@@ -54,9 +54,9 @@ escape hatch for "everything else", added once the plumbing exists.
 | Piece | Where | Notes |
 |---|---|---|
 | Prompt contract | `src/lib/ai.ts` `WIDGET_PROMPT`, appended in `turn-executor.ts` | fence kind + strict JSON + worked rules; 3-widget cap per answer |
-| Block type + fence routing | `ContentBlocks.kt` `Block.WidgetBlock` | widget languages: chart/stat/table/compare/progress/timeline, case-insensitive; open fence mid-stream → skeleton, never raw JSON |
-| Payload validation | `WidgetBlocks.kt` `parseWidget()` | kotlinx.serialization, caps (200 points/series, 8 series, 100 rows, 8 stat cards, 64 KB), returns null on ANY failure → renderer degrades to a code block |
-| Renderers | `WidgetBlocks.kt` `WidgetBlockView` | line/area/bar/pie on Canvas, stat cards, sortable table, compare columns, animated progress, timeline; skeleton via `skeletonSurface`; theme colors only (no new deps) |
+| Block type + fence routing | `ContentBlocks.kt` `Block.WidgetBlock`, `Block.PlanBlock` | widget languages: chart/stat/table/compare/progress/timeline/plan, case-insensitive; open fence mid-stream → skeleton, never raw JSON. `plan` is promoted to a first-class `PlanBlock` when the payload has timed rows |
+| Payload validation | `WidgetBlocks.kt` `parseWidget()`, `parseNexlyPlanData()` | kotlinx.serialization, caps (200 points/series, 8 series, 100 rows, 8 stat cards, 64 KB, 14 plan rows), returns null on ANY failure → renderer degrades to a code block |
+| Renderers | `WidgetBlocks.kt` `WidgetBlockView`, `NexlyPlanCard` | line/area/bar/pie on Canvas, stat cards, sortable table, compare columns, animated progress, timeline, Nexly glass timetable; skeleton via `skeletonSurface`; theme colors only (no new deps) |
 | Dispatch | `RichBlocks.kt` `BlockView` | one line: `is Block.WidgetBlock -> WidgetBlockView(...)` |
 
 Tests: `WidgetBlocksTest` (15) + `ContentBlocksTest` regression (22), all green;
@@ -96,6 +96,7 @@ Rendering rules (both clients, identical):
 | `compare` | two columns of labelled rows | split card |
 | `progress` | label + percent | bar card |
 | `timeline` | dated entries | vertical line card |
+| `plan` | timed rows + icon + closing | Nexly glass timetable: one card, circular glass glyph per row, time over activity, closing line + timestamp. First-class on Android and iOS (`Block.PlanBlock` / `Block.plan`), not a generic widget card. |
 
 ### Where the model learns to emit it
 

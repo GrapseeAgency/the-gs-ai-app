@@ -7,6 +7,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
@@ -171,6 +172,25 @@ class ApiClient(
             setBody(patch)
         }.status.isSuccess()
 
+    suspend fun planProgress(id: String): PlanProgressDto? {
+        val response = client.get("$root/conversations/$id/plan-progress")
+        if (!response.status.isSuccess()) return null
+        return response.bodyAsText()
+            .let { GsApiJson.decodeFromString(PlanProgressResponse.serializer(), it) }
+            .progress
+    }
+
+    suspend fun savePlanProgress(id: String, progress: PlanProgressDto): PlanProgressDto? {
+        val response = client.put("$root/conversations/$id/plan-progress") {
+            contentType(ContentType.Application.Json)
+            setBody(progress)
+        }
+        if (!response.status.isSuccess()) return null
+        return response.bodyAsText()
+            .let { GsApiJson.decodeFromString(PlanProgressResponse.serializer(), it) }
+            .progress
+    }
+
     suspend fun messages(id: String): List<MessageDto> {
         val response = client.get("$root/conversations/$id/messages")
         return decodeList(
@@ -236,7 +256,9 @@ class ApiClient(
          *  DEVICE's zone, so every turn — including the translation scratch
          *  conversation — carries a real clock without any call site knowing
          *  about it. Pass null explicitly only in tests that pin the zone. */
-        timezone: String? = TimeZone.getDefault().id
+        timezone: String? = TimeZone.getDefault().id,
+        /** Non-visible plan-progress context for the next turn. */
+        turnContext: String? = null
     ) {
         // THE POST IS INSIDE THE GUARD TOO, AND IT IS WHERE THE CUT ACTUALLY
         // SURFACES.
@@ -278,7 +300,8 @@ class ApiClient(
                         stream = true,
                         attachments = attachments?.ifEmpty { null },
                         mode = mode,
-                        timezone = timezone
+                        timezone = timezone,
+                        turnContext = turnContext
                     )
                 )
             }

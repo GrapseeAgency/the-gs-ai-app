@@ -163,3 +163,7 @@ upload/*.png
 var/
 out/
 fonts/
+
+# local probe database (DATABASE_URL=file:dev.db)
+dev.db
+dev.db-journal

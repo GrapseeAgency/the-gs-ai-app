@@ -574,6 +574,44 @@ jobs:
           # each target can actually cover, and a decoded budget per screen.
           python3 scripts/prepare_home_art.py --check
 
+      - name: Nexly chat response renders (real Compose tree, JVM)
+        if: always()
+        working-directory: android
+        run: |
+          set -euo pipefail
+          # Same Roborazzi harness as Home, pointed at the REAL model-response
+          # composition: BlocksContent + Thinking card + Plan card + glass.
+          ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest \
+            --rerun --tests "com.grapsee.gsai.ui.chat.NexlyChatScreenshotTest" \
+            -PgsShots=true
+          SHOTS=app/build/screenshots
+          for w in 393x852 411x914 360x780; do
+            if [ -s "$SHOTS/nexly-chat-$w.png" ]; then
+              echo "rendered nexly-chat-$w.png ($(wc -c < "$SHOTS/nexly-chat-$w.png") bytes)"
+            else
+              echo "::error::nexly-chat-$w.png was not produced"; exit 1
+            fi
+          done
+          test -s "$SHOTS/nexly-chat-thinking-393x852.png" \
+            || { echo "::error::the adaptive-thinking render was not produced"; exit 1; }
+          echo "rendered nexly-chat-thinking-393x852.png"
+          for w in 411x914 393x852; do
+            test -s "$SHOTS/nexly-chat-full-$w.png" \
+              || { echo "::error::nexly-chat-full-$w.png was not produced"; exit 1; }
+            test -s "$SHOTS/nexly-chat-full-prose-$w.png" \
+              || { echo "::error::nexly-chat-full-prose-$w.png was not produced"; exit 1; }
+            echo "rendered nexly-chat-full-$w.png + prose"
+          done
+
+      - name: Upload the Nexly chat response renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexly-chat-render-android
+          path: android/app/build/screenshots/nexly-chat-*.png
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Unit tests
         id: unit
         working-directory: android
@@ -676,3 +714,7 @@ jobs:
             echo "wrapper: generated per run from the pinned properties"
             echo "      (8.13); no wrapper JAR is committed by design."
           } >> "$GITHUB_STEP_SUMMARY"
+
+
+
+

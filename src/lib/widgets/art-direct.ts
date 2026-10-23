@@ -239,6 +239,8 @@ function roleSurfaces(kind: WidgetKind, payload: Record<string, unknown>): reado
       return ['outline', 'tinted']
     case 'timeline':
       return ['editorial', 'outline']
+    case 'plan':
+      return ['editorial', 'outline']
     case 'quiz':
       return ['inset', 'tinted']
     case 'form':

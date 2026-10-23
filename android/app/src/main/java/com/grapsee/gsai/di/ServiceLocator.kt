@@ -139,7 +139,12 @@ object ServiceLocator {
         clientId = SessionStore.rotateClientId(context)
         db = AppDatabase.build(context)
         api = ApiClient(http)
-        chat = ChatRepository(api, db, onDeadSession = { rotateSessionId() })
+        chat = ChatRepository(
+            api,
+            db,
+            onDeadSession = { rotateSessionId() },
+            appContext = appContext
+        )
         chatStream = ChatStreamController(chat)
         attachments = AttachmentStore(http, context.applicationContext)
     }

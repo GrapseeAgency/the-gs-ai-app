@@ -827,6 +827,26 @@ private fun hasEntries(json: String): Boolean =
         false
     }
 
+/**
+ * A plan is TIMED rows, not any array called `rows`. Requiring both a time and
+ * an activity keeps a table, a progress list or a bespoke `{rows:[...]}` widget
+ * from being stolen by the timetable renderer. Mirrors `isNexlyPlanPayload`.
+ */
+private fun hasTimedRows(obj: JsonObject): Boolean {
+    val root = listOf("plan", "schedule", "timetable")
+        .firstNotNullOfOrNull { obj[it] as? JsonObject } ?: obj
+    val rows = (root["rows"] as? JsonArray) ?: (root["items"] as? JsonArray) ?: return false
+    return rows.any { element ->
+        val row = element as? JsonObject ?: return@any false
+        val time = (row["time"] ?: row["start"] ?: row["from"] ?: row["date"] ?: row["slot"]) as? JsonPrimitive
+        val text = (row["text"] ?: row["label"] ?: row["title"]
+            ?: row["activity"] ?: row["detail"] ?: row["task"]) as? JsonPrimitive
+        val hasTime = time?.contentOrNull?.isNotBlank() == true
+        val hasText = text?.contentOrNull?.isNotBlank() == true
+        hasTime && hasText
+    }
+}
+
 fun inferWidgetKind(json: String): String? {
     val obj = try {
         widgetJson.parseToJsonElement(json) as? JsonObject
@@ -839,6 +859,7 @@ fun inferWidgetKind(json: String): String? {
         if ("columns" in keys && "rows" in keys) add("table")
         if ("cards" in keys) add("stat")
         if ("entries" in keys) add("timeline")
+        if (("rows" in keys || "items" in keys) && hasTimedRows(obj)) add("plan")
         if ("questions" in keys) add("quiz")
         if ("fields" in keys) add("form")
         if ("prompts" in keys) add("followups")
@@ -849,7 +870,9 @@ fun inferWidgetKind(json: String): String? {
         if ("pages" in keys) add("media")
         if ("steps" in keys || "groups" in keys) add("app")
     }
-    return candidates.firstOrNull { parseWidget(it, json) != null }
+    return candidates.firstOrNull {
+        if (it == "plan") parseNexlyPlanData(json) != null else parseWidget(it, json) != null
+    }
 }
 
 // ---------------------------------------------------------------------------

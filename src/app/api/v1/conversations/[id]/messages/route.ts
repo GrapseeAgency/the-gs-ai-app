@@ -57,9 +57,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     )
   }
 
-  let body: { content?: unknown; stream?: unknown; modelId?: unknown; attachments?: unknown; timezone?: unknown; mode?: unknown }
+  let body: { content?: unknown; stream?: unknown; modelId?: unknown; attachments?: unknown; timezone?: unknown; mode?: unknown; turnContext?: unknown }
   try {
-    body = (await req.json()) as { content?: unknown; stream?: unknown; modelId?: unknown; attachments?: unknown; timezone?: unknown; mode?: unknown }
+    body = (await req.json()) as { content?: unknown; stream?: unknown; modelId?: unknown; attachments?: unknown; timezone?: unknown; mode?: unknown; turnContext?: unknown }
   } catch {
     return NextResponse.json(
       { code: 'bad_request', message: 'Request body must be valid JSON' },
@@ -114,6 +114,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     // FLASH MODE (Phase 2) — absent/invalid parses to 'flash' (the new
     // default; old clients keep working unchanged).
     mode: parseThinkingMode(body?.mode),
+    // Non-visible client context (plan-checklist progress). Sanitised and
+    // capped inside prepareTurn; old clients simply omit it.
+    turnContext: typeof body?.turnContext === 'string' ? body.turnContext : null,
   }
 
   const prepared = await prepareTurn(turnRequest, { content, attachments: rawAttachments })

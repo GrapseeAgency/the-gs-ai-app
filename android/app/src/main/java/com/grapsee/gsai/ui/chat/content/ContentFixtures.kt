@@ -196,6 +196,20 @@ object ContentFixtures {
                 "Details: [Spec](https://example.com/spec)\n\n---\n\n" +
                 BLOCK_MATH + "\n\n" +
                 "```mermaid\nflowchart LR\n    A --> B --> C\n```"
+        ),
+        Fixture(
+            "F26_NEXLY_PLAN",
+            "Got it! Here is your day.\n\n```plan\n" +
+                "{\n" +
+                "  \"title\": \"Here's your personalized plan for tomorrow:\",\n" +
+                "  \"rows\": [\n" +
+                "    {\"time\": \"8:00 – 8:30 AM\", \"icon\": \"sunrise\", \"text\": \"Morning routine + light exercise\"},\n" +
+                "    {\"time\": \"9:00 – 11:00 AM\", \"icon\": \"book-2\", \"text\": \"Classes\"}\n" +
+                "  ],\n" +
+                "  \"closing\": \"You got this!\",\n" +
+                "  \"closingIcon\": \"flame\",\n" +
+                "  \"timestamp\": \"9:45 PM\"\n" +
+                "}\n```"
         )
     )
 }
@@ -220,6 +234,7 @@ private fun summarize(blocks: List<Block>): FixtureSummary {
             is Block.MermaidBlock -> "MermaidBlock"
             is Block.HtmlBlock -> "HtmlBlock"
             is Block.WidgetBlock -> "WidgetBlock:${block.kind}"
+            is Block.PlanBlock -> "PlanBlock"
             is Block.ImageBlock -> "ImageBlock"
             is Block.CollapsibleBlock -> "Collapsible"
             is Block.CitationsBlock -> "Citations"

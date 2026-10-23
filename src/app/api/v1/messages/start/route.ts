@@ -41,6 +41,7 @@ type StartBody = {
   attachments?: unknown
   timezone?: unknown
   mode?: unknown
+  turnContext?: unknown
   resumeRunId?: unknown
 }
 
@@ -143,6 +144,7 @@ export async function POST(req: NextRequest) {
   const timezone = typeof body?.timezone === 'string' ? body.timezone : null
   // FLASH MODE (Phase 2) — absent/invalid parses to 'flash' (the new default).
   const mode = parseThinkingMode(body?.mode)
+  const turnContext = typeof body?.turnContext === 'string' ? body.turnContext : null
 
   // ---- FRESH start ---------------------------------------------------------
   const conversationId = typeof body?.conversationId === 'string' ? body.conversationId : ''
@@ -182,6 +184,7 @@ export async function POST(req: NextRequest) {
       requestId: runId, // correlation: the runId IS the request id (billing)
       attachmentIds,
       mode,
+      turnContext,
       runId,
     },
     { content, attachments: rawAttachments }
@@ -203,6 +206,7 @@ export async function POST(req: NextRequest) {
     timezone,
     clientVersion,
     mode,
+    turnContext,
     userMessageId: prepared.prep.userMessage.id,
   })
 
@@ -233,6 +237,7 @@ async function turnRequestFromRun(
     timezone?: string | null
     clientVersion?: string
     mode?: unknown
+    turnContext?: string | null
   } = {}
   try {
     facts = JSON.parse(events[0]?.payload ?? '{}') as typeof facts
@@ -247,6 +252,7 @@ async function turnRequestFromRun(
     requestId: run.id, // correlation: the runId IS the request id on resume
     attachmentIds: facts.attachmentIds ?? [],
     mode: parseThinkingMode(facts.mode), // durable mode survives resume
+    turnContext: facts.turnContext ?? null,
     runId: run.id,
     existingUserMessageId: run.userMessageId ?? undefined,
   }

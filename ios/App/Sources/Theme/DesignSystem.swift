@@ -498,7 +498,7 @@ enum GSFormatters {
 
     static let clock: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
+        formatter.dateFormat = "h:mm a"
         return formatter
     }()
     static let dayStamp: DateFormatter = {

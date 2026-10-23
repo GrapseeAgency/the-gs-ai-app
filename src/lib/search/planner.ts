@@ -146,6 +146,7 @@ Schema:
  "intent": "broad_news"|"sector_news"|"entity_news"|"geo_news"|"time_window_news"|"source_specific"|"factual"|"research"|"academic"|"book_source"|"historical_religious"|"comparison"|"none",
  "ambiguous": boolean,
  "clarifyQuestion": string|null,
+ "clarifyOptions": [{"id": string, "label": string}],
  "queries": string[],
  "timeRange": "day"|"week"|"month"|"none",
  "region": string|null,
@@ -167,6 +168,10 @@ Rules:
 - Deeper multi-part research ("explain the situation with X") => depth="deep", intent="research".
 - Facts that need current data (weather, scores, prices, releases) => intent=factual.
 - Ordinary chat/general knowledge => needsSearch=false, intent="none".
+- GENERAL AMBIGUITY: if answering would require guessing a key fact (which programming language/framework/version, which platform, which project/file, which person or topic), set ambiguous=true, write ONE short clarifyQuestion, and return 2-5 clarifyOptions as {id,label}. Do NOT clarify ordinary questions that already name the subject; answer those. Do NOT clarify when a web search can resolve the missing fact.
+- Do not ask for permission, preferences, or extra detail that is not required to answer. A clarification is a last resort, not a conversation starter.
+- SOFTWARE RELEASES: "latest version of X", "what version is X", "is X released", "latest stable X" => intent="source_specific", sourceHint="github.com", officialOnly=true, needsSearch=true, queries include "<X> latest release github". Prefer the project's official release page over news.
+- A bare "can you fix my code / my code is not working" with no language, framework, project or error is genuinely ambiguous: ask which language/framework and for the code/error.
 - timeRange: "day" for today/now, "week" for this week, "month" for this month, "none" otherwise. queries: 1-4 short search-engine queries, English, no conversational words.
 - If the user says "use only official sources" or names an official documentation site, set officialOnly=true (deterministic layers also enforce this).
 - If the user explicitly tells you to stop searching and summarise, set needsSearch=false (the orchestrator also enforces this deterministically).
@@ -214,6 +219,7 @@ function normalizePlan(raw: Record<string, unknown>, fallbackQuery: string): Sea
       q
         .replace(/^(?:(?:again|now|please|and|then)\s+)+(?:for\s+)?/i, '')
         .replace(/^(?:the\s+)?(?:search|searching|google|look\s*up)\s*(?:for|up|about)?\s*(?:again\s+)?/i, '')
+        .replace(/^(?:the\s+)?(?:latest\s+)?(?:stable\s+)?version\s+of\s+(?:the\s+)?/i, '')
         .trim()
     )
     .filter((q) => q.length >= 3)
@@ -223,13 +229,31 @@ function normalizePlan(raw: Record<string, unknown>, fallbackQuery: string): Sea
       ? raw.sourceHint.trim().toLowerCase()
       : undefined
   const ambiguous = raw.ambiguous === true && typeof raw.clarifyQuestion === 'string' && raw.clarifyQuestion.trim().length > 0
+  // The planner may now return subject-specific options for a non-news
+  // clarification (language, platform, which project/file, etc.). Keep the
+  // news set as the fallback so old outputs stay valid.
+  const plannerOptions: ClarifyOption[] = Array.isArray(raw.clarifyOptions)
+    ? (raw.clarifyOptions as unknown[])
+        .filter(
+          (o): o is ClarifyOption =>
+            typeof o === 'object' &&
+            o !== null &&
+            typeof (o as ClarifyOption).id === 'string' &&
+            typeof (o as ClarifyOption).label === 'string' &&
+            (o as ClarifyOption).label.trim().length > 0
+        )
+        .map((o) => ({ id: o.id.slice(0, 40), label: o.label.trim().slice(0, 60) }))
+        .filter((o, i, all) => all.findIndex((x) => x.id === o.id) === i)
+        .slice(0, 5)
+    : []
+  const clarifyOptions = plannerOptions.length >= 2 ? plannerOptions : NEWS_CATEGORY_OPTIONS
   return {
     needsSearch: raw.needsSearch === true && !ambiguous && queries.length > 0,
     intent,
     ambiguity: {
       isAmbiguous: ambiguous,
       prompt: ambiguous
-        ? { question: (raw.clarifyQuestion as string).trim().slice(0, 200), options: NEWS_CATEGORY_OPTIONS }
+        ? { question: (raw.clarifyQuestion as string).trim().slice(0, 200), options: clarifyOptions }
         : null,
     },
     queries: queries.length > 0 ? queries : fallbackQuery ? [fallbackQuery] : [],
@@ -435,6 +459,52 @@ export async function planSearch(input: PlanInput): Promise<SearchPlan> {
       officialOnly: detectOfficialOnly(text),
     }
   }
+  // Deterministic general-ambiguity backstop: a bare "fix my code" without a
+  // language/error is the same clarify case even when both planner providers
+  // are down.
+  if (
+    /^(?:can you |could you |please )?(?:fix|debug|help(?: me)? with)\s+(?:my|the|this)?\s*(?:code|app|project|error)\b/i.test(text) &&
+    !/\b(python|javascript|typescript|react|node|java|kotlin|swift|c#|c\+\+|go|rust|php|ruby|sql)\b/i.test(text)
+  ) {
+    return {
+      needsSearch: false,
+      intent: 'none',
+      ambiguity: {
+        isAmbiguous: true,
+        prompt: {
+          question: 'Which programming language and framework are you using, and can you share the code or error message?',
+          options: [
+            { id: 'javascript', label: 'JavaScript (Node.js)' },
+            { id: 'python', label: 'Python' },
+            { id: 'java', label: 'Java' },
+            { id: 'csharp', label: 'C#' },
+            { id: 'other', label: 'Other (please specify)' },
+          ],
+        },
+      },
+      queries: [],
+      timeRange: 'none',
+      depth: 'quick',
+    }
+  }
+
+  // Software release backstop (planner outage): force an official-release
+  // query rather than a broad web query that returns news pages.
+  const release = text.match(/(?:latest(?:\s+stable)?\s+version\s+of|what\s+version\s+is|latest\s+stable\s+)([a-z0-9][\w .+#-]{1,60})/i)
+  if (release) {
+    const project = release[1].replace(/\s+(?:right now|today|now)$/i, '').trim()
+    return {
+      needsSearch: true,
+      intent: 'source_specific',
+      ambiguity: { isAmbiguous: false, prompt: null },
+      queries: [`${project} latest release github`].filter((q) => q.length >= 3),
+      sourceHint: 'github.com',
+      officialOnly: true,
+      timeRange: 'none',
+      depth: 'quick',
+    }
+  }
+
   if (gate.trigger === null) {
     return {
       needsSearch: false,

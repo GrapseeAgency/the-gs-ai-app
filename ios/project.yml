@@ -92,6 +92,10 @@ targets:
       # word on screen. These are byte-identical to
       # android/app/src/main/res/font/poppins_*.ttf (md5 verified), and
       # check_poppins_registered.py fails if either side drifts.
+      #
+      # Nexly glass vocabulary: one 3.49.0 outline font + the class-to-
+      # codepoint table. Both clients bundle the identical pair so a plan
+      # emitted once resolves to the same glyph on Android and iOS.
       - path: App/Resources
     settings:
       base:
@@ -167,11 +171,13 @@ targets:
         # The faces bundled under App/Resources/Fonts (Inter Tight), by file name as they land
         # in the bundle. UIAppFonts is what makes UIFont(name:) find them; the
         # PostScript names they register under are given in DesignSystem.swift.
+        # TablerIcons.ttf is the Nexly glyph vocabulary (same file Android ships).
         UIAppFonts:
           - InterTight-Regular.ttf
           - InterTight-Medium.ttf
           - InterTight-SemiBold.ttf
           - InterTight-Bold.ttf
+          - TablerIcons.ttf
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         NSSpeechRecognitionUsageDescription: GS turns your voice into text for your prompts when you use voice mode.
         NSMicrophoneUsageDescription: GS uses the microphone when you talk in voice mode.

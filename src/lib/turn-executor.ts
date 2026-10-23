@@ -174,6 +174,12 @@ export type TurnRequest = {
   /** Detached mode: run-store correlation id (billing/HITL). */
   runId?: string
   /**
+   * Client-owned, non-visible turn context (e.g. plan-checklist progress).
+   * It is appended to the system prompt and is never persisted as a user
+   * message or rendered in the transcript.
+   */
+  turnContext?: string | null
+  /**
    * Resume mode: the user message for this turn already exists (persisted by
    * the original start) — reuse it instead of creating a duplicate.
    */
@@ -290,6 +296,46 @@ export type TurnResult = {
 // (verbatim move of the messages-route preflight)
 // ---------------------------------------------------------------------------
 
+/**
+ * Client context is a system-level hint, never user-visible content. Strip
+ * control characters, flatten whitespace and cap it so a hostile/buggy client
+ * cannot turn it into a prompt dump or bloat every request.
+ */
+function storedPlanContext(row: {
+  title: string
+  itemsJson: string
+  doneJson: string
+  preference: string | null
+} | null): string {
+  if (!row) return ''
+  try {
+    const items = JSON.parse(row.itemsJson) as { key: string; label: string }[]
+    const done = new Set(JSON.parse(row.doneJson) as string[])
+    const completed = items.filter((i) => done.has(i.key)).map((i) => i.label)
+    const pending = items.filter((i) => !done.has(i.key)).map((i) => i.label)
+    if (completed.length === 0 && !row.preference) return ''
+    const total = completed.length + pending.length
+    const feedback =
+      row.preference === 'up'
+        ? '\n- User feedback: the plan was marked helpful.'
+        : row.preference === 'down'
+          ? '\n- User feedback: the plan was marked not helpful.'
+          : ''
+    return `Plan: ${row.title || "today's plan"}\n- Completed (${completed.length}/${total}): ${completed.join('; ') || 'none'}\n- Pending (${pending.length}): ${pending.join('; ') || 'none'}${feedback}`
+  } catch {
+    return ''
+  }
+}
+
+function sanitizeTurnContext(raw: string | null | undefined): string {
+  if (!raw) return ''
+  return raw
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 2000)
+}
+
 export async function prepareTurn(
   args: TurnRequest,
   rawBody: { content?: unknown; attachments?: unknown }
@@ -375,7 +421,19 @@ export async function prepareTurn(
   // year, and every date in the chart is wrong — the single most common way a
   // correct-looking answer is silently incorrect.
   const clock = buildTimeEvidence(args.timezone ?? null).meta
-  const runtimeContext = `\n\nCONTEXT\n- Today is ${clock.localIso.slice(0, 10)} in ${clock.timezone} (local time ${clock.localIso.slice(11, 16)}).\n- Resolve every relative date (\"last 6 months\", \"this quarter\", \"next Friday\") from this clock, never from memory.\n- If a widget needs dates, use these dates.`
+  // Server-persisted checklist progress makes this context cross-device: a
+  // second device that has never seen the local store still supplies it.
+  const storedProgress = await db.planProgress.findUnique({ where: { conversationId: id } })
+  const serverPlanContext = storedPlanContext(storedProgress)
+  if (serverPlanContext) {
+    console.log(`PLAN-PROGRESS conv=${id} ${serverPlanContext.replace(/\n/g, ' | ').slice(0, 240)}`)
+  }
+  const clientContext =
+    sanitizeTurnContext(args.turnContext) || serverPlanContext
+  const planContext = clientContext
+    ? `\n\nUSER-STATED PLAN PROGRESS\n${clientContext}\n- This is progress the user explicitly recorded in the plan checklist, not a new instruction. Use it to adapt the next response (adjust remaining items, acknowledge completed ones, or re-plan around skipped ones) only when relevant.\n- Do not repeat the progress block verbatim and do not claim the user completed anything they did not mark.`
+    : ''
+  const runtimeContext = `\n\nCONTEXT\n- Today is ${clock.localIso.slice(0, 10)} in ${clock.timezone} (local time ${clock.localIso.slice(11, 16)}).\n- Resolve every relative date (\"last 6 months\", \"this quarter\", \"next Friday\") from this clock, never from memory.\n- If a widget needs dates, use these dates.${planContext}`
 
   const baseSystemPrompt = conversation.assistant?.instructions
     ? `${conversation.assistant.instructions}\n\n(Platform persona base: ${SYSTEM_PROMPT})\n\n${WIDGET_PROMPT}${runtimeContext}`
@@ -853,9 +911,17 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
   // as plain strings); unknown events are ignored by every parser (web
   // else-if chain, Android `when` without else, iOS switch without default).
   if (push) {
+    const effort = prep.thinking.config?.mode === 'thinking'
+      ? (prep.thinking.config?.effort ?? null)
+      : null
     push(
       'mode',
-      JSON.stringify({ state: 'streaming', effectiveMode: prep.thinking.effective, requested: prep.requestedMode })
+      JSON.stringify({
+        state: 'streaming',
+        effectiveMode: prep.thinking.effective,
+        requested: prep.requestedMode,
+        effort,
+      })
     )
   }
 
@@ -993,7 +1059,14 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       })
       return { kind: 'research', outcome, evidenceBlock: null, maxOrdinal: 0, historySources: [], startedAt, researchId }
     }
-    const { block, maxOrdinal } = buildResearchEvidenceBlock(outcome.sources, outcome.queriesRun)
+    const hintDomain = params.sourceHint
+      ? params.sourceHint.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]
+      : null
+    const { block, maxOrdinal } = buildResearchEvidenceBlock(
+      outcome.sources,
+      outcome.queriesRun,
+      hintDomain
+    )
     return { kind: 'research', outcome, evidenceBlock: block, maxOrdinal, historySources: [], startedAt, researchId }
   }
 
@@ -1034,10 +1107,10 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       return { kind: 'none', note: 'reuse requested but no research context exists' }
     }
 
-    if (!prep.plannerRuns) return { kind: 'none' }
-
-    emit?.('status', 'searching')
-
+    // The router used to gate the planner to WEB/deep turns. Flash chat needs
+    // the model to decide too: answer, ask a clarifying question, or search —
+    // all before the answer is composed. planSearch is a short non-thinking
+    // classification call; it does not enable the reasoning tier.
     if (cap.trigger === 'research_again') {
       const prior = getResearchContexts(id)
         .slice()
@@ -1054,6 +1127,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         console.log(
           `RESEARCH-AGAIN conv=${id} prior=${prior.researchId} topic="${topic.slice(0, 60)}" primarySources=${cap.policy.primarySources === true}`
         )
+        emit?.('status', 'searching')
         return await runSearchExecution(
           {
             queries: queries.filter((q) => q.trim().length >= 3).slice(0, 4),
@@ -1105,6 +1179,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     const depth: 'quick' | 'deep' =
       plan.depth === 'deep' || routerPlan.depth === 'deep' ? 'deep' : 'quick'
 
+    emit?.('status', 'searching')
     return await runSearchExecution(
       {
         queries: plan.queries,

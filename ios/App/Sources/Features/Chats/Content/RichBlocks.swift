@@ -25,8 +25,167 @@ struct BlocksView: View {
     }
 }
 
+// MARK: - Nexly glass transcript
+
+/// The reference composition, iOS twin of Android's `NexlyAssistantBlocks`:
+/// consecutive prose becomes one milky glass card, a `plan` fence becomes its
+/// own sibling card, and every card carries the companion orb outside it. The
+/// Thinking/Reasoning/Effort panel sits after the preamble inside the first
+/// prose card and survives finalize for plan turns (the timetable is the proof
+/// that planning happened), exactly like the reference.
+struct NexlyAssistantBlocksView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    let blocks: [Block]
+    var isStreaming: Bool = false
+    var showStatus: Bool = false
+    var thinkingPhase: NexlyThinkingPhase = .done
+    var thinkingEffort: String? = nil
+    var thinkingReasoningHint: String? = nil
+    var searchSourceCount: Int = 0
+    var showThinkingStages: Bool = true
+    var isPlanTurn: Bool = false
+    /// Plan turns place the status card after the whole preamble; a non-plan
+    /// answer places it after the first paragraph.
+    var statusAtEnd: Bool = true
+    var citations: [Int: String] = [:]
+    var planTimestamp: String? = nil
+    var conversationID: String? = nil
+
+    private enum Group {
+        case prose([Block])
+        case plan(NexlyPlanData, Bool)
+    }
+
+    var body: some View {
+        let groups = grouped()
+        let statusIndex = groups.firstIndex { group in
+            if case .prose = group { return true }
+            return false
+        }
+        // The sheet keeps assistant cards at about 69% of the phone width,
+        // leaving the pearl field visible to the right of the glass.
+        let cardMax: CGFloat = sizeClass == .regular ? 340 : 286
+        let planMax: CGFloat = sizeClass == .regular ? 350 : 290
+        VStack(alignment: .leading, spacing: 12) {
+            if groups.isEmpty {
+                HStack(alignment: .top, spacing: 9) {
+                    NexlyAssistantOrb()
+                    if showStatus {
+                        NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount, showStages: showThinkingStages)
+                            .frame(maxWidth: cardMax, alignment: .leading)
+                    } else {
+                        Text("…")
+                            .font(Aero.body())
+                            .foregroundStyle(Aero.text)
+                            .padding(.vertical, 8)
+                    }
+                    Spacer(minLength: 0)
+                }
+            } else {
+                ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
+                    HStack(alignment: .top, spacing: 9) {
+                        NexlyAssistantOrb()
+                        switch group {
+                        case .plan(let plan, let open):
+                            NexlyPlanCard(
+                                plan: plan,
+                                open: open,
+                                fallbackTimestamp: planTimestamp,
+                                conversationID: conversationID
+                            )
+                            .frame(maxWidth: planMax, alignment: .leading)
+                            .layoutPriority(1)
+                        case .prose(let prose):
+                            proseCard(
+                                prose,
+                                isStatusHost: index == statusIndex,
+                                isFirst: index == 0
+                            )
+                            .frame(maxWidth: cardMax, alignment: .leading)
+                            .layoutPriority(1)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func proseCard(_ prose: [Block], isStatusHost: Bool, isFirst: Bool) -> some View {
+        let statusHostIndex = statusAtEnd ? prose.count - 1 : 0
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(prose.enumerated()), id: \.offset) { index, block in
+                BlockView(block: block, isLast: index == prose.count - 1, citations: citations)
+                if isStatusHost && showStatus && index == statusHostIndex {
+                    if !prose.isEmpty { Spacer().frame(height: 2) }
+                    NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount, showStages: showThinkingStages)
+                }
+            }
+            if isStatusHost && showStatus && prose.isEmpty {
+                NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount, showStages: showThinkingStages)
+            } else if prose.isEmpty && isStreaming {
+                Text("…")
+                    .font(Aero.body())
+                    .foregroundStyle(Aero.text)
+            }
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .nexlyGlassCard(corner: 20)
+        .environment(\.nexlyProseCompact, true)
+        .environment(\.nexlyCodeWrap, true)
+        .padding(.top, isFirst ? 0 : 2)
+    }
+
+    private func grouped() -> [Group] {
+        var out: [Group] = []
+        var prose: [Block] = []
+        func flush() {
+            if !prose.isEmpty {
+                out.append(.prose(prose))
+                prose.removeAll()
+            }
+        }
+        for block in blocks {
+            if case .plan(let plan, let open, _) = block {
+                flush()
+                out.append(.plan(plan, open))
+            } else {
+                prose.append(block)
+            }
+        }
+        flush()
+        // Status must lead the turn. When the model opened with the timetable
+        // (no preamble yet), give the thinking panel its own prose card before
+        // the plan instead of hiding it inside a later paragraph.
+        if showStatus, let first = out.first, case .plan(_, _) = first {
+            out.insert(.prose([]), at: 0)
+        }
+        return out
+    }
+}
+
+/// Companion orb beside each assistant card — the reference keeps identity
+/// outside the glass, never as an avatar inside the text.
+private struct NexlyAssistantOrb: View {
+    var body: some View {
+        AnimatedGsIllustration(
+            imageName: "GSCompanionOrb",
+            size: 30,
+            breathDuration: 3.2,
+            rotationDegrees: 0.8,
+            lift: -1,
+            startDelay: 0.16
+        )
+        .accessibilityLabel("Nexly")
+    }
+}
+
 @ViewBuilder
-private func BlockView(block: Block, isLast: Bool, citations: [Int: String]) -> some View {
+func BlockView(block: Block, isLast: Bool, citations: [Int: String]) -> some View {
     switch block {
     case .paragraph(let spans, _):
         ParagraphView(spans: spans, showCaret: false, citations: citations)
@@ -42,6 +201,8 @@ private func BlockView(block: Block, isLast: Bool, citations: [Int: String]) -> 
         CodeBlockCardView(language: language, code: code, open: open)
     case .table(let headers, let aligns, let rows, _):
         TableBlockView(headers: headers, aligns: aligns, rows: rows, citations: citations)
+    case .plan(let plan, let open, _):
+        NexlyPlanCard(plan: plan, open: open)
     case .divider:
         DividerBlockView()
     case .mathBlock(let latex, _):
@@ -71,33 +232,37 @@ private struct SpanTheme {
     var citations: [Int: String] = [:]
 }
 
-private func attributed(from spans: [InlineSpan], theme: SpanTheme) -> AttributedString {
+private func attributed(
+    from spans: [InlineSpan],
+    theme: SpanTheme,
+    style: InlinePresentationIntent = []
+) -> AttributedString {
     var result = AttributedString()
-    append(spans: spans, into: &result, theme: theme)
+    append(spans: spans, into: &result, theme: theme, style: style)
     return result
 }
 
-private func append(spans: [InlineSpan], into result: inout AttributedString, theme: SpanTheme) {
+private func append(
+    spans: [InlineSpan],
+    into result: inout AttributedString,
+    theme: SpanTheme,
+    style: InlinePresentationIntent = []
+) {
     for span in spans {
         switch span {
         case .text(let text):
-            appendText(text, into: &result, theme: theme)
+            appendText(text, into: &result, theme: theme, style: style)
         case .bold(let children):
-            var inner = attributed(from: children, theme: theme)
-            inner.inlinePresentationIntent = .stronglyEmphasized
-            result.append(inner)
+            result.append(attributed(from: children, theme: theme, style: style.union(.stronglyEmphasized)))
         case .italic(let children):
-            var inner = attributed(from: children, theme: theme)
-            inner.inlinePresentationIntent = .emphasized
-            result.append(inner)
+            result.append(attributed(from: children, theme: theme, style: style.union(.emphasized)))
         case .strike(let children):
-            var inner = attributed(from: children, theme: theme)
-            inner.inlinePresentationIntent = .strikethrough
-            result.append(inner)
+            result.append(attributed(from: children, theme: theme, style: style.union(.strikethrough)))
         case .code(let code):
             var run = AttributedString(code)
             run.font = .system(size: theme.baseSize * 0.88, weight: .regular, design: .monospaced)
             run.backgroundColor = theme.monoBackground
+            if !style.isEmpty { run.inlinePresentationIntent = style }
             result.append(run)
         case .link(let text, let url):
             if let url = URL(string: url) {
@@ -126,9 +291,42 @@ private let citationMarkerRegex = try! NSRegularExpression(pattern: "\\[(\\d{1,3
 /// Splits a plain-text run on `[N]` markers: matched ordinals become tappable
 /// superscript chips linking the real source URL; unmatched markers stay
 /// literal text (the protocol's strip rule, applied in the renderer).
-private func appendText(_ text: String, into result: inout AttributedString, theme: SpanTheme) {
+/// Inline `:icon:` tokens and any emoji the model slipped through become real
+/// Tabler glass glyphs instead of text — the native twin of the web renderer.
+private func appendText(
+    _ text: String,
+    into result: inout AttributedString,
+    theme: SpanTheme,
+    style: InlinePresentationIntent = []
+) {
+    for part in NexlyIcons.inlineParts(text) {
+        switch part {
+        case .text(let run):
+            appendCitations(run, into: &result, theme: theme, style: style)
+        case .icon(let name):
+            var glyph = AttributedString(NexlyIcons.glyph(name))
+            glyph.font = .custom(NexlyIcons.family, size: theme.baseSize * 1.14)
+            glyph.foregroundColor = theme.textColor
+            glyph.baselineOffset = -theme.baseSize * 0.09
+            result.append(glyph)
+        }
+    }
+}
+
+private func styledRun(_ text: String, style: InlinePresentationIntent) -> AttributedString {
+    var run = AttributedString(text)
+    if !style.isEmpty { run.inlinePresentationIntent = style }
+    return run
+}
+
+private func appendCitations(
+    _ text: String,
+    into result: inout AttributedString,
+    theme: SpanTheme,
+    style: InlinePresentationIntent
+) {
     guard !theme.citations.isEmpty, text.contains("[") else {
-        result.append(AttributedString(text))
+        result.append(styledRun(text, style: style))
         return
     }
     let ns = text as NSString
@@ -136,11 +334,14 @@ private func appendText(_ text: String, into result: inout AttributedString, the
     while index < ns.length {
         let range = NSRange(location: index, length: ns.length - index)
         guard let match = citationMarkerRegex.firstMatch(in: text, range: range) else {
-            result.append(AttributedString(ns.substring(from: index)))
+            result.append(styledRun(ns.substring(from: index), style: style))
             return
         }
         if match.range.location > index {
-            result.append(AttributedString(ns.substring(with: NSRange(location: index, length: match.range.location - index))))
+            result.append(styledRun(
+                ns.substring(with: NSRange(location: index, length: match.range.location - index)),
+                style: style
+            ))
         }
         if let ordinal = Int(ns.substring(with: match.range(at: 1))),
            let urlString = theme.citations[ordinal],
@@ -155,7 +356,7 @@ private func appendText(_ text: String, into result: inout AttributedString, the
             chip.backgroundColor = theme.monoBackground
             result.append(chip)
         } else {
-            result.append(AttributedString(ns.substring(with: match.range)))
+            result.append(styledRun(ns.substring(with: match.range), style: style))
         }
         index = match.range.location + match.range.length
     }
@@ -164,6 +365,7 @@ private func appendText(_ text: String, into result: inout AttributedString, the
 // MARK: - Paragraph & heading
 
 private struct ParagraphView: View {
+    @Environment(\.nexlyProseCompact) private var compact
     let spans: [InlineSpan]
     var showCaret: Bool = false
     var citations: [Int: String] = [:]
@@ -173,13 +375,14 @@ private struct ParagraphView: View {
             let theme = SpanTheme(
                 monoBackground: Aero.container,
                 linkColor: Aero.accentDeep,
-                textColor: Aero.text,
-                baseSize: 15,
+                textColor: compact ? NexlyInk.prose : Aero.text,
+                baseSize: compact ? 13 : 15,
                 citations: citations
             )
             Text(attributed(from: spans, theme: theme))
-                .font(Aero.body())
-                .foregroundStyle(Aero.text)
+                .font(compact ? .system(size: 13, weight: .regular) : Aero.body())
+                .lineSpacing(compact ? 2 : 0)
+                .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
                 .textSelection(.enabled)
         }
     }
@@ -318,6 +521,7 @@ private struct BlockQuoteView: View {
 // MARK: - Code block
 
 struct CodeBlockCardView: View {
+    @Environment(\.nexlyCodeWrap) private var wrapCode
     let language: String?
     let code: String
     var open: Bool = false
@@ -346,29 +550,46 @@ struct CodeBlockCardView: View {
                     .textSelection(.enabled)
             } else {
                 // Both axes scroll inside the card; large code never grows the
-                // transcript item forever. Open (mid-stream) fences stay plain
-                // monospace — one highlight pass on finalize.
-                ScrollView([.horizontal, .vertical]) {
-                    Group {
-                        if open {
-                            Text(code)
-                                .font(.system(size: 12, weight: .regular, design: .monospaced))
-                                .foregroundStyle(Aero.codeText)
-                        } else {
-                            highlightedCode(code, language: language)
-                                .foregroundStyle(Aero.codeText)
-                        }
+                // transcript item forever. Nexly cards opt into soft wrapping
+                // so a narrow glass card still shows every token.
+                if wrapCode {
+                    // The card grows to fit wrapped code. A nested vertical
+                    // ScrollView inside the transcript's scroll view was
+                    // collapsing to a short height and hiding lines in the
+                    // static render (and was awkward on a phone).
+                    codeContent
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 10)
+                        .textSelection(.enabled)
+                } else {
+                    ScrollView([.horizontal, .vertical]) {
+                        codeContent
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 10)
+                            .textSelection(.enabled)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 10)
-                    .textSelection(.enabled)
+                    .frame(maxHeight: 340)
                 }
-                .frame(maxHeight: 340)
             }
         }
         .background(RoundedRectangle(cornerRadius: 12).fill(Aero.codeSurface))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline, lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private var codeContent: some View {
+        Group {
+            if open {
+                Text(code)
+                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                    .foregroundStyle(Aero.codeText)
+            } else {
+                highlightedCode(code, language: language)
+                    .foregroundStyle(Aero.codeText)
+            }
+        }
     }
 }
 

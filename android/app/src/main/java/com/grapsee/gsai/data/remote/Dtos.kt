@@ -129,7 +129,10 @@ data class SendMessageRequest(
      *  resolves relative dates ("last 6 months", "next Friday") against THIS
      *  clock instead of guessing UTC — a chart labelled from the wrong month
      *  is worse than no chart. Null omits the field (old servers ignore it). */
-    val timezone: String? = null
+    val timezone: String? = null,
+    /** Non-visible client context (plan-checklist progress). Null omits it, so
+     *  plain sends stay byte-compatible with older servers. */
+    val turnContext: String? = null
 )
 
 /**
@@ -162,4 +165,25 @@ internal data class ConversationListDto(
 @Serializable
 internal data class MessageListDto(
     val items: List<MessageDto> = emptyList()
+)
+
+@Serializable
+data class PlanProgressItemDto(
+    val key: String,
+    val label: String
+)
+
+@Serializable
+data class PlanProgressDto(
+    val fingerprint: String,
+    val title: String,
+    val items: List<PlanProgressItemDto>,
+    val done: List<String>,
+    val preference: String? = null,
+    val updatedAt: String? = null
+)
+
+@Serializable
+data class PlanProgressResponse(
+    val progress: PlanProgressDto? = null
 )

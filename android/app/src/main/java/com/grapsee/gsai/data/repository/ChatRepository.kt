@@ -7,6 +7,7 @@ import java.net.UnknownHostException
 import com.grapsee.gsai.BuildConfig
 import com.grapsee.gsai.data.attachment.AttachmentDraft
 import com.grapsee.gsai.data.attachment.AttachmentPhase
+import com.grapsee.gsai.data.chat.NexlyPlanProgressStore
 import com.grapsee.gsai.data.local.AppDatabase
 import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.data.local.MessageEntity
@@ -180,7 +181,9 @@ class ChatRepository(
     private val api: ApiClient,
     private val db: AppDatabase,
     /** v0.71.5: invoked when a send proves the session-affinity pin is dead. */
-    private val onDeadSession: (() -> Unit)? = null
+    private val onDeadSession: (() -> Unit)? = null,
+    /** Needed to read the durable Nexly plan progress for turn context. */
+    private val appContext: android.content.Context? = null
 ) {
     private val _connectionState = MutableStateFlow(false)
     val connectionState: StateFlow<Boolean> = _connectionState.asStateFlow()
@@ -541,6 +544,11 @@ class ChatRepository(
                 content = content,
                 attachments = attachmentIds,
                 mode = mode,
+                // The durable plan checklist is the user's real progress. It
+                // rides as non-visible system context so the model can adapt
+                // the next answer instead of pretending the checks never
+                // happened.
+                turnContext = NexlyPlanProgressStore.contextFor(appContext, activeId),
                 onDelta = { delta ->
                     receivedAnyEvent = true
                     accumulated.append(delta)

@@ -1,0 +1,5 @@
+Here's a balanced schedule for a productive tomorrow:
+
+```plan
+{"title":"Here's a balanced schedule for a productive tomorrow:","rows":[{"time":"7:00 – 8:00 AM","text":"Wake up, stretch, breakfast","icon":"sunrise","tone":"amber"},{"time":"8:00 – 11:00 AM","text":"Morning classes","icon":"book-2","tone":"lavender"},{"time":"11:00 – 11:30 AM","text":"Break & snack","icon":"apple","tone":"green"},{"time":"11:30 – 1:30 PM","text":"Assignments & focused study","icon":"notebook","tone":"lavender"},{"time":"1:30 – 2:30 PM","text":"Lunch + walk","icon":"salad","tone":"green"},{"time":"2:30 – 4:30 PM","text":"Afternoon classes / project work","icon":"device-laptop","tone":"blue"},{"time":"4:30 – 5:30 PM","text":"Exercise / workout","icon":"run","tone":"pink"},{"time":"5:30 – 7:30 PM","text":"Dinner + free time","icon":"tools-kitchen-2","tone":"green"},{"time":"7:30 – 10:00 PM","text":"Review, wind down, sleep","icon":"moon","tone":"lilac"}],"closing":"You've got this — make it count!","closingIcon":"flame","timestamp":"9:45 PM","palette":"meadow","accent":"#0b7285","variant":"editorial"}
+```

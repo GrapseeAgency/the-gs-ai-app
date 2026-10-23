@@ -46,6 +46,10 @@ indirect enum Block: Equatable {
     /// `open` = the closing fence hasn't arrived yet (mid-stream representation).
     case codeBlock(language: String?, code: String, open: Bool, sourceStart: Int)
     case table(headers: [[InlineSpan]], aligns: [TableAlign], rows: [[[InlineSpan]]], sourceStart: Int)
+    /// The Nexly timetable. A first-class block: it owns its own glass card,
+    /// renders time + glass glyph + activity rows, and never falls through to
+    /// a markdown table or raw JSON. `open` is the mid-stream skeleton.
+    case plan(NexlyPlanData, open: Bool, sourceStart: Int)
     case divider(sourceStart: Int)
     case mathBlock(latex: String, sourceStart: Int)
     case mermaid(source: String, sourceStart: Int)
@@ -64,6 +68,7 @@ indirect enum Block: Equatable {
         case .blockQuote(_, let s): return s
         case .codeBlock(_, _, _, let s): return s
         case .table(_, _, _, let s): return s
+        case .plan(_, _, let s): return s
         case .divider(let s): return s
         case .mathBlock(_, let s): return s
         case .mermaid(_, let s): return s
@@ -297,6 +302,13 @@ private func isProse(_ lines: [GSLine], index: Int) -> Bool {
     return true
 }
 
+/// Fence names models reach for when they mean the Nexly timetable. `schedule`
+/// is also a real interactive app type, so it becomes a plan only when the
+/// body actually has timed rows.
+private let nexlyPlanFenceLanguages: Set<String> = [
+    "plan", "schedule", "timetable", "itinerary", "routine", "day",
+]
+
 private func parseFence(_ lines: [GSLine], start: Int) -> (Block, Int) {
     let opener = lines[start].text.trimmingCharacters(in: .whitespaces)
         .dropFirst(3)
@@ -317,6 +329,20 @@ private func parseFence(_ lines: [GSLine], start: Int) -> (Block, Int) {
             let block: Block
             if language?.lowercased() == "mermaid" {
                 block = .mermaid(source: code, sourceStart: lines[start].offset)
+            } else if let lang = language?.lowercased(),
+                      nexlyPlanFenceLanguages.contains(lang),
+                      let plan = parseNexlyPlan(code) {
+                // A validated timetable owns a real card. A malformed plan
+                // fence stays source code — never an empty glass surface.
+                block = .plan(plan, open: false, sourceStart: lines[start].offset)
+            } else if let lang = language?.lowercased(),
+                      ["json", "jsonc", "widget", "genui", "data"].contains(lang),
+                      let plan = parseNexlyPlan(code) {
+                // The model sometimes labels the same payload ```json. The
+                // validator only returns a plan when timed rows are present, so
+                // ordinary JSON stays code. Native parity with Android's
+                // promoteBarePayload().
+                block = .plan(plan, open: false, sourceStart: lines[start].offset)
             } else {
                 block = .codeBlock(language: language, code: code, open: false, sourceStart: lines[start].offset)
             }
@@ -326,8 +352,15 @@ private func parseFence(_ lines: [GSLine], start: Int) -> (Block, Int) {
         body.append(lines[i].text)
         i += 1
     }
-    // Unterminated trailing fence — mid-stream: render what arrived as open code.
-    return (.codeBlock(language: language, code: String(body.dropLast(body.hasSuffix("\n") ? 1 : 0)), open: true, sourceStart: lines[start].offset), lines.count)
+    let openCode = String(body.dropLast(body.hasSuffix("\n") ? 1 : 0))
+    // Unterminated trailing plan: show the glass skeleton rather than a wall
+    // of raw JSON. Everything else keeps the honest open-code representation.
+    if language?.lowercased() == "plan" {
+        return (.plan(parseNexlyPlan(openCode) ?? .placeholder,
+                      open: true,
+                      sourceStart: lines[start].offset), lines.count)
+    }
+    return (.codeBlock(language: language, code: openCode, open: true, sourceStart: lines[start].offset), lines.count)
 }
 
 private func parseMathBlock(_ lines: [GSLine], start: Int, into blocks: inout [Block]) -> Int {
@@ -602,6 +635,8 @@ private func shiftSource(_ block: Block, by delta: Int) -> Block {
         return .codeBlock(language: language, code: code, open: open, sourceStart: s + delta)
     case .table(let headers, let aligns, let rows, let s):
         return .table(headers: headers, aligns: aligns, rows: rows, sourceStart: s + delta)
+    case .plan(let plan, let open, let s):
+        return .plan(plan, open: open, sourceStart: s + delta)
     case .divider(let s):
         return .divider(sourceStart: s + delta)
     case .mathBlock(let latex, let s):

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -47,6 +49,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
@@ -55,6 +58,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -65,7 +69,10 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.ui.components.GsGlassRole
+import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsTheme
 import kotlinx.coroutines.Dispatchers
@@ -155,7 +162,24 @@ fun BlocksContent(
      * answer already stated. Empty strings disable recovery.
      */
     userPrompt: String = "",
-    priorContext: String = ""
+    priorContext: String = "",
+    /**
+     * Nexly glass transcript: consecutive prose blocks become one glass card,
+     * a plan block becomes its own sibling card, and [statusCard] is appended
+     * inside the first prose card (the reference's Thinking/Reasoning/Effort
+     * panel below the preamble). Other call sites keep the document surface.
+     */
+    glassAssistant: Boolean = false,
+    statusCard: (@Composable () -> Unit)? = null,
+    /**
+     * Plan turns put the status card after the whole preamble (the reference).
+     * A non-plan answer puts it after the first paragraph, so a long answer
+     * cannot push the card under the composer.
+     */
+    statusAtEnd: Boolean = true,
+    planTimestamp: String? = null,
+    /** Conversation that owns the plan, for durable checklist progress. */
+    planConversationId: String? = null
 ) {
     val cache = remember { StreamBlockCache() }
     // Recovery must be decided BEFORE parsing, because a successful recovery
@@ -179,24 +203,167 @@ fun BlocksContent(
     // defect. Prose blocks keep selection; every interactive block (widgets,
     // charts, code cards, mermaid, collapsibles, citation chips, tool results)
     // renders OUTSIDE the container and owns its own taps.
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (isStreaming && blocks.isEmpty()) {
-            StreamingCaret()
-        }
-        blocks.forEachIndexed { index, block ->
-            key(streamBlockKey(block, index)) {
-                val blockContent: @Composable () -> Unit = {
-                    BlockView(
-                        block = block,
-                        isLast = index == blocks.lastIndex,
-                        isStreaming = isStreaming,
-                        onCopyCode = onCopyCode,
-                        citationUrls = citationUrls,
-                        onSendPrompt = onSendPrompt
-                    )
-                }
-                if (block.isProseBlock()) SelectionContainer { blockContent() } else blockContent()
+    if (glassAssistant) {
+        NexlyAssistantBlocks(
+            blocks = blocks,
+            isStreaming = isStreaming,
+            onCopyCode = onCopyCode,
+            citationUrls = citationUrls,
+            onSendPrompt = onSendPrompt,
+            statusCard = statusCard,
+            statusAtEnd = statusAtEnd,
+            planTimestamp = planTimestamp,
+            planConversationId = planConversationId
+        )
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (isStreaming && blocks.isEmpty()) {
+                StreamingCaret()
             }
+            blocks.forEachIndexed { index, block ->
+                key(streamBlockKey(block, index)) {
+                    val blockContent: @Composable () -> Unit = {
+                        BlockView(
+                            block = block,
+                            isLast = index == blocks.lastIndex,
+                            isStreaming = isStreaming,
+                            onCopyCode = onCopyCode,
+                            citationUrls = citationUrls,
+                            onSendPrompt = onSendPrompt
+                        )
+                    }
+                    if (block.isProseBlock()) SelectionContainer { blockContent() } else blockContent()
+                }
+            }
+        }
+    }
+}
+
+private sealed interface NexlyGroup {
+    data class Prose(val blocks: List<Block>) : NexlyGroup
+    data class Plan(val block: Block.PlanBlock) : NexlyGroup
+}
+
+/**
+ * Compose the assistant turn the way the reference does: one glass card for
+ * the preamble (with the live Thinking panel nested after it), then one glass
+ * card for the timetable. A plan card is never nested inside the prose card.
+ */
+@Composable
+private fun NexlyAssistantBlocks(
+    blocks: List<Block>,
+    isStreaming: Boolean,
+    onCopyCode: (String) -> Unit,
+    citationUrls: Map<Int, String>,
+    onSendPrompt: ((String) -> Unit)?,
+    statusCard: (@Composable () -> Unit)?,
+    statusAtEnd: Boolean,
+    planTimestamp: String?,
+    planConversationId: String?
+) {
+    val groups = remember(blocks, statusCard != null) {
+        val out = mutableListOf<NexlyGroup>()
+        val prose = mutableListOf<Block>()
+        fun flush() {
+            if (prose.isNotEmpty()) {
+                out += NexlyGroup.Prose(prose.toList())
+                prose.clear()
+            }
+        }
+        for (block in blocks) {
+            if (block is Block.PlanBlock) {
+                flush()
+                out += NexlyGroup.Plan(block)
+            } else {
+                prose += block
+            }
+        }
+        flush()
+        if (statusCard != null && out.firstOrNull() !is NexlyGroup.Prose) {
+            out.add(0, NexlyGroup.Prose(emptyList()))
+        }
+        out
+    }
+    var statusPlaced = false
+    // The sheet keeps the assistant cards narrower than the phone: about 69%
+    // of the device width, so the pearl backdrop stays visible at the right.
+    val wide = LocalConfiguration.current.screenWidthDp >= 600
+    val cardMax = if (wide) 340.dp else 286.dp
+    val planMax = if (wide) 350.dp else 290.dp
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        groups.forEach { group ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                NexlyAssistantOrb(size = 28.dp)
+                Spacer(Modifier.width(9.dp))
+                Box(Modifier.weight(1f)) {
+                    when (group) {
+                        is NexlyGroup.Plan -> NexlyPlanCard(
+                            plan = group.block.plan,
+                            open = group.block.open,
+                            fallbackTimestamp = planTimestamp,
+                            modifier = Modifier.widthIn(max = planMax),
+                            planConversationId = planConversationId
+                        )
+                        is NexlyGroup.Prose -> CompositionLocalProvider(
+                            LocalNexlyProseStyle provides TextStyle(
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
+                                fontWeight = FontWeight.Normal,
+                                color = NexlyInk.prose
+                            ),
+                            LocalNexlyCodeWrap provides true
+                        ) {
+                        Column(
+                            modifier = Modifier
+                                .widthIn(max = cardMax)
+                                .fillMaxWidth()
+                                .nexlyGlassCard(20.dp)
+                                .padding(horizontal = 13.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (group.blocks.isEmpty() && isStreaming) {
+                                if (statusCard == null) StreamingCaret()
+                            }
+                            val statusHostIndex = if (statusAtEnd) {
+                                group.blocks.lastIndex
+                            } else {
+                                0
+                            }
+                            group.blocks.forEachIndexed { index, block ->
+                                key(streamBlockKey(block, index)) {
+                                    val blockContent: @Composable () -> Unit = {
+                                        BlockView(
+                                            block = block,
+                                            isLast = index == group.blocks.lastIndex,
+                                            isStreaming = isStreaming,
+                                            onCopyCode = onCopyCode,
+                                            citationUrls = citationUrls,
+                                            onSendPrompt = onSendPrompt
+                                        )
+                                    }
+                                    if (block.isProseBlock()) SelectionContainer { blockContent() } else blockContent()
+                                }
+                                if (!statusPlaced && statusCard != null && index == statusHostIndex) {
+                                    statusPlaced = true
+                                    Spacer(Modifier.height(2.dp))
+                                    statusCard()
+                                }
+                            }
+                            if (!statusPlaced && statusCard != null && group.blocks.isEmpty()) {
+                                statusPlaced = true
+                                statusCard()
+                            }
+                        }
+                        }
+                    }
+                }
+            }
+        }
+        if (isStreaming && blocks.isEmpty() && groups.isEmpty()) {
+            StreamingCaret()
         }
     }
 }
@@ -282,6 +449,7 @@ private fun BlockView(
         is Block.MermaidBlock -> MermaidBlockView(block, streaming = isStreaming, onCopyCode = onCopyCode)
         is Block.HtmlBlock -> HtmlBlockView(block, streaming = isStreaming)
         is Block.WidgetBlock -> WidgetBlockView(block, streaming = isStreaming, onSendPrompt = onSendPrompt)
+        is Block.PlanBlock -> NexlyPlanCard(block.plan, open = block.open)
         is Block.ImageBlock -> ImageBlockView(block)
         is Block.CollapsibleBlock -> CollapsibleBlockView(block, citationUrls)
         is Block.CitationsBlock -> CitationsBlockView(block)
@@ -311,13 +479,15 @@ private data class SpanTheme(
 @Composable
 private fun rememberSpanTheme(
     defaultFontSize: androidx.compose.ui.unit.TextUnit,
-    citationUrls: Map<Int, String> = emptyMap()
+    citationUrls: Map<Int, String> = emptyMap(),
+    textColor: Color? = null
 ): SpanTheme {
     val context = androidx.compose.ui.platform.LocalContext.current
+    remember(context) { NexlyIcons.ensureLoaded(context.applicationContext) }
     return SpanTheme(
         codeBg = MaterialTheme.colorScheme.surfaceContainerHighest,
         linkColor = MaterialTheme.colorScheme.primary,
-        textColor = MaterialTheme.colorScheme.onSurface,
+        textColor = textColor ?: MaterialTheme.colorScheme.onSurface,
         caretColor = MaterialTheme.colorScheme.primary,
         fontSize = defaultFontSize,
         citations = citationUrls,
@@ -325,10 +495,30 @@ private fun rememberSpanTheme(
     )
 }
 
+private fun appendNexlyText(
+    builder: AnnotatedString.Builder,
+    text: String,
+    theme: SpanTheme
+) {
+    for (part in NexlyIcons.inlineParts(text)) {
+        if (part.isIcon) {
+            builder.withStyle(
+                SpanStyle(
+                    fontFamily = NexlyIcons.family,
+                    fontSize = theme.fontSize * 1.14f,
+                    color = theme.textColor
+                )
+            ) { append(NexlyIcons.glyph(part.value)) }
+        } else {
+            builder.append(part.value)
+        }
+    }
+}
+
 private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan>, theme: SpanTheme) {
     for (span in spans) {
         when (span) {
-            is InlineSpan.TextSpan -> builder.append(span.text)
+            is InlineSpan.TextSpan -> appendNexlyText(builder, span.text, theme)
             is InlineSpan.BoldSpan -> builder.withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
                 appendSpans(builder, span.children, theme)
             }
@@ -446,15 +636,18 @@ private fun ParagraphBlock(
     citationUrls: Map<Int, String>
 ) {
     if (block.spans.isEmpty()) return
-    val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize, citationUrls)
+    val compact = LocalNexlyProseStyle.current
+    val bodyStyle = compact ?: MaterialTheme.typography.bodyMedium
+    val ink = compact?.color ?: MaterialTheme.colorScheme.onSurface
+    val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
     val styled = remember(block.spans, theme, showCaret) {
         spansToAnnotatedString(block.spans, theme, showCaret)
     }
     val text = @Composable {
         Text(
             text = styled,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface
+            style = bodyStyle,
+            color = ink
         )
     }
     if (selectable) SelectionContainer { text() } else text()

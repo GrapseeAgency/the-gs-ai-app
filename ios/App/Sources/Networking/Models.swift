@@ -307,12 +307,22 @@ struct SendMessageRequest: Codable, Equatable {
     /// FLASH MODE (Phase 3): 'flash' | 'thinking' | 'auto'. Nil is omitted
     /// from the wire; the backend default is 'flash'.
     var mode: String?
+    /// Non-visible client context (plan-checklist progress). Nil is omitted;
+    /// old servers ignore unknown fields.
+    var turnContext: String?
 
-    init(content: String, stream: Bool = false, attachments: [String]? = nil, mode: String? = nil) {
+    init(
+        content: String,
+        stream: Bool = false,
+        attachments: [String]? = nil,
+        mode: String? = nil,
+        turnContext: String? = nil
+    ) {
         self.content = content
         self.stream = stream
         self.attachments = attachments
         self.mode = mode
+        self.turnContext = turnContext
     }
 
     init(from decoder: Decoder) throws {
@@ -321,6 +331,7 @@ struct SendMessageRequest: Codable, Equatable {
         stream = try container.decodeIfPresent(Bool.self, forKey: .stream) ?? false
         attachments = try container.decodeIfPresent([String].self, forKey: .attachments)
         mode = try container.decodeIfPresent(String.self, forKey: .mode)
+        turnContext = try container.decodeIfPresent(String.self, forKey: .turnContext)
     }
 }
 
@@ -389,4 +400,25 @@ struct MessageListEnvelope: Codable, Equatable {
 struct APIErrorEnvelope: Codable, Equatable {
     var code: String?
     var message: String
+}
+
+// MARK: - Nexly plan progress (cross-device checklist)
+
+struct PlanProgressItem: Codable, Equatable, Identifiable {
+    var key: String
+    var label: String
+    var id: String { key }
+}
+
+struct PlanProgressPayload: Codable, Equatable {
+    var fingerprint: String
+    var title: String
+    var items: [PlanProgressItem]
+    var done: [String]
+    var preference: String?
+    var updatedAt: String?
+}
+
+struct PlanProgressEnvelope: Codable {
+    var progress: PlanProgressPayload?
 }

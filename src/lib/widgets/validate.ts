@@ -30,6 +30,7 @@ import {
   type WidgetKind,
 } from './catalog'
 import { SURFACES, PALETTES, type Palette, type Surface } from '../design/rulebook'
+import { isNexlyPlanPayload, parseNexlyPlan } from '../nexly/plan'
 
 export interface WidgetFence {
   kind: string
@@ -52,27 +53,44 @@ export type ValidationResult =
 /** ```kind\n{...}\n``` at the start of a line. */
 const FENCE = /^```([a-zA-Z][\w-]*)[ \t]*\r?\n([\s\S]*?)^```[ \t]*$/gm
 
+/**
+ * Fence languages a model naturally reaches for when it means the Nexly
+ * timetable. `schedule` is also a real interactive app type, so it is only
+ * re-routed when the payload actually has timed rows.
+ */
+const PLAN_FENCE_LANGUAGES = new Set(['plan', 'schedule', 'timetable', 'itinerary', 'routine', 'day'])
+
 export function extractWidgetFences(text: string): WidgetFence[] {
   const out: WidgetFence[] = []
   for (const m of text.matchAll(FENCE)) {
     const language = m[1]
+    const lower = language.toLowerCase()
+    const body = m[2].trim()
     // A chart sub-type fence (```funnel, ```gantt …) is a chart widget with the
     // type implied by the fence. Normalising here means the persisted answer
     // only ever carries the canonical ```chart form, and the client never sees
     // a payload it would render as a code block.
-    const kind = widgetKindOf(language)
+    let kind = widgetKindOf(language)
+    if (PLAN_FENCE_LANGUAGES.has(lower) && body.startsWith('{')) {
+      try {
+        if (isNexlyPlanPayload(JSON.parse(body))) kind = 'plan'
+      } catch {
+        // The validator below reports the malformed body.
+      }
+    }
     if (!kind) continue
     const start = m.index ?? 0
-    const body = m[2].trim()
     // A widget payload is a JSON OBJECT. A ```gantt fence holding mermaid's
     // gantt syntax (dateFormat/section lines — the model does this constantly)
     // is NOT a widget: validating it would report "invalid JSON" and STRIP the
     // fence, destroying a diagram the client could have rendered. Leave it in
     // the text, untouched, for the client's diagram renderer.
     if (!body.startsWith('{')) continue
-    const json = language.toLowerCase() !== kind
-      ? injectWidgetType(body, language, kind)
-      : body
+    const json = kind === 'plan'
+      ? body
+      : lower !== kind
+        ? injectWidgetType(body, language, kind)
+        : body
     out.push({ kind, json, start, end: start + m[0].length })
   }
   return out
@@ -104,6 +122,10 @@ export function inferWidgetKind(json: string): WidgetKind | null {
   if (has('columns') && has('rows')) candidates.push('table')
   if (has('cards')) candidates.push('stat')
   if (has('entries')) candidates.push('timeline')
+  // Only timed rows are a plan. A `{rows:[...]}` payload with labels/values is
+  // usually a table or a bespoke widget; do not steal it from its renderer.
+  if (has('rows') && isNexlyPlanPayload(obj)) candidates.push('plan')
+  if (has('items') && isNexlyPlanPayload(obj)) candidates.push('plan')
   if (has('questions')) candidates.push('quiz')
   if (has('fields')) candidates.push('form')
   if (has('prompts')) candidates.push('followups')
@@ -735,6 +757,15 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     return {
       widget: { title: asString(p.title), entries },
       errors: entries.length ? [] : ['timeline needs dated entries'],
+      repaired: false,
+    }
+  },
+
+  plan: (p) => {
+    const plan = parseNexlyPlan(p)
+    return {
+      widget: plan ? { ...plan } : {},
+      errors: plan ? [] : ['plan needs at least one timed row with time and text'],
       repaired: false,
     }
   },

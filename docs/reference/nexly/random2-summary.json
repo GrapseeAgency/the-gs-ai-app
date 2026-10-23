@@ -1,0 +1,46 @@
+{
+  "at": "2026-10-23T18:21:01.748Z",
+  "base": "http://127.0.0.1:3000",
+  "questions": [
+    {
+      "id": "coding-sql-join-duplicates",
+      "conversationId": "cmvlaokf3000gpohl189it2ah",
+      "question": "Why does my SQL query return duplicate rows when I join orders with order_items, and what is the cleanest fix?",
+      "clarified": false,
+      "sources": 0,
+      "expectSearch": false,
+      "searchMatched": true,
+      "answerChars": 2642
+    },
+    {
+      "id": "coding-js-async-beginner",
+      "conversationId": "cmvlaozk6000mpohl80do9pqg",
+      "question": "Explain async/await vs .then() promises in JavaScript to a complete beginner with one tiny example.",
+      "clarified": false,
+      "sources": 0,
+      "expectSearch": false,
+      "searchMatched": true,
+      "answerChars": 1231
+    },
+    {
+      "id": "life-monstera-yellow",
+      "conversationId": "cmvlap8s6000spohlwc0jeckl",
+      "question": "The bottom leaves of my monstera are turning yellow. What is most likely wrong and what should I do first?",
+      "clarified": false,
+      "sources": 0,
+      "expectSearch": false,
+      "searchMatched": true,
+      "answerChars": 2313
+    },
+    {
+      "id": "life-dst-end-current",
+      "conversationId": "cmvlaplyw000ypohlvultpswu",
+      "question": "When does daylight saving time end in the United States this year?",
+      "clarified": false,
+      "sources": 2,
+      "expectSearch": true,
+      "searchMatched": true,
+      "answerChars": 517
+    }
+  ]
+}
