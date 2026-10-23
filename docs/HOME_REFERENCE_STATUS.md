@@ -70,6 +70,8 @@ cannot distort, because it is the same string at the same rendering.
 | video chip | 7.21 pt | 11.0 (13 dp icon) | 7.67 (10 sp, 8 dp icon) |
 | card headline | 16 pt, same line break | 16 | 16 kept |
 | card body | 12 pt, two lines | 12, three lines | unchanged — the face, not the size |
+| "Today's reflection" | 9.10 pt | 8.67 at 12.5 | unchanged — inside the noise |
+| "Mind Guide" | — | 8.33 at 13 | not measurable: the sheet's window merges its two lines |
 
 Three of these were 20% or more off the picture while both platforms agreed with each
 other. That is the failure mode this table exists to catch: the contract cannot see it,
