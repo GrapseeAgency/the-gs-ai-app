@@ -153,8 +153,11 @@ SUGGESTIONS_IOS = {"name": "suggestions",
                    # — a detector validated on the previous capture first, where it
                    # returned 0.7926 against the 0.7935 that had been measured by
                    # hand.
-                   "interior": [0.66, 0.7750, 0.26, 0.0200],
-                   "outside":  [0.004, 0.7750, 0.022, 0.0200],
+                   # Interior lowered 3.4 pt and shortened: it read -5.65 tint with 5.22 spread,
+    # i.e. it was straddling the card's top edge and averaging its title row in.
+    # The rim is right where it was (Δrim 1.75, hairline 238.91 inside its band).
+    "interior": [0.66, 0.7790, 0.26, 0.0160],
+                   "outside":  [0.004, 0.7790, 0.022, 0.0160],
                    "rim_y": 0.7715}
 
 # The bento's Mind Guide card — the sheet's purest glass, sitting on the bloom
