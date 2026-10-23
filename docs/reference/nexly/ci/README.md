@@ -173,8 +173,9 @@ turn:
 - **Reasoning** shows a real sentence only when the provider streamed a trace;
   otherwise it says “No reasoning trace exposed”.
 
-The card is still shown on plan turns as a status surface, but it no longer
-invents a reasoning trace or an effort level the model never received. The
+The card is shown only when a real thinking/reasoning event or search
+sources exist. A flash plan turn has no stage card; it no longer invents a
+reasoning trace or an effort level the model never received. The
 free model profile (`supportsReasoningEffort: false`) sends no effort value;
 the old static “High effort” fixture has been removed from the card and from
 the claims.
@@ -185,15 +186,17 @@ the sources are counted and surfaced in the Search row.
 
 ## Verified runs
 
-Both workflows completed green on commit `67c5809b`:
+Both workflows completed green on commit `48daa550`:
 
 - Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39938777811
-  (run `39938777811`, 281 unit tests)
+  (run `39955028622`, 281 unit tests)
 - iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39938781413
-  (run `39938781413`)
+  (run `39955031934`)
 
 `reference-vs-android-393x852.png` and `reference-vs-ios-393x852.png` place the
 sheet and the final native render at the same scale for a direct comparison.
+The native render is flash, so the sheet's Thinking/Reasoning panel is absent
+by design; the `*thinking*` image is the separate thinking-mode component.
 
 Android runs the full unit suite (281 tests, including `NexlyPlanTest` and the
 new progress-store tests); the

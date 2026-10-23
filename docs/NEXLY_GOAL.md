@@ -162,6 +162,15 @@ catalogue, validator and web registry also know the `plan` kind.
   “Effort” claim and the static “High effort” fixture are gone.
 - The Android composer uses the iOS proportions: 38pt sparkle lane, 46pt
   capsule, 14pt field, 36pt send control.
+- Flash is the default and no longer paints a Thinking/Reasoning card. The
+  short non-thinking planner runs on every turn to choose answer, clarify or
+  web search; a search runs before the answer in the same turn, and clarify
+  options become native chips. Flash plan/prose evidence has no stage card.
+- Fresh evidence: four live flash questions (Python comprehension, React
+  effect, snoozing, interrupting a friend) are captured in
+  `docs/reference/nexly/random-*.md`; the coding and snoozing answers render on
+  both devices at 393×1400. The snoozing answer is a real model-authored plan.
+
 - Cards use a thinner white veil, a hairline rim and almost no shadow. The
   backdrop draws defined pearl spheres (white rim, refraction band, specular
   crescent) and a stronger lotus in the lower-left.
@@ -177,8 +186,8 @@ catalogue, validator and web registry also know the `plan` kind.
   `ios/App/Tests/AppTests/NexlyPlanProgressStoreTests.swift`, expanded
   `scripts/test-nexly-plan.ts`, `F26_NEXLY_PLAN` fixtures on both parsers, and
   plan, adaptive-thinking, prose and full-screen renders on both platforms.
-- Native verification is green on commit `67c5809b`: Android CI run
-  `39938777811` (compile, Home render, Nexly response + adaptive + full-screen
+- Native verification is green on commit `48daa550`: Android CI run
+  `39955028622` (compile, Home render, Nexly response + adaptive + full-screen
   renders at the full size matrix, 281 unit tests) and iOS CI run
-  `39938781413` (Xcode build, XCTest, Home render, the same Nexly renders).
+  `39955031934` (Xcode build, XCTest, Home render, the same Nexly renders).
   Evidence and run links are in `docs/reference/nexly/ci/README.md`.
