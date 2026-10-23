@@ -192,7 +192,11 @@ catalogue, validator and web registry also know the `plan` kind.
   question ran retrieval (8 sources) and, because the sources were irrelevant,
   the model refused to invent the version and pointed to the official releases
   page. Flash mode was `effective=flash`, and the planner ran on the turn.
-  Evidence: `docs/reference/nexly/backend-capabilities.json`.
+  A second run (`39961095648`) sent `turnContext` with “Completed: Drink water;
+  Open curtains” and the model answered exactly those two items, proving the
+  checklist context reaches it. Evidence:
+  `docs/reference/nexly/backend-capabilities.json` and
+  `backend-capabilities-progress.json`.
 - Native verification is green on commit `48daa550`: Android CI run
   `39955028622` (compile, Home render, Nexly response + adaptive + full-screen
   renders at the full size matrix, 281 unit tests) and iOS CI run
