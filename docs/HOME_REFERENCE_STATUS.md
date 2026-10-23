@@ -60,8 +60,9 @@ means choosing and licensing another family for both platforms.
 **The video card's artwork is the right kind of picture, shipped upside down to be
 less wrong.** Its saturation and lightness match the reference (chroma mean 22.1
 against 20.5 over the whole card, 30.1 against 29.2 over the art's own region), and
-the art region's chroma map correlates with the reference's at **r = +0.604** with
-the orientation we ship and **r = +0.372** with the same art the other way up.
+the art region's chroma map correlates with the reference's at **r = +0.604** on
+Android and **+0.616** on iOS with the orientation we ship, against **+0.372** with
+the same art the other way up.
 
 That 0.604 is a placement story only in the weak sense: it is the best any transform
 of our asset reaches, and it is short of the ~0.85 that would mean "the same picture
