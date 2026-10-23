@@ -364,11 +364,13 @@ final class HomeRenderTests: XCTestCase {
         // change moved the page, and it reported "the glass is not rasterising"
         // when the glass had simply moved 12 pt. Scan the column for the brightest
         // row in the bento's neighbourhood and measure under it.
-        // The RIGHT column, where the Mind Guide card's lit hairline lives. At
-        // x 0.30 sits the video card, whose top edge is a chip pill and a soft
-        // gradient — the scan found 245 L there and called it "no edge", which was
-        // true of that column and false of the page.
-        let colX = size.width * 0.64
+        // The whole right column, as a fraction, exactly as the pixel gate's bento
+        // probe reads it. A single column at a fixed fraction is not width-stable:
+        // at 393 it landed on the Mind Guide hairline, at 360 and 411 it landed on
+        // that card's title text, and the check then reported "no lit edge" at two
+        // widths out of three while the rim was sitting there the whole time.
+        let colX = size.width * 0.62
+        let colW = size.width * 0.30
         var bestY = size.height * 0.33
         var bestL = -1.0
         var scan = size.height * 0.33
@@ -376,11 +378,11 @@ final class HomeRenderTests: XCTestCase {
             // One pixel row, because the rim IS one pixel: a 2 pt window at 3x
             // averages six rows and pulled a 252 L hairline down to 244, which
             // made the scan unable to tell a lit card edge from the page.
-            let v = meanLuma(gray, x: colX, y: scan, w: size.width * 0.18, h: 1)
+            let v = meanLuma(gray, x: colX, y: scan, w: colW, h: 1)
             if v > bestL { bestL = v; bestY = scan }
             scan += 2
         }
-        let card = meanLuma(gray, x: colX, y: bestY + 10, w: size.width * 0.18, h: 12)
+        let card = meanLuma(gray, x: colX, y: bestY + 10, w: colW, h: 12)
         let margin = meanLuma(gray, x: size.width * 0.02, y: bestY + 10, w: size.width * 0.05, h: 12)
         if bestL < 248 {
             problems.append("no lit card edge in the bento's band — brightest row was "
