@@ -615,15 +615,18 @@ jobs:
             --rerun --tests "com.grapsee.gsai.ui.explore.NexlyExploreScreenshotTest" \
             -PgsShots=true
           SHOTS=app/build/screenshots
-          for w in 393x1400 393x852 411x914 360x780; do
-            test -s "$SHOTS/nexly-explore-$w.png" \
-              || { echo "::error::nexly-explore-$w.png was not produced"; exit 1; }
+          # The full-page capture keeps the -full- name (chat-harness
+          # convention). Roborazzi flushes asynchronously, so wait for each
+          # file to be non-empty instead of failing on a racing check.
+          for name in nexly-explore-full-393x1400 nexly-explore-393x852 nexly-explore-411x914 nexly-explore-360x780 nexly-explore-search-393x852 nexly-explore-search-empty-393x852; do
+            for attempt in 1 2 3 4 5 6; do
+              [ -s "$SHOTS/$name.png" ] && break
+              sleep 5
+            done
+            test -s "$SHOTS/$name.png" \
+              || { echo "::error::$name.png was not produced"; exit 1; }
           done
-          test -s "$SHOTS/nexly-explore-search-393x852.png" \
-            || { echo "::error::the Explore search-state render was not produced"; exit 1; }
-          test -s "$SHOTS/nexly-explore-search-empty-393x852.png" \
-            || { echo "::error::the Explore empty-search render was not produced"; exit 1; }
-          echo "rendered nexly-explore-*.png"
+          echo "rendered all six Explore captures"
 
       - name: Upload the Nexly Explore renders
         if: always()

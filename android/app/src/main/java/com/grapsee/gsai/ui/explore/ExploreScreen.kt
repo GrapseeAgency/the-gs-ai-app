@@ -146,16 +146,6 @@ fun ExploreScreen(
                     .padding(horizontal = 20.dp),
             ) {
                 Spacer(Modifier.height(14.dp))
-                HeroCard(
-                    inkStrong = inkStrong,
-                    inkBody = inkBody,
-                    onExploreAll = {
-                        category = ExploreCategory.All
-                        showAllTools = true
-                        scope.launch { scroll.animateScrollTo(scroll.maxValue) }
-                    },
-                )
-                Spacer(Modifier.height(18.dp))
 
                 if (query.isNotBlank()) {
                     SectionHeader("Results", inkHeader, inkMuted, count = ExploreCatalog.search(query).size)
@@ -170,6 +160,16 @@ fun ExploreScreen(
                         }
                     }
                 } else {
+                    HeroCard(
+                        inkStrong = inkStrong,
+                        inkBody = inkBody,
+                        onExploreAll = {
+                            category = ExploreCategory.All
+                            showAllTools = true
+                            scope.launch { scroll.animateScrollTo(scroll.maxValue) }
+                        },
+                    )
+                    Spacer(Modifier.height(18.dp))
                     CategoryChips(category, onSelect = { category = it })
                     Spacer(Modifier.height(20.dp))
 
@@ -374,13 +374,27 @@ private fun HeroCard(
             .fillMaxWidth()
             .gsGlass(role = GsGlassRole.CardLight, shape = RoundedCornerShape(26.dp)),
     ) {
+        // The reference's hero: pearl on the left where the copy sits, the
+        // ethereal art carrying the right side. The scrim keeps the left
+        // readable without hiding the bloom.
         Image(
             painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             alignment = Alignment.CenterEnd,
             modifier = Modifier.matchParentSize(),
-            alpha = 0.55f,
+            alpha = 0.85f,
+        )
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(
+                    Brush.horizontalGradient(
+                        0f to Color(0xFFFDF1EC).copy(alpha = 0.88f),
+                        0.55f to Color(0xFFFDF1EC).copy(alpha = 0.30f),
+                        1f to Color.Transparent,
+                    ),
+                ),
         )
         Column(Modifier.padding(18.dp)) {
             Row(
@@ -676,7 +690,7 @@ private fun CollectionCard(
                 .height(86.dp),
         ) {
             Image(
-                painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus),
+                painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
