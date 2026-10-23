@@ -613,3 +613,62 @@ jobs:
             echo "      (8.13); no wrapper JAR is committed by design."
           } >> "$GITHUB_STEP_SUMMARY"
 
+
+  # One-shot end-to-end capability probe against a locally running branch
+  # server (SQLite + real model + real planner + real retrieval).
+  backend-capabilities:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+      - name: Create SQLite schema
+        env:
+          DATABASE_URL: file:./dev.db
+        run: |
+          bunx prisma generate
+          bunx prisma db push --accept-data-loss
+      - name: Start branch server
+        env:
+          DATABASE_URL: file:./dev.db
+          OPENROUTER_API_KEYS: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          bunx next dev -p 3000 > /tmp/next.log 2>&1 &
+          echo $! > /tmp/next.pid
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+              echo "server ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::branch server did not become ready"
+          tail -80 /tmp/next.log
+          exit 1
+      - name: Probe clarify, multi-turn, and live search
+        env:
+          OPENROUTER_API_KEYS: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: bun scripts/live-backend-capabilities.ts
+      - name: Server log
+        if: always()
+        run: tail -200 /tmp/next.log || true
+      - name: Upload probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexly-backend-capabilities
+          path: |
+            docs/reference/nexly/backend-capabilities.json
+            /tmp/next.log
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Stop server
+        if: always()
+        run: kill "$(cat /tmp/next.pid)" 2>/dev/null || true
