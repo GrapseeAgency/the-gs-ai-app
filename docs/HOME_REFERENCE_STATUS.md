@@ -68,10 +68,11 @@ cannot distort, because it is the same string at the same rendering.
 | "See All" | 7.89 pt | 10.33 at 14 | **9.00 at 11** |
 | dock "Generate" | 8.50 pt | 10.33 at 15 | **8.33 at 12** |
 | quick-action labels | 14.6 pt | 13.7 | unchanged — already right |
-| "Nexly" | 12.14 pt | 13.33 at 18 | 16.5 (see below) |
+| "Nexly" | 15.17 pt | 16.00 at 16.5 | **15.00 at 15** |
 | video chip | 7.21 pt | 11.0 (13 dp icon) | 7.67 (10 sp, 8 dp icon) |
 | card headline | 16 pt, same line break | 16 | 16 kept |
 | card body | 12 pt, two lines | 12, three lines | unchanged — the face, not the size |
+| "AI Companion" | 9.71 pt | 11.00 at 11 | **10.33 at 10** |
 | "Today's reflection" | 9.10 pt | 8.67 at 12.5 | unchanged — inside the noise |
 | "Mind Guide" | — | 8.33 at 13 | not measurable: the sheet's window merges its two lines |
 
