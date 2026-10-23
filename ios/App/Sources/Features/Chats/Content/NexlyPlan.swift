@@ -667,7 +667,7 @@ struct NexlyPlanCard: View {
         VStack(alignment: .leading, spacing: 5) {
             NexlyInlineText(
                 text: plan.title,
-                fontSize: 12.5,
+                fontSize: 12,
                 glyphSize: 14,
                 color: NexlyInk.title,
                 // The sheet's title is only a hair larger than the rows; at the
@@ -689,24 +689,13 @@ struct NexlyPlanCard: View {
                             GSHaptics.select()
                         } label: {
                             HStack(alignment: .center, spacing: 10) {
-                                ZStack(alignment: .bottomTrailing) {
-                                    NexlyGlassGlyphTile(
-                                        name: row.icon,
-                                        tone: row.tone,
-                                        size: 24,
-                                        glyphSize: 12
-                                    )
-                                    .opacity(done ? 0.55 : 1)
-                                    if done {
-                                        Circle()
-                                            .fill(NexlyGlassTone.peach.ink)
-                                            .frame(width: 13, height: 13)
-                                            .overlay(Circle().strokeBorder(Color.white, lineWidth: 1))
-                                            .overlay(
-                                                NexlyGlyph(name: "check", size: 8, color: .white)
-                                            )
-                                    }
-                                }
+                                NexlyGlassGlyphTile(
+                                    name: row.icon,
+                                    tone: row.tone,
+                                    size: 24,
+                                    glyphSize: 12
+                                )
+                                .opacity(done ? 0.55 : 1)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(row.time)
                                         .font(.system(size: 9.5, weight: .regular))
@@ -722,7 +711,19 @@ struct NexlyPlanCard: View {
                                         strikethrough: done
                                     )
                                 }
-                                Spacer(minLength: 0)
+                                Spacer(minLength: 8)
+                                ZStack {
+                                    if done {
+                                        Circle().fill(NexlyGlassTone.peach.ink)
+                                        NexlyGlyph(name: "check", size: 9, color: .white)
+                                    } else {
+                                        Circle().strokeBorder(
+                                            NexlyInk.meta.opacity(0.38),
+                                            lineWidth: 1
+                                        )
+                                    }
+                                }
+                                .frame(width: 16, height: 16)
                             }
                             .contentShape(Rectangle())
                         }

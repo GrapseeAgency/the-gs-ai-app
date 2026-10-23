@@ -54,7 +54,15 @@ a generic chat screen rather than the sheet:
   about 70% of the 393pt width, leaving the pearl field visible at the right;
 - the plan title is a single line at the sheet's lighter weight;
 - glyph chips use a **pale tone wash with the saturated colour in the glyph**
-  (not saturated chips with white ink);
+  (not saturated chips with white ink), at a **24pt** chip / 12pt glyph so they
+  read as annotations rather than giant app icons;
+- plan rows are **interactive checkboxes**: each row shows a trailing check
+  ring and tapping it fills the ring, strikes the row and fires haptic
+  feedback (the row is exposed as a checkbox to assistive tech, not a dead
+  list);
+- the Android composer now uses the same compact proportions as iOS: a 38pt
+  sparkle lane inside a 46pt capsule, 14pt field and 36pt peach send control,
+  instead of the oversized 48pt leading control;
 - text uses the sheet's **soft neutral grey ink**, not the app's near-black
   brown: the user/preamble stay around `#4A4750`, plan titles around
   `#555860`, rows around `#5E6068`, and metadata around `#8C8E96`;

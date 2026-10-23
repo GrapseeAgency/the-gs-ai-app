@@ -149,10 +149,17 @@ catalogue, validator and web registry also know the `plan` kind.
 - The sheet's **soft neutral ink** replaced the app's near-black brown
   (`#4A4750` prose, `#555860` title, `#5E6068` rows, `#8C8E96` metadata).
 - Glyph chips are now a **pale tone wash with the saturated colour in the
-  glyph**, not saturated chips with white ink. Cards use a thinner white veil,
-  a hairline rim and almost no shadow. The backdrop draws defined pearl
-  spheres (white rim, refraction band, specular crescent) and a stronger lotus
-  in the lower-left.
+  glyph**, not saturated chips with white ink, and are **24pt with a 12pt
+  glyph** so the emoji replacement reads at text scale, not as a giant icon.
+- Plan rows are **actionable**: every row has a trailing check ring; tapping
+  fills it, strikes the row, reduces the tile tone and fires haptic feedback.
+  The row is exposed as a checkbox to assistive tech. This is the interactive
+  layer the response was missing.
+- The Android composer uses the iOS proportions: 38pt sparkle lane, 46pt
+  capsule, 14pt field, 36pt send control.
+- Cards use a thinner white veil, a hairline rim and almost no shadow. The
+  backdrop draws defined pearl spheres (white rim, refraction band, specular
+  crescent) and a stronger lotus in the lower-left.
 - iOS landscape no longer pushes the composer below the screen edge: the
   harness pins the column to the geometry height, ignores the simulator safe
   area, and keeps the composer in flow.

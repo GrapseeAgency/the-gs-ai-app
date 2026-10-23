@@ -562,7 +562,7 @@ fun NexlyPlanCard(
         NexlyInlineRichText(
             text = cleanPlanText(plan.title, 160),
             color = NexlyInk.title,
-            fontSize = 12.5.sp,
+            fontSize = 12.sp,
             glyphSize = 14.dp,
             weight = FontWeight.Medium
         )
@@ -614,29 +614,18 @@ fun NexlyPlanCard(
                             .padding(vertical = 1.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box {
-                            NexlyGlassGlyphTile(
-                                name = row.icon,
-                                toneName = row.tone,
-                                size = 24.dp,
-                                glyphSize = 12.dp,
-                                modifier = Modifier.alpha(if (done) 0.55f else 1f)
-                            )
-                            if (done) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomEnd)
-                                        .size(13.dp)
-                                        .background(NexlyInk.peach, CircleShape)
-                                        .border(1.dp, Color.White, CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    NexlyGlyph(name = "check", size = 8.dp, color = Color.White)
-                                }
-                            }
-                        }
+                        NexlyGlassGlyphTile(
+                            name = row.icon,
+                            toneName = row.tone,
+                            size = 24.dp,
+                            glyphSize = 12.dp,
+                            modifier = Modifier.alpha(if (done) 0.55f else 1f)
+                        )
                         Spacer(Modifier.width(10.dp))
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
                             Text(
                                 text = row.time,
                                 style = MaterialTheme.typography.labelSmall.copy(
@@ -656,6 +645,27 @@ fun NexlyPlanCard(
                                 weight = FontWeight.Normal,
                                 textDecoration = if (done) TextDecoration.LineThrough else null
                             )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp)
+                                .then(
+                                    if (done) {
+                                        Modifier.background(NexlyInk.peach, CircleShape)
+                                    } else {
+                                        Modifier.border(
+                                            1.dp,
+                                            NexlyInk.meta.copy(alpha = 0.38f),
+                                            CircleShape
+                                        )
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (done) {
+                                NexlyGlyph(name = "check", size = 9.dp, color = Color.White)
+                            }
                         }
                     }
                 }
