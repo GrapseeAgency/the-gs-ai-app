@@ -52,16 +52,16 @@ final class DesignSystemTests: XCTestCase {
         XCTAssertEqual(Aero.Radius.chip, 999)
     }
 
-    /// Poppins is the product's one typeface on both platforms. Asserted here so
+    /// Inter Tight is the product's one typeface on both platforms. Asserted here so
     /// the claim is checked against the running binary rather than against
     /// project.yml, which can say UIAppFonts while the bundle ships nothing.
-    func testPoppinsIsRegistered() {
+    func testProductFaceIsRegistered() {
         XCTAssertTrue(Aero.productLoaded,
-                      "Poppins did not resolve, so every Aero.responsive call is "
+                      "Inter Tight did not resolve, so every Aero.responsive call is "
                       + "silently falling back to SF Pro")
-        XCTAssertEqual(Aero.productName(.semibold), "Poppins-SemiBold")
-        XCTAssertEqual(Aero.productName(.medium), "Poppins-Medium")
-        XCTAssertEqual(Aero.productName(.regular), "Poppins-Regular")
-        XCTAssertEqual(Aero.productName(.bold), "Poppins-Bold")
+        XCTAssertEqual(Aero.productName(.semibold), "InterTight-SemiBold")
+        XCTAssertEqual(Aero.productName(.medium), "InterTight-Medium")
+        XCTAssertEqual(Aero.productName(.regular), "InterTight-Regular")
+        XCTAssertEqual(Aero.productName(.bold), "InterTight-Bold")
     }
 }

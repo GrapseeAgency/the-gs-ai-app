@@ -99,7 +99,7 @@ final class HomeRenderTests: XCTestCase {
         // gate forever. Android's Type.kt sets Poppins on all sixteen roles;
         // this is the line that proves iOS does too.
         XCTAssertTrue(Aero.productLoaded,
-                      "Poppins is not registered, so iOS is rendering SF Pro. Check "
+                      "Inter Tight is not registered, so iOS is rendering SF Pro. Check "
                       + "UIAppFonts in ios/project.yml and ios/App/Resources/Fonts/.")
 
         let dir = Self.outputDirectory()
