@@ -118,12 +118,12 @@ as a fabricated model transcript.
 
 ## Verified runs
 
-Both workflows completed green on commit `f19ff6ac`:
+Both workflows completed green on commit `f98164d2`:
 
-- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39913542541
-  (run `39913542541`)
-- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39913545298
-  (run `39913545298`)
+- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39927380129
+  (run `39927380129`)
+- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39927383196
+  (run `39927383196`)
 
 `reference-vs-android-393x852.png` and `reference-vs-ios-393x852.png` place the
 sheet and the final native render at the same scale for a direct comparison.
