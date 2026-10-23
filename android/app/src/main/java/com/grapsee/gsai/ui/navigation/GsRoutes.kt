@@ -6,6 +6,7 @@ import android.net.Uri
 object GsRoutes {
     const val HOME = "home"
     const val TRAVEL_AGENT = "travel-agent"
+    const val EXPLORE = "explore"
     const val CHATS = "chats"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"

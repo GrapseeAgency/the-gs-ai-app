@@ -102,7 +102,7 @@ enum DrawerDestination: String, CaseIterable, Identifiable {
     /// draft — the same `chatPrefill` contract Home's Create tile uses.
     var route: AeroRoute {
         switch self {
-        case .explore: return .travelAgent
+        case .explore: return .explore
         case .imageStudio: return .chatPrefill(DrawerMetrics.imageStudioPrompt)
         case .voice: return .voice
         case .savedCreations: return .chatArchive

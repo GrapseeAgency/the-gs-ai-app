@@ -28,6 +28,7 @@ enum AeroRoute: Hashable {
     case chatArchive
     case chatSearch
     case travelAgent
+    case explore
 
     // Section roots — reached from the drawer (no tab bar anywhere)
     case chats
@@ -88,7 +89,7 @@ struct RootView: View {
                         withAnimation(Aero.motion(Aero.spring)) { showDrawer = true }
                     },
                     onOpenChats: { router.path.append(.chats) },
-                    onOpenAgent: { router.path.append(.travelAgent) },
+                    onOpenAgent: { router.path.append(.explore) },
                     onOpenConversation: { id in router.path.append(.chat(id)) },
                     onStartPrompt: { prompt in router.path.append(.chatPrefill(prompt)) },
                     // Both routes already existed; the Home controls that name
@@ -194,6 +195,7 @@ struct AeroDestinations: ViewModifier {
             case .chatArchive: ArchivedChatsView()
             case .chatSearch: ChatSearchView()
             case .travelAgent: TravelAgentView(onBack: { router.path.removeLast() }, onSendToChat: { prompt in router.path.append(.chatPrefill(prompt)) })
+            case .explore: ExploreView(onOpenChat: { router.path.append($0) })
 
             // Section roots (drawer)
             case .chats: ChatsListView()

@@ -620,6 +620,40 @@ jobs:
             echo "rendered nexly-chat-full-$w.png + prose"
           done
 
+      - name: Nexly Explore AI renders (real Compose tree, JVM)
+        if: always()
+        working-directory: android
+        run: |
+          set -euo pipefail
+          # Same Roborazzi harness, pointed at the REAL Explore page: hero,
+          # chips, search, Featured Tools, Popular rows, Collections, Featured
+          # journey, composer — over the pearl backdrop.
+          ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest \
+            --rerun --tests "com.grapsee.gsai.ui.explore.NexlyExploreScreenshotTest" \
+            -PgsShots=true
+          SHOTS=app/build/screenshots
+          # The full-page capture keeps the -full- name (chat-harness
+          # convention). Roborazzi flushes asynchronously, so wait for each
+          # file to be non-empty instead of failing on a racing check.
+          for name in nexly-explore-full-393x1400 nexly-explore-393x852 nexly-explore-411x914 nexly-explore-360x780 nexly-explore-search-393x852 nexly-explore-search-empty-393x852; do
+            for attempt in 1 2 3 4 5 6; do
+              [ -s "$SHOTS/$name.png" ] && break
+              sleep 5
+            done
+            test -s "$SHOTS/$name.png" \
+              || { echo "::error::$name.png was not produced"; exit 1; }
+          done
+          echo "rendered all six Explore captures"
+
+      - name: Upload the Nexly Explore renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexly-explore-render-android
+          path: android/app/build/screenshots/nexly-explore-*.png
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload the Nexly chat response renders
         if: always()
         uses: actions/upload-artifact@v4

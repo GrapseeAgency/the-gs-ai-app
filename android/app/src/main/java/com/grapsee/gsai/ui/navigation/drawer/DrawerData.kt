@@ -41,9 +41,10 @@ data class DrawerFixture(
 /**
  * The four destinations, and the reason each one is real:
  *
- *  - Explore        the app's existing Explore route (the same target the old
- *                   drawer called "Explore tools"); the concurrent Explore work
- *                   re-points THIS ONE STRING and nothing else here.
+ *  - Explore        `GsRoutes.EXPLORE`, the real Explore screen. This was the one
+ *                   line the drawer's plan reserved for the concurrent Explore
+ *                   workstream, and it landed as expected: they added the route,
+ *                   this row points at it, and nothing else here changed.
  *  - Image Studio   no studio screen exists yet, so the row lands in the
  *                   composer with a seeded prompt — the same `chatPrefill`
  *                   contract Home's Create tile already uses.
@@ -52,7 +53,7 @@ data class DrawerFixture(
  *                   conversations live ("Saved responses" in the old drawer).
  */
 val DESTINATIONS: List<DrawerDestination> = listOf(
-    DrawerDestination("Explore", GsIcons.Compass, GsRoutes.TRAVEL_AGENT),
+    DrawerDestination("Explore", GsIcons.Compass, GsRoutes.EXPLORE),
     DrawerDestination("Image Studio", GsIcons.Image, GsRoutes.chat(null, IMAGE_STUDIO_PROMPT)),
     DrawerDestination("Voice", GsIcons.Activity, GsRoutes.VOICE),
     DrawerDestination("Saved creations", GsIcons.Bookmark, GsRoutes.CHAT_ARCHIVE),
