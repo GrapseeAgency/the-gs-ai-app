@@ -181,22 +181,24 @@ private let gsGlassTokenAlpha = 0.80
 
 /// The reference glass as a background + rim + shadow on any shape.
 ///
-/// The shape is an `AnyInsettableShape` rather than a corner radius because the
-/// pill and the composer are the SAME material as the cards, cut differently —
-/// Android reaches them all through one `gsGlass(role, shape)` and iOS had a
-/// second, hand-written capsule recipe that had drifted: no veiling layer, no
-/// height-proportional rim lean, and a plain `.shadow` that painted the capsule's
-/// own silhouette *through* its translucent fill. That last one cost 5.1 L, which
-/// is why the quick-action pills read greyer than the page behind them on iOS
-/// while Android's measured the reference's own 2.6 L.
+/// The shape is a generic `InsettableShape` rather than a corner radius because
+/// the pill and the composer are the SAME material as the cards, cut
+/// differently — Android reaches them all through one `gsGlass(role, shape)` and
+/// iOS had a second, hand-written capsule recipe that had drifted: no veiling
+/// layer, no height-proportional rim lean, and a plain `.shadow` that painted the
+/// capsule's own silhouette *through* its translucent fill. That last one cost
+/// 5.1 L, which is why the quick-action pills read greyer than the page behind
+/// them on iOS while Android's measured the reference's own 2.6 L.
 ///
-/// Insettable, not just `Shape`: the rim is drawn with `strokeBorder`, which only
-/// exists on `InsettableShape`, and `AnyShape` erases that conformance — the CI
-/// compiler answered `AnyShape` with "value of type 'AnyShape' has no member
-/// 'strokeBorder'".
-private struct GsGlassModifier: ViewModifier {
+/// Insettable, and generic over the shape rather than type-erased, because the
+/// rim is drawn with `strokeBorder`: that exists only on `InsettableShape`, and
+/// SwiftUI ships no `AnyInsettableShape` box (the CI compiler answered
+/// `AnyShape` with "has no member 'strokeBorder'" and the erasing type with
+/// "cannot find type 'AnyInsettableShape' in scope"). Each entry point below
+/// passes one concrete shape, which is all the generality this needs.
+private struct GsGlassModifier<S: InsettableShape>: ViewModifier {
     let role: GsGlassRole
-    let shape: AnyInsettableShape
+    let shape: S
 
     func body(content: Content) -> some View {
         content
@@ -321,7 +323,7 @@ extension View {
     func gsGlass(_ role: GsGlassRole = .card, corner: CGFloat = Aero.Radius.card) -> some View {
         modifier(GsGlassModifier(
             role: role,
-            shape: AnyInsettableShape(RoundedRectangle(cornerRadius: corner, style: .continuous))))
+            shape: RoundedRectangle(cornerRadius: corner, style: .continuous)))
     }
 
     /// The pill and composer controls: the same material, cut as a capsule.
@@ -334,6 +336,6 @@ extension View {
     /// gate measures that (A2 material law on the `pill` probe), and Android's
     /// pills — which always went through the single path — did not have it.
     func gsCapsuleGlass(_ role: GsGlassRole = .floatingControl) -> some View {
-        modifier(GsGlassModifier(role: role, shape: AnyInsettableShape(Capsule())))
+        modifier(GsGlassModifier(role: role, shape: Capsule()))
     }
 }
