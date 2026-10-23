@@ -162,6 +162,33 @@ prompt under `USER-STATED PLAN PROGRESS`, and never stores it as a user message.
 The model therefore sees real progress and an explicit preference signal; it is
 told not to repeat the block or claim unmarked completions.
 
+## Cross-device progress
+
+Checklist progress is no longer only local. The server stores it per
+conversation (`PlanProgress` in Prisma; SQLite locally), exposed at
+
+```
+GET/PUT /api/v1/conversations/{id}/plan-progress
+```
+
+Both clients hydrate from that endpoint and PUT on each toggle/rating. The
+local store remains the offline fallback. `prepareTurn` also reads the stored
+row when the client sends no `turnContext`, so a second device gets the same
+progress into the model.
+
+The server-side path was exercised in run `39966154390`: the PUT/GET succeeded
+and the turn log printed
+
+```
+PLAN-PROGRESS conv=… Plan: demo morning | Completed (2/2): Drink water; Open curtains | Pending (0): none | User feedback: the plan was marked helpful.
+```
+
+That run’s model call then hit the free-key quota and returned a 502, so the
+final model sentence was not captured on the server-persisted variant; the
+earlier client-context run (`39961095648`) did capture the correct sentence
+(“You completed "Drink water" and "Open curtains"”). The context construction
+is deterministic and logged; the upstream exhaustion is external.
+
 ## Activity stages
 
 The third card row is no longer a fixed “Effort” claim. It is driven by the
@@ -219,12 +246,12 @@ Full payloads: [`backend-capabilities.json`](../backend-capabilities.json)
 
 ## Verified runs
 
-Both workflows completed green on commit `48daa550`:
+Both workflows completed green on commit `ed9656a9`:
 
 - Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39938777811
-  (run `39955028622`, 281 unit tests)
+  (run `39968123204`, 281 unit tests)
 - iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39938781413
-  (run `39955031934`)
+  (run `39968127637`)
 
 `reference-vs-android-393x852.png` and `reference-vs-ios-393x852.png` place the
 sheet and the final native render at the same scale for a direct comparison.

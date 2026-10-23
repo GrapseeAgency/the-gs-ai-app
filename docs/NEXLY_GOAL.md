@@ -197,8 +197,19 @@ catalogue, validator and web registry also know the `plan` kind.
   checklist context reaches it. Evidence:
   `docs/reference/nexly/backend-capabilities.json` and
   `backend-capabilities-progress.json`.
-- Native verification is green on commit `48daa550`: Android CI run
-  `39955028622` (compile, Home render, Nexly response + adaptive + full-screen
+- **Cross-device checklist:** a `PlanProgress` row is stored server-side per
+  conversation and exposed at `GET/PUT /api/v1/conversations/{id}/plan-progress`;
+  both clients hydrate/PUT it, and `prepareTurn` falls back to the stored row
+  when the client sends no `turnContext`. The server log in run `39966154390`
+  printed the completed/pending/feedback context for the turn.
+- **Upstream hardening:** a free endpoint that refuses flash with “Reasoning
+  is mandatory” is retried with provider reasoning instead of returning a 502;
+  the planner gained deterministic clarify and software-release fallbacks.
+  The last server-progress model call hit the free-key quota, so the final
+  sentence on that variant was not captured; the earlier client-context run did
+  capture it. This is an external quota limit, recorded rather than hidden.
+- Native verification is green on commit `ed9656a9`: Android CI run
+  `39968123204` (compile, Home render, Nexly response + adaptive + full-screen
   renders at the full size matrix, 281 unit tests) and iOS CI run
-  `39955031934` (Xcode build, XCTest, Home render, the same Nexly renders).
+  `39968127637` (Xcode build, XCTest, Home render, the same Nexly renders).
   Evidence and run links are in `docs/reference/nexly/ci/README.md`.
