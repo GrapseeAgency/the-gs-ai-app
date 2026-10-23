@@ -19,25 +19,35 @@ face; code must look like code.
 
 ## The known gap: Poppins is wider than the reference
 
-Measured with `PIL.ImageFont` at matched cap height, over the string the reference sets
-largest — "Good morning," at 26 pt:
+Measured in CI (`.github/workflows/font-eval.yml`) at matched cap height, over the
+string the reference sets largest — "Good morning," at 26 pt. Every number is from the
+same script, on the same runner, so they are comparable to each other:
 
-| face | width at 26 pt | vs Poppins |
-|---|---|---|
-| the reference's own face | 159.0 pt | 0.824 |
-| **Poppins SemiBold (shipped)** | **193.5 pt** | **1.000** |
-| Liberation Sans (Arial metrics) | 172.0 pt | 0.885 |
-| Adwaita Sans / Inter | 182.8 pt | 0.889 |
-| Fira Sans | 174.3 pt | 0.901 |
+| face | width ÷ Poppins | x-height ÷ cap | vs reference (0.824 / 0.850) |
+|---|---|---|---|
+| the reference's own face | 0.824 | 0.850 | — |
+| **Poppins SemiBold (shipped)** | **1.000** | 0.826 | +0.176 wide, −0.024 x-height |
+| **Inter Tight** | **0.844** | 0.777 | **+0.020 wide**, −0.073 x-height |
+| Manrope | 0.893 | 0.792 | +0.069, −0.058 |
+| Outfit | 0.879 | 0.718 | +0.055, −0.132 |
+| Figtree | 0.883 | 0.746 | +0.059, −0.104 |
+| Hanken Grotesk | 0.877 | 0.728 | +0.053, −0.122 |
+| DM Sans | 0.900 | 0.786 | +0.076, −0.064 |
 
-Consequences of that 22 %: the video card's body sets **three lines where the reference
-sets two** ("beautiful videos in minutes." needs 164 pt at 12 pt and the column is
-131), and the headline's strokes read heavier at the same point size. Every other
-difference in the type table has been closed by size; this one cannot be.
+Scored with width weighted double because line breaks are what the eye reads first,
+**Inter Tight** is the clear winner — 0.020 off the reference's width against Poppins'
+0.176. Three claims made earlier from prose, not measurement, died here: Manrope is not
+semi-condensed (0.893), Outfit is not narrow (0.879), and Poppins' own x-height is 0.826,
+not the 0.804 I had recorded, which puts the reference only 0.024 above it.
 
-The reference's letterforms were re-checked at 6× after this file's first draft claimed a
+Consequences of the shipped gap: the video card's body sets **three lines where the
+reference sets two** ("beautiful videos in minutes." needs 164 pt at 12 pt in a 131 pt
+column), and the headline's strokes read heavier at the same point size.
+
+The reference's letterforms were re-checked at 6× after an earlier draft claimed a
 double-storey `g`: it is **single-storey**, with round geometric bowls — Poppins' shape,
-narrower. So the face to source is a *narrow geometric grotesque*, not a neo-grotesque.
+narrower. Inter Tight is single-storey too, which is why it can substitute without the
+letterforms changing family.
 
 ## Accepting a replacement face
 
