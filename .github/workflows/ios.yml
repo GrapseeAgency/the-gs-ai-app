@@ -32,6 +32,7 @@ on:
       - "scripts/test_home_render_gate.py"
       - "scripts/prepare_home_art.py"
       - "scripts/check_home_dark.py"
+      - "scripts/check_font_faces.py"
       # This one reads the Swift side of every Home type role; a change to either
       # the lint or the view has to run it here, because android-app's filter does
       # not see ios/**.
@@ -359,6 +360,11 @@ jobs:
           python3 scripts/check_home_render.py \
             --reference assets/reference/home-reference.png \
             --render "$DIR/home-ios-393x852.png" --probe-set ios --label ios-393
+
+      - name: The faces are upright and named for their weight
+        run: |
+          set -euo pipefail
+          python3 scripts/check_font_faces.py
 
       - name: The dark page holds up
         run: |

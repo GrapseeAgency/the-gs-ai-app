@@ -54,6 +54,7 @@ on:
       - 'scripts/test_home_render_gate.py'
       - 'scripts/prepare_home_art.py'
       - 'scripts/check_home_dark.py'
+      - 'scripts/check_font_faces.py'
   pull_request:
     branches: [native-runtime]
     paths:
@@ -68,6 +69,7 @@ on:
       - 'scripts/test_home_render_gate.py'
       - 'scripts/prepare_home_art.py'
       - 'scripts/check_home_dark.py'
+      - 'scripts/check_font_faces.py'
 
 concurrency:
   group: android-app-${{ github.ref }}
@@ -614,6 +616,11 @@ jobs:
       # flat page, cards painted out, hairline erased, frame shifted, probes
       # slipped both ways, backdrop dimmed. Each must fail with the check that is
       # supposed to catch it, and the untouched frame must pass.
+      - name: The faces are upright and named for their weight
+        run: |
+          set -euo pipefail
+          python3 scripts/check_font_faces.py
+
       # The dark page has no reference frame, so it is scored against what a dark
       # glass UI must satisfy rather than against a picture: a dark page, glass
       # that is present at all, copy that separates from it, no blown highlight.

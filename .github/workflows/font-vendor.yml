@@ -23,6 +23,7 @@ on:
     paths:
       - ".github/workflows/font-vendor.yml"
       - ".github/scripts/**"
+      - "scripts/check_font_faces.py"
   workflow_dispatch:
     inputs:
       family:
@@ -67,13 +68,21 @@ jobs:
           mkdir -p var out
           LIST=$(curl -fsSL --retry 3 -H "Accept: application/vnd.github+json" \
                    "https://api.github.com/repos/google/fonts/contents/ofl/${SLUG}")
-          URL=$(printf '%s' "$LIST" | python3 -c "import json,sys;d=json.load(sys.stdin);t=[i['download_url'] for i in d if i['name'].lower().endswith('.ttf')];print(([u for u in t if '%5B' in u or '[' in u] or t or [''])[0])")
+          # Upright only. `ofl/intertight` ships BOTH `InterTight[wght].ttf` and
+          # `InterTight-Italic[wght].ttf`, and taking the first variable file
+          # vendored the italic cut under upright names: every glyph on Home was
+          # slanted, while registration, the type contract and both pixel gates all
+          # passed. The filename is the only place that distinction is stated, so it
+          # is checked here and the angle is re-checked after instancing.
+          URL=$(printf '%s' "$LIST" | python3 -c "import json,sys;d=json.load(sys.stdin);t=[i['download_url'] for i in d if i['name'].lower().endswith('.ttf') and 'italic' not in i['name'].lower()];print(([u for u in t if '%5B' in u or '[' in u] or t or [''])[0])")
           test -n "$URL" || { echo "::error::no .ttf in ofl/${SLUG}"; exit 1; }
           echo "source: $URL"
           curl -fsSL --retry 3 "$URL" -o var/source.ttf
           for W in 400 500 600 700; do
             fonttools varLib.instancer var/source.ttf wght="$W" -o "out/$W.ttf" >/dev/null
-            echo "  instantiated $W -> $(wc -c < "out/$W.ttf") bytes"
+            ANGLE=$(python3 -c "from fontTools.ttLib import TTFont;print(TTFont('out/$W.ttf')['post'].italicAngle)")
+            echo "  instantiated $W -> $(wc -c < "out/$W.ttf") bytes, italicAngle $ANGLE"
+            python3 -c "import sys;from fontTools.ttLib import TTFont;a=TTFont('out/$W.ttf')['post'].italicAngle;sys.exit(0 if abs(a)<0.01 else '::error::the source face is slanted; refusing to vendor it')"
           done
           # An instanced variable font keeps the SOURCE's name table, so all four
           # files came out as "InterTight-Italic" and iOS registered one face that
@@ -202,6 +211,9 @@ jobs:
           set -euo pipefail
           python3 .github/scripts/check_home_type_parity.py
           python3 scripts/prepare_home_art.py --check
+          # Upright, named for its weight, identical on both platforms. This is the
+          # check the italic incident needed and did not have.
+          python3 scripts/check_font_faces.py
           python3 .github/scripts/check_ios_deployment_target.py || true
 
       - name: Show the diff
