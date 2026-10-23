@@ -44,7 +44,7 @@ permissions:
 
 jobs:
   vendor:
-    name: Vendor ${{ inputs.family }}
+    name: Vendor ${{ inputs.family || 'Inter Tight' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -61,8 +61,8 @@ jobs:
 
       - name: Fetch and instantiate the four weights
         env:
-          FAMILY: ${{ inputs.family }}
-          SLUG: ${{ inputs.slug }}
+          FAMILY: ${{ inputs.family || 'Inter Tight' }}
+          SLUG: ${{ inputs.slug || 'intertight' }}
         run: |
           set -euo pipefail
           mkdir -p var out
