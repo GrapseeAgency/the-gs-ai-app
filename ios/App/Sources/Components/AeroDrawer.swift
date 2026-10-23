@@ -394,7 +394,10 @@ struct AeroDrawer: View {
     /// Reads the store once per presentation and keeps the result in `@State`.
     private func refreshRecents() {
         if let fixture = recentFixture {
-            recents = fixture.recents
+            // prefix(4), not the whole fixture: the 500-chat capture drew twelve
+            // bands against nine, and the panel's "four rows" has to be a property
+            // of the panel rather than of where the rows came from.
+            recents = Array(fixture.recents.prefix(4))
             return
         }
         recents = ConversationStore.shared.activeConversations.prefix(4).map { conversation in

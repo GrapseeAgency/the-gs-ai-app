@@ -791,6 +791,10 @@ def main() -> int:
     ap.add_argument("--write-contract", action="store_true")
     ap.add_argument("--report-only", action="store_true")
     ap.add_argument("--debug-out")
+    ap.add_argument("--same-frame",
+                    help="a capture of the SAME drawer with 500 conversations; the two "
+                         "frames must be near-identical, which is what 'bounded rows' "
+                         "means in pixels")
     args = ap.parse_args()
 
     ref = Path(args.reference)
@@ -863,6 +867,31 @@ def main() -> int:
             draw.rectangle([int(pr * W), 0, W, H], outline=(0, 100, 220), width=3)
             Path(args.debug_out).write_bytes(b"")
             im.convert("RGB").save(args.debug_out)
+
+    # DR11: 500 conversations must draw the SAME rows. A raw pixel diff is the
+    # wrong instrument — a one-pixel shift of the panel moves every glyph edge and
+    # still means "bounded" — so the 500-chat frame is measured with the same
+    # probes and has to report the same panel and the same number of text bands.
+    if args.same_frame:
+        if not Path(args.same_frame).is_file():
+            print(f"::error::DR11 no 500-chat capture at {args.same_frame}")
+            return 2
+        try:
+            many = measure_render(args.same_frame, args.home)
+        except Exception as exc:                   # noqa: BLE001
+            print(f"::error::DR11 could not measure the 500-chat frame: {exc}")
+            return 2
+        print(f"  DR11 500 chats        panel {many['panel_ratio']:.3f} vs "
+              f"{r['panel_ratio']:.3f}, bands {many['recent_ink_bands']} vs "
+              f"{r['recent_ink_bands']}")
+        if abs(many["panel_ratio"] - r["panel_ratio"]) > 0.01:
+            problems.append(
+                f"DR11 the panel changed width with 500 conversations "
+                f"({many['panel_ratio']:.3f} vs {r['panel_ratio']:.3f})")
+        if abs(many["recent_ink_bands"] - r["recent_ink_bands"]) > 1:
+            problems.append(
+                f"DR11 500 conversations drew {many['recent_ink_bands']} text bands "
+                f"against {r['recent_ink_bands']} for four — the list is not bounded")
 
     problems += constants_problems(c)
     if problems and not args.report_only:

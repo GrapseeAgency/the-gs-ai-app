@@ -714,6 +714,7 @@ jobs:
           python3 scripts/check_drawer_render.py \
             --render android/app/build/screenshots/drawer-393x852.png \
             --home android/app/build/screenshots/home-393x852.png \
+            --same-frame android/app/build/screenshots/drawer-500chats-393x852.png \
             --probe-set android --label android-drawer
 
       # The drawer gate's own non-vacuity, executed every run: eight doctored

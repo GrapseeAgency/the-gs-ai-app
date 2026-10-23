@@ -139,7 +139,10 @@ fun GsDrawerContent(
         workspace = "Personal workspace",
         initials = initialsFor(storedName),
     )
-    val recents: List<DrawerRecent> = fixture?.recents ?: recentsFromStore
+    // The limit applies to BOTH sources. The fixture path used to skip it, so the
+    // 500-chat capture drew twelve text bands instead of nine — the drawer's
+    // "four rows" was a property of the store, not of the panel. DR11 caught it.
+    val recents: List<DrawerRecent> = fixture?.recents?.take(RECENT_LIMIT) ?: recentsFromStore
         .take(RECENT_LIMIT)
         .map { conversation ->
             val title = gsConversationTitle(conversation.title)
