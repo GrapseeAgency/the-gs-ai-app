@@ -121,6 +121,20 @@ model-callable browser tool; the model never silently pretends it searched.
 
 ## Fresh coding/life questions
 
+The second batch (commit `f6a4b60b`, runs `40002935742` Android /
+`40002940596` iOS, both green first-attempt) renders questions answered
+THROUGH the live server so the first-turn decisions were real: the SQL-join
+question and the monstera question were answered directly (planner: no
+search), while "when does DST end in the US this year" searched on turn 1
+and was answered November 1, 2026 with a citation — see
+`random2-*.md` + `random2-summary.json`. The batch also exposed and fixed a
+hard bug: a successful reasoning-mandatory retry was misread as failure
+(empty-message 502), and daily-quota 429s now cool a key until the quota
+resets instead of 10 minutes.
+
+The first batch (list-comprehension + snooze) is documented in
+`random-*.md`.
+
 `scripts/live-random-questions.ts` was run once through the repository's
 OpenRouter secret (flash: reasoning disabled). Four questions were captured:
 
