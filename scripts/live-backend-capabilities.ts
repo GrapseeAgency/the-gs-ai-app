@@ -87,6 +87,16 @@ async function main() {
   )
   report.coding = coding
 
+  // 5 — the plan-progress context must reach the model on the next turn.
+  const progress = await post<Msg>(`/api/v1/conversations/${id}/messages`, {
+    content: 'What have I already completed in my plan? Answer in one short sentence.',
+    stream: false,
+    mode: 'flash',
+    turnContext:
+      'Plan: demo morning.\n- Completed (2/2): Drink water; Open curtains.\n- Pending (0): none.',
+  })
+  report.progress = progress
+
   const outDir = path.join(process.cwd(), 'docs/reference/nexly')
   fs.mkdirSync(outDir, { recursive: true })
   fs.writeFileSync(
@@ -101,6 +111,7 @@ async function main() {
   console.log(`clarify follow-up answered: ${Boolean(report.clarifyFollowUp)}`)
   console.log(`fresh sources: ${report.freshSourceCount}`)
   console.log(`fresh answer: ${fresh.content?.slice(0, 300)}`)
+  console.log(`progress answer: ${progress.content?.slice(0, 300)}`)
 
   if (clarifyOptions.length < 2) {
     throw new Error('PLANNER DID NOT CLARIFY AN AMBIGUOUS REQUEST')
@@ -110,6 +121,10 @@ async function main() {
   }
   if (report.freshSourceCount < 1) {
     throw new Error('FRESH QUESTION DID NOT RETURN SOURCES')
+  }
+  const progressText = (progress.content ?? '').toLowerCase()
+  if (!progressText.includes('water') && !progressText.includes('curtain')) {
+    throw new Error('MODEL DID NOT RECEIVE THE PLAN PROGRESS CONTEXT')
   }
 }
 
