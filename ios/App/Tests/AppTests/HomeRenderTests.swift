@@ -73,6 +73,46 @@ final class HomeRenderTests: XCTestCase {
 
     private static let scale: CGFloat = 3
 
+    /// The dark pass. There is no dark frame in the reference, so this asserts the
+    /// things a dark glass page must satisfy without one — the page is actually
+    /// dark, and the copy still separates from it — and writes the capture that
+    /// scripts/check_home_dark.py then measures for the rest.
+    func testHomeRendersInDark() async throws {
+        let size = CGSize(width: 393, height: 852)
+        var problems = ["never captured"]
+        var image = UIImage()
+        for _ in 1...3 {
+            guard let capture = try await Self.renderHome(size: size, greetingHour: 9, dark: true) else {
+                problems = ["drawHierarchy reported failure — nothing was composited"]
+                continue
+            }
+            windows.append(capture.window)
+            image = capture.image
+            let gray = try Self.grayscale(image)
+            let page = Self.meanLuma(gray, x: 0, y: size.height * 0.10,
+                                     w: size.width * 0.04, h: size.height * 0.10)
+            let copy = Self.meanLuma(gray, x: size.width * 0.03, y: size.height * 0.17,
+                                     w: size.width * 0.57, h: size.height * 0.10)
+            problems = []
+            if page > 90 {
+                problems.append("dark capture has a light page: margin \(Int(page)) L")
+            }
+            if copy - page < 40 {
+                problems.append("dark copy does not separate from the page: "
+                                + "\(Int(copy)) vs \(Int(page)) L")
+            }
+            if problems.isEmpty { break }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        for problem in problems { XCTFail("dark: \(problem)") }
+
+        let dir = Self.outputDirectory()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("home-ios-393x852-dark.png")
+        guard let data = image.pngData() else { XCTFail("no PNG data for dark"); return }
+        FileManager.default.createFile(atPath: url.path, contents: data)
+    }
+
     func testHomeRendersAtEveryWidth() async throws {
         // The reference greets a person; pin the identity so the hero renders
         // the same words the sheet shows instead of the "there" fallback.
@@ -158,7 +198,7 @@ final class HomeRenderTests: XCTestCase {
     /// show every glass surface as empty and look perfectly fine while proving
     /// nothing. Drawing the live window goes through the same compositing path
     /// the device uses.
-    private static func renderHome(size: CGSize, greetingHour: Int)
+    private static func renderHome(size: CGSize, greetingHour: Int, dark: Bool = false)
         async throws -> (image: UIImage, window: UIWindow)? {
         let view = HomeDashboardView(
             onNewChat: {},
@@ -173,6 +213,7 @@ final class HomeRenderTests: XCTestCase {
         )
         .frame(width: size.width, height: size.height)
         .environment(\.layoutDirection, .leftToRight)
+        .environment(\.colorScheme, dark ? .dark : .light)
 
         let host = UIHostingController(rootView: view)
         host.view.frame = CGRect(origin: .zero, size: size)

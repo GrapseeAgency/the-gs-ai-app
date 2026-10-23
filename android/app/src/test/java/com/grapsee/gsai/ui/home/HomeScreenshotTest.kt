@@ -45,8 +45,8 @@ class HomeScreenshotTest {
         onOpenSettings = {},
     )
 
-    private fun shoot(path: String) {
-        compose.setContent { TheGsAiTheme(darkTheme = false) { content() } }
+    private fun shoot(path: String, dark: Boolean = false) {
+        compose.setContent { TheGsAiTheme(darkTheme = dark) { content() } }
         compose.onRoot().captureRoboImage(path)
     }
 
@@ -61,4 +61,12 @@ class HomeScreenshotTest {
     @Test
     @Config(sdk = [34], qualifiers = "w360dp-h780dp-xxhdpi")
     fun homeAtNarrowWidth() = shoot("build/screenshots/home-360x780.png")
+
+    // There is no dark frame in the reference, so this capture is not scored
+    // against a picture — it is scored against the physical requirements a dark
+    // glass page has to meet (see scripts/check_home_dark.py). Without it, dark
+    // mode is untested by definition rather than by accident.
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-night-xxhdpi")
+    fun homeInDark() = shoot("build/screenshots/home-393x852-dark.png", dark = true)
 }

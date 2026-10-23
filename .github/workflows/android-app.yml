@@ -53,6 +53,7 @@ on:
       # evidence, so a commit to either has to run the job that uses them.
       - 'scripts/test_home_render_gate.py'
       - 'scripts/prepare_home_art.py'
+      - 'scripts/check_home_dark.py'
   pull_request:
     branches: [native-runtime]
     paths:
@@ -66,6 +67,7 @@ on:
       # evidence, so a commit to either has to run the job that uses them.
       - 'scripts/test_home_render_gate.py'
       - 'scripts/prepare_home_art.py'
+      - 'scripts/check_home_dark.py'
 
 concurrency:
   group: android-app-${{ github.ref }}
@@ -612,6 +614,16 @@ jobs:
       # flat page, cards painted out, hairline erased, frame shifted, probes
       # slipped both ways, backdrop dimmed. Each must fail with the check that is
       # supposed to catch it, and the untouched frame must pass.
+      # The dark page has no reference frame, so it is scored against what a dark
+      # glass UI must satisfy rather than against a picture: a dark page, glass
+      # that is present at all, copy that separates from it, no blown highlight.
+      - name: The dark page holds up
+        run: |
+          set -euo pipefail
+          python3 scripts/check_home_dark.py \
+            --render android/app/build/screenshots/home-393x852-dark.png \
+            --label android-dark
+
       - name: The pixel gate can still fail
         run: |
           set -euo pipefail
