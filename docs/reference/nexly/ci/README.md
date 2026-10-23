@@ -285,12 +285,20 @@ next after pool rotation, so a flaky upstream no longer fails the probe.
 
 ## Verified runs
 
-Both workflows completed green on commit `ed9656a9`:
+Latest green pair — commit `bb33ddaf` (the final commit of this slice):
 
-- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39938777811
-  (run `39968123204`, 281 unit tests)
-- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39938781413
-  (run `39968127637`)
+- Android: run `39995365358` (attempt 1, success; 16 render PNGs in the
+  `nexly-chat-render-android` artifact)
+- iOS: run `39995369369` (attempt 2, success — attempt 1 hit the known
+  macOS-runner simulator bootstrap flake "xctrunner unknown to FrontBoard"
+  AFTER all 65 unit tests had already passed with 0 failures; the failed
+  job alone was re-run and went green). 16 render PNGs in the
+  `nexly-chat-render-ios` artifact.
+
+Earlier green pair on `ed9656a9`:
+
+- Android: run `39968123204` (281 unit tests)
+- iOS: run `39968127637`
 
 ### Release-citation accuracy (local, 2026-10-23)
 
