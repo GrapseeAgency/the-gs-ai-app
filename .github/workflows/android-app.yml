@@ -49,6 +49,10 @@ on:
       # The render step below blocks on this script's verdict, so the script is
       # as much a part of this job as the Kotlin it compiles.
       - 'scripts/check_home_render.py'
+      # The adversarial suite and the artwork manifest are part of the gate's
+      # evidence, so a commit to either has to run the job that uses them.
+      - 'scripts/test_home_render_gate.py'
+      - 'scripts/prepare_home_art.py'
   pull_request:
     branches: [native-runtime]
     paths:
@@ -58,6 +62,10 @@ on:
       - 'native/cpp/**'
       - 'native/crates/**'
       - 'scripts/check_home_render.py'
+      # The adversarial suite and the artwork manifest are part of the gate's
+      # evidence, so a commit to either has to run the job that uses them.
+      - 'scripts/test_home_render_gate.py'
+      - 'scripts/prepare_home_art.py'
 
 concurrency:
   group: android-app-${{ github.ref }}
@@ -586,6 +594,17 @@ jobs:
             --reference assets/reference/home-reference.png \
             --render android/app/build/screenshots/home-393x852.png \
             --probe-set android --label android-393
+
+      # The gate's own non-vacuity, executed every run rather than argued once:
+      # flat page, cards painted out, hairline erased, frame shifted, probes
+      # slipped both ways, backdrop dimmed. Each must fail with the check that is
+      # supposed to catch it, and the untouched frame must pass.
+      - name: The pixel gate can still fail
+        run: |
+          set -euo pipefail
+          python3 scripts/test_home_render_gate.py \
+            --render android/app/build/screenshots/home-393x852.png \
+            --probe-set android
 
       - name: Report
         if: always()

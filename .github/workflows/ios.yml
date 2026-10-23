@@ -27,6 +27,10 @@ on:
       # gate could be made stricter or looser in total silence — the same defect
       # `check_workflow_trigger_covers_scripts.py` exists for, one directory over.
       - "scripts/check_home_render.py"
+      # The adversarial suite below runs the pixel gate against doctored frames;
+      # changing it, or the artwork manifest it feeds, has to run this job too.
+      - "scripts/test_home_render_gate.py"
+      - "scripts/prepare_home_art.py"
 
 permissions:
   contents: read
@@ -338,6 +342,17 @@ jobs:
           python3 scripts/check_home_render.py \
             --reference assets/reference/home-reference.png \
             --render "$DIR/home-ios-393x852.png" --probe-set ios --label ios-393
+
+      # The gate's own non-vacuity, executed every run: flat page, cards painted
+      # out, hairline erased, frame shifted, probes slipped, backdrop dimmed. A
+      # green pixel gate that cannot fail has certified nothing, so the proof is a
+      # step rather than a paragraph in a commit message.
+      - name: The pixel gate can still fail
+        run: |
+          set -euo pipefail
+          python3 scripts/test_home_render_gate.py \
+            --render ios/build/home-renders/home-ios-393x852.png \
+            --probe-set ios
 
       - name: Upload full xcodebuild logs (failure diagnostics)
         if: failure()
