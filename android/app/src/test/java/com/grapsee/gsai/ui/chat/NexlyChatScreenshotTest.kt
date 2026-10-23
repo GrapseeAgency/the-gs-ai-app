@@ -439,35 +439,116 @@ Procrastination on a thesis usually isn't laziness — it's a response to the sc
  * reference sheet. No thinking card is rendered for these turns.
  */
 private const val NEXLY_RANDOM_CODING_USER =
-    "Why does my Python list comprehension return None when I use .append() inside it? I want a short, concrete fix."
+    "Why does my SQL query return duplicate rows when I join orders with order_items, and what is the cleanest fix?"
 
 private val NEXLY_RANDOM_CODING_WIRE = """
-`list.append()` returns `None` — it mutates the list in place and does not produce a value. A comprehension collects the *result* of its expression, so you end up with a list of `None`s.
+The duplicate rows happen because the join is many‑to‑many: one order can have multiple order items, and the join repeats the order data for each matching item. When you select columns from the **orders** table without aggregating them, each order item creates a separate row, so the same order appears multiple times.
 
-**Fix:** build the list directly in the comprehension instead of appending.
+**Cleanest fix**
 
-```python
-# ❌ returns [None, None, None]
-result = [my_list.append(x) for x in source]
+Wrap the query in a **subquery** (or CTE) that groups the orders first, then join to the items. This collapses the order rows before the many‑to‑many relationship is introduced.
 
-# ✅ returns the transformed values
-result = [x * 2 for x in source]          # or any expression
+```sql
+WITH order_summary AS (
+  SELECT
+    order_id,
+    customer_id,
+    order_date,
+    total_amount,
+    -- any other order columns you need
+  FROM orders
+  GROUP BY order_id, customer_id, order_date, total_amount
+)
+SELECT
+  os.order_id,
+  os.customer_id,
+  os.order_date,
+  os.total_amount,
+  oi.item_id,
+  oi.product_name,
+  oi.quantity,
+  oi.unit_price
+FROM order_summary os
+JOIN order_items oi
+  ON os.order_id = oi.order_id
+ORDER BY os.order_date, os.order_id;
 ```
 
-If you need to accumulate into an existing list, use a plain loop or `extend`:
+**Why this works**
 
-```python
-my_list.extend(x * 2 for x in source)
+1. **`order_summary`** aggregates the orders table, producing one row per `order_id`.  
+2. The **join** now pairs each distinct order with its items, so you get one order row per item but no duplicate order rows.  
+3. If you need totals per order (e.g., sum of `quantity * unit_price`), add an aggregate in the CTE or a final `GROUP BY` after the join.
+
+**Optional: keep the original order rows as a separate column**
+
+If you still want the original order row repeated for each item (e.g., for reporting), use a **window function** instead of a subquery:
+
+```sql
+SELECT
+  order_id,
+  customer_id,
+  order_date,
+  total_amount,
+  item_id,
+  product_name,
+  quantity,
+  unit_price
+FROM orders o
+JOIN order_items oi
+  ON o.order_id = oi.order_id
+ORDER BY order_date, order_id;
 ```
+
+Here the order columns are taken directly from `orders`, but because the join is many‑to‑many you still see duplicates. To avoid that while preserving the original order rows, you can **`DISTINCT`** on the order columns plus the item columns if you only need unique combinations:
+
+```sql
+SELECT DISTINCT
+  o.order_id,
+  o.customer_id,
+  o.order_date,
+  o.total_amount,
+  oi.item_id,
+  oi.product_name,
+  oi.quantity,
+  oi.unit_price
+FROM orders o
+JOIN order_items oi
+  ON o.order_id = oi.order_id
+ORDER BY o.order_date, o.order_id;
+```
+
+**Bottom line**
+
+- Use a **CTE/grouped subquery** when you need one order row per item without repeating the order data.  
+- Use **`DISTINCT`** only if you truly need unique combinations and don’t need aggregation.  
+- Choose the approach that matches whether you need aggregated totals or just de‑duplicated rows.
 """.trimIndent()
 
 private const val NEXLY_RANDOM_LIFE_USER =
-    "I keep hitting snooze and feel behind all morning. What is one change that actually sticks?"
+    "The bottom leaves of my monstera are turning yellow. What is most likely wrong and what should I do first?"
 
 private val NEXLY_RANDOM_LIFE_WIRE = """
-Move your phone across the room so you have to stand up to turn off the alarm. That single physical step breaks the snooze loop and gets you vertical before your brain negotiates.
+The most common cause of yellowing lower leaves on a Monstera is **over‑watering or poor drainage**, which leads to root rot and reduced nutrient uptake. The plant’s lower leaves are the first to show stress because they’re farthest from the crown and receive the least light.
 
-```plan
-{"title":"A snooze-proof morning starts the night before","rows":[{"time":"10:00 PM","text":"Phone on charger across the room","icon":"moon","tone":"lilac"},{"time":"10:15 PM","text":"Lights out, no screens","icon":"book-2","tone":"lavender"},{"time":"6:30 AM","text":"Alarm goes off — walk to phone","icon":"alarm","tone":"amber"},{"time":"6:32 AM","text":"Open curtains, drink water","icon":"sunrise","tone":"amber"},{"time":"6:40 AM","text":"Stretch or 2-min movement","icon":"activity","tone":"pink"},{"time":"6:50 AM","text":"Coffee or tea, no phone","icon":"coffee","tone":"green"},{"time":"7:00 AM","text":"Name the day's top priority","icon":"target","tone":"blue"},{"time":"7:10 AM","text":"Shower and dress","icon":"sparkles","tone":"blue"},{"time":"7:30 AM","text":"Out the door on time","icon":"briefcase","tone":"blue"}],"closing":"Stand up once, the rest follows.","closingIcon":"flame","timestamp":"10:00 PM","accent":"#1098ad","variant":"editorial"}
-```
+**What to do first**
+
+1. **Check the soil moisture** – Stick your finger 2–3 cm into the pot. If it feels soggy or the pot sits in a saucer of water, the roots are likely water‑logged.
+2. **Let the soil dry out** – Move the plant to a brighter spot (bright indirect light is ideal) and stop watering until the top 5 cm of soil feels dry to the touch. In most indoor conditions this is every 7–10 days.
+3. **Improve drainage** – If the pot lacks drainage holes, repot into a pot with holes and a well‑draining mix (e.g., 1 part perlite or orchid bark to 2 parts potting soil). This prevents water from pooling at the bottom.
+4. **Inspect roots** – When you repot, gently tease out the root ball. Healthy roots are firm and white; brown, mushy, or blackened roots indicate rot. Trim away any rotten sections with clean scissors.
+5. **Adjust watering routine** – After repotting, water thoroughly to flush excess salts, then let the soil dry out completely before the next watering. Consider using a moisture‑meter or a simple “finger test” to keep watering consistent.
+
+**Why this works**
+
+- Excess water deprives roots of oxygen, causing them to suffocate and decay.
+- Root rot reduces the plant’s ability to absorb water and nutrients, so the lower leaves—being the oldest—turn yellow first.
+- Fixing drainage and allowing the soil to dry restores healthy root function, and the plant will usually recover new growth within a few weeks.
+
+**Next steps (if needed)**
+
+- If many leaves are yellowing or the plant looks wilted despite drier soil, look for other stressors: low humidity, nutrient deficiencies, or pests. A balanced house‑plant fertilizer (diluted to half strength) can help once the roots are healthy.
+- Keep the plant in bright, indirect light, avoid direct sun, and maintain moderate humidity (40‑60 %). These conditions support vigorous growth and prevent further leaf stress.
+
+By addressing watering and drainage first, you give your Monstera the best chance to bounce back and keep producing those iconic split leaves.
 """.trimIndent()
