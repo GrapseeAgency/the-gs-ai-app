@@ -281,6 +281,26 @@ def check(manifest: list[Art]) -> int:
                     f"{a.name}: {side} copy is not the authored art at the "
                     f"declared resolution (mean |diff| {diff:.1f} of 255) — "
                     f"re-derive with --write")
+        # Card artwork is a high-key render: nothing in it is dark. A candidate
+        # lifted out of the design mock would carry the card's COPY with it — the
+        # headline is near-black — so this asserts the asset is art and not a
+        # screenshot of a card. It is the check that makes "derive the art from the
+        # reference" a safe move if it is ever approved, and a guard against a bad
+        # crop today.
+        if "video" in a.name or "video" in a.ios_set.lower():
+            for side, path in (("android", a.android_path), ("ios", a.ios_path)):
+                if not path.is_file():
+                    continue
+                with Image.open(path) as im:
+                    arr = np.asarray(im.convert("RGB")).astype(float)
+                l = 0.2126 * arr[..., 0] + 0.7152 * arr[..., 1] + 0.0722 * arr[..., 2]
+                dark = float((l < 90).mean() * 100.0)
+                if dark > 0.25:
+                    problems.append(
+                        f"{a.name}: {side} art is {dark:.2f}% near-black — card "
+                        f"artwork is high-key and carries no copy; this looks like "
+                        f"a crop of a rendered card rather than the art")
+
         if a.name not in used_android and a.ios_set not in used_ios:
             problems.append(
                 f"{a.name}: the manifest carries it but neither platform draws "
