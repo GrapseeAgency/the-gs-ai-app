@@ -480,6 +480,10 @@ struct ChatDetailView: View {
                 }
                 MessageBubble(
                     message: message,
+                    conversationID: vm.conversationID,
+                    sourceCount: message.isStreaming
+                        ? vm.liveSources.count
+                        : (message.sources?.count ?? 0),
                     isSpeaking: speech.speakingMessageID == message.id.uuidString,
                     editEnabled: !vm.isStreaming && editingIndex == nil,
                     highlight: message.id == activeMatch,
@@ -1217,6 +1221,8 @@ private struct TranslationSheet: View {
 struct MessageBubble: View, Equatable {
 
     let message: ChatViewModel.ChatMessage
+    var conversationID: String? = nil
+    var sourceCount: Int = 0
     var isSpeaking: Bool = false
     var editEnabled: Bool = false
     var highlight: Bool = false
@@ -1259,6 +1265,8 @@ struct MessageBubble: View, Equatable {
      */
     static func == (lhs: MessageBubble, rhs: MessageBubble) -> Bool {
         lhs.message == rhs.message &&
+        lhs.conversationID == rhs.conversationID &&
+        lhs.sourceCount == rhs.sourceCount &&
         lhs.isSpeaking == rhs.isSpeaking &&
         lhs.editEnabled == rhs.editEnabled &&
         lhs.highlight == rhs.highlight &&
@@ -1393,7 +1401,8 @@ struct MessageBubble: View, Equatable {
 
     private var thinkingPhase: NexlyThinkingPhase {
         guard message.isStreaming else { return .done }
-        if !message.content.isEmpty { return .effort }
+        if !message.content.isEmpty { return .answer }
+        if sourceCount > 0 { return .search }
         if let reasoning, !reasoning.isEmpty { return .reasoning }
         return .thinking
     }
@@ -1427,10 +1436,12 @@ struct MessageBubble: View, Equatable {
                 thinkingPhase: thinkingPhase,
                 thinkingEffort: thinkingEffort,
                 thinkingReasoningHint: thinkingReasoningHint,
+                searchSourceCount: sourceCount,
                 isPlanTurn: hasPlan,
                 statusAtEnd: hasPlan,
                 citations: citationLinks,
-                planTimestamp: message.createdAt
+                planTimestamp: message.createdAt,
+                conversationID: conversationID
             )
             .background {
                 if highlight {

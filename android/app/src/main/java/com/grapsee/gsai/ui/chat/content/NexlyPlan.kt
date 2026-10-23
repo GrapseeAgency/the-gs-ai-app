@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.selection.toggleable
@@ -24,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +62,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.grapsee.gsai.data.chat.NexlyPlanProgressStore
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.theme.GsTheme
@@ -547,10 +550,27 @@ fun NexlyPlanCard(
     plan: NexlyPlanData,
     open: Boolean = false,
     fallbackTimestamp: String? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    planConversationId: String? = null
 ) {
     val colors = GsTheme.colors
-    val doneRows = remember(plan.title, plan.rows.size) { mutableStateMapOf<String, Boolean>() }
+    val context = LocalContext.current
+    val rowPairs = remember(plan) { plan.rows.map { it.time to it.text } }
+    val fingerprint = remember(plan.title, rowPairs) {
+        NexlyPlanProgressStore.fingerprint(plan.title, rowPairs)
+    }
+    val doneRows = remember(planConversationId, fingerprint) {
+        mutableStateMapOf<String, Boolean>().apply {
+            NexlyPlanProgressStore
+                .load(context, planConversationId, fingerprint)
+                .forEach { put(it, true) }
+        }
+    }
+    val preference = remember(planConversationId, fingerprint) {
+        mutableStateOf(
+            NexlyPlanProgressStore.loadPreference(context, planConversationId, fingerprint)
+        )
+    }
     val haptics = LocalHapticFeedback.current
     Column(
         modifier = modifier
@@ -607,6 +627,15 @@ fun NexlyPlanCard(
                                 role = Role.Checkbox,
                                 onValueChange = { checked ->
                                     doneRows[rowKey] = checked
+                                    NexlyPlanProgressStore.save(
+                                        context = context,
+                                        conversationId = planConversationId,
+                                        fingerprint = fingerprint,
+                                        title = plan.title,
+                                        rows = rowPairs,
+                                        done = doneRows.filterValues { it }.keys,
+                                        preference = preference.value
+                                    )
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 }
                             )
@@ -702,6 +731,63 @@ fun NexlyPlanCard(
                         text = stamp,
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                         color = NexlyInk.meta
+                    )
+                }
+            }
+        }
+        // Completion is progress; this is the actual preference signal. Both
+        // are persisted and sent as turn context on the next message.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Was this plan helpful?",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 9.5.sp,
+                    lineHeight = 12.sp
+                ),
+                color = NexlyInk.meta
+            )
+            Spacer(Modifier.weight(1f))
+            listOf("up" to "thumb-up", "down" to "thumb-down").forEach { (id, icon) ->
+                val selected = preference.value == id
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = if (id == "up") "Mark plan helpful"
+                            else "Mark plan not helpful"
+                        ) {
+                            preference.value = if (selected) null else id
+                            NexlyPlanProgressStore.save(
+                                context = context,
+                                conversationId = planConversationId,
+                                fingerprint = fingerprint,
+                                title = plan.title,
+                                rows = rowPairs,
+                                done = doneRows.filterValues { it }.keys,
+                                preference = preference.value
+                            )
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                        .semantics {
+                            contentDescription = if (id == "up") "Plan helpful" else "Plan not helpful"
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    NexlyGlyph(
+                        name = icon,
+                        size = 14.dp,
+                        color = when {
+                            !selected -> NexlyInk.meta
+                            id == "up" -> NexlyInk.peach
+                            else -> Color(0xFFC76D7D)
+                        }
                     )
                 }
             }

@@ -177,7 +177,9 @@ fun BlocksContent(
      * cannot push the card under the composer.
      */
     statusAtEnd: Boolean = true,
-    planTimestamp: String? = null
+    planTimestamp: String? = null,
+    /** Conversation that owns the plan, for durable checklist progress. */
+    planConversationId: String? = null
 ) {
     val cache = remember { StreamBlockCache() }
     // Recovery must be decided BEFORE parsing, because a successful recovery
@@ -210,7 +212,8 @@ fun BlocksContent(
             onSendPrompt = onSendPrompt,
             statusCard = statusCard,
             statusAtEnd = statusAtEnd,
-            planTimestamp = planTimestamp
+            planTimestamp = planTimestamp,
+            planConversationId = planConversationId
         )
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -255,7 +258,8 @@ private fun NexlyAssistantBlocks(
     onSendPrompt: ((String) -> Unit)?,
     statusCard: (@Composable () -> Unit)?,
     statusAtEnd: Boolean,
-    planTimestamp: String?
+    planTimestamp: String?,
+    planConversationId: String?
 ) {
     val groups = remember(blocks, statusCard != null) {
         val out = mutableListOf<NexlyGroup>()
@@ -300,7 +304,8 @@ private fun NexlyAssistantBlocks(
                             plan = group.block.plan,
                             open = group.block.open,
                             fallbackTimestamp = planTimestamp,
-                            modifier = Modifier.widthIn(max = planMax)
+                            modifier = Modifier.widthIn(max = planMax),
+                            planConversationId = planConversationId
                         )
                         is NexlyGroup.Prose -> CompositionLocalProvider(
                             LocalNexlyProseStyle provides TextStyle(

@@ -129,7 +129,10 @@ data class SendMessageRequest(
      *  resolves relative dates ("last 6 months", "next Friday") against THIS
      *  clock instead of guessing UTC — a chart labelled from the wrong month
      *  is worse than no chart. Null omits the field (old servers ignore it). */
-    val timezone: String? = null
+    val timezone: String? = null,
+    /** Non-visible client context (plan-checklist progress). Null omits it, so
+     *  plain sends stay byte-compatible with older servers. */
+    val turnContext: String? = null
 )
 
 /**

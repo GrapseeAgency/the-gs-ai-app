@@ -41,12 +41,14 @@ struct NexlyAssistantBlocksView: View {
     var thinkingPhase: NexlyThinkingPhase = .done
     var thinkingEffort: String? = nil
     var thinkingReasoningHint: String? = nil
+    var searchSourceCount: Int = 0
     var isPlanTurn: Bool = false
     /// Plan turns place the status card after the whole preamble; a non-plan
     /// answer places it after the first paragraph.
     var statusAtEnd: Bool = true
     var citations: [Int: String] = [:]
     var planTimestamp: String? = nil
+    var conversationID: String? = nil
 
     private enum Group {
         case prose([Block])
@@ -68,7 +70,7 @@ struct NexlyAssistantBlocksView: View {
                 HStack(alignment: .top, spacing: 9) {
                     NexlyAssistantOrb()
                     if showStatus {
-                        NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint)
+                        NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount)
                             .frame(maxWidth: cardMax, alignment: .leading)
                     } else {
                         Text("…")
@@ -84,9 +86,14 @@ struct NexlyAssistantBlocksView: View {
                         NexlyAssistantOrb()
                         switch group {
                         case .plan(let plan, let open):
-                            NexlyPlanCard(plan: plan, open: open, fallbackTimestamp: planTimestamp)
-                                .frame(maxWidth: planMax, alignment: .leading)
-                                .layoutPriority(1)
+                            NexlyPlanCard(
+                                plan: plan,
+                                open: open,
+                                fallbackTimestamp: planTimestamp,
+                                conversationID: conversationID
+                            )
+                            .frame(maxWidth: planMax, alignment: .leading)
+                            .layoutPriority(1)
                         case .prose(let prose):
                             proseCard(
                                 prose,
@@ -112,11 +119,11 @@ struct NexlyAssistantBlocksView: View {
                 BlockView(block: block, isLast: index == prose.count - 1, citations: citations)
                 if isStatusHost && showStatus && index == statusHostIndex {
                     if !prose.isEmpty { Spacer().frame(height: 2) }
-                    NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint)
+                    NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount)
                 }
             }
             if isStatusHost && showStatus && prose.isEmpty {
-                NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint)
+                NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount)
             } else if prose.isEmpty && isStreaming {
                 Text("…")
                     .font(Aero.body())

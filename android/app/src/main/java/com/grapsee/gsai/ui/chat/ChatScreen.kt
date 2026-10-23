@@ -1546,6 +1546,7 @@ fun ChatScreen(
                                 Box(Modifier.messageAppear(message.id)) {
                                     AssistantMessage(
                                         message = message,
+                                        conversationId = activeConversationId,
                                         isSpeaking = speakingMessageId == message.id,
                                         highlight = index == activeMatchIndex,
                                         showIdentity = false,
@@ -2224,7 +2225,8 @@ private fun LiveStreamText(
     glassAssistant: Boolean = false,
     statusCard: (@Composable () -> Unit)? = null,
     statusAtEnd: Boolean = true,
-    planTimestamp: String? = null
+    planTimestamp: String? = null,
+    planConversationId: String? = null
 ) {
     CompositionLocalProvider(LocalVoiceLauncher provides onNavigateVoice) {
         BlocksContent(
@@ -2238,7 +2240,8 @@ private fun LiveStreamText(
             glassAssistant = glassAssistant,
             statusCard = statusCard,
             statusAtEnd = statusAtEnd,
-            planTimestamp = planTimestamp
+            planTimestamp = planTimestamp,
+            planConversationId = planConversationId
         )
     }
 }
@@ -2249,7 +2252,7 @@ private fun LiveStreamText(
  * first assistant card, after the preamble, and stays visible while the plan
  * streams — not just before the first token.
  */
-enum class NexlyThinkingPhase { THINKING, REASONING, EFFORT, DONE }
+enum class NexlyThinkingPhase { THINKING, REASONING, SEARCH, ANSWER, DONE }
 
 /** First meaningful sentence of the live reasoning, capped for one line. */
 private fun reasoningHint(text: String?): String? {
@@ -2267,22 +2270,32 @@ internal fun ReferenceThinkingCard(
     effort: String? = null,
     isPlan: Boolean = true,
     reasoningHint: String? = null,
+    searchSources: Int = 0,
 ) {
     val thinkingSubtitle = if (isPlan) {
         "Analyzing your goals and priorities..."
     } else {
         "Understanding your request..."
     }
-    val reasoningSubtitle = if (isPlan) {
-        "Planning the best structure and balance..."
+    // Show a real reasoning sentence only when the provider streamed one.
+    // Otherwise this row must not imply a trace the app never received.
+    val reasoningSubtitle = reasoningHint?.takeIf { it.isNotBlank() }
+        ?: if (isPlan) "Provider default reasoning" else "No reasoning trace exposed"
+    val hasSearch = searchSources > 0
+    val finalTitle = if (hasSearch) "Search" else "Answer"
+    val finalSubtitle = if (hasSearch) {
+        "$searchSources source${if (searchSources == 1) "" else "s"} found"
+    } else if (isPlan) {
+        "Composing your plan..."
     } else {
-        reasoningHint?.takeIf { it.isNotBlank() } ?: "Working through the best approach..."
+        "Composing the answer..."
     }
-    val effortSubtitle = when {
-        isPlan -> "Creating a detailed, realistic schedule..."
-        !effort.isNullOrBlank() ->
-            "${effort.replaceFirstChar { it.uppercase() }} effort · composing the answer..."
-        else -> "Composing a detailed answer..."
+    val finalIcon = if (hasSearch) "world-search" else "pencil"
+    val finalTone = if (hasSearch) "blue" else "peach"
+    val finalActive = if (hasSearch) {
+        phase == NexlyThinkingPhase.SEARCH
+    } else {
+        phase == NexlyThinkingPhase.ANSWER
     }
     Column(
         modifier = Modifier
@@ -2307,11 +2320,11 @@ internal fun ReferenceThinkingCard(
             active = phase == NexlyThinkingPhase.REASONING
         )
         ThinkingRow(
-            icon = "settings",
-            tone = "mint",
-            title = "Effort",
-            subtitle = effortSubtitle,
-            active = phase == NexlyThinkingPhase.EFFORT
+            icon = finalIcon,
+            tone = finalTone,
+            title = finalTitle,
+            subtitle = finalSubtitle,
+            active = finalActive
         )
     }
 }
@@ -2650,6 +2663,7 @@ private fun JumpToLatestPill(onClick: () -> Unit) {
 @Composable
 private fun AssistantMessage(
     message: ChatUiMessage,
+    conversationId: String? = null,
     isSpeaking: Boolean,
     highlight: Boolean = false,
     showIdentity: Boolean = true,
@@ -2759,7 +2773,8 @@ private fun AssistantMessage(
     val cardReasoningHint = liveReasoningHint ?: lastReasoningHint
     val thinkingPhase = when {
         !message.isStreaming -> NexlyThinkingPhase.DONE
-        liveAnswerStarted -> NexlyThinkingPhase.EFFORT
+        liveAnswerStarted -> NexlyThinkingPhase.ANSWER
+        turnSources.isNotEmpty() -> NexlyThinkingPhase.SEARCH
         liveReasoningActive -> NexlyThinkingPhase.REASONING
         else -> NexlyThinkingPhase.THINKING
     }
@@ -2860,13 +2875,15 @@ private fun AssistantMessage(
                     userPrompt = userPrompt,
                     priorContext = priorContext,
                     glassAssistant = true,
+                    planConversationId = conversationId,
                     statusCard = if (showStatus) {
                         {
                             ReferenceThinkingCard(
                                 phase = thinkingPhase,
                                 effort = cardEffort,
                                 isPlan = planVisible,
-                                reasoningHint = cardReasoningHint
+                                reasoningHint = cardReasoningHint,
+                                searchSources = turnSources.size
                             )
                         }
                     } else {

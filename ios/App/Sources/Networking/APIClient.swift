@@ -140,6 +140,8 @@ final class APIClient {
         attachmentIDs: [String]? = nil,
         /** FLASH MODE (Phase 3): 'flash' | 'thinking' | 'auto'; nil omits the field. */
         mode: String? = nil,
+        /** Non-visible plan-progress context for the next turn. */
+        turnContext: String? = nil,
         onDelta: @escaping (String) -> Void,
         onDone: @escaping (Message?) -> Void,
         onError: @escaping (Error) -> Void = { _ in },
@@ -152,7 +154,8 @@ final class APIClient {
                 content: content,
                 stream: true,
                 attachments: attachmentIDs,
-                mode: mode))
+                mode: mode,
+                turnContext: turnContext))
         )
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 

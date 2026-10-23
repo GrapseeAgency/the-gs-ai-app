@@ -236,7 +236,9 @@ class ApiClient(
          *  DEVICE's zone, so every turn — including the translation scratch
          *  conversation — carries a real clock without any call site knowing
          *  about it. Pass null explicitly only in tests that pin the zone. */
-        timezone: String? = TimeZone.getDefault().id
+        timezone: String? = TimeZone.getDefault().id,
+        /** Non-visible plan-progress context for the next turn. */
+        turnContext: String? = null
     ) {
         // THE POST IS INSIDE THE GUARD TOO, AND IT IS WHERE THE CUT ACTUALLY
         // SURFACES.
@@ -278,7 +280,8 @@ class ApiClient(
                         stream = true,
                         attachments = attachments?.ifEmpty { null },
                         mode = mode,
-                        timezone = timezone
+                        timezone = timezone,
+                        turnContext = turnContext
                     )
                 )
             }

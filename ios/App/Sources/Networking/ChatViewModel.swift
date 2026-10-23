@@ -733,6 +733,7 @@ final class ChatViewModel: ObservableObject {
                     conversationID: conversationID,
                     attachmentIDs: attachments?.map { $0.id },
                     mode: mode,
+                    turnContext: NexlyPlanProgressStore.shared.context(for: conversationID),
                     onDelta: { [buffer = self.streamBuffer] delta in
                         buffer.append(delta) // lock-guarded — no main hop per token
                     },

@@ -561,37 +561,42 @@ private struct NexlyPlanRowPressStyle: ButtonStyle {
 // ---------------------------------------------------------------------------
 
 enum NexlyThinkingPhase {
-    case thinking, reasoning, effort, done
+    case thinking, reasoning, search, answer, done
 }
 
-/// Thinking / Reasoning / Effort. It is a sibling of the preamble INSIDE the
-/// assistant card and stays mounted while the plan streams — not a
-/// pre-first-token placeholder. The copy is the reference copy for a plan
-/// turn; every other turn uses honest, task-neutral copy and the backend's
-/// real effort. The active row gets a thin halo ring.
+/// Thinking / Reasoning / Answer-or-Search. It is a sibling of the preamble
+/// INSIDE the assistant card and stays mounted while the plan streams.
+///
+/// The third row is driven by real state: if the turn produced search sources
+/// it says Search and the source count; otherwise it says Answer. The
+/// Reasoning row shows a real sentence only when the provider streamed a
+/// trace — otherwise it says so. There is no fabricated "High effort" line.
 struct NexlyThinkingCard: View {
     var phase: NexlyThinkingPhase = .done
     var effort: String? = nil
     var isPlan: Bool = true
     var reasoningHint: String? = nil
+    var searchSources: Int = 0
 
     private var thinkingSubtitle: String {
         isPlan ? "Analyzing your goals and priorities..." : "Understanding your request..."
     }
 
     private var reasoningSubtitle: String {
-        if isPlan { return "Planning the best structure and balance..." }
         if let reasoningHint, !reasoningHint.isEmpty { return reasoningHint }
-        return "Working through the best approach..."
+        return isPlan ? "Provider default reasoning" : "No reasoning trace exposed"
     }
 
-    private var effortSubtitle: String {
-        if isPlan { return "Creating a detailed, realistic schedule..." }
-        if let effort, !effort.isEmpty {
-            let label = effort.prefix(1).uppercased() + String(effort.dropFirst())
-            return "\(label) effort · composing the answer..."
+    private var hasSearch: Bool { searchSources > 0 }
+    private var finalTitle: String { hasSearch ? "Search" : "Answer" }
+    private var finalSubtitle: String {
+        if hasSearch {
+            return "\(searchSources) source\(searchSources == 1 ? "" : "s") found"
         }
-        return "Composing a detailed answer..."
+        return isPlan ? "Composing your plan..." : "Composing the answer..."
+    }
+    private var finalActive: Bool {
+        hasSearch ? phase == .search : phase == .answer
     }
 
     var body: some View {
@@ -602,9 +607,10 @@ struct NexlyThinkingCard: View {
             row(icon: "brain", tone: .lavender,
                 title: "Reasoning", subtitle: reasoningSubtitle,
                 active: phase == .reasoning)
-            row(icon: "settings", tone: .mint,
-                title: "Effort", subtitle: effortSubtitle,
-                active: phase == .effort)
+            row(icon: hasSearch ? "world-search" : "pencil",
+                tone: hasSearch ? .blue : .peach,
+                title: finalTitle, subtitle: finalSubtitle,
+                active: finalActive)
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 2)
@@ -655,7 +661,9 @@ struct NexlyPlanCard: View {
     let plan: NexlyPlanData
     var open: Bool = false
     var fallbackTimestamp: String? = nil
+    var conversationID: String? = nil
     @State private var doneRows: Set<String> = []
+    @State private var preference: String? = nil
 
     private var stamp: String? {
         if let timestamp = plan.timestamp, !timestamp.isEmpty { return timestamp }
@@ -683,9 +691,17 @@ struct NexlyPlanCard: View {
                         let key = "\(row.time)|\(row.text)"
                         let done = doneRows.contains(key)
                         Button {
+                            var next = doneRows
+                            if done { next.remove(key) } else { next.insert(key) }
                             withAnimation(.easeOut(duration: 0.16)) {
-                                if done { doneRows.remove(key) } else { doneRows.insert(key) }
+                                doneRows = next
                             }
+                            NexlyPlanProgressStore.shared.save(
+                                conversationID: conversationID,
+                                plan: plan,
+                                done: next,
+                                preference: preference
+                            )
                             GSHaptics.select()
                         } label: {
                             HStack(alignment: .center, spacing: 10) {
@@ -761,12 +777,60 @@ struct NexlyPlanCard: View {
                     }
                 }
             }
+            HStack(spacing: 2) {
+                Text("Was this plan helpful?")
+                    .font(.system(size: 9.5))
+                    .foregroundColor(NexlyInk.meta)
+                Spacer(minLength: 0)
+                feedbackButton("up", icon: "thumb-up")
+                feedbackButton("down", icon: "thumb-down")
+            }
+            .padding(.top, 2)
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .nexlyGlassCard(corner: 20)
         .accessibilityElement(children: .contain)
+        .onAppear { restoreProgress() }
+        .onChange(of: conversationID) { _ in restoreProgress() }
+    }
+
+    private func restoreProgress() {
+        let store = NexlyPlanProgressStore.shared
+        let fingerprint = store.fingerprint(for: plan)
+        doneRows = store.load(conversationID: conversationID, fingerprint: fingerprint)
+        preference = store.loadPreference(
+            conversationID: conversationID,
+            fingerprint: fingerprint
+        )
+    }
+
+    private func feedbackButton(_ id: String, icon: String) -> some View {
+        let selected = preference == id
+        return Button {
+            let next = selected ? nil : id
+            preference = next
+            NexlyPlanProgressStore.shared.save(
+                conversationID: conversationID,
+                plan: plan,
+                done: doneRows,
+                preference: next
+            )
+            GSHaptics.select()
+        } label: {
+            NexlyGlyph(
+                name: icon,
+                size: 14,
+                color: selected
+                    ? (id == "up" ? NexlyGlassTone.peach.ink : Color(red: 0.78, green: 0.43, blue: 0.49))
+                    : NexlyInk.meta
+            )
+            .frame(width: 26, height: 26)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(id == "up" ? "Mark plan helpful" : "Mark plan not helpful")
+        .accessibilityValue(selected ? "Selected" : "Not selected")
     }
 
     private var skeleton: some View {
