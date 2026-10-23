@@ -340,6 +340,16 @@ matrix live in `/home/arafat/nexly-evidence/`.
 
 ## Honest limits
 
+- The preview space the apps ship against
+  (`preview-chat-c945696f-…space-z.ai`, both apps' BASE_URL) predates this
+  branch's backend: `plan-progress` returns 404 there, so cross-device sync
+  and server-side plan context need one redeploy of this branch's backend to
+  that space. The apps degrade honestly meanwhile (local-first progress,
+  sync failures swallowed, no crashes) — verified against the live preview.
+  The branch backend itself is fully verified end-to-end locally.
+
+## Honest limits (design/render)
+
 - The mock's photographic pearl/flower backdrop is approximated with native
   gradients, glass orbs and the app's lotus asset. The reference image is not
   shipped as an asset.
