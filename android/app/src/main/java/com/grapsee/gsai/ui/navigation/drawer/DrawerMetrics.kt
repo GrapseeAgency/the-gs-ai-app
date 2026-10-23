@@ -26,7 +26,7 @@ object DrawerMetrics {
     const val panelRatio: Float = 0.786f
 
     /** The sheet's bottom-right arc fits r = 47.1 px. Top-right is square. */
-    val cornerRadius = 28.dp
+    val cornerRadius = 27.dp
 
     /** The first section label's ink starts 25.1 pt from the panel's left. */
     val contentInset = 24.dp

@@ -11,7 +11,7 @@ enum DrawerMetrics {
     static let panelRatio: CGFloat = 0.786
 
     /// The sheet's bottom-right arc fits r = 47.1 px. Top-right is square.
-    static let cornerRadius: CGFloat = 28
+    static let cornerRadius: CGFloat = 27
 
     /// The first section label's ink starts 25.1 pt from the panel's left.
     static let contentInset: CGFloat = 24

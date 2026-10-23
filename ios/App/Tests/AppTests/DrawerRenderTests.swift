@@ -112,6 +112,7 @@ final class DrawerRenderTests: XCTestCase {
         return out
     }
 
+    @MainActor
     private func capture(size: CGSize, dark: Bool, name: String) throws {
         var problems = ["the capture was never taken"]
         for _ in 1...3 {

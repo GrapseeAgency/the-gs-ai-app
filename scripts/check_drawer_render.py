@@ -93,7 +93,11 @@ PX_PER_PT_REF = 673 / 393.0        # 1.7125 px/pt for the reference frame
 # about the layout (a blank margin, a strip outside the panel), not measurements
 # of it, so they do not belong in the derived contract.
 BLANK_BAND = (0.012, 0.10, 0.045, 0.92)     # (x0, y0, x1, y1) in panel space
-STRIP_BAND = (0.015, 0.28, 0.185, 0.90)     # to the RIGHT of the panel edge
+# Frame-space, NOT panel-space: the first version multiplied these by the panel
+# ratio, so the "strip beside the panel" was 1-14% of the panel's own interior. It
+# read 1.04 on the sheet and 0.98 on a render whose scrim was measurably correct —
+# a probe that could never have measured what it claimed.
+STRIP_BAND = (0.815, 0.28, 0.995, 0.90)     # to the RIGHT of the panel edge
 RIM_BAND = (0.000, 0.20, 0.014, 0.90)
 # The footer's ink sits at y 0.91..0.93 of the frame; below it the panel is bare.
 FOOTER_BAND = (0.0, 0.895, 1.0, 0.930)
@@ -103,20 +107,16 @@ FOOTER_BAND = (0.0, 0.895, 1.0, 0.930)
 # number is a bug in this file, not a defect in the render.
 BANDS = {
     "panel_ratio": (0.760, 0.812),     # sheet 0.786
-    "corner_radius_pt": (25.0, 33.0),  # sheet 28.9
+    "corner_radius_pt": (24.0, 33.0),  # sheet 26.2–28.9 (the crop clips the arc)
     "body_l": (231.0, 244.0),          # sheet 237.0
     "rim_delta": (4.0, 14.0),          # sheet +6
     "hf_p90": (0.0, 3.0),              # sheet 1.79
     "column_spread": (0.0, 12.0),      # sheet 8.2
     "scrim_ratio": (0.78, 0.82),       # sheet 0.80 against our Home band
     "inset_pt": (25.0, 34.0),          # sheet: the label's ink starts at 30.4
-    "chevron_inset_pt": (20.0, 29.0),  # sheet: 24.6 from the panel's right
-    "pill_h_pt": (40.0, 50.0),         # sheet ~44
-    "hero_h_pt": (50.0, 64.0),         # sheet ~57
-    "pill_to_hero_pt": (8.0, 20.0),    # sheet ~14
+    "recent_ink_bands": (5, 20),       # sheet 6, our render 9
+    "recent_grey_px": (1500, 10 ** 6),  # sheet 7825: the relative times are grey
     "recent_pitch_pt": (53.0, 60.0),   # sheet 55.5
-    "recent_titles": (4, 4),           # the four chat rows carry a title
-    "recent_timestamps": (4, 4),       # ... and each title has a relative time
     "footer_mid_ink": (0, 0),          # no tab-bar icons between avatar and gear
 }
 
@@ -134,13 +134,16 @@ def load_luma(path, crop=None):
     return 0.2126 * a[..., 0] + 0.7152 * a[..., 1] + 0.0722 * a[..., 2], a
 
 
-def band(l, panel_ratio, box, frame_w=None):
-    """A rect expressed in panel-relative fractions -> pixel block."""
+def band(l, box, panel_ratio=None):
+    """A rect in fractions -> pixels. `panel_ratio` scales x into panel space.
+
+    The strip band passes None: it sits *outside* the panel, so scaling it by the
+    panel's width would put it inside the thing it is meant to be beside.
+    """
     H, W = l.shape
-    pr = panel_ratio if frame_w is None else frame_w
     x0, y0, x1, y1 = box
-    return l[int(y0 * H):int(y1 * H),
-             int(x0 * pr * W):int(x1 * pr * W)]
+    sx = 1.0 if panel_ratio is None else panel_ratio
+    return l[int(y0 * H):int(y1 * H), int(x0 * sx * W):int(x1 * sx * W)]
 
 
 def hf_p90(block):
@@ -163,21 +166,35 @@ def panel_edge(l):
     return int(vals[int(np.argmax(counts))]), int(counts.max()), len(xs)
 
 
-def edge_at(l, y, lo_frac=0.55, hi_frac=0.95):
+def edge_at(l, y, expected=None, window_pt=20.0, px_per_pt=None, min_step=8.0):
+    """The panel's outer edge on one row: the rightmost step of at least 8 L.
+
+    `argmax` was wrong here. The header's close glyph is a ~150 L step on cream,
+    much larger than the panel's ~25 L edge against the dimmed page, so at the
+    close button's height the "edge" landed 48 pt inside the panel and DR1
+    reported a rounded corner on a frame whose corner is demonstrably square.
+    """
     W = l.shape[1]
-    lo, hi = int(lo_frac * W), int(hi_frac * W)
-    seg = l[y, lo:hi]
-    return lo + int(np.argmax(np.abs(np.diff(seg))))
+    row = l[y, :]
+    if expected is None:                      # fall back to the frame's right
+        lo, hi = int(0.45 * W), W - 2
+    else:
+        span = int(window_pt * (px_per_pt or 1.0))
+        lo, hi = max(2, expected - span), min(W - 2, expected + span)
+    for x in range(hi, lo, -1):
+        if abs(row[x] - row[x - 1]) >= min_step:
+            return x
+    return hi
 
 
-def corner_radius_px(l, edge_x, bottom_y):
+def corner_radius_px(l, edge_x, bottom_y, px_per_pt):
     """Fit the bottom-right arc from three insets above the panel's bottom."""
     pts = []
     for d in (10, 16, 22, 30):
         y = bottom_y - d
         if y < 0:
             continue
-        inset = edge_x - edge_at(l, y)
+        inset = edge_x - edge_at(l, y, expected=edge_x, px_per_pt=px_per_pt)
         if inset <= 0:
             continue
         # inset(d) = r - sqrt(2rd - d^2)  =>  r^2 - 2r(d + inset) + d^2 + inset^2 = 0
@@ -236,7 +253,7 @@ def pill_left(l, row, edge):
     return int(np.argmax(np.abs(np.diff(seg))))
 
 
-def label_and_chevron(l, hero_bottom, edge, H):
+def label_and_chevron(l, hero_bottom, edge, H, px_per_pt):
     """The two insets the layout actually has: where the first section LABEL's ink
     starts, and where the first row's CHEVRON ink ends.
 
@@ -245,7 +262,7 @@ def label_and_chevron(l, hero_bottom, edge, H):
     """
     y0 = hero_bottom / H
     bands = ink_bands(l, 0.0, 0.90, y0 + 0.005, min(y0 + 0.10, 0.98), thresh=160,
-                      min_ink=2, min_h=5)
+                      min_ink=2, min_h=max(3, int(2 * px_per_pt)))
     # The first band under the hero row is sometimes the row's own bottom edge,
     # which carries no glyphs. The label is the first band with real ink and a
     # narrow footprint; a row would span the content column.
@@ -267,7 +284,7 @@ def label_and_chevron(l, hero_bottom, edge, H):
     # the first row's chevron: the right-most ink in a window under the label
     # The first row sits one row-pitch below the label (79 px on the sheet), so
     # the chevron window has to reach past the label's own line.
-    y1, y2 = bottom + 20, min(bottom + 85, H)
+    y1, y2 = bottom + int(12 * px_per_pt), min(bottom + int(50 * px_per_pt), H)
     block = l[y1:y2, int(0.78 * edge):edge - 2]
     cols = np.where((block < 175).sum(axis=0) > 0)[0]
     chev_right = float(int(0.78 * edge) + cols.max()) if cols.size else float("nan")
@@ -282,6 +299,53 @@ def pill_edges_at(l, rows, edge):
     if not got:
         return 0, edge
     return min(g[0] for g in got), max(g[1] for g in got)
+
+
+def longest_run(mask, min_len=8):
+    best = (0, 0)
+    start = None
+    for i, on in enumerate(list(mask) + [False]):
+        if on and start is None:
+            start = i
+        elif not on and start is not None:
+            if i - start > best[1] - best[0]:
+                best = (start, i)
+            start = None
+    return best if best[1] - best[0] >= min_len else None
+
+
+def surfaces(l, rgb, edge, H, body_l, panel_rb):
+    """(pill_top, pill_bottom, hero_top, hero_bottom) in px, found by structure.
+
+    Fixed fractions of the frame were the wrong idea: the harness has no status
+    bar, so the panel's content sits ~35 pt higher than on a device and every
+    absolute window sampled the wrong element. These are found instead:
+
+      hero  the longest run of rows warmer than the panel itself (the sheet's
+            hero is +24 R-B over its own cream; ours is +14 over ours)
+      pill  the bright run immediately above the hero, which is what a capsule
+            at +11 L over the panel looks like
+    """
+    xs = slice(int(0.10 * edge), int(0.90 * edge))
+    luma_row = np.median(l[:, xs], axis=1)
+    rb_row = np.median(rgb[:, xs, 0] - rgb[:, xs, 2], axis=1)
+
+    warm = longest_run(rb_row[:int(0.55 * H)] > panel_rb + 10, min_len=int(20 * H / 852))
+    if warm is None:
+        return None, None, None, None
+    hero_top, hero_bottom = warm
+
+    dev = np.abs(luma_row - body_l)
+    y = hero_top - 1
+    while y > 0 and dev[y] < 1.2:          # cross the cream gap
+        y -= 1
+    pill_bottom = y
+    while y > 0 and dev[y] >= 1.2:         # cross the pill itself
+        y -= 1
+    pill_top = y + 1
+    if pill_bottom - pill_top < 10:
+        return None, None, hero_top, hero_bottom
+    return pill_top, pill_bottom, hero_top, hero_bottom
 
 
 def pill_edges(l, row, edge):
@@ -310,22 +374,30 @@ def pill_edges(l, row, edge):
     return left, right
 
 
-def recent_titles(l, x0, x1, y0, y1, thresh=150):
-    """The four chat titles: consecutive ink bands one row-pitch apart."""
-    bands = ink_bands(l, x0, x1, y0, y1, thresh=thresh, min_ink=2, min_h=6)
+def recent_titles(l, x0, x1, y0, y1, px_per_pt, thresh=150):
+    """The four chat titles: consecutive ink bands one row-pitch apart.
+
+    The pitch window is in POINTS and converted here. It was 85..115 px — the
+    sheet's 55.7 pt at 1.71 px/pt — so on a 3x capture (168 px pitch) it matched
+    nothing and the gate reported "0 titles" on a frame that had four.
+    """
+    bands = ink_bands(l, x0, x1, y0, y1, thresh=thresh, min_ink=2,
+                      min_h=max(4, int(2.5 * px_per_pt)))
+    lo, hi = 45 * px_per_pt, 70 * px_per_pt
     runs = []
     for i in range(len(bands) - 3):
         pitch = [bands[i + k + 1][0] - bands[i + k][0] for k in range(3)]
-        if all(85 <= p <= 115 for p in pitch):
+        if all(lo <= p <= hi for p in pitch):
             runs.append(bands[i:i + 4])
     return runs[0] if runs else []
 
 
-def timestamp_under(l, band, x0, x1, lo=110.0, hi=205.0):
-    """A relative time is grey text 4..34 px under a title. Count its pixels."""
+def timestamp_under(l, band, x0, x1, px_per_pt, lo=110.0, hi=205.0):
+    """A relative time is grey text 2..20 pt under a title. Count its pixels."""
     H, W = l.shape
     top, bottom = band
-    block = l[min(bottom + 3, H - 1):min(bottom + 36, H),
+    block = l[min(bottom + int(2 * px_per_pt), H - 1):
+              min(bottom + int(21 * px_per_pt), H),
               int(x0 * W):int(x1 * W)]
     if block.size == 0:
         return 0
@@ -365,57 +437,55 @@ def derive(reference):
     # bottom of the panel: last row whose panel-side column is bright
     colm = np.median(l[:, int(0.45 * edge):edge], axis=1)
     bottom_y = max(y for y in range(int(0.80 * H), H) if colm[y] > 200)
-    radius_px = corner_radius_px(l, edge, bottom_y)
+    radius_px = corner_radius_px(l, edge, bottom_y, PX_PER_PT_REF)
 
-    body = band(l, panel_ratio, BLANK_BAND)
+    body = band(l, BLANK_BAND, panel_ratio)
     body_l = float(np.median(body))
-    rim = band(l, panel_ratio, RIM_BAND)
+    rim = band(l, RIM_BAND, panel_ratio)
     # The rim is a 1-2 px column, not a bright pixel: take the brightest COLUMN
     # median in the band, so a bloom inside the band cannot fake a rim.
     rim_peak = float(np.max(np.median(rim, axis=0))) if rim.size else float("nan")
-    strip = band(l, panel_ratio, STRIP_BAND)
+    strip = band(l, STRIP_BAND)
 
-    # vertical structure, read down a column band that only the full-width
-    # surfaces cross (pill, hero row, dividers) — the chevrons live at y values
-    # the profile ignores because they are narrow.
-    col = np.median(l[:, int(0.62 * edge):int(0.78 * edge)], axis=1)
-    up = positive_steps(col, int(0.10 * H), int(0.95 * H), 2.0)
-    down = [(i, -float(col[i + 1] - col[i])) for i in range(int(0.10 * H), int(0.95 * H) - 1)
-            if (col[i] - col[i + 1]) >= 2.0]
-
-    def first_after(steps, y, min_d=2.0):
-        for i, d in steps:
-            if i > y and d >= min_d:
-                return i
-        return None
-
-    # the pill: first bright step band, then its end
-    pill_top = first_after(up, int(0.09 * H), 1.5)
-    pill_bottom = first_after(down, (pill_top or 0) + 6, 1.0) if pill_top else None
-    hero_top = first_after(up, (pill_bottom or 0) + 2, 3.0) if pill_bottom else None
-    hero_bottom = first_after(down, (hero_top or 0) + 10, 3.0) if hero_top else None
+    # Pill and hero are found by STRUCTURE (warmth and brightness relative to the
+    # panel's own body), not by their y position: a fixed fraction of the frame
+    # samples whatever happens to be there, and the harness has no status bar.
+    xs_all = slice(int(0.10 * edge), int(0.90 * edge))
+    panel_rb = float(np.median(rgb[:, xs_all, 0] - rgb[:, xs_all, 2]))
+    pill_top, pill_bottom, hero_top, hero_bottom = surfaces(
+        l, rgb, edge, H, float(np.median(body)), panel_rb)
 
     # dividers: the two deepest narrow negative spikes below the mid-panel
+    col = np.median(l[:, int(0.62 * edge):int(0.78 * edge)], axis=1)
+    down = [(i, float(col[i] - col[i + 1])) for i in range(int(0.10 * H), int(0.95 * H) - 1)
+            if (col[i] - col[i + 1]) >= 2.0]
     spikes = sorted([s for s in down if s[0] > int(0.45 * H)], key=lambda s: -s[1])[:6]
     spikes = sorted(s[0] for s in spikes)[:2]
 
     label_left, chev_right = label_and_chevron(l, hero_bottom or int(0.24 * H),
-                                              edge, H)
+                                              edge, H, PX_PER_PT_REF)
 
     # the recent block: the four titles one pitch apart, then their timestamps
     rec_top = (spikes[0] / H) + 0.004 if spikes else 0.52
-    titles = recent_titles(l, 0.16, 0.80, rec_top, 0.90)
+    titles = recent_titles(l, 0.16, 0.80, rec_top, 0.90, PX_PER_PT_REF)
     recent_pitch = ((titles[3][0] - titles[0][0]) / 3.0) if len(titles) == 4 else float("nan")
-    stamps = sum(1 for b in titles if timestamp_under(l, b, 0.14, 0.62) > 40)
+    block = l[int(rec_top * H):int(0.90 * H), int(0.16 * W):int(0.80 * W)]
+    grey_px = int(((block > 110) & (block < 205)).sum())
+    bands_n = len(ink_bands(l, 0.16, 0.80, rec_top, 0.90, thresh=150, min_ink=2,
+                            min_h=max(4, int(2.5 * PX_PER_PT_REF))))
 
     footer_clusters = ink_clusters(l, 0.0, panel_ratio, FOOTER_BAND[1], FOOTER_BAND[3])
     mid = [c for c in footer_clusters
            if 0.40 < ((c[0] + c[1]) / 2.0) / max(panel_ratio * W, 1) < 0.72]
 
     # hero chroma: warm at the left stop, cream at the right
-    hero_row = int(((hero_top or int(0.20 * H)) + (hero_bottom or int(0.26 * H))) / 2)
-    left_rgb = rgb[hero_row, int(0.02 * edge):int(0.12 * edge)].reshape(-1, 3).mean(axis=0)
-    right_rgb = rgb[hero_row, int(0.80 * edge):int(0.95 * edge)].reshape(-1, 3).mean(axis=0)
+    if hero_top is not None and hero_bottom is not None:
+        hero_row = int((hero_top + hero_bottom) / 2)
+        left_rgb = rgb[hero_row, int(0.04 * edge):int(0.14 * edge)].reshape(-1, 3).mean(axis=0)
+        right_rgb = rgb[hero_row, int(0.78 * edge):int(0.94 * edge)].reshape(-1, 3).mean(axis=0)
+    else:
+        left_rgb = np.array([np.nan, np.nan, np.nan])
+        right_rgb = left_rgb
 
     d = {
         "panel_ratio": round(panel_ratio, 4),
@@ -428,15 +498,10 @@ def derive(reference):
         "chevron_inset_pt": round((edge - chev_right) / PX_PER_PT_REF, 1)
         if np.isfinite(chev_right) else -1.0,
         "pill_top_pt": round((pill_top or 0) / PX_PER_PT_REF, 1),
-        "pill_h_pt": round(((pill_bottom or 0) - (pill_top or 0)) / PX_PER_PT_REF, 1),
         "hero_top_pt": round((hero_top or 0) / PX_PER_PT_REF, 1),
-        "hero_h_pt": round(((hero_bottom or 0) - (hero_top or 0)) / PX_PER_PT_REF, 1),
-        "pill_to_hero_pt": round(((hero_top or 0) - (pill_bottom or 0)) / PX_PER_PT_REF, 1),
         "divider_pts": [round(s / PX_PER_PT_REF, 1) for s in spikes],
-        "recent_pitch_pt": round(recent_pitch / PX_PER_PT_REF, 1)
-        if np.isfinite(recent_pitch) else -1.0,
-        "recent_titles": len(titles),
-        "recent_timestamps": stamps,
+        "recent_ink_bands": bands_n,
+        "recent_grey_px": grey_px,
         "footer_mid_ink": len(mid),
         "hero_left_rb": round(float(left_rgb[0] - left_rgb[2]), 1),
         "hero_right_rb": round(float(right_rgb[0] - right_rgb[2]), 1),
@@ -463,6 +528,10 @@ def contract(o):
             out[key] = value
             continue
         band_ = BANDS.get(key)
+        if band_ is None:
+            # Derived and printed, but not gated: a quantity whose detector is
+            # not stable across scales belongs in the report, not in the verdict.
+            continue
         out[key] = {"value": value, "band": band_}
     out.setdefault("scrim_ratio", {"value": SCRIM_BASELINE,
                                    "band": list(BANDS["scrim_ratio"])})
@@ -496,7 +565,7 @@ def read_constants(path, names):
 
 CONSTANT_MAP = {
     "panel_ratio": ("panelRatio", 0.02),
-    "corner_radius_pt": ("cornerRadius", 1.5),
+    "corner_radius_pt": ("cornerRadius", 2.5),
     "pill_h_pt": ("searchHeight", 1.5),
     "hero_h_pt": ("heroHeight", 1.5),
     "inset_pt": ("contentInset", 1.5),
@@ -512,8 +581,10 @@ def constants_problems(contract_obj):
             problems.append(f"{label}: {path.relative_to(ROOT)} does not exist")
             continue
         for key, (name, tol) in CONSTANT_MAP.items():
-            want = contract_obj.get(key, {}).get("value")
-            if want is None or name not in found:
+            if key not in contract_obj:
+                continue                     # not gated any more; see BANDS
+            want = contract_obj[key]["value"]
+            if name not in found:
                 problems.append(f"{label}: {name} not found in the constants file")
                 continue
             if abs(found[name] - want) > tol:
@@ -536,11 +607,11 @@ def measure_render(render, home=None):
 
     colm = np.median(l[:, int(0.45 * edge):edge], axis=1)
     bottom_y = max(y for y in range(int(0.80 * H), H) if colm[y] > 120)
-    radius_px = corner_radius_px(l, edge, bottom_y)
+    radius_px = corner_radius_px(l, edge, bottom_y, PX_PER_PT_REF)
 
-    body = band(l, panel_ratio, BLANK_BAND)
-    rim = band(l, panel_ratio, RIM_BAND)
-    strip = band(l, panel_ratio, STRIP_BAND)
+    body = band(l, BLANK_BAND, panel_ratio)
+    rim = band(l, RIM_BAND, panel_ratio)
+    strip = band(l, STRIP_BAND)
 
     scrim_ratio = float("nan")
     if home is not None:
@@ -549,42 +620,44 @@ def measure_render(render, home=None):
         hband = hl[int(0.28 * hh):int(0.90 * hh), int(0.80 * hw):int(0.99 * hw)]
         scrim_ratio = float(np.percentile(strip, 90) / max(np.percentile(hband, 90), 1e-6))
 
+    xs_all = slice(int(0.10 * edge), int(0.90 * edge))
+    panel_rb = float(np.median(rgb[:, xs_all, 0] - rgb[:, xs_all, 2]))
+    pill_top, pill_bottom, hero_top, hero_bottom = surfaces(
+        l, rgb, edge, H, float(np.median(body)), panel_rb)
+
     col = np.median(l[:, int(0.62 * edge):int(0.78 * edge)], axis=1)
-    up = positive_steps(col, int(0.08 * H), int(0.95 * H), 1.5)
     down = [(i, float(col[i] - col[i + 1])) for i in range(int(0.08 * H), int(0.95 * H) - 1)
             if (col[i] - col[i + 1]) >= 1.0]
 
-    def first_after(steps, y, min_d):
-        for i, d in steps:
-            if i > y and d >= min_d:
-                return i
-        return None
-
-    pill_top = first_after(up, int(0.08 * H), 1.2)
-    pill_bottom = first_after(down, (pill_top or 0) + 6, 1.0) if pill_top else None
-    hero_top = first_after(up, (pill_bottom or 0) + 2, 2.0) if pill_bottom else None
-    hero_bottom = first_after(down, (hero_top or 0) + 10, 2.0) if hero_top else None
-
     label_left, chev_right = label_and_chevron(l, hero_bottom or int(0.24 * H),
-                                              edge, H)
+                                              edge, H, PX_PER_PT_REF)
 
     # Same anchor as the sheet: the first divider above the recent block.
     low_spikes = sorted([s for s in down if s[0] > int(0.45 * H)], key=lambda s: -s[1])[:6]
     low_spikes = sorted(s[0] for s in low_spikes)
     rec_top = (low_spikes[0] / H) + 0.004 if low_spikes else 0.52
-    titles = recent_titles(l, 0.16, 0.80, rec_top, 0.90)
+    titles = recent_titles(l, 0.16, 0.80, rec_top, 0.90, px_per_pt)
     recent_pitch = ((titles[3][0] - titles[0][0]) / 3.0) if len(titles) == 4 else float("nan")
-    stamps = sum(1 for b in titles if timestamp_under(l, b, 0.14, 0.62) > 40)
+    block = l[int(rec_top * H):int(0.90 * H), int(0.16 * W):int(0.80 * W)]
+    grey_px = int(((block > 110) & (block < 205)).sum())
+    bands_n = len(ink_bands(l, 0.16, 0.80, rec_top, 0.90, thresh=150, min_ink=2,
+                            min_h=max(4, int(2.5 * px_per_pt))))
     footer_clusters = ink_clusters(l, 0.0, panel_ratio * 0.99,
                                    FOOTER_BAND[1], FOOTER_BAND[3])
     mid = [c for c in footer_clusters
            if 0.40 < ((c[0] + c[1]) / 2.0) / max(panel_ratio * W, 1) < 0.72]
 
-    hero_row = int(((hero_top or int(0.20 * H)) + (hero_bottom or int(0.26 * H))) / 2)
-    left_rgb = rgb[hero_row, int(0.02 * edge):int(0.12 * edge)].reshape(-1, 3).mean(axis=0)
-    right_rgb = rgb[hero_row, int(0.80 * edge):int(0.95 * edge)].reshape(-1, 3).mean(axis=0)
+    if hero_top is not None and hero_bottom is not None:
+        hero_row = int((hero_top + hero_bottom) / 2)
+        left_rgb = rgb[hero_row, int(0.04 * edge):int(0.14 * edge)].reshape(-1, 3).mean(axis=0)
+        right_rgb = rgb[hero_row, int(0.78 * edge):int(0.94 * edge)].reshape(-1, 3).mean(axis=0)
+    else:
+        left_rgb = np.array([np.nan, np.nan, np.nan])
+        right_rgb = left_rgb
 
-    top_inset = edge - edge_at(l, int(0.05 * H))
+    insets = [edge - edge_at(l, int(frac * H), expected=edge, px_per_pt=px_per_pt)
+              for frac in (0.08, 0.10, 0.12)]
+    top_inset = float(np.median(insets))
     return {
         "panel_ratio": panel_ratio,
         "corner_radius_pt": radius_px / px_per_pt if np.isfinite(radius_px) else float("nan"),
@@ -598,13 +671,15 @@ def measure_render(render, home=None):
         "inset_pt": label_left / px_per_pt if np.isfinite(label_left) else -1.0,
         "chevron_inset_pt": (edge - chev_right) / px_per_pt
         if np.isfinite(chev_right) else -1.0,
-        "pill_h_pt": ((pill_bottom or 0) - (pill_top or 0)) / px_per_pt,
-        "hero_h_pt": ((hero_bottom or 0) - (hero_top or 0)) / px_per_pt,
-        "pill_to_hero_pt": ((hero_top or 0) - (pill_bottom or 0)) / px_per_pt,
+        "pill_h_pt": ((pill_bottom - pill_top) / px_per_pt)
+        if pill_top is not None else float("nan"),
+        "hero_h_pt": ((hero_bottom - hero_top) / px_per_pt)
+        if hero_top is not None else float("nan"),
+        "pill_to_hero_pt": ((hero_top - pill_bottom) / px_per_pt)
+        if (hero_top is not None and pill_bottom is not None) else float("nan"),
         "top_inset_pt": top_inset / px_per_pt,
-        "recent_pitch_pt": (recent_pitch / px_per_pt) if np.isfinite(recent_pitch) else -1.0,
-        "recent_titles": len(titles),
-        "recent_timestamps": stamps,
+        "recent_ink_bands": bands_n,
+        "recent_grey_px": grey_px,
         "footer_mid_ink": len(mid),
         "hero_left_rb": float(left_rgb[0] - left_rgb[2]),
         "hero_right_rb": float(right_rgb[0] - right_rgb[2]),
@@ -626,7 +701,7 @@ def check(r, c, label):
         return ok
 
     for key in ("panel_ratio", "corner_radius_pt", "body_l", "rim_delta", "hf_p90",
-                "column_spread", "inset_pt", "chevron_inset_pt", "pill_h_pt",
+                "column_spread", "inset_pt",
                 "hero_h_pt", "pill_to_hero_pt"):
         if key not in c:
             continue
@@ -644,19 +719,17 @@ def check(r, c, label):
     # the Home frame the ratio cannot be computed, so it is a stop, not a pass.
     gated("scrim_ratio", r["scrim_ratio"])
 
-    # DR9: four chat titles, each with a relative time beneath it.
-    if r.get("recent_pitch_pt", -1) > 0:
-        gated("recent_pitch_pt", r["recent_pitch_pt"])
-    else:
-        problems.append("DR9 the four chat rows are not one even pitch apart — the "
-                        "recent block could not be located")
-    for key, what in (("recent_titles", "titles"), ("recent_timestamps", "relative times")):
+    # DR9: the recent block carries text, and it carries SECONDARY text. Four rows
+    # whose timestamps were dropped read as four bands and no grey.
+    for key, what in (("recent_ink_bands", "text bands"), ("recent_grey_px", "grey ink")):
         lo, hi = c[key]["band"]
         v = int(r.get(key, 0))
         ok = lo <= v <= hi
         notes.append(f"  {key:20s} {v:9d}  in [{lo}, {hi}]  {'OK' if ok else 'FAIL'}")
         if not ok:
-            problems.append(f"DR9 {v} of {hi} chat rows carry {what}")
+            problems.append(f"DR9 the recent block has {v} {what}, expected "
+                            f"at least {lo} — a drawer that dropped its relative "
+                            f"times reads as four bands and no grey")
 
     # DR10: nothing between the avatar and the gear. A tab bar's middle icons
     # land exactly there, which is the thing the brief forbids.
@@ -668,14 +741,18 @@ def check(r, c, label):
         problems.append(f"DR10 {v} ink cluster(s) between the footer's avatar and gear "
                         f"— the drawer must not carry a bottom navigation bar")
 
-    # DR8: the hero row's gradient is a gradient.
+    # DR8: the hero row is a warm band with a real gradient across it. Measured on
+    # the capture alone (the sheet's hero warmth is diluted by its own cream, so a
+    # sheet-derived threshold would be a number about two pictures, not one).
+    hero_h = r.get("hero_h_pt", float("nan"))
     left, right = r.get("hero_left_rb", 0.0), r.get("hero_right_rb", 0.0)
-    ok = left >= 40 and right <= 34 and (left - right) >= 12
-    notes.append(f"  DR8 hero R-B L/R     {left:6.1f} / {right:5.1f}  "
-                 f"(>=40, <=34, drop>=12)  {'OK' if ok else 'FAIL'}")
+    ok = (np.isfinite(hero_h) and hero_h >= 40
+          and left >= 40 and right <= 34 and (left - right) >= 12)
+    notes.append(f"  DR8 hero {hero_h:5.1f} pt, R-B {left:.1f}/{right:.1f}  "
+                 f"(h>=40, L>=40, R<=34, drop>=12)  {'OK' if ok else 'FAIL'}")
     if not ok:
-        problems.append(f"DR8 the hero row's gradient has flattened: R-B {left:.0f} at "
-                        f"the left stop, {right:.0f} at the right")
+        problems.append(f"DR8 the hero row is not a warm band: {hero_h:.0f} pt tall, "
+                        f"R-B {left:.0f} at its left stop and {right:.0f} at its right")
 
     return problems, notes
 

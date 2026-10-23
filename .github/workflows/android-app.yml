@@ -57,6 +57,7 @@ on:
       - 'scripts/check_font_faces.py'
       - 'scripts/check_drawer_render.py'
       - 'scripts/check_drawer_structure.py'
+      - 'scripts/test_drawer_render_gate.py'
       - '.github/scripts/check_drawer_type_parity.py'
       - 'assets/reference/drawer-reference.png'
       - 'shared-contracts/drawer-geometry.json'
@@ -680,6 +681,14 @@ jobs:
             --render android/app/build/screenshots/drawer-393x852.png \
             --home android/app/build/screenshots/home-393x852.png \
             --probe-set android --label android-drawer
+
+      # The drawer gate's own non-vacuity, executed every run: eight doctored
+      # frames, each caught by the check that owns it, and the real frame passing.
+      - name: The drawer gate can still fail
+        run: |
+          set -euo pipefail
+          python3 scripts/test_drawer_render_gate.py \
+            --render android/app/build/screenshots/drawer-393x852.png --home android/app/build/screenshots/home-393x852.png
 
       - name: The drawer's type and geometry agree across platforms
         run: |

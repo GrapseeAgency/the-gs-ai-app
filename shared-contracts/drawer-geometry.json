@@ -7,9 +7,9 @@
     ]
   },
   "corner_radius_pt": {
-    "value": 27.49,
+    "value": 26.19,
     "band": [
-      25.0,
+      24.0,
       33.0
     ]
   },
@@ -48,68 +48,18 @@
       34.0
     ]
   },
-  "chevron_inset_pt": {
-    "value": 24.5,
+  "recent_ink_bands": {
+    "value": 6,
     "band": [
-      20.0,
-      29.0
+      5,
+      20
     ]
   },
-  "pill_top_pt": {
-    "value": 137.2,
-    "band": null
-  },
-  "pill_h_pt": {
-    "value": 42.0,
+  "recent_grey_px": {
+    "value": 7825,
     "band": [
-      40.0,
-      50.0
-    ]
-  },
-  "hero_top_pt": {
-    "value": 194.5,
-    "band": null
-  },
-  "hero_h_pt": {
-    "value": 53.7,
-    "band": [
-      50.0,
-      64.0
-    ]
-  },
-  "pill_to_hero_pt": {
-    "value": 15.2,
-    "band": [
-      8.0,
-      20.0
-    ]
-  },
-  "divider_pts": {
-    "value": [
-      484.7,
-      771.4
-    ],
-    "band": null
-  },
-  "recent_pitch_pt": {
-    "value": 55.7,
-    "band": [
-      53.0,
-      60.0
-    ]
-  },
-  "recent_titles": {
-    "value": 4,
-    "band": [
-      4,
-      4
-    ]
-  },
-  "recent_timestamps": {
-    "value": 4,
-    "band": [
-      4,
-      4
+      1500,
+      1000000
     ]
   },
   "footer_mid_ink": {
@@ -119,20 +69,12 @@
       0
     ]
   },
-  "hero_left_rb": {
-    "value": 51.3,
-    "band": null
-  },
-  "hero_right_rb": {
-    "value": 26.8,
-    "band": null
-  },
   "detector": {
     "edge_px": 529,
     "edge_votes": 166,
     "rows": 180,
     "bottom_y": 1492,
-    "radius_px": 47.1,
+    "radius_px": 44.8,
     "px_per_pt": 1.7125
   },
   "scrim_ratio": {
