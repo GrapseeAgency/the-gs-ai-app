@@ -16,6 +16,11 @@ python3 scripts/prepare_home_art.py --check      # artwork: resolution, parity, 
 python3 scripts/test_home_render_gate.py --render <capture> --probe-set <kind>
 ```
 
+A layout change moves the probes. When a rim or hairline check fails, the gate prints
+where the nearest edge actually is — the brightest row, and the largest positive step
+in the column median, each against the `rim_y` the probe carries — so re-deriving a
+rect is a copy from the log rather than a search.
+
 ## What matches
 
 | quantity | sheet | Android | iOS |
@@ -47,6 +52,32 @@ twelve type roles and its glass corners agree across platforms; and the gate its
 is proven able to fail by `test_home_render_gate.py`, which doctors the capture
 eight ways (flat page, cards painted out, hairline erased, frame shifted, probes
 slipped both ways, backdrop dimmed) and requires each to be caught.
+
+## Type measured against the sheet, not against each other
+
+The type contract was derived from the two platforms, so it can only ever prove they
+agree. These came from measuring the same string's glyph band on the sheet and on the
+render and scaling the size by the ratio — the one comparison a different typeface
+cannot distort, because it is the same string at the same rendering.
+
+| role | sheet band | ours, before | ours, now |
+|---|---|---|---|
+| greeting line 1 | 28.5 pt | 27.3 at 26 | 26 kept (0.7 pt cap apart) |
+| greeting subtitle | 11.5 pt, 17.6 pt pitch | 15.3 at 15/22 | 12.7, 17.7 pitch (**12.5/18**) |
+| "Today's Used" | 15.78 pt | 19.00 at 18 | **16.00 at 15** |
+| "Nexly" | 12.14 pt | 13.33 at 18 | 16.5 (see below) |
+| video chip | 7.21 pt | 11.0 (13 dp icon) | 7.67 (10 sp, 8 dp icon) |
+| card headline | 16 pt, same line break | 16 | 16 kept |
+| card body | 12 pt, two lines | 12, three lines | unchanged — the face, not the size |
+
+Three of these were 20% or more off the picture while both platforms agreed with each
+other. That is the failure mode this table exists to catch: the contract cannot see it,
+because the contract is a mirror.
+
+One difference is spacing, not size, and is left open: the sheet has a 9.7 pt gap
+between "Nexly" and "AI Companion" and ours has none — the two lines merge into a
+single glyph band at every threshold. Closing it moves everything below, so it wants
+its own pass with the probes re-derived around it.
 
 ## The video card's internals, measured against the sheet
 
