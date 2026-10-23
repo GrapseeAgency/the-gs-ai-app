@@ -831,7 +831,6 @@ struct NexlyPlanCard: View {
     private func restoreServerProgress() async {
         guard let conversationID, !conversationID.isEmpty else { return }
         guard let remote = try? await APIClient.shared.planProgress(conversationID: conversationID),
-              let remote,
               remote.fingerprint == NexlyPlanProgressStore.shared.fingerprint(for: plan) else {
             return
         }
