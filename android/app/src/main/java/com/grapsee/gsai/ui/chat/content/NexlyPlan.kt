@@ -396,6 +396,21 @@ data class NexlyTone(
 internal val LocalNexlyProseStyle = androidx.compose.runtime.staticCompositionLocalOf<androidx.compose.ui.text.TextStyle?> { null }
 
 /**
+ * The sheet's ink is a soft neutral grey, not the app's near-black brown.
+ * This is the single biggest reason the first native pass read heavier than
+ * the reference: every line was at maximum contrast.
+ */
+internal object NexlyInk {
+    val prose = Color(0xFF4A4750)
+    val title = Color(0xFF555860)
+    val row = Color(0xFF5E6068)
+    val label = Color(0xFF4B4E58)
+    val meta = Color(0xFF8C8E96)
+    val header = Color(0xFF3B3A40)
+    val headerMeta = Color(0xFF7E7E86)
+}
+
+/**
  * The sheet's cards are thinner than the app's standard card glass: a clear
  * white veil over the pearl field, a hairline rim and almost no shadow. The
  * shared `.gsGlass(Card)` is intentionally milkier for menus and sheets.
@@ -534,7 +549,7 @@ fun NexlyPlanCard(
     ) {
         NexlyInlineRichText(
             text = cleanPlanText(plan.title, 160),
-            color = colors.textPrimary,
+            color = NexlyInk.title,
             fontSize = 12.sp,
             glyphSize = 14.dp,
             weight = FontWeight.Medium
@@ -585,12 +600,12 @@ fun NexlyPlanCard(
                                     lineHeight = 11.sp,
                                     fontWeight = FontWeight.Normal
                                 ),
-                                color = colors.textTertiary,
+                                color = NexlyInk.meta,
                                 maxLines = 1
                             )
                             NexlyInlineRichText(
                                 text = row.text,
-                                color = colors.textPrimary,
+                                color = NexlyInk.row,
                                 fontSize = 11.5.sp,
                                 glyphSize = 13.5.dp,
                                 weight = FontWeight.Normal
@@ -609,7 +624,7 @@ fun NexlyPlanCard(
                 plan.closing?.let { closing ->
                     NexlyInlineRichText(
                         text = closing,
-                        color = colors.textPrimary,
+                        color = NexlyInk.row,
                         fontSize = 12.sp,
                         glyphSize = 13.5.dp
                     )
@@ -629,7 +644,7 @@ fun NexlyPlanCard(
                     Text(
                         text = stamp,
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                        color = colors.textTertiary
+                        color = NexlyInk.meta
                     )
                 }
             }

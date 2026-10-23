@@ -29,11 +29,11 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Nexly")
                     .font(.system(size: 16.5, weight: .semibold))
-                    .foregroundStyle(Aero.text)
+                    .foregroundStyle(NexlyInk.header)
                     .lineLimit(1)
                 Text("AI Companion")
                     .font(.system(size: 10, weight: .regular))
-                    .foregroundStyle(Aero.textSecondary)
+                    .foregroundStyle(NexlyInk.headerMeta)
                     .lineLimit(1)
             }
 

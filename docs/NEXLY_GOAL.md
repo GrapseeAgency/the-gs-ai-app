@@ -146,6 +146,8 @@ catalogue, validator and web registry also know the `plan` kind.
   phones** (about half the device) with the avatar in its own lane; assistant
   cards are capped at **286pt prose / 290pt plan** (about 70% of a 393pt
   screen); the plan title is 12pt medium and one line at 393pt.
+- The sheet's **soft neutral ink** replaced the app's near-black brown
+  (`#4A4750` prose, `#555860` title, `#5E6068` rows, `#8C8E96` metadata).
 - Glyph chips are now a **pale tone wash with the saturated colour in the
   glyph**, not saturated chips with white ink. Cards use a thinner white veil,
   a hairline rim and almost no shadow. The backdrop draws defined pearl

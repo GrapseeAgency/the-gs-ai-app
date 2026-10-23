@@ -180,6 +180,18 @@ extension View {
     }
 }
 
+/// The sheet's ink is a soft neutral grey, not the app's near-black brown.
+/// Using full-contrast ink was what made the first native pass read heavy.
+enum NexlyInk {
+    static let prose = Color(red: 0.290, green: 0.278, blue: 0.314)
+    static let title = Color(red: 0.333, green: 0.345, blue: 0.376)
+    static let row = Color(red: 0.369, green: 0.376, blue: 0.408)
+    static let label = Color(red: 0.294, green: 0.306, blue: 0.345)
+    static let meta = Color(red: 0.549, green: 0.557, blue: 0.588)
+    static let header = Color(red: 0.231, green: 0.227, blue: 0.251)
+    static let headerMeta = Color(red: 0.494, green: 0.494, blue: 0.525)
+}
+
 enum NexlyGlassTone: String, CaseIterable {
     case amber, lavender, blue, green, pink, peach, mint, lilac
 
@@ -597,10 +609,10 @@ struct NexlyThinkingCard: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Aero.text)
+                    .foregroundColor(NexlyInk.label)
                 Text(subtitle)
                     .font(.system(size: 9))
-                    .foregroundColor(Aero.textMuted)
+                    .foregroundColor(NexlyInk.meta)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -634,7 +646,7 @@ struct NexlyPlanCard: View {
                 text: plan.title,
                 fontSize: 12,
                 glyphSize: 14,
-                color: Aero.text,
+                color: NexlyInk.title,
                 // The sheet's title is only a hair larger than the rows; at the
                 // narrower card width a bold title wrapped where the reference
                 // stays on one line.
@@ -655,13 +667,13 @@ struct NexlyPlanCard: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(row.time)
                                     .font(.system(size: 9, weight: .regular))
-                                    .foregroundColor(Aero.textTertiary)
+                                    .foregroundColor(NexlyInk.meta)
                                     .lineLimit(1)
                                 NexlyInlineText(
                                     text: row.text,
                                     fontSize: 11.5,
                                     glyphSize: 13.5,
-                                    color: Aero.text,
+                                    color: NexlyInk.row,
                                     weight: .regular
                                 )
                             }
@@ -677,7 +689,7 @@ struct NexlyPlanCard: View {
                             text: closing,
                             fontSize: 12,
                             glyphSize: 13.5,
-                            color: Aero.text,
+                            color: NexlyInk.row,
                             weight: .regular
                         )
                         if let closingIcon = plan.closingIcon,
@@ -693,7 +705,7 @@ struct NexlyPlanCard: View {
                     if let stamp {
                         Text(stamp)
                             .font(.system(size: 9, weight: .regular))
-                            .foregroundColor(Aero.textTertiary)
+                            .foregroundColor(NexlyInk.meta)
                     }
                 }
             }

@@ -306,7 +306,8 @@ private fun NexlyAssistantBlocks(
                             LocalNexlyProseStyle provides TextStyle(
                                 fontSize = 12.5.sp,
                                 lineHeight = 17.5.sp,
-                                fontWeight = FontWeight.Normal
+                                fontWeight = FontWeight.Normal,
+                                color = NexlyInk.prose
                             )
                         ) {
                         Column(
@@ -472,14 +473,15 @@ private data class SpanTheme(
 @Composable
 private fun rememberSpanTheme(
     defaultFontSize: androidx.compose.ui.unit.TextUnit,
-    citationUrls: Map<Int, String> = emptyMap()
+    citationUrls: Map<Int, String> = emptyMap(),
+    textColor: Color? = null
 ): SpanTheme {
     val context = androidx.compose.ui.platform.LocalContext.current
     remember(context) { NexlyIcons.ensureLoaded(context.applicationContext) }
     return SpanTheme(
         codeBg = MaterialTheme.colorScheme.surfaceContainerHighest,
         linkColor = MaterialTheme.colorScheme.primary,
-        textColor = MaterialTheme.colorScheme.onSurface,
+        textColor = textColor ?: MaterialTheme.colorScheme.onSurface,
         caretColor = MaterialTheme.colorScheme.primary,
         fontSize = defaultFontSize,
         citations = citationUrls,
@@ -630,7 +632,8 @@ private fun ParagraphBlock(
     if (block.spans.isEmpty()) return
     val compact = LocalNexlyProseStyle.current
     val bodyStyle = compact ?: MaterialTheme.typography.bodyMedium
-    val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls)
+    val ink = compact?.color ?: MaterialTheme.colorScheme.onSurface
+    val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
     val styled = remember(block.spans, theme, showCaret) {
         spansToAnnotatedString(block.spans, theme, showCaret)
     }
@@ -638,7 +641,7 @@ private fun ParagraphBlock(
         Text(
             text = styled,
             style = bodyStyle,
-            color = MaterialTheme.colorScheme.onSurface
+            color = ink
         )
     }
     if (selectable) SelectionContainer { text() } else text()

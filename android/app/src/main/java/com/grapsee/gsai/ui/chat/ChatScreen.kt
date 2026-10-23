@@ -190,6 +190,7 @@ import com.grapsee.gsai.ui.chat.content.BlocksContent
 import com.grapsee.gsai.ui.chat.content.LocalVoiceLauncher
 import com.grapsee.gsai.ui.chat.content.NexlyGlassGlyphTile
 import com.grapsee.gsai.ui.chat.content.NexlyGlyph
+import com.grapsee.gsai.ui.chat.content.NexlyInk
 import com.grapsee.gsai.ui.chat.content.NexlyUserAvatar
 import com.grapsee.gsai.ui.chat.content.containsNexlyPlan
 import com.grapsee.gsai.ui.chat.content.nexlyPearlBackdrop
@@ -1780,7 +1781,7 @@ internal fun NexlyChatHeader(
                         lineHeight = 20.sp,
                         fontWeight = FontWeight.SemiBold
                     ),
-                    color = GsTheme.colors.textPrimary,
+                    color = NexlyInk.header,
                     maxLines = 1
                 )
                 Text(
@@ -1789,7 +1790,7 @@ internal fun NexlyChatHeader(
                         fontSize = 10.sp,
                         lineHeight = 12.sp
                     ),
-                    color = GsTheme.colors.textSecondary,
+                    color = NexlyInk.headerMeta,
                     maxLines = 1
                 )
             }
@@ -1981,7 +1982,7 @@ internal fun UserMessage(
                                         fontSize = 12.5.sp,
                                         lineHeight = 17.5.sp
                                     ),
-                                    color = colors.textPrimary
+                                    color = NexlyInk.prose
                                 )
                             }
                             DropdownMenu(
@@ -2018,14 +2019,14 @@ internal fun UserMessage(
                                 Text(
                                     text = stamp,
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
-                                    color = colors.textTertiary
+                                    color = NexlyInk.meta
                                 )
                             }
                             if (!message.failed) {
                                 NexlyGlyph(
                                     name = "checks",
                                     size = 12.dp,
-                                    color = colors.textSecondary.copy(alpha = 0.78f)
+                                    color = NexlyInk.meta
                                 )
                             }
                         }
@@ -2334,7 +2335,7 @@ private fun ThinkingRow(
                     lineHeight = 15.sp,
                     fontWeight = FontWeight.Medium
                 ),
-                color = GsTheme.colors.textPrimary
+                color = NexlyInk.label
             )
             Text(
                 text = subtitle,
@@ -2342,7 +2343,7 @@ private fun ThinkingRow(
                     fontSize = 9.sp,
                     lineHeight = 11.5.sp
                 ),
-                color = GsTheme.colors.textSecondary,
+                color = NexlyInk.meta,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

@@ -55,6 +55,9 @@ a generic chat screen rather than the sheet:
 - the plan title is a single line at the sheet's lighter weight;
 - glyph chips use a **pale tone wash with the saturated colour in the glyph**
   (not saturated chips with white ink);
+- text uses the sheet's **soft neutral grey ink**, not the app's near-black
+  brown: the user/preamble stay around `#4A4750`, plan titles around
+  `#555860`, rows around `#5E6068`, and metadata around `#8C8E96`;
 - cards use a thinner white veil and hairline rim (`thinMaterial` on iOS,
   a translucent white draw on Android) with almost no shadow, so the
   iridescent bubbles read through them;

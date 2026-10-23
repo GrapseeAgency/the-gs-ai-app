@@ -366,14 +366,14 @@ private struct ParagraphView: View {
             let theme = SpanTheme(
                 monoBackground: Aero.container,
                 linkColor: Aero.accentDeep,
-                textColor: Aero.text,
+                textColor: compact ? NexlyInk.prose : Aero.text,
                 baseSize: compact ? 12.5 : 15,
                 citations: citations
             )
             Text(attributed(from: spans, theme: theme))
                 .font(compact ? .system(size: 12.5, weight: .regular) : Aero.body())
                 .lineSpacing(compact ? 2 : 0)
-                .foregroundStyle(Aero.text)
+                .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
                 .textSelection(.enabled)
         }
     }

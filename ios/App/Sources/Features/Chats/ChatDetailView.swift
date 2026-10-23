@@ -1313,7 +1313,7 @@ struct MessageBubble: View, Equatable {
                 VStack(alignment: .trailing, spacing: 5) {
                     Text(message.content)
                         .font(.system(size: 12.5))
-                        .foregroundStyle(Aero.text)
+                        .foregroundStyle(NexlyInk.prose)
                         .lineSpacing(2)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
@@ -1345,12 +1345,12 @@ struct MessageBubble: View, Equatable {
                         if let stamp = timeLabel(message.createdAt) {
                             Text(stamp)
                                 .font(.system(size: 9.5, weight: .regular))
-                                .foregroundStyle(Aero.textTertiary)
+                                .foregroundStyle(NexlyInk.meta)
                         }
                         NexlyGlyph(
                             name: "checks",
                             size: 12,
-                            color: Aero.textSecondary.opacity(0.78)
+                            color: NexlyInk.meta
                         )
                     }
                     .padding(.trailing, 2)
