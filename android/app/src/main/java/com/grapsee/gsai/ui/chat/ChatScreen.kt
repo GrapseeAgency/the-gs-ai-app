@@ -1979,8 +1979,8 @@ internal fun UserMessage(
                                 Text(
                                     text = message.content,
                                     style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 12.5.sp,
-                                        lineHeight = 17.5.sp
+                                        fontSize = 13.sp,
+                                        lineHeight = 18.sp
                                     ),
                                     color = NexlyInk.prose
                                 )
@@ -2107,18 +2107,29 @@ internal fun ComposerRow(
                 .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(26.dp))
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                modifier = Modifier.padding(horizontal = 5.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
                 // The reference has one leading sparkle. It opens the same
                 // attach/mode sheet the removed plus and mic used to reach, so
                 // no capability disappeared with the chrome.
-                IconButton(onClick = onAttach) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = "Nexly tools and attachments",
+                            onClick = onAttach
+                        )
+                        .semantics { contentDescription = "Nexly tools and attachments" },
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
                         GsIcons.Sparkles,
-                        contentDescription = "Nexly tools and attachments",
+                        contentDescription = null,
                         tint = Color(0xFF8E7BFF),
-                        modifier = Modifier.size(19.dp)
+                        modifier = Modifier.size(17.dp)
                     )
                 }
     // The field is LIVE during a turn. It used to be `enabled = !isStreaming`,
@@ -2323,16 +2334,16 @@ private fun ThinkingRow(
         NexlyGlassGlyphTile(
             name = icon,
             toneName = tone,
-            size = 28.dp,
-            glyphSize = 14.dp,
+            size = 24.dp,
+            glyphSize = 12.dp,
             active = active
         )
         Column {
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 12.sp,
-                    lineHeight = 15.sp,
+                    fontSize = 12.5.sp,
+                    lineHeight = 15.5.sp,
                     fontWeight = FontWeight.Medium
                 ),
                 color = NexlyInk.label
@@ -2340,8 +2351,8 @@ private fun ThinkingRow(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 9.sp,
-                    lineHeight = 11.5.sp
+                    fontSize = 9.5.sp,
+                    lineHeight = 12.sp
                 ),
                 color = NexlyInk.meta,
                 maxLines = 1,

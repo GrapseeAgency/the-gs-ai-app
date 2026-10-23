@@ -304,8 +304,8 @@ private fun NexlyAssistantBlocks(
                         )
                         is NexlyGroup.Prose -> CompositionLocalProvider(
                             LocalNexlyProseStyle provides TextStyle(
-                                fontSize = 12.5.sp,
-                                lineHeight = 17.5.sp,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
                                 fontWeight = FontWeight.Normal,
                                 color = NexlyInk.prose
                             )

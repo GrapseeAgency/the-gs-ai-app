@@ -517,6 +517,7 @@ struct NexlyInlineText: View {
     var color: Color = Aero.text
     var glyphColor: Color? = nil
     var weight: Font.Weight = .medium
+    var strikethrough: Bool = false
 
     var body: some View {
         let parts = NexlyIcons.inlineParts(text)
@@ -535,6 +536,23 @@ struct NexlyInlineText: View {
         return Text(attributed)
             .font(.system(size: fontSize, weight: weight))
             .foregroundColor(color)
+            .strikethrough(strikethrough)
+    }
+}
+
+/// A quiet press response on a plan row: the glass catches a little more light
+/// and the row settles, without a button chrome or a colour flash.
+private struct NexlyPlanRowPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.white.opacity(configuration.isPressed ? 0.26 : 0))
+            )
+            .scaleEffect(configuration.isPressed ? 0.995 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -609,13 +627,13 @@ struct NexlyThinkingCard: View {
         active: Bool
     ) -> some View {
         HStack(spacing: 9) {
-            NexlyGlassGlyphTile(name: icon, tone: tone, size: 28, glyphSize: 14, active: active)
+            NexlyGlassGlyphTile(name: icon, tone: tone, size: 24, glyphSize: 12, active: active)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 12.5, weight: .medium))
                     .foregroundColor(NexlyInk.label)
                 Text(subtitle)
-                    .font(.system(size: 9))
+                    .font(.system(size: 9.5))
                     .foregroundColor(NexlyInk.meta)
                     .lineLimit(1)
             }
@@ -637,6 +655,7 @@ struct NexlyPlanCard: View {
     let plan: NexlyPlanData
     var open: Bool = false
     var fallbackTimestamp: String? = nil
+    @State private var doneRows: Set<String> = []
 
     private var stamp: String? {
         if let timestamp = plan.timestamp, !timestamp.isEmpty { return timestamp }
@@ -648,7 +667,7 @@ struct NexlyPlanCard: View {
         VStack(alignment: .leading, spacing: 5) {
             NexlyInlineText(
                 text: plan.title,
-                fontSize: 12,
+                fontSize: 12.5,
                 glyphSize: 14,
                 color: NexlyInk.title,
                 // The sheet's title is only a hair larger than the rows; at the
@@ -659,30 +678,57 @@ struct NexlyPlanCard: View {
             if plan.rows.isEmpty {
                 skeleton
             } else {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 2) {
                     ForEach(plan.rows) { row in
-                        HStack(alignment: .center, spacing: 10) {
-                            NexlyGlassGlyphTile(
-                                name: row.icon,
-                                tone: row.tone,
-                                size: 30,
-                                glyphSize: 15
-                            )
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(row.time)
-                                    .font(.system(size: 9, weight: .regular))
-                                    .foregroundColor(NexlyInk.meta)
-                                    .lineLimit(1)
-                                NexlyInlineText(
-                                    text: row.text,
-                                    fontSize: 11.5,
-                                    glyphSize: 13.5,
-                                    color: NexlyInk.row,
-                                    weight: .regular
-                                )
+                        let key = "\(row.time)|\(row.text)"
+                        let done = doneRows.contains(key)
+                        Button {
+                            withAnimation(.easeOut(duration: 0.16)) {
+                                if done { doneRows.remove(key) } else { doneRows.insert(key) }
                             }
-                            Spacer(minLength: 0)
+                            GSHaptics.select()
+                        } label: {
+                            HStack(alignment: .center, spacing: 10) {
+                                ZStack(alignment: .bottomTrailing) {
+                                    NexlyGlassGlyphTile(
+                                        name: row.icon,
+                                        tone: row.tone,
+                                        size: 24,
+                                        glyphSize: 12
+                                    )
+                                    .opacity(done ? 0.55 : 1)
+                                    if done {
+                                        Circle()
+                                            .fill(NexlyGlassTone.peach.ink)
+                                            .frame(width: 13, height: 13)
+                                            .overlay(Circle().strokeBorder(Color.white, lineWidth: 1))
+                                            .overlay(
+                                                NexlyGlyph(name: "check", size: 8, color: .white)
+                                            )
+                                    }
+                                }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(row.time)
+                                        .font(.system(size: 9.5, weight: .regular))
+                                        .foregroundColor(NexlyInk.meta)
+                                        .strikethrough(done)
+                                        .lineLimit(1)
+                                    NexlyInlineText(
+                                        text: row.text,
+                                        fontSize: 12.5,
+                                        glyphSize: 13.5,
+                                        color: done ? NexlyInk.meta : NexlyInk.row,
+                                        weight: .regular,
+                                        strikethrough: done
+                                    )
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(NexlyPlanRowPressStyle())
+                        .accessibilityLabel("\(row.time), \(row.text)")
+                        .accessibilityValue(done ? "Done" : "Not done")
                     }
                 }
             }
@@ -691,8 +737,8 @@ struct NexlyPlanCard: View {
                     if let closing = plan.closing {
                         NexlyInlineText(
                             text: closing,
-                            fontSize: 12,
-                            glyphSize: 13.5,
+                            fontSize: 12.5,
+                            glyphSize: 12.5,
                             color: NexlyInk.row,
                             glyphColor: NexlyGlassTone.peach.ink,
                             weight: .regular
@@ -701,7 +747,7 @@ struct NexlyPlanCard: View {
                            !closing.contains(where: { $0 == ":" }) {
                             NexlyGlyph(
                                 name: closingIcon,
-                                size: 14,
+                                size: 12,
                                 color: NexlyGlassTone.peach.ink
                             )
                         }
@@ -719,8 +765,7 @@ struct NexlyPlanCard: View {
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .nexlyGlassCard(corner: 20)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(plan.title)
+        .accessibilityElement(children: .contain)
     }
 
     private var skeleton: some View {

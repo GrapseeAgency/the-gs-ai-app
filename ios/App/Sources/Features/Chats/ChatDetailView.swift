@@ -1312,7 +1312,7 @@ struct MessageBubble: View, Equatable {
                 Spacer(minLength: 44)
                 VStack(alignment: .trailing, spacing: 5) {
                     Text(message.content)
-                        .font(.system(size: 12.5))
+                        .font(.system(size: 13))
                         .foregroundStyle(NexlyInk.prose)
                         .lineSpacing(2)
                         .padding(.horizontal, 12)

@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,9 +23,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
@@ -36,8 +39,13 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -45,6 +53,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -541,6 +550,8 @@ fun NexlyPlanCard(
     modifier: Modifier = Modifier
 ) {
     val colors = GsTheme.colors
+    val doneRows = remember(plan.title, plan.rows.size) { mutableStateMapOf<String, Boolean>() }
+    val haptics = LocalHapticFeedback.current
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -551,7 +562,7 @@ fun NexlyPlanCard(
         NexlyInlineRichText(
             text = cleanPlanText(plan.title, 160),
             color = NexlyInk.title,
-            fontSize = 12.sp,
+            fontSize = 12.5.sp,
             glyphSize = 14.dp,
             weight = FontWeight.Medium
         )
@@ -583,33 +594,67 @@ fun NexlyPlanCard(
                 }
             }
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 plan.rows.forEach { row ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        NexlyGlassGlyphTile(
-                            name = row.icon,
-                            toneName = row.tone,
-                            size = 30.dp,
-                            glyphSize = 15.dp
-                        )
+                    val rowKey = row.time + "|" + row.text
+                    val done = doneRows[rowKey] == true
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .toggleable(
+                                value = done,
+                                role = Role.Checkbox,
+                                onValueChange = { checked ->
+                                    doneRows[rowKey] = checked
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                }
+                            )
+                            .semantics { contentDescription = "${row.time}, ${row.text}" }
+                            .padding(vertical = 1.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box {
+                            NexlyGlassGlyphTile(
+                                name = row.icon,
+                                toneName = row.tone,
+                                size = 24.dp,
+                                glyphSize = 12.dp,
+                                modifier = Modifier.alpha(if (done) 0.55f else 1f)
+                            )
+                            if (done) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .size(13.dp)
+                                        .background(NexlyInk.peach, CircleShape)
+                                        .border(1.dp, Color.White, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    NexlyGlyph(name = "check", size = 8.dp, color = Color.White)
+                                }
+                            }
+                        }
                         Spacer(Modifier.width(10.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
                                 text = row.time,
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 9.sp,
-                                    lineHeight = 11.sp,
-                                    fontWeight = FontWeight.Normal
+                                    fontSize = 9.5.sp,
+                                    lineHeight = 11.5.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    textDecoration = if (done) TextDecoration.LineThrough else null
                                 ),
                                 color = NexlyInk.meta,
                                 maxLines = 1
                             )
                             NexlyInlineRichText(
                                 text = row.text,
-                                color = NexlyInk.row,
-                                fontSize = 11.5.sp,
+                                color = if (done) NexlyInk.meta else NexlyInk.row,
+                                fontSize = 12.5.sp,
                                 glyphSize = 13.5.dp,
-                                weight = FontWeight.Normal
+                                weight = FontWeight.Normal,
+                                textDecoration = if (done) TextDecoration.LineThrough else null
                             )
                         }
                     }
@@ -626,8 +671,8 @@ fun NexlyPlanCard(
                     NexlyInlineRichText(
                         text = closing,
                         color = NexlyInk.row,
-                        fontSize = 12.sp,
-                        glyphSize = 13.5.dp,
+                        fontSize = 12.5.sp,
+                        glyphSize = 12.5.dp,
                         glyphColor = NexlyInk.peach
                     )
                     if (plan.closingIcon != null &&
@@ -636,7 +681,7 @@ fun NexlyPlanCard(
                         Spacer(Modifier.width(4.dp))
                         NexlyGlyph(
                             name = plan.closingIcon,
-                            size = 14.dp,
+                            size = 12.dp,
                             color = tone("peach").ink
                         )
                     }
@@ -662,10 +707,11 @@ fun NexlyInlineRichText(
     glyphSize: Dp,
     weight: FontWeight = FontWeight.Medium,
     glyphColor: Color? = null,
+    textDecoration: TextDecoration? = null,
 ) {
     val context = LocalContext.current
     remember(context) { NexlyIcons.ensureLoaded(context.applicationContext) }
-    val annotated = remember(text, color, fontSize, glyphSize, weight, glyphColor) {
+    val annotated = remember(text, color, fontSize, glyphSize, weight, glyphColor, textDecoration) {
         buildAnnotatedString {
             for (part in NexlyIcons.inlineParts(text)) {
                 if (part.isIcon) {
@@ -687,7 +733,8 @@ fun NexlyInlineRichText(
         style = TextStyle(
             fontSize = fontSize,
             lineHeight = (fontSize.value + 3).sp,
-            fontWeight = weight
+            fontWeight = weight,
+            textDecoration = textDecoration
         ),
         color = color
     )
