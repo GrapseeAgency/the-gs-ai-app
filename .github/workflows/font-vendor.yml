@@ -13,6 +13,16 @@ name: Font vendor
 # afterwards, so a bad substitution cannot land on main.
 
 on:
+  # `apply` defaults to false, so a push-triggered run only prints the plan and
+  # never writes to the repository. The trigger exists because this workflow
+  # invokes .github/scripts/ helpers, and a step that runs a script has to be
+  # reachable when that script changes — check_workflow_trigger_covers_scripts.py
+  # enforces exactly that, and it is right to.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/font-vendor.yml"
+      - ".github/scripts/**"
   workflow_dispatch:
     inputs:
       family:
