@@ -17,8 +17,8 @@ on:
   workflow_dispatch:
     inputs:
       families:
-        description: Space-separated Google Fonts family names
-        default: "Manrope Outfit Figtree DM Sans Inter Tight"
+        description: Comma-separated Google Fonts family names
+        default: "Manrope,Outfit,Figtree,DM Sans,Inter Tight,Hanken Grotesk,Karla"
         required: true
 
 permissions:
@@ -45,30 +45,44 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p fonts
-          # fonts.google.com/download answers with an HTML page, not the zip it used
-          # to; the CSS API serves a real static instance per weight, and asking for
-          # it with a legacy User-Agent makes Google hand back TTF instead of woff2.
-          echo "$FAMILIES" | tr ' ' '\n' | while read -r FAM; do
+          # Two dead ends before this one, both recorded because they cost runs:
+          # fonts.google.com/download now answers with HTML instead of the zip; the
+          # CSS API's legacy-User-Agent trick (TTF instead of woff2) returned no TTF
+          # URL at all for any family. The google/fonts repository is the actual
+          # source of truth for these files, so ask its contents API for the .ttf in
+          # ofl/<slug>/ and instantiate a 600 weight when only the variable file is
+          # there.
+          printf '%s' "$FAMILIES" | tr ',' '\n' | while IFS= read -r FAM; do
             [ -n "$FAM" ] || continue
-            SLUG=$(echo "$FAM" | tr ' ' '_')
-            ENC=$(echo "$FAM" | sed 's/ /+/g')
-            mkdir -p "fonts/$SLUG"
-            echo "::group::$FAM"
-            CSS=$(curl -fsSL --retry 3 -H "User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)" \
-                  "https://fonts.googleapis.com/css2?family=${ENC}:wght@600") || CSS=""
-            # `|| true` because grep exits 1 when there is no match and, under
-            # `set -e` with `pipefail`, that failure propagates through the
-            # pipeline into the assignment and kills the step before the warning
-            # below can explain why. That is exactly what the first two runs did.
-            URL=$(printf '%s' "$CSS" | grep -m1 -o 'https://[^)]*\.ttf' || true)
-            if [ -z "$URL" ]; then
-              echo "::warning::$FAM: no TTF served for weight 600"
+            SLUG=$(printf '%s' "$FAM" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+            mkdir -p "fonts/$FAM"
+            echo "::group::$FAM (ofl/$SLUG)"
+            LIST=$(curl -fsSL --retry 3 -H "Accept: application/vnd.github+json" \
+                     "https://api.github.com/repos/google/fonts/contents/ofl/$SLUG" || true)
+            if [ -z "$LIST" ]; then
+              echo "::warning::$FAM: no ofl/$SLUG directory"
               echo "::endgroup::"
               continue
             fi
-            curl -fsSL --retry 3 "$URL" -o "fonts/$SLUG/SemiBold-600.ttf"
-            echo "  $URL"
-            echo "  bytes: $(wc -c < "fonts/$SLUG/SemiBold-600.ttf")"
+            URL=$(printf '%s' "$LIST" | python3 -c "import json,sys;d=json.load(sys.stdin);t=[i['download_url'] for i in d if i['name'].lower().endswith('.ttf')];print(([u for u in t if '%5B' in u or '[' in u] or t or [''])[0])" || true)
+            if [ -z "$URL" ]; then
+              echo "::warning::$FAM: no .ttf in ofl/$SLUG"
+              echo "::endgroup::"
+              continue
+            fi
+            NAME=$(basename "$URL" | python3 -c "import sys,urllib.parse;print(urllib.parse.unquote(sys.stdin.read().strip()))")
+            curl -fsSL --retry 3 "$URL" -o "fonts/$FAM/$NAME"
+            echo "  $NAME ($(wc -c < "fonts/$FAM/$NAME") bytes)"
+            case "$NAME" in
+              *"[wght]"*)
+                fonttools varLib.instancer "fonts/$FAM/$NAME" wght=600 \
+                  -o "fonts/$FAM/SemiBold-600.ttf" >/dev/null
+                echo "  instantiated 600 from the variable file"
+                ;;
+              *)
+                cp "fonts/$FAM/$NAME" "fonts/$FAM/SemiBold-600.ttf"
+                ;;
+            esac
             echo "::endgroup::"
           done
 
@@ -91,8 +105,8 @@ jobs:
 
           rows = [("Poppins SemiBold (shipped)", 1.0, band(POPPINS, "o") / base_cap, "baseline")]
           for fam in sorted(glob.glob("fonts/*/")):
+              name = os.path.basename(fam.rstrip("/"))
               p = os.path.join(fam, "SemiBold-600.ttf")
-              name = os.path.basename(fam.rstrip("/")).replace("_", " ")
               if not os.path.isfile(p):
                   rows.append((name, None, None, "not fetched"))
                   continue
@@ -100,18 +114,15 @@ jobs:
               cap = band(p, "H")
               ratio = (f.getlength("Good morning,") / cap) / base_wcap
               xcap = band(p, "o") / cap
-              ok_w = 0.80 <= ratio <= 0.85
-              ok_x = xcap >= 0.82
-              verdict = "PASS" if ok_w and ok_x else ("width" if not ok_w else "x-height")
-              rows.append((name, ratio, xcap, verdict))
+              ok_w, ok_x = 0.80 <= ratio <= 0.85, xcap >= 0.82
+              rows.append((name, ratio, xcap, "PASS" if ok_w and ok_x else ("width" if not ok_w else "x-height")))
 
-          print(f"{'face':28s} {'width/Poppins':>13s} {'x/cap':>7s}  verdict")
-          print(f"{'-'*28} {'-'*13} {'-'*7}  {'-'*12}")
+          print(f"{'face':26s} {'width/Poppins':>13s} {'x/cap':>7s}  verdict")
+          print(f"{'-'*26} {'-'*13} {'-'*7}  {'-'*12}")
           for name, ratio, xcap, verdict in rows:
               r = f"{ratio:.3f}" if ratio is not None else "-"
               x = f"{xcap:.3f}" if xcap is not None else "-"
-              print(f"{name[:28]:28s} {r:>13s} {x:>7s}  {verdict}")
-              print(f"::notice::face={name} width_ratio={r} x_cap={x} verdict={verdict}")
+              print(f"{name[:26]:26s} {r:>13s} {x:>7s}  {verdict}")
           print()
           print("reference (measured from the sheet): width 0.824, x/cap 0.850")
           print("accept: width 0.80-0.85 AND x/cap >= 0.82")
