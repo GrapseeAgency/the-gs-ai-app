@@ -173,6 +173,11 @@ async function extractError(response: Response): Promise<string> {
   }
 }
 
+/** Some OpenRouter endpoints force reasoning and reject {enabled:false}. */
+function reasoningMandatory(error: string): boolean {
+  return /reasoning is mandatory/i.test(error)
+}
+
 /** Non-streaming OpenRouter completion: key-pool rotation × model chain. */
 export async function orCompleteChat(
   messages: ChatMessageInput[],
@@ -193,10 +198,17 @@ export async function orCompleteChat(
         continue
       }
       try {
-        const response = await postChat(key, model, messages, false, reasoning)
+        let response = await postChat(key, model, messages, false, reasoning)
         if (!response.ok) {
           lastError = await extractError(response)
-          if (shouldRotate(response.status)) {
+          if (reasoningMandatory(lastError) && reasoning?.enabled !== true) {
+            // Last-resort endpoint that refuses flash: let it think rather
+            // than returning a 502. The UI will show the real reasoning event
+            // if the provider emits one.
+            response = await postChat(key, model, messages, false, { enabled: true })
+            lastError = response.ok ? '' : await extractError(response)
+          }
+          if (!response.ok && shouldRotate(response.status)) {
             if (response.status === 401 || response.status === 402 || response.status === 429) coolKey(key)
             console.log(`OR-ROTATE model=${model} status=${response.status} key=***${key.slice(-4)}`)
             continue
@@ -260,10 +272,14 @@ export async function orStreamChat(
       }
       let forwarded = false
       try {
-        const response = await postChat(key, model, messages, true, reasoning)
+        let response = await postChat(key, model, messages, true, reasoning)
         if (!response.ok) {
           lastError = await extractError(response)
-          if (shouldRotate(response.status)) {
+          if (reasoningMandatory(lastError) && reasoning?.enabled !== true) {
+            response = await postChat(key, model, messages, true, { enabled: true })
+            lastError = response.ok ? '' : await extractError(response)
+          }
+          if (!response.ok && shouldRotate(response.status)) {
             if (response.status === 401 || response.status === 402 || response.status === 429) coolKey(key)
             console.log(`OR-ROTATE model=${model} status=${response.status} key=***${key.slice(-4)}`)
             continue
