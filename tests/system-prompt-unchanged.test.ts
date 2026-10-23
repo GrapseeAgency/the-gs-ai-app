@@ -19,8 +19,14 @@
 import { describe, expect, test } from 'bun:test'
 import { SYSTEM_PROMPT } from '../src/lib/ai'
 
-/** sha256(SYSTEM_PROMPT) — 590 chars, pinned 2026-09-24 (flash-mode Phase 7). */
-const SYSTEM_PROMPT_SHA256 = '7451490f30ee274cc241d718fcdd0bc8a6275d7d72dff4ebe4e6ffc5c329b028'
+/**
+ * sha256(SYSTEM_PROMPT) — 317 chars. Re-pinned 2026-10-24: the Phase-7 pin
+ * (590 chars, 7451490f…) was superseded by the DELIBERATE genui prompt change
+ * (0.81.10, "a prompt that cannot drift") which replaced the 8.3 one-liner
+ * with the shorter theme-token contract. Same rule as before: any change —
+ * one comma — breaks this test and must be a separately-audited act.
+ */
+const SYSTEM_PROMPT_SHA256 = '615a538167dbb11f6ea174603ce585a473b6b6a29402f4bca0a028a0e0c84079'
 
 /** sha256 of the Phase-7-era prompt under the ALSO-FORBIDDEN assistant-instructions wrapper. */
 const FORBIDDEN_SNIPPETS = [
@@ -55,6 +61,6 @@ describe('system prompt is untouched by the mode feature', () => {
     expect(SYSTEM_PROMPT.split('\n').filter((l) => l.trim().length > 0).length).toBeLessThanOrEqual(10)
     // Length bound: a prompt that quietly grows beyond the pinned +10% is a
     // contract change even before its hash is re-pinned deliberately.
-    expect(SYSTEM_PROMPT.length).toBeLessThanOrEqual(Math.ceil(590 * 1.1))
+    expect(SYSTEM_PROMPT.length).toBeLessThanOrEqual(Math.ceil(317 * 1.1))
   })
 })
