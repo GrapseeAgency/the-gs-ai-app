@@ -642,8 +642,12 @@ jobs:
           bunx next dev -p 3000 > /tmp/next.log 2>&1 &
           echo $! > /tmp/next.pid
           for i in $(seq 1 90); do
-            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
-              echo "server ready"
+            # The health probe itself may be 503 when the free upstream is
+            # cooling down; that still proves the HTTP server is up. The
+            # capability probe below tests the real turns.
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/api/health || true)
+            if [ -n "$CODE" ] && [ "$CODE" != "000" ]; then
+              echo "server responding (HTTP $CODE)"
               exit 0
             fi
             sleep 2
