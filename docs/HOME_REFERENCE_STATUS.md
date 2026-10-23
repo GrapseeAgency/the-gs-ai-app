@@ -74,6 +74,12 @@ Three of these were 20% or more off the picture while both platforms agreed with
 other. That is the failure mode this table exists to catch: the contract cannot see it,
 because the contract is a mirror.
 
+The sizes above are confirmed on both platforms' captures from the same run, not just on
+Android's: the greeting's first line is 27.3 pt on both against the sheet's 28.5, the
+subtitle is 12.7 on Android and 13.0 on iOS against 11.5, and the quick-action row is
+13.7 and 14.3 against 14.6. What is left of each difference is the face's metrics at a
+matched point size, which no size change can remove.
+
 The header was measured twice. The first reading put "Nexly" at 12.14 pt and claimed
 the two header lines had no gap at all; both came from an x window that stopped at
 110 pt, before the "y", so it clipped the descender and reported the union of the two
