@@ -40,7 +40,7 @@
     "weight": "semibold"
   },
   "Nexly": {
-    "size": 18.0,
+    "size": 16.5,
     "weight": "semibold"
   },
   "See All": {
@@ -52,7 +52,7 @@
     "weight": "medium"
   },
   "Today's Used": {
-    "size": 18.0,
+    "size": 15.0,
     "weight": "semibold"
   },
   "Today's reflection": {

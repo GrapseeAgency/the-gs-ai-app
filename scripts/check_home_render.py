@@ -465,6 +465,31 @@ def hairline_luma(l, probe):
     return float(np.median(win.max(axis=0)))
 
 
+def suggest_edge(l, p):
+    """Where the nearest card edge is, when a probe's rect has slipped.
+
+    Cost of a layout change used to be a CI round trip per platform: a rect misses,
+    the gate fails, and the only way to learn the new row is to download the capture
+    and scan it by hand. This prints both candidates the two detectors would use —
+    the brightest row (a lit rim, which is what the bento and the pill have) and the
+    largest positive step in the column median (dim glass, which is what the
+    Suggestions card is) — so the fix is a copy, not an investigation.
+    """
+    H, W = l.shape
+    x, _, w, _ = p["interior"]
+    x0, x1 = int((x + 0.02) * W), int((x + w - 0.02) * W)
+    band = 0.03
+    y0, y1 = max(0, int((p["rim_y"] - band) * H)), min(H, int((p["rim_y"] + band) * H))
+    if y1 - y0 < 4:
+        return None
+    peak = float(l[y0:y1, x0:x1].max(axis=1).max())
+    peak_y = y0 + int(np.argmax(l[y0:y1, x0:x1].max(axis=1)))
+    prof = np.median(l[:, x0:x1], axis=1)
+    step_y = y0 + int(np.argmax(np.diff(prof[y0:y1])))
+    return {"peak_y": peak_y / H, "peak": peak,
+            "step_y": step_y / H, "step": float(np.diff(prof[y0:y1]).max())}
+
+
 def measure(path, kind, crop=None, debug_out=None, ground=None):
     """Every probe of `kind`'s set, measured on one decoded frame.
 
@@ -687,6 +712,14 @@ def main() -> int:
             ok = lo <= value <= hi
             if not ok:
                 failures.append(f"{r['probe']}/{name}: {value:.2f} outside [{lo}, {hi}]")
+                if name.startswith(("A4", "A9")):
+                    probe = next(q for q in PROBES[args.probe_set] if q["name"] == r["probe"])
+                    hint = suggest_edge(l, probe)
+                    if hint and abs(hint["peak"]) > 0:
+                        print(f"      {r['probe']}:: the rect may have slipped — "
+                              f"brightest row {hint['peak_y']:.4f} (luma {hint['peak']:.1f}), "
+                              f"largest step {hint['step_y']:.4f} (+{hint['step']:.1f} L); "
+                              f"rim_y is {probe['rim_y']:.4f}")
             print(f"    {name:18s} {value:8.2f}  in [{lo},{hi}]  {'OK' if ok else 'FAIL'}")
 
     if failures or drift:

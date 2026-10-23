@@ -343,8 +343,12 @@ private fun HomeHeader(onAssistant: () -> Unit, onMenu: () -> Unit) {
         Column {
             Text(
                 text = "Nexly",
+                // 16.5 not 18: the sheet's "Nexly" glyph band is 12.14 pt against
+                // our 13.33 at 18sp, and the ratio of the two (0.91) applied to 18
+                // is 16.4. Same method as the subtitle — the contract had the value
+                // the two platforms shared, not the value the picture uses.
                 style = MaterialTheme.typography.titleMedium.copy(
-                    fontSize = 18.sp,
+                    fontSize = 16.5.sp,
                     fontWeight = FontWeight.SemiBold
                 ),
                 color = colors.textPrimary
@@ -758,9 +762,12 @@ private fun TodayUsedHeader(onSeeAll: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
+            // 15 not 18: the sheet's band is 15.78 pt against our 19.00, ratio 0.83,
+            // 18 x 0.83 = 15.0. A section heading that is 20% larger than the
+            // picture's reads as the page's most important label, which it is not.
             text = "Today's Used",
             style = MaterialTheme.typography.titleLarge.copy(
-                fontSize = 18.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold
             ),
             color = GsTheme.colors.textPrimary,

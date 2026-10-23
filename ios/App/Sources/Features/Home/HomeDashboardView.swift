@@ -132,8 +132,9 @@ struct HomeDashboardView: View {
                 .scaledToFit()
                 .frame(width: 42, height: 42)
             VStack(alignment: .leading, spacing: 2) {
+                // 16.5: the sheet's glyph band is 12.14 pt against our 13.33 at 18.
                 Text("Nexly")
-                    .font(Aero.responsive(18, .semibold, relativeTo: .headline))
+                    .font(Aero.responsive(16.5, .semibold, relativeTo: .headline))
                     .foregroundStyle(Aero.text)
                 Text("AI Companion")
                     // .medium, not .regular: Android renders this role as
@@ -343,8 +344,9 @@ struct HomeDashboardView: View {
 
     private var todayUsedHeader: some View {
         HStack {
+            // 15: the sheet's band is 15.78 pt against our 19.00 at 18.
             Text("Today's Used")
-                .font(Aero.responsive(18, .semibold, relativeTo: .headline))
+                .font(Aero.responsive(15, .semibold, relativeTo: .headline))
                 .foregroundStyle(Aero.text)
             Spacer()
             Button(action: onOpenChats) {
