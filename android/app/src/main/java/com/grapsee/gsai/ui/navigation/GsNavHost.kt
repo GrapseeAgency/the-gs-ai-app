@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import android.view.HapticFeedbackConstants
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -88,8 +89,16 @@ import com.grapsee.gsai.ui.settings.OnDeviceModelConsentDialog
  *  · The drawer knows the current route and marks it selected.
  */
 @Composable
-fun GsNavHost(modifier: Modifier = Modifier) {
-    val navController = rememberNavController()
+fun GsNavHost(
+    modifier: Modifier = Modifier,
+    /**
+     * Hoistable so the shell above the graph can see where the user is. The
+     * default keeps every existing call site, preview and test unchanged; the
+     * only caller that passes one is MainActivity, which stops painting the
+     * ambient canvas once Home has settled over the top of it.
+     */
+    navController: NavHostController = rememberNavController(),
+) {
     val open: (String) -> Unit = { route -> navController.navigate(route) }
     val back: () -> Unit = { navController.popBackStack() }
     val context = LocalContext.current

@@ -151,11 +151,20 @@ enum GsGlassRole {
     /// `nil` means the role paints its fill over the raw backdrop, because its
     /// numbers were solved against that backdrop and a veil on top of them
     /// breaks them — see `cardLight`.
+    ///
+    /// `floatingControl` joined that list on measurement, not taste. The sheet's
+    /// quick-action pill is a 2.85 L darkening of the page behind it and Android
+    /// reads 1.93 L; iOS with `.thinMaterial` read 11.64 L — the pill greyer than
+    /// its own fill colour, which no alpha can explain. A vibrancy material is a
+    /// second, platform-specific opacity: it blurs the whole background behind
+    /// the capsule, so where the neighbourhood contains ink it subtracts light
+    /// the recipe never asked for, and the rim measurement rode that difference
+    /// (+21.25 L against the sheet's +11.82). Same role, same numbers, both
+    /// platforms: the fill is the fill.
     var material: Material? {
         switch self {
         case .card, .elevated: return .regularMaterial
-        case .cardLight, .cardDim: return nil
-        case .floatingControl: return .thinMaterial
+        case .cardLight, .cardDim, .floatingControl: return nil
         case .modal: return .thickMaterial
         case .sunken: return .ultraThinMaterial
         }

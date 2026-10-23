@@ -33,7 +33,8 @@ edge by 3px and averaged in its bright bottom rim (+11.7 L), which cancelled the
 glass tint and produced the bogus -0.43 L baseline that the bands were said to be
 "MEASURED, not assumed" from. On clean glass the sheet's card is -2.79 L. That
 one correction reframed everything: Android measures -2.93 (correct to 0.14 L)
-while iOS measures -4.64 — a real defect the old +3.0 upper bound was hiding.
+while iOS measured -4.64 — a real defect the old +3.0 upper bound was hiding, and
+which closed to -3.22 when Poppins replaced SF Pro on that platform.
 
 A5 makes "could not measure" exit 2 as documented. Previously a NaN from an
 undersized rim window fell through `if r[key] is not None` (never true for a
@@ -56,20 +57,21 @@ the render rect sits in the overlap of the two cards. Tighten it once that
 divergence is fixed.
 
 The bento probe cannot do that. Android's Mind Guide card top edge sits at
-0.4374 of the frame and iOS's at 0.4550 — an 18pt gap against a card whose whole
-lit hairline is 3px tall — so there is no y that is on both cards' glass, let
-alone a rim_y that measures both hairlines. It gets its own rect per platform
-(`--probe-set`), each verified with --debug-out rather than assumed.
+0.4374 of the frame and iOS's at 0.4742 — a 35pt gap, which is the iPhone 16 Pro's
+59pt safe area against the 24dp the Android harness reports, i.e. correct device
+behaviour rather than a layout bug — against a card whose whole lit hairline is
+3px tall. There is no y that is on both cards' glass, let alone a rim_y that
+measures both hairlines. It gets its own rect per platform (`--probe-set`), each
+verified with --debug-out rather than assumed.
 
-TWO PROBES, AND NOT THE SAME METRIC ON BOTH
--------------------------------------------
-The sheet's Suggestions card sits on flat cream and its glass only moves the page
-2.79 L; the bento card sits over the bloom and moves it 10.94 L. Same glass,
-different ground. Gating only the weak case is what let a surface with no visible
-material at all print OK for three rounds, so both are gated, each against its own
-measured anchor — and each on the number that isolates the glass at that spot:
-the row on flat cream is measured against the page beside it, the card over the
-bloom against the backdrop actually under it (see BANDS for why).
+WHAT EACH PROBE IS GATED ON
+---------------------------
+Three cues, and not the same number on all three surfaces. The Suggestions row
+sits on flat cream, so it is measured against the page beside it. The bento card
+sits over the bloom, where "card minus page" measures where the card is as much
+as what the glass does, so it is measured against the material law for the ground
+actually under it (see BANDS). The pill is gated on both: its edge is the cue, and
+its fill is where a platform-specific opacity shows up first.
 
 Usage:
   check_home_render.py --render path/to/home.png --probe-set android [--label android-393]
@@ -198,60 +200,70 @@ SPREAD_MAX = 5.0                  # real 0.21 / 2.36 | boundary-straddling 7.4..
 # band's +3.0 upper bound admitted a zero delta, which is why "no glass at all"
 # and "correct glass" both printed OK.
 #
-#   suggestions  tint vs its page -2.79, rim +2.58
-#                (Android -2.93 correct to 0.14; iOS -4.64)
-#   bento        lift over its own ground +2.79, rim +19.94
-#                (Android +3.57 / +18.94; iOS +2.58 / +18.42)
+# THE MATERIAL LAW, AND WHY THE BENTO IS GATED ON IT
+# --------------------------------------------------
+# Translucent cream over a ground composites to
 #
-# The two probes do not gate the same luminance metric, because the page will not
-# let them. The bento sits on a bloom that swings 13 L across the few points the
-# card moves, so "card minus page" there measures WHERE the card is as much as
-# what the glass does — and the two platforms currently place it 17pt apart, which
-# is a real defect belonging to the bento geometry, not to the material. Subtract
-# the backdrop PNG from under the card instead and the number is the material
-# alone: coverage. That the sheet's +2.79, Android's +3.57 and iOS's +2.58 agree
-# to 1 L is the evidence the metric is the right one; on the page-relative number
-# the same two renders read -10.09 and -7.44, and only 0.5 L of that spread is
-# glass.
+#     interior = A·F + (1 − A)·ground
 #
-# The suggestions row is on flat cream, where the ground does not move, so it
-# keeps the page-relative number — including the 1.0 L extra room on its dark
-# side that the old band had, so the iOS card that is 1.85 L too dark stays a
-# known, printed gap instead of a new red.
+# with A the coverage and F the fill's own luminance. Both were solved off the
+# sheet, whose suggestions row sits on flat cream and whose Mind Guide card sits
+# on the bloom: two cards, two grounds, one solution — A = 0.45, F = 235.2. (An
+# earlier pass solved A = 0.30 / F = 238.6 by treating a card's own composite as
+# the "ground"; the render disagreed with those constants and the re-solve is
+# what the numbers below are.)
+#
+# `residual` is the measured card minus what that law predicts for the ground
+# actually under it. It replaces `lift` (interior − ground) as the bento's gated
+# number because it is position-independent: the card may sit anywhere down the
+# page and the law still says what its pixels must be. `lift` did not. iOS's
+# iPhone 16 Pro safe area is 59pt against the mock's 20pt and Android's harness
+# 24dp, so the same page laid out from the safe area puts the bento ~35pt lower,
+# over a ground 5 L brighter, and lift read +0.36 where the sheet reads +2.79.
+# The last pass recorded that as a widened band per capture. It was the wrong
+# fix: a band per capture is how a gate stops meaning anything, and the
+# exemption was bought by giving up the coverage claim.
+#
+# What the law cannot do is invent its own sensitivity. Where the ground meets
+# the fill, coverage stops being identifiable — iOS's bento ground is 234.33
+# against a fill of 235.2 — so the script prints `coverage` as "not identifiable"
+# there rather than quoting the ±1.7-to-+3.7 range the band would admit. Where it
+# is a number, the residual is the glass; where it is not, the rim is what
+# carries that card and the residual only says the composite is the right
+# brightness.
+#
+#   probe          sheet            android           ios
+#   suggestions  tint -2.79        -2.93             -3.22
+#                rim  +2.58        +1.54             +2.15
+#   bento        resid +0.12       +0.93             -0.03
+#                rim  +19.94       +18.96            +17.08
+#   pill         resid +0.16       -0.13             -6.69 -> the thinMaterial gap
+#                rim  +11.82       +14.53            +21.25   fixed with it
 BANDS = {
     "suggestions": {"tint": (-5.49, -1.09), "rim": (-1.50, 8.00)},
-    "bento":       {"lift": (1.00, 4.50), "rim": (15.00, 22.50)},
-    # The pill's fill is within 2 L of the page behind it, so its lift says
-    # nothing; its edge is the whole cue, and the sheet's is +14.7 L.
-    "pill":        {"rim": (10.00, 22.00)},
+    # ±2.0 L. The three captures read +0.12 / +0.93 / -0.03 today, and 2 L is the
+    # honesty margin on a ground read out of the PNG at the mock's rect: the mock
+    # is not rectified (its crop is 5% too wide), and its own page beside the
+    # cards agrees with the shipped art to 0.00 L one row up and 5.7 L two rows
+    # down. Device captures do not carry that error — the art they draw IS the
+    # file being sampled — so the band is set by the weakest anchor, not by the
+    # strongest measurement.
+    "bento":       {"residual": (-2.00, 2.00), "rim": (15.00, 22.50)},
+    # The pill's edge is the cue that makes it read as a floating capsule, and
+    # the sheet's is +11.82 L. Its fill is gated too, because that is where a
+    # platform-specific opacity announces itself: with a vibrancy material under
+    # the fill, iOS's pill measured 6.7 L below what the law allows for its own
+    # ground while Android measured -0.13 L. Coverage there is coarse (|F - ground|
+    # is 4.0 L on Android's row), absolute luminance is not.
+    "pill":        {"residual": (-2.00, 2.00), "rim": (10.00, 22.00)},
 }
 
-# A band per (probe, capture) where the same number cannot be read at all.
-#
-# The bento's lift is interior minus the backdrop under it, and on iOS that
-# ground is 234.47 against a fill of 235.2 — a denominator of 0.73 L. Dividing
-# by it turns a 0.4 L measurement error into a 55-point swing in coverage, so
-# the quantity is not merely outside the band on iOS, it is unmeasurable there:
-# the sheet's card sits over a ground of 229.25 because the mock draws a 20pt
-# status bar, Android's harness reports 24dp, and an iPhone 16 Pro reports 59pt,
-# which pushes the whole page ~35pt down onto a brighter band of the bloom. That
-# last one is correct device behaviour, not a bug to hide.
-#
-# So iOS's bento is carried by the rim — position-independent, and it lands at
-# +17.08/+18.42 against the sheet's +19.94 — and its lift band is widened to the
-# full range that a 0.73 L denominator can actually distinguish. The narrowing
-# back to (1.0, 4.5) belongs to whoever puts the card over a darker ground, i.e.
-# the bento-geometry work, and this override is where that gets noticed.
-BAND_OVERRIDES = {
-    ("bento", "ios"): {"lift": (-1.50, 5.00)},
-}
-
-
-def bands_for(probe, kind):
-    b = dict(BANDS[probe])
-    for metric, band in BAND_OVERRIDES.get((probe, kind), {}).items():
-        b[metric] = band
-    return b
+# The solved constants. Changing either one changes every residual in the file,
+# so they live next to the measurements that produced them rather than in a
+# config. F is also L(#F2EAE3), the glass fill token both platforms ship: the
+# solve and the token agreeing to 0.0 is why the band can be this tight.
+MATERIAL_A = 0.45
+MATERIAL_F = 235.2
 
 
 def load_luma(path, crop=None):
@@ -295,9 +307,10 @@ def measure(path, kind, crop=None, debug_out=None, ground=None):
     """Every probe of `kind`'s set, measured on one decoded frame.
 
     `ground` is the luminance of the backdrop PNG the page draws its atmosphere
-    from. Where a probe gates on `lift`, the card's interior is compared with the
-    same rectangle of that image — the ground actually under the glass — because
-    that isolates the material from where the card happens to sit.
+    from. Where a probe gates on `residual`, the card's interior is compared with
+    what the material law predicts for that ground — the ground actually under
+    the glass — which is what makes the number independent of where the card
+    happens to sit on the page.
     """
     l = load_luma(path, crop)
     got = []
@@ -308,12 +321,19 @@ def measure(path, kind, crop=None, debug_out=None, ground=None):
         # A3: how flat the interior rect is. A box straddling a card boundary has
         # row medians that jump; a box on clean glass does not.
         spread = float(np.ptp(np.median(ins, axis=1)))
-        lift = interior - float(np.median(rect_of(ground, p["interior"]))) if ground is not None else None
+        gmed = float(np.median(rect_of(ground, p["interior"]))) if ground is not None else None
+        denom = None if gmed is None else MATERIAL_F - gmed
+        residual = None if gmed is None else interior - (
+            MATERIAL_A * MATERIAL_F + (1 - MATERIAL_A) * gmed)
+        # Coverage is only identifiable where the ground is not the fill: as
+        # |F - ground| goes to zero the same luminance is produced by every
+        # coverage, so the quotient stops being a measurement of the glass.
+        coverage = None if not denom or abs(denom) < 1.0 else (interior - gmed) / denom
         got.append({
             "probe": p["name"], "interior": interior, "page_outside": page,
             "interior_minus_page": interior - page, "interior_spread": spread,
             "rim_minus_interior": rim_excess(l, p),
-            "lift_over_ground": lift,
+            "ground": gmed, "material_residual": residual, "coverage": coverage,
         })
     if debug_out:
         src = Image.open(path).convert("RGB")
@@ -339,15 +359,23 @@ def fmt(v):
 
 
 def row(r):
-    lift = f" lift={fmt(r['lift_over_ground'])}" if r["lift_over_ground"] is not None else ""
+    if r["ground"] is None:
+        material = ""
+    else:
+        cov = "not identifiable" if r["coverage"] is None else f"{r['coverage']:+.2f}"
+        material = (f" ground={fmt(r['ground'])} law={fmt(r['material_residual'])}"
+                    f" coverage={cov}")
     return (f"  {r['probe']:14s} interior={fmt(r['interior'])} page={fmt(r['page_outside'])} "
-            f"Δtint={fmt(r['interior_minus_page'])}{lift} spread={fmt(r['interior_spread'])} "
+            f"Δtint={fmt(r['interior_minus_page'])}{material} spread={fmt(r['interior_spread'])} "
             f"Δrim={fmt(r['rim_minus_interior'])}")
 
 
 # Which number each gated metric reads off a measurement row.
-METRICS = {"tint": "interior_minus_page", "lift": "lift_over_ground",
-           "rim": "rim_minus_interior", "spread": "interior_spread"}
+METRICS = {"tint": "interior_minus_page", "rim": "rim_minus_interior",
+           "spread": "interior_spread", "residual": "material_residual"}
+
+# How each metric is labelled in the assertion list.
+LABELS = {"tint": "A2 glass tint", "residual": "A2 material law", "rim": "A4 rim highlight"}
 
 
 def main() -> int:
@@ -358,7 +386,8 @@ def main() -> int:
     ap.add_argument("--backdrop",
                     default="android/app/src/main/res/drawable-nodpi/gs_home_backdrop.png",
                     help="the page atmosphere PNG the cards sit on, read as the ground "
-                         "under them for the lift metric (both platforms ship this file)")
+                         "the material law is evaluated at (both platforms ship this "
+                         "file, byte-identically — see scripts/prepare_home_art.py)")
     ap.add_argument("--probe-set", default="android", choices=["android", "ios"],
                     help="which platform's render rects to use")
     ap.add_argument("--probes", help="JSON overriding the built-in probe sets")
@@ -402,7 +431,7 @@ def main() -> int:
     # its own anchor cannot be right about a render. Checked, not assumed.
     stale = []
     for r in ref:
-        for metric, band in bands_for(r["probe"], "reference").items():
+        for metric, band in BANDS[r["probe"]].items():
             v = r[METRICS[metric]]
             if v is None or v != v or not band[0] <= v <= band[1]:
                 stale.append(f"{r['probe']} {metric} {fmt(v)} vs band {band}")
@@ -446,10 +475,13 @@ def main() -> int:
     for r in got:
         checks = [("A1 page present",   r["page_outside"],    PAGE_LUMA_BAND),
                   ("A3 probe on glass", r["interior_spread"], (0.0, SPREAD_MAX))]
-        for metric, band in bands_for(r["probe"], args.probe_set).items():
-            label = "A2 glass tint" if metric == "tint" else (
-                "A2 glass lift" if metric == "lift" else "A4 rim highlight")
-            checks.append((label, r[METRICS[metric]], band))
+        for metric, band in BANDS[r["probe"]].items():
+            value = r[METRICS[metric]]
+            if value is None:
+                print(f"\n::error::{r['probe']}/{metric} could not be computed on "
+                      f"{args.render} — no ground was loaded (not a glass verdict)")
+                return 2
+            checks.append((LABELS[metric], value, band))
         print(f"  [{r['probe']}]")
         for name, value, (lo, hi) in sorted(checks):
             ok = lo <= value <= hi

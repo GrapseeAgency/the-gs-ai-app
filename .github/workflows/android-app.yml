@@ -537,6 +537,18 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # Placed after the upload for the same reason the pixel gate is: a failing
+      # check must not cost the evidence that came before it. This one is cheap
+      # (it reads PNG headers and greps sources), so it does not need to be early.
+      - name: Artwork is accounted for on both platforms
+        run: |
+          set -euo pipefail
+          # The backdrop and card art are what Home decodes, and the ground the
+          # pixel gate divides its `lift` by. This asserts one authored source per
+          # asset, one resolution, identical bytes on both platforms, a footprint
+          # each target can actually cover, and a decoded budget per screen.
+          python3 scripts/prepare_home_art.py --check
+
       - name: Unit tests
         id: unit
         working-directory: android
