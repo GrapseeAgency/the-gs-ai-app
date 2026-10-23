@@ -496,6 +496,21 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
     ) {
         // The authored pearl render from the reference — placed at the
         // bottom-right of the card exactly as the mock composites it.
+        //
+        // MEASURED, AND STILL ~25 pt HIGH. On the 393x852 captures the card's
+        // saturated mass — pixels with chroma > 70 whose brightest channel is also
+        // > 200, so text antialiasing cannot enter the count — centroids at y 163 pt
+        // in the mock, y 164 on iOS and y 139 here. Two explanations were tested on
+        // real renders and both are dead: swapping `.offset().size()` to
+        // `.size().offset()` moved the centroid not at all, and
+        // ContentScale.FillBounds reached only y 148 while distorting the art. What
+        // is left is the box: a 200 pt box bottom-aligned at card_bottom + 12
+        // letterboxes this 864x560 art to 200x130, so its centre cannot leave the
+        // band y 61..191 and the mass inside it cannot sit lower than about here.
+        // Closing the gap means deciding the art's box against the mock, not nudging
+        // an offset — and the mock's mass also covers 3.7% of the card where ours
+        // covers 0.7%, because the authored asset peaks at chroma 90 while the
+        // reference card reaches 255. That part is an artwork, not a layout.
         Image(
             painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_video_art),
             contentDescription = "Pearlescent bloom",

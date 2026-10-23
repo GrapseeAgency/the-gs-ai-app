@@ -498,6 +498,12 @@ private struct VideoCard: View {
                 // 17.5 pt, Android's at 20.0, iOS's at 13.5. `Color.clear` is what
                 // Android's Box already does — the card's size comes from the
                 // constraint, the art overflows it and the clipShape trims it.
+                //
+                // This is now the platform that agrees with the reference: the
+                // card's saturated mass centroids at y 164 pt here against the
+                // mock's 163, while Android measures 139 — see the note on
+                // VideoCard in HomeDashboardScreen.kt, which records the two
+                // explanations already ruled out there.
                 Color.clear.overlay(alignment: .bottomTrailing) {
                     Image("GSHomeVideoArt")
                         .resizable()
