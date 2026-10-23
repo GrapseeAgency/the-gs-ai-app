@@ -47,7 +47,7 @@ reference does.
 The visual pass corrected the things that made the first native version read as
 a generic chat screen rather than the sheet:
 
-- the user turn is capped at **190pt on compact phones** (about half the
+- the user turn is capped at **205pt on compact phones** (about half the
   device width) instead of filling the row; the avatar keeps its own lane and
   the time/tick sits under the bubble;
 - assistant cards are capped at **286pt (prose) / 290pt (plan)** on phones,

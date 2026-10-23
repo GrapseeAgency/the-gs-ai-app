@@ -1927,7 +1927,7 @@ internal fun UserMessage(
             // not a full-width slab: the pearl field stays visible beside it.
             val maxBubble = minOf(
                 210.dp,
-                (LocalConfiguration.current.screenWidthDp * 0.5f).dp
+                (LocalConfiguration.current.screenWidthDp * 0.54f).dp
             )
             val bubbleTop = if (dark) colors.surface.copy(alpha = 0.54f)
             else Color(0xFFFFE9DE).copy(alpha = 0.82f)

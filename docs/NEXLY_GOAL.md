@@ -142,7 +142,7 @@ catalogue, validator and web registry also know the `plan` kind.
   plan rows, closing, timestamp and composer) is visible at 393×852 and
   411×914. The column is capped at 640 and centered on tablets; the
   transcript scrolls on shorter devices while the composer stays on screen.
-- Sheet-scale correction: the user turn is capped at **190pt on compact
+- Sheet-scale correction: the user turn is capped at **205pt on compact
   phones** (about half the device) with the avatar in its own lane; assistant
   cards are capped at **286pt prose / 290pt plan** (about 70% of a 393pt
   screen); the plan title is 12pt medium and one line at 393pt.

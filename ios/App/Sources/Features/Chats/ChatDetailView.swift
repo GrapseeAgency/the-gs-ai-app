@@ -1336,7 +1336,7 @@ struct MessageBubble: View, Equatable {
                         )
                         .shadow(color: Color(red: 0.55, green: 0.32, blue: 0.24).opacity(0.08),
                                 radius: 3, y: 1)
-                        .frame(maxWidth: sizeClass == .regular ? 260 : 190,
+                        .frame(maxWidth: sizeClass == .regular ? 260 : 205,
                                alignment: .trailing)
                         .textSelection(.enabled)
 
