@@ -60,11 +60,17 @@ means choosing and licensing another family for both platforms.
 **The video card's artwork carries its colour in a different place.** Its
 saturation and lightness now match the reference (chroma mean 22.1 against 20.5,
 226.0 L against 225.2) but the reference's colour mass peaks at y 167 of the card's
-214 where ours peaks at y 63. The authored asset has its saturated mass at the top
-right; the mock reads the other way round, and flipping the asset was measured to
-move the peak the wrong way (to y 57) because its lower band is not the mirror of
-its upper one. Matching this needs the artwork the mock was drawn from, not another
-transform of the one we have.
+214 where ours peaks at y 63.
+
+That is not a placement error, and this is now proven rather than assumed: a search
+over all eight dihedral transforms of the asset, seventeen scale factors and
+twenty-five offsets — every one of them covering the whole card, so no sub-window
+can match a blob instead of the picture — tops out at **r = +0.108** (identity, the
+best of the eight) against the reference card's chroma map. Flipping, rotating or
+rescaling our asset cannot produce the mock's card; the mock was drawn from a
+different picture. An earlier round reported r = +0.694 for a flipped *sub-window*,
+which is what a blob match looks like and is why the whole-card constraint is part
+of the test. Matching the reference here needs its source artwork.
 
 **Three dead imagesets ship on iOS.** `GSVideoCreate`, `GSHomeOrb` and
 `GSHomeLotus` are referenced by no source; Android's resource shrinking strips the
