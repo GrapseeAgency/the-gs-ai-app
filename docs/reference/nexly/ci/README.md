@@ -125,9 +125,10 @@ The third card row is no longer a fixed “Effort” claim. It is driven by the
 turn:
 
 - **Search** with the real source count when the backend actually ran research;
-- **Answer** (“Composing your plan…”) otherwise;
+- **Answer** (“Composing your plan…” while running, “Plan ready” when settled)
+  otherwise;
 - **Reasoning** shows a real sentence only when the provider streamed a trace;
-  otherwise it says “Provider default reasoning” / “No reasoning trace exposed”.
+  otherwise it says “No reasoning trace exposed”.
 
 The card is still shown on plan turns as a status surface, but it no longer
 invents a reasoning trace or an effort level the model never received. The
@@ -141,17 +142,18 @@ the sources are counted and surfaced in the Search row.
 
 ## Verified runs
 
-Both workflows completed green on commit `f98164d2`:
+Both workflows completed green on commit `67c5809b`:
 
-- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39927380129
-  (run `39927380129`)
-- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39927383196
-  (run `39927383196`)
+- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39938777811
+  (run `39938777811`, 281 unit tests)
+- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39938781413
+  (run `39938781413`)
 
 `reference-vs-android-393x852.png` and `reference-vs-ios-393x852.png` place the
 sheet and the final native render at the same scale for a direct comparison.
 
-Android runs the full unit suite (267 tests, including `NexlyPlanTest`); the
+Android runs the full unit suite (281 tests, including `NexlyPlanTest` and the
+new progress-store tests); the
 screenshot tests are gated behind `-PgsShots=true` and are excluded from the
 ordinary suite, exactly like `HomeScreenshotTest`. The workflows also assert
 that every expected PNG exists before uploading.
