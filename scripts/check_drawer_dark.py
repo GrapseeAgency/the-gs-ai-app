@@ -25,7 +25,10 @@ from PIL import Image
 BANDS = {
     "panel_l": (8.0, 70.0),
     "panel_minus_strip": (2.0, 60.0),
-    "scrim_ratio": (0.40, 0.66),
+    # The same 0.20 black over a DARK page dims it by the same proportion, so the
+    # ratio is not "stronger in dark" — that was a guess about our own design, and
+    # the first dark capture measured 0.80, exactly as light does.
+    "scrim_ratio": (0.70, 0.90),
     "copy_contrast": (60.0, 255.0),
     "blown": (0.0, 1.0),
     "hero_left_rb": (12.0, 120.0),

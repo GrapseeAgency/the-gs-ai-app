@@ -38,6 +38,7 @@ struct AeroDrawer: View {
     var recentFixture: DrawerFixture? = nil
 
     @State private var recents: [DrawerRecent] = []
+    @Environment(\.colorScheme) private var scheme
 
     @ObservedObject private var store = ConversationStore.shared
     /// The drawer header shows the REAL stored identity — it re-renders the
@@ -68,11 +69,16 @@ struct AeroDrawer: View {
     private var panelSurface: some View {
         ZStack {
             Aero.navSurface
+            // In dark the wash is a 4% white lift over the dark nav surface. The
+            // first version painted the LIGHT cream at 85% in both appearances, so
+            // the dark capture measured 206 L — a light panel behind a dark page.
             LinearGradient(
-                colors: [Color(red: 1.0, green: 0.94, blue: 0.90),
-                         Color(red: 0.98, green: 0.92, blue: 0.89)],
+                colors: scheme == .dark
+                    ? [Color.white.opacity(0.06), .clear]
+                    : [Color(red: 1.0, green: 0.94, blue: 0.90),
+                       Color(red: 0.98, green: 0.92, blue: 0.89)],
                 startPoint: .topLeading, endPoint: .bottomTrailing
-            ).opacity(0.85)
+            ).opacity(scheme == .dark ? 0.9 : 0.85)
             LinearGradient(
                 colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.16), .clear],
                 startPoint: .topLeading,
@@ -235,8 +241,9 @@ struct AeroDrawer: View {
             }
             .padding(.horizontal, 16)
             .frame(height: DrawerMetrics.searchHeight)
-            .background(Capsule().fill(Color.white.opacity(0.55)))
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.65), lineWidth: 1))
+            .background(Capsule().fill(Color.white.opacity(scheme == .dark ? 0.10 : 0.55)))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(scheme == .dark ? 0.14 : 0.65),
+                                            lineWidth: 1))
             .padding(.horizontal, DrawerMetrics.contentInset)
         }
         .buttonStyle(.plain)
@@ -272,9 +279,12 @@ struct AeroDrawer: View {
             .frame(height: DrawerMetrics.heroHeight)
             .background(
                 RoundedRectangle(cornerRadius: DrawerMetrics.heroRadius)
-                    .fill(LinearGradient(colors: [DrawerMetrics.heroLeft,
-                                                  DrawerMetrics.heroRight],
-                                         startPoint: .leading, endPoint: .trailing))
+                    .fill(LinearGradient(
+                        colors: scheme == .dark
+                            ? [DrawerMetrics.heroLeft.opacity(0.30),
+                               DrawerMetrics.heroRight.opacity(0.12)]
+                            : [DrawerMetrics.heroLeft, DrawerMetrics.heroRight],
+                        startPoint: .leading, endPoint: .trailing))
             )
             .padding(.horizontal, DrawerMetrics.contentInset)
         }
@@ -364,8 +374,9 @@ struct AeroDrawer: View {
     private func disc(_ symbol: String) -> some View {
         ZStack {
             Circle()
-                .fill(Color.white.opacity(0.62))
-                .overlay(Circle().strokeBorder(Color.white.opacity(0.75), lineWidth: 1))
+                .fill(Color.white.opacity(scheme == .dark ? 0.10 : 0.62))
+                .overlay(Circle().strokeBorder(
+                    Color.white.opacity(scheme == .dark ? 0.16 : 0.75), lineWidth: 1))
                 .frame(width: DrawerMetrics.disc, height: DrawerMetrics.disc)
             Image(systemName: symbol)
                 .font(.system(size: 16))
@@ -435,8 +446,9 @@ struct AeroDrawer: View {
                 onRoute(.settings)
             } label: {
                 ZStack {
-                    Circle().fill(Color.white.opacity(0.62))
-                        .overlay(Circle().strokeBorder(Color.white.opacity(0.75), lineWidth: 1))
+                    Circle().fill(Color.white.opacity(scheme == .dark ? 0.10 : 0.62))
+                        .overlay(Circle().strokeBorder(
+                            Color.white.opacity(scheme == .dark ? 0.16 : 0.75), lineWidth: 1))
                         .frame(width: DrawerMetrics.gear, height: DrawerMetrics.gear)
                     Image(systemName: "gearshape")
                         .font(.system(size: DrawerMetrics.gearGlyph))
