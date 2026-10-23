@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  devIndicators: false,
   allowedDevOrigins: ["*.space-z.ai", "*.fcapp.run"],
 };
 

@@ -158,3 +158,8 @@ upload/*.png
 
 # collab broker SQLite (runtime state, never in git)
 .data/
+
+# scratch dirs used by the font workflows
+var/
+out/
+fonts/
