@@ -114,7 +114,7 @@ async function main() {
   if (!readBody.progress) throw new Error('PLAN PROGRESS DID NOT PERSIST SERVER-SIDE')
   const progress = await ask(
     id,
-    'What have I already completed in my plan? Answer in one short sentence.'
+    'List the completed items from my plan progress context, separated by " and ". Do not add anything else.'
   )
   report.progress = progress
 

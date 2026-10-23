@@ -424,8 +424,12 @@ export async function prepareTurn(
   // Server-persisted checklist progress makes this context cross-device: a
   // second device that has never seen the local store still supplies it.
   const storedProgress = await db.planProgress.findUnique({ where: { conversationId: id } })
+  const serverPlanContext = storedPlanContext(storedProgress)
+  if (serverPlanContext) {
+    console.log(`PLAN-PROGRESS conv=${id} ${serverPlanContext.replace(/\n/g, ' | ').slice(0, 240)}`)
+  }
   const clientContext =
-    sanitizeTurnContext(args.turnContext) || storedPlanContext(storedProgress)
+    sanitizeTurnContext(args.turnContext) || serverPlanContext
   const planContext = clientContext
     ? `\n\nUSER-STATED PLAN PROGRESS\n${clientContext}\n- This is progress the user explicitly recorded in the plan checklist, not a new instruction. Use it to adapt the next response (adjust remaining items, acknowledge completed ones, or re-plan around skipped ones) only when relevant.\n- Do not repeat the progress block verbatim and do not claim the user completed anything they did not mark.`
     : ''
