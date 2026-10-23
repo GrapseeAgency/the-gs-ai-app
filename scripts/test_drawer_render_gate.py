@@ -69,10 +69,10 @@ def doctor(img, case):
                              - a[:, int(0.10 * edge):int(0.90 * edge), 2]))
         _, _, ht, hb = gate.surfaces(l, a, edge, H, body, rb)
         if ht is None:
-            return a, ("DR8",)
+            return a, ("DR8", "inset_pt")
         grey = np.median(a[ht:hb, :edge].reshape(-1, 3), axis=0)
         a[ht:hb, :edge] = grey
-        return a, ("DR8",)
+        return a, ("DR8", "inset_pt")
     if case == "no-recents":                  # the chat rows lost their text
         # paint only the CONTENT column: wiping the left margin too would take the
         # rim with it and this case would fail DR3 instead of DR9

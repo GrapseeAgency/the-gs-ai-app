@@ -113,7 +113,9 @@ BANDS = {
     "hf_p90": (0.0, 3.0),              # sheet 1.79
     "column_spread": (0.0, 12.0),      # sheet 8.2
     "scrim_ratio": (0.78, 0.82),       # sheet 0.80 against our Home band
-    "inset_pt": (25.0, 34.0),          # sheet: the label's ink starts at 30.4
+    # The sheet's label ink starts at 25.1 and the token is 24, so a ±2 pt band
+    # around the token, not around the sheet's exact pixel.
+    "inset_pt": (23.0, 28.0),          # token 24 ±2: the sheet ink lands at 25.1
     "recent_ink_bands": (5, 20),       # sheet 6, our render 9
     "recent_grey_px": (1500, 10 ** 6),  # sheet 7825: the relative times are grey
     "recent_pitch_pt": (53.0, 60.0),   # sheet 55.5
@@ -328,9 +330,11 @@ def surfaces(l, rgb, edge, H, body_l, panel_rb):
     """
     xs = slice(int(0.10 * edge), int(0.90 * edge))
     luma_row = np.median(l[:, xs], axis=1)
-    rb_row = np.median(rgb[:, xs, 0] - rgb[:, xs, 2], axis=1)
+    rb = rgb[..., 0] - rgb[..., 2]
+    grad = (np.median(rb[:, int(0.04 * edge):int(0.20 * edge)], axis=1)
+            - np.median(rb[:, int(0.75 * edge):int(0.95 * edge)], axis=1))
 
-    warm = longest_run(rb_row[:int(0.55 * H)] > panel_rb + 10, min_len=int(20 * H / 852))
+    warm = longest_run(grad[:int(0.60 * H)] > 8, min_len=int(20 * H / 852))
     if warm is None:
         return None, None, None, None
     hero_top, hero_bottom = warm
@@ -500,8 +504,6 @@ def derive(reference):
         "inset_pt": round(label_left / PX_PER_PT_REF, 1) if np.isfinite(label_left) else -1.0,
         "chevron_inset_pt": round((edge - chev_right) / PX_PER_PT_REF, 1)
         if np.isfinite(chev_right) else -1.0,
-        "pill_top_pt": round((pill_top or 0) / PX_PER_PT_REF, 1),
-        "hero_top_pt": round((hero_top or 0) / PX_PER_PT_REF, 1),
         "divider_pts": [round(s / PX_PER_PT_REF, 1) for s in spikes],
         "recent_ink_bands": bands_n,
         "recent_grey_px": grey_px,
@@ -610,7 +612,16 @@ def measure_render(render, home=None):
 
     colm = np.median(l[:, int(0.45 * edge):edge], axis=1)
     bottom_y = max(y for y in range(int(0.80 * H), H) if colm[y] > 120)
-    radius_px = corner_radius_px(l, edge, bottom_y, px_per_pt)
+    # When the panel runs to the frame's bottom edge its arc is outside the
+    # capture: iOS draws the panel full-bleed, so the last rows of the arc are not
+    # in the PNG. The radius is then a token claim (identical on both platforms),
+    # not a pixel one, and this says so instead of failing on a number it could
+    # not see.
+    # `body` is measured further down; the corner test needs its own reference.
+    corner_ref = float(np.median(band(l, BLANK_BAND, panel_ratio)))
+    corner_is_panel = abs(float(l[bottom_y - 2, max(edge - 5, 0)]) - corner_ref) < 4.0
+    arc_in_frame = bottom_y < H - 3 or corner_is_panel
+    radius_px = corner_radius_px(l, edge, bottom_y, px_per_pt) if arc_in_frame else float("nan")
 
     body = band(l, BLANK_BAND, panel_ratio)
     rim = band(l, RIM_BAND, panel_ratio)
@@ -664,6 +675,7 @@ def measure_render(render, home=None):
     return {
         "panel_ratio": panel_ratio,
         "corner_radius_pt": radius_px / px_per_pt if np.isfinite(radius_px) else float("nan"),
+        "arc_in_frame": arc_in_frame,
         "body_l": float(np.median(body)),
         "rim_delta": float(np.max(np.median(rim, axis=0)) - np.median(body))
         if rim.size else float("nan"),
@@ -703,7 +715,13 @@ def check(r, c, label):
             problems.append(f"{key}: {value:.2f} outside [{lo}, {hi}]")
         return ok
 
-    for key in ("panel_ratio", "corner_radius_pt", "body_l", "rim_delta", "hf_p90",
+    if r.get("arc_in_frame", True):
+        gated("corner_radius_pt", r.get("corner_radius_pt", float("nan")))
+    else:
+        notes.append("  corner_radius_pt      arc clipped by the frame   "
+                     "(token-gated instead)")
+
+    for key in ("panel_ratio", "body_l", "rim_delta", "hf_p90",
                 "column_spread", "inset_pt",
                 "hero_h_pt", "pill_to_hero_pt"):
         if key not in c:

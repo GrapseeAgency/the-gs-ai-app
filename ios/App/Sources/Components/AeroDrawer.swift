@@ -134,6 +134,7 @@ struct AeroDrawer: View {
             ScrollView(showsIndicators: false) {
                 panelList
             }
+            .frame(maxHeight: .infinity)
             footer
         }
         .frame(width: panelWidth, alignment: .top)
