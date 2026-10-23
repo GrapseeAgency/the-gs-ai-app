@@ -39,17 +39,35 @@ Allowed ONLY when the AI is literally alive: streaming caret, generation progres
 
 ## 2. Typography
 
-| Style | Font | Size/Weight |
-|---|---|---|
-| displayTitle | **Serif** | 34 semibold |
-| display | Serif | 28 semibold |
-| headline | Serif | 22 semibold |
-| title | Sans | 17 semibold |
-| body | Sans | 15 regular |
-| caption | Sans | 13 regular |
-| label | Sans | 12 medium |
+One family across the whole product — **Poppins** (Regular / Medium / SemiBold /
+Bold, bundled for both platforms and registered in `UIAppFonts` on iOS) — in
+three voices. There is no serif tier: an earlier revision set display and
+headline in a serif, and it read as editorial on a product that is a companion.
 
-Serif = editorial/brand voice (greetings, screen titles, empty-state headlines). Sans = everything functional.
+| Role | Weight | Size / leading | Tracking |
+|---|---|---|---|
+| displayLarge | Bold | 34 / 42 | −0.6 |
+| displayMedium · headlineLarge | SemiBold | 30 / 38 · 26 / 33 | −0.5 · −0.3 |
+| headlineMedium · headlineSmall | SemiBold | 22 / 29 · 19 / 26 | −0.2 · −0.1 |
+| titleLarge · titleMedium · titleSmall | SemiBold | 17 / 23 · 15 / 21 · 13 / 18 | 0 |
+| bodyLarge · bodyMedium · bodySmall | Regular | 15 / 23 · 14 / 21 · 12 / 17 | +0.1 |
+| labelLarge · labelMedium | SemiBold · Medium | 14 / 19 · 11.5 / 16 | +0.1 · +0.2 |
+
+Android's `GsTypography` (ui/theme/Type.kt) is the source of these numbers and
+iOS's `Aero` mirrors them. `check_home_type_parity.py` fails CI when a Home role
+disagrees between the platforms, and `TextStyle.untracked()` (Type.kt) zeroes the
+positive tracking on Home because iOS renders no letter spacing at all — the
+same string was otherwise one word wider on Android, which is enough to change a
+line break.
+
+**The mock is not set in Poppins, and nobody should claim otherwise.** The
+reference sheet's greeting is a narrower grotesque with a double-storey `g`: at
+matched cap height "Good morning," spans 159 pt in the mock, 171 pt in SF Pro
+and 193 pt in Poppins. Poppins stays because it is the product's declared family,
+it is the only one bundled for both platforms, and it is what mandate b10 (one
+surface, identical on both) can actually satisfy — but the letterforms do not
+match the mock, and the sizes above are taken from the mock's *metrics*, not from
+its typeface.
 
 ## 3. Motion (the "Kinetic" in Aeruo)
 
