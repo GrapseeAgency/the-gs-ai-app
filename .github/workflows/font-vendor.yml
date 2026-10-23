@@ -46,7 +46,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install font tooling
-        run: pip install --quiet --disable-pip-version-check fonttools pillow
+        run: pip install --quiet --disable-pip-version-check fonttools pillow numpy
 
       - name: Fetch and instantiate the four weights
         env:
