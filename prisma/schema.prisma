@@ -42,19 +42,19 @@ model UserDevice {
 }
 
 model Conversation {
-  id           String    @id @default(cuid())
-  title        String    @default("New chat")
+  id           String       @id @default(cuid())
+  title        String       @default("New chat")
   modelId      String?
   assistantId  String?
-  pinned       Boolean   @default(false)
-  archived     Boolean   @default(false)
+  pinned       Boolean      @default(false)
+  archived     Boolean      @default(false)
   folder       String?
   userDeviceId String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   messages     Message[]
   attachments  Attachment[]
-  assistant    Assistant? @relation(fields: [assistantId], references: [id])
+  assistant    Assistant?   @relation(fields: [assistantId], references: [id])
 
   @@index([updatedAt])
   @@index([assistantId])
@@ -100,7 +100,7 @@ model MessageSource {
   status        String   @default("retrieved")
   // Whether the final answer actually cited this source ([N] parsed server-side).
   used          Boolean  @default(false)
-  rank          Int?     // position in its engine's ranking
+  rank          Int? // position in its engine's ranking
 
   @@index([messageId])
 }
@@ -136,18 +136,18 @@ model Attachment {
 }
 
 model Assistant {
-  id           String   @id @default(cuid())
-  slug         String   @unique
-  name         String
-  description  String   @default("")
-  instructions String   @default("")
-  category     String   @default("general")
-  starters     String   @default("[]")
-  published    Boolean  @default(false)
-  favourite    Boolean  @default(false)
-  uses         Int      @default(0)
-  rating       Float    @default(0)
-  createdAt    DateTime @default(now())
+  id            String         @id @default(cuid())
+  slug          String         @unique
+  name          String
+  description   String         @default("")
+  instructions  String         @default("")
+  category      String         @default("general")
+  starters      String         @default("[]")
+  published     Boolean        @default(false)
+  favourite     Boolean        @default(false)
+  uses          Int            @default(0)
+  rating        Float          @default(0)
+  createdAt     DateTime       @default(now())
   conversations Conversation[]
 }
 
@@ -182,33 +182,33 @@ model NotificationItem {
 // production monitor: graders read these rows, never the console logs.
 // SQLite has no primitive list fields — `domains`/`cited` ride as JSON strings.
 model TurnTrace {
-  id               String   @id @default(cuid())
-  requestId        String
-  conversationId   String
-  messageId        String
-  timestamp        DateTime @default(now())
-  clientVersion    String
-  backendRevision  String
-  capability       String // CHAT | WEB | DEEP_RESEARCH | TIME | VISION | DOCUMENT
-  trigger          String // explicit | recency | source_specific | none | stop_reuse | ...
-  searchExecuted   Boolean
-  researchExecuted Boolean
-  evidenceCount    Int
-  sourceCount      Int
-  sourcesRead      Int // status === 'retrieved' among the turn's fresh sources
-  sourcesFailed    Int // status === 'failed' among the turn's fresh sources
-  domains          String // JSON string[] — distinct domains returned
-  modelRoute       String // INTERNAL ONLY — never sent to a client
-  finalStatus      String // done | error | clarify
-  cited            String // JSON number[] — cited source ordinals
-  latencyMs        Int
-  errorType        String? // provider_429 | ssrf_block | parse_fail | provider_error | null
-  silentFailures   String? // JSON string[] — silent-failure-gate violations; null/[] = clean turn
+  id                String   @id @default(cuid())
+  requestId         String
+  conversationId    String
+  messageId         String
+  timestamp         DateTime @default(now())
+  clientVersion     String
+  backendRevision   String
+  capability        String // CHAT | WEB | DEEP_RESEARCH | TIME | VISION | DOCUMENT
+  trigger           String // explicit | recency | source_specific | none | stop_reuse | ...
+  searchExecuted    Boolean
+  researchExecuted  Boolean
+  evidenceCount     Int
+  sourceCount       Int
+  sourcesRead       Int // status === 'retrieved' among the turn's fresh sources
+  sourcesFailed     Int // status === 'failed' among the turn's fresh sources
+  domains           String // JSON string[] — distinct domains returned
+  modelRoute        String // INTERNAL ONLY — never sent to a client
+  finalStatus       String // done | error | clarify
+  cited             String // JSON number[] — cited source ordinals
+  latencyMs         Int
+  errorType         String? // provider_429 | ssrf_block | parse_fail | provider_error | null
+  silentFailures    String? // JSON string[] — silent-failure-gate violations; null/[] = clean turn
   // FLASH MODE (Phase 5) — the mode dimension of the turn.
-  requestedMode    String  @default("flash") // flash | thinking | auto — as the client sent it
-  effectiveMode    String  @default("flash") // flash | thinking — after overrides + model capability
-  thinkingLatencyMs Int?   // TTFT of the thinking path (ms); null when flash or buffered
-  modeNote         String? // GS-MODE-REMAP / flash-forced note; null = clean resolution
+  requestedMode     String   @default("flash") // flash | thinking | auto — as the client sent it
+  effectiveMode     String   @default("flash") // flash | thinking — after overrides + model capability
+  thinkingLatencyMs Int? // TTFT of the thinking path (ms); null when flash or buffered
+  modeNote          String? // GS-MODE-REMAP / flash-forced note; null = clean resolution
 
   @@index([conversationId])
   @@index([timestamp])
@@ -222,20 +222,20 @@ model TurnTrace {
 // honest production number; `wowDelta` compares against the same category's
 // rate 7 days ago and `alerted` marks any drop > 5 percentage points.
 model EvalScore {
-  id            String   @id @default(cuid())
-  windowStart   DateTime // UTC hour window this batch covers
-  windowEnd     DateTime
-  category      String   // ROUTING | CONTEXT_ISOLATION | SOURCE_QUALITY | FAILURE_HONESTY (monitor-gradable subsets)
-  sampledTurns  Int      // turns sampled into this batch
-  gradedTurns   Int      // turns that produced a verdict (excluded: ungradeable)
-  passCount     Int
-  failCount     Int
-  passRate      Float    // passCount / gradedTurns, 0..1
-  wowDelta      Float?   // passRate - passRate(same category, 7 days earlier), percentage points
-  alerted       Boolean  @default(false) // true when wowDelta < -0.05
-  alertNote     String?  // human-readable alert text persisted with the row
-  sampleDetail  String   // JSON — per-turn {requestId, verdict, failures[]} for auditability
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  windowStart  DateTime // UTC hour window this batch covers
+  windowEnd    DateTime
+  category     String // ROUTING | CONTEXT_ISOLATION | SOURCE_QUALITY | FAILURE_HONESTY (monitor-gradable subsets)
+  sampledTurns Int // turns sampled into this batch
+  gradedTurns  Int // turns that produced a verdict (excluded: ungradeable)
+  passCount    Int
+  failCount    Int
+  passRate     Float // passCount / gradedTurns, 0..1
+  wowDelta     Float? // passRate - passRate(same category, 7 days earlier), percentage points
+  alerted      Boolean  @default(false) // true when wowDelta < -0.05
+  alertNote    String? // human-readable alert text persisted with the row
+  sampleDetail String // JSON — per-turn {requestId, verdict, failures[]} for auditability
+  createdAt    DateTime @default(now())
 
   @@unique([windowStart, category])
   @@index([windowStart])
@@ -283,7 +283,7 @@ model TurnRun {
 //     s ∈ completed | error | killed | cancelled.
 // bounded append (MAXLEN ~) + safety TTL (expiresAt) mirrored per entry.
 model StreamChunk {
-  seq       Int      @default(autoincrement()) @id
+  seq       Int      @id @default(autoincrement())
   streamKey String // chat:run:{streamId}
   entryId   String // "<ms>-<seq>"
   payload   String
@@ -301,7 +301,7 @@ model StreamChunk {
 // happens. Run state is a fold over this log; a killed run is reconciled
 // from the dangling Requested-without-Completed pair.
 model TurnEvent {
-  seq       Int      @default(autoincrement()) @id
+  seq       Int      @id @default(autoincrement())
   runId     String
   eventType String // TurnStarted | LLMCallRequested | LLMCallCompleted |
   // LLMCallFailed | ToolCallRequested | ToolCallCompleted |
@@ -345,17 +345,17 @@ model ResearchLedgerRow {
 // PHASE 6 — async subagent dispatch: the supervisor launches a task and
 // continues working; tasks maintain their own state across interactions.
 model SubagentTask {
-  id        String    @id @default(cuid())
+  id        String   @id @default(cuid())
   runId     String // supervisor run
   name      String
   url       String? // remote agent server (heterogeneous deployment); null = local executor
   graphId   String?
-  input     String    @default("{}")
-  status    String    @default("pending") // pending | running | done | failed | cancelled
+  input     String   @default("{}")
+  status    String   @default("pending") // pending | running | done | failed | cancelled
   result    String?
   error     String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([runId])
   @@map("subagent_tasks")
@@ -388,38 +388,50 @@ model KnowledgeNode {
 // SQLite: no JSONB/JSON primitive — `infrastructure` rides as a JSON string;
 // no TIMESTAMPTZ — startedAt/completedAt are DateTime (ISO-8601 in UTC).
 model BenchmarkRun {
-  runId             String   @id // uuid from the result file
-  model             String
-  benchmark         String
-  benchmarkVersion  String? // benchmark config revision (suite file + commit)
-  datasetRevision   String? // pinned sha/commit resolved at download time
-  harness           String // inspect_ai | tau2 | swebench | ...
-  harnessVersion    String?
-  dockerImageDigest String?
-  infrastructure    String   @default("{}") // JSON {cpu, ram_gb, timeout_s}
-  startedAt         DateTime?
-  completedAt       DateTime?
-  nSamples          Int?
-  metric            String?
-  score             Float?
-  scoreStderr       Float?
-  scoreCiLo         Float?
-  scoreCiHi         Float?
-  gitCommit         String?
-  rawLogUrl         String?
-  costUsd           Float?
-  failedCount       Int      @default(0)
-  erroredCount      Int      @default(0)
-  skippedCount      Int      @default(0)
+  runId              String    @id // uuid from the result file
+  model              String
+  benchmark          String
+  benchmarkVersion   String? // benchmark config revision (suite file + commit)
+  datasetRevision    String? // pinned sha/commit resolved at download time
+  harness            String // inspect_ai | tau2 | swebench | ...
+  harnessVersion     String?
+  dockerImageDigest  String?
+  infrastructure     String    @default("{}") // JSON {cpu, ram_gb, timeout_s}
+  startedAt          DateTime?
+  completedAt        DateTime?
+  nSamples           Int?
+  metric             String?
+  score              Float?
+  scoreStderr        Float?
+  scoreCiLo          Float?
+  scoreCiHi          Float?
+  gitCommit          String?
+  rawLogUrl          String?
+  costUsd            Float?
+  failedCount        Int       @default(0)
+  erroredCount       Int       @default(0)
+  skippedCount       Int       @default(0)
   // Phase 8/9 columns: exploit gap (visible - heldout) and contamination
   // flag (CONTAMINATED | NOT-FLAGGED | NOT-MEASURED | INDETERMINATE).
-  exploitRate       Float?
-  contaminationFlag String?
+  exploitRate        Float?
+  contaminationFlag  String?
   contaminationScore Float?
-  status            String   @default("done") // done | BLOCKED | INCOMPLETE-CI
-  rawReason         String? // raw blocker/error text when status != done
-  createdAt         DateTime @default(now())
+  status             String    @default("done") // done | BLOCKED | INCOMPLETE-CI
+  rawReason          String? // raw blocker/error text when status != done
+  createdAt          DateTime  @default(now())
 
   @@index([model, benchmark, completedAt(sort: Desc)])
   @@map("benchmark_runs")
+}
+
+/// Cross-device progress for the Nexly plan checklist. Keyed by conversation,
+/// because a conversation is the unit the model and both clients share.
+model PlanProgress {
+  conversationId String   @id
+  fingerprint    String
+  title          String
+  itemsJson      String
+  doneJson       String
+  preference     String?
+  updatedAt      DateTime @updatedAt
 }

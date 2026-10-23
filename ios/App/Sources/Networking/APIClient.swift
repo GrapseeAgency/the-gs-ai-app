@@ -85,6 +85,30 @@ final class APIClient {
         return try decode(MessageListEnvelope.self, from: data).items
     }
 
+    /// GET /api/v1/conversations/{id}/plan-progress — cross-device checklist.
+    func planProgress(conversationID: String) async throws -> PlanProgressPayload? {
+        let request = try buildRequest(
+            path: "/api/v1/conversations/\(Self.escaped(conversationID))/plan-progress"
+        )
+        let data = try await validatedData(for: request)
+        return try decode(PlanProgressEnvelope.self, from: data).progress
+    }
+
+    /// PUT /api/v1/conversations/{id}/plan-progress — upsert the checklist.
+    @discardableResult
+    func savePlanProgress(
+        conversationID: String,
+        payload: PlanProgressPayload
+    ) async throws -> PlanProgressPayload? {
+        let request = try buildRequest(
+            path: "/api/v1/conversations/\(Self.escaped(conversationID))/plan-progress",
+            method: "PUT",
+            body: try encoded(payload)
+        )
+        let data = try await validatedData(for: request)
+        return try decode(PlanProgressEnvelope.self, from: data).progress
+    }
+
     /// DELETE /api/v1/conversations/{id} — expects 2xx (usually 204).
     func deleteConversation(id: String) async throws {
         let request = try buildRequest(path: "/api/v1/conversations/\(Self.escaped(id))", method: "DELETE")

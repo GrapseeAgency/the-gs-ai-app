@@ -720,6 +720,7 @@ struct NexlyPlanCard: View {
                                 done: next,
                                 preference: preference
                             )
+                            syncRemoteProgress(done: next, preference: preference)
                             GSHaptics.select()
                         } label: {
                             HStack(alignment: .center, spacing: 10) {
@@ -812,6 +813,7 @@ struct NexlyPlanCard: View {
         .accessibilityElement(children: .contain)
         .onAppear { restoreProgress() }
         .onChange(of: conversationID) { _ in restoreProgress() }
+        .task(id: conversationID) { await restoreServerProgress() }
     }
 
     private func restoreProgress() {
@@ -822,6 +824,55 @@ struct NexlyPlanCard: View {
             conversationID: conversationID,
             fingerprint: fingerprint
         )
+    }
+
+    /// The server is authoritative across devices; local state remains the
+    /// offline fallback.
+    private func restoreServerProgress() async {
+        guard let conversationID, !conversationID.isEmpty else { return }
+        guard let remote = try? await APIClient.shared.planProgress(conversationID: conversationID),
+              let remote,
+              remote.fingerprint == NexlyPlanProgressStore.shared.fingerprint(for: plan) else {
+            return
+        }
+        doneRows = Set(remote.done)
+        preference = remote.preference
+        NexlyPlanProgressStore.shared.save(
+            conversationID: conversationID,
+            plan: plan,
+            done: doneRows,
+            preference: preference
+        )
+    }
+
+    private func planProgressPayload(
+        done: Set<String>,
+        preference: String?
+    ) -> PlanProgressPayload {
+        PlanProgressPayload(
+            fingerprint: NexlyPlanProgressStore.shared.fingerprint(for: plan),
+            title: plan.title,
+            items: plan.rows.map { row in
+                PlanProgressItem(
+                    key: "\(row.time)|\(row.text)",
+                    label: row.time.isEmpty ? row.text : "\(row.time) — \(row.text)"
+                )
+            },
+            done: Array(done),
+            preference: preference,
+            updatedAt: nil
+        )
+    }
+
+    private func syncRemoteProgress(done: Set<String>, preference: String?) {
+        guard let conversationID, !conversationID.isEmpty else { return }
+        let payload = planProgressPayload(done: done, preference: preference)
+        Task {
+            _ = try? await APIClient.shared.savePlanProgress(
+                conversationID: conversationID,
+                payload: payload
+            )
+        }
     }
 
     private func feedbackButton(_ id: String, icon: String) -> some View {
@@ -835,6 +886,7 @@ struct NexlyPlanCard: View {
                 done: doneRows,
                 preference: next
             )
+            syncRemoteProgress(done: doneRows, preference: next)
             GSHaptics.select()
         } label: {
             NexlyGlyph(

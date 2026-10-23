@@ -87,14 +87,35 @@ async function main() {
   )
   report.coding = coding
 
-  // 5 — the plan-progress context must reach the model on the next turn.
-  const progress = await post<Msg>(`/api/v1/conversations/${id}/messages`, {
-    content: 'What have I already completed in my plan? Answer in one short sentence.',
-    stream: false,
-    mode: 'flash',
-    turnContext:
-      'Plan: demo morning.\n- Completed (2/2): Drink water; Open curtains.\n- Pending (0): none.',
+  // 5 — persist the checklist server-side, then ask from a turn with NO
+  // client turnContext. This is the cross-device path: the server must supply
+  // the progress from the DB.
+  const saveRes = await fetch(`${base}/api/v1/conversations/${id}/plan-progress`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'x-session-id': session },
+    body: JSON.stringify({
+      fingerprint: 'demo-morning-v1',
+      title: 'demo morning',
+      items: [
+        { key: 'water', label: 'Drink water' },
+        { key: 'curtains', label: 'Open curtains' },
+      ],
+      done: ['water', 'curtains'],
+      preference: 'up',
+    }),
   })
+  if (!saveRes.ok) throw new Error(`plan-progress PUT HTTP ${saveRes.status}`)
+  const readRes = await fetch(`${base}/api/v1/conversations/${id}/plan-progress`, {
+    headers: { 'x-session-id': session },
+  })
+  const readBody = (await readRes.json()) as { progress?: unknown }
+  report.planProgressSaved = true
+  report.planProgressRead = readBody.progress ?? null
+  if (!readBody.progress) throw new Error('PLAN PROGRESS DID NOT PERSIST SERVER-SIDE')
+  const progress = await ask(
+    id,
+    'What have I already completed in my plan? Answer in one short sentence.'
+  )
   report.progress = progress
 
   const outDir = path.join(process.cwd(), 'docs/reference/nexly')

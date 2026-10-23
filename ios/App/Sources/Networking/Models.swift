@@ -401,3 +401,24 @@ struct APIErrorEnvelope: Codable, Equatable {
     var code: String?
     var message: String
 }
+
+// MARK: - Nexly plan progress (cross-device checklist)
+
+struct PlanProgressItem: Codable, Equatable, Identifiable {
+    var key: String
+    var label: String
+    var id: String { key }
+}
+
+struct PlanProgressPayload: Codable, Equatable {
+    var fingerprint: String
+    var title: String
+    var items: [PlanProgressItem]
+    var done: [String]
+    var preference: String?
+    var updatedAt: String?
+}
+
+struct PlanProgressEnvelope: Codable {
+    var progress: PlanProgressPayload?
+}

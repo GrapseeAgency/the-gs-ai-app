@@ -166,3 +166,24 @@ internal data class ConversationListDto(
 internal data class MessageListDto(
     val items: List<MessageDto> = emptyList()
 )
+
+@Serializable
+data class PlanProgressItemDto(
+    val key: String,
+    val label: String
+)
+
+@Serializable
+data class PlanProgressDto(
+    val fingerprint: String,
+    val title: String,
+    val items: List<PlanProgressItemDto>,
+    val done: List<String>,
+    val preference: String? = null,
+    val updatedAt: String? = null
+)
+
+@Serializable
+data class PlanProgressResponse(
+    val progress: PlanProgressDto? = null
+)

@@ -7,6 +7,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
@@ -170,6 +171,25 @@ class ApiClient(
             contentType(ContentType.Application.Json)
             setBody(patch)
         }.status.isSuccess()
+
+    suspend fun planProgress(id: String): PlanProgressDto? {
+        val response = client.get("$root/conversations/$id/plan-progress")
+        if (!response.status.isSuccess()) return null
+        return response.bodyAsText()
+            .let { GsApiJson.decodeFromString(PlanProgressResponse.serializer(), it) }
+            .progress
+    }
+
+    suspend fun savePlanProgress(id: String, progress: PlanProgressDto): PlanProgressDto? {
+        val response = client.put("$root/conversations/$id/plan-progress") {
+            contentType(ContentType.Application.Json)
+            setBody(progress)
+        }
+        if (!response.status.isSuccess()) return null
+        return response.bodyAsText()
+            .let { GsApiJson.decodeFromString(PlanProgressResponse.serializer(), it) }
+            .progress
+    }
 
     suspend fun messages(id: String): List<MessageDto> {
         val response = client.get("$root/conversations/$id/messages")

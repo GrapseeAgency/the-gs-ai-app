@@ -24,9 +24,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -63,9 +65,13 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.chat.NexlyPlanProgressStore
+import com.grapsee.gsai.data.remote.PlanProgressDto
+import com.grapsee.gsai.data.remote.PlanProgressItemDto
+import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.theme.GsTheme
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -577,6 +583,48 @@ fun NexlyPlanCard(
         )
     }
     val haptics = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+
+    fun pushProgress() {
+        val id = planConversationId ?: return
+        val items = rowPairs.map { (time, text) ->
+            PlanProgressItemDto(
+                key = time + "|" + text,
+                label = if (time.isBlank()) text else "$time — $text"
+            )
+        }
+        val dto = PlanProgressDto(
+            fingerprint = fingerprint,
+            title = plan.title,
+            items = items,
+            done = doneRows.filterValues { it }.keys.toList(),
+            preference = preference.value
+        )
+        scope.launch {
+            runCatching { ServiceLocator.api.savePlanProgress(id, dto) }
+        }
+    }
+
+    // Hydrate from the server so a second device sees the same checklist.
+    LaunchedEffect(planConversationId, fingerprint) {
+        val id = planConversationId ?: return@LaunchedEffect
+        val remote = runCatching { ServiceLocator.api.planProgress(id) }.getOrNull()
+            ?: return@LaunchedEffect
+        if (remote.fingerprint == fingerprint) {
+            doneRows.clear()
+            remote.done.forEach { doneRows[it] = true }
+            preference.value = remote.preference
+            NexlyPlanProgressStore.save(
+                context = context,
+                conversationId = id,
+                fingerprint = fingerprint,
+                title = plan.title,
+                rows = rowPairs,
+                done = remote.done.toSet(),
+                preference = remote.preference
+            )
+        }
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -641,6 +689,7 @@ fun NexlyPlanCard(
                                         done = doneRows.filterValues { it }.keys,
                                         preference = preference.value
                                     )
+                                    pushProgress()
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 }
                             )
@@ -778,6 +827,7 @@ fun NexlyPlanCard(
                                 done = doneRows.filterValues { it }.keys,
                                 preference = preference.value
                             )
+                            pushProgress()
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         }
                         .semantics {
