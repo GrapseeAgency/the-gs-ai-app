@@ -1,0 +1,127 @@
+name: Font evaluation
+
+# Measures a candidate typeface against the numbers the reference actually has,
+# before anyone edits a single line of app code.
+#
+# The two numbers that decide acceptance (see docs/TYPOGRAPHY.md):
+#   * width of "Good morning," at matched cap height, relative to the shipped
+#     Poppins SemiBold — the reference sits at 0.824;
+#   * x-height / cap height — the reference sits at ~0.85.
+#
+# Both are scale-free ratios, so this needs no app build and no device: it
+# downloads an OFL family, instantiates the four weights the UI uses, and prints
+# the table. Nothing is written back to the repository — vendoring is a separate,
+# reviewed commit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      families:
+        description: Space-separated Google Fonts family names
+        default: "Manrope Outfit Figtree DM Sans Inter Tight"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Measure candidate faces
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install font tooling
+        run: pip install --quiet --disable-pip-version-check fonttools pillow
+
+      - name: Fetch, instantiate and measure
+        env:
+          FAMILIES: ${{ inputs.families }}
+        run: |
+          set -euo pipefail
+          mkdir -p fonts
+          echo "$FAMILIES" | tr ' ' '\n' | while read -r FAM; do
+            [ -n "$FAM" ] || continue
+            SLUG=$(echo "$FAM" | tr ' ' '_')
+            echo "::group::$FAM"
+            curl -fsSL --retry 3 "https://fonts.google.com/download?family=$(echo "$FAM" | sed 's/ /%20/g')" -o "fonts/$SLUG.zip" \
+              || { echo "::warning::$FAM: download failed"; echo "::endgroup::"; continue; }
+            mkdir -p "fonts/$SLUG" && unzip -oq "fonts/$SLUG.zip" -d "fonts/$SLUG"
+            if ! find "fonts/$SLUG" -iname '*semibold*.ttf' -o -iname '*600*.ttf' | grep -q .; then
+              VAR=$(find "fonts/$SLUG" -name '*[[]wght[]].ttf' | head -1)
+              if [ -n "$VAR" ]; then
+                fonttools varLib.instancer "$VAR" wght=600 -o "fonts/$SLUG/SemiBold-600.ttf" >/dev/null
+                echo "  instantiated SemiBold from $VAR"
+              fi
+            fi
+            echo "  files: $(find "fonts/$SLUG" -name '*.ttf' | wc -l)"
+            echo "::endgroup::"
+          done
+
+          python3 - <<'PY'
+          import glob, os
+          from PIL import Image, ImageDraw, ImageFont
+
+          POPPINS = "android/app/src/main/res/font/poppins_semibold.ttf"
+
+          def cap_of(path, size=240):
+              f = ImageFont.truetype(path, size)
+              im = Image.new("L", (700, 500), 0)
+              ImageDraw.Draw(im).text((30, 30), "H", font=f, fill=255)
+              bb = im.getbbox()
+              return bb[3] - bb[1]
+
+          def x_of(path, size=240):
+              f = ImageFont.truetype(path, size)
+              im = Image.new("L", (700, 500), 0)
+              ImageDraw.Draw(im).text((30, 30), "o", font=f, fill=255)
+              bb = im.getbbox()
+              return bb[3] - bb[1]
+
+          base = ImageFont.truetype(POPPINS, 1000)
+          base_cap = cap_of(POPPINS)
+          base_wcap = base.getlength("Good morning,") / base_cap
+
+          rows = [("Poppins SemiBold (shipped)", 1.0, x_of(POPPINS) / base_cap, "baseline")]
+          for fam in sorted(glob.glob("fonts/*/")):
+              ttfs = [p for p in glob.glob(fam + "**/*.ttf", recursive=True)]
+              semi = ([p for p in ttfs if "semibold" in os.path.basename(p).lower() or "600" in os.path.basename(p)]
+                      or [p for p in ttfs if "regular" in os.path.basename(p).lower()]
+                      or ttfs)
+              if not semi:
+                  rows.append((os.path.basename(fam.rstrip("/")), None, None, "no ttf"))
+                  continue
+              p = semi[0]
+              f = ImageFont.truetype(p, 1000)
+              ratio = (f.getlength("Good morning,") / cap_of(p)) / base_wcap
+              xcap = x_of(p) / cap_of(p)
+              verdict = ("pass" if 0.80 <= ratio <= 0.85 and xcap >= 0.82
+                         else "fail width" if not (0.80 <= ratio <= 0.85) else "fail x-height")
+              rows.append((os.path.basename(fam.rstrip("/")), ratio, xcap, verdict + " · " + os.path.basename(p)))
+
+          print(f"{'face':28s} {'width/Poppins':>13s} {'x/cap':>7s}  verdict")
+          print(f"{'-'*28} {'-'*13} {'-'*7}  {'-'*40}")
+          for name, ratio, xcap, verdict in rows:
+              r = f"{ratio:.3f}" if ratio is not None else "-"
+              x = f"{xcap:.3f}" if xcap is not None else "-"
+              print(f"{name[:28]:28s} {r:>13s} {x:>7s}  {verdict}")
+              print(f"::notice::face={name} width_ratio={r} x_cap={x} verdict={verdict}")
+          print()
+          print(f"reference (measured from the sheet): width 0.824, x/cap 0.850")
+          print(f"accept: width 0.80-0.85 AND x/cap >= 0.82")
+          PY
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Font evaluation"
+            echo ""
+            echo "Acceptance (from \`docs/TYPOGRAPHY.md\`): width 0.80–0.85 of Poppins at matched cap height, x-height/cap ≥ 0.82."
+            echo "The reference measures 0.824 and 0.850."
+          } >> "$GITHUB_STEP_SUMMARY"
