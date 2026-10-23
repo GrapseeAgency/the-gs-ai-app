@@ -64,7 +64,11 @@ jobs:
               echo "::endgroup::"
               continue
             fi
-            URL=$(printf '%s' "$LIST" | python3 -c "import json,sys;d=json.load(sys.stdin);t=[i['download_url'] for i in d if i['name'].lower().endswith('.ttf')];print(([u for u in t if '%5B' in u or '[' in u] or t or [''])[0])" || true)
+            # Upright only — the same trap that vendored the italic cut. A family
+            # directory can hold both `X[wght].ttf` and `X-Italic[wght].ttf`, and
+            # measuring the slanted one produces a width that describes a face the
+            # app will not draw.
+            URL=$(printf '%s' "$LIST" | python3 -c "import json,sys;d=json.load(sys.stdin);t=[i['download_url'] for i in d if i['name'].lower().endswith('.ttf') and 'italic' not in i['name'].lower()];print(([u for u in t if '%5B' in u or '[' in u] or t or [''])[0])" || true)
             if [ -z "$URL" ]; then
               echo "::warning::$FAM: no .ttf in ofl/$SLUG"
               echo "::endgroup::"
