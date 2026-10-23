@@ -416,8 +416,9 @@ struct HomeDashboardView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles")
                         .font(Aero.responsive(18, .semibold, relativeTo: .body))
+                    // 12: the sheet's band is 8.50 pt against our 10.33 at 15.
                     Text("Generate")
-                        .font(Aero.responsive(15, .semibold, relativeTo: .callout))
+                        .font(Aero.responsive(12, .semibold, relativeTo: .callout))
                         .lineLimit(1)
                         .minimumScaleFactor(0.9)
                 }

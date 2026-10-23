@@ -981,8 +981,11 @@ private fun HomeDock(
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = "Generate",
+                    // 12, not 15: the sheet's band is 8.50 pt, an 11.8 pt cap at
+                    // this face's ratio; ours measured 10.33 at 15sp, and the word is
+                    // 1.40x wider on the page than the sheet's.
                     style = MaterialTheme.typography.labelLarge.untracked().copy(
-                        fontSize = 15.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     ),
                     color = Color(0xFF3A2116),
