@@ -48,6 +48,28 @@ is proven able to fail by `test_home_render_gate.py`, which doctors the capture
 eight ways (flat page, cards painted out, hairline erased, frame shifted, probes
 slipped both ways, backdrop dimmed) and requires each to be caught.
 
+## The video card's internals, measured against the sheet
+
+The pixel gate measures glass at three probes; it does not see inside a card. These
+came from cropping the sheet's card and ours to the same 187x214 pt box, viewing them
+side by side at the same scale, and then measuring what the eye caught.
+
+| element | sheet | ours | how it was measured |
+|---|---|---|---|
+| chip pill contents | 7.21 pt tall | 7.67 pt | dark pixels over the card; icon and label are the same height in the sheet |
+| play disc | 37.0 pt | 37.0 pt | brightest-blob extent in the card's bottom-left |
+| play glyph | 9.2 x 11.5 pt, solid (65% ink) | 8.7 x 11.0 pt, solid (51% ink) | dark bbox inside the disc; a filled triangle is 50% of its box by area |
+| headline | 16 pt semibold | 16 pt semibold | cap-height bands; same line break after "Create Stunning" |
+| body copy | 12 pt, two lines | 12 pt, three lines | see below |
+
+The body wraps to three lines on Android because Poppins needs ~155 pt for "beautiful
+videos in minutes." where the column is 131 pt; the sheet's narrower face fits it.
+Forcing two lines would mean ~10 pt type, which trades a wrong size for a wrong face.
+
+The play control was a 44 dp disc around an outline glyph on Android and SF's solid
+`play` in the same 44 pt disc on iOS — 7 pt over the sheet on both, and disagreeing
+with each other. It is now a 37 pt disc with a drawn filled triangle on both.
+
 ## What does not match, and why it is not a code change
 
 **The reference is not set in Poppins.** At matched cap height "Good morning,"
