@@ -147,10 +147,11 @@ chroma, p90 and luminance, which move by 0.0 between the two orientations becaus
 cannot see arrangement. Only the correlation between real captures and the reference,
 restricted to the art region, ranks the options — and it says: keep the flip.
 
-**Three dead imagesets ship on iOS.** `GSVideoCreate`, `GSHomeOrb` and
-`GSHomeLotus` are referenced by no source; Android's resource shrinking strips the
-drawables from the APK, but actool compiles every imageset into `Assets.car`, so
-16.6 MB decoded ships for nothing. They are named and costed in
-`scripts/prepare_home_art.py`'s allow-list rather than removed, because this
-workspace's file tooling reports success on deleting a PNG and leaves the file —
-and a half-deleted imageset is a broken build.
+**Three dead imagesets no longer ship on iOS.** They were referenced by no source
+and actool compiles every imageset in the catalog into `Assets.car`, so 4.2 MB of PNG
+was decoding to 16.6 MB inside the app for nothing. Deleting a PNG is not something
+this workspace's tooling can do — it reports success and leaves the file — but moving
+the imageset out of the catalog is, and XcodeGen never sees `ios/Parked-imagesets/`.
+The art stays in the repo at its authored resolution, `prepare_home_art.py` now fails
+if any of the three returns to the catalog or if a parked copy goes missing, and the
+manifest reports **0.0 MB of unreferenced iOS art** (it was 16.6).

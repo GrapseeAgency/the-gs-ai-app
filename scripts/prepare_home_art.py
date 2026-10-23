@@ -72,15 +72,25 @@ ALL_BUDGET_MB = 14.0
 
 # Dead art that predates this script, named so it cannot grow. Unreferenced
 # drawables are stripped from the release APK by `isShrinkResources = true`, so
-# the Android entries cost repo bytes only. iOS compiles every imageset into
-# Assets.car whether or not code asks for it, so the iOS twins ship. Removing
-# them means deleting a PNG, which this workspace's tooling refuses to do (it
-# reports success and leaves the file), so they are accounted for here.
+# the Android entries cost repo bytes only.
 DEAD_ALLOW_LIST = {
     "android": {"gs_home_orb", "gs_home_lotus", "gs_video_create",
                 "gs_companion_orb", "gs_travel_agent_orb"},
-    "ios": {"GSHomeOrb", "GSHomeLotus", "GSVideoCreate"},
+    "ios": set(),
 }
+
+# The iOS twins of that art used to ship: actool compiles every .imageset in the
+# catalog into Assets.car whether or not code asks for it, so 4.2 MB of PNG
+# decoded to 16.6 MB inside the app for nothing. Deleting a PNG is not something
+# this workspace's tooling can do, but *moving the imageset out of the catalog*
+# is, and the result is the same: XcodeGen never sees it, the art stays in the
+# repo at its authored resolution, and restoring one is a `git mv` back.
+PARKED_IOS = {
+    "GSVideoCreate": "4.2 MB on disk, no reference in any Swift or Kotlin source",
+    "GSHomeOrb": "the logo orb is drawn by ReferenceBackdrop, not from this art",
+    "GSHomeLotus": "superseded by GSHomeLotusNew, which the reflection card draws",
+}
+PARKED_DIR = Path("ios/Parked-imagesets")
 
 
 @dataclass(frozen=True)
@@ -293,6 +303,20 @@ def check(manifest: list[Art]) -> int:
                     f"{stem}: {side} art referenced by no source and not in "
                     f"DEAD_ALLOW_LIST (unreferenced art is only allowed to stay "
                     f"dead by name)")
+
+    # Parked art: out of the catalog, still in the repo. Both halves matter — a
+    # name coming back into the catalog would ship 16.6 MB of decoded PNG again,
+    # and a missing parked copy would mean the art was lost rather than parked.
+    for name, why in PARKED_IOS.items():
+        if (IOS_ASSETS / f"{name}.imageset").exists():
+            problems.append(
+                f"{name}: back in Assets.xcassets — it is parked because {why}; "
+                f"actool compiles every imageset into Assets.car whether or not "
+                f"code draws it")
+        if not (PARKED_DIR / f"{name}.imageset").is_dir():
+            problems.append(
+                f"{name}: parked copy missing from {PARKED_DIR} — the art is "
+                f"gone rather than parked")
 
     home = {"android": 0.0, "ios": 0.0}
     total = {"android": 0.0, "ios": 0.0}
