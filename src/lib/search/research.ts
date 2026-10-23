@@ -563,14 +563,20 @@ const MAX_SOURCES_PER_DOMAIN = 2
 
 export function buildResearchEvidenceBlock(
   sources: ResearchSource[],
-  queriesRun: string[]
+  queriesRun: string[],
+  authoritativeDomain?: string | null
 ): { block: string; maxOrdinal: number } {
   const kept: ResearchSource[] = []
   const perDomain = new Map<string, number>()
+  const isAuthoritative = (s: ResearchSource) =>
+    Boolean(authoritativeDomain) &&
+    (s.domain === authoritativeDomain || s.domain.endsWith(`.${authoritativeDomain}`))
   const ordered = [...sources].sort((a, b) => {
-    const ar = a.status === 'retrieved' ? 0 : 1
-    const br = b.status === 'retrieved' ? 0 : 1
-    return ar - br || a.ordinal - b.ordinal
+    // An authoritative-domain source (e.g. the official GitHub release for a
+    // version question) outranks everything, even a fully retrieved page.
+    const aa = isAuthoritative(a) ? 0 : a.status === 'retrieved' ? 1 : 2
+    const bb = isAuthoritative(b) ? 0 : b.status === 'retrieved' ? 1 : 2
+    return aa - bb || a.ordinal - b.ordinal
   })
   for (const s of ordered) {
     const n = perDomain.get(s.domain) ?? 0
@@ -587,6 +593,11 @@ export function buildResearchEvidenceBlock(
     const date = s.extractedDate ?? s.publishedDate
     const dateStr = date ? ` — published ${date}` : ''
     lines.push(`[${s.ordinal}] "${s.title}" — ${s.domain} — ${s.url}${dateStr}`)
+    if (isAuthoritative(s)) {
+      lines.push(
+        '(OFFICIAL SOURCE — this result came from the authoritative registry the planner specified for this question (e.g. the vendor\'s own GitHub Releases). Its version/tag/status is the ground truth; competing numbers from unofficial pages are stale or wrong.)'
+      )
+    }
     if (s.status === 'retrieved' && s.pageExtract) {
       lines.push(`(Full article was retrieved. Extract:)`)
       lines.push(evidenceWindow(s.pageExtract, s.query))

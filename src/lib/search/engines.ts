@@ -894,12 +894,11 @@ export function enginesForIntent(
   // treg is paid-per-success; it only exists when the operator configured a
   // token, and it is always LAST so it loses every tie-break to a free engine.
   const treg = process.env.TREG_TOKEN ? (['treg'] as SearchEngineId[]) : []
-  // 8.2 §11/§23 — "official sources only": first-party-friendly engines only;
-  // no aggregator/news engines, no third-party provider search.
-  if (officialOnly) {
-    return [...searx, 'bing-web', 'wikipedia', 'duckduckgo-lite']
-  }
   // §13 — the user NAMED a source; the engine set must be able to reach it.
+  // This must precede the officialOnly gate: a release question is BOTH
+  // ("github.com" hint AND official-only), and the named-source engine IS the
+  // official engine — dropping it here is why a Bun version question once
+  // cited a stale third-party blog.
   if (intent === 'source_specific' && sourceHint) {
     const hint = sourceHint.toLowerCase()
     if (hint === 'github.com' || hint.endsWith('.github.com')) {
@@ -912,6 +911,11 @@ export function enginesForIntent(
       return [...searx, 'bing-news-rss', 'google-news-rss', 'duckduckgo-lite', 'z-ai', ...brave, ...treg]
     }
     return [...searx, 'bing-web', 'duckduckgo-lite', 'z-ai', ...brave, ...treg]
+  }
+  // 8.2 §11/§23 — "official sources only": first-party-friendly engines only;
+  // no aggregator/news engines, no third-party provider search.
+  if (officialOnly) {
+    return [...searx, 'bing-web', 'wikipedia', 'duckduckgo-lite']
   }
   if (intent === 'academic') {
     return [...searx, 'arxiv', 'crossref', 'wikipedia', 'bing-web', 'duckduckgo-lite']

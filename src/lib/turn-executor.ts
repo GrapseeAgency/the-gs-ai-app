@@ -1059,7 +1059,14 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       })
       return { kind: 'research', outcome, evidenceBlock: null, maxOrdinal: 0, historySources: [], startedAt, researchId }
     }
-    const { block, maxOrdinal } = buildResearchEvidenceBlock(outcome.sources, outcome.queriesRun)
+    const hintDomain = params.sourceHint
+      ? params.sourceHint.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]
+      : null
+    const { block, maxOrdinal } = buildResearchEvidenceBlock(
+      outcome.sources,
+      outcome.queriesRun,
+      hintDomain
+    )
     return { kind: 'research', outcome, evidenceBlock: block, maxOrdinal, historySources: [], startedAt, researchId }
   }
 

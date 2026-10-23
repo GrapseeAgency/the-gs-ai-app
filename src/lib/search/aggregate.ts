@@ -364,7 +364,12 @@ export async function runMetaSearch(input: MetaSearchInput): Promise<MetaSearchO
     const { engineId, query } = taskMeta[i]
     if (res.status === 'fulfilled') {
       // FORENSIC AUDIT [17] — poison-SERP rejection before ANY merging.
-      if (isPoisonedSerp(query, res.value)) {
+      // Registry engines (github-release) answer from an authoritative API,
+      // not a query-matched SERP; their titles ("oven-sh/bun v1.4.4") have
+      // zero lexical overlap with the question by construction. Only judge
+      // genuine web-SERP engines.
+      const isRegistryEngine = engineId === 'github-release'
+      if (!isRegistryEngine && isPoisonedSerp(query, res.value)) {
         console.log(
           `SERP-GUARD engine=${engineId} query="${query.slice(0, 60)}" discarded=${res.value.length} reason=zero-top-5-title-overlap`
         )
