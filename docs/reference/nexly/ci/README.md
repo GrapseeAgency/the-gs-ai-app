@@ -59,7 +59,8 @@ a generic chat screen rather than the sheet:
 - plan rows are **interactive checkboxes**: each row shows a trailing check
   ring and tapping it fills the ring, strikes the row and fires haptic
   feedback (the row is exposed as a checkbox to assistive tech, not a dead
-  list);
+  list). The state is persisted per conversation and rides the next turn as
+  non-visible context, so the model can adapt instead of forgetting it;
 - the Android composer now uses the same compact proportions as iOS: a 38pt
   sparkle lane inside a 46pt capsule, 14pt field and 36pt peach send control,
   instead of the oversized 48pt leading control;
@@ -97,24 +98,46 @@ width-specific mock.
 - At 393×852 and 411×914 the complete plan (title, nine rows, closing and
   timestamp) is visible above the composer.
 
-## Adaptive Thinking / Reasoning / Effort
+## Plan progress → model context
 
-`nexly-chat-*thinking-393x852.png` is a deterministic component state render of
-the real prose answer with the Reasoning row active. It proves the card is not
-fixed reference copy:
+The check rings are no longer a local-only decoration. `NexlyPlanProgressStore`
+(Android SharedPreferences / iOS UserDefaults) persists completion and the
+helpful/not-helpful rating per conversation, fingerprinted to the plan so stale
+checks cannot restore onto a different timetable.
 
-- “Understanding your request…”
-- “Working through the best approach…” with the active Reasoning halo
-- “High effort · composing the answer…”
+On the next message the client sends a compact, non-visible `turnContext`:
 
-In production the card is driven by the backend `mode` event
-(`effectiveMode`, `requested`, `effort`), the reasoning stream and whether the
-answer has started. Plan turns keep the reference copy; every other turn uses
-task-neutral copy and the real effort. A flash turn with no reasoning does not
-show the card. The free model used for the capture returns a final answer
-without a chain-of-thought trace, so the live screenshots show the settled
-`done` state; the adaptive state render is labeled as a component state, not
-as a fabricated model transcript.
+```
+Plan: Here's your balanced schedule for tomorrow:
+- Completed (2/9): 6:30 – 7:00 AM — Wake up + light stretch; ...
+- Pending (7): ...
+- User feedback: the plan was marked helpful.
+```
+
+`prepareTurn` sanitises and caps it (2,000 chars), appends it to the system
+prompt under `USER-STATED PLAN PROGRESS`, and never stores it as a user message.
+The model therefore sees real progress and an explicit preference signal; it is
+told not to repeat the block or claim unmarked completions.
+
+## Activity stages
+
+The third card row is no longer a fixed “Effort” claim. It is driven by the
+turn:
+
+- **Search** with the real source count when the backend actually ran research;
+- **Answer** (“Composing your plan…”) otherwise;
+- **Reasoning** shows a real sentence only when the provider streamed a trace;
+  otherwise it says “Provider default reasoning” / “No reasoning trace exposed”.
+
+The card is still shown on plan turns as a status surface, but it no longer
+invents a reasoning trace or an effort level the model never received. The
+free model profile (`supportsReasoningEffort: false`) sends no effort value;
+the old static “High effort” fixture has been removed from the card and from
+the claims.
+
+Web search in this path is still a **backend capability gate** (explicit/fresh
+queries trigger research), not a tool the model calls on its own. When it runs,
+the sources are counted and surfaced in the Search row.
 
 ## Verified runs
 

@@ -555,7 +555,9 @@ fun NexlyPlanCard(
 ) {
     val colors = GsTheme.colors
     val context = LocalContext.current
-    val rowPairs = remember(plan) { plan.rows.map { it.time to it.text } }
+    val rowPairs = remember(plan) {
+        plan.rows.map { row -> row.time to row.text }
+    }
     val fingerprint = remember(plan.title, rowPairs) {
         NexlyPlanProgressStore.fingerprint(plan.title, rowPairs)
     }

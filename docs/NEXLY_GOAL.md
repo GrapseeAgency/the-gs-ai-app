@@ -151,10 +151,15 @@ catalogue, validator and web registry also know the `plan` kind.
 - Glyph chips are now a **pale tone wash with the saturated colour in the
   glyph**, not saturated chips with white ink, and are **24pt with a 12pt
   glyph** so the emoji replacement reads at text scale, not as a giant icon.
-- Plan rows are **actionable**: every row has a trailing check ring; tapping
-  fills it, strikes the row, reduces the tile tone and fires haptic feedback.
-  The row is exposed as a checkbox to assistive tech. This is the interactive
-  layer the response was missing.
+- Plan rows are **actionable and logically wired**: every row has a trailing
+  check ring; tapping fills it, strikes the row, reduces the tile tone and
+  fires haptic feedback. Completion and a helpful/not-helpful rating are
+  persisted per conversation, and the next message sends them as a non-visible
+  `turnContext` (sanitised in `prepareTurn`), so the model can adapt.
+- The activity card's third row is real: **Search** with a source count when
+  research actually ran, otherwise **Answer**. Reasoning shows a trace only
+  when one arrived; otherwise it says “Provider default reasoning”. The fixed
+  “Effort” claim and the static “High effort” fixture are gone.
 - The Android composer uses the iOS proportions: 38pt sparkle lane, 46pt
   capsule, 14pt field, 36pt send control.
 - Cards use a thinner white veil, a hairline rim and almost no shadow. The
@@ -167,7 +172,9 @@ catalogue, validator and web registry also know the `plan` kind.
   stays peach rather than turning gray; plan/thinking spacing was compacted to
   the sheet's density.
 - Tests added: `android/.../NexlyPlanTest.kt`,
-  `ios/App/Tests/AppTests/NexlyPlanTests.swift`, expanded
+  `android/.../NexlyPlanProgressStoreTest.kt`,
+  `ios/App/Tests/AppTests/NexlyPlanTests.swift`,
+  `ios/App/Tests/AppTests/NexlyPlanProgressStoreTests.swift`, expanded
   `scripts/test-nexly-plan.ts`, `F26_NEXLY_PLAN` fixtures on both parsers, and
   plan, adaptive-thinking, prose and full-screen renders on both platforms.
 - Native verification is green on commit `f98164d2`: Android CI run
