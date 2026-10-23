@@ -275,7 +275,7 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
 
         // 3c. Chats multi-select (reference row-2 screen): long-press a row,
         // read the contextual count, then leave with system back.
-        if (tapDesc("Open menu") && tapText("Your chats")) {
+        if (tapDesc("Open menu") && tapText("Explore")) {
             SystemClock.sleep(1_500)
             val row = device.wait(Until.findObject(By.textContains("Design pass sample")), 8_000)
             if (row != null) {

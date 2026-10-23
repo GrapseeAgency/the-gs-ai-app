@@ -1,0 +1,146 @@
+{
+  "panel_ratio": {
+    "value": 0.786,
+    "band": [
+      0.76,
+      0.812
+    ]
+  },
+  "corner_radius_pt": {
+    "value": 27.49,
+    "band": [
+      25.0,
+      33.0
+    ]
+  },
+  "body_l": {
+    "value": 239.5,
+    "band": [
+      231.0,
+      244.0
+    ]
+  },
+  "rim_delta": {
+    "value": 9.6,
+    "band": [
+      4.0,
+      14.0
+    ]
+  },
+  "hf_p90": {
+    "value": 1.0,
+    "band": [
+      0.0,
+      3.0
+    ]
+  },
+  "column_spread": {
+    "value": 2.9,
+    "band": [
+      0.0,
+      12.0
+    ]
+  },
+  "inset_pt": {
+    "value": 25.1,
+    "band": [
+      25.0,
+      34.0
+    ]
+  },
+  "chevron_inset_pt": {
+    "value": 24.5,
+    "band": [
+      20.0,
+      29.0
+    ]
+  },
+  "pill_top_pt": {
+    "value": 137.2,
+    "band": null
+  },
+  "pill_h_pt": {
+    "value": 42.0,
+    "band": [
+      40.0,
+      50.0
+    ]
+  },
+  "hero_top_pt": {
+    "value": 194.5,
+    "band": null
+  },
+  "hero_h_pt": {
+    "value": 53.7,
+    "band": [
+      50.0,
+      64.0
+    ]
+  },
+  "pill_to_hero_pt": {
+    "value": 15.2,
+    "band": [
+      8.0,
+      20.0
+    ]
+  },
+  "divider_pts": {
+    "value": [
+      484.7,
+      771.4
+    ],
+    "band": null
+  },
+  "recent_pitch_pt": {
+    "value": 55.7,
+    "band": [
+      53.0,
+      60.0
+    ]
+  },
+  "recent_titles": {
+    "value": 4,
+    "band": [
+      4,
+      4
+    ]
+  },
+  "recent_timestamps": {
+    "value": 4,
+    "band": [
+      4,
+      4
+    ]
+  },
+  "footer_mid_ink": {
+    "value": 0,
+    "band": [
+      0,
+      0
+    ]
+  },
+  "hero_left_rb": {
+    "value": 51.3,
+    "band": null
+  },
+  "hero_right_rb": {
+    "value": 26.8,
+    "band": null
+  },
+  "detector": {
+    "edge_px": 529,
+    "edge_votes": 166,
+    "rows": 180,
+    "bottom_y": 1492,
+    "radius_px": 47.1,
+    "px_per_pt": 1.7125
+  },
+  "scrim_ratio": {
+    "value": 0.8,
+    "band": [
+      0.78,
+      0.82
+    ]
+  },
+  "reference_sha256": "02d3c84e99fdf547f5267015bf52d8bbdae7972cc9bdb2308635cf51d03ae82f"
+}

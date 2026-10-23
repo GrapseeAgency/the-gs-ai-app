@@ -180,6 +180,11 @@ fun GsNavHost(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        // Measured from the sheet: 0.18-0.22 black. Left unset, Material 3
+        // composites its own 0.32 and the drawer's strip reads 20 L darker than
+        // the reference; the app's SCRIM_LIGHT (0.50) is darker still. The gate
+        // measures this as a ratio against the Home capture of the same run.
+        scrimColor = com.grapsee.gsai.ui.navigation.drawer.DrawerMetrics.scrim,
         // The drawer is product chrome. Inside the session gate (Auth /
         // Onboarding) neither the content nor the edge-swipe gesture exists —
         // an unauthenticated user never inherits the authenticated shell.
