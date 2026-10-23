@@ -375,27 +375,34 @@ private fun HeroCard(
             .gsGlass(role = GsGlassRole.CardLight, shape = RoundedCornerShape(26.dp)),
     ) {
         // The reference's hero: pearl on the left where the copy sits, the
-        // ethereal art carrying the right side. The scrim keeps the left
-        // readable without hiding the bloom.
-        Image(
-            painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            alignment = Alignment.CenterEnd,
-            modifier = Modifier.matchParentSize(),
-            alpha = 0.85f,
-        )
+        // ethereal art carrying the right half. The art frame is the right
+        // 62% only, with its left edge fading into the card so the two read
+        // as one surface.
         Box(
             Modifier
-                .matchParentSize()
-                .background(
-                    Brush.horizontalGradient(
-                        0f to Color(0xFFFDF1EC).copy(alpha = 0.88f),
-                        0.55f to Color(0xFFFDF1EC).copy(alpha = 0.30f),
-                        1f to Color.Transparent,
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .fillMaxWidth(0.62f),
+        ) {
+            Image(
+                painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+                alpha = 0.9f,
+            )
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            0f to Color(0xFFFDF1EC).copy(alpha = 0.95f),
+                            0.45f to Color(0xFFFDF1EC).copy(alpha = 0.25f),
+                            1f to Color.Transparent,
+                        ),
                     ),
-                ),
-        )
+            )
+        }
         Column(Modifier.padding(18.dp)) {
             Row(
                 Modifier

@@ -292,15 +292,28 @@ struct ExploreView: View {
 
     private var heroCard: some View {
         AeroCard {
-            ZStack(alignment: .topTrailing) {
+            ZStack(alignment: .trailing) {
+                // The art carries the right 62% only; its left edge fades
+                // into the pearl card so the copy side stays quiet.
                 GeometryReader { geo in
-                    Image("GSHomeLotusNew")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .clipped()
-                        .opacity(0.5)
-                        .allowsHitTesting(false)
+                    let artWidth = geo.size.width * 0.62
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        Image("GSHomeLotusNew")
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: artWidth)
+                            .clipped()
+                            .overlay(
+                                LinearGradient(
+                                    colors: [Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.95),
+                                             Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.25),
+                                             .clear],
+                                    startPoint: .leading, endPoint: .trailing
+                                )
+                            )
+                            .allowsHitTesting(false)
+                    }
                 }
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 5) {
