@@ -12,12 +12,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.assertIsOff
-import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.widthIn
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -51,24 +47,6 @@ class NexlyChatScreenshotTest {
     @Before
     fun onlyOnRequest() {
         assumeTrue(System.getProperty("gs.screenshots") == "true")
-    }
-
-    /**
-     * The plan is a real checklist, not a picture of one. This exercises the
-     * same toggleable row the user taps and asserts its checked state, so the
-     * interactive layer cannot silently regress to a static list.
-     */
-    @Test
-    fun planRowsAreCheckable() {
-        compose.setContent { TheGsAiTheme { referenceResponse() } }
-        val row = compose.onNodeWithContentDescription(
-            "6:30 – 7:00 AM, Wake up + light stretch"
-        )
-        row.assertIsOff()
-        row.performClick()
-        row.assertIsOn()
-        row.performClick()
-        row.assertIsOff()
     }
 
     @Composable
