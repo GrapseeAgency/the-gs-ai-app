@@ -123,7 +123,7 @@ jobs:
 
       - name: Install as the product family and flip the token
         env:
-          FAMILY: ${{ inputs.family }}
+          FAMILY: ${{ inputs.family || 'Inter Tight' }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -225,7 +225,7 @@ jobs:
       - name: Commit and push
         if: ${{ inputs.apply == 'true' }}
         env:
-          FAMILY: ${{ inputs.family }}
+          FAMILY: ${{ inputs.family || 'Inter Tight' }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
