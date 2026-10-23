@@ -56,7 +56,11 @@ jobs:
             echo "::group::$FAM"
             CSS=$(curl -fsSL --retry 3 -H "User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)" \
                   "https://fonts.googleapis.com/css2?family=${ENC}:wght@600") || CSS=""
-            URL=$(printf '%s' "$CSS" | grep -o 'https://[^)]*\.ttf' | head -1)
+            # `|| true` because grep exits 1 when there is no match and, under
+            # `set -e` with `pipefail`, that failure propagates through the
+            # pipeline into the assignment and kills the step before the warning
+            # below can explain why. That is exactly what the first two runs did.
+            URL=$(printf '%s' "$CSS" | grep -m1 -o 'https://[^)]*\.ttf' || true)
             if [ -z "$URL" ]; then
               echo "::warning::$FAM: no TTF served for weight 600"
               echo "::endgroup::"
