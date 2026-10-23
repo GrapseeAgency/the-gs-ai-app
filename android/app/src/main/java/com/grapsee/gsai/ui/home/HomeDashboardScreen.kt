@@ -355,9 +355,11 @@ private fun HomeHeader(onAssistant: () -> Unit, onMenu: () -> Unit) {
             )
             Text(
                 text = "AI Companion",
-                // 11 not 13: measured over the whole string (x 55..150 pt), the
-                // sheet's "AI Companion" band is 9.1 pt against our 10.7 at 13sp.
-                style = MaterialTheme.typography.labelSmall.untracked().copy(fontSize = 11.sp),
+                // 10: measured over the whole string, the sheet's band is 9.71 pt
+                // against our 11.00 at 11sp — the last of the header family still
+                // over. (The first reading of 9.1 came from the same narrow window
+                // that clipped "Nexly"'s descender.)
+                style = MaterialTheme.typography.labelSmall.untracked().copy(fontSize = 10.sp),
                 color = colors.textSecondary
             )
         }

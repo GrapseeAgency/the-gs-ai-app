@@ -143,8 +143,8 @@ struct HomeDashboardView: View {
                     // pair was one of the type-role mismatches the last review
                     // listed; check_home_type_parity.py now fails if either side
                     // moves off the shared contract again.
-                    // 11: the sheet's band is 9.1 pt against our 10.7 at 13.
-                    .font(Aero.responsive(11, .medium, relativeTo: .subheadline))
+                    // 10: the sheet's band is 9.71 pt against our 11.00 at 11.
+                    .font(Aero.responsive(10, .medium, relativeTo: .subheadline))
                     .foregroundStyle(Aero.textMuted)
             }
             Spacer()
