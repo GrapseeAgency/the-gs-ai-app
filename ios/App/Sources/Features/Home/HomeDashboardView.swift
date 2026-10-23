@@ -132,9 +132,10 @@ struct HomeDashboardView: View {
                 .scaledToFit()
                 .frame(width: 42, height: 42)
             VStack(alignment: .leading, spacing: 2) {
-                // 16.5: the sheet's glyph band is 12.14 pt against our 13.33 at 18.
+                // 15: the sheet's band is 14.6 pt against our 16.0 at 16.5, measured
+                // over the whole string so the descender is inside the window.
                 Text("Nexly")
-                    .font(Aero.responsive(16.5, .semibold, relativeTo: .headline))
+                    .font(Aero.responsive(15, .semibold, relativeTo: .headline))
                     .foregroundStyle(Aero.text)
                 Text("AI Companion")
                     // .medium, not .regular: Android renders this role as
@@ -142,7 +143,8 @@ struct HomeDashboardView: View {
                     // pair was one of the type-role mismatches the last review
                     // listed; check_home_type_parity.py now fails if either side
                     // moves off the shared contract again.
-                    .font(Aero.responsive(13, .medium, relativeTo: .subheadline))
+                    // 11: the sheet's band is 9.1 pt against our 10.7 at 13.
+                    .font(Aero.responsive(11, .medium, relativeTo: .subheadline))
                     .foregroundStyle(Aero.textMuted)
             }
             Spacer()

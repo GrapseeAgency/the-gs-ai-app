@@ -343,19 +343,21 @@ private fun HomeHeader(onAssistant: () -> Unit, onMenu: () -> Unit) {
         Column {
             Text(
                 text = "Nexly",
-                // 16.5 not 18: the sheet's "Nexly" glyph band is 12.14 pt against
-                // our 13.33 at 18sp, and the ratio of the two (0.91) applied to 18
-                // is 16.4. Same method as the subtitle — the contract had the value
-                // the two platforms shared, not the value the picture uses.
+                // 15: measured over the whole string, the sheet's "Nexly" band is
+                // 14.6 pt against our 16.0 at 16.5sp. (The first reading said 12.14
+                // because the x window stopped before the "y" and clipped its
+                // descender — a narrow window is how this measurement lies.)
                 style = MaterialTheme.typography.titleMedium.copy(
-                    fontSize = 16.5.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold
                 ),
                 color = colors.textPrimary
             )
             Text(
                 text = "AI Companion",
-                style = MaterialTheme.typography.labelSmall.untracked().copy(fontSize = 13.sp),
+                // 11 not 13: measured over the whole string (x 55..150 pt), the
+                // sheet's "AI Companion" band is 9.1 pt against our 10.7 at 13sp.
+                style = MaterialTheme.typography.labelSmall.untracked().copy(fontSize = 11.sp),
                 color = colors.textSecondary
             )
         }
