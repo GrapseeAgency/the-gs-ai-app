@@ -251,10 +251,15 @@ BANDS = {
     "bento":       {"residual": (-2.00, 2.00), "rim": (15.00, 22.50)},
     # The pill's edge is the cue that makes it read as a floating capsule, and
     # the sheet's is +11.82 L. Its fill is gated too, because that is where a
-    # platform-specific opacity announces itself: with a vibrancy material under
-    # the fill, iOS's pill measured 6.7 L below what the law allows for its own
-    # ground while Android measured -0.13 L. Coverage there is coarse (|F - ground|
-    # is 4.0 L on Android's row), absolute luminance is not.
+    # platform-specific opacity announces itself, and it did: iOS's pill measured
+    # -6.69 L against the law where the sheet is +0.16 and Android -0.13. Two
+    # causes, both found by this number and neither visible in a screenshot —
+    # `gsCapsuleGlass` was a second, hand-written recipe that (a) cast its shadow
+    # with plain `.shadow`, so the capsule's own silhouette came back through a
+    # translucent fill, and (b) tinted with `Aero.surface`, 3.0 L brighter than
+    # the `glassSurface` Android paints. The capsule is the shared modifier now.
+    # Coverage is coarse here (|F - ground| is 4.0 L on Android's row); absolute
+    # luminance is not.
     "pill":        {"residual": (-2.00, 2.00), "rim": (10.00, 22.00)},
 }
 

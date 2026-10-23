@@ -61,6 +61,15 @@ enum Aero {
         // ten points brighter than the reference render.
         light: UIColor(red: 0.961, green: 0.929, blue: 0.902, alpha: 1),
         dark: UIColor(red: 0.133, green: 0.090, blue: 0.086, alpha: 1)) // 221716
+    /// The translucent glass layer — Android's `glassSurface`, same two numbers.
+    ///
+    /// Not the same thing as `surface`: that is an opaque panel, and this is a
+    /// 45% layer over the bloom whose colour the sheet's own cards measure as
+    /// #F2EAE3 exactly. Both platforms' glass reads from here, so a pill or a
+    /// card cannot land 3 L brighter on one platform than the other (b10).
+    static let glassSurface = dynamic(
+        light: UIColor(red: 0.949, green: 0.918, blue: 0.890, alpha: 1),   // F2EAE3
+        dark: UIColor(red: 0.165, green: 0.110, blue: 0.098, alpha: 1))    // 2A1C19
     static let elevatedSurface = dynamic(     // above-surface content
         light: .white,
         dark: UIColor(red: 0.208, green: 0.133, blue: 0.118, alpha: 1)) // 35221E

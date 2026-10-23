@@ -65,41 +65,38 @@ enum GsGlassRole {
 
     /// The colour the fill is painted with.
     ///
-    /// `Aero.surface` (#F5EDE6) is what the sheet's cards LOOK like; the sheet's
-    /// two cards say the fill it sees is #F2EAE3, and the two are not the same
-    /// number — see `cardLight`. Android keeps this in its `glassSurface` token,
-    /// which is why it is spelled out again here rather than folded into
-    /// `Aero.surface`: that colour is every plain surface in the app, and this
-    /// one is only ever a translucent layer over something else.
+    /// One colour for every role, because Android has one: `glassSurface` is the
+    /// translucent layer's token there, and this used to be #F2EAE3 for the two
+    /// card roles and `Aero.surface` (#F5EDE6) for everything else. Over a 45%
+    /// layer that 3.0 L is not a nuance — it is the difference between the pill
+    /// measuring the reference and measuring 3 L brighter than the same glass on
+    /// the other platform. `Aero.surface` stays what it is: the right number for
+    /// an OPAQUE surface, the wrong one for a layer you see a bloom through.
+    /// Dark matches Android's `0xD92A1C19`.
     var tintColor: Color {
-        switch self {
-        case .cardLight, .cardDim: return Color(red: 0.949, green: 0.918, blue: 0.890)
-        default:                   return Aero.surface
-        }
+        Aero.glassSurface
     }
 
-    /// Top / bottom of the interior luminance fall, per role.
-    var tintAlphaTop: Double {
-        switch self {
-        // 0.45 is the measured coverage; Android reaches the same number as
-        // 0.80 (its token's alpha) × 0.565 (its fillAlpha).
-        case .cardLight, .cardDim: return 0.452
-        default:                   return fillAlpha * 0.55
-        }
-    }
-    var tintAlphaBottom: Double {
-        switch self {
-        // Android's fill gradient falls to 82% of the top alpha: 0.452 × 0.82.
-        case .cardLight, .cardDim: return 0.371
-        default:                   return fillAlpha * 0.28
-        }
-    }
+    /// Top / bottom of the interior luminance fall.
+    ///
+    /// Derived rather than per-role, because Android derives them the same way:
+    /// its `glassSurface` token carries 0xCC = 0.80 alpha, `drawRect` multiplies
+    /// the role's `fillAlpha` into that, and the body gradient falls to 82% of
+    /// the top. For the card roles that product is 0.80 × 0.565 = 0.452 — the
+    /// coverage solved off the sheet, which is why the two numbers hardcoded here
+    /// were those. The roles that were NOT hardcoded fell through a `× 0.55`
+    /// / `× 0.28` rule Android does not have, and that is how the same role came
+    /// to sit 0.22 of an alpha apart on the two platforms.
+    var tintAlphaTop: Double { gsGlassTokenAlpha * fillAlpha }
+    var tintAlphaBottom: Double { gsGlassTokenAlpha * fillAlpha * 0.82 }
 
-    /// How opaque the tinted fill sits over the material. Thicker glass scatters more.
+    /// How opaque the tinted fill sits over the material. Thicker glass scatters
+    /// more. These are Android's `GsGlassRole` table, unchanged: a role means the
+    /// same glass on both platforms or mandate b10 is not met.
     var fillAlpha: Double {
         switch self {
         case .card: return 1
-        case .cardLight, .cardDim: return 1
+        case .cardLight, .cardDim: return 0.565
         case .elevated: return 1
         case .floatingControl: return 0.86
         case .modal: return 1
@@ -176,10 +173,25 @@ enum GsGlassRole {
 /// 4.6 / 17.2 is this number, and Android's `RIM_FALL` is the same constant.
 private let gsRimFall = 0.27
 
-/// The reference glass as a background + rim + shadow on any rounded surface.
+/// The alpha baked into Android's `glassSurface` token (0xCC), which its
+/// `drawRect` then multiplies the role's `fillAlpha` into. Named because both
+/// ends of the luminance fall are derived from it, and a platform that is
+/// matching Android has to match the multiplication, not just the colour.
+private let gsGlassTokenAlpha = 0.80
+
+/// The reference glass as a background + rim + shadow on any shape.
+///
+/// The shape is an `AnyShape` rather than a corner radius because the pill and
+/// the composer are the SAME material as the cards, cut differently — Android
+/// reaches them all through one `gsGlass(role, shape)` and iOS had a second,
+/// hand-written capsule recipe that had drifted: no veiling layer, no height-
+/// proportional rim lean, and a plain `.shadow` that painted the capsule's own
+/// silhouette *through* its translucent fill. That last one cost 5.1 L, which is
+/// why the quick-action pills read greyer than the page behind them on iOS while
+/// Android's measured the reference's own 2.6 L.
 private struct GsGlassModifier: ViewModifier {
     let role: GsGlassRole
-    let corner: CGFloat
+    let shape: AnyShape
 
     func body(content: Content) -> some View {
         content
@@ -219,8 +231,7 @@ private struct GsGlassModifier: ViewModifier {
     /// frame: the erased footprint therefore lands where the card is, not where
     /// its shadow is, which is the whole point.
     private var castShadow: some View {
-        let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
-        return shape
+        shape
             .fill(Color(red: 0.35, green: 0.16, blue: 0.10))
             .opacity(0.14)
             .blur(radius: role.elevation * 0.6)
@@ -243,8 +254,7 @@ private struct GsGlassModifier: ViewModifier {
 
     /// Material + interior luminance fall + top airlight, all clipped to shape.
     private var glassShape: some View {
-        let shape = RoundedRectangle(cornerRadius: corner, style: .continuous)
-        return shape
+        shape
             .fill(baseStyle)
             .overlay(
                 // 1 + 4. tinted fill, lighter at the top, deeper at the bottom.
@@ -285,7 +295,7 @@ private struct GsGlassModifier: ViewModifier {
     private func rim(in size: CGSize) -> some View {
         let lit = 0.9 * role.rimStrength
         let lean = min(0.49, size.height * 0.075 / max(size.width, 1))
-        return RoundedRectangle(cornerRadius: corner, style: .continuous)
+        return shape
             .strokeBorder(
                 LinearGradient(
                     colors: [
@@ -300,58 +310,25 @@ private struct GsGlassModifier: ViewModifier {
     }
 }
 
-/// The capsule variant for the composer and pill controls.
-private struct GsCapsuleGlassModifier: ViewModifier {
-    let role: GsGlassRole
-
-    func body(content: Content) -> some View {
-        let capsule = Capsule()
-        let base: AnyShapeStyle = role.material.map { AnyShapeStyle($0) } ?? AnyShapeStyle(Color.clear)
-        return content
-            .background(
-                capsule.fill(
-                    LinearGradient(
-                        colors: [
-                            Aero.surface.opacity(role.fillAlpha * 0.55),
-                            Aero.surface.opacity(role.fillAlpha * 0.28)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-            )
-            .background(capsule.fill(base))
-            .overlay(
-                Capsule().strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            Aero.elevatedSurface.opacity(0.9 * role.rimStrength),
-                            Aero.elevatedSurface.opacity(0.9 * role.rimStrength * gsRimFall)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 1
-                )
-            )
-            .shadow(
-                color: Color(red: 0.35, green: 0.16, blue: 0.10).opacity(role.elevation > 0 ? 0.14 : 0),
-                radius: role.elevation * 0.6,
-                x: 0,
-                y: role.elevation * 0.28
-            )
-    }
-}
-
 extension View {
     /// Apply the shared glass material as a rounded-rect background. The iOS
     /// twin of Android `Modifier.gsGlass(role, shape)`.
     func gsGlass(_ role: GsGlassRole = .card, corner: CGFloat = Aero.Radius.card) -> some View {
-        modifier(GsGlassModifier(role: role, corner: corner))
+        modifier(GsGlassModifier(
+            role: role,
+            shape: AnyShape(RoundedRectangle(cornerRadius: corner, style: .continuous))))
     }
 
-    /// The pill/composer variant of the same material.
+    /// The pill and composer controls: the same material, cut as a capsule.
+    ///
+    /// This used to be a second recipe of its own. It is one call now because a
+    /// duplicate is how the drift happened: the capsule version had no veiling
+    /// layer, no height-proportional rim lean, and it cast its shadow with
+    /// `.shadow` straight onto the modified view, so the capsule's own silhouette
+    /// came back through a translucent fill and took 5.1 L out of the pill. The
+    /// gate measures that (A2 material law on the `pill` probe), and Android's
+    /// pills — which always went through the single path — did not have it.
     func gsCapsuleGlass(_ role: GsGlassRole = .floatingControl) -> some View {
-        modifier(GsCapsuleGlassModifier(role: role))
+        modifier(GsGlassModifier(role: role, shape: AnyShape(Capsule())))
     }
 }
