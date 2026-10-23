@@ -19,6 +19,20 @@ face; code must look like code.
 
 ## The known gap: Poppins is wider than the reference
 
+> **Correction, and it matters.** Every number in the table below was measured on the
+> *italic* cut of whichever family the runner fetched, because the eval step selected
+> "the first `.ttf`" in `ofl/<slug>` and several families ship `X-Italic[wght].ttf` beside
+> `X[wght].ttf`. That is the same selection bug that vendored Inter Tight Italic into the
+> app (see *The face the app ships*, below). The rows are therefore **not** measurements of
+> the faces they name, and the Inter Tight row in particular describes slanted glyphs.
+>
+> The selection is fixed (italics are excluded), but the table has **not** been
+> re-measured: the eval's denominator (`POPPINS`) pointed at
+> `android/.../poppins_semibold.ttf`, which stopped existing when Inter Tight was vendored,
+> and the replacement path is still being fixed. Treat the numbers as historical until a
+> green run prints a new table. What *is* verified today is the shipped face's shape:
+> upright, four weights, identical bytes on both platforms (`scripts/check_font_faces.py`).
+
 Measured in CI (`.github/workflows/font-eval.yml`) at matched cap height, over the
 string the reference sets largest — "Good morning," at 26 pt. Every number is from the
 same script, on the same runner, so they are comparable to each other:
@@ -79,3 +93,33 @@ Adwaita Sans (variable font, 0.889), Fira Sans (humanist terminals and a differe
    type table in `docs/HOME_REFERENCE_STATUS.md` does, so re-measure the bands there.
 6. If the render is worse, `git revert` the one commit — the family is a single token on
    each platform precisely so this stays cheap.
+
+## The face the app ships
+
+`InterTight-{Regular,Medium,SemiBold,Bold}`, 400/500/600/700, vendored by
+`.github/workflows/font-vendor.yml` from `ofl/intertight` and instanced from the
+**upright** variable font.
+
+The first vendoring took the italic cut. `ofl/intertight` ships
+
+- `InterTight[wght].ttf`
+- `InterTight-Italic[wght].ttf`
+
+and the step selected "the first `.ttf`", which was the second one. `varLib.instancer`
+keeps the source's name table, so the four files announced themselves as
+`InterTight-Italic`; the job then rewrote name IDs 1/2/4/6/16/17/21/22 and `OS/2`, which
+made iOS resolve `InterTight-Regular` and draw it. Registration tests passed, the 15-role
+type contract passed, both pixel gates passed, and **every glyph on Home was slanted**
+(`italicAngle` −9.40 in all four files). It was found by cropping the video card and
+looking at it.
+
+Three things now stand in the way of a repeat:
+
+1. the vendor and eval steps exclude any filename containing `italic`;
+2. the vendor job reads `italicAngle` back after instancing and refuses a non-zero one;
+3. `scripts/check_font_faces.py` runs in `android-app`, `ios` and the vendor job, and
+   asserts for every shipped weight: `italicAngle` ≈ 0, the `OS/2` italic bit clear, the
+   subfamily matching `usWeightClass`, and byte-identical files on both platforms.
+
+A capture can show a slanted word; no gate we had could say so. That is why the font
+contract exists now, and why it reads the font rather than the screenshot.
