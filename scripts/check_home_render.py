@@ -252,12 +252,20 @@ SPREAD_MAX = 5.0                  # real 0.21 / 2.36 | boundary-straddling 7.4..
 # brightness.
 #
 #   probe          sheet            android           ios
-#   suggestions  tint -2.79        -2.93             -3.22
-#                rim  +2.58        +1.54             +2.15
-#   bento        resid +0.12       +0.93             -0.03
-#                rim  +19.94       +18.96            +17.08
-#   pill         resid +0.16       -0.13             -6.69 -> the thinMaterial gap
-#                rim  +11.82       +14.53            +21.25   fixed with it
+#   suggestions  tint  -2.79       -2.93             -3.22
+#                rim   +2.58       +1.54             +2.18
+#                hair   241.09     239.06            240.91
+#   bento        resid  +0.12      +0.93             -0.03
+#                rim   +19.94      +18.96            +17.03
+#                hair   252.00     252.14            252.35
+#                edge    16.76      20.00             20.00
+#   pill         resid  +0.16      +0.94             -0.62
+#                rim   +11.82      +14.31            +12.53
+#                hair   252.43     253.21            253.57
+#
+# Re-measured after the material and geometry work of the last waves; the sheet's
+# edge is printed and not gated because its crop is not rectified, and every other
+# cell here is inside the band its line names, on both platforms.
 BANDS = {
     # A9 ("hairline") on every probe: the absolute level of the top edge, which
     # the rim's 90%-white makes ground-independent. Measured sheet / android / ios:
