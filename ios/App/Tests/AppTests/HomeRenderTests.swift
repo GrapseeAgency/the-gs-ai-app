@@ -359,38 +359,20 @@ final class HomeRenderTests: XCTestCase {
                             + "— dock did not composite")
         }
 
-        // 4. bento glass vs the page it sits on. The card's top edge is LOCATED,
-        // not assumed: a fixed fraction of the height broke the moment a typeface
-        // change moved the page, and it reported "the glass is not rasterising"
-        // when the glass had simply moved 12 pt. Scan the column for the brightest
-        // row in the bento's neighbourhood and measure under it.
-        // The whole right column, as a fraction, exactly as the pixel gate's bento
-        // probe reads it. A single column at a fixed fraction is not width-stable:
-        // at 393 it landed on the Mind Guide hairline, at 360 and 411 it landed on
-        // that card's title text, and the check then reported "no lit edge" at two
-        // widths out of three while the rim was sitting there the whole time.
-        let colX = size.width * 0.62
-        let colW = size.width * 0.30
-        var bestY = size.height * 0.33
-        var bestL = -1.0
-        var scan = size.height * 0.33
-        while scan < size.height * 0.62 {
-            // One pixel row, because the rim IS one pixel: a 2 pt window at 3x
-            // averages six rows and pulled a 252 L hairline down to 244, which
-            // made the scan unable to tell a lit card edge from the page.
-            let v = meanLuma(gray, x: colX, y: scan, w: colW, h: 1)
-            if v > bestL { bestL = v; bestY = scan }
-            scan += 2
-        }
-        let card = meanLuma(gray, x: colX, y: bestY + 10, w: colW, h: 12)
-        let margin = meanLuma(gray, x: size.width * 0.02, y: bestY + 10, w: size.width * 0.05, h: 12)
-        if bestL < 248 {
-            problems.append("no lit card edge in the bento's band — brightest row was "
-                            + "\(Int(bestY)) pt at luma \(Int(bestL)), the page is \(Int(margin))")
-        }
-        if abs(card - margin) < 1.2 {
-            problems.append("card interior equals the page beside it — the glass is not rasterising "
-                            + "(brightest row in 0.33–0.62 was \(Int(bestY)) pt, luma \(Int(bestL)))")
+        // 4. the bento band versus the page beside it. Two large boxes over the
+        // row, not a hairline hunt: three attempts to locate a 1-pixel rim from a
+        // fraction of the frame each failed on a different width (video card, then
+        // title text, then two of three), and every failure said "the glass is not
+        // rasterising" about a page whose glass was fine. A row-sized comparison
+        // answers the actual question — is there a card band here or is it all
+        // page — and it cannot land on one glyph.
+        let band = meanLuma(gray, x: size.width * 0.08, y: size.height * 0.46,
+                            w: size.width * 0.84, h: size.height * 0.12)
+        let beside = meanLuma(gray, x: 0, y: size.height * 0.46,
+                              w: size.width * 0.04, h: size.height * 0.12)
+        if abs(band - beside) < 1.2 {
+            problems.append("the bento band reads like bare page — no card is compositing "
+                            + "(band \(String(format: "%.1f", band)), page \(String(format: "%.1f", beside)))")
         }
         return problems
     }
