@@ -138,8 +138,8 @@ SUGGESTIONS_RENDER = {
 # (0.72 and 1.42 L, i.e. noise), which is the same "a gate that cannot fail"
 # defect this script was rewritten for, hiding in the one check added last.
 SUGGESTIONS_ANDROID = dict(SUGGESTIONS_RENDER, rim_y=0.7465,
-                           interior=[0.66, 0.7503, 0.26, 0.0200],
-                           outside=[0.004, 0.7503, 0.022, 0.0200])
+                           interior=[0.66, 0.7550, 0.26, 0.0180],
+                           outside=[0.004, 0.7550, 0.022, 0.0180])
 # iOS re-measured after Poppins landed: the geometric face is taller than SF Pro
 # at the same point size, so every text block grew and the cards below the
 # greeting moved down ~50px. The old rect (interior 0.7900, rim_y 0.7707) now

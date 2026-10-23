@@ -369,12 +369,19 @@ final class HomeRenderTests: XCTestCase {
         var bestL = -1.0
         var scan = size.height * 0.33
         while scan < size.height * 0.62 {
-            let v = meanLuma(gray, x: colX, y: scan, w: size.width * 0.18, h: 2)
+            // One pixel row, because the rim IS one pixel: a 2 pt window at 3x
+            // averages six rows and pulled a 252 L hairline down to 244, which
+            // made the scan unable to tell a lit card edge from the page.
+            let v = meanLuma(gray, x: colX, y: scan, w: size.width * 0.18, h: 1)
             if v > bestL { bestL = v; bestY = scan }
             scan += 2
         }
         let card = meanLuma(gray, x: colX, y: bestY + 10, w: size.width * 0.18, h: 12)
         let margin = meanLuma(gray, x: size.width * 0.02, y: bestY + 10, w: size.width * 0.05, h: 12)
+        if bestL < 248 {
+            problems.append("no lit card edge in the bento's band — brightest row was "
+                            + "\(Int(bestY)) pt at luma \(Int(bestL)), the page is \(Int(margin))")
+        }
         if abs(card - margin) < 1.2 {
             problems.append("card interior equals the page beside it — the glass is not rasterising "
                             + "(brightest row in 0.33–0.62 was \(Int(bestY)) pt, luma \(Int(bestL)))")
