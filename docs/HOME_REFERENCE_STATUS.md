@@ -20,16 +20,16 @@ python3 scripts/test_home_render_gate.py --render <capture> --probe-set <kind>
 
 | quantity | sheet | Android | iOS |
 |---|---|---|---|
-| suggestions Δtint (card − page) | −2.79 | −2.93 | −3.22 |
-| suggestions rim (hairline − glass) | +2.58 | +1.54 | +2.18 |
-| suggestions hairline, absolute L | 241.09 | 239.06 | 240.91 |
-| bento material-law residual | +0.12 | +0.93 | −0.03 |
-| bento rim (hairline − glass) | +19.94 | +18.96 | +17.03 |
-| bento hairline, absolute L | 252.00 | 252.14 | 252.35 |
+| suggestions Δtint (card − page) | −2.79 | −2.86 | −3.93 |
+| suggestions rim (hairline − glass) | +2.58 | +1.72 | +2.81 |
+| suggestions hairline, absolute L | 241.09 | 238.98 | 240.91 |
+| bento material-law residual | +0.12 | +0.78 | +0.23 |
+| bento rim (hairline − glass) | +19.94 | +19.71 | +17.46 |
+| bento hairline, absolute L | 252.00 | 252.14 | 252.14 |
 | bento left edge, pt from frame | 16.76¹ | 20.00 | 20.00 |
-| pill material-law residual | +0.16 | +0.94 | −0.62 |
-| pill rim (hairline − glass) | +11.82 | +14.31 | +12.53 |
-| pill hairline, absolute L | 252.43 | 253.21 | 253.57 |
+| pill material-law residual | +0.16 | +0.80 | −0.08 |
+| pill rim (hairline − glass) | +11.82 | +15.03 | +12.91 |
+| pill hairline, absolute L | 252.43 | 253.21 | 253.21 |
 
 ¹ printed, not gated: the mock's crop is not rectified, so its absolute x carries
 the crop. The value a device must hit is the 20 pt margin token, and both do.

@@ -146,9 +146,16 @@ SUGGESTIONS_ANDROID = dict(SUGGESTIONS_RENDER, rim_y=0.7602,
 # straddles the card's top edge — which is what A3 purity exists to catch, and
 # did: it reported spread 9.29 rather than passing a page sample as glass.
 SUGGESTIONS_IOS = {"name": "suggestions",
-                   "interior": [0.66, 0.7970, 0.26, 0.0200],
-                   "outside":  [0.004, 0.7970, 0.022, 0.0200],
-                   "rim_y": 0.7935}
+                   # Re-derived on run 39935068074. The brightest row in the old
+                   # window was the DOCK's rim (0.8196, luma 242.8), not this card:
+                   # the card is dim glass and its edge is a step, not a peak, so the
+                   # edge was found as the largest positive step in the column median
+                   # — a detector validated on the previous capture first, where it
+                   # returned 0.7926 against the 0.7935 that had been measured by
+                   # hand.
+                   "interior": [0.66, 0.7887, 0.26, 0.0200],
+                   "outside":  [0.004, 0.7887, 0.022, 0.0200],
+                   "rim_y": 0.7852}
 
 # The bento's Mind Guide card — the sheet's purest glass, sitting on the bloom
 # where the material has something to do. x 0.62..0.92 is inside the card on all
@@ -173,14 +180,13 @@ BENTO_ANDROID = {
     "edge_y": 0.4898,
 }
 BENTO_IOS = {
-    # Re-measured on the post-Poppins capture (run 39860471181): the Mind Guide
-    # card's lit top edge is at row 1212 and its clean glass runs 1218..1245,
-    # above where the title now sits.
+    # Re-derived on run 39935068074, the first capture after the greeting subtitle
+    # went to the sheet's 12.5/18: the card's lit edge is 6.0 pt higher, at 0.4671.
     "name": "bento",
-    "interior": [0.62, 0.4773, 0.30, 0.0094],
-    "outside":  [0.004, 0.4773, 0.022, 0.0094],
-    "rim_y": 0.4742,
-    "edge_y": 0.535,
+    "interior": [0.62, 0.4702, 0.30, 0.0094],
+    "outside":  [0.004, 0.4702, 0.022, 0.0094],
+    "rim_y": 0.4671,
+    "edge_y": 0.5279,
 }
 
 # The quick-action pills. This probe exists because a previous pass reported the
@@ -207,10 +213,11 @@ PILL_ANDROID = {
     "rim_y": 0.3265,                               # row 834
 }
 PILL_IOS = {
+    # Re-derived on run 39935068074: 7.0 pt higher with the subtitle change.
     "name": "pill",
-    "interior": [0.105, 0.3767, 0.045, 0.0110],   # rows 963..991
-    "outside":  [0.004, 0.3767, 0.022, 0.0110],
-    "rim_y": 0.3744,                               # row 957
+    "interior": [0.105, 0.3685, 0.045, 0.0110],
+    "outside":  [0.004, 0.3685, 0.022, 0.0110],
+    "rim_y": 0.3662,
 }
 
 PROBES = {
@@ -261,20 +268,20 @@ SPREAD_MAX = 5.0                  # real 0.21 / 2.36 | boundary-straddling 7.4..
 # brightness.
 #
 #   probe          sheet            android           ios
-#   suggestions  tint  -2.79       -2.93             -3.22
-#                rim   +2.58       +1.54             +2.18
-#                hair   241.09     239.06            240.91
-#   bento        resid  +0.12      +0.93             -0.03
-#                rim   +19.94      +18.96            +17.03
-#                hair   252.00     252.14            252.35
-#                edge    16.76      20.00             20.00
-#   pill         resid  +0.16      +0.94             -0.62
-#                rim   +11.82      +14.31            +12.53
-#                hair   252.43     253.21            253.57
+#   suggestions  tint  -2.79       -2.86             -3.93
+#                rim   +2.58       +1.72             +2.81
+#                hair   241.09     238.98            240.91
+#   bento        resid  +0.12      +0.78             +0.23
+#                rim   +19.94      +19.71            +17.46
+#                hair   252.00     252.14            252.14
+#                edge   16.76      20.00             20.00
+#   pill         resid  +0.16      +0.80             -0.08
+#                rim   +11.82      +15.03            +12.91
+#                hair   252.43     253.21            253.21
 #
-# Re-measured after the material and geometry work of the last waves; the sheet's
-# edge is printed and not gated because its crop is not rectified, and every other
-# cell here is inside the band its line names, on both platforms.
+# Re-measured on the captures that followed the greeting subtitle change (12.5/18).
+# The sheet's edge is printed and not gated because its crop is not rectified; every
+# other cell is inside the band its line names, on both platforms.
 BANDS = {
     # A9 ("hairline") on every probe: the absolute level of the top edge, which
     # the rim's 90%-white makes ground-independent. Measured sheet / android / ios:
