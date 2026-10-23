@@ -75,6 +75,42 @@ jobs:
             fonttools varLib.instancer var/source.ttf wght="$W" -o "out/$W.ttf" >/dev/null
             echo "  instantiated $W -> $(wc -c < "out/$W.ttf") bytes"
           done
+          # An instanced variable font keeps the SOURCE's name table, so all four
+          # files came out as "InterTight-Italic" and iOS registered one face that
+          # nobody asked for by name: UIFont(name: "InterTight-SemiBold") returned
+          # nil and every Aero.responsive call silently fell back to SF Pro. The
+          # test caught it; this step is the fix, and it belongs here rather than
+          # in a one-off patch so the next face cannot repeat it.
+          python3 - <<'PY'
+          import os
+          from fontTools.ttLib import TTFont
+
+          FAMILY = os.environ["FAMILY"]
+          STEM = FAMILY.replace(" ", "")
+          NAMES = {400: ("Regular", "Regular"), 500: ("Medium", "Medium"),
+                   600: ("SemiBold", "SemiBold"), 700: ("Bold", "Bold")}
+          for w, (sub, ps) in NAMES.items():
+              path = f"out/{w}.ttf"
+              f = TTFont(path)
+              name = f["name"]
+              full = f"{FAMILY} {sub}" if sub != "Regular" else FAMILY
+              records = {
+                  1: FAMILY, 2: sub, 4: full, 6: f"{STEM}-{ps}",
+                  16: FAMILY, 17: sub, 21: FAMILY, 22: sub,
+              }
+              for nid, value in records.items():
+                  name.setName(value, nid, 3, 1, 0x409)   # Windows / Unicode BMP
+                  name.setName(value, nid, 1, 0, 0)       # Macintosh
+              f["OS/2"].usWeightClass = w
+              f["OS/2"].fsSelection &= ~(1 << 0)          # clear ITALIC
+              if sub == "Regular":
+                  f["OS/2"].fsSelection |= 1 << 6         # REGULAR
+              else:
+                  f["OS/2"].fsSelection &= ~(1 << 6)
+              f.save(path)
+              f.close()
+              print(f"  named {path}: {STEM}-{ps} (weight {w})")
+          PY
 
       - name: Install as the product family and flip the token
         env:
@@ -141,7 +177,18 @@ jobs:
                         f"The faces bundled under App/Resources/Fonts ({FAMILY}), by file name as they land")
           py.write_text(t)
 
-          # 6. retire the previous family from both bundles (history keeps it)
+          # 6. test expectations name the PostScript faces literally
+          for p in glob.glob("ios/App/Tests/**/*.swift", recursive=True):
+              t = pathlib.Path(p).read_text()
+              for old_sub in ("Regular", "Medium", "SemiBold", "Bold"):
+                  t = t.replace(f'"Poppins-{old_sub}"', f'"{STEM}-{old_sub}"')
+              t = t.replace("Poppins is not registered", f"{FAMILY} is not registered")
+              t = t.replace("Poppins did not resolve", f"{FAMILY} did not resolve")
+              t = t.replace("testPoppinsIsRegistered", "testProductFaceIsRegistered")
+              t = t.replace("Poppins is the product's one typeface", f"{FAMILY} is the product's one typeface")
+              pathlib.Path(p).write_text(t)
+
+          # 7. retire the previous family from both bundles (history keeps it)
           for pat in ("android/app/src/main/res/font/poppins_*.ttf",
                       "ios/App/Resources/Fonts/Poppins-*.ttf"):
               for f in glob.glob(pat):
