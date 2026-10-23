@@ -1378,8 +1378,8 @@ struct MessageBubble: View, Equatable {
             return [Aero.surface.opacity(0.62), Aero.accentSoft.opacity(0.34)]
         }
         return [
-            Color(red: 1.0, green: 0.945, blue: 0.910).opacity(0.62),
-            Color(red: 1.0, green: 0.875, blue: 0.808).opacity(0.50),
+            Color(red: 1.0, green: 0.914, blue: 0.871).opacity(0.82),
+            Color(red: 1.0, green: 0.839, blue: 0.769).opacity(0.68),
         ]
     }
 

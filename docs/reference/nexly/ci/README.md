@@ -58,9 +58,9 @@ a generic chat screen rather than the sheet:
 - text uses the sheet's **soft neutral grey ink**, not the app's near-black
   brown: the user/preamble stay around `#4A4750`, plan titles around
   `#555860`, rows around `#5E6068`, and metadata around `#8C8E96`;
-- cards use a thinner white veil and hairline rim (`thinMaterial` on iOS,
-  a translucent white draw on Android) with almost no shadow, so the
-  iridescent bubbles read through them;
+- cards use a warm milky veil and hairline rim (`regularMaterial` plus a
+  warm tint on iOS, a tinted translucent draw on Android) with almost no
+  shadow, so the iridescent bubbles read through them;
 - the backdrop has defined pearl spheres with white rims, refraction bands and
   specular highlights, plus the lotus in the lower-left.
 

@@ -145,10 +145,13 @@ private struct NexlyCardGlass: ViewModifier {
         content
             .background(
                 shape
-                    .fill(.thinMaterial)
+                    .fill(.regularMaterial)
                     .overlay(
                         shape.fill(
-                            Color.white.opacity(scheme == .dark ? 0.10 : 0.18)
+                            (scheme == .dark
+                                ? Color.white
+                                : Color(red: 0.953, green: 0.910, blue: 0.894))
+                                .opacity(scheme == .dark ? 0.10 : 0.30)
                         )
                     )
             )
@@ -512,6 +515,7 @@ struct NexlyInlineText: View {
     var fontSize: CGFloat = 14.5
     var glyphSize: CGFloat = 17
     var color: Color = Aero.text
+    var glyphColor: Color? = nil
     var weight: Font.Weight = .medium
 
     var body: some View {
@@ -524,7 +528,7 @@ struct NexlyInlineText: View {
             case .icon(let name):
                 var glyph = AttributedString(NexlyIcons.glyph(name))
                 glyph.font = .custom(NexlyIcons.family, size: glyphSize)
-                glyph.foregroundColor = color
+                glyph.foregroundColor = glyphColor ?? color
                 attributed.append(glyph)
             }
         }
@@ -690,6 +694,7 @@ struct NexlyPlanCard: View {
                             fontSize: 12,
                             glyphSize: 13.5,
                             color: NexlyInk.row,
+                            glyphColor: NexlyGlassTone.peach.ink,
                             weight: .regular
                         )
                         if let closingIcon = plan.closingIcon,

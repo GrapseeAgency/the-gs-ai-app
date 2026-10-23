@@ -1930,9 +1930,9 @@ internal fun UserMessage(
                 (LocalConfiguration.current.screenWidthDp * 0.5f).dp
             )
             val bubbleTop = if (dark) colors.surface.copy(alpha = 0.54f)
-            else Color(0xFFFFF1E8).copy(alpha = 0.62f)
+            else Color(0xFFFFE9DE).copy(alpha = 0.82f)
             val bubbleBottom = if (dark) colors.accentSoft.copy(alpha = 0.28f)
-            else Color(0xFFFFDFCE).copy(alpha = 0.50f)
+            else Color(0xFFFFD6C4).copy(alpha = 0.68f)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,

@@ -408,6 +408,7 @@ internal object NexlyInk {
     val meta = Color(0xFF8C8E96)
     val header = Color(0xFF3B3A40)
     val headerMeta = Color(0xFF7E7E86)
+    val peach = Color(0xFFD57F4C)
 }
 
 /**
@@ -430,11 +431,11 @@ internal fun Modifier.nexlyGlassCard(corner: Dp = 20.dp): Modifier {
         .background(
             Brush.verticalGradient(
                 listOf(
-                    (if (dark) GsTheme.colors.surface else Color.White).copy(
-                        alpha = if (dark) 0.44f else 0.50f
+                    (if (dark) GsTheme.colors.surface else Color(0xFFF3E8E4)).copy(
+                        alpha = if (dark) 0.44f else 0.62f
                     ),
-                    (if (dark) GsTheme.colors.surface else Color.White).copy(
-                        alpha = if (dark) 0.28f else 0.27f
+                    (if (dark) GsTheme.colors.surface else Color(0xFFEDDFDB)).copy(
+                        alpha = if (dark) 0.28f else 0.46f
                     )
                 )
             ),
@@ -626,7 +627,8 @@ fun NexlyPlanCard(
                         text = closing,
                         color = NexlyInk.row,
                         fontSize = 12.sp,
-                        glyphSize = 13.5.dp
+                        glyphSize = 13.5.dp,
+                        glyphColor = NexlyInk.peach
                     )
                     if (plan.closingIcon != null &&
                         !Regex(":([a-z0-9][a-z0-9-]{1,42}):").containsMatchIn(closing)
@@ -659,10 +661,11 @@ fun NexlyInlineRichText(
     fontSize: androidx.compose.ui.unit.TextUnit,
     glyphSize: Dp,
     weight: FontWeight = FontWeight.Medium,
+    glyphColor: Color? = null,
 ) {
     val context = LocalContext.current
     remember(context) { NexlyIcons.ensureLoaded(context.applicationContext) }
-    val annotated = remember(text, color, fontSize, glyphSize, weight) {
+    val annotated = remember(text, color, fontSize, glyphSize, weight, glyphColor) {
         buildAnnotatedString {
             for (part in NexlyIcons.inlineParts(text)) {
                 if (part.isIcon) {
@@ -670,7 +673,7 @@ fun NexlyInlineRichText(
                         SpanStyle(
                             fontFamily = NexlyIcons.family,
                             fontSize = glyphSize.value.sp,
-                            color = color
+                            color = glyphColor ?: color
                         )
                     ) { append(NexlyIcons.glyph(part.value)) }
                 } else {
