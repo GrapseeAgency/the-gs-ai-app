@@ -359,12 +359,25 @@ final class HomeRenderTests: XCTestCase {
                             + "— dock did not composite")
         }
 
-        // 4. bento glass vs the page it sits on, at the same height.
-        let bentoY = size.height * 0.55
-        let card = meanLuma(gray, x: size.width * 0.30, y: bentoY, w: size.width * 0.18, h: 20)
-        let margin = meanLuma(gray, x: size.width * 0.02, y: bentoY, w: size.width * 0.05, h: 20)
+        // 4. bento glass vs the page it sits on. The card's top edge is LOCATED,
+        // not assumed: a fixed fraction of the height broke the moment a typeface
+        // change moved the page, and it reported "the glass is not rasterising"
+        // when the glass had simply moved 12 pt. Scan the column for the brightest
+        // row in the bento's neighbourhood and measure under it.
+        let colX = size.width * 0.30
+        var bestY = size.height * 0.33
+        var bestL = -1.0
+        var scan = size.height * 0.33
+        while scan < size.height * 0.62 {
+            let v = meanLuma(gray, x: colX, y: scan, w: size.width * 0.18, h: 2)
+            if v > bestL { bestL = v; bestY = scan }
+            scan += 2
+        }
+        let card = meanLuma(gray, x: colX, y: bestY + 10, w: size.width * 0.18, h: 12)
+        let margin = meanLuma(gray, x: size.width * 0.02, y: bestY + 10, w: size.width * 0.05, h: 12)
         if abs(card - margin) < 1.2 {
-            problems.append("card interior equals the page beside it — the glass is not rasterising")
+            problems.append("card interior equals the page beside it — the glass is not rasterising "
+                            + "(brightest row in 0.33–0.62 was \(Int(bestY)) pt, luma \(Int(bestL)))")
         }
         return problems
     }

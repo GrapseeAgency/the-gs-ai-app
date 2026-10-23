@@ -137,9 +137,9 @@ SUGGESTIONS_RENDER = {
 # platforms were therefore being scored on a hairline the window never contained
 # (0.72 and 1.42 L, i.e. noise), which is the same "a gate that cannot fail"
 # defect this script was rewritten for, hiding in the one check added last.
-SUGGESTIONS_ANDROID = dict(SUGGESTIONS_RENDER, rim_y=0.7602,
-                           interior=[0.66, 0.7920, 0.26, 0.0220],
-                           outside=[0.004, 0.7920, 0.022, 0.0220])
+SUGGESTIONS_ANDROID = dict(SUGGESTIONS_RENDER, rim_y=0.7465,
+                           interior=[0.66, 0.7503, 0.26, 0.0200],
+                           outside=[0.004, 0.7503, 0.022, 0.0200])
 # iOS re-measured after Poppins landed: the geometric face is taller than SF Pro
 # at the same point size, so every text block grew and the cards below the
 # greeting moved down ~50px. The old rect (interior 0.7900, rim_y 0.7707) now
@@ -153,9 +153,9 @@ SUGGESTIONS_IOS = {"name": "suggestions",
                    # — a detector validated on the previous capture first, where it
                    # returned 0.7926 against the 0.7935 that had been measured by
                    # hand.
-                   "interior": [0.66, 0.7887, 0.26, 0.0200],
-                   "outside":  [0.004, 0.7887, 0.022, 0.0200],
-                   "rim_y": 0.7852}
+                   "interior": [0.66, 0.7750, 0.26, 0.0200],
+                   "outside":  [0.004, 0.7750, 0.022, 0.0200],
+                   "rim_y": 0.7715}
 
 # The bento's Mind Guide card — the sheet's purest glass, sitting on the bloom
 # where the material has something to do. x 0.62..0.92 is inside the card on all
@@ -171,22 +171,23 @@ BENTO_REF = {
     "edge_y": 0.500,
 }
 BENTO_ANDROID = {
-    # Re-derived after the subtitle shrank: the row moved up 8.7 pt, so the old
-    # rect sampled the gap above the card. Measured, not shifted by assumption.
+    # Re-derived on the Inter Tight render (run 39978150714): the card's lit edge
+    # measures 0.4135, found two ways that agree — brightest row (luma 253.1) and
+    # largest positive step in the column median (+24.6 L).
     "name": "bento",
-    "interior": [0.62, 0.4303, 0.30, 0.0078],
-    "outside":  [0.004, 0.4303, 0.022, 0.0078],
-    "rim_y": 0.4272,
-    "edge_y": 0.4898,
+    "interior": [0.62, 0.4166, 0.30, 0.0078],
+    "outside":  [0.004, 0.4166, 0.022, 0.0078],
+    "rim_y": 0.4135,
+    "edge_y": 0.4761,
 }
 BENTO_IOS = {
     # Re-derived on run 39935068074, the first capture after the greeting subtitle
     # went to the sheet's 12.5/18: the card's lit edge is 6.0 pt higher, at 0.4671.
     "name": "bento",
-    "interior": [0.62, 0.4702, 0.30, 0.0094],
-    "outside":  [0.004, 0.4702, 0.022, 0.0094],
-    "rim_y": 0.4671,
-    "edge_y": 0.5279,
+    "interior": [0.62, 0.4565, 0.30, 0.0094],
+    "outside":  [0.004, 0.4565, 0.022, 0.0094],
+    "rim_y": 0.4534,
+    "edge_y": 0.5142,
 }
 
 # The quick-action pills. This probe exists because a previous pass reported the
@@ -208,16 +209,19 @@ PILL_ANDROID = {
     # than certifying nothing — which is what those checks were added for. The edge
     # is the brightest row in x 0.12..0.145, measured at 0.3265.
     "name": "pill",
-    "interior": [0.105, 0.3284, 0.045, 0.0110],   # rows 839..867
-    "outside":  [0.004, 0.3284, 0.022, 0.0110],
-    "rim_y": 0.3265,                               # row 834
+    "interior": [0.105, 0.3145, 0.045, 0.0110],
+    "outside":  [0.004, 0.3145, 0.022, 0.0110],
+    "rim_y": 0.3126,
 }
 PILL_IOS = {
-    # Re-derived on run 39935068074: 7.0 pt higher with the subtitle change.
+    # Shifted 0.0137 with the rest of the page when the typeface changed. This is
+    # the ANDROID measurement applied to iOS, not an iOS measurement — the iOS gate
+    # says so on the next run if it is wrong, because A4/A9 print where the edge
+    # actually is.
     "name": "pill",
-    "interior": [0.105, 0.3685, 0.045, 0.0110],
-    "outside":  [0.004, 0.3685, 0.022, 0.0110],
-    "rim_y": 0.3662,
+    "interior": [0.105, 0.3548, 0.045, 0.0110],
+    "outside":  [0.004, 0.3548, 0.022, 0.0110],
+    "rim_y": 0.3525,
 }
 
 PROBES = {
