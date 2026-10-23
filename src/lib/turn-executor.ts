@@ -1066,10 +1066,10 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       return { kind: 'none', note: 'reuse requested but no research context exists' }
     }
 
-    if (!prep.plannerRuns) return { kind: 'none' }
-
-    emit?.('status', 'searching')
-
+    // The router used to gate the planner to WEB/deep turns. Flash chat needs
+    // the model to decide too: answer, ask a clarifying question, or search —
+    // all before the answer is composed. planSearch is a short non-thinking
+    // classification call; it does not enable the reasoning tier.
     if (cap.trigger === 'research_again') {
       const prior = getResearchContexts(id)
         .slice()
@@ -1086,6 +1086,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         console.log(
           `RESEARCH-AGAIN conv=${id} prior=${prior.researchId} topic="${topic.slice(0, 60)}" primarySources=${cap.policy.primarySources === true}`
         )
+        emit?.('status', 'searching')
         return await runSearchExecution(
           {
             queries: queries.filter((q) => q.trim().length >= 3).slice(0, 4),
@@ -1137,6 +1138,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     const depth: 'quick' | 'deep' =
       plan.depth === 'deep' || routerPlan.depth === 'deep' ? 'deep' : 'quick'
 
+    emit?.('status', 'searching')
     return await runSearchExecution(
       {
         queries: plan.queries,

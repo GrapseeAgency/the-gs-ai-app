@@ -1391,12 +1391,15 @@ struct MessageBubble: View, Equatable {
         ]
     }
 
-    /// A plan turn always keeps the card (the timetable is the proof of the
-    /// work). A thinking-mode turn keeps it for the session; a flash turn with
-    /// no reasoning never pretends it thought.
+    /// Flash turns do not reason, so a Thinking/Reasoning card would be
+    /// theater. Keep it only for a real thinking/reasoning event, or a single
+    /// Search/Answer row when the turn actually has sources.
+    private var showThinkingStages: Bool {
+        sawThinking || effectiveMode == "thinking" || !(reasoning ?? "").isEmpty
+    }
+
     private var showThinkingCard: Bool {
-        if hasPlan || sawThinking || effectiveMode == "thinking" { return true }
-        return !(reasoning ?? "").isEmpty
+        showThinkingStages || sourceCount > 0
     }
 
     private var thinkingPhase: NexlyThinkingPhase {
@@ -1437,6 +1440,7 @@ struct MessageBubble: View, Equatable {
                 thinkingEffort: thinkingEffort,
                 thinkingReasoningHint: thinkingReasoningHint,
                 searchSourceCount: sourceCount,
+                showThinkingStages: showThinkingStages,
                 isPlanTurn: hasPlan,
                 statusAtEnd: hasPlan,
                 citations: citationLinks,

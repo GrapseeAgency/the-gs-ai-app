@@ -42,6 +42,7 @@ struct NexlyAssistantBlocksView: View {
     var thinkingEffort: String? = nil
     var thinkingReasoningHint: String? = nil
     var searchSourceCount: Int = 0
+    var showThinkingStages: Bool = true
     var isPlanTurn: Bool = false
     /// Plan turns place the status card after the whole preamble; a non-plan
     /// answer places it after the first paragraph.
@@ -70,7 +71,7 @@ struct NexlyAssistantBlocksView: View {
                 HStack(alignment: .top, spacing: 9) {
                     NexlyAssistantOrb()
                     if showStatus {
-                        NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount)
+                        NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount, showStages: showThinkingStages)
                             .frame(maxWidth: cardMax, alignment: .leading)
                     } else {
                         Text("…")
@@ -119,11 +120,11 @@ struct NexlyAssistantBlocksView: View {
                 BlockView(block: block, isLast: index == prose.count - 1, citations: citations)
                 if isStatusHost && showStatus && index == statusHostIndex {
                     if !prose.isEmpty { Spacer().frame(height: 2) }
-                    NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount)
+                    NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount, showStages: showThinkingStages)
                 }
             }
             if isStatusHost && showStatus && prose.isEmpty {
-                NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount)
+                NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount, showStages: showThinkingStages)
             } else if prose.isEmpty && isStreaming {
                 Text("…")
                     .font(Aero.body())

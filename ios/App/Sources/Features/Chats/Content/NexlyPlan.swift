@@ -577,6 +577,7 @@ struct NexlyThinkingCard: View {
     var isPlan: Bool = true
     var reasoningHint: String? = nil
     var searchSources: Int = 0
+    var showStages: Bool = true
 
     private var thinkingSubtitle: String {
         if phase == .done { return "Request analyzed" }
@@ -603,12 +604,14 @@ struct NexlyThinkingCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            row(icon: "sparkles", tone: .peach,
-                title: "Thinking", subtitle: thinkingSubtitle,
-                active: phase == .thinking)
-            row(icon: "brain", tone: .lavender,
-                title: "Reasoning", subtitle: reasoningSubtitle,
-                active: phase == .reasoning)
+            if showStages {
+                row(icon: "sparkles", tone: .peach,
+                    title: "Thinking", subtitle: thinkingSubtitle,
+                    active: phase == .thinking)
+                row(icon: "brain", tone: .lavender,
+                    title: "Reasoning", subtitle: reasoningSubtitle,
+                    active: phase == .reasoning)
+            }
             row(icon: hasSearch ? "world-search" : "pencil",
                 tone: hasSearch ? .blue : .peach,
                 title: finalTitle, subtitle: finalSubtitle,

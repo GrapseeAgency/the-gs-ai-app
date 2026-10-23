@@ -2271,6 +2271,7 @@ internal fun ReferenceThinkingCard(
     isPlan: Boolean = true,
     reasoningHint: String? = null,
     searchSources: Int = 0,
+    showStages: Boolean = true,
 ) {
     val thinkingSubtitle = if (phase == NexlyThinkingPhase.DONE) {
         "Request analyzed"
@@ -2309,20 +2310,22 @@ internal fun ReferenceThinkingCard(
             .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
-        ThinkingRow(
-            icon = "sparkles",
-            tone = "peach",
-            title = "Thinking",
-            subtitle = thinkingSubtitle,
-            active = phase == NexlyThinkingPhase.THINKING
-        )
-        ThinkingRow(
-            icon = "brain",
-            tone = "lavender",
-            title = "Reasoning",
-            subtitle = reasoningSubtitle,
-            active = phase == NexlyThinkingPhase.REASONING
-        )
+        if (showStages) {
+            ThinkingRow(
+                icon = "sparkles",
+                tone = "peach",
+                title = "Thinking",
+                subtitle = thinkingSubtitle,
+                active = phase == NexlyThinkingPhase.THINKING
+            )
+            ThinkingRow(
+                icon = "brain",
+                tone = "lavender",
+                title = "Reasoning",
+                subtitle = reasoningSubtitle,
+                active = phase == NexlyThinkingPhase.REASONING
+            )
+        }
         ThinkingRow(
             icon = finalIcon,
             tone = finalTone,
@@ -2782,7 +2785,11 @@ private fun AssistantMessage(
         liveReasoningActive -> NexlyThinkingPhase.REASONING
         else -> NexlyThinkingPhase.THINKING
     }
-    val showStatus = planVisible || sawThinking || liveMode == "thinking" || liveReasoningActive
+    // Flash turns do not reason, so Thinking/Reasoning rows would be theater.
+    // Show the stage card only when a real thinking/reasoning event arrived;
+    // a flash turn with web sources keeps a single Search/Answer row.
+    val showThinkingStages = sawThinking || liveMode == "thinking" || liveReasoningActive
+    val showStatus = showThinkingStages || turnSources.isNotEmpty()
     Box(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             if (showIdentity) {
@@ -2887,7 +2894,8 @@ private fun AssistantMessage(
                                 effort = cardEffort,
                                 isPlan = planVisible,
                                 reasoningHint = cardReasoningHint,
-                                searchSources = turnSources.size
+                                searchSources = turnSources.size,
+                                showStages = showThinkingStages
                             )
                         }
                     } else {
