@@ -137,7 +137,9 @@ SUGGESTIONS_RENDER = {
 # platforms were therefore being scored on a hairline the window never contained
 # (0.72 and 1.42 L, i.e. noise), which is the same "a gate that cannot fail"
 # defect this script was rewritten for, hiding in the one check added last.
-SUGGESTIONS_ANDROID = dict(SUGGESTIONS_RENDER, rim_y=0.7582)
+SUGGESTIONS_ANDROID = dict(SUGGESTIONS_RENDER, rim_y=0.7602,
+                           interior=[0.66, 0.7920, 0.26, 0.0220],
+                           outside=[0.004, 0.7920, 0.022, 0.0220])
 # iOS re-measured after Poppins landed: the geometric face is taller than SF Pro
 # at the same point size, so every text block grew and the cards below the
 # greeting moved down ~50px. The old rect (interior 0.7900, rim_y 0.7707) now
@@ -162,11 +164,13 @@ BENTO_REF = {
     "edge_y": 0.500,
 }
 BENTO_ANDROID = {
+    # Re-derived after the subtitle shrank: the row moved up 8.7 pt, so the old
+    # rect sampled the gap above the card. Measured, not shifted by assumption.
     "name": "bento",
-    "interior": [0.62, 0.4405, 0.30, 0.0078],
-    "outside":  [0.004, 0.4405, 0.022, 0.0078],
-    "rim_y": 0.4374,
-    "edge_y": 0.500,
+    "interior": [0.62, 0.4303, 0.30, 0.0078],
+    "outside":  [0.004, 0.4303, 0.022, 0.0078],
+    "rim_y": 0.4272,
+    "edge_y": 0.4898,
 }
 BENTO_IOS = {
     # Re-measured on the post-Poppins capture (run 39860471181): the Mind Guide
@@ -192,10 +196,15 @@ PILL_REF = {
     "rim_y": 0.3540,                               # row 497, the bright hairline
 }
 PILL_ANDROID = {
+    # Re-derived after the greeting subtitle went from 15sp/22 to the sheet's
+    # 12.5/18: the quick-action row moved up 7.5 pt, so the old rect sampled page
+    # where the pill had been, and A4/A9 failed (rim +1.56, hairline 239.6) rather
+    # than certifying nothing — which is what those checks were added for. The edge
+    # is the brightest row in x 0.12..0.145, measured at 0.3265.
     "name": "pill",
-    "interior": [0.105, 0.3372, 0.045, 0.0110],   # rows 862..890
-    "outside":  [0.004, 0.3372, 0.022, 0.0110],
-    "rim_y": 0.3353,                               # row 857
+    "interior": [0.105, 0.3284, 0.045, 0.0110],   # rows 839..867
+    "outside":  [0.004, 0.3284, 0.022, 0.0110],
+    "rim_y": 0.3265,                               # row 834
 }
 PILL_IOS = {
     "name": "pill",

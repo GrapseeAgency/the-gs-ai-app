@@ -400,9 +400,14 @@ private fun GreetingBlock(greeting: String, firstName: String?) {
         Spacer(Modifier.height(10.dp))
         Text(
             text = "Your thoughts, questions, ideas —\nI'm here for it all.",
+            // 12.5/18, measured off the sheet: its two subtitle lines are 18 pt
+            // apart with an 11.5 pt glyph band, and ours were 22 pt apart at 15 sp.
+            // The size was never checked against the picture — both platforms agreed
+            // on 15 because the contract was derived FROM them, which is the
+            // difference between parity and fidelity.
             style = MaterialTheme.typography.bodyMedium.untracked().copy(
-                fontSize = 15.sp,
-                lineHeight = 22.sp
+                fontSize = 12.5.sp,
+                lineHeight = 18.sp
             ),
             color = GsTheme.colors.textSecondary
         )

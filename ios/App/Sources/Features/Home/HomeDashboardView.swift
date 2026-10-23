@@ -281,9 +281,12 @@ struct HomeDashboardView: View {
                     .font(Aero.responsive(22, .semibold, relativeTo: .title2))
                     .foregroundStyle(Aero.accent)
             }
+            // 12.5 with a 3 pt leading: the sheet's subtitle lines are 18 pt apart.
+            // 15/22 was the contract's value and the contract was derived from the
+            // code, so both platforms agreed on a number the picture does not use.
             Text("Your thoughts, questions, ideas —\nI'm here for it all.")
-                .font(Aero.responsive(15, .regular, relativeTo: .body))
-                .lineSpacing(4)
+                .font(Aero.responsive(12.5, .regular, relativeTo: .caption))
+                .lineSpacing(3)
                 .foregroundStyle(Aero.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }
