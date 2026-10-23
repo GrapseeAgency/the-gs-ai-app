@@ -92,13 +92,15 @@ enum GsGlassRole {
 
     /// How opaque the tinted fill sits over the material. Thicker glass scatters
     /// more. These are Android's `GsGlassRole` table, unchanged: a role means the
-    /// same glass on both platforms or mandate b10 is not met.
+    /// same glass on both platforms or mandate b10 is not met. See Android's
+    /// `FloatingControl` note for why the floating roles are the cards' 0.565 and
+    /// not the 0.86 this used to carry.
     var fillAlpha: Double {
         switch self {
         case .card: return 1
         case .cardLight, .cardDim: return 0.565
         case .elevated: return 1
-        case .floatingControl: return 0.86
+        case .floatingControl: return 0.565
         case .modal: return 1
         case .sunken: return 0.62
         }

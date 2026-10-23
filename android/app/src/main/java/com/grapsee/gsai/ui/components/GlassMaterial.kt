@@ -100,9 +100,18 @@ enum class GsGlassRole(
     /** Popovers and cards lifted above other content. */
     Elevated(fillAlpha = 1f, veilingAlpha = 0.08f, rimStrength = 0.75f, elevation = 16.dp),
 
-    /** Floating tab bars, tool clusters, the send affordance. Thinnest glass,
-     *  brightest rim — it has to look like it hovers. */
-    FloatingControl(fillAlpha = 0.86f, veilingAlpha = 0.06f, rimStrength = 1f, elevation = 20.dp),
+    /** Floating tab bars, tool clusters, the send affordance. Same glass as the
+     *  cards, brightest rim and the most lift — it has to look like it hovers.
+     *
+     *  0.565 rather than the 0.86 this carried, because the sheet's own pill is
+     *  measurably the cards' glass: its coverage over the page behind it is 0.43
+     *  against the cards' 0.47, while 0.86 (0.688 effective once the token's own
+     *  0.80 alpha is multiplied in) put iOS's pill 2.41 L under the material law
+     *  — the deviation Android could not show, because the page under its pill is
+     *  7 L darker and a too-thick fill barely registers over a ground near its own
+     *  colour. Rim strength and elevation are what make a control float; the fill
+     *  is not, and the sheet says so. */
+    FloatingControl(fillAlpha = 0.565f, veilingAlpha = 0.06f, rimStrength = 1f, elevation = 20.dp),
 
     /** Bottom sheets and dialogs. The thickest glass, so the strongest veiling. */
     Modal(fillAlpha = 1f, veilingAlpha = 0.12f, rimStrength = 0.8f, elevation = 28.dp),
