@@ -553,14 +553,15 @@ struct CodeBlockCardView: View {
                 // transcript item forever. Nexly cards opt into soft wrapping
                 // so a narrow glass card still shows every token.
                 if wrapCode {
-                    ScrollView(.vertical) {
-                        codeContent
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 12)
-                            .padding(.bottom, 10)
-                            .textSelection(.enabled)
-                    }
-                    .frame(maxHeight: 340)
+                    // The card grows to fit wrapped code. A nested vertical
+                    // ScrollView inside the transcript's scroll view was
+                    // collapsing to a short height and hiding lines in the
+                    // static render (and was awkward on a phone).
+                    codeContent
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 10)
+                        .textSelection(.enabled)
                 } else {
                     ScrollView([.horizontal, .vertical]) {
                         codeContent
