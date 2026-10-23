@@ -73,10 +73,12 @@ final class HomeRenderTests: XCTestCase {
 
     private static let scale: CGFloat = 3
 
-    /// The dark pass. There is no dark frame in the reference, so this asserts the
-    /// things a dark glass page must satisfy without one — the page is actually
-    /// dark, and the copy still separates from it — and writes the capture that
-    /// scripts/check_home_dark.py then measures for the rest.
+    /// The dark pass. There is no dark frame in the reference, so this asserts the one
+    /// thing a capture can get wrong on its own — that it is actually dark — and
+    /// writes the PNG that scripts/check_home_dark.py measures for the rest. Copy
+    /// contrast belongs there, not here: it is a percentile of the text against its
+    /// background, and a box MEAN over mixed text and page cannot see it (it read
+    /// 62 L against a 46 L page and called that a failure of the page).
     func testHomeRendersInDark() async throws {
         let size = CGSize(width: 393, height: 852)
         var problems = ["never captured"]
@@ -91,15 +93,9 @@ final class HomeRenderTests: XCTestCase {
             let gray = try Self.grayscale(image)
             let page = Self.meanLuma(gray, x: 0, y: size.height * 0.10,
                                      w: size.width * 0.04, h: size.height * 0.10)
-            let copy = Self.meanLuma(gray, x: size.width * 0.03, y: size.height * 0.17,
-                                     w: size.width * 0.57, h: size.height * 0.10)
             problems = []
             if page > 90 {
                 problems.append("dark capture has a light page: margin \(Int(page)) L")
-            }
-            if copy - page < 40 {
-                problems.append("dark copy does not separate from the page: "
-                                + "\(Int(copy)) vs \(Int(page)) L")
             }
             if problems.isEmpty { break }
             try? await Task.sleep(nanoseconds: 250_000_000)
