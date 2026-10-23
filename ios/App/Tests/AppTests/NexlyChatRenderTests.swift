@@ -96,6 +96,32 @@ final class NexlyChatRenderTests: XCTestCase {
         }
     }
 
+    func testFlashQuestionsRender() async throws {
+        let dir = Self.outputDirectory()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let questions: [(String, String, String)] = [
+            ("coding", NEXLY_RANDOM_CODING_USER, NEXLY_RANDOM_CODING_WIRE),
+            ("life", NEXLY_RANDOM_LIFE_USER, NEXLY_RANDOM_LIFE_WIRE),
+        ]
+        for (id, question, wire) in questions {
+            let size = CGSize(width: 393, height: 1400)
+            guard let image = try await Self.renderFlash(
+                question: question, wire: wire, size: size
+            ) else {
+                XCTFail("flash \(id) did not composite")
+                continue
+            }
+            guard let data = image.pngData() else {
+                XCTFail("no PNG data for flash \(id)")
+                continue
+            }
+            XCTAssertGreaterThan(data.count, 20_000)
+            let url = dir.appendingPathComponent("nexly-chat-ios-random-\(id)-393x1400.png")
+            FileManager.default.createFile(atPath: url.path, contents: data)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        }
+    }
+
     func testAdaptiveThinkingRenders() async throws {
         let dir = Self.outputDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -136,6 +162,16 @@ final class NexlyChatRenderTests: XCTestCase {
 
     private static func renderFullProse(size: CGSize) async throws -> UIImage? {
         let view = NexlyFullProseView()
+            .frame(width: size.width, height: size.height)
+            .ignoresSafeArea()
+            .environment(\.layoutDirection, .leftToRight)
+        return try await capture(view: view, size: size)
+    }
+
+    private static func renderFlash(
+        question: String, wire: String, size: CGSize
+    ) async throws -> UIImage? {
+        let view = NexlyFlashQuestionView(question: question, wire: wire)
             .frame(width: size.width, height: size.height)
             .ignoresSafeArea()
             .environment(\.layoutDirection, .leftToRight)
@@ -242,11 +278,77 @@ private struct NexlyFullChatView: View {
                             NexlyAssistantBlocksView(
                                 blocks: parseBlocks(NEXLY_REFERENCE_WIRE),
                                 isStreaming: false,
-                                showStatus: true,
-                                thinkingPhase: .done,
-                                thinkingEffort: "high",
+                                // Flash: the timetable is the answer.
+                                showStatus: false,
                                 isPlanTurn: true,
                                 planTimestamp: "2026-10-22T21:45:00Z"
+                            )
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                    }
+                    NexlyComposerBar(
+                        text: .constant(""),
+                        isStreaming: false,
+                        canSend: false,
+                        focused: $composerFocused,
+                        onAttach: {},
+                        onVoice: {},
+                        onSearch: {},
+                        onSend: {},
+                        onStop: {},
+                        onSubmit: {}
+                    )
+                    .padding(.horizontal, Aero.Spacing.m)
+                    .padding(.top, 3)
+                    .padding(.bottom, 10)
+                }
+                .frame(width: column, height: geo.size.height, alignment: .top)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+    }
+}
+
+/// A fresh flash question: no reasoning stages, just the real user turn and
+/// the real flash answer. The two questions are captured by the one-shot live
+/// CI job, not hand-authored.
+private struct NexlyFlashQuestionView: View {
+    let question: String
+    let wire: String
+    @FocusState private var composerFocused: Bool
+
+    var body: some View {
+        GeometryReader { geo in
+            let column = min(640, geo.size.width)
+            ZStack {
+                NexlyChatBackdrop()
+                VStack(spacing: 0) {
+                    NexlyBrandHeader(
+                        sparkleLabel: "New chat",
+                        menuGlyph: "menu-2",
+                        menuLabel: "Open menu",
+                        onSparkle: {},
+                        onMenu: {},
+                        sparkleMenu: { EmptyView() },
+                        menuMenu: { EmptyView() }
+                    )
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 14) {
+                            MessageBubble(
+                                message: ChatViewModel.ChatMessage(
+                                    role: "user",
+                                    content: question,
+                                    createdAt: "2026-10-23T10:30:00Z"
+                                ),
+                                editEnabled: false
+                            )
+                            NexlyAssistantBlocksView(
+                                blocks: parseBlocks(wire),
+                                isStreaming: false,
+                                showStatus: false,
+                                isPlanTurn: false,
+                                planTimestamp: "2026-10-23T10:31:00Z"
                             )
                         }
                         .padding(.horizontal, 16)
@@ -391,3 +493,39 @@ private let NEXLY_REFERENCE_USER =
 /// The real-life non-plan question rendered by the prose harness.
 private let NEXLY_PROSE_USER =
     "I keep procrastinating on my thesis. Why does that happen and what is one realistic change I can make this week?"
+
+/// Fresh flash questions captured by the one-shot live CI job
+/// (`scripts/live-random-questions.ts`). They are unrelated to the sheet.
+private let NEXLY_RANDOM_CODING_USER =
+    "Why does my Python list comprehension return None when I use .append() inside it? I want a short, concrete fix."
+
+private let NEXLY_RANDOM_CODING_WIRE = """
+`list.append()` returns `None` — it mutates the list in place and does not produce a value. A comprehension collects the *result* of its expression, so you end up with a list of `None`s.
+
+**Fix:** build the list directly in the comprehension instead of appending.
+
+```python
+# ❌ returns [None, None, None]
+result = [my_list.append(x) for x in source]
+
+# ✅ returns the transformed values
+result = [x * 2 for x in source]          # or any expression
+```
+
+If you need to accumulate into an existing list, use a plain loop or `extend`:
+
+```python
+my_list.extend(x * 2 for x in source)
+```
+"""
+
+private let NEXLY_RANDOM_LIFE_USER =
+    "I keep hitting snooze and feel behind all morning. What is one change that actually sticks?"
+
+private let NEXLY_RANDOM_LIFE_WIRE = """
+Move your phone across the room so you have to stand up to turn off the alarm. That single physical step breaks the snooze loop and gets you vertical before your brain negotiates.
+
+```plan
+{"title":"A snooze-proof morning starts the night before","rows":[{"time":"10:00 PM","text":"Phone on charger across the room","icon":"moon","tone":"lilac"},{"time":"10:15 PM","text":"Lights out, no screens","icon":"book-2","tone":"lavender"},{"time":"6:30 AM","text":"Alarm goes off — walk to phone","icon":"alarm","tone":"amber"},{"time":"6:32 AM","text":"Open curtains, drink water","icon":"sunrise","tone":"amber"},{"time":"6:40 AM","text":"Stretch or 2-min movement","icon":"activity","tone":"pink"},{"time":"6:50 AM","text":"Coffee or tea, no phone","icon":"coffee","tone":"green"},{"time":"7:00 AM","text":"Name the day's top priority","icon":"target","tone":"blue"},{"time":"7:10 AM","text":"Shower and dress","icon":"sparkles","tone":"blue"},{"time":"7:30 AM","text":"Out the door on time","icon":"briefcase","tone":"blue"}],"closing":"Stand up once, the rest follows.","closingIcon":"flame","timestamp":"10:00 PM","accent":"#1098ad","variant":"editorial"}
+```
+"""

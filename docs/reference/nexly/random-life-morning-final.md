@@ -1,0 +1,5 @@
+Move your phone across the room so you have to stand up to turn off the alarm. That single physical step breaks the snooze loop and gets you vertical before your brain negotiates.
+
+```plan
+{"title":"A snooze-proof morning starts the night before","rows":[{"time":"10:00 PM","text":"Phone on charger across the room","icon":"moon","tone":"lilac"},{"time":"10:15 PM","text":"Lights out, no screens","icon":"book-2","tone":"lavender"},{"time":"6:30 AM","text":"Alarm goes off — walk to phone","icon":"alarm","tone":"amber"},{"time":"6:32 AM","text":"Open curtains, drink water","icon":"sunrise","tone":"amber"},{"time":"6:40 AM","text":"Stretch or 2-min movement","icon":"activity","tone":"pink"},{"time":"6:50 AM","text":"Coffee or tea, no phone","icon":"coffee","tone":"green"},{"time":"7:00 AM","text":"Name the day's top priority","icon":"target","tone":"blue"},{"time":"7:10 AM","text":"Shower and dress","icon":"sparkles","tone":"blue"},{"time":"7:30 AM","text":"Out the door on time","icon":"briefcase","tone":"blue"}],"closing":"Stand up once, the rest follows.","closingIcon":"flame","timestamp":"10:00 PM","accent":"#1098ad","variant":"editorial"}
+```

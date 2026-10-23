@@ -613,26 +613,3 @@ jobs:
             echo "      (8.13); no wrapper JAR is committed by design."
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # One-shot live model evidence for the flash random-question test. Goes
-  # through the repository's OpenRouter secret; no key ever reaches the repo.
-  live-random-questions:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - name: Ask four fresh coding/life questions with the production prompts
-        env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: bun scripts/live-random-questions.ts
-      - name: Upload raw/final answers
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: nexly-random-answers
-          path: docs/reference/nexly/random-*.md
-          if-no-files-found: warn
-          retention-days: 30
