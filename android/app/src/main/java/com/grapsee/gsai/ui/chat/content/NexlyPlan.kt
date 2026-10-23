@@ -407,6 +407,9 @@ data class NexlyTone(
  */
 internal val LocalNexlyProseStyle = androidx.compose.runtime.staticCompositionLocalOf<androidx.compose.ui.text.TextStyle?> { null }
 
+/** Nexly cards soft-wrap code; the rest of the app keeps horizontal scroll. */
+internal val LocalNexlyCodeWrap = androidx.compose.runtime.staticCompositionLocalOf { false }
+
 /**
  * The sheet's ink is a soft neutral grey, not the app's near-black brown.
  * This is the single biggest reason the first native pass read heavier than

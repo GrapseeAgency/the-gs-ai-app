@@ -38,9 +38,9 @@ render also proves the card adapts to fresh content.
   `UIVisualEffectView` glass is included.
 
 The full-screen harness uses the same internal production views as the chat
-screen. The assistant turn contains one prose glass card (preamble + Thinking
-card) and one separate plan glass card with its own orb, exactly as the
-reference does.
+screen. A flash assistant turn contains one prose glass card and one separate
+plan glass card with its own orb; a thinking-mode turn additionally mounts the
+Thinking panel, which is why the adaptive-thinking image exists separately.
 
 ## Sheet match
 
@@ -97,6 +97,49 @@ width-specific mock.
   devices the transcript scrolls; that is a chat surface, not a clipped layout.
 - At 393×852 and 411×914 the complete plan (title, nine rows, closing and
   timestamp) is visible above the composer.
+
+## Flash mode
+
+Flash is the product default for these turns. It does **not** request or display
+a Thinking/Reasoning sequence: the flash full-screen plan render has no stage
+card, and the fresh coding/life renders have none either. The Thinking panel is
+still available as a *component* for a real thinking-mode turn (the
+`*thinking*` image), but it is not painted onto flash answers.
+
+The routing decision is separate from the answer and is a short, non-thinking
+classification call (`planSearch`). It now runs for every turn, not only
+WEB/deep routes, and can return:
+
+- **answer** — no search, no clarification;
+- **clarify** — one concise question with 2–5 quick-choice options (the native
+  clarify chips send the chosen label as the next user turn);
+- **search** — run the backend retrieval first, then answer in the same turn.
+
+This is what lets a flash turn ask when the request is genuinely ambiguous or
+fetch current information before writing. It is still a backend planner, not a
+model-callable browser tool; the model never silently pretends it searched.
+
+## Fresh coding/life questions
+
+`scripts/live-random-questions.ts` was run once through the repository's
+OpenRouter secret (flash: reasoning disabled). Four questions were captured:
+
+1. Python list comprehension returning `None` with `.append()`.
+2. React `useEffect` fetching twice in development.
+3. Hitting snooze and feeling behind all morning.
+4. Asking a friend to stop interrupting.
+
+The native harness renders the first and third on **both** Android and iOS at
+393pt wide by 1400pt tall, so the whole answer is visible rather than cut at a
+device fold:
+
+- `nexly-chat-random-coding-393x1400.png` / `nexly-chat-ios-random-coding-393x1400.png`
+- `nexly-chat-random-life-393x1400.png` / `nexly-chat-ios-random-life-393x1400.png`
+
+The life answer contains a real model-authored plan card; the coding answer
+contains real model-authored fenced code. Raw/final captures are committed as
+`docs/reference/nexly/random-*.md`. The fourth answer ends by asking the user a
+follow-up question — the model does ask when a conversation needs a next step.
 
 ## Plan progress → model context
 

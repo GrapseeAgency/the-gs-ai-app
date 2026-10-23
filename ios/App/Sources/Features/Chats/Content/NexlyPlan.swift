@@ -134,6 +134,19 @@ extension EnvironmentValues {
     }
 }
 
+/// Nexly cards wrap code at the card width; the rest of the app keeps the
+/// horizontal code scroll.
+private struct NexlyCodeWrapKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var nexlyCodeWrap: Bool {
+        get { self[NexlyCodeWrapKey.self] }
+        set { self[NexlyCodeWrapKey.self] = newValue }
+    }
+}
+
 /// The sheet's cards are thinner than the app's standard card glass: a clear
 /// white veil over the pearl field, a hairline rim and barely any shadow.
 private struct NexlyCardGlass: ViewModifier {

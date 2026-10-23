@@ -56,6 +56,9 @@ fun CodeBlockCard(
         }
     }
     val colors = GsTheme.colors
+    // Nexly assistant cards wrap code at the card width; other surfaces keep
+    // the long-standing horizontal code scroll.
+    val wrapCode = LocalNexlyCodeWrap.current
     val highlighted = remember(code, language, colors, open) {
         when {
             code.isBlank() -> AnnotatedString("…")
@@ -106,10 +109,14 @@ fun CodeBlockCard(
                     text = highlighted,
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     color = GsTheme.colors.codeText,
+                    softWrap = wrapCode,
                     modifier = Modifier
                         .padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
                         .verticalScroll(rememberScrollState())
-                        .horizontalScroll(rememberScrollState())
+                        .then(
+                            if (wrapCode) Modifier
+                            else Modifier.horizontalScroll(rememberScrollState())
+                        )
                 )
             }
         }

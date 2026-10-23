@@ -136,6 +136,7 @@ struct NexlyAssistantBlocksView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .nexlyGlassCard(corner: 20)
         .environment(\.nexlyProseCompact, true)
+        .environment(\.nexlyCodeWrap, true)
         .padding(.top, isFirst ? 0 : 2)
     }
 
@@ -520,6 +521,7 @@ private struct BlockQuoteView: View {
 // MARK: - Code block
 
 struct CodeBlockCardView: View {
+    @Environment(\.nexlyCodeWrap) private var wrapCode
     let language: String?
     let code: String
     var open: Bool = false
@@ -548,29 +550,45 @@ struct CodeBlockCardView: View {
                     .textSelection(.enabled)
             } else {
                 // Both axes scroll inside the card; large code never grows the
-                // transcript item forever. Open (mid-stream) fences stay plain
-                // monospace — one highlight pass on finalize.
-                ScrollView([.horizontal, .vertical]) {
-                    Group {
-                        if open {
-                            Text(code)
-                                .font(.system(size: 12, weight: .regular, design: .monospaced))
-                                .foregroundStyle(Aero.codeText)
-                        } else {
-                            highlightedCode(code, language: language)
-                                .foregroundStyle(Aero.codeText)
-                        }
+                // transcript item forever. Nexly cards opt into soft wrapping
+                // so a narrow glass card still shows every token.
+                if wrapCode {
+                    ScrollView(.vertical) {
+                        codeContent
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 10)
+                            .textSelection(.enabled)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 10)
-                    .textSelection(.enabled)
+                    .frame(maxHeight: 340)
+                } else {
+                    ScrollView([.horizontal, .vertical]) {
+                        codeContent
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 10)
+                            .textSelection(.enabled)
+                    }
+                    .frame(maxHeight: 340)
                 }
-                .frame(maxHeight: 340)
             }
         }
         .background(RoundedRectangle(cornerRadius: 12).fill(Aero.codeSurface))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline, lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private var codeContent: some View {
+        Group {
+            if open {
+                Text(code)
+                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                    .foregroundStyle(Aero.codeText)
+            } else {
+                highlightedCode(code, language: language)
+                    .foregroundStyle(Aero.codeText)
+            }
+        }
     }
 }
 

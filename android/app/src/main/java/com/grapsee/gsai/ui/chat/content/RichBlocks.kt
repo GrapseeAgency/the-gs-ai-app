@@ -313,7 +313,8 @@ private fun NexlyAssistantBlocks(
                                 lineHeight = 18.sp,
                                 fontWeight = FontWeight.Normal,
                                 color = NexlyInk.prose
-                            )
+                            ),
+                            LocalNexlyCodeWrap provides true
                         ) {
                         Column(
                             modifier = Modifier
