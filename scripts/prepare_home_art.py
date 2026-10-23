@@ -93,6 +93,7 @@ class Art:
     upscale: float          # declared tolerance: target may undershoot need by this
     screens: str
     note: str
+    flip_v: bool = False    # the shipped copy is the authored art upside down
 
     @property
     def android_path(self) -> Path:
@@ -124,10 +125,14 @@ MANIFEST = [
     Art("gs_home_video_art", "GSHomeVideoArt", "home/gs-home-video-art.png",
         (864, 560), (600, 462), 1.0, "Home",
         "Video card art, in a fixed 200 pt box inside the 214 pt card. Drawn "
-        "Crop, not Fit — see the note on VideoCard in HomeDashboardScreen.kt. "
-        "No transform: an earlier revision of this manifest flipped it vertically "
-        "on the strength of a synthetic composite correlation, and rendering both "
-        "ways showed the difference is 0.02 of the error score, i.e. nothing."),
+        "Crop, not Fit — see the note on VideoCard in HomeDashboardScreen.kt — and "
+        "SHIPPED UPSIDE DOWN. The flip is decided by the art region's chroma-map "
+        "correlation with the reference card, measured on real renders: 0.372 as "
+        "authored, 0.604 flipped. An earlier retraction of this flip used the "
+        "card's mean chroma, p90 and luminance, which move by 0.0 between the two "
+        "orientations because they do not see arrangement at all; that retraction "
+        "was wrong and is recorded in docs/HOME_REFERENCE_STATUS.md.",
+        flip_v=True),
     Art("gs_home_lotus_new", "GSHomeLotusNew", "home/gs-home-lotus.png",
         (880, 416), (720, 480), 1.2, "Home",
         "Reflection card: 150x100 dp/pt, 240x160 pt at the chrome cap. The "
@@ -191,6 +196,8 @@ def write(manifest: list[Art]) -> int:
                 return 1
             if img.size != a.target:
                 img = img.resize(a.target, Image.LANCZOS)
+            if a.flip_v:
+                img = img.transpose(Image.FLIP_TOP_BOTTOM)
             for dest in (a.android_path, a.ios_path):
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 img.save(dest, optimize=True)
@@ -205,6 +212,8 @@ def derived(a: Art) -> np.ndarray:
         img = src.convert("RGBA" if "A" in src.getbands() else "RGB")
         if img.size != a.target:
             img = img.resize(a.target, Image.LANCZOS)
+        if a.flip_v:
+            img = img.transpose(Image.FLIP_TOP_BOTTOM)
         return np.asarray(img).astype(float)
 
 

@@ -57,26 +57,26 @@ family and the only face bundled for both platforms, so it is what the parity
 mandate can satisfy — but the letterforms are not the mock's. Deciding otherwise
 means choosing and licensing another family for both platforms.
 
-**The video card's artwork is the right kind of picture, arranged differently.** Its
-saturation and lightness now match the reference (chroma mean 22.1 against 20.5 over
-the whole card, 30.1 against 29.2 over the art's own region) but the reference's
-colour mass peaks at y 167 of the card's 214 where ours peaks at y 63.
+**The video card's artwork is the right kind of picture, shipped upside down to be
+less wrong.** Its saturation and lightness match the reference (chroma mean 22.1
+against 20.5 over the whole card, 30.1 against 29.2 over the art's own region), and
+the art region's chroma map correlates with the reference's at **r = +0.604** with
+the orientation we ship and **r = +0.372** with the same art the other way up.
 
-Measured on the real renders rather than on a model, the art region's chroma map
-correlates with the reference's at **r = +0.372** with the current `Crop` placement
-and **r = +0.298** with the `Fit` it replaced — the same family of image, not the
-same arrangement, and Crop is the better of the two on both correlation and
-saturation, which is why it is what ships.
+That 0.604 is a placement story only in the weak sense: it is the best any transform
+of our asset reaches, and it is short of the ~0.85 that would mean "the same picture
+placed differently". The reference's colour mass peaks at y 167 of the card's 214,
+ours at y 63.
 
-Two earlier attempts to answer "is it just placed differently?" are worth recording
-because both were wrong in the same way. A sub-window match reported r = +0.694 for a
-flipped placement; that was matching a blob. A later search over eight dihedral
-transforms, seventeen scales and twenty-five offsets reported r ≤ 0.108 for
-everything — but it forced the art to cover the whole card, and this card is art in
-the bottom-right corner under a horizontal scrim, so the model described neither
-image and the number measured the model. What is true, and measured on pixels the app
-actually produced: same kind of artwork, different arrangement, and no transform of
-ours gets to 0.85. Matching it needs the artwork the mock was drawn from.
+The history of this number is worth keeping, because two earlier answers were wrong
+in instructive ways. A sub-window match reported r = +0.694 for a flip — matching a
+blob. A search over eight dihedral transforms, seventeen scales and twenty-five
+offsets reported r ≤ 0.108 for everything — but it forced the art to cover the whole
+card, and this card is art in the bottom-right corner under a horizontal scrim, so it
+measured the model. And a *retraction* of the flip was based on the card's mean
+chroma, p90 and luminance, which move by 0.0 between the two orientations because they
+cannot see arrangement. Only the correlation between real captures and the reference,
+restricted to the art region, ranks the options — and it says: keep the flip.
 
 **Three dead imagesets ship on iOS.** `GSVideoCreate`, `GSHomeOrb` and
 `GSHomeLotus` are referenced by no source; Android's resource shrinking strips the
