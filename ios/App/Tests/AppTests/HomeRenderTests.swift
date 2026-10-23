@@ -216,6 +216,13 @@ final class HomeRenderTests: XCTestCase {
         .environment(\.colorScheme, dark ? .dark : .light)
 
         let host = UIHostingController(rootView: view)
+        // The hosting controller's trait collection is injected at the ROOT of the
+        // SwiftUI hierarchy and wins over `.environment(\.colorScheme,)` set on the
+        // root view: the first dark capture came out at 180 L with dark text on it,
+        // i.e. it rendered light while the test asserted dark. The override is the
+        // UIKit-level statement of the same intent, and it is what the view actually
+        // reads.
+        host.overrideUserInterfaceStyle = dark ? .dark : .light
         host.view.frame = CGRect(origin: .zero, size: size)
 
         let window = UIWindow(frame: CGRect(origin: .zero, size: size))
