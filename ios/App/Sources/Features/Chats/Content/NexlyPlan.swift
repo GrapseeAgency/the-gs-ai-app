@@ -579,12 +579,13 @@ struct NexlyThinkingCard: View {
     var searchSources: Int = 0
 
     private var thinkingSubtitle: String {
-        isPlan ? "Analyzing your goals and priorities..." : "Understanding your request..."
+        if phase == .done { return "Request analyzed" }
+        return isPlan ? "Analyzing your goals and priorities..." : "Understanding your request..."
     }
 
     private var reasoningSubtitle: String {
         if let reasoningHint, !reasoningHint.isEmpty { return reasoningHint }
-        return isPlan ? "Provider default reasoning" : "No reasoning trace exposed"
+        return "No reasoning trace exposed"
     }
 
     private var hasSearch: Bool { searchSources > 0 }
@@ -593,6 +594,7 @@ struct NexlyThinkingCard: View {
         if hasSearch {
             return "\(searchSources) source\(searchSources == 1 ? "" : "s") found"
         }
+        if phase == .done { return isPlan ? "Plan ready" : "Answer ready" }
         return isPlan ? "Composing your plan..." : "Composing the answer..."
     }
     private var finalActive: Bool {

@@ -7,9 +7,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class NexlyPlanProgressStoreTest {
     private val rows = listOf(
         "6:30 – 7:00 AM" to "Wake up + light stretch",

@@ -2272,7 +2272,9 @@ internal fun ReferenceThinkingCard(
     reasoningHint: String? = null,
     searchSources: Int = 0,
 ) {
-    val thinkingSubtitle = if (isPlan) {
+    val thinkingSubtitle = if (phase == NexlyThinkingPhase.DONE) {
+        "Request analyzed"
+    } else if (isPlan) {
         "Analyzing your goals and priorities..."
     } else {
         "Understanding your request..."
@@ -2280,11 +2282,13 @@ internal fun ReferenceThinkingCard(
     // Show a real reasoning sentence only when the provider streamed one.
     // Otherwise this row must not imply a trace the app never received.
     val reasoningSubtitle = reasoningHint?.takeIf { it.isNotBlank() }
-        ?: if (isPlan) "Provider default reasoning" else "No reasoning trace exposed"
+        ?: "No reasoning trace exposed"
     val hasSearch = searchSources > 0
     val finalTitle = if (hasSearch) "Search" else "Answer"
     val finalSubtitle = if (hasSearch) {
         "$searchSources source${if (searchSources == 1) "" else "s"} found"
+    } else if (phase == NexlyThinkingPhase.DONE) {
+        if (isPlan) "Plan ready" else "Answer ready"
     } else if (isPlan) {
         "Composing your plan..."
     } else {
