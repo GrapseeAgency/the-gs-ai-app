@@ -184,6 +184,28 @@ Web search in this path is still a **backend capability gate** (explicit/fresh
 queries trigger research), not a tool the model calls on its own. When it runs,
 the sources are counted and surfaced in the Search row.
 
+## End-to-end capability probe
+
+The branch was stood up locally in CI against SQLite and the real production
+route (`scripts/live-backend-capabilities.ts`), using the repository's
+OpenRouter key in flash mode. Run `39960319355` (commit `a00ffee4`) produced:
+
+- **Clarify:** “Can you fix my code? It is not working.” → the planner asked
+  *“Which programming language and framework are you using, and can you share
+  the code or error message?”* with five quick choices (JavaScript, Python,
+  Java, C#, Other). Sending “JavaScript (Node.js)” produced the answer turn.
+- **Search:** “What is the latest stable version of the Bun runtime right
+  now?” → the planner ran retrieval and returned **8 sources**. Those sources
+  did not contain the Bun release data, and the model explicitly refused to
+  invent the version, pointing to `github.com/oven-sh/bun/releases` instead.
+  That is the honest-failure behavior we want, not a hallucinated version.
+- **Normal coding answer:** the Python `.append()` question answered without
+  an unnecessary search or clarify.
+- The turn log shows `mode=flash effective=flash`, the planner running, and
+  `searchExecuted=true` for the fresh question.
+
+Full payload: [`backend-capabilities.json`](../backend-capabilities.json).
+
 ## Verified runs
 
 Both workflows completed green on commit `48daa550`:
