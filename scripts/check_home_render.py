@@ -51,6 +51,17 @@ from, and A8 checks that the bento is where the page's own margin puts it — a
 card can be the right glass at the right size and still hang outside the column
 it was laid out in, which is exactly what one did (see card_left_edge).
 
+A9 gates the top hairline's ABSOLUTE level as well as its excess. The excess is
+what the eye sees locally, but it is not comparable between captures: the same
+252.0 L hairline reads +19.94 on the sheet, +18.96 on Android and +17.03 on iOS,
+because the iPhone's safe area puts that card on a bloom 4 L brighter, and the
+band for it has to be 7.5 L wide. The absolute number does not move (252.0 /
+252.1 / 252.4) because the rim is 90%-opaque white, so A9 gets a 4 L band and is
+the check that fails when the rim's alpha or colour moves. Proven: weakening
+CardLight's rimStrength from 1f to 0.6f drops its hairline to 244.06 and A9
+fails — where the excess, at 10.87, also fails but only because that band happens
+to be wide.
+
 PROBES ARE PER-IMAGE-KIND ON PURPOSE
 ------------------------------------
 `SCREEN` crops the mock to 680x1404 (aspect 0.4843) while a device capture is
@@ -248,7 +259,13 @@ SPREAD_MAX = 5.0                  # real 0.21 / 2.36 | boundary-straddling 7.4..
 #   pill         resid +0.16       -0.13             -6.69 -> the thinMaterial gap
 #                rim  +11.82       +14.53            +21.25   fixed with it
 BANDS = {
-    "suggestions": {"tint": (-5.49, -1.09), "rim": (-1.50, 8.00)},
+    # A9 ("hairline") on every probe: the absolute level of the top edge, which
+    # the rim's 90%-white makes ground-independent. Measured sheet / android / ios:
+    # suggestions 241.1 / 239.1 / 240.9, bento 252.0 / 252.1 / 252.4,
+    # pill 252.4 / 253.2 / 253.6. Each band holds its three with >= 1 L to spare
+    # and is 3-4 L wide against the 7-12 L the excess band has to be.
+    "suggestions": {"tint": (-5.49, -1.09), "rim": (-1.50, 8.00),
+                    "hairline": (238.0, 243.5)},
     # ±2.0 L. The three captures read +0.12 / +0.93 / -0.03 today, and 2 L is the
     # honesty margin on a ground read out of the PNG at the mock's rect: the mock
     # is not rectified (its crop is 5% too wide), and its own page beside the
@@ -256,7 +273,8 @@ BANDS = {
     # down. Device captures do not carry that error — the art they draw IS the
     # file being sampled — so the band is set by the weakest anchor, not by the
     # strongest measurement.
-    "bento":       {"residual": (-2.00, 2.00), "rim": (15.00, 22.50)},
+    "bento":       {"residual": (-2.00, 2.00), "rim": (15.00, 22.50),
+                    "hairline": (250.0, 254.0)},
     # The pill's edge is the cue that makes it read as a floating capsule, and
     # the sheet's is +11.82 L. Its fill is gated too, because that is where a
     # platform-specific opacity announces itself, and it did: iOS's pill measured
@@ -268,7 +286,8 @@ BANDS = {
     # the `glassSurface` Android paints. The capsule is the shared modifier now.
     # Coverage is coarse here (|F - ground| is 4.0 L on Android's row); absolute
     # luminance is not.
-    "pill":        {"residual": (-2.00, 2.00), "rim": (10.00, 22.00)},
+    "pill":        {"residual": (-2.00, 2.00), "rim": (10.00, 22.00),
+                    "hairline": (250.5, 255.0)},
 }
 
 # The solved constants. Changing either one changes every residual in the file,
@@ -396,6 +415,32 @@ def card_left_edge(l, edge_y):
     return None
 
 
+def hairline_luma(l, probe):
+    """The top edge's absolute luminance, before anything is subtracted.
+
+    The excess below it is what the eye sees locally, but it moves with the
+    ground: the same 252.0 hairline reads +19.94 L on the sheet, +18.96 on Android
+    and +17.03 on iOS, purely because the glass under it sits on a bloom 4 L
+    brighter where the iPhone's 59 pt safe area puts the card. That is why the rim
+    band has to be 7.5 L wide.
+
+    The absolute number does not move, because the rim is 90%-opaque white: 0.90 x
+    255 + 0.10 x fill is 252.7 whatever the ground. Measured across the three
+    frames the bento hairline is 252.0 / 252.1 / 252.4 — a 0.4 L spread where the
+    excess spreads 2.9. So it can be gated to +/- 2 L, and it fails if the rim's
+    alpha or its colour moves, which is the thing the wide excess band cannot see.
+    """
+    H, W = l.shape
+    x, _, w, _ = probe["interior"]
+    x0, x1 = int((x + 0.02) * W), int((x + w - 0.02) * W)
+    top = probe["rim_y"]
+    y0, y1 = max(0, int((top - 0.006) * H)), min(H, int((top + 0.018) * H))
+    win = l[y0:y1, x0:x1]
+    if win.shape[0] < 6:
+        return float("nan")
+    return float(np.median(win.max(axis=0)))
+
+
 def measure(path, kind, crop=None, debug_out=None, ground=None):
     """Every probe of `kind`'s set, measured on one decoded frame.
 
@@ -426,6 +471,7 @@ def measure(path, kind, crop=None, debug_out=None, ground=None):
             "probe": p["name"], "interior": interior, "page_outside": page,
             "interior_minus_page": interior - page, "interior_spread": spread,
             "rim_minus_interior": rim_excess(l, p),
+            "hairline_absolute": hairline_luma(l, p),
             "ground": gmed, "material_residual": residual, "coverage": coverage,
             "left_edge_pt": card_left_edge(l, p["edge_y"]) if "edge_y" in p else None,
         })
@@ -461,16 +507,18 @@ def row(r):
                     f" coverage={cov}")
     return (f"  {r['probe']:14s} interior={fmt(r['interior'])} page={fmt(r['page_outside'])} "
             f"Δtint={fmt(r['interior_minus_page'])}{material} spread={fmt(r['interior_spread'])} "
-            f"Δrim={fmt(r['rim_minus_interior'])}"
+            f"Δrim={fmt(r['rim_minus_interior'])} hair={fmt(r['hairline_absolute'])}"
             + ("" if r["left_edge_pt"] is None else f" edge={fmt(r['left_edge_pt'])}pt"))
 
 
 # Which number each gated metric reads off a measurement row.
 METRICS = {"tint": "interior_minus_page", "rim": "rim_minus_interior",
-           "spread": "interior_spread", "residual": "material_residual"}
+           "spread": "interior_spread", "residual": "material_residual",
+           "hairline": "hairline_absolute"}
 
 # How each metric is labelled in the assertion list.
-LABELS = {"tint": "A2 glass tint", "residual": "A2 material law", "rim": "A4 rim highlight"}
+LABELS = {"tint": "A2 glass tint", "residual": "A2 material law",
+          "rim": "A4 rim highlight", "hairline": "A9 hairline level"}
 
 
 def main() -> int:
