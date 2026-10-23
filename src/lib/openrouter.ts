@@ -154,7 +154,19 @@ function shouldRotate(status: number): boolean {
  */
 const KEY_COOLDOWN_MS = 10 * 60 * 1000
 const keyCooldownUntil = new Map<string, number>()
-function coolKey(key: string): void {
+/** "free-models-per-day" does not come back in 10 minutes — cool until the
+ *  daily quota resets (next UTC midnight, +5min slack) so a dead key is
+ *  skipped for the rest of the day instead of re-probed every turn. */
+function coolKeyUntilDailyReset(key: string): void {
+  const until = new Date()
+  until.setUTCHours(24, 5, 0, 0)
+  keyCooldownUntil.set(key, until.getTime())
+}
+function coolKey(key: string, reason = ''): void {
+  if (/free-models-per-day|per-day|daily limit/i.test(reason)) {
+    coolKeyUntilDailyReset(key)
+    return
+  }
   keyCooldownUntil.set(key, Date.now() + KEY_COOLDOWN_MS)
 }
 function keyIsCooled(key: string): boolean {
@@ -167,7 +179,7 @@ function someLiveKey(keys: string[]): boolean {
 async function extractError(response: Response): Promise<string> {
   try {
     const j = (await response.json()) as OrErrorBody
-    return j?.error?.message ?? `HTTP ${response.status}`
+    return j?.error?.message || `HTTP ${response.status}`
   } catch {
     return `HTTP ${response.status}`
   }
@@ -208,16 +220,22 @@ export async function orCompleteChat(
             response = await postChat(key, model, messages, false, { enabled: true })
             lastError = response.ok ? '' : await extractError(response)
           }
-          if (!response.ok && shouldRotate(response.status)) {
-            if (response.status === 401 || response.status === 402 || response.status === 429) coolKey(key)
+          if (response.ok) {
+            // The reasoning-mandatory retry succeeded — fall through to the
+            // success path below instead of misreading it as a failure (this
+            // exact bug surfaced as "OpenRouter openrouter/free: " with an
+            // empty message and a 502 to the client).
+          } else if (shouldRotate(response.status)) {
+            if (response.status === 401 || response.status === 402 || response.status === 429) coolKey(key, lastError)
             console.log(`OR-ROTATE model=${model} status=${response.status} key=***${key.slice(-4)}`)
             continue
+          } else {
+            // Permanent for THIS model (400/404): fall through to the next
+            // model in the chain; only surface after the last one.
+            lastError = `OpenRouter ${model}: ${lastError}`
+            if (isLastModel) throw new Error(lastError)
+            break
           }
-          // Permanent for THIS model (400/404): fall through to the next
-          // model in the chain; only surface after the last one.
-          lastError = `OpenRouter ${model}: ${lastError}`
-          if (isLastModel) throw new Error(lastError)
-          break
         }
         const completion = (await response.json()) as {
           choices?: { message?: { content?: unknown } }[]
@@ -279,14 +297,19 @@ export async function orStreamChat(
             response = await postChat(key, model, messages, true, { enabled: true })
             lastError = response.ok ? '' : await extractError(response)
           }
-          if (!response.ok && shouldRotate(response.status)) {
-            if (response.status === 401 || response.status === 402 || response.status === 429) coolKey(key)
+          if (response.ok) {
+            // reasoning-mandatory retry succeeded — continue into the stream
+            // below (falling through to the failure branch here produced the
+            // bogus "OpenRouter <model>: " 502).
+          } else if (shouldRotate(response.status)) {
+            if (response.status === 401 || response.status === 402 || response.status === 429) coolKey(key, lastError)
             console.log(`OR-ROTATE model=${model} status=${response.status} key=***${key.slice(-4)}`)
             continue
+          } else {
+            lastError = `OpenRouter ${model}: ${lastError}`
+            if (isLastModel) throw new Error(lastError)
+            break // next model in chain
           }
-          lastError = `OpenRouter ${model}: ${lastError}`
-          if (isLastModel) throw new Error(lastError)
-          break // next model in chain
         }
         if (!response.body) {
           lastError = 'OpenRouter returned no body'
