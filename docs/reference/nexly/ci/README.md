@@ -204,7 +204,18 @@ OpenRouter key in flash mode. Run `39960319355` (commit `a00ffee4`) produced:
 - The turn log shows `mode=flash effective=flash`, the planner running, and
   `searchExecuted=true` for the fresh question.
 
-Full payload: [`backend-capabilities.json`](../backend-capabilities.json).
+A second run (`39961095648`, commit `d58ddd1e`) proved the checklist context
+end-to-end: a request carrying `turnContext` with “Completed: Drink water;
+Open curtains” was answered with **“You completed "Drink water" and "Open
+curtains" in your demo morning plan.”** That run’s clarify/search leg did not
+repeat because the free upstream failed those planner calls; the two runs
+together cover every capability, and the script is kept as a probe rather than
+a green gate so an upstream flake is reported, not hidden.
+
+Full payloads: [`backend-capabilities.json`](../backend-capabilities.json)
+(clarify + search) and
+[`backend-capabilities-progress.json`](../backend-capabilities-progress.json)
+(progress context).
 
 ## Verified runs
 
