@@ -30,6 +30,23 @@ import androidx.compose.ui.unit.sp
  *
  * Mirrors ios/App/Sources/Theme/DesignSystem.swift.
  */
+/**
+ * This style with its tracking resolved to zero.
+ *
+ * Home's copy contract, on one platform's terms. iOS renders no letter spacing
+ * at all — `Aero.responsive` maps a role to a font and stops there — so every
+ * positive tracking value in the ramp below is a width Android adds and iOS
+ * does not. At 12sp over the 44 characters of "Turn your ideas into beautiful
+ * videos in minutes." that difference is one word, and the word fell to a third
+ * line: the video card read two lines on iOS and in the sheet, three here.
+ *
+ * Only POSITIVE tracking is zeroed. The display tier's negative tracking narrows
+ * toward the sheet's narrower grotesque (see the header), and no line break on
+ * the page depends on it; that iOS does not apply it at all is recorded with the
+ * measured numbers in shared-contracts/home-type-roles.json rather than here.
+ */
+fun TextStyle.untracked(): TextStyle = copy(letterSpacing = 0.sp)
+
 val GsTypography = Typography(
     displayLarge = TextStyle(
         fontFamily = GsFonts.Poppins,

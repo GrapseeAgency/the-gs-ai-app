@@ -68,6 +68,7 @@ import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsRadius
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.LocalGsIsDark
+import com.grapsee.gsai.ui.theme.untracked
 import java.time.LocalTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -348,7 +349,7 @@ private fun HomeHeader(onAssistant: () -> Unit, onMenu: () -> Unit) {
             )
             Text(
                 text = "AI Companion",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp),
+                style = MaterialTheme.typography.labelSmall.untracked().copy(fontSize = 13.sp),
                 color = colors.textSecondary
             )
         }
@@ -397,7 +398,7 @@ private fun GreetingBlock(greeting: String, firstName: String?) {
         Spacer(Modifier.height(10.dp))
         Text(
             text = "Your thoughts, questions, ideas —\nI'm here for it all.",
-            style = MaterialTheme.typography.bodyMedium.copy(
+            style = MaterialTheme.typography.bodyMedium.untracked().copy(
                 fontSize = 15.sp,
                 lineHeight = 22.sp
             ),
@@ -536,7 +537,7 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
             Spacer(Modifier.height(6.dp))
             Text(
                 text = "Turn your ideas into beautiful videos in minutes.",
-                style = MaterialTheme.typography.labelMedium.copy(
+                style = MaterialTheme.typography.labelMedium.untracked().copy(
                     fontSize = 12.sp,
                     lineHeight = 17.sp
                 ),
@@ -605,7 +606,7 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = "Mind Guide",
-                        style = MaterialTheme.typography.titleSmall.copy(
+                        style = MaterialTheme.typography.titleSmall.untracked().copy(
                             fontSize = if (compact) 12.sp else 13.sp,
                             fontWeight = FontWeight.SemiBold
                         ),
@@ -618,10 +619,9 @@ private fun MindGuideCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                         // allowed so a 360dp card wraps "companion." onto a
                         // third line instead of clipping it to "personal…".
                         text = "Your personal\nclarity companion.",
-                        style = MaterialTheme.typography.labelSmall.copy(
+                        style = MaterialTheme.typography.labelSmall.untracked().copy(
                             fontSize = if (compact) 9.sp else 9.5.sp,
-                            lineHeight = if (compact) 11.sp else 12.sp,
-                            letterSpacing = 0.sp
+                            lineHeight = if (compact) 11.sp else 12.sp
                         ),
                         color = GsTheme.colors.textSecondary,
                         maxLines = 3
@@ -661,7 +661,7 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "Today's reflection",
-                        style = MaterialTheme.typography.titleSmall.copy(
+                        style = MaterialTheme.typography.titleSmall.untracked().copy(
                             fontSize = if (compact) 10.sp else 12.5.sp,
                             fontWeight = FontWeight.SemiBold
                         ),
@@ -680,10 +680,9 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = "Take a moment to check in with yourself.",
-                    style = MaterialTheme.typography.labelSmall.copy(
+                    style = MaterialTheme.typography.labelSmall.untracked().copy(
                         fontSize = if (compact) 9.5.sp else 10.5.sp,
-                        lineHeight = if (compact) 11.5.sp else 13.sp,
-                        letterSpacing = 0.sp
+                        lineHeight = if (compact) 11.5.sp else 13.sp
                     ),
                     color = GsTheme.colors.textSecondary,
                     maxLines = 3
@@ -740,7 +739,7 @@ private fun TodayUsedHeader(onSeeAll: () -> Unit) {
         ) {
             Text(
                 text = "See All",
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelLarge.untracked(),
                 color = GsTheme.colors.textSecondary
             )
             Spacer(Modifier.width(4.dp))
@@ -783,7 +782,7 @@ private fun SuggestionsCard(title: String, subtitle: String, onClick: () -> Unit
             Column(Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyMedium.copy(
+                    style = MaterialTheme.typography.bodyMedium.untracked().copy(
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
                     ),
@@ -791,7 +790,7 @@ private fun SuggestionsCard(title: String, subtitle: String, onClick: () -> Unit
                 )
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                    style = MaterialTheme.typography.labelMedium.untracked().copy(fontSize = 12.sp),
                     color = GsTheme.colors.textSecondary
                 )
             }
@@ -842,7 +841,7 @@ private fun RecentPreviewCard(row: ConversationPreviewRow, onClick: () -> Unit) 
     ) {
         Text(
             text = preview.ifBlank { "Pick up where you left off." },
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.untracked(),
             color = colors.textPrimary,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis
@@ -850,7 +849,7 @@ private fun RecentPreviewCard(row: ConversationPreviewRow, onClick: () -> Unit) 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = row.conversation.title,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.untracked(),
                 color = colors.textTertiary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -928,7 +927,7 @@ private fun HomeDock(
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = "Generate",
-                    style = MaterialTheme.typography.labelLarge.copy(
+                    style = MaterialTheme.typography.labelLarge.untracked().copy(
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold
                     ),
@@ -1202,7 +1201,7 @@ private fun GlassPill(
         Spacer(Modifier.width(if (compact) 3.dp else 4.dp))
         Text(
             text = label,
-            style = MaterialTheme.typography.labelMedium.copy(
+            style = MaterialTheme.typography.labelMedium.untracked().copy(
                 fontSize = if (compact) 12.sp else 13.sp,
                 fontWeight = FontWeight.Medium
             ),
@@ -1231,7 +1230,7 @@ private fun ReferenceChip(icon: ImageVector, label: String) {
         Spacer(Modifier.width(5.dp))
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelSmall.untracked(),
             color = GsTheme.colors.textPrimary
         )
     }

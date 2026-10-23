@@ -127,7 +127,12 @@ def scan_android(path, roles):
         if not role:
             continue
         base = dict(roles.get(role.group(1), {'size': None, 'line': None, 'weight': None}))
-        copy = re.search(r'typography\.\w+\.copy\(', body)
+        # A style may pass through a no-argument chain call first —
+        # `labelMedium.untracked().copy(fontSize = 12.sp)` — and skipping that
+        # step reads the base style's size instead of the call site's, which is
+        # how this extractor reported six roles as their ramp defaults the first
+        # time `untracked()` went in front of a `.copy(`.
+        copy = re.search(r'typography\.\w+(?:\.\w+\(\))*\.copy\(', body)
         args = call_at(body, copy.end() - 1) if copy else ''
         size = ternary_size(args, 'fontSize')
         line = ternary_size(args, 'lineHeight')
@@ -227,6 +232,43 @@ def corner_problems():
     return problems
 
 
+def tracking_problems():
+    """Home may not render a width iOS cannot produce.
+
+    Type.kt's ramp carries positive tracking on the label and body styles. iOS's
+    `Aero.responsive` applies no tracking at all, so each of those values is text
+    width on one platform only — on the video card it was exactly one word: "Turn
+    your ideas into beautiful videos in minutes." broke to three lines on Android
+    and two in the sheet and on iOS. Home resolves those styles through
+    `untracked()` (see Type.kt), and this is what stops the next edit forgetting
+    to.
+
+    Negative tracking — the display tier — is deliberately not covered: it
+    narrows toward the sheet's own face, and no line break on the page depends on
+    it. Only styles the ramp gives a POSITIVE letterSpacing are in scope.
+    """
+    ramp = open(TYPEKT).read()
+    positive = set()
+    for m in re.finditer(r'(\w+)\s*=\s*TextStyle\((.*?)\)\s*,?\s*\n', ramp, re.S):
+        ls = re.search(r'letterSpacing\s*=\s*([\d.]+)\.sp', m.group(2))
+        if ls and float(ls.group(1)) > 0:
+            positive.add(m.group(1))
+    if not positive:
+        return [f'{TYPEKT}: no positive-tracking style was found — the extractor '
+                f'no longer matches the ramp, and a check that sees nothing must '
+                f'not be green']
+    problems = []
+    for i, line in enumerate(open(KT).read().split('\n'), 1):
+        m = re.search(r'MaterialTheme\.typography\.(\w+)', line)
+        if not m:
+            continue
+        if m.group(1) in positive and '.untracked()' not in line:
+            problems.append(
+                f'{KT}:{i} renders {m.group(1)}, which carries tracking iOS does '
+                f'not have, without .untracked()')
+    return problems
+
+
 def main() -> int:
     derive = '--derive' in sys.argv
     roles = android_roles()
@@ -284,6 +326,7 @@ def main() -> int:
     only_a = sorted(set(a) - set(i))
     only_i = sorted(set(i) - set(a))
     problems += corner_problems()
+    problems += tracking_problems()
 
     if problems:
         print(f'::error::Home design contract violated ({len(problems)} problem(s)):')
