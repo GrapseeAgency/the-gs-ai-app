@@ -29,6 +29,12 @@ export type SearchEngineId =
   | 'arxiv'
   | 'crossref'
   | 'github-release'
+  // Google's index reached through the Gemini API's google_search grounding
+  // (a real search, not scraping). Present only when GOOGLE_API_KEYS /
+  // GOOGLE_API_KEY is configured — see engines.ts. The model emits the exact
+  // source URLs it used; our retrieval layer then fetches and verifies them,
+  // so a hallucinated URL dies on fetch and never reaches evidence.
+  | 'gemini-grounded'
 
 /** One normalized hit from any engine, before ranking/dedupe. */
 export type RawResult = {

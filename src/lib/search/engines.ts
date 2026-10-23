@@ -843,8 +843,114 @@ const githubRelease: EngineAdapter = {
   },
 }
 
+// ---------------------------------------------------------------------------
+// Gemini google_search grounding — a real Google index, lawfully reached.
+//
+// The Gemini API's google_search tool runs an actual Google search server-side
+// and grounds the answer in it. We ask for the exact source URLs the model
+// used; those URLs become SERP hits which the ordinary retrieval layer then
+// fetches and reads. A URL the model invented simply fails to fetch and is
+// dropped — hallucination cannot survive into evidence.
+//
+// Grounding redirect URIs from groundingMetadata are single-use tokens (404 on
+// replay), which is why the URLs come from the model text instead.
+// ---------------------------------------------------------------------------
+
+let geminiKeyCursor = 0
+
+function googleKeys(): string[] {
+  const pool = [
+    ...(process.env.GOOGLE_API_KEYS ?? '').split(','),
+    process.env.GOOGLE_API_KEY ?? '',
+  ]
+    .map((k) => k.trim())
+    .filter(Boolean)
+  return [...new Set(pool)]
+}
+
+const geminiGrounded: EngineAdapter = {
+  id: 'gemini-grounded',
+  kind: 'reference',
+  async run(q: EngineQuery): Promise<RawResult[]> {
+    const keys = googleKeys()
+    if (keys.length === 0) return []
+    const prompt =
+      `Search the web: ${q.query}\n\n` +
+      `Reply with 3-6 lines, one per source you actually used, each line exactly:\n` +
+      `https://exact-source-url — one-sentence key fact from that page\n` +
+      `No other text.`
+    const body = JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      tools: [{ google_search: {} }],
+      generationConfig: {
+        maxOutputTokens: 2048,
+        temperature: 0,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    })
+    const attempt = async (key: string): Promise<{ ok: boolean; text: string }> => {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 12_000)
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: ctrl.signal }
+        )
+        if (!res.ok) return { ok: false, text: `HTTP ${res.status}` }
+        const json = (await res.json()) as {
+          candidates?: { content?: { parts?: { text?: string }[] } }[]
+        }
+        const text = (json.candidates?.[0]?.content?.parts ?? [])
+          .map((pt) => pt.text ?? '')
+          .join('')
+        return { ok: true, text }
+      } catch {
+        return { ok: false, text: 'network' }
+      } finally {
+        clearTimeout(timer)
+      }
+    }
+    let text = ''
+    // Rotate the key pool across calls and retry a throttled/refused call once
+    // with the next key — a per-key rate limit must not fail the search.
+    for (let i = 0; i < Math.min(2, keys.length); i++) {
+      const key = keys[geminiKeyCursor++ % keys.length]
+      const r = await attempt(key)
+      if (r.ok && r.text.trim()) {
+        text = r.text
+        break
+      }
+      if (r.ok) break // genuine empty answer — do not burn another quota slot
+    }
+    const out: RawResult[] = []
+    for (const line of text.split('\n')) {
+      const m = line.match(/^\s*(https?:\/\/[^\s—–]+)\s*[—–-]\s*(.+)$/u)
+      if (!m) continue
+      let domain = ''
+      try {
+        domain = new URL(m[1]).hostname.replace(/^www\./, '')
+      } catch {
+        continue
+      }
+      const fact = m[2].trim().slice(0, 400)
+      out.push({
+        url: m[1],
+        title: fact.slice(0, 120) || domain,
+        snippet: fact,
+        domain,
+        publishedDate: null,
+        rank: out.length + 1,
+        engine: 'gemini-grounded',
+      })
+      if (out.length >= 6) break
+    }
+    return out
+  },
+}
+
 export const ENGINE_REGISTRY: Partial<Record<SearchEngineId, EngineAdapter>> = {
   'github-release': githubRelease,
+  'gemini-grounded': geminiGrounded,
   'bing-news-rss': bingNewsRss,
   'google-news-rss': googleNewsRss,
   'bing-web': bingWeb,
@@ -894,6 +1000,8 @@ export function enginesForIntent(
   // treg is paid-per-success; it only exists when the operator configured a
   // token, and it is always LAST so it loses every tie-break to a free engine.
   const treg = process.env.TREG_TOKEN ? (['treg'] as SearchEngineId[]) : []
+  // A configured Gemini key pool puts a real Google index in the chain.
+  const google = googleKeys().length > 0 ? (['gemini-grounded'] as SearchEngineId[]) : []
   // §13 — the user NAMED a source; the engine set must be able to reach it.
   // This must precede the officialOnly gate: a release question is BOTH
   // ("github.com" hint AND official-only), and the named-source engine IS the
@@ -910,7 +1018,7 @@ export function enginesForIntent(
     if (NEWS_HINT_DOMAINS.some((d) => hint === d || hint.endsWith(`.${d}`))) {
       return [...searx, 'bing-news-rss', 'google-news-rss', 'duckduckgo-lite', 'z-ai', ...brave, ...treg]
     }
-    return [...searx, 'bing-web', 'duckduckgo-lite', 'z-ai', ...brave, ...treg]
+    return [...searx, ...google, 'bing-web', 'duckduckgo-lite', 'z-ai', ...brave, ...treg]
   }
   // 8.2 §11/§23 — "official sources only": first-party-friendly engines only;
   // no aggregator/news engines, no third-party provider search.
@@ -938,7 +1046,7 @@ export function enginesForIntent(
       : [...searx, 'bing-news-rss', 'google-news-rss', 'duckduckgo-lite', 'z-ai', ...brave, ...treg]
   }
   if (intent === 'factual' || intent === 'research' || intent === 'comparison') {
-    return [...searx, 'bing-web', 'duckduckgo-lite', 'wikipedia', 'bing-news-rss', 'z-ai', ...brave, ...treg]
+    return [...searx, ...google, 'bing-web', 'duckduckgo-lite', 'wikipedia', 'bing-news-rss', 'z-ai', ...brave, ...treg]
   }
-  return [...searx, 'bing-web', 'duckduckgo-lite', 'z-ai', ...brave, ...treg]
+  return [...searx, ...google, 'bing-web', 'duckduckgo-lite', 'z-ai', ...brave, ...treg]
 }

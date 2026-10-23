@@ -158,3 +158,7 @@ upload/*.png
 
 # collab broker SQLite (runtime state, never in git)
 .data/
+
+# local probe database (DATABASE_URL=file:dev.db)
+dev.db
+dev.db-journal

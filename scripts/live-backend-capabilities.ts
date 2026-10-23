@@ -22,18 +22,44 @@ type Msg = {
   sources?: unknown[]
 }
 
+// A free-tier upstream can refuse one request and serve the next; the key
+// pool rotates server-side, so a transient 502/upstream_error is a "try
+// again", not a failure of the capability under test.
 async function post<T>(pathName: string, body: unknown): Promise<T> {
-  const res = await fetch(`${base}${pathName}`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-session-id': session,
-    },
-    body: JSON.stringify(body),
-  })
-  const text = await res.text()
-  if (!res.ok) throw new Error(`${pathName} HTTP ${res.status}: ${text.slice(0, 500)}`)
-  return JSON.parse(text) as T
+  let lastErr: unknown = null
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(`${base}${pathName}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-session-id': session,
+        },
+        body: JSON.stringify(body),
+      })
+      const text = await res.text()
+      if (res.status === 502 || res.status === 503 || res.status === 429) {
+        lastErr = new Error(`${pathName} HTTP ${res.status}: ${text.slice(0, 300)}`)
+        if (attempt < 3) {
+          console.log(`attempt ${attempt} got HTTP ${res.status} — retrying in ${attempt * 10}s`)
+          await new Promise((r) => setTimeout(r, attempt * 10_000))
+          continue
+        }
+        throw lastErr
+      }
+      if (!res.ok) throw new Error(`${pathName} HTTP ${res.status}: ${text.slice(0, 500)}`)
+      return JSON.parse(text) as T
+    } catch (err) {
+      // network-level refusal (connection reset mid-stream): also transient
+      if (attempt < 3 && err instanceof TypeError) {
+        lastErr = err
+        await new Promise((r) => setTimeout(r, attempt * 10_000))
+        continue
+      }
+      throw err
+    }
+  }
+  throw lastErr ?? new Error('unreachable')
 }
 
 async function ask(conversationId: string, content: string): Promise<Msg> {

@@ -86,6 +86,12 @@ export async function GET() {
     status: upstreamAlive ? 'ok' : 'unavailable',
     backgroundRuns: backgroundRunsEnabled(),
     keypool: { layer: pool.layer, size: pool.keys.length },
+    search: {
+      googleGroundedKeys:
+        (process.env.GOOGLE_API_KEYS ?? '').split(',').filter(Boolean).length +
+        (process.env.GOOGLE_API_KEY ? 1 : 0),
+      searxng: Boolean(process.env.SEARXNG_URL),
+    },
     upstream: {
       openrouter: {
         probed: or.probed,

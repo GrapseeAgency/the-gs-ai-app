@@ -261,6 +261,28 @@ The model still has to synthesize the sentence, but it now receives the exact
 tag instead of an irrelevant news page. General current-events questions still
 depend on the web engines; no system can guarantee every arbitrary fact.
 
+## Google-grounded search (gemini-grounded engine)
+
+The search chain now includes a real Google index, lawfully reached: the
+Gemini API's `google_search` grounding tool. The engine asks Gemini to return
+the exact source URLs it used; those URLs become ordinary SERP hits which the
+existing retrieval layer then fetches and reads — a URL the model invented
+dies on fetch and never reaches evidence (grounding redirect URIs are
+single-use tokens, 404 on replay, which is why URLs come from the model text).
+
+- Keys: `GOOGLE_API_KEYS` (comma pool; `GOOGLE_API_KEY` also honoured),
+  rotated per call, one retry on a throttled key. Present in the engine chain
+  only when configured; `/api/health` reports `search.googleGroundedKeys`.
+- Placement: after self-hosted SearXNG, ahead of bing-web, in the default,
+  factual/research/comparison and source-specific fallback engine lists.
+  Release questions keep their dedicated github-release engine first.
+- Live check (2026-10-23, 6-key pool): "current Node.js LTS version" → 3
+  real URLs including the first-party `nodejs.org/blog/release/v26.12.1`.
+
+The e2e probe also retries transient upstream refusals (502/503/429, network
+resets) with backoff — a free-tier key that refuses one request serves the
+next after pool rotation, so a flaky upstream no longer fails the probe.
+
 ## Verified runs
 
 Both workflows completed green on commit `ed9656a9`:
