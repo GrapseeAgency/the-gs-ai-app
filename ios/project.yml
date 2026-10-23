@@ -164,14 +164,14 @@ targets:
       properties:
         UILaunchScreen: {}
         CFBundleDisplayName: GS AI
-        # The faces bundled under App/Resources/Fonts, by file name as they land
+        # The faces bundled under App/Resources/Fonts (Inter Tight), by file name as they land
         # in the bundle. UIAppFonts is what makes UIFont(name:) find them; the
         # PostScript names they register under are given in DesignSystem.swift.
         UIAppFonts:
-          - Poppins-Regular.ttf
-          - Poppins-Medium.ttf
-          - Poppins-SemiBold.ttf
-          - Poppins-Bold.ttf
+          - InterTight-Regular.ttf
+          - InterTight-Medium.ttf
+          - InterTight-SemiBold.ttf
+          - InterTight-Bold.ttf
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         NSSpeechRecognitionUsageDescription: GS turns your voice into text for your prompts when you use voice mode.
         NSMicrophoneUsageDescription: GS uses the microphone when you talk in voice mode.

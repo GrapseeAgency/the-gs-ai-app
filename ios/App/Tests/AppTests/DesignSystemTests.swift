@@ -56,12 +56,12 @@ final class DesignSystemTests: XCTestCase {
     /// the claim is checked against the running binary rather than against
     /// project.yml, which can say UIAppFonts while the bundle ships nothing.
     func testPoppinsIsRegistered() {
-        XCTAssertTrue(Aero.poppinsLoaded,
+        XCTAssertTrue(Aero.productLoaded,
                       "Poppins did not resolve, so every Aero.responsive call is "
                       + "silently falling back to SF Pro")
-        XCTAssertEqual(Aero.poppinsName(.semibold), "Poppins-SemiBold")
-        XCTAssertEqual(Aero.poppinsName(.medium), "Poppins-Medium")
-        XCTAssertEqual(Aero.poppinsName(.regular), "Poppins-Regular")
-        XCTAssertEqual(Aero.poppinsName(.bold), "Poppins-Bold")
+        XCTAssertEqual(Aero.productName(.semibold), "Poppins-SemiBold")
+        XCTAssertEqual(Aero.productName(.medium), "Poppins-Medium")
+        XCTAssertEqual(Aero.productName(.regular), "Poppins-Regular")
+        XCTAssertEqual(Aero.productName(.bold), "Poppins-Bold")
     }
 }

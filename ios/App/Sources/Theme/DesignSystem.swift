@@ -303,17 +303,17 @@ enum Aero {
     /// the screen would say SF Pro, and nothing would fail. HomeRenderTests
     /// asserts this is true, so a bundle that lost its fonts is a red test
     /// rather than a design regression someone has to notice in a screenshot.
-    static let poppinsLoaded: Bool = UIFont(name: "Poppins-SemiBold", size: 12) != nil
+    static let productLoaded: Bool = UIFont(name: "InterTight-SemiBold", size: 12) != nil
 
     /// SwiftUI weight → the bundled Poppins face. Four weights ship (400/500/600/
     /// 700); the remaining cases snap to the nearest one, exactly as Android's
     /// font resource does, which is why `.medium` and `.semibold` are distinct.
-    static func poppinsName(_ weight: Font.Weight) -> String {
+    static func productName(_ weight: Font.Weight) -> String {
         switch weight {
-        case .ultraLight, .thin, .light, .regular: return "Poppins-Regular"
-        case .medium:                              return "Poppins-Medium"
-        case .semibold:                            return "Poppins-SemiBold"
-        default:                                   return "Poppins-Bold"
+        case .ultraLight, .thin, .light, .regular: return "InterTight-Regular"
+        case .medium:                              return "InterTight-Medium"
+        case .semibold:                            return "InterTight-SemiBold"
+        default:                                   return "InterTight-Bold"
         }
     }
 
@@ -336,8 +336,8 @@ enum Aero {
         // A designed fallback (monospaced code, serif quotes) keeps the system
         // face — Poppins has neither, and Android's per-role fontFamily override
         // leaves those two alone for the same reason.
-        if design == .default, poppinsLoaded {
-            return .custom(poppinsName(weight), size: resolved)
+        if design == .default, productLoaded {
+            return .custom(productName(weight), size: resolved)
         }
         return .system(size: resolved, weight: weight, design: design)
     }

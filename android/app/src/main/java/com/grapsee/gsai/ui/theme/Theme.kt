@@ -142,14 +142,14 @@ fun gsTextSet(fontScale: Float): GsTextSet {
         lineHeight = 22.sp,
     )
     val metadata = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         lineHeight = 14.sp,
         letterSpacing = 0.3.sp,
     )
     val button = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 19.sp,

@@ -7,7 +7,7 @@ import androidx.compose.ui.text.font.FontWeight
 /**
  * The product typeface.
  *
- * Poppins is the family the reference product is drawn in: geometric, warm,
+ * Inter Tight is the family the reference product is drawn in: geometric, warm,
  * slightly rounded, and — critically — it keeps its personality at the small
  * sizes this interface uses for supporting lines. The four weights bundled
  * here are the only weights the UI asks for (400 / 500 / 600 / 700), so the
@@ -22,10 +22,10 @@ object GsFonts {
     // package-level symbol and flags `import com.grapsee.gsai.R` as wrong-package.
     // Inline FQN is not an import, so it is never scanned, and still resolves to
     // the resource class AGP generates under the `com.grapsee.gsai` namespace.
-    val Poppins: FontFamily = FontFamily(
-        Font(com.grapsee.gsai.R.font.poppins_regular, FontWeight.Normal),
-        Font(com.grapsee.gsai.R.font.poppins_medium, FontWeight.Medium),
-        Font(com.grapsee.gsai.R.font.poppins_semibold, FontWeight.SemiBold),
-        Font(com.grapsee.gsai.R.font.poppins_bold, FontWeight.Bold),
-    )
+    val Product: FontFamily = FontFamily(
+    Font(com.grapsee.gsai.R.font.inter_tight_regular, FontWeight.Normal),
+    Font(com.grapsee.gsai.R.font.inter_tight_medium, FontWeight.Medium),
+    Font(com.grapsee.gsai.R.font.inter_tight_semibold, FontWeight.SemiBold),
+    Font(com.grapsee.gsai.R.font.inter_tight_bold, FontWeight.Bold),
+)
 }

@@ -49,105 +49,105 @@ fun TextStyle.untracked(): TextStyle = copy(letterSpacing = 0.sp)
 
 val GsTypography = Typography(
     displayLarge = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.Bold,
         fontSize = 34.sp,
         lineHeight = 42.sp,
         letterSpacing = (-0.6).sp
     ),
     displayMedium = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.SemiBold,
         fontSize = 30.sp,
         lineHeight = 38.sp,
         letterSpacing = (-0.5).sp
     ),
     displaySmall = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.SemiBold,
         fontSize = 26.sp,
         lineHeight = 33.sp,
         letterSpacing = (-0.3).sp
     ),
     headlineLarge = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.SemiBold,
         fontSize = 26.sp,
         lineHeight = 33.sp,
         letterSpacing = (-0.3).sp
     ),
     headlineMedium = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.SemiBold,
         fontSize = 22.sp,
         lineHeight = 29.sp,
         letterSpacing = (-0.2).sp
     ),
     headlineSmall = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.SemiBold,
         fontSize = 19.sp,
         lineHeight = 26.sp,
         letterSpacing = (-0.1).sp
     ),
     titleLarge = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.SemiBold,
         fontSize = 17.sp,
         lineHeight = 23.sp,
         letterSpacing = 0.sp
     ),
     titleMedium = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.SemiBold,
         fontSize = 15.sp,
         lineHeight = 21.sp,
         letterSpacing = 0.sp
     ),
     titleSmall = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.SemiBold,
         fontSize = 13.sp,
         lineHeight = 18.sp,
         letterSpacing = 0.1.sp
     ),
     bodyLarge = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.Normal,
         fontSize = 15.sp,
         lineHeight = 23.sp,
         letterSpacing = 0.1.sp
     ),
     bodyMedium = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 21.sp,
         letterSpacing = 0.1.sp
     ),
     bodySmall = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
         lineHeight = 17.sp,
         letterSpacing = 0.1.sp
     ),
     labelLarge = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.SemiBold,
         fontSize = 14.sp,
         lineHeight = 19.sp,
         letterSpacing = 0.1.sp
     ),
     labelMedium = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.Medium,
         fontSize = 11.5.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.2.sp
     ),
     labelSmall = TextStyle(
-        fontFamily = GsFonts.Poppins,
+        fontFamily = GsFonts.Product,
         fontWeight = FontWeight.Medium,
         fontSize = 10.5.sp,
         lineHeight = 14.sp,
