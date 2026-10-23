@@ -124,12 +124,12 @@ struct AeroDrawer: View {
 
     private var panelLayer: some View {
         VStack(alignment: .leading, spacing: 0) {
+            brandHeader
             ScrollView(showsIndicators: false) {
                 panelList
             }
             footer
         }
-        .padding(.top, Aero.Spacing.xl)
         .frame(width: panelWidth, alignment: .top)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(panelSurface)
@@ -170,6 +170,50 @@ struct AeroDrawer: View {
             dividerRow
         }
         .padding(.bottom, 4)
+    }
+
+    /// The brand lockup: the product orb, the wordmark and its subtitle, and the
+    /// close control. The sheet's orb starts 62.7 pt from the frame top, i.e.
+    /// 3.7 pt below a 59 pt safe area, which is why the padding is 4.
+    private var brandHeader: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(colors: [Color(red: 1, green: 0.914, blue: 0.835),
+                                                  Color(red: 1, green: 0.725, blue: 0.627)],
+                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: DrawerMetrics.headerOrb, height: DrawerMetrics.headerOrb)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 22, weight: .regular))
+                    .foregroundColor(.white.opacity(0.9))
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Nexly")
+                    .font(.system(size: DrawerMetrics.wordmark, weight: .semibold))
+                    .foregroundColor(Aero.text)
+                Text("AI Companion")
+                    .font(.system(size: DrawerMetrics.subtitle))
+                    .foregroundColor(DrawerMetrics.labelInk)
+            }
+            Spacer(minLength: 0)
+            Button {
+                GSHaptics.tap()
+                onClose()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: DrawerMetrics.closeGlyph, weight: .medium))
+                    .foregroundColor(Aero.text)
+                    .frame(width: DrawerMetrics.closeHit + 10,
+                           height: DrawerMetrics.closeHit + 10)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close menu")
+        }
+        .padding(.leading, DrawerMetrics.contentInset + 4)
+        .padding(.trailing, DrawerMetrics.contentInset)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
     }
 
     /// The magnifier + placeholder pill. It opens the real search screen; the

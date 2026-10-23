@@ -33,6 +33,12 @@ on:
       - "scripts/prepare_home_art.py"
       - "scripts/check_home_dark.py"
       - "scripts/check_font_faces.py"
+      - "scripts/check_drawer_render.py"
+      - "scripts/check_drawer_dark.py"
+      - "scripts/check_drawer_structure.py"
+      - ".github/scripts/check_drawer_type_parity.py"
+      - "assets/reference/drawer-reference.png"
+      - "shared-contracts/drawer-geometry.json"
       # This one reads the Swift side of every Home type role; a change to either
       # the lint or the view has to run it here, because android-app's filter does
       # not see ios/**.
@@ -274,6 +280,14 @@ jobs:
           DIR=ios/build/home-renders
           mkdir -p "$DIR"
           if [ -d "$SRC" ]; then cp "$SRC"/home-ios-*.png "$DIR/" 2>/dev/null || true; fi
+          # The drawer writes its own directory, so Home's glob above can never
+          # pick a drawer frame up and mis-register a Home probe on it.
+          DSRC=/tmp/gs-drawer-renders
+          if [ -d "$DSRC" ]; then cp "$DSRC"/drawer-ios-*.png "$DIR/" 2>/dev/null || true; fi
+          for n in drawer-ios-393x852 drawer-ios-393x852-dark drawer-ios-360x780; do
+            test -s "$DIR/$n.png" \
+              || { echo "::error::$n.png missing — the drawer harness did not produce it"; exit 1; }
+          done
           for w in 393x852 411x914 360x780; do
             test -s "$DIR/home-ios-$w.png" \
               || { echo "::error::home-ios-$w.png missing — the render harness did not produce it"; exit 1; }
@@ -392,6 +406,32 @@ jobs:
           python3 scripts/check_home_render.py \
             --reference assets/reference/home-reference.png \
             --render "$DIR/home-ios-393x852.png" --probe-set ios --label ios-393
+
+      - name: Measure the drawer against its reference sheet
+        run: |
+          set -euo pipefail
+          python3 scripts/check_drawer_render.py \
+            --render ios/build/home-renders/drawer-ios-393x852.png \
+            --home ios/build/home-renders/home-ios-393x852.png \
+            --probe-set ios --label ios-drawer
+
+      - name: The drawer's type and geometry agree across platforms
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check_drawer_type_parity.py
+
+      - name: The drawer's structure (lazy list, no per-frame sort, no shadow)
+        run: |
+          set -euo pipefail
+          python3 scripts/check_drawer_structure.py --self-test
+
+      - name: The drawer in dark mode
+        run: |
+          set -euo pipefail
+          python3 scripts/check_drawer_dark.py \
+            --render ios/build/home-renders/drawer-ios-393x852-dark.png \
+            --home ios/build/home-renders/home-ios-393x852-dark.png \
+            --label ios-drawer-dark
 
       - name: The faces are upright and named for their weight
         run: |

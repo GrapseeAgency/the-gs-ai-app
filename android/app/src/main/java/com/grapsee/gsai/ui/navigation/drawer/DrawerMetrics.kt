@@ -34,7 +34,6 @@ object DrawerMetrics {
     /** Search pill: 42.0 pt tall on the sheet, capsule ends. */
     val searchHeight = 42.dp
     val searchGlyph = 18.dp
-    val searchTextInset = 38.dp
 
     /** Hero ("New chat"): 53.7 pt tall, 20.6 pt radius, 42.3 pt orb. */
     val heroHeight = 54.dp

@@ -49,7 +49,7 @@ enum DrawerMetrics {
     static let gear: CGFloat = 34
     static let gearGlyph: CGFloat = 15
     static let closeHit: CGFloat = 30
-    static let closeGlyph: CGFloat = 16
+    static let closeGlyph: CGFloat = 10
     static let headerOrb: CGFloat = 56
 
     /// Measured at 0.18–0.22 black against our own Home band. The old drawer used

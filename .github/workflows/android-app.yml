@@ -55,6 +55,11 @@ on:
       - 'scripts/prepare_home_art.py'
       - 'scripts/check_home_dark.py'
       - 'scripts/check_font_faces.py'
+      - 'scripts/check_drawer_render.py'
+      - 'scripts/check_drawer_structure.py'
+      - '.github/scripts/check_drawer_type_parity.py'
+      - 'assets/reference/drawer-reference.png'
+      - 'shared-contracts/drawer-geometry.json'
   pull_request:
     branches: [native-runtime]
     paths:
@@ -525,6 +530,7 @@ jobs:
           rm -rf app/build/screenshots
           ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest \
             --rerun --tests "com.grapsee.gsai.ui.home.HomeScreenshotTest" \
+            --tests "com.grapsee.gsai.ui.navigation.DrawerScreenshotTest" \
             -PgsShots=true
           SHOTS=app/build/screenshots
           MISSING=0
@@ -533,6 +539,16 @@ jobs:
               echo "rendered home-$w.png ($(wc -c < "$SHOTS/home-$w.png") bytes)"
             else
               echo "::error::home-$w.png was not produced"; MISSING=1
+            fi
+          done
+          # The drawer's own frames. A capture that silently skipped would make
+          # every drawer gate below measure a file that is not there, so absence
+          # is a failure here rather than an exit 2 three steps later.
+          for n in drawer-393x852 drawer-393x852-dark drawer-360x780 drawer-500chats-393x852; do
+            if [ -s "$SHOTS/$n.png" ]; then
+              echo "rendered $n.png ($(wc -c < "$SHOTS/$n.png") bytes)"
+            else
+              echo "::error::$n.png was not produced"; MISSING=1
             fi
           done
           [ "$MISSING" -eq 0 ] || exit 1
@@ -654,6 +670,35 @@ jobs:
       # flat page, cards painted out, hairline erased, frame shifted, probes
       # slipped both ways, backdrop dimmed. Each must fail with the check that is
       # supposed to catch it, and the untouched frame must pass.
+      # The drawer, scored against its own sheet. DR2 needs the Home capture of
+      # the SAME run, which is why both files are named here: the dim is a ratio,
+      # and a ratio against another run's page would move whenever the page did.
+      - name: Measure the drawer against its reference sheet
+        run: |
+          set -euo pipefail
+          python3 scripts/check_drawer_render.py \
+            --render android/app/build/screenshots/drawer-393x852.png \
+            --home android/app/build/screenshots/home-393x852.png \
+            --probe-set android --label android-drawer
+
+      - name: The drawer's type and geometry agree across platforms
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check_drawer_type_parity.py
+
+      - name: The drawer's structure (lazy list, no per-frame sort, no shadow)
+        run: |
+          set -euo pipefail
+          python3 scripts/check_drawer_structure.py --self-test
+
+      - name: The drawer in dark mode
+        run: |
+          set -euo pipefail
+          python3 scripts/check_drawer_dark.py \
+            --render android/app/build/screenshots/drawer-393x852-dark.png \
+            --home android/app/build/screenshots/home-393x852-dark.png \
+            --label android-drawer-dark
+
       - name: The faces are upright and named for their weight
         run: |
           set -euo pipefail
