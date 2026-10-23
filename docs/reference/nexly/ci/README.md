@@ -270,6 +270,15 @@ Both workflows completed green on commit `ed9656a9`:
 - iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39938781413
   (run `39968127637`)
 
+### Release-citation accuracy (local, 2026-10-23)
+
+A local end-to-end run of the capability probe (70-key pool, real planner +
+real retrieval, commit `6f8c8fbd`) additionally proved that the model cites
+the **authoritative** release rather than a stale third-party page: the Bun
+question answered **v1.4.4** with the `github-release` result as source [1].
+Three defects had conspired to bury it (see that commit message); evidence in
+`backend-capabilities.json`.
+
 `reference-vs-android-393x852.png` and `reference-vs-ios-393x852.png` place the
 sheet and the final native render at the same scale for a direct comparison.
 The native render is flash, so the sheet's Thinking/Reasoning panel is absent
