@@ -94,7 +94,16 @@ jobs:
           import glob, os
           from PIL import Image, ImageDraw, ImageFont
 
-          POPPINS = "android/app/src/main/res/font/poppins_semibold.ttf"
+          # The normaliser has to be a face that is not the one under test, and it has
+          # to be present: this used to point at android/app/src/main/res/font/
+          # poppins_semibold.ttf, which stopped existing the day Poppins was replaced
+          # by Inter Tight — the next eval died on "cannot open resource" before it
+          # printed a row. It is now downloaded as part of the run.
+          candidates = sorted(glob.glob("fonts/Poppins/SemiBold-600.ttf"))
+          if not candidates:
+              raise SystemExit("::error::this eval needs Poppins in --families; it is "
+                               "the denominator of every width ratio")
+          POPPINS = candidates[0]
 
           def band(path, glyph, size=240):
               f = ImageFont.truetype(path, size)
