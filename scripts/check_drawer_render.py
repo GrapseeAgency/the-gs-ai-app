@@ -166,7 +166,7 @@ def panel_edge(l):
     return int(vals[int(np.argmax(counts))]), int(counts.max()), len(xs)
 
 
-def edge_at(l, y, expected=None, window_pt=20.0, px_per_pt=None, min_step=8.0):
+def edge_at(l, y, expected=None, window_pt=45.0, px_per_pt=None, min_step=8.0):
     """The panel's outer edge on one row: the rightmost step of at least 8 L.
 
     `argmax` was wrong here. The header's close glyph is a ~150 L step on cream,
@@ -466,12 +466,15 @@ def derive(reference):
                                               edge, H, PX_PER_PT_REF)
 
     # the recent block: the four titles one pitch apart, then their timestamps
-    rec_top = (spikes[0] / H) + 0.004 if spikes else 0.52
+    # Clamped below the hero: when the dividers are gone (a doctored frame, or a
+    # layout regression) the spike list collapses and an unclamped top would pull
+    # the window up into the pill's copy, where any text counts as "recent rows".
+    rec_top = max((spikes[0] / H) + 0.004, 0.45) if spikes else 0.52
     titles = recent_titles(l, 0.16, 0.80, rec_top, 0.90, PX_PER_PT_REF)
     recent_pitch = ((titles[3][0] - titles[0][0]) / 3.0) if len(titles) == 4 else float("nan")
-    block = l[int(rec_top * H):int(0.90 * H), int(0.16 * W):int(0.80 * W)]
+    block = l[int(rec_top * H):int(0.90 * H), int(0.16 * W):int(0.62 * W)]
     grey_px = int(((block > 110) & (block < 205)).sum())
-    bands_n = len(ink_bands(l, 0.16, 0.80, rec_top, 0.90, thresh=150, min_ink=2,
+    bands_n = len(ink_bands(l, 0.16, 0.62, rec_top, 0.90, thresh=150, min_ink=2,
                             min_h=max(4, int(2.5 * PX_PER_PT_REF))))
 
     footer_clusters = ink_clusters(l, 0.0, panel_ratio, FOOTER_BAND[1], FOOTER_BAND[3])
@@ -607,7 +610,7 @@ def measure_render(render, home=None):
 
     colm = np.median(l[:, int(0.45 * edge):edge], axis=1)
     bottom_y = max(y for y in range(int(0.80 * H), H) if colm[y] > 120)
-    radius_px = corner_radius_px(l, edge, bottom_y, PX_PER_PT_REF)
+    radius_px = corner_radius_px(l, edge, bottom_y, px_per_pt)
 
     body = band(l, BLANK_BAND, panel_ratio)
     rim = band(l, RIM_BAND, panel_ratio)
@@ -635,12 +638,12 @@ def measure_render(render, home=None):
     # Same anchor as the sheet: the first divider above the recent block.
     low_spikes = sorted([s for s in down if s[0] > int(0.45 * H)], key=lambda s: -s[1])[:6]
     low_spikes = sorted(s[0] for s in low_spikes)
-    rec_top = (low_spikes[0] / H) + 0.004 if low_spikes else 0.52
+    rec_top = max((low_spikes[0] / H) + 0.004, 0.45) if low_spikes else 0.52
     titles = recent_titles(l, 0.16, 0.80, rec_top, 0.90, px_per_pt)
     recent_pitch = ((titles[3][0] - titles[0][0]) / 3.0) if len(titles) == 4 else float("nan")
-    block = l[int(rec_top * H):int(0.90 * H), int(0.16 * W):int(0.80 * W)]
+    block = l[int(rec_top * H):int(0.90 * H), int(0.16 * W):int(0.62 * W)]
     grey_px = int(((block > 110) & (block < 205)).sum())
-    bands_n = len(ink_bands(l, 0.16, 0.80, rec_top, 0.90, thresh=150, min_ink=2,
+    bands_n = len(ink_bands(l, 0.16, 0.62, rec_top, 0.90, thresh=150, min_ink=2,
                             min_h=max(4, int(2.5 * px_per_pt))))
     footer_clusters = ink_clusters(l, 0.0, panel_ratio * 0.99,
                                    FOOTER_BAND[1], FOOTER_BAND[3])

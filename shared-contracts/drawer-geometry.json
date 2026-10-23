@@ -49,14 +49,14 @@
     ]
   },
   "recent_ink_bands": {
-    "value": 6,
+    "value": 5,
     "band": [
       5,
       20
     ]
   },
   "recent_grey_px": {
-    "value": 7825,
+    "value": 3532,
     "band": [
       1500,
       1000000
