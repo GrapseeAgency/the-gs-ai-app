@@ -488,15 +488,24 @@ private struct VideoCard: View {
                              Color(red: 0.95, green: 0.92, blue: 0.96),
                              Color(red: 0.97, green: 0.92, blue: 0.89)],
                     startPoint: .topLeading, endPoint: .bottomTrailing)
-                // The authored pearl render from the reference.
-                Image("GSHomeVideoArt")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 200, height: 200)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity,
-                           alignment: .bottomTrailing)
-                    .offset(x: 16, y: 12)
-                    .allowsHitTesting(false)
+                // The authored pearl render from the reference, on a clear layer
+                // rather than as a plain sibling. `frame(width: 200, height: 200)`
+                // sets a MINIMUM of 200 as well as an ideal, so as a ZStack child it
+                // made the card 200 pt wide inside the 186.9 pt slot the bento gave
+                // it; the outer `.frame(width:)` then centred the 13 pt excess, and
+                // 6.5 pt of glass and rim hung OUTSIDE the page's 20 pt margin on
+                // each side. Measured on the capture: the sheet's card edge is at
+                // 17.5 pt, Android's at 20.0, iOS's at 13.5. `Color.clear` is what
+                // Android's Box already does — the card's size comes from the
+                // constraint, the art overflows it and the clipShape trims it.
+                Color.clear.overlay(alignment: .bottomTrailing) {
+                    Image("GSHomeVideoArt")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 200, height: 200)
+                        .offset(x: 16, y: 12)
+                }
+                .allowsHitTesting(false)
                 LinearGradient(
                     stops: [
                         .init(color: Color(red: 0.984, green: 0.957, blue: 0.941), location: 0),

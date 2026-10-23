@@ -46,6 +46,11 @@ own measurement, which is printed every run. A recorded anchor that no longer
 matches the image it came from means the sheet moved or a rect slipped, and a
 verdict built on either is worthless.
 
+A7 checks the shipped atmosphere against the atmosphere the reference was drawn
+from, and A8 checks that the bento is where the page's own margin puts it — a
+card can be the right glass at the right size and still hang outside the column
+it was laid out in, which is exactly what one did (see card_left_edge).
+
 PROBES ARE PER-IMAGE-KIND ON PURPOSE
 ------------------------------------
 `SCREEN` crops the mock to 680x1404 (aspect 0.4843) while a device capture is
@@ -143,12 +148,14 @@ BENTO_REF = {
     "interior": [0.62, 0.4359, 0.30, 0.0128],
     "outside":  [0.004, 0.4359, 0.022, 0.0128],
     "rim_y": 0.4312,
+    "edge_y": 0.500,
 }
 BENTO_ANDROID = {
     "name": "bento",
     "interior": [0.62, 0.4405, 0.30, 0.0078],
     "outside":  [0.004, 0.4405, 0.022, 0.0078],
     "rim_y": 0.4374,
+    "edge_y": 0.500,
 }
 BENTO_IOS = {
     # Re-measured on the post-Poppins capture (run 39860471181): the Mind Guide
@@ -158,6 +165,7 @@ BENTO_IOS = {
     "interior": [0.62, 0.4773, 0.30, 0.0094],
     "outside":  [0.004, 0.4773, 0.022, 0.0094],
     "rim_y": 0.4742,
+    "edge_y": 0.535,
 }
 
 # The quick-action pills. This probe exists because a previous pass reported the
@@ -312,6 +320,15 @@ MARGIN_X = (0.002, 0.018)
 MARGIN_BAND = (0.0, 0.60)        # median |sheet - art|, measured 0.11
 MARGIN_P90_BAND = (0.0, 2.50)    # p90 of the same, measured 0.87
 
+# A8 — where the bento's left edge must land. Home's content column is inset 20
+# dp/pt on both platforms (Android's `padding(horizontal = 20.dp)`, iOS's
+# `HomeMetrics.margin`), so the card's rim begins at 20.0 pt. The band allows 1.5
+# pt either side: half a pixel of rounding at 3x on each edge plus the softness of
+# finding a 1 px line by threshold. Applied to the device captures only — the mock
+# is not rectified and its own edge reads 17.5 pt, which is a property of the crop
+# rather than of a layout bug, so it is printed and not gated.
+EDGE_BAND = (18.5, 21.5)
+
 
 def margin_agreement(frame, ground):
     """|page - backdrop art| down the bare left margin, as (median, p90)."""
@@ -351,6 +368,34 @@ def rim_excess(l, probe):
     return float(np.median(win.max(axis=0))) - surround
 
 
+def card_left_edge(l, edge_y):
+    """Where the bento's left rim begins, in points from the frame's left edge.
+
+    A8. A card can be the right glass at the right size and still be in the wrong
+    place, and one was: iOS's video art carried a fixed `.frame(width: 200)` which
+    is a MINIMUM as well as an ideal, so the card measured 200 pt inside the 186.9
+    pt slot the bento gave it and the outer `.frame(width:)` centred the 13 pt
+    excess — 6.5 pt of glass and rim hanging outside the page's 20 pt margin on
+    each side, with the card's edge at 13.5 pt. Nothing in the material metrics can
+    see that; the probe rects still land on glass.
+
+    Sampled below the top hairline, where the left rim is a straight vertical line:
+    at the hairline itself the corner radius curves it away. Measured at the
+    mid-card row, the jump off the page is 9 L on Android and 11 L on iOS, so 4 L
+    is a wide margin for detecting it.
+    """
+    H, W = l.shape
+    y = int(edge_y * H)
+    band = l[max(0, y - 1):y + 3, :].mean(axis=0)
+    px_per_pt = W / 393.0                  # every frame is treated as 393 pt wide
+    lo, hi = int(6.0 * px_per_pt), int(60.0 * px_per_pt)
+    page = float(np.median(band[:lo]))
+    for x in range(lo, hi):
+        if band[x] - page > 4.0:
+            return x / px_per_pt
+    return None
+
+
 def measure(path, kind, crop=None, debug_out=None, ground=None):
     """Every probe of `kind`'s set, measured on one decoded frame.
 
@@ -382,6 +427,7 @@ def measure(path, kind, crop=None, debug_out=None, ground=None):
             "interior_minus_page": interior - page, "interior_spread": spread,
             "rim_minus_interior": rim_excess(l, p),
             "ground": gmed, "material_residual": residual, "coverage": coverage,
+            "left_edge_pt": card_left_edge(l, p["edge_y"]) if "edge_y" in p else None,
         })
     if debug_out:
         src = Image.open(path).convert("RGB")
@@ -415,7 +461,8 @@ def row(r):
                     f" coverage={cov}")
     return (f"  {r['probe']:14s} interior={fmt(r['interior'])} page={fmt(r['page_outside'])} "
             f"Δtint={fmt(r['interior_minus_page'])}{material} spread={fmt(r['interior_spread'])} "
-            f"Δrim={fmt(r['rim_minus_interior'])}")
+            f"Δrim={fmt(r['rim_minus_interior'])}"
+            + ("" if r["left_edge_pt"] is None else f" edge={fmt(r['left_edge_pt'])}pt"))
 
 
 # Which number each gated metric reads off a measurement row.
@@ -485,6 +532,11 @@ def main() -> int:
         if not band[0] <= value <= band[1]:
             drift.append(f"sheet margin {name} {value:.2f} outside [{band[0]}, {band[1]}]")
 
+    ref_edges = [r for r in ref if r["left_edge_pt"] is not None]
+    if ref_edges:
+        print(f"  A8 bento left edge (sheet): {ref_edges[0]['left_edge_pt']:.1f} pt — printed, "
+              f"not gated: the mock is not rectified, so its own x carries the crop")
+
     # The bands are recorded measurements of this sheet. If the sheet or a probe
     # rect has moved, the band is a lie, and a gate that cannot be right about
     # its own anchor cannot be right about a render. Checked, not assumed.
@@ -552,6 +604,12 @@ def main() -> int:
                       f"{args.render} — no ground was loaded (not a glass verdict)")
                 return 2
             checks.append((LABELS[metric], value, band))
+        if "edge_y" in next(p for p in PROBES[args.probe_set] if p["name"] == r["probe"]):
+            if r["left_edge_pt"] is None:
+                print(f"\n::error::{r['probe']} A8: no card edge found within 60 pt of "
+                      f"the frame — the bento is not where the page puts it")
+                return 2
+            checks.append(("A8 edge at margin", r["left_edge_pt"], EDGE_BAND))
         print(f"  [{r['probe']}]")
         for name, value, (lo, hi) in sorted(checks):
             ok = lo <= value <= hi
