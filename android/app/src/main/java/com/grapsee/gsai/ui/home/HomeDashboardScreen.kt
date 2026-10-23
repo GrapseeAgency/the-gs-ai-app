@@ -1247,12 +1247,20 @@ private fun ReferenceChip(icon: ImageVector, label: String) {
             icon,
             contentDescription = null,
             tint = GsTheme.colors.textPrimary,
-            modifier = Modifier.size(13.dp)
+            modifier = Modifier.size(8.dp)
         )
         Spacer(Modifier.width(5.dp))
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall.untracked(),
+            // 10sp/10dp: the sheet's chip is 7.2 pt tall measured as dark pixels
+            // over the card (icon and text are the same height there). At 11sp the
+            // label rendered an 8.33 pt cap and a 13dp icon made the whole chip 11.0
+            // pt — 3.8 pt more than the sheet's, the "Video 12 vs 13" a review
+            // listed that no gate could see until the lint learned to resolve copy
+            // passed as a parameter. The icon is 8dp because on the sheet the icon
+            // and the label are the same height (7.2 pt); at 10dp it set the chip's
+            // height on its own.
+            style = MaterialTheme.typography.labelSmall.untracked().copy(fontSize = 10.sp),
             color = GsTheme.colors.textPrimary
         )
     }

@@ -530,8 +530,11 @@ private struct VideoCard: View {
                     // the play control is pinned to the bottom of the card.
                     HStack(spacing: 5) {
                         Image(systemName: "play")
-                            .font(Aero.responsive(10, .bold, relativeTo: .caption2))
-                        Text("Video").font(Aero.caption())
+                            .font(Aero.responsive(8, .bold, relativeTo: .caption2))
+                        // 10 pt: the sheet's chip is 7.2 pt tall with its icon. 11 was
+                        // 3.8 pt over; 13 (Aero.caption()) was the iOS half of the
+                        // "Video 12 vs 13" pair a review listed.
+                        Text("Video").font(Aero.responsive(10, .medium, relativeTo: .caption))
                     }
                     .foregroundStyle(Aero.text)
                     .padding(.horizontal, 9).padding(.vertical, 5)

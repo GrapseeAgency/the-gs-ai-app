@@ -109,6 +109,95 @@ def ternary_size(body, pattern):
     return float(m.group(1)) if m else None
 
 
+def block_at(src, brace_idx):
+    """The balanced text of the block whose '{' sits at brace_idx."""
+    depth = 0
+    i = brace_idx
+    in_str = False
+    while i < len(src):
+        c = src[i]
+        if in_str:
+            if c == '\\':
+                i += 2
+                continue
+            if c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True
+        elif c == '{':
+            depth += 1
+        elif c == '}':
+            depth -= 1
+            if depth == 0:
+                return src[brace_idx + 1:i]
+        i += 1
+    return ''
+
+
+def style_row(body, roles):
+    """The size/weight/line a Compose Text() body renders, or None without a role."""
+    role = re.search(r'style = MaterialTheme\.typography\.(\w+)', body)
+    if not role:
+        return None
+    base = dict(roles.get(role.group(1), {'size': None, 'line': None, 'weight': None}))
+    # A style may pass through a no-argument chain call first —
+    # `labelMedium.untracked().copy(fontSize = 12.sp)` — and skipping that step
+    # reads the base style's size instead of the call site's, which is how this
+    # extractor reported six roles as their ramp defaults the first time
+    # `untracked()` went in front of a `.copy(`.
+    copy = re.search(r'typography\.\w+(?:\.\w+\(\))*\.copy\(', body)
+    args = call_at(body, copy.end() - 1) if copy else ''
+    size = ternary_size(args, 'fontSize')
+    line = ternary_size(args, 'lineHeight')
+    fw = re.search(r'fontWeight = FontWeight\.(\w+)', args)
+    if size is not None:
+        base['size'] = size
+    if line is not None:
+        base['line'] = line
+    if fw:
+        base['weight'] = WEIGHT_MAP.get(fw.group(1), fw.group(1).lower())
+    return base
+
+
+def android_forwarded_roles(src, roles):
+    """literal -> style row, for copy Android forwards into a Text() as a parameter.
+
+    `SuggestionsCard(title = "Suggestions", subtitle = "...")` and
+    `ReferenceChip(label = "Video")` carry their copy at the CALL SITE, so there is
+    no literal inside the Text() that renders it and the first version of this lint
+    reported all three as UNPAIRED — which is three of the four roles a review had
+    just listed as disagreeing between platforms. Printing that gap as a note made
+    it visible, but a note does not gate, so those three could drift freely.
+
+    Resolve them properly: for every composable taking a String parameter that it
+    renders in a styled Text, read the call sites that pass a literal.
+    """
+    out = {}
+    param_rows = {}
+    # The params group must tolerate a lambda type: `onClick: () -> Unit` carries
+    # its own parens, and a `[^)]*` group stops at the first of them, so the
+    # function never matched and everything it renders stayed UNPAIRED.
+    for m in re.finditer(r'fun (\w+)\(((?:[^()]|\([^()]*\))*)\)\s*\{', src):
+        name, params = m.group(1), m.group(2)
+        strings = re.findall(r'(\w+):\s*String\??', params)
+        if not strings:
+            continue
+        body = block_at(src, m.end() - 1)
+        for t in re.finditer(r'\bText\(', body):
+            tbody = call_at(body, t.end() - 1)
+            row = style_row(tbody, roles)
+            txt = re.search(r'text = (\w+)\b', tbody)
+            if row and txt and txt.group(1) in strings:
+                param_rows[(name, txt.group(1))] = row
+    for (name, param), row in param_rows.items():
+        for c in re.finditer(rf'\b{name}\(', src):
+            cbody = call_at(src, c.end() - 1)
+            lit = re.search(rf'\b{param} = "((?:[^"\\]|\\.)*)"', cbody)
+            if lit:
+                out[lit.group(1)] = row
+    return out
+
+
 def scan_android(path, roles):
     """(literal, size, weight, line) for every Text() on the page."""
     src = open(path).read()
@@ -123,26 +212,10 @@ def scan_android(path, roles):
         # row as `personal` and quietly dropped the real one.
         lit = (re.search(r'text\s*=\s*"((?:[^"\\]|\\.)*)"', body)
                or re.search(r'^\s*"((?:[^"\\]|\\.)*)"', body))
-        role = re.search(r'style = MaterialTheme\.typography\.(\w+)', body)
-        if not role:
+        base = style_row(body, roles)
+        if base is None:
             continue
-        base = dict(roles.get(role.group(1), {'size': None, 'line': None, 'weight': None}))
-        # A style may pass through a no-argument chain call first —
-        # `labelMedium.untracked().copy(fontSize = 12.sp)` — and skipping that
-        # step reads the base style's size instead of the call site's, which is
-        # how this extractor reported six roles as their ramp defaults the first
-        # time `untracked()` went in front of a `.copy(`.
-        copy = re.search(r'typography\.\w+(?:\.\w+\(\))*\.copy\(', body)
-        args = call_at(body, copy.end() - 1) if copy else ''
-        size = ternary_size(args, 'fontSize')
-        line = ternary_size(args, 'lineHeight')
-        fw = re.search(r'fontWeight = FontWeight\.(\w+)', args)
-        if size is not None:
-            base['size'] = size
-        if line is not None:
-            base['line'] = line
-        if fw:
-            base['weight'] = WEIGHT_MAP.get(fw.group(1), fw.group(1).lower())
+        role = re.search(r'style = MaterialTheme\.typography\.(\w+)', body)
         found.append({'key': lit.group(1) if lit else '@dynamic',
                       'role': role.group(1), **base})
     return found
@@ -272,7 +345,10 @@ def tracking_problems():
 def main() -> int:
     derive = '--derive' in sys.argv
     roles = android_roles()
-    a = index(scan_android(KT, roles))
+    kt_src = open(KT).read()
+    forwarded = [dict(key=k, role='forwarded', **v)
+                 for k, v in android_forwarded_roles(kt_src, roles).items()]
+    a = index(scan_android(KT, roles) + forwarded)
     i = index(scan_swift(SWIFT))
     keys = sorted(set(a) | set(i))
 

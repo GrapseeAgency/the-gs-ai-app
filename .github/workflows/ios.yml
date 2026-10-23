@@ -31,6 +31,11 @@ on:
       # changing it, or the artwork manifest it feeds, has to run this job too.
       - "scripts/test_home_render_gate.py"
       - "scripts/prepare_home_art.py"
+      # This one reads the Swift side of every Home type role; a change to either
+      # the lint or the view has to run it here, because android-app's filter does
+      # not see ios/**.
+      - ".github/scripts/check_home_type_parity.py"
+      - ".github/scripts/check_gate_scripts_are_invoked.py"
 
 permissions:
   contents: read
@@ -85,6 +90,17 @@ jobs:
         run: |
           python3 scripts/ios_static_gates.py
           python3 scripts/swift_structure_gate.py
+
+      # The type contract is shared: it reads HomeDashboardView.swift and the Kotlin
+      # view and fails if a role's size, weight, line height or tracking differs. It
+      # was written before this job and invoked by nothing, so nothing held; the
+      # meta-lint right after it keeps that from recurring for any script in the tree.
+      - name: Home's type roles match across platforms, and every gate is invoked
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check_home_type_parity.py
+          python3 .github/scripts/check_gate_scripts_are_invoked.py --self-test
+          python3 .github/scripts/check_gate_scripts_are_invoked.py
 
       - name: Generate Xcode project (XcodeGen)
         run: |

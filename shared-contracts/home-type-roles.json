@@ -13,21 +13,74 @@
     "name: Android's FontWeight.SemiBold and SwiftUI's .semibold are both",
     "'semibold'.",
     "",
-    "What is NOT here, and why: the greeting, the resume-card preview and the",
-    "suggestions row take their copy as parameters, so neither source has a",
-    "literal to pair on. The lint prints that gap on every run instead of",
-    "quietly reporting fewer checks."
+    "",
+    "What is NOT here: the greeting only. Android renders `greeting + \",\"` and",
+    "iOS interpolates `\\(greetingWord)`, so neither side has a literal; the lint",
+    "prints that one gap on every run. The suggestions row and the Video chip USED",
+    "to be in this list because their copy arrives as a parameter — the lint now",
+    "follows `SuggestionsCard(title = \"…\")` and `ReferenceChip(label = \"…\")`",
+    "into the Text() that renders the parameter, which is how the chip's 10.5 vs 13",
+    "disagreement was found after two reviews had listed it and no check had seen",
+    "it."
   ],
-  "AI Companion": { "size": 13.0, "weight": "medium" },
-  "Create Stunning\\nVideos with AI": { "size": 16.0, "weight": "semibold" },
-  "Generate": { "size": 15.0, "weight": "semibold" },
-  "Mind Guide": { "size": 13.0, "weight": "semibold" },
-  "Nexly": { "size": 18.0, "weight": "semibold" },
-  "See All": { "size": 14.0, "weight": "semibold" },
-  "Take a moment to check in with yourself.": { "size": 10.5, "weight": "medium" },
-  "Today's Used": { "size": 18.0, "weight": "semibold" },
-  "Today's reflection": { "size": 12.5, "weight": "semibold" },
-  "Turn your ideas into beautiful videos in minutes.": { "size": 12.0, "weight": "medium" },
-  "Your personal\\nclarity companion.": { "size": 9.5, "weight": "medium" },
-  "Your thoughts, questions, ideas —\\nI'm here for it all.": { "size": 15.0, "weight": "regular" }
+  "AI Companion": {
+    "size": 13.0,
+    "weight": "medium"
+  },
+  "Create Stunning\\nVideos with AI": {
+    "size": 16.0,
+    "weight": "semibold"
+  },
+  "Generate": {
+    "size": 15.0,
+    "weight": "semibold"
+  },
+  "Mind Guide": {
+    "size": 13.0,
+    "weight": "semibold"
+  },
+  "Nexly": {
+    "size": 18.0,
+    "weight": "semibold"
+  },
+  "See All": {
+    "size": 14.0,
+    "weight": "semibold"
+  },
+  "Take a moment to check in with yourself.": {
+    "size": 10.5,
+    "weight": "medium"
+  },
+  "Today's Used": {
+    "size": 18.0,
+    "weight": "semibold"
+  },
+  "Today's reflection": {
+    "size": 12.5,
+    "weight": "semibold"
+  },
+  "Turn your ideas into beautiful videos in minutes.": {
+    "size": 12.0,
+    "weight": "medium"
+  },
+  "Your personal\\nclarity companion.": {
+    "size": 9.5,
+    "weight": "medium"
+  },
+  "Your thoughts, questions, ideas —\\nI'm here for it all.": {
+    "size": 15.0,
+    "weight": "regular"
+  },
+  "Suggestions": {
+    "size": 14.0,
+    "weight": "medium"
+  },
+  "Try suggested questions first.": {
+    "size": 12.0,
+    "weight": "medium"
+  },
+  "Video": {
+    "size": 10.0,
+    "weight": "medium"
+  }
 }

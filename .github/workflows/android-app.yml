@@ -357,6 +357,19 @@ jobs:
           }
           python3 .github/scripts/check_tests_can_fail.py "${KTT[@]}"
 
+      # `check_home_type_parity.py` held twelve Home type roles to a contract, and
+      # three source comments plus a paragraph in docs/DESIGN_SYSTEM.md said it
+      # "fails CI". No workflow ran it, so it could not fail and the contract was
+      # enforced by nothing. The first step below closes that class rather than the
+      # instance: every `check_*`/`test_*` script must be invoked from a workflow run
+      # block, and a mention in a YAML comment does not count.
+      - name: Every gate script is actually invoked
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check_gate_scripts_are_invoked.py --self-test
+          python3 .github/scripts/check_gate_scripts_are_invoked.py
+          python3 .github/scripts/check_home_type_parity.py
+
       - name: The two ABI lists agree
         run: |
           set -euo pipefail
