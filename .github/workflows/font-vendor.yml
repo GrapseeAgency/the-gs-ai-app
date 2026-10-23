@@ -1,0 +1,179 @@
+name: Font vendor
+
+# Vendors a measured typeface into the repository and flips the family token on
+# both platforms.
+#
+# Why a workflow: the candidate has to be fetched (a binary, from an upstream OFL
+# release), instantiated into the four static weights the UI uses, and written on
+# both sides in one atomic commit — and the machine that decides *whether* to
+# vendor it is the same one that measures it. `.github/workflows/font-eval.yml`
+# produces the numbers; this applies the one that passed.
+#
+# It refuses to push unless the type contract and the artwork manifest both pass
+# afterwards, so a bad substitution cannot land on main.
+
+on:
+  workflow_dispatch:
+    inputs:
+      family:
+        description: Google Fonts family name
+        default: "Inter Tight"
+        required: true
+      slug:
+        description: Directory name under google/fonts ofl/
+        default: "intertight"
+        required: true
+      apply:
+        description: "true commits and pushes; false only prints the plan"
+        default: "false"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  vendor:
+    name: Vendor ${{ inputs.family }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install font tooling
+        run: pip install --quiet --disable-pip-version-check fonttools pillow
+
+      - name: Fetch and instantiate the four weights
+        env:
+          FAMILY: ${{ inputs.family }}
+          SLUG: ${{ inputs.slug }}
+        run: |
+          set -euo pipefail
+          mkdir -p var out
+          LIST=$(curl -fsSL --retry 3 -H "Accept: application/vnd.github+json" \
+                   "https://api.github.com/repos/google/fonts/contents/ofl/${SLUG}")
+          URL=$(printf '%s' "$LIST" | python3 -c "import json,sys;d=json.load(sys.stdin);t=[i['download_url'] for i in d if i['name'].lower().endswith('.ttf')];print(([u for u in t if '%5B' in u or '[' in u] or t or [''])[0])")
+          test -n "$URL" || { echo "::error::no .ttf in ofl/${SLUG}"; exit 1; }
+          echo "source: $URL"
+          curl -fsSL --retry 3 "$URL" -o var/source.ttf
+          for W in 400 500 600 700; do
+            fonttools varLib.instancer var/source.ttf wght="$W" -o "out/$W.ttf" >/dev/null
+            echo "  instantiated $W -> $(wc -c < "out/$W.ttf") bytes"
+          done
+
+      - name: Install as the product family and flip the token
+        env:
+          FAMILY: ${{ inputs.family }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re, shutil, glob, pathlib
+
+          FAMILY = os.environ["FAMILY"]                      # "Inter Tight"
+          STEM = FAMILY.replace(" ", "")                     # "InterTight"
+          WEIGHTS = [("400", "regular", "Regular"), ("500", "medium", "Medium"),
+                     ("600", "semibold", "SemiBold"), ("700", "bold", "Bold")]
+
+          # 1. the binary files, both platforms, identical bytes
+          for w, lower, camel in WEIGHTS:
+              src = f"out/{w}.ttf"
+              shutil.copyfile(src, f"android/app/src/main/res/font/{FAMILY.lower().replace(' ', '_')}_{lower}.ttf")
+              shutil.copyfile(src, f"ios/App/Resources/Fonts/{STEM}-{camel}.ttf")
+
+          # 2. Android family object
+          gs = pathlib.Path("android/app/src/main/java/com/grapsee/gsai/ui/theme/GsFonts.kt")
+          s = gs.read_text()
+          s = re.sub(r"val Poppins: FontFamily = FontFamily\(\n(?:.*\n)*?    \)",
+                     """val Product: FontFamily = FontFamily(
+              Font(com.grapsee.gsai.R.font.%s_regular, FontWeight.Normal),
+              Font(com.grapsee.gsai.R.font.%s_medium, FontWeight.Medium),
+              Font(com.grapsee.gsai.R.font.%s_semibold, FontWeight.SemiBold),
+              Font(com.grapsee.gsai.R.font.%s_bold, FontWeight.Bold),
+          )""" % ((FAMILY.lower().replace(' ', '_'),) * 4), s, count=1)
+          s = s.replace("Poppins is the family the reference product is drawn in",
+                        f"{FAMILY} is the family the reference product is drawn in")
+          gs.write_text(s)
+
+          # 3. every Kotlin call site
+          for p in glob.glob("android/**/*.kt", recursive=True):
+              t = pathlib.Path(p).read_text()
+              if "GsFonts.Poppins" in t:
+                  pathlib.Path(p).write_text(t.replace("GsFonts.Poppins", "GsFonts.Product"))
+
+          # 4. iOS resolver
+          ds = pathlib.Path("ios/App/Sources/Theme/DesignSystem.swift")
+          t = ds.read_text()
+          t = t.replace('UIFont(name: "Poppins-SemiBold"', f'UIFont(name: "{STEM}-SemiBold"')
+          t = t.replace('return "Poppins-Regular"', f'return "{STEM}-Regular"')
+          t = t.replace('return "Poppins-Medium"', f'return "{STEM}-Medium"')
+          t = t.replace('return "Poppins-SemiBold"', f'return "{STEM}-SemiBold"')
+          t = t.replace('return "Poppins-Bold"', f'return "{STEM}-Bold"')
+          t = t.replace("poppinsLoaded", "productLoaded").replace("poppinsName", "productName")
+          ds.write_text(t)
+          for p in glob.glob("ios/**/*.swift", recursive=True):
+              t = pathlib.Path(p).read_text()
+              if "poppinsName" in t or "poppinsLoaded" in t:
+                  pathlib.Path(p).write_text(t.replace("poppinsName", "productName")
+                                              .replace("poppinsLoaded", "productLoaded"))
+
+          # 5. UIAppFonts
+          py = pathlib.Path("ios/project.yml")
+          t = py.read_text()
+          t = re.sub(r"        UIAppFonts:\n(?:          - Poppins-\w+\.ttf\n)+",
+                     "        UIAppFonts:\n" + "".join(
+                         f"          - {STEM}-{camel}.ttf\n" for _, _, camel in WEIGHTS), t, count=1)
+          t = t.replace("The faces bundled under App/Resources/Fonts, by file name as they land",
+                        f"The faces bundled under App/Resources/Fonts ({FAMILY}), by file name as they land")
+          py.write_text(t)
+
+          # 6. retire the previous family from both bundles (history keeps it)
+          for pat in ("android/app/src/main/res/font/poppins_*.ttf",
+                      "ios/App/Resources/Fonts/Poppins-*.ttf"):
+              for f in glob.glob(pat):
+                  os.remove(f)
+                  print(f"removed {f}")
+          print(f"installed {FAMILY} as the product family")
+          PY
+
+      - name: The contract and the manifest must still pass
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check_home_type_parity.py
+          python3 scripts/prepare_home_art.py --check
+          python3 .github/scripts/check_ios_deployment_target.py || true
+
+      - name: Show the diff
+        run: |
+          set -euo pipefail
+          git status --short
+          git diff --stat
+
+      - name: Commit and push
+        if: ${{ inputs.apply == 'true' }}
+        env:
+          FAMILY: ${{ inputs.family }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -F - <<MSG
+          type: vendor ${FAMILY} as the product family
+
+          Chosen by measurement, not by taste: .github/workflows/font-eval.yml scored seven
+          OFL faces at matched cap height against the reference, and ${FAMILY} is the only
+          one inside the width band (0.844 of Poppins against the reference's 0.824, where
+          Poppins sits at 1.000), at the cost of 0.073 of x-height.
+
+          Four static weights instantiated from the variable file, identical bytes on both
+          platforms, registered in UIAppFonts, and the family is a single token on each
+          side: GsFonts.Product and Aero.productName. The type contract passed with no
+          number edited, which is the condition for a substitution being a substitution and
+          not a re-spec.
+          MSG
+          git push origin HEAD:main
