@@ -74,10 +74,13 @@ Three of these were 20% or more off the picture while both platforms agreed with
 other. That is the failure mode this table exists to catch: the contract cannot see it,
 because the contract is a mirror.
 
-One difference is spacing, not size, and is left open: the sheet has a 9.7 pt gap
-between "Nexly" and "AI Companion" and ours has none — the two lines merge into a
-single glyph band at every threshold. Closing it moves everything below, so it wants
-its own pass with the probes re-derived around it.
+The header was measured twice. The first reading put "Nexly" at 12.14 pt and claimed
+the two header lines had no gap at all; both came from an x window that stopped at
+110 pt, before the "y", so it clipped the descender and reported the union of the two
+lines as one band. Measured over the whole string the sheet reads "Nexly" 15.17 pt and
+"AI Companion" 9.71 pt with a 6.7 pt gap, and our render now reads 15.00, 11.00 and a
+5.0 pt gap. The name is within 0.2 pt; the subtitle is still 1.3 pt tall and the gap
+1.7 pt tight, both inside the noise a different typeface introduces at these sizes.
 
 ## The video card's internals, measured against the sheet
 
