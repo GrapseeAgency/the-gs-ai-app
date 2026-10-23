@@ -508,6 +508,16 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
         // 200x200 covers 130 of the card's 214 points and the rest is base
         // gradient. The orientation of the asset turned out to be worth 0.02 of
         // the error score, which is why nothing transforms it in the manifest.
+        //
+        // What is still not the reference, and is an artwork rather than a
+        // layout: WHERE the colour sits. Averaging chroma across the card's rows,
+        // the reference's peak is at y 167 pt of 214 with 30.7% of the mass in the
+        // upper half; ours peaks at y 63 with 47.2% up top. The authored asset has
+        // its saturated mass at the top right and the pale swirl at the bottom
+        // left, and the mock reads the other way round — but flipping the asset
+        // moves the peak to y 57, i.e. the wrong way, because the asset's lower
+        // band is not the mirror of its upper one. Matching that needs the art the
+        // mock was drawn from, not another transform of this one.
         Image(
             painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_video_art),
             contentDescription = "Pearlescent bloom",
