@@ -353,7 +353,8 @@ struct HomeDashboardView: View {
             Spacer()
             Button(action: onOpenChats) {
                 HStack(spacing: 4) {
-                    Text("See All").font(Aero.responsive(14, .semibold, relativeTo: .callout))
+                    // 11: the sheet's band is 7.89 pt against our 10.33 at 14.
+                    Text("See All").font(Aero.responsive(11, .semibold, relativeTo: .callout))
                     Image(systemName: "arrow.right")
                         .font(Aero.responsive(11, .semibold, relativeTo: .caption))
                 }

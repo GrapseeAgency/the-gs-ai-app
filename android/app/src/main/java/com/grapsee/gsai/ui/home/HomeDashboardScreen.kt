@@ -790,7 +790,10 @@ private fun TodayUsedHeader(onSeeAll: () -> Unit) {
         ) {
             Text(
                 text = "See All",
-                style = MaterialTheme.typography.labelLarge.untracked(),
+                // 11, not 14: the sheet's band is 7.89 pt, which is an 11 pt cap at
+                // this face's 0.72 ratio; ours measured 10.33 at 14sp. Third label in
+                // the page header family that was too big while both platforms agreed.
+                style = MaterialTheme.typography.labelLarge.untracked().copy(fontSize = 11.sp),
                 color = GsTheme.colors.textSecondary
             )
             Spacer(Modifier.width(4.dp))
