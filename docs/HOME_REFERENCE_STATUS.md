@@ -66,6 +66,8 @@ cannot distort, because it is the same string at the same rendering.
 | greeting subtitle | 11.5 pt, 17.6 pt pitch | 15.3 at 15/22 | 12.7, 17.7 pitch (**12.5/18**) |
 | "Today's Used" | 15.78 pt | 19.00 at 18 | **16.00 at 15** |
 | "See All" | 7.89 pt | 10.33 at 14 | **9.00 at 11** |
+| dock "Generate" | 8.50 pt | 10.33 at 15 | **8.33 at 12** |
+| quick-action labels | 14.6 pt | 13.7 | unchanged — already right |
 | "Nexly" | 12.14 pt | 13.33 at 18 | 16.5 (see below) |
 | video chip | 7.21 pt | 11.0 (13 dp icon) | 7.67 (10 sp, 8 dp icon) |
 | card headline | 16 pt, same line break | 16 | 16 kept |
