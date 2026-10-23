@@ -282,6 +282,49 @@ def rect_of(l, r):
     return l[y0:y1, x0:x1]
 
 
+# A7 — the atmosphere the page draws has to BE the reference's atmosphere, not a
+# rendering of it. Every ground the material law divides by is read out of this
+# file, so if the file and the sheet disagree, every residual in the report is
+# measured against the wrong floor. The left margin is the sample: the page's
+# content starts at 20 dp (0.051 of the frame), so x 0.005..0.05 is bare backdrop
+# on the sheet and on both devices, with nothing drawn over it.
+#
+# The right margin is deliberately not used. Measured down 351 four-row samples,
+# the left agrees with the sheet to a median 0.11 L (p90 0.93, 2% of rows over
+# 2 L) while the right carries a median 0.15 but 10.5% of rows over 2 L and up to
+# 20.8 — the mock's own frame bevel and a clipped bokeh, not an artwork defect.
+#
+# The band is applied to the SHEET only. The same measurement on a capture is
+# dominated by something else, and knowing which is the point: iOS's left margin
+# sits 1.0-6.0 L below the art across x 8..32 px because its cards really do
+# cast the role's 10pt shadow onto the page (the mock's own page shadow measures
+# -7.2 L below its card, so iOS is the faithful one), while the Android capture
+# tracks the art to 0.3 L — nothing reaches the margin there in that render. Gate
+# the capture on it and the next honest fix would be to
+# delete a shadow. So: gate the artwork against the reference, print the
+# platforms, and name the difference instead of tuning a band around it.
+MARGIN_X = (0.002, 0.018)
+MARGIN_BAND = (0.0, 0.60)        # median |sheet - art|, measured 0.11
+MARGIN_P90_BAND = (0.0, 2.50)    # p90 of the same, measured 0.87
+
+
+def margin_agreement(frame, ground):
+    """|page - backdrop art| down the bare left margin, as (median, p90)."""
+    H, W = frame.shape
+    AH, AW = ground.shape
+    x0, x1 = int(MARGIN_X[0] * W), int(MARGIN_X[1] * W)
+    ax0, ax1 = int(MARGIN_X[0] * AW), int(MARGIN_X[1] * AW)
+    diffs = []
+    for y0 in range(0, H - 3, 4):
+        gy0 = int(y0 / H * AH)
+        gy1 = max(gy0 + 1, int((y0 + 4) / H * AH))
+        a = float(np.median(frame[y0:y0 + 4, x0:x1]))
+        b = float(np.median(ground[gy0:gy1, ax0:ax1]))
+        diffs.append(abs(a - b))
+    d = np.asarray(diffs)
+    return float(np.median(d)), float(np.percentile(d, 90)), int(d.size)
+
+
 def rim_excess(l, probe):
     """How much brighter the card's top hairline is than everything around it.
 
@@ -426,9 +469,22 @@ def main() -> int:
     for r in ref:
         print(row(r))
 
+    # A7 on the sheet: the art we ship and the atmosphere the mock were drawn
+    # from have to be the same picture, or the ground every residual below is
+    # measured against is somebody else's lighting.
+    drift = []
+    med, p90, n = margin_agreement(load_luma(args.reference, SCREEN), ground)
+    print(f"\n  A7 atmosphere identity (sheet): |page - shipped art| down the bare "
+          f"left margin: median {med:.2f} p90 {p90:.2f} over {n} rows")
+    for name, value, band in (("median", med, MARGIN_BAND), ("p90", p90, MARGIN_P90_BAND)):
+        if not band[0] <= value <= band[1]:
+            drift.append(f"sheet margin {name} {value:.2f} outside [{band[0]}, {band[1]}]")
+
     # The bands are recorded measurements of this sheet. If the sheet or a probe
     # rect has moved, the band is a lie, and a gate that cannot be right about
     # its own anchor cannot be right about a render. Checked, not assumed.
+    for d in drift:
+        print(f"::error::{d}")
     stale = []
     for r in ref:
         for metric, band in BANDS[r["probe"]].items():
@@ -444,7 +500,7 @@ def main() -> int:
         return 2
 
     if args.report_only:
-        return 0
+        return 1 if drift else 0
     if not args.render:
         print("::error::--render is required unless --report-only")
         return 2
@@ -458,6 +514,15 @@ def main() -> int:
     print(f"\n=== {args.label}, same metrics ({args.probe_set} rects) ===")
     for r in got:
         print(row(r))
+
+    # A7 again on the capture: what the platform actually put on screen, against
+    # the file it is supposed to be drawing. A translucent veil over the page —
+    # a scrim nobody asked for, a dimming layer left over from a sheet — moves
+    # this number and nothing else in the report.
+    med, p90, n = margin_agreement(load_luma(args.render), ground)
+    print(f"\n  A7 atmosphere identity ({args.label}): median {med:.2f} p90 {p90:.2f} "
+          f"over {n} rows — diagnostic only, this is where the platform's card "
+          f"shadows land (see MARGIN_X above)")
 
     # A5: a NaN means the instrument could not see the surface at all. It must
     # never be routed into a band comparison, where it reads as a drift.
@@ -489,9 +554,10 @@ def main() -> int:
                 failures.append(f"{r['probe']}/{name}: {value:.2f} outside [{lo}, {hi}]")
             print(f"    {name:18s} {value:8.2f}  in [{lo},{hi}]  {'OK' if ok else 'FAIL'}")
 
-    if failures:
-        print(f"\n::error::Home glass failed {len(failures)} check(s) on {args.label}:")
-        for f in failures:
+    if failures or drift:
+        print(f"\n::error::Home glass failed {len(failures) + len(drift)} check(s) "
+              f"on {args.label}:")
+        for f in failures + drift:
             print(f"  - {f}")
         if args.debug_out:
             print(f"  (if A3 failed, open {args.debug_out}: the red box must sit "
