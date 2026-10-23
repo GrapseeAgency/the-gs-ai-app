@@ -507,48 +507,6 @@ struct AeroDrawer: View {
             }
     }
 
-    // MARK: Live recents
-
-    /// One live recent: tap to open, long-press for the benchmark action set.
-    private func recentRow(_ conversation: StoredConversation) -> some View {
-        row(title: gsConversationTitle(conversation.title), icon: nil, isPinned: conversation.pinned) {
-            onRoute(.chat(conversation.id))
-        }
-        .contextMenu {
-            Button {
-                GSHaptics.success()
-                let target = !conversation.pinned
-                store.setPinned(id: conversation.id, target)
-                GSHaptics.success()
-                sync(conversation.id, pinned: target)
-            } label: {
-                Label(conversation.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
-            }
-            Button {
-                renameTarget = conversation
-                renameDraft = conversation.title
-            } label: {
-                Label("Rename…", systemImage: "pencil")
-            }
-            Button {
-                GSHaptics.success()
-                store.setArchived(id: conversation.id, true)
-                GSHaptics.success()
-                sync(conversation.id, archived: true)
-            } label: {
-                Label("Archive", systemImage: "archivebox")
-            }
-            Button(role: .destructive) {
-                GSHaptics.warning()
-                store.delete(id: conversation.id)
-                GSHaptics.warning()
-                syncDelete(conversation.id)
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
-    }
-
     private func sync(_ id: String, pinned: Bool? = nil, archived: Bool? = nil, title: String? = nil) {
         guard !id.hasPrefix("demo-"), !id.hasPrefix("local-") else { return }
         Task { try? await APIClient.shared.updateConversation(id: id, pinned: pinned, archived: archived, title: title) }
@@ -578,7 +536,28 @@ struct AeroDrawer: View {
     /// One row inside the account / More reveal sheets. The route handler in
     /// RootView closes the drawer itself (which unmounts the sheet with it) —
     /// so the row only routes.
-    private func sheetRow(title: String, icon: String, isSelected: Bool = false, action: @escaping () -> Void) -> some View {
-        row(title: title, icon: icon, isSelected: isSelected, action: action)
+    private func sheetRow(title: String, icon: String, isSelected: Bool = false,
+                          action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundColor(isSelected ? Aero.accent : Aero.text.opacity(0.8))
+                    .frame(width: 28)
+                Text(title)
+                    .font(.system(size: DrawerMetrics.rowTitle))
+                    .foregroundColor(isSelected ? Aero.accent : Aero.text)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: DrawerMetrics.chevron, weight: .medium))
+                    .foregroundColor(DrawerMetrics.labelInk)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 52)
+            .background(RoundedRectangle(cornerRadius: 16)
+                .fill(isSelected ? Aero.accent.opacity(0.12) : Color.clear))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 }

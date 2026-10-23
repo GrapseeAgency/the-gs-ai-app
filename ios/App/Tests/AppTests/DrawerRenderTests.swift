@@ -1,6 +1,7 @@
 import XCTest
 import SwiftUI
 import UIKit
+@testable import GSApp
 
 /// The drawer rendered over the real Home page, on a real window, written where
 /// the workflow can collect it.
@@ -55,7 +56,7 @@ final class DrawerRenderTests: XCTestCase {
                 entryOffset: .constant(0),
                 onRoute: { _ in },
                 onClose: {},
-                activeRoute: .home,
+                activeRoute: nil,
                 recentFixture: Self.fixture
             )
         }

@@ -193,20 +193,24 @@ fun GsDrawerContent(
                     }
                     item {
                         Spacer(Modifier.height(DrawerMetrics.pillToHero))
-                        DrawerHeroRow(label = "New chat") {
-                            onClose()
-                            onNavigate(GsRoutes.chat(null))
-                        }
+                        DrawerHeroRow(
+                            label = "New chat",
+                            onClick = {
+                                onClose()
+                                onNavigate(GsRoutes.chat(null))
+                            },
+                        )
                     }
                     item { DrawerSectionLabel("YOUR SPACE") }
                     items(DESTINATIONS) { destination ->
                         DrawerDestinationRow(
                             destination = destination,
                             selected = selectedRoute == destination.route,
-                        ) {
-                            onClose()
-                            onNavigate(destination.route)
-                        }
+                            onClick = {
+                                onClose()
+                                onNavigate(destination.route)
+                            },
+                        )
                     }
                     item {
                         Spacer(Modifier.height(6.dp))
