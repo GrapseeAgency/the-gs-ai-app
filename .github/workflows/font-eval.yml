@@ -45,21 +45,26 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p fonts
+          # fonts.google.com/download answers with an HTML page, not the zip it used
+          # to; the CSS API serves a real static instance per weight, and asking for
+          # it with a legacy User-Agent makes Google hand back TTF instead of woff2.
           echo "$FAMILIES" | tr ' ' '\n' | while read -r FAM; do
             [ -n "$FAM" ] || continue
             SLUG=$(echo "$FAM" | tr ' ' '_')
+            ENC=$(echo "$FAM" | sed 's/ /+/g')
+            mkdir -p "fonts/$SLUG"
             echo "::group::$FAM"
-            curl -fsSL --retry 3 "https://fonts.google.com/download?family=$(echo "$FAM" | sed 's/ /%20/g')" -o "fonts/$SLUG.zip" \
-              || { echo "::warning::$FAM: download failed"; echo "::endgroup::"; continue; }
-            mkdir -p "fonts/$SLUG" && unzip -oq "fonts/$SLUG.zip" -d "fonts/$SLUG"
-            if ! find "fonts/$SLUG" -iname '*semibold*.ttf' -o -iname '*600*.ttf' | grep -q .; then
-              VAR=$(find "fonts/$SLUG" -name '*[[]wght[]].ttf' | head -1)
-              if [ -n "$VAR" ]; then
-                fonttools varLib.instancer "$VAR" wght=600 -o "fonts/$SLUG/SemiBold-600.ttf" >/dev/null
-                echo "  instantiated SemiBold from $VAR"
-              fi
+            CSS=$(curl -fsSL --retry 3 -H "User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)" \
+                  "https://fonts.googleapis.com/css2?family=${ENC}:wght@600") || CSS=""
+            URL=$(printf '%s' "$CSS" | grep -o 'https://[^)]*\.ttf' | head -1)
+            if [ -z "$URL" ]; then
+              echo "::warning::$FAM: no TTF served for weight 600"
+              echo "::endgroup::"
+              continue
             fi
-            echo "  files: $(find "fonts/$SLUG" -name '*.ttf' | wc -l)"
+            curl -fsSL --retry 3 "$URL" -o "fonts/$SLUG/SemiBold-600.ttf"
+            echo "  $URL"
+            echo "  bytes: $(wc -c < "fonts/$SLUG/SemiBold-600.ttf")"
             echo "::endgroup::"
           done
 
@@ -69,51 +74,43 @@ jobs:
 
           POPPINS = "android/app/src/main/res/font/poppins_semibold.ttf"
 
-          def cap_of(path, size=240):
+          def band(path, glyph, size=240):
               f = ImageFont.truetype(path, size)
-              im = Image.new("L", (700, 500), 0)
-              ImageDraw.Draw(im).text((30, 30), "H", font=f, fill=255)
+              im = Image.new("L", (900, 600), 0)
+              ImageDraw.Draw(im).text((40, 40), glyph, font=f, fill=255)
               bb = im.getbbox()
               return bb[3] - bb[1]
 
-          def x_of(path, size=240):
-              f = ImageFont.truetype(path, size)
-              im = Image.new("L", (700, 500), 0)
-              ImageDraw.Draw(im).text((30, 30), "o", font=f, fill=255)
-              bb = im.getbbox()
-              return bb[3] - bb[1]
+          base_f = ImageFont.truetype(POPPINS, 1000)
+          base_cap = band(POPPINS, "H")
+          base_wcap = base_f.getlength("Good morning,") / base_cap
 
-          base = ImageFont.truetype(POPPINS, 1000)
-          base_cap = cap_of(POPPINS)
-          base_wcap = base.getlength("Good morning,") / base_cap
-
-          rows = [("Poppins SemiBold (shipped)", 1.0, x_of(POPPINS) / base_cap, "baseline")]
+          rows = [("Poppins SemiBold (shipped)", 1.0, band(POPPINS, "o") / base_cap, "baseline")]
           for fam in sorted(glob.glob("fonts/*/")):
-              ttfs = [p for p in glob.glob(fam + "**/*.ttf", recursive=True)]
-              semi = ([p for p in ttfs if "semibold" in os.path.basename(p).lower() or "600" in os.path.basename(p)]
-                      or [p for p in ttfs if "regular" in os.path.basename(p).lower()]
-                      or ttfs)
-              if not semi:
-                  rows.append((os.path.basename(fam.rstrip("/")), None, None, "no ttf"))
+              p = os.path.join(fam, "SemiBold-600.ttf")
+              name = os.path.basename(fam.rstrip("/")).replace("_", " ")
+              if not os.path.isfile(p):
+                  rows.append((name, None, None, "not fetched"))
                   continue
-              p = semi[0]
               f = ImageFont.truetype(p, 1000)
-              ratio = (f.getlength("Good morning,") / cap_of(p)) / base_wcap
-              xcap = x_of(p) / cap_of(p)
-              verdict = ("pass" if 0.80 <= ratio <= 0.85 and xcap >= 0.82
-                         else "fail width" if not (0.80 <= ratio <= 0.85) else "fail x-height")
-              rows.append((os.path.basename(fam.rstrip("/")), ratio, xcap, verdict + " · " + os.path.basename(p)))
+              cap = band(p, "H")
+              ratio = (f.getlength("Good morning,") / cap) / base_wcap
+              xcap = band(p, "o") / cap
+              ok_w = 0.80 <= ratio <= 0.85
+              ok_x = xcap >= 0.82
+              verdict = "PASS" if ok_w and ok_x else ("width" if not ok_w else "x-height")
+              rows.append((name, ratio, xcap, verdict))
 
           print(f"{'face':28s} {'width/Poppins':>13s} {'x/cap':>7s}  verdict")
-          print(f"{'-'*28} {'-'*13} {'-'*7}  {'-'*40}")
+          print(f"{'-'*28} {'-'*13} {'-'*7}  {'-'*12}")
           for name, ratio, xcap, verdict in rows:
               r = f"{ratio:.3f}" if ratio is not None else "-"
               x = f"{xcap:.3f}" if xcap is not None else "-"
               print(f"{name[:28]:28s} {r:>13s} {x:>7s}  {verdict}")
               print(f"::notice::face={name} width_ratio={r} x_cap={x} verdict={verdict}")
           print()
-          print(f"reference (measured from the sheet): width 0.824, x/cap 0.850")
-          print(f"accept: width 0.80-0.85 AND x/cap >= 0.82")
+          print("reference (measured from the sheet): width 0.824, x/cap 0.850")
+          print("accept: width 0.80-0.85 AND x/cap >= 0.82")
           PY
 
       - name: Summary
