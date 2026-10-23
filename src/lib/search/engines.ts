@@ -767,7 +767,84 @@ export const tregWebSearch: EngineAdapter = {
   },
 }
 
+/**
+ * GitHub Releases — the authoritative source for software version questions.
+ * No key: the public API allows 60 unauthenticated requests/hour. The planner
+ * marks version/release questions with sourceHint=github.com, so this engine
+ * runs first and returns the exact tag instead of a news page.
+ */
+const githubRelease: EngineAdapter = {
+  id: 'github-release',
+  kind: 'reference',
+  async run(q: EngineQuery): Promise<RawResult[]> {
+    const project = q.query
+      .replace(/\b(?:latest|stable|version|release|releases|github|of|the|for)\b/gi, ' ')
+      .replace(/[^A-Za-z0-9 .+#_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .split(' ')
+      .slice(0, 5)
+      .join(' ')
+    if (project.length < 2) return []
+    const headers = { Accept: 'application/vnd.github+json', 'User-Agent': UA }
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), ENGINE_TIMEOUT_MS)
+    try {
+      const variants = [
+        project,
+        project.split(' ').slice(0, 2).join(' '),
+        project.split(' ')[0],
+      ].filter((v, i, a) => v.length >= 2 && a.indexOf(v) === i)
+      const required = project.split(' ')[0].toLowerCase()
+      for (const variant of variants) {
+        const searchRes = await fetch(
+          `https://api.github.com/search/repositories?q=${encodeURIComponent(variant + ' in:name')}&per_page=3`,
+          { headers, signal: ctrl.signal }
+        )
+        if (!searchRes.ok) continue
+        const search = (await searchRes.json()) as {
+          items?: { full_name?: string }[]
+        }
+        for (const repo of search.items ?? []) {
+          const fullName = repo.full_name
+          if (!fullName) continue
+          const repoName = fullName.split('/')[1]?.toLowerCase() ?? ''
+          // The first query word is the product name ("Bun"). A repo whose
+          // name merely contains another word ("...Runtime...") is not it.
+          if (!repoName.split(/[-_.]/).includes(required) && repoName !== required) continue
+          const relRes = await fetch(`https://api.github.com/repos/${fullName}/releases/latest`, {
+            headers,
+            signal: ctrl.signal,
+          })
+          if (!relRes.ok) continue
+          const rel = (await relRes.json()) as {
+            tag_name?: string
+            name?: string
+            html_url?: string
+            published_at?: string
+          }
+          if (!rel.tag_name || !rel.html_url) continue
+          return [
+            {
+              url: rel.html_url,
+              title: `${fullName} ${rel.tag_name}`,
+              snippet: `Latest release: ${rel.tag_name}${rel.name ? ` (${rel.name})` : ''}${rel.published_at ? `, published ${rel.published_at}` : ''}. Official GitHub release.`,
+              domain: 'github.com',
+            },
+          ]
+        }
+      }
+      return []
+    } catch {
+      return []
+    } finally {
+      clearTimeout(timer)
+    }
+  },
+}
+
 export const ENGINE_REGISTRY: Partial<Record<SearchEngineId, EngineAdapter>> = {
+  'github-release': githubRelease,
   'bing-news-rss': bingNewsRss,
   'google-news-rss': googleNewsRss,
   'bing-web': bingWeb,
@@ -825,6 +902,9 @@ export function enginesForIntent(
   // §13 — the user NAMED a source; the engine set must be able to reach it.
   if (intent === 'source_specific' && sourceHint) {
     const hint = sourceHint.toLowerCase()
+    if (hint === 'github.com' || hint.endsWith('.github.com')) {
+      return [...searx, 'github-release', 'bing-web', 'duckduckgo-lite', ...brave, ...treg]
+    }
     if (hint === 'wikipedia.org' || hint.endsWith('.wikipedia.org')) {
       return [...searx, 'wikipedia', 'bing-web', 'duckduckgo-lite']
     }

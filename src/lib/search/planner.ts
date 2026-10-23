@@ -219,6 +219,7 @@ function normalizePlan(raw: Record<string, unknown>, fallbackQuery: string): Sea
       q
         .replace(/^(?:(?:again|now|please|and|then)\s+)+(?:for\s+)?/i, '')
         .replace(/^(?:the\s+)?(?:search|searching|google|look\s*up)\s*(?:for|up|about)?\s*(?:again\s+)?/i, '')
+        .replace(/^(?:the\s+)?(?:latest\s+)?(?:stable\s+)?version\s+of\s+(?:the\s+)?/i, '')
         .trim()
     )
     .filter((q) => q.length >= 3)

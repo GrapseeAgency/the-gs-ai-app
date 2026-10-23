@@ -244,6 +244,23 @@ Full payloads: [`backend-capabilities.json`](../backend-capabilities.json)
 [`backend-capabilities-progress.json`](../backend-capabilities-progress.json)
 (progress context).
 
+## Software-release accuracy
+
+A version question used to hit general news engines. The planner now routes
+software releases to an authoritative GitHub Releases engine
+(`github-release`): it resolves the repository, fetches `/releases/latest`, and
+returns the exact tag as a source. Verified directly against the public API:
+
+```
+query: Bun runtime latest release github
+→ https://github.com/oven-sh/bun/releases/tag/bun-v1.4.4
+→ Latest release: bun-v1.4.4 (Bun v1.4.4), published 2026-10-22
+```
+
+The model still has to synthesize the sentence, but it now receives the exact
+tag instead of an irrelevant news page. General current-events questions still
+depend on the web engines; no system can guarantee every arbitrary fact.
+
 ## Verified runs
 
 Both workflows completed green on commit `ed9656a9`:

@@ -28,6 +28,7 @@ export type SearchEngineId =
   | 'gutenberg'
   | 'arxiv'
   | 'crossref'
+  | 'github-release'
 
 /** One normalized hit from any engine, before ranking/dedupe. */
 export type RawResult = {

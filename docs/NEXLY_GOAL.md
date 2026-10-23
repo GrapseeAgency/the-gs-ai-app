@@ -197,6 +197,9 @@ catalogue, validator and web registry also know the `plan` kind.
   checklist context reaches it. Evidence:
   `docs/reference/nexly/backend-capabilities.json` and
   `backend-capabilities-progress.json`.
+- **Software-release accuracy:** version/release questions route to a
+  keyless GitHub Releases engine that returns the exact tag. Verified:
+  `Bun runtime latest release github` → `bun-v1.4.4`, official release URL.
 - **Cross-device checklist:** a `PlanProgress` row is stored server-side per
   conversation and exposed at `GET/PUT /api/v1/conversations/{id}/plan-progress`;
   both clients hydrate/PUT it, and `prepareTurn` falls back to the stored row
