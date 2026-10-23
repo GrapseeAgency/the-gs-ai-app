@@ -562,7 +562,10 @@ private struct VideoCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     ZStack {
-                        Circle().fill(Color.white.opacity(0.55)).frame(width: 44, height: 44)
+                        // 37 pt, the sheet's disc (44 was 7 pt over). Android drew an
+                    // outline glyph here while iOS drew SF's solid `play`; Android now
+                    // draws a filled triangle of the sheet's 9.2 x 11.5 pt.
+                    Circle().fill(Color.white.opacity(0.55)).frame(width: 37, height: 37)
                         Image(systemName: "play.fill")
                             .font(Aero.responsive(15, .regular, relativeTo: .body))
                             .foregroundStyle(Aero.text)

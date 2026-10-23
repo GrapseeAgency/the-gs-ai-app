@@ -1,5 +1,6 @@
 package com.grapsee.gsai.ui.home
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,6 +40,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
@@ -566,20 +568,33 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 color = GsTheme.colors.textSecondary
             )
             Spacer(Modifier.weight(1f))
+            // 37dp disc with a FILLED triangle. Measured on the sheet: the disc is
+            // 37.0 pt across and the glyph is 9.2 x 11.5 pt at 65% ink, i.e. a solid
+            // triangle. This was a 44dp disc around Tabler's outline glyph (30% ink)
+            // while iOS already drew SF's solid `play` — so the two platforms
+            // disagreed on the card's most salient control, and both were 7 pt larger
+            // than the sheet.
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(37.dp)
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.55f))
                     .border(1.dp, Color.White.copy(alpha = 0.7f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    GsIcons.Play,
-                    contentDescription = "Play preview",
-                    tint = GsTheme.colors.textPrimary,
-                    modifier = Modifier.size(16.dp)
-                )
+                // GsTheme.colors is @Composable, so it cannot be read inside the
+                // draw lambda; hoisting it is what the compiler's
+                // "@Composable invocations can only happen from ..." error asks for.
+                val ink = GsTheme.colors.textPrimary
+                Canvas(Modifier.size(width = 9.dp, height = 11.dp).offset(x = 1.dp)) {
+                    val tri = Path().apply {
+                        moveTo(0f, 0f)
+                        lineTo(size.width, size.height / 2f)
+                        lineTo(0f, size.height)
+                        close()
+                    }
+                    drawPath(tri, ink)
+                }
             }
         }
     }
