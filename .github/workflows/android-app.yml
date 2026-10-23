@@ -603,6 +603,37 @@ jobs:
             echo "rendered nexly-chat-full-$w.png + prose"
           done
 
+      - name: Nexly Explore AI renders (real Compose tree, JVM)
+        if: always()
+        working-directory: android
+        run: |
+          set -euo pipefail
+          # Same Roborazzi harness, pointed at the REAL Explore page: hero,
+          # chips, search, Featured Tools, Popular rows, Collections, Featured
+          # journey, composer — over the pearl backdrop.
+          ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest \
+            --rerun --tests "com.grapsee.gsai.ui.explore.NexlyExploreScreenshotTest" \
+            -PgsShots=true
+          SHOTS=app/build/screenshots
+          for w in 393x1400 393x852 411x914 360x780; do
+            test -s "$SHOTS/nexly-explore-$w.png" \
+              || { echo "::error::nexly-explore-$w.png was not produced"; exit 1; }
+          done
+          test -s "$SHOTS/nexly-explore-search-393x852.png" \
+            || { echo "::error::the Explore search-state render was not produced"; exit 1; }
+          test -s "$SHOTS/nexly-explore-search-empty-393x852.png" \
+            || { echo "::error::the Explore empty-search render was not produced"; exit 1; }
+          echo "rendered nexly-explore-*.png"
+
+      - name: Upload the Nexly Explore renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexly-explore-render-android
+          path: android/app/build/screenshots/nexly-explore-*.png
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload the Nexly chat response renders
         if: always()
         uses: actions/upload-artifact@v4

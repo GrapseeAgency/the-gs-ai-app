@@ -59,6 +59,7 @@ import com.grapsee.gsai.ui.settings.ThemeCustomisationScreen
 import com.grapsee.gsai.ui.settings.VoiceSettingsScreen
 import com.grapsee.gsai.ui.specimen.GlassSpecimenScreen
 import com.grapsee.gsai.ui.voice.VoiceScreen
+import com.grapsee.gsai.ui.explore.ExploreScreen
 import com.grapsee.gsai.ui.home.HomeDashboardScreen
 import com.grapsee.gsai.ui.agents.TravelAgentScreen
 import com.grapsee.gsai.ui.theme.GsMotion
@@ -256,13 +257,21 @@ fun GsNavHost(
                 onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) },
                 onOpenDrawer = { scope.launch { drawerState.open() } },
                 onOpenChats = { open(GsRoutes.CHATS) },
-                onOpenAgent = { open(GsRoutes.TRAVEL_AGENT) },
+                onOpenAgent = { open(GsRoutes.EXPLORE) },
                 onOpenVoice = { open(GsRoutes.VOICE) },
                 onOpenSettings = { open(GsRoutes.SETTINGS) },
             )
         }
         composable(GsRoutes.TRAVEL_AGENT) {
             TravelAgentScreen(onBack = back, onSendToChat = { prompt -> navController.navigate(GsRoutes.chat(null, prompt)) })
+        }
+        composable(GsRoutes.EXPLORE) {
+            ExploreScreen(
+                onOpenChat = { prompt, autoSend ->
+                    navController.navigate(GsRoutes.chat(null, prompt, autoSend))
+                },
+                onBack = back,
+            )
         }
         composable(GsRoutes.CHATS) { ChatsScreen(onNavigate = open) }
         composable(GsRoutes.PROFILE) { ProfileScreen(onNavigate = open, onBack = back) }

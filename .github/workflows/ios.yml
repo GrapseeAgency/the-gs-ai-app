@@ -314,6 +314,24 @@ jobs:
               || { echo "::error::nexly-chat-ios-full-prose-$w.png missing — the prose render did not run"; exit 1; }
           done
 
+      - name: Collect the Explore AI render
+        if: always()
+        run: |
+          set -euo pipefail
+          # ExploreRenderTests shares the /tmp channel; a missing PNG is a
+          # build failure, not a shrug. The 393x1400 capture is the
+          # reference-height full page.
+          SRC=/tmp/gs-nexly-renders
+          DIR=ios/build/nexly-renders
+          mkdir -p "$DIR"
+          if [ -d "$SRC" ]; then cp "$SRC"/nexly-explore-ios-*.png "$DIR/" 2>/dev/null || true; fi
+          for w in 393x852 411x914 360x780 393x1400; do
+            test -s "$DIR/nexly-explore-ios-$w.png" \
+              || { echo "::error::nexly-explore-ios-$w.png missing — the Explore render harness did not produce it"; exit 1; }
+          done
+          test -s "$DIR/nexly-explore-ios-search-393x852.png" \
+            || { echo "::error::the Explore search-state render was not produced"; exit 1; }
+
       - name: Upload the Nexly chat response render
         if: always()
         uses: actions/upload-artifact@v4
