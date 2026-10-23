@@ -498,17 +498,22 @@ private struct VideoCard: View {
                 // 17.5 pt, Android's at 20.0, iOS's at 13.5. `Color.clear` is what
                 // Android's Box already does — the card's size comes from the
                 // constraint, the art overflows it and the clipShape trims it.
-                //
-                // This is now the platform that agrees with the reference: the
-                // card's saturated mass centroids at y 164 pt here against the
-                // mock's 163, while Android measures 139 — see the note on
-                // VideoCard in HomeDashboardScreen.kt, which records the two
-                // explanations already ruled out there.
                 Color.clear.overlay(alignment: .bottomTrailing) {
                     Image("GSHomeVideoArt")
                         .resizable()
-                        .scaledToFit()
+                        // Fill the 200 pt box and trim the sides: the twin of
+                        // Android's `ContentScale.Crop`, and the reason is the
+                        // card's own colour. `scaledToFit()` letterboxes this
+                        // 864x560 asset to 200x130, so 84 pt of the card's 214
+                        // show only their base gradient — measured across four
+                        // renders, that leaves the card 3.5 L lighter and a
+                        // quarter short of the reference's saturation (chroma
+                        // mean 17.2 against the reference's 20.5; filled, 22.1).
+                        // `.clipped()` is what makes this a crop rather than an
+                        // overflow: a SwiftUI frame does not clip by itself.
+                        .scaledToFill()
                         .frame(width: 200, height: 200)
+                        .clipped()
                         .offset(x: 16, y: 12)
                 }
                 .allowsHitTesting(false)

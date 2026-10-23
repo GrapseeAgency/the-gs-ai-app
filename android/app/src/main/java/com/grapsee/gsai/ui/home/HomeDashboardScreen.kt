@@ -494,27 +494,24 @@ private fun VideoCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 onClick = onClick
             )
     ) {
-        // The authored pearl render from the reference — placed at the
-        // bottom-right of the card exactly as the mock composites it.
+        // The authored pearl render from the reference, filling the card's
+        // bottom-right and trimmed by its clip — the mock composites it so the
+        // colour reaches the copy, not just the corner.
         //
-        // MEASURED, AND STILL ~25 pt HIGH. On the 393x852 captures the card's
-        // saturated mass — pixels with chroma > 70 whose brightest channel is also
-        // > 200, so text antialiasing cannot enter the count — centroids at y 163 pt
-        // in the mock, y 164 on iOS and y 139 here. Two explanations were tested on
-        // real renders and both are dead: swapping `.offset().size()` to
-        // `.size().offset()` moved the centroid not at all, and
-        // ContentScale.FillBounds reached only y 148 while distorting the art. What
-        // is left is the box: a 200 pt box bottom-aligned at card_bottom + 12
-        // letterboxes this 864x560 art to 200x130, so its centre cannot leave the
-        // band y 61..191 and the mass inside it cannot sit lower than about here.
-        // Closing the gap means deciding the art's box against the mock, not nudging
-        // an offset — and the mock's mass also covers 3.7% of the card where ours
-        // covers 0.7%, because the authored asset peaks at chroma 90 while the
-        // reference card reaches 255. That part is an artwork, not a layout.
+        // Crop, not Fit, and the number that says so is the card's own chroma
+        // distribution measured on four real renders (two scales x two asset
+        // orientations, tool-results/measure_video_art_variants.py). Letterboxed
+        // into the 200 pt box the card reads chroma mean 17.2, p90 43.4, 228.7 L;
+        // filled it reads 22.1, 50.2, 226.0 — against the reference card's 20.5,
+        // 52.0, 225.2. Fit leaves the page 3.5 L too light and a quarter short of
+        // the reference's saturation, because a 864x560 asset letterboxed into
+        // 200x200 covers 130 of the card's 214 points and the rest is base
+        // gradient. The orientation of the asset turned out to be worth 0.02 of
+        // the error score, which is why nothing transforms it in the manifest.
         Image(
             painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_video_art),
             contentDescription = "Pearlescent bloom",
-            contentScale = ContentScale.Fit,
+            contentScale = ContentScale.Crop,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .offset(x = 16.dp, y = 12.dp)

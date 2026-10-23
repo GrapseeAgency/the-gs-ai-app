@@ -93,7 +93,6 @@ class Art:
     upscale: float          # declared tolerance: target may undershoot need by this
     screens: str
     note: str
-    flip_v: bool = False    # the shipped copy is the authored art upside down
 
     @property
     def android_path(self) -> Path:
@@ -124,15 +123,11 @@ MANIFEST = [
         "Mind Guide orb, 38 dp/pt and 61 pt at the design system's 1.6x chrome cap."),
     Art("gs_home_video_art", "GSHomeVideoArt", "home/gs-home-video-art.png",
         (864, 560), (600, 462), 1.0, "Home",
-        "Video card art, fitted into a fixed 200 pt box inside the 214 pt card. "
-        "SHIPPED UPSIDE DOWN: the authored render puts its saturated pearl mass at "
-        "the top right and the pale swirl below it, and the reference card is the "
-        "other way round — its bright-chroma region occupies x 132..186, "
-        "y 141..188 of the card where ours measured y 97..128. Correlating the "
-        "card's chroma map against the composited asset scores r=+0.385 as "
-        "authored and r=+0.694 flipped, so the flip is the measured answer; the "
-        "authored file stays what it was drawn as and the transform lives here.",
-        flip_v=True),
+        "Video card art, in a fixed 200 pt box inside the 214 pt card. Drawn "
+        "Crop, not Fit — see the note on VideoCard in HomeDashboardScreen.kt. "
+        "No transform: an earlier revision of this manifest flipped it vertically "
+        "on the strength of a synthetic composite correlation, and rendering both "
+        "ways showed the difference is 0.02 of the error score, i.e. nothing."),
     Art("gs_home_lotus_new", "GSHomeLotusNew", "home/gs-home-lotus.png",
         (880, 416), (720, 480), 1.2, "Home",
         "Reflection card: 150x100 dp/pt, 240x160 pt at the chrome cap. The "
@@ -196,8 +191,6 @@ def write(manifest: list[Art]) -> int:
                 return 1
             if img.size != a.target:
                 img = img.resize(a.target, Image.LANCZOS)
-            if a.flip_v:
-                img = img.transpose(Image.FLIP_TOP_BOTTOM)
             for dest in (a.android_path, a.ios_path):
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 img.save(dest, optimize=True)
@@ -212,8 +205,6 @@ def derived(a: Art) -> np.ndarray:
         img = src.convert("RGBA" if "A" in src.getbands() else "RGB")
         if img.size != a.target:
             img = img.resize(a.target, Image.LANCZOS)
-        if a.flip_v:
-            img = img.transpose(Image.FLIP_TOP_BOTTOM)
         return np.asarray(img).astype(float)
 
 
@@ -249,11 +240,11 @@ def check(manifest: list[Art]) -> int:
         if a.android_path.is_file() and a.ios_path.is_file() and \
                 md5(a.android_path) != md5(a.ios_path):
             problems.append(f"{a.name}: the two platforms ship different pixels")
-        # The shipped copy has to be the authored art under the declared transform
-        # (resize, and for one asset a vertical flip). Compared in pixels rather
-        # than by hash because PNG encoding is not stable across Pillow releases,
-        # and a 1.0 mean-difference tolerance is far tighter than anything a human
-        # edit could introduce while still allowing a re-encode.
+        # The shipped copy has to BE the authored art at the declared resolution.
+        # Compared in pixels rather than by hash because PNG encoding is not
+        # stable across Pillow releases, and a 1.0 mean-difference tolerance is
+        # far tighter than anything a hand edit could introduce while still
+        # allowing a re-encode.
         for side, path in (("android", a.android_path), ("ios", a.ios_path)):
             if not path.is_file():
                 continue
@@ -268,9 +259,9 @@ def check(manifest: list[Art]) -> int:
             diff = float(np.abs(got - want).mean())
             if diff > 1.0:
                 problems.append(
-                    f"{a.name}: {side} copy is not the authored art under the "
-                    f"declared transform (mean |diff| {diff:.1f} of 255; "
-                    f"flip_v={a.flip_v}) — re-derive with --write")
+                    f"{a.name}: {side} copy is not the authored art at the "
+                    f"declared resolution (mean |diff| {diff:.1f} of 255) — "
+                    f"re-derive with --write")
         if a.name not in used_android and a.ios_set not in used_ios:
             problems.append(
                 f"{a.name}: the manifest carries it but neither platform draws "
