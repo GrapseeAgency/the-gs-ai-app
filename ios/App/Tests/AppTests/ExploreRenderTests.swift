@@ -8,7 +8,8 @@ import UIKit
  * Featured Tools grid, Popular rows, Collections, Featured journey, composer
  * — over the same pearl backdrop Home mounts. No mockup.
  *
- * The references are docs/reference/explore/*.png; the PNGs are the evidence.
+ * The references are the Explore screenshots in docs/reference/explore; the
+ * PNGs are the evidence.
  */
 @MainActor
 final class ExploreRenderTests: XCTestCase {

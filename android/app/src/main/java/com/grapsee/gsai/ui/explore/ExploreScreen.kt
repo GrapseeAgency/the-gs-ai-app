@@ -53,7 +53,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.grapsee.gsai.R
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.gsGlass
@@ -105,7 +104,7 @@ fun ExploreScreen(
             ReferenceBackdrop(Modifier.matchParentSize(), showBlossom = false, bokeh = false)
         } else {
             Image(
-                painter = painterResource(R.drawable.gs_home_backdrop),
+                painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_backdrop),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
@@ -267,7 +266,7 @@ private fun ExploreHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Image(
-            painter = painterResource(R.drawable.gs_companion_orb),
+            painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(38.dp),
@@ -376,7 +375,7 @@ private fun HeroCard(
             .gsGlass(role = GsGlassRole.CardLight, shape = RoundedCornerShape(26.dp)),
     ) {
         Image(
-            painter = painterResource(R.drawable.gs_home_lotus_new),
+            painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             alignment = Alignment.CenterEnd,
@@ -677,7 +676,7 @@ private fun CollectionCard(
                 .height(86.dp),
         ) {
             Image(
-                painter = painterResource(R.drawable.gs_home_lotus),
+                painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
