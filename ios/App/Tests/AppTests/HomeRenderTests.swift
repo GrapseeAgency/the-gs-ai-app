@@ -364,7 +364,11 @@ final class HomeRenderTests: XCTestCase {
         // change moved the page, and it reported "the glass is not rasterising"
         // when the glass had simply moved 12 pt. Scan the column for the brightest
         // row in the bento's neighbourhood and measure under it.
-        let colX = size.width * 0.30
+        // The RIGHT column, where the Mind Guide card's lit hairline lives. At
+        // x 0.30 sits the video card, whose top edge is a chip pill and a soft
+        // gradient — the scan found 245 L there and called it "no edge", which was
+        // true of that column and false of the page.
+        let colX = size.width * 0.64
         var bestY = size.height * 0.33
         var bestL = -1.0
         var scan = size.height * 0.33
