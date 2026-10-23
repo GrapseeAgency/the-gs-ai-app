@@ -460,7 +460,11 @@ struct AeroDrawer: View {
             .accessibilityLabel("Settings")
         }
         .padding(.horizontal, DrawerMetrics.contentInset)
-        .padding(.vertical, 8)
+        .padding(.top, 8)
+        // 30 pt of clearance, ~the sheet's 34 pt above the home indicator: the
+        // panel is full-bleed, so without it the footer sits under the indicator
+        // and the panel's own bottom edge is pushed out of the frame.
+        .padding(.bottom, 30)
     }
 
     /// The identity the footer shows: the fixture when a capture is running, the

@@ -61,6 +61,7 @@ final class DrawerRenderTests: XCTestCase {
             )
         }
         .frame(width: size.width, height: size.height)
+        .ignoresSafeArea()
         .environment(\.layoutDirection, .leftToRight)
 
         let host = UIHostingController(rootView: view)
