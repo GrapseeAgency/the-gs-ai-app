@@ -163,8 +163,8 @@ catalogue, validator and web registry also know the `plan` kind.
   `ios/App/Tests/AppTests/NexlyPlanTests.swift`, expanded
   `scripts/test-nexly-plan.ts`, `F26_NEXLY_PLAN` fixtures on both parsers, and
   plan, adaptive-thinking, prose and full-screen renders on both platforms.
-- Native verification is green on commit `33c61a17`: Android CI run
-  `39865438005` (compile, Home render, Nexly response + adaptive + full-screen
+- Native verification is green on commit `f19ff6ac`: Android CI run
+  `39913542541` (compile, Home render, Nexly response + adaptive + full-screen
   renders at the full size matrix, 267 unit tests) and iOS CI run
-  `39865441786` (Xcode build, XCTest, Home render, the same Nexly renders).
+  `39913545298` (Xcode build, XCTest, Home render, the same Nexly renders).
   Evidence and run links are in `docs/reference/nexly/ci/README.md`.

@@ -110,12 +110,15 @@ as a fabricated model transcript.
 
 ## Verified runs
 
-Both workflows completed green on commit `33c61a17`:
+Both workflows completed green on commit `f19ff6ac`:
 
-- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39865438005
-  (run `39865438005`)
-- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39865441786
-  (run `39865441786`)
+- Android: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39913542541
+  (run `39913542541`)
+- iOS: https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/39913545298
+  (run `39913545298`)
+
+`reference-vs-android-393x852.png` and `reference-vs-ios-393x852.png` place the
+sheet and the final native render at the same scale for a direct comparison.
 
 Android runs the full unit suite (267 tests, including `NexlyPlanTest`); the
 screenshot tests are gated behind `-PgsShots=true` and are excluded from the
