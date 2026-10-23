@@ -123,11 +123,19 @@ def main() -> int:
               f"{fa['sha'][:12]}  both platforms")
 
     # No stray face may sit in the bundle either: a leftover file is a face the app
-    # registers and might resolve by name.
+    # registers and might resolve by name. The ONE carve-out is the Nexly icon
+    # vocabulary: tabler_icons.ttf is an icon codepoint font (no text face at
+    # all — it exists so plan rows paint the same glyphs on both platforms),
+    # registered under its own name and referenced only as R.font.tabler_icons
+    # by the glyph painter. It can never satisfy a text-style request, so it is
+    # not a face drifting from the one-family contract.
+    ICON_VOCABULARY = {"tabler_icons.ttf", "tablericons.ttf"}
     for directory, pattern in ((android_dir, "*.ttf"), (ios_dir, "*.ttf")):
         if not directory.is_dir():
             continue
         for path in sorted(directory.glob(pattern)):
+            if path.name.lower() in ICON_VOCABULARY:
+                continue
             if "inter_tight" not in path.name.lower() and "intertight" not in path.name.lower():
                 problems.append(f"unrelated face still bundled: {path.relative_to(root)}")
 
