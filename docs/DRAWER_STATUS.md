@@ -48,6 +48,24 @@ measures the *resulting* luma as a ratio against the Home capture of the same ru
 square at every sampled height; the current drawer rounded both ends. DR1 asserts
 the top inset is 0 at 5% height, and an arc fit for the bottom.
 
+## What is gated where — and why the split
+
+Pixels can see some of this and not all of it. The ones pixels cannot see are
+gated as tokens instead, which is a weaker claim made honestly rather than a
+stronger claim made falsely.
+
+| Quantity | Gated by | Why |
+|---|---|---|
+| panel width, corner shape, body luma, rim, HF, column spread | pixel gate | all of them survive a 1.7→3 px/pt change |
+| the dim | pixel gate | as a ratio against the same run's Home capture |
+| content inset | pixel gate | the section label's ink is crisp on cream |
+| the recent block's copy and its relative times | pixel gate | nine text bands and grey ink in the title column |
+| no bottom navigation | pixel gate | no ink between the footer's avatar and gear |
+| the hero row | pixel gate, self-anchored | a warm band ≥40 pt with R−B ≥40 at its left and ≤34 at its right |
+| search pill height | **token parity** | it is glass on glass — 1.8 L from the panel — so its edges are inside the noise. `searchHeight` is compared across platforms, not against the picture. |
+| chevron inset | **token parity** | its detector needs the row's y, and the harness has no status bar, so the row sits ~35 pt higher than on a device |
+| every type role | **token parity** | 32 metric names identical on both platforms, 10 labels rendered on both |
+
 ## What the tests now prove
 
 - `scripts/check_drawer_render.py` — panel ratio, the square top corner, the bottom
