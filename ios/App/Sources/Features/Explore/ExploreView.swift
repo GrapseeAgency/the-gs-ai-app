@@ -491,7 +491,7 @@ struct ExploreView: View {
         .frame(maxWidth: .infinity)
         .modifier(ExploreGlass(corner: 24, elevation: 14))
         // The artwork bleeds across the whole card — no frame edge, no seam.
-        .overlay(alignment: .trailing) {
+        .background(alignment: .topTrailing) {
             Image("GSExploreHero")
                 .resizable()
                 .scaledToFill()
@@ -804,9 +804,7 @@ struct DiscoverView: View {
                         } else {
                             heroCard
                             chips
-                            ExploreSectionHeader(title: "Featured Tools")
                             toolsSection
-                            ExploreSectionHeader(title: "Popular")
                             popularSection
                         }
                     }
@@ -912,7 +910,7 @@ struct DiscoverView: View {
         .padding(13)
         .frame(maxWidth: .infinity, alignment: .leading)
         .modifier(ExploreGlass(corner: 24, elevation: 14))
-        .overlay(alignment: .trailing) {
+        .background(alignment: .topTrailing) {
             Image("GSExploreHero")
                 .resizable()
                 .scaledToFill()
