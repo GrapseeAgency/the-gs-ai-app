@@ -787,6 +787,7 @@ private fun ExploreToolCardHorizontal(
 ) {
     Column(
         Modifier
+            .fillMaxWidth()
             .exploreGlass(shape = RoundedCornerShape(18.dp), elevation = 10.dp)
             .clickable(role = Role.Button, onClickLabel = tool.title) { onOpen() }
             .padding(11.dp),
@@ -1364,6 +1365,7 @@ private fun DiscoverToolCardVertical(
 ) {
     Column(
         Modifier
+            .fillMaxWidth()
             .exploreGlass(shape = RoundedCornerShape(18.dp), elevation = 10.dp)
             .clickable(role = Role.Button, onClickLabel = tool.title) { onOpen() }
             .padding(11.dp),
