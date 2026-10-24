@@ -380,25 +380,23 @@ jobs:
           # is a screenshot of nothing, and a test with no capture cannot be
           # read by a human afterwards.
           LOG=ios/build/xcodebuild-test.log
-          if ! grep -q "Test Case '-\[GsChatUITests.MenuChromeTests testEveryMenuPutsItsGlyphInTheLeadingSlot\]' passed" "$LOG"; then
-            echo "::error::MenuChromeTests did not pass in this run — the menu gate is not live"
-            grep -E "MenuChromeTests|error: -\[" "$LOG" | head -40 || true
-            exit 1
-          fi
-          # A UI-test RUNNER is sandboxed away from the host-visible /tmp that
-          # the in-app render harnesses write to (run 40128411165 produced no
-          # PNGs there at all), so the captures leave as XCTAttachments and are
-          # exported from the result bundle the test step wrote.
+          # EXPORT FIRST, assert after. A step that fails before exporting
+          # throws away the very captures and numbers the failure has to be
+          # read from (run 40130252859 produced none).
           DIR=ios/build/menu-chrome
           rm -rf "$DIR"; mkdir -p "$DIR"
           xcrun xcresulttool export attachments \
             --path ios/build/GSApp-tests.xcresult --output-path "$DIR/raw" \
-            > "$DIR/export.log" 2>&1 || { echo "::error::xcresulttool could not export the attachments"; cat "$DIR/export.log"; exit 1; }
+            > "$DIR/export.log" 2>&1 || { echo "::error::xcresulttool could not export the attachments"; cat "$DIR/export.log"; }
           python3 - "$DIR" <<'PY'
           import glob, json, os, shutil, sys
           root = sys.argv[1]
           raw = os.path.join(root, "raw")
-          manifest = json.load(open(os.path.join(raw, "manifest.json")))
+          path = os.path.join(raw, "manifest.json")
+          if not os.path.exists(path):
+              print("no manifest at", path)
+              sys.exit(0)
+          manifest = json.load(open(path))
           groups = manifest if isinstance(manifest, list) else [manifest]
           kept = []
           for group in groups:
@@ -412,6 +410,15 @@ jobs:
                   kept.append(os.path.basename(dst))
           print("exported:", ", ".join(sorted(kept)) or "nothing")
           PY
+          if [ -s "$DIR/report.json" ]; then
+            echo "=== the harness's own numbers ==="
+            cat "$DIR/report.json"
+          fi
+          if ! grep -q "Test Case '-\[GsChatUITests.MenuChromeTests testEveryMenuPutsItsGlyphInTheLeadingSlot\]' passed" "$LOG"; then
+            echo "::error::MenuChromeTests did not pass in this run — the menu gate is not live"
+            grep -E "MenuChromeTests|MENU-|MEASURE |error: -\[" "$LOG" | head -60 || true
+            exit 1
+          fi
           for n in chats-row-context chats-row-swipe-leading chats-row-swipe-trailing \
                    chat-header-sparkle chat-header-menu user-bubble-context \
                    assistant-bubble-context drawer-recent-context; do
@@ -419,9 +426,6 @@ jobs:
               || { echo "::error::menu-$n is missing — the menu harness opened no such menu"; exit 1; }
           done
           test -s "$DIR/report.json" || { echo "::error::report.json missing — no measurements were written"; exit 1; }
-          # Printed, not just uploaded: the numbers are the evidence a glyph is
-          # in the leading slot, and a reader should not need an artifact zip.
-          cat "$DIR/report.json"
 
       - name: Upload the menu-chrome captures
         if: always()

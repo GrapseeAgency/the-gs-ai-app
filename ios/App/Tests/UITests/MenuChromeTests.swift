@@ -123,7 +123,7 @@ final class MenuChromeTests: XCTestCase {
         let userText = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "What should I pack")).firstMatch
         if userText.waitForExistence(timeout: 10),
-           openContextMenu(on: userText, app: app, expecting: "Edit") {
+           openContextMenu(on: userText, app: app, expecting: "Edit", press: .coordinate(-10)) {
             capture(name: "user-bubble-context", app: app,
                     items: [("Copy", .leading), ("Edit", .leading)])
             dismissMenu(app: app, item: "Edit")
@@ -158,7 +158,7 @@ final class MenuChromeTests: XCTestCase {
             ? app.buttons["New chat"].firstMatch
             : app.buttons["Search in chat"].firstMatch
         if assistantText.exists, sparkle.waitForExistence(timeout: 10),
-           openContextMenu(on: sparkle, app: app, expecting: "Voice input") {
+           openContextMenu(on: sparkle, app: app, expecting: "Voice input", press: .coordinate(0)) {
             // A chat pushed from the inbox may not offer "New chat"; the same
             // menu then carries Search and Voice only.
             var items: [(String, Slot)] = [
@@ -173,7 +173,7 @@ final class MenuChromeTests: XCTestCase {
         }
 
         if headerMenu.waitForExistence(timeout: 10),
-           openContextMenu(on: headerMenu, app: app, expecting: "Chat options") {
+           openContextMenu(on: headerMenu, app: app, expecting: "Chat options", press: .coordinate(0)) {
             capture(
                 name: "chat-header-menu",
                 app: app,
@@ -219,17 +219,41 @@ final class MenuChromeTests: XCTestCase {
         case above
     }
 
-    private func openContextMenu(on element: XCUIElement, app: XCUIApplication, expecting label: String) -> Bool {
-        // A COORDINATE press, not element.press: run 40129349764 showed the two
-        // header buttons firing their ACTION on an element-level long press
-        // (the screen navigated to a new chat and every later menu vanished),
-        // while the same gesture through a coordinate opens the menu.
-        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            .press(forDuration: 1.4)
-        if app.buttons[label].waitForExistence(timeout: 12) { return true }
+    private enum Press {
+        /// `element.press` — the gesture rows and bubble containers answer to.
+        case element
+        /// A press through a coordinate: the only route that did not fire a
+        /// header button's ACTION instead of opening its menu (run 40129349764).
+        case coordinate(CGFloat)
+    }
+
+    private func openContextMenu(on element: XCUIElement, app: XCUIApplication,
+                                 expecting label: String, press: Press = .element) -> Bool {
+        switch press {
+        case .element:
+            element.press(forDuration: 1.4)
+        case .coordinate(let dx):
+            // A COORDINATE press, moved `dx` points off the centre. The user
+            // bubble's text is selectable, so a press ON it starts a text
+            // selection instead of the bubble's menu (run 40130252859).
+            let width = max(1, element.frame.width)
+            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5 + dx / width, dy: 0.5))
+                .press(forDuration: 1.4)
+        }
+        if app.buttons[label].waitForExistence(timeout: 12) {
+            print("MENU-OPEN \(label)")
+            return true
+        }
         // The menu may expose rows as cells or static texts on some OS
         // builds; only a total absence is a failure.
-        if app.staticTexts[label].exists || app.cells[label].exists { return true }
+        if app.staticTexts[label].exists || app.cells[label].exists {
+            print("MENU-OPEN(text) \(label)")
+            return true
+        }
+        // Printed, so the run log carries what was on screen instead of a
+        // screenshot nobody can reach from a failed step.
+        let labels = app.buttons.allElementsBoundByIndex.prefix(30).map(\.label)
+        print("MENU-FAIL \(label): buttons=\(labels)")
         record("menu '\(label)' never appeared after long-press")
         attachTree(app)
         return false
@@ -296,6 +320,7 @@ final class MenuChromeTests: XCTestCase {
             }
             // 2. It is an icon's size, not a speck and not a paragraph.
             let height = probe.bbox.height / scale
+            print("MEASURE \(name)/\(label) geometry=\(box.kind) ink=\(probe.count) h=\(String(format: "%.1f", height)) w=\(String(format: "%.1f", probe.bbox.width / scale)) band=\(String(format: "%.0fx%.0f", band.width, band.height))")
             if height < 9 || height > 24 {
                 record("\(name)/\(label): glyph height \(String(format: "%.1f", height)) pt is outside 9–24 pt")
             }
