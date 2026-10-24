@@ -57,7 +57,7 @@ enum class DrawerTopic(val icon: String, vararg val keywords: String) {
         "ميزانية", "बजट",
     ),
     Travel(
-        "MapPin",
+        "Sprout",
         "travel", "trip", "flight", "hotel", "itinerary",
         "kyoto", "paris", "tokyo", "london", "visa",
         "vacation", "holiday", "weekend in", "京都", "東京", "东京", "旅行", "путешествие",
@@ -112,7 +112,7 @@ enum class DrawerTopic(val icon: String, vararg val keywords: String) {
         "लेखन",
     ),
     Plan(
-        "CalendarCheck",
+        "Sparkles",
         "plan", "schedule", "tomorrow", "calendar", "agenda",
         "todo", "reminder", "this week", "next week", "予定",
         "计划", "план", "planifier", "خطة", "योजना",
@@ -225,6 +225,8 @@ fun drawerIcon(title: String, pinned: Boolean): ImageVector =
         "Palette" -> GsIcons.Palette
         "PenLine" -> GsIcons.PenLine
         "CalendarCheck" -> GsIcons.CalendarCheck
+        "Sparkles" -> GsIcons.Sparkles
+        "Sprout" -> GsIcons.Sprout
         "Music" -> GsIcons.Music
         "Trophy" -> GsIcons.Trophy
         "House" -> GsIcons.House

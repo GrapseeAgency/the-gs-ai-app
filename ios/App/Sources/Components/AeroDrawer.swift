@@ -190,9 +190,7 @@ struct AeroDrawer: View {
                                                   Color(red: 1, green: 0.725, blue: 0.627)],
                                          startPoint: .topLeading, endPoint: .bottomTrailing))
                     .frame(width: DrawerMetrics.headerOrb, height: DrawerMetrics.headerOrb)
-                Image(systemName: "sparkles")
-                    .font(Aero.specFont(22, .regular))
-                    .foregroundColor(.white.opacity(0.9))
+                GsIconView(GsIcons.sparkles, size: 22, color: .white.opacity(0.9))
             }
             VStack(alignment: .leading, spacing: 0) {
                 Text("Nexly")
@@ -207,9 +205,7 @@ struct AeroDrawer: View {
                 GSHaptics.tap()
                 onClose()
             } label: {
-                Image(systemName: "xmark")
-                    .font(Aero.specFont(DrawerMetrics.closeGlyph, .medium))
-                    .foregroundColor(Aero.text)
+                GsIconView(GsIcons.x, size: DrawerMetrics.closeGlyph, color: Aero.text)
                     .frame(width: DrawerMetrics.closeHit + 10,
                            height: DrawerMetrics.closeHit + 10)
                     .contentShape(Rectangle())
@@ -232,9 +228,7 @@ struct AeroDrawer: View {
             onRoute(.chatSearch)
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .font(Aero.specFont(DrawerMetrics.searchGlyph))
-                    .foregroundColor(DrawerMetrics.labelInk)
+                GsIconView(GsIcons.search, size: DrawerMetrics.searchGlyph, color: DrawerMetrics.labelInk)
                 Text("Search chats")
                     .font(Aero.specFont(DrawerMetrics.searchText))
                     .foregroundColor(DrawerMetrics.labelInk)
@@ -265,9 +259,7 @@ struct AeroDrawer: View {
                                                       DrawerMetrics.heroOrbBottom],
                                              startPoint: .top, endPoint: .bottom))
                         .frame(width: DrawerMetrics.heroOrb, height: DrawerMetrics.heroOrb)
-                    Image(systemName: "plus")
-                        .font(Aero.specFont(17, .semibold))
-                        .foregroundColor(.white)
+                    GsIconView(GsIcons.plus, size: 17, color: .white)
                 }
                 Text("New chat")
                     .font(Aero.specFont(DrawerMetrics.heroLabel, .semibold))
@@ -424,9 +416,7 @@ struct AeroDrawer: View {
     }
 
     private var chevron: some View {
-        Image(systemName: "chevron.right")
-            .font(Aero.specFont(DrawerMetrics.chevron, .medium))
-            .foregroundColor(DrawerMetrics.labelInk)
+        GsIconView(GsIcons.chevronRight, size: DrawerMetrics.chevron, color: DrawerMetrics.labelInk)
     }
 
     /// Reads the store once per presentation and keeps the result in `@State`.
@@ -506,9 +496,7 @@ struct AeroDrawer: View {
                         .overlay(Circle().strokeBorder(
                             Color.white.opacity(scheme == .dark ? 0.16 : 0.75), lineWidth: 1))
                         .frame(width: DrawerMetrics.gear, height: DrawerMetrics.gear)
-                    Image(systemName: "gearshape")
-                        .font(Aero.specFont(DrawerMetrics.gearGlyph))
-                        .foregroundColor(Aero.text.opacity(0.8))
+                    GsIconView(GsIcons.settings, size: DrawerMetrics.gearGlyph, color: Aero.text.opacity(0.8))
                 }
             }
             .buttonStyle(.plain)
@@ -620,9 +608,7 @@ struct AeroDrawer: View {
                     .font(Aero.specFont(DrawerMetrics.rowTitle))
                     .foregroundColor(isSelected ? Aero.accent : Aero.text)
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(Aero.specFont(DrawerMetrics.chevron, .medium))
-                    .foregroundColor(DrawerMetrics.labelInk)
+                GsIconView(GsIcons.chevronRight, size: DrawerMetrics.chevron, color: DrawerMetrics.labelInk)
             }
             .padding(.horizontal, 12)
             .frame(height: 52)

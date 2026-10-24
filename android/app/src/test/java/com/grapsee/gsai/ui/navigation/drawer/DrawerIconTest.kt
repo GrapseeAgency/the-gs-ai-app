@@ -21,10 +21,10 @@ class DrawerIconTest {
 
     @Test
     fun theSheetsFourTitlesGetFourDifferentIcons() {
-        assertEquals("CalendarCheck", drawerIconName("Plan my tomorrow", pinned = false))
+        assertEquals("Sparkles", drawerIconName("Plan my tomorrow", pinned = false))
         assertEquals("Lightbulb", drawerIconName("Ideas for a brand launch", pinned = false))
         assertEquals("Atom", drawerIconName("Explain quantum physics", pinned = false))
-        assertEquals("MapPin", drawerIconName("Weekend in Kyoto", pinned = false))
+        assertEquals("Sprout", drawerIconName("Weekend in Kyoto", pinned = false))
     }
 
     @Test
@@ -54,7 +54,7 @@ class DrawerIconTest {
         assertEquals("MessageCircle", drawerIconName("cartoon", pinned = false))
         assertEquals("MessageCircle", drawerIconName("scoreboard wiring", pinned = false))
         // …while the words themselves still work.
-        assertEquals("CalendarCheck", drawerIconName("plan the week", pinned = false))
+        assertEquals("Sparkles", drawerIconName("plan the week", pinned = false))
         assertEquals("ShoppingBag", drawerIconName("cart", pinned = false))
     }
 
@@ -83,12 +83,12 @@ class DrawerIconTest {
         // `\b` does not exist in these languages, so these are matched by
         // containment; before that, every one of them fell through to the neutral
         // glyph no matter what it said.
-        assertEquals("MapPin", drawerIconName("京都の週末", pinned = false))
-        assertEquals("MapPin", drawerIconName("Путешествие в Токио", pinned = false))
+        assertEquals("Sprout", drawerIconName("京都の週末", pinned = false))
+        assertEquals("Sprout", drawerIconName("Путешествие в Токио", pinned = false))
         assertEquals("Atom", drawerIconName("解释量子物理", pinned = false))
         assertEquals("Atom", drawerIconName("физика элементарных частиц", pinned = false))
-        assertEquals("CalendarCheck", drawerIconName("योजना बनाओ", pinned = false))
-        assertEquals("CalendarCheck", drawerIconName("خطة ليوم غد", pinned = false))
+        assertEquals("Sparkles", drawerIconName("योजना बनाओ", pinned = false))
+        assertEquals("Sparkles", drawerIconName("خطة ليوم غد", pinned = false))
         assertEquals("Utensils", drawerIconName("рецепт борща", pinned = false))
     }
 
