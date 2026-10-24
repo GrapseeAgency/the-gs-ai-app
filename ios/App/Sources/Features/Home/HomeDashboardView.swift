@@ -745,14 +745,7 @@ private struct DockIcon: View {
     }
 
     private var gearMark: some View {
-        // Even-odd, the twin of Compose's PathFillType.EvenOdd: the ring and
-        // the hub wind the same way, so the nonzero rule would fill the hole
-        // solid. `PathFillStyle` is iOS 17 and the page ships at iOS 16; the
-        // SDK spells the shape-fill's flag `isEOFilled` (run 40117076973
-        // rejected `eo:` — that label belongs to the Canvas context's fill).
-        FilledGearGlyph()
-            .fill(ink, style: FillStyle(isEOFilled: true, antialiased: true))
-            .frame(width: markSide, height: markSide)
+        FilledGearMark(color: ink, side: markSide)
     }
 
     var body: some View {
@@ -834,74 +827,92 @@ private struct FilledHouseGlyph: Shape {
 }
 
 /// Filled gear with an even-odd hole — Android's `FilledGear`, command for
-/// command, including the open second subpath Android leaves unclosed.
-private struct FilledGearGlyph: Shape {
-    func path(in rect: CGRect) -> Path {
-        let s = rect.width / 24
-        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
-        var path = Path()
-        path.move(to: p(18.79, 9.6))
-        path.addLine(to: p(19.02, 10.38))
-        path.addLine(to: p(21.28, 10.53))
-        path.addLine(to: p(21.28, 13.47))
-        path.addLine(to: p(19.02, 13.62))
-        path.addLine(to: p(18.79, 14.4))
-        path.addLine(to: p(18.5, 15.1))
-        path.addLine(to: p(18.11, 15.82))
-        path.addLine(to: p(19.6, 17.53))
-        path.addLine(to: p(17.53, 19.6))
-        path.addLine(to: p(15.82, 18.11))
-        path.addLine(to: p(15.1, 18.5))
-        path.addLine(to: p(14.4, 18.79))
-        path.addLine(to: p(13.62, 19.02))
-        path.addLine(to: p(13.47, 21.28))
-        path.addLine(to: p(10.53, 21.28))
-        path.addLine(to: p(10.38, 19.02))
-        path.addLine(to: p(9.6, 18.79))
-        path.addLine(to: p(8.9, 18.5))
-        path.addLine(to: p(8.18, 18.11))
-        path.addLine(to: p(6.47, 19.6))
-        path.addLine(to: p(4.4, 17.53))
-        path.addLine(to: p(5.89, 15.82))
-        path.addLine(to: p(5.5, 15.1))
-        path.addLine(to: p(5.21, 14.4))
-        path.addLine(to: p(4.98, 13.62))
-        path.addLine(to: p(2.72, 13.47))
-        path.addLine(to: p(2.72, 10.53))
-        path.addLine(to: p(4.98, 10.38))
-        path.addLine(to: p(5.21, 9.6))
-        path.addLine(to: p(5.5, 8.9))
-        path.addLine(to: p(5.89, 8.18))
-        path.addLine(to: p(4.4, 6.47))
-        path.addLine(to: p(6.47, 4.4))
-        path.addLine(to: p(8.18, 5.89))
-        path.addLine(to: p(8.9, 5.5))
-        path.addLine(to: p(9.6, 5.21))
-        path.addLine(to: p(10.38, 4.98))
-        path.addLine(to: p(10.53, 2.72))
-        path.addLine(to: p(13.47, 2.72))
-        path.addLine(to: p(13.62, 4.98))
-        path.addLine(to: p(14.4, 5.21))
-        path.addLine(to: p(15.1, 5.5))
-        path.addLine(to: p(15.82, 5.89))
-        path.addLine(to: p(17.53, 4.4))
-        path.addLine(to: p(19.6, 6.47))
-        path.addLine(to: p(18.11, 8.18))
-        path.addLine(to: p(18.5, 8.9))
-        path.closeSubpath()
-        path.move(to: p(15.1, 12))
-        path.addLine(to: p(14.68, 10.45))
-        path.addLine(to: p(13.55, 9.32))
-        path.addLine(to: p(12, 8.9))
-        path.addLine(to: p(10.45, 9.32))
-        path.addLine(to: p(9.32, 10.45))
-        path.addLine(to: p(8.9, 12))
-        path.addLine(to: p(9.32, 13.55))
-        path.addLine(to: p(10.45, 14.68))
-        path.addLine(to: p(12, 15.1))
-        path.addLine(to: p(13.55, 14.68))
-        path.addLine(to: p(14.68, 13.55))
-        return path
+/// command, including the open second subpath Android leaves unclosed. The
+/// geometry is authored in the 24-unit space, as every family glyph is.
+private func gearGeometry(_ path: inout Path) {
+    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: y) }
+    path.move(to: p(18.79, 9.6))
+    path.addLine(to: p(19.02, 10.38))
+    path.addLine(to: p(21.28, 10.53))
+    path.addLine(to: p(21.28, 13.47))
+    path.addLine(to: p(19.02, 13.62))
+    path.addLine(to: p(18.79, 14.4))
+    path.addLine(to: p(18.5, 15.1))
+    path.addLine(to: p(18.11, 15.82))
+    path.addLine(to: p(19.6, 17.53))
+    path.addLine(to: p(17.53, 19.6))
+    path.addLine(to: p(15.82, 18.11))
+    path.addLine(to: p(15.1, 18.5))
+    path.addLine(to: p(14.4, 18.79))
+    path.addLine(to: p(13.62, 19.02))
+    path.addLine(to: p(13.47, 21.28))
+    path.addLine(to: p(10.53, 21.28))
+    path.addLine(to: p(10.38, 19.02))
+    path.addLine(to: p(9.6, 18.79))
+    path.addLine(to: p(8.9, 18.5))
+    path.addLine(to: p(8.18, 18.11))
+    path.addLine(to: p(6.47, 19.6))
+    path.addLine(to: p(4.4, 17.53))
+    path.addLine(to: p(5.89, 15.82))
+    path.addLine(to: p(5.5, 15.1))
+    path.addLine(to: p(5.21, 14.4))
+    path.addLine(to: p(4.98, 13.62))
+    path.addLine(to: p(2.72, 13.47))
+    path.addLine(to: p(2.72, 10.53))
+    path.addLine(to: p(4.98, 10.38))
+    path.addLine(to: p(5.21, 9.6))
+    path.addLine(to: p(5.5, 8.9))
+    path.addLine(to: p(5.89, 8.18))
+    path.addLine(to: p(4.4, 6.47))
+    path.addLine(to: p(6.47, 4.4))
+    path.addLine(to: p(8.18, 5.89))
+    path.addLine(to: p(8.9, 5.5))
+    path.addLine(to: p(9.6, 5.21))
+    path.addLine(to: p(10.38, 4.98))
+    path.addLine(to: p(10.53, 2.72))
+    path.addLine(to: p(13.47, 2.72))
+    path.addLine(to: p(13.62, 4.98))
+    path.addLine(to: p(14.4, 5.21))
+    path.addLine(to: p(15.1, 5.5))
+    path.addLine(to: p(15.82, 5.89))
+    path.addLine(to: p(17.53, 4.4))
+    path.addLine(to: p(19.6, 6.47))
+    path.addLine(to: p(18.11, 8.18))
+    path.addLine(to: p(18.5, 8.9))
+    path.closeSubpath()
+    path.move(to: p(15.1, 12))
+    path.addLine(to: p(14.68, 10.45))
+    path.addLine(to: p(13.55, 9.32))
+    path.addLine(to: p(12, 8.9))
+    path.addLine(to: p(10.45, 9.32))
+    path.addLine(to: p(9.32, 10.45))
+    path.addLine(to: p(8.9, 12))
+    path.addLine(to: p(9.32, 13.55))
+    path.addLine(to: p(10.45, 14.68))
+    path.addLine(to: p(12, 15.1))
+    path.addLine(to: p(13.55, 14.68))
+    path.addLine(to: p(14.68, 13.55))
+}
+
+/// The gear drawn through a Canvas, not a Shape.fill. Even-odd is the twin of
+/// Compose's PathFillType.EvenOdd — the ring and the hub wind the same way, so
+/// the nonzero rule would fill the hole solid — and the context's fill is the
+/// one API on this SDK that takes `FillStyle(eo:)`: run 40117076973 rejected
+/// `eo:` on Shape.fill, run 40117461200 rejected `isEOFilled:` there too, and
+/// `PathFillStyle` is iOS 17 while the page ships at iOS 16. GsIconView draws
+/// through the same Canvas for the same reason.
+private struct FilledGearMark: View {
+    let color: Color
+    let side: CGFloat
+    var body: some View {
+        Canvas { context, size in
+            let scale = min(size.width, size.height) / 24
+            context.scaleBy(x: scale, y: scale)
+            var path = Path()
+            gearGeometry(&path)
+            context.fill(path, with: .color(color), style: FillStyle(eo: true))
+        }
+        .frame(width: side, height: side)
     }
 }
 
