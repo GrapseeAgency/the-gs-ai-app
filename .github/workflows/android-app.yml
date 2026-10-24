@@ -653,7 +653,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nexly-explore-render-android
-          path: android/app/build/screenshots/nexly-explore-*.png
+          path: |
+            android/app/build/screenshots/nexly-explore-*.png
+            android/app/build/screenshots/nexly-discover-*.png
           if-no-files-found: error
           retention-days: 30
 
