@@ -374,27 +374,27 @@ struct AeroDrawer: View {
                     recents[index].symbol = DrawerTopic.iconName(title: recents[index].title, pinned: next)
                 }
             } label: {
-                Label(recent.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
+                GsMenuLabel(recent.pinned ? "Unpin" : "Pin to top", icon: GsIcons.pin)
             }
             Button {
                 renameId = recent.id
                 renameDraft = recent.title
             } label: {
-                Label("Rename…", systemImage: "pencil")
+                GsMenuLabel("Rename…", icon: GsIcons.squarePen)
             }
             Button {
                 GSHaptics.success()
                 store.setArchived(id: recent.id, true)
                 sync(recent.id, archived: true)
             } label: {
-                Label("Archive", systemImage: "archivebox")
+                GsMenuLabel("Archive", icon: GsIcons.archive)
             }
             Button(role: .destructive) {
                 GSHaptics.warning()
                 store.delete(id: recent.id)
                 syncDelete(recent.id)
             } label: {
-                Label("Delete", systemImage: "trash")
+                GsMenuLabel("Delete", icon: GsIcons.trash2)
             }
         }
     }

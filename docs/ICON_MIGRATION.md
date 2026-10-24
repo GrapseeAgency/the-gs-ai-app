@@ -19,6 +19,7 @@ Four doctored catalogues prove the check can fail.
 | `Features/Chats/ChatsListView.swift` | 8 → 3 → **0** |
 | `Features/Chats/ChatDetailView.swift` | 11 → 6 → **0** |
 | `Features/Home/HomeDashboardView.swift` | 12 → **0** |
+| Menu labels (`Label(_:systemImage:)`) | 29 → **0**, capped at zero by rules 15–17 |
 | Android | `GsIcons` throughout; nothing to migrate |
 
 Gated by rule 14 of `scripts/check_drawer_structure.py`: **one `systemName:` in
@@ -81,16 +82,80 @@ contours, so the geometry ships in Android's order with a plain fill.
 Reversing the hub to "create" the hole would have filled it solid — a wrong
 glyph no compile can catch, which is why the winding was measured first.
 
-## Remaining — the menu chrome
+## The menu chrome — harness before conversion (2026-10-25)
 
-29 `Label(systemImage:)` sites still draw SF glyphs: 8 in ChatsListView (row
-context menu + swipes), 17 in ChatDetailView (message menu, translation menu,
-overflow), 4 in AeroDrawer (recents menu). They have survived every pass
-because their icons are drawn by SwiftUI's menu chrome, and a `GsIconView`
-inside a menu-item label is not guaranteed a leading icon slot — the migration
-must not trade an SF glyph for an icon-less row. Verify on a capture before
-converting. Rule 14 of `check_drawer_structure.py` counts `systemName:` only,
-so it neither catches these nor protects against re-introducing them.
+A `Label`'s icon inside a `Menu`, a `.contextMenu` or `.swipeActions` is drawn
+by UIKit's menu chrome, which decides whether an icon appears at all. No static
+check can see that, so the 29 rows were converted only once an instrument
+existed to prove where the glyph lands.
+
+`ios/App/Tests/UITests/MenuChromeTests.swift` launches the app with
+`-gs_test_seed_chats` (three fixed conversations — one pinned, one user and one
+assistant turn each) and opens all EIGHT real menus:
+
+| Menu | Rows | Trigger |
+|---|---|---|
+| chats row context menu | 5 | long-press the row |
+| chats row leading swipe | 1 | swipe right |
+| chats row trailing swipe | 2 | swipe left |
+| header sparkle menu | 3 | long-press the sparkle |
+| header menu button | 3 | long-press the menu button |
+| user bubble menu | 2 | long-press 10 pt left of the text |
+| assistant bubble menu | 7 | long-press the reply |
+| drawer recent-row menu | 4 | long-press a recent |
+
+The two inline sheet labels (Translation header, Copy translation) are not
+chrome — ordinary `Label` layout, the position the family already draws
+everywhere else.
+
+Per row, on the presented menu's screenshot: ink exists (≥ 90 px at 2x), its
+height is 9–24 pt, and it sits in the slot the label implies — left of the
+title, or above it inside a swipe button. Every number is printed as
+`MEASURE …` and written to `report.json`, every menu is attached to the result
+bundle as `menu-<name>`, and the workflow exports them BEFORE asserting and
+fails if the test did not pass or a capture is missing.
+
+**The SF baseline** (runs 40131109721, 40132162258, 40133180902): menu rows
+measure h 12.3–19.3 pt at a leading inset of 27.7–29.7 pt. Those are the
+calibration numbers; the family's rows are held to the same bounds.
+
+The harness paid for itself before a single row was converted, by finding four
+things the code hid:
+
+1. iOS's menu icon column starts 27–29 pt into the row — the first bound of
+   22 pt failed SF's own glyphs.
+2. A swipe action stacks icon over title INSIDE one button, so a band above the
+   text has to be clamped inside the button; unclamped it measured 26.3 pt of
+   page.
+3. The user bubble's text is selectable — a press on it starts a selection, not
+   the bubble's menu; the press moves onto the bubble's padding.
+4. The header buttons fire their ACTION on a long press (the sparkle opened a
+   new chat, the menu button opened the drawer), which is why the harness now
+   presses their coordinates. Whether their menus can be opened by gesture at
+   all is the open question below.
+
+## The 29 rows → the family
+
+Every row is `GsMenuLabel(title, icon:)`, and the icon is a **template image**
+rasterised from the same 24-unit geometry `GsIconView` strokes — deliberately
+not a `Canvas`. A menu paints its icon with the label's own tint, which is how a
+destructive row turns red and a disabled one dims; a Canvas drawing its own
+colour would keep that colour in every row.
+
+| Menu | Was | Now (Android's twin) |
+|---|---|---|
+| chats row | pin · trash · archivebox · checkmark.circle · pencil | pin · trash2 · archive · circleCheck · squarePen |
+| swipe leading | pin | pin |
+| swipe trailing | trash · archivebox | trash2 · archive |
+| header sparkle | square.and.pencil · magnifyingglass · mic | squarePen · search · mic |
+| header menu | ellipsis · magnifyingglass · square.and.pencil | ellipsis · search · squarePen |
+| user bubble | doc.on.doc · pencil | copy · squarePen |
+| assistant bubble | doc.on.doc · speaker.wave.2/stop.fill · arrow.clockwise · translate · bookmark · arrow.triangle.branch · square.and.arrow.up | copy · volume2/volumeX · refreshCw · languages · bookmark · split · share |
+| drawer recent | pin · pencil · archivebox · trash | pin · squarePen · archive · trash2 |
+| translation sheet | translate · checkmark/doc.on.doc | languages · check/doc (inline, sides 17/14) |
+
+`Label(_:systemImage:)` is now **ZERO** in all three files, and rules 15–17 of
+`check_drawer_structure.py` fail the build on the first one that returns.
 
 ## Evidence state — read before claiming these done
 
@@ -176,14 +241,19 @@ still shows the pre-fix icons (hash-era). Refreshing it means downloading the ru
 capture artifacts and rewriting the icon section.
 
 
-## The 29 menu labels — frozen, not forgotten
+## The 29 menu labels — converted, one open question
 
-`Label(_:systemImage:)` still hands SwiftUI an SF name in 29 places: 8 in
-`ChatsListView`, 17 in `ChatDetailView`, 4 in `AeroDrawer`. A custom view inside a
-menu-item label is **not guaranteed the leading-icon slot**, so converting these
-needs a capture of each menu before and after — a different job from the in-row
-sites, which were geometry swaps.
+All 29 are on the family and capped at zero by rules 15–17. Two kinds of
+evidence back them:
 
-Until then they are bounded: rules 15 and 16 of
-`scripts/check_drawer_structure.py` fail the build if either count grows. The debt
-can shrink; it cannot spread.
+- **Measured by the harness**: the chats row menu, both swipes, both bubble
+  menus and the drawer's recent menu — the screenshots and `report.json` land in
+  the `menu-chrome-ios` artifact of every run.
+- **Not measurable yet**: the SIX header rows (3 sparkle + 3 menu-button). Their
+  `.contextMenu`s sit on `Button`s that take the whole long-press gesture as
+  their ACTION — the press opens a new chat or the drawer instead of a menu —
+  so the harness can drive the press but no menu appears. That is a UI defect in
+  its own right: `sparkleMenu` / `menuMenu` are written and unreachable. It is
+  recorded here rather than papered over; the 6 rows are converted (so they
+  cannot drift back to SF) but not capture-verified until the header wraps those
+  menus in something a gesture can open.

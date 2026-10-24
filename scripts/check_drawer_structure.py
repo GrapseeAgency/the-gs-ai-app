@@ -93,14 +93,25 @@ def rules():
         # Rows that take a FIXED height clip text the moment the type size grows.
         # A capture at the default size looks identical either way, which is why
         # this is a rule and not a measurement.
+        # Menu labels were capped at 8 / 17 / 4 while their conversion was
+        # blocked on evidence: a Label's icon inside menu chrome is drawn by
+        # UIKit, and nothing proved a custom view reached that slot. The menu
+        # harness (ios/App/Tests/UITests/MenuChromeTests.swift) now opens every
+        # menu and measures the ink beside each title, so all three counts are
+        # ZERO and the ceiling is zero with them: the debt can shrink, and now
+        # it can no longer be re-grown at all.
         (IOS_CHATS_LIST,
-         "a new menu label was added with an SF Symbol (ceiling 8; convert with a capture)",
-         lambda t: t.count("systemImage:") > 8,
-         "\n".join(["Label(\"x\", systemImage: \"a\")"] * 9)),
+         "a menu label hands SwiftUI an SF name again (ceiling 0 — the menu harness converted all 8)",
+         lambda t: t.count("systemImage:") > 0,
+         "Label(\"x\", systemImage: \"a\")"),
         (IOS_CHAT_DETAIL,
-         "a new menu label was added with an SF Symbol (ceiling 17; convert with a capture)",
-         lambda t: t.count("systemImage:") > 17,
-         "\n".join(["Label(\"x\", systemImage: \"a\")"] * 18)),
+         "a menu label hands SwiftUI an SF name again (ceiling 0 — the menu harness converted all 17)",
+         lambda t: t.count("systemImage:") > 0,
+         "Label(\"x\", systemImage: \"a\")"),
+        (IOS_DRAWER,
+         "a drawer menu label hands SwiftUI an SF name again (ceiling 0 — the menu harness converted all 4)",
+         lambda t: t.count("systemImage:") > 0,
+         "Label(\"x\", systemImage: \"a\")"),
         (ANDROID_ROWS,
          "an interactive row has a fixed height, so large type is clipped",
          lambda t: re.search(r"\.height\(DrawerMetrics\.", t) is not None,
