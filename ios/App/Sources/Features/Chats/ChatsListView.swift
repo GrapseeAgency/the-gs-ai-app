@@ -304,9 +304,7 @@ struct ChatsListView: View {
                 title: row.title,
                 subtitle: "\(row.preview) · \(row.time)",
                 leading: {
-                    Image(systemName: "bubble.left")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Aero.text)
+                    GsIconView(GsIcons.messageCircle, size: 14, color: Aero.text)
                         .frame(width: 36, height: 36)
                         .background(Circle().fill(Aero.containerHigh))
                 },
@@ -316,9 +314,7 @@ struct ChatsListView: View {
                             .font(.system(size: 20))
                             .foregroundStyle(selection.contains(row.id) ? Aero.accent : Aero.textMuted)
                     } else if row.pinned {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 13))
-                            .foregroundStyle(Aero.accent)
+                        GsIconView(GsIcons.star, size: 13, color: Aero.accent)
                     }
                 }
             )
