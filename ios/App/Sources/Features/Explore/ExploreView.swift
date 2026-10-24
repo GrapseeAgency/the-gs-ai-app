@@ -293,21 +293,25 @@ struct ExploreView: View {
     private var heroCard: some View {
         AeroCard {
             ZStack(alignment: .trailing) {
-                // The art carries the right 62% only; its left edge fades
-                // into the pearl card so the copy side stays quiet.
+                // The art carries the right 66% only; its left edge fades
+                // into the pearl card. The art is the authored backdrop's own
+                // luminous bubble (upper-right region of that render).
                 GeometryReader { geo in
-                    let artWidth = geo.size.width * 0.62
+                    let artWidth = geo.size.width * 0.66
+                    let artHeight = geo.size.height
                     HStack(spacing: 0) {
                         Spacer(minLength: 0)
-                        Image("GSHomeLotusNew")
+                        Image("GSHomeBackdrop")
                             .resizable()
                             .scaledToFill()
-                            .frame(width: artWidth)
+                            .frame(width: artWidth * 2.1, height: artHeight * 2.1)
+                            .offset(x: -artWidth * 0.62, y: -artHeight * 0.62)
+                            .frame(width: artWidth, height: artHeight, alignment: .topLeading)
                             .clipped()
                             .overlay(
                                 LinearGradient(
-                                    colors: [Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.95),
-                                             Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.25),
+                                    colors: [Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.92),
+                                             Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.22),
                                              .clear],
                                     startPoint: .leading, endPoint: .trailing
                                 )
@@ -517,13 +521,15 @@ struct ExploreView: View {
                             showAllTools = false
                         } label: {
                             VStack(alignment: .leading, spacing: 0) {
-                                Image("GSHomeLotusNew")
-                                    .resizable()
-                                    .scaledToFill()
+                                // Each collection carries its own scene, like
+                                // the reference set: the lotus for Design, the
+                                // pearl-drape scene for Work, the bubble
+                                // close-up for Learning.
+                                collectionArt(collection)
                                     .frame(height: 86)
                                     .frame(maxWidth: .infinity)
                                     .clipped()
-                                    .overlay(LinearGradient(colors: [.white.opacity(0.08), .white.opacity(0.40)], startPoint: .top, endPoint: .bottom))
+                                    .overlay(LinearGradient(colors: [.white.opacity(0.08), .white.opacity(0.38)], startPoint: .top, endPoint: .bottom))
                                     .allowsHitTesting(false)
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack {
@@ -555,12 +561,56 @@ struct ExploreView: View {
         }
     }
 
+    @ViewBuilder
+    private func collectionArt(_ collection: ExploreCatalog.Collection) -> some View {
+        switch collection.subtitle {
+        case "Work smarter, not harder":
+            Image("GSHomeVideoArt")
+                .resizable()
+                .scaledToFill()
+        case "Build new skills":
+            // The authored backdrop's bubble region.
+            Image("GSHomeBackdrop")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 340, height: 340)
+                .offset(x: 24, y: -60)
+                .frame(width: 168, height: 86, alignment: .topLeading)
+        default:
+            Image("GSHomeLotusNew")
+                .resizable()
+                .scaledToFill()
+        }
+    }
+
     private var featuredSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeader("Featured")
             Button {
                 onOpenChat(.chatPrefill(ExploreCatalog.featured.prompt))
             } label: {
+                ZStack(alignment: .trailing) {
+                // The reference's featured card: the scene fills the card's
+                // right side under a pearl veil, words on the left.
+                GeometryReader { geo in
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        Image("GSHomeLotusNew")
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: geo.size.width * 0.46)
+                            .clipped()
+                            .overlay(
+                                LinearGradient(
+                                    colors: [Color(red: 0.984, green: 0.929, blue: 0.906).opacity(0.94),
+                                             Color(red: 0.984, green: 0.929, blue: 0.906).opacity(0.30),
+                                             .clear],
+                                    startPoint: .leading, endPoint: .trailing
+                                )
+                            )
+                            .allowsHitTesting(false)
+                    }
+                }
                 HStack(spacing: 12) {
                     Circle()
                         .fill(ExploreCatalog.featured.bg)
@@ -582,6 +632,7 @@ struct ExploreView: View {
                         .overlay(NexlyGlyph(name: "chevron-right", size: 14, color: Aero.text))
                 }
                 .padding(12)
+            }
                 .background(RoundedRectangle(cornerRadius: 20).fill(Aero.glassSurface))
                 .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.5), lineWidth: 1))
             }

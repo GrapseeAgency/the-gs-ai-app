@@ -374,29 +374,30 @@ private fun HeroCard(
             .gsGlass(role = GsGlassRole.CardLight, shape = RoundedCornerShape(26.dp)),
     ) {
         // The reference's hero: pearl on the left where the copy sits, the
-        // ethereal art carrying the right half. The art frame is the right
-        // 62% only, with its left edge fading into the card so the two read
-        // as one surface.
+        // luminous bubble artwork carrying the right side. The art is the
+        // authored backdrop's own bubble (upper-right region of that render),
+        // full-strength, with its left edge fading into the pearl card.
         Box(
             Modifier
                 .align(Alignment.CenterEnd)
                 .fillMaxHeight()
-                .fillMaxWidth(0.62f),
+                .fillMaxWidth(0.66f),
         ) {
             Image(
-                painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
+                painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_backdrop),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                // The bubble sits at ~(0.74, 0.24) of the authored render.
+                alignment = Alignment(0.74f, 0.24f),
                 modifier = Modifier.matchParentSize(),
-                alpha = 0.9f,
             )
             Box(
                 Modifier
                     .matchParentSize()
                     .background(
                         Brush.horizontalGradient(
-                            0f to Color(0xFFFDF1EC).copy(alpha = 0.95f),
-                            0.45f to Color(0xFFFDF1EC).copy(alpha = 0.25f),
+                            0f to Color(0xFFFDF1EC).copy(alpha = 0.92f),
+                            0.5f to Color(0xFFFDF1EC).copy(alpha = 0.22f),
                             1f to Color.Transparent,
                         ),
                     ),
@@ -695,12 +696,26 @@ private fun CollectionCard(
                 .fillMaxWidth()
                 .height(86.dp),
         ) {
+            // Each collection carries its own scene, like the reference set:
+            // the lotus for Design, the pearl-drape scene for Work, the
+            // bubble close-up for Learning.
+            val alignment = when (collection.subtitle) {
+                "Work smarter, not harder" -> Alignment(0.5f, 0.62f)
+                "Build new skills" -> Alignment(0.74f, 0.24f)
+                else -> Alignment.Center
+            }
+            val art = when (collection.subtitle) {
+                "Work smarter, not harder" -> com.grapsee.gsai.R.drawable.gs_home_video_art
+                "Build new skills" -> com.grapsee.gsai.R.drawable.gs_home_backdrop
+                else -> com.grapsee.gsai.R.drawable.gs_home_lotus_new
+            }
             Image(
-                painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
+                painter = painterResource(art),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                alignment = alignment,
                 modifier = Modifier.matchParentSize(),
-                alpha = 0.8f,
+                alpha = 0.9f,
             )
             Box(
                 Modifier
@@ -708,7 +723,7 @@ private fun CollectionCard(
                     .background(
                         Brush.verticalGradient(
                             0f to Color.White.copy(alpha = 0.10f),
-                            1f to Color.White.copy(alpha = 0.42f),
+                            1f to Color.White.copy(alpha = 0.38f),
                         ),
                     ),
             )
@@ -749,60 +764,90 @@ private fun FeaturedCard(
     inkMuted: Color,
     onOpen: () -> Unit,
 ) {
-    Row(
+    Box(
         Modifier
             .fillMaxWidth()
             .gsGlass(role = GsGlassRole.CardLight, shape = RoundedCornerShape(20.dp))
-            .clickable(role = Role.Button, onClickLabel = ExploreCatalog.featured.title) { onOpen() }
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .clickable(role = Role.Button, onClickLabel = ExploreCatalog.featured.title) { onOpen() },
     ) {
+        // The reference's featured card: the scene fills the card's right
+        // side under a pearl veil, words on the left.
         Box(
             Modifier
-                .size(40.dp)
-                .background(ExploreCatalog.featured.tone.bg, CircleShape),
-            contentAlignment = Alignment.Center,
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .fillMaxWidth(0.46f),
         ) {
-            Icon(
-                GsIcons.Sparkles,
+            Image(
+                painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
                 contentDescription = null,
-                tint = ExploreCatalog.featured.tone.fg,
-                modifier = Modifier.size(18.dp),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+                alpha = 0.9f,
+            )
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            0f to Color(0xFFFBEDE7).copy(alpha = 0.94f),
+                            0.5f to Color(0xFFFBEDE7).copy(alpha = 0.30f),
+                            1f to Color.Transparent,
+                        ),
+                    ),
             )
         }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                ExploreCatalog.featured.title,
-                fontSize = 14.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = GsFonts.Product,
-                color = inkStrong,
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                ExploreCatalog.featured.subtitle,
-                fontSize = 11.5.sp,
-                lineHeight = 15.sp,
-                fontFamily = GsFonts.Product,
-                color = inkMuted,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Spacer(Modifier.width(8.dp))
-        Box(
-            Modifier
-                .size(30.dp)
-                .background(Color.White.copy(alpha = 0.55f), CircleShape),
-            contentAlignment = Alignment.Center,
+        Row(
+            Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                GsIcons.ChevronRight,
-                contentDescription = null,
-                tint = inkBody,
-                modifier = Modifier.size(15.dp),
-            )
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .background(ExploreCatalog.featured.tone.bg, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    GsIcons.Sparkles,
+                    contentDescription = null,
+                    tint = ExploreCatalog.featured.tone.fg,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    ExploreCatalog.featured.title,
+                    fontSize = 14.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = GsFonts.Product,
+                    color = inkStrong,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    ExploreCatalog.featured.subtitle,
+                    fontSize = 11.5.sp,
+                    lineHeight = 15.sp,
+                    fontFamily = GsFonts.Product,
+                    color = inkMuted,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier
+                    .size(30.dp)
+                    .background(Color.White.copy(alpha = 0.55f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    GsIcons.ChevronRight,
+                    contentDescription = null,
+                    tint = inkBody,
+                    modifier = Modifier.size(15.dp),
+                )
+            }
         }
     }
 }
@@ -950,7 +995,7 @@ private fun EmptySearch(
 /** Catalog icon ids (kebab, shared with the iOS glyph table) → vectors. */
 private fun exploreIcon(id: String): ImageVector = when (id) {
     "photo" -> GsIcons.Image
-    "player-play" -> GsIcons.Video
+    "player-play" -> GsIcons.PlayCircle
     "microphone" -> GsIcons.Mic
     "code" -> GsIcons.Code
     "file-text" -> GsIcons.FileText
