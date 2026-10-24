@@ -120,7 +120,6 @@ final class DrawerRenderTests: XCTestCase {
     }
 
     @MainActor
-    @MainActor
     private func capture(size: CGSize, dark: Bool, name: String,
                          fixture: DrawerFixture = DrawerRenderTests.fixture) throws {
         var problems = ["the capture was never taken"]
