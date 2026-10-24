@@ -38,6 +38,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -388,7 +389,7 @@ private fun HeroCard(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 // The bubble sits at ~(0.74, 0.24) of the authored render.
-                alignment = Alignment(0.74f, 0.24f),
+                alignment = BiasBiasAlignment(0.74f, 0.24f),
                 modifier = Modifier.matchParentSize(),
             )
             Box(
@@ -700,8 +701,8 @@ private fun CollectionCard(
             // the lotus for Design, the pearl-drape scene for Work, the
             // bubble close-up for Learning.
             val alignment = when (collection.subtitle) {
-                "Work smarter, not harder" -> Alignment(0.5f, 0.62f)
-                "Build new skills" -> Alignment(0.74f, 0.24f)
+                "Work smarter, not harder" -> BiasAlignment(0.5f, 0.62f)
+                "Build new skills" -> BiasAlignment(0.74f, 0.24f)
                 else -> Alignment.Center
             }
             val art = when (collection.subtitle) {
