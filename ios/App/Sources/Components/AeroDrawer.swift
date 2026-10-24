@@ -528,10 +528,10 @@ struct AeroDrawer: View {
     private var accountSheetView: some View {
         AeroSheetShell(title: account.displayName.isEmpty ? "Account" : account.displayName) {
             VStack(spacing: Aero.Spacing.s) {
-                sheetRow(title: "Profile", icon: "person", isSelected: activeRoute == .profile) { onRoute(.profile) }
-                sheetRow(title: "Settings", icon: "gearshape", isSelected: activeRoute == .settings) { onRoute(.settings) }
-                sheetRow(title: "Notifications", icon: "bell", isSelected: activeRoute == .notifications) { onRoute(.notifications) }
-                sheetRow(title: "Billing", icon: "creditcard", isSelected: activeRoute == .billing) { onRoute(.billing) }
+                sheetRow(title: "Profile", icon: "User", isSelected: activeRoute == .profile) { onRoute(.profile) }
+                sheetRow(title: "Settings", icon: "Settings", isSelected: activeRoute == .settings) { onRoute(.settings) }
+                sheetRow(title: "Notifications", icon: "Bell", isSelected: activeRoute == .notifications) { onRoute(.notifications) }
+                sheetRow(title: "Billing", icon: "CreditCard", isSelected: activeRoute == .billing) { onRoute(.billing) }
             }
         }
     }
@@ -600,9 +600,8 @@ struct AeroDrawer: View {
                           action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(Aero.specFont(16))
-                    .foregroundColor(isSelected ? Aero.accent : Aero.text.opacity(0.8))
+                GsIconView(DrawerTopic.paths(named: icon), size: 16,
+                           color: isSelected ? Aero.accent : Aero.text.opacity(0.8))
                     .frame(width: 28)
                 Text(title)
                     .font(Aero.specFont(DrawerMetrics.rowTitle))

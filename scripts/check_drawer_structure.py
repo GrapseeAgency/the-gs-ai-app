@@ -95,6 +95,13 @@ def rules():
          "an interactive row has a fixed height, so large type is clipped",
          lambda t: re.search(r"\.height\(DrawerMetrics\.", t) is not None,
          "Modifier.height(DrawerMetrics.recentPitch)"),
+        # The panel drew SF Symbols for months while Android drew Lucide: two icon
+        # languages in one product, invisible in a capture because both look like
+        # "an icon". Zero is the only number that stays true.
+        (IOS_DRAWER,
+         "the drawer draws an SF Symbol instead of the family",
+         lambda t: "systemName:" in t,
+         "Image(systemName: \"xmark\")"),
         (IOS_DRAWER,
          "an interactive row has a fixed height, so large type is clipped",
          lambda t: re.search(r"\.frame\(height: DrawerMetrics\.(searchHeight|heroHeight|destPitch|recentPitch)\)", t) is not None,
