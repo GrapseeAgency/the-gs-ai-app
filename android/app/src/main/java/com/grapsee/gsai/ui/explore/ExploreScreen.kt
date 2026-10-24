@@ -160,7 +160,7 @@ object ExploreCatalog {
             title = "Video Generator",
             subtitle = "Turn ideas into videos",
             icon = "player-play",
-            tone = ExploreTone(ExploreTones.LavenderBg, Color.White),
+            tone = ExploreTone(ExploreTones.LavenderBg, Color(0xFF8E90E8)),
             category = ExploreCategory.Creativity,
             prompt = "Help me plan a short video. Ask what it is for and who watches it, then give me a shot-by-shot outline with narration lines and on-screen text for each scene.",
             filledTile = true,
@@ -622,6 +622,7 @@ fun ExploreScreen(
                                 painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_hero),
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
+                                alignment = Alignment.TopEnd,
                                 modifier = Modifier.matchParentSize(),
                             )
                         }

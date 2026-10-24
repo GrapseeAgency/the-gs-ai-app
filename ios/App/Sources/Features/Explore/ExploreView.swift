@@ -52,7 +52,7 @@ enum ExploreCatalog {
         ExploreTool(
             id: "video-generator", title: "Video Generator",
             subtitle: "Turn ideas into videos",
-            glyph: "player-play", bg: ExplorePalette.lavenderBg, fg: ExplorePalette.lavenderFg,
+            glyph: "player-play", bg: ExplorePalette.lavenderBg, fg: Color(red: 0.557, green: 0.565, blue: 0.910),
             category: .creativity,
             filledTile: true,
             prompt: "Help me plan a short video. Ask what it is for and who watches it, then give me a shot-by-shot outline with narration lines and on-screen text for each scene."
@@ -503,7 +503,7 @@ struct ExploreView: View {
                 .resizable()
                 .scaledToFill()
                 .frame(maxWidth: 216)
-                .frame(maxHeight: .infinity)
+                .frame(maxHeight: .infinity, alignment: .topTrailing)
                 .clipped()
                 .overlay(
                     LinearGradient(
@@ -925,7 +925,7 @@ struct DiscoverView: View {
                 .resizable()
                 .scaledToFill()
                 .frame(maxWidth: 200)
-                .frame(maxHeight: .infinity)
+                .frame(maxHeight: .infinity, alignment: .topTrailing)
                 .clipped()
                 .overlay(
                     LinearGradient(
