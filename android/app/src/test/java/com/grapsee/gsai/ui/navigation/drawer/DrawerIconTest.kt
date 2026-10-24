@@ -79,6 +79,26 @@ class DrawerIconTest {
     }
 
     @Test
+    fun aHeadlineInAnotherScriptStillFindsItsTopic() {
+        // `\b` does not exist in these languages, so these are matched by
+        // containment; before that, every one of them fell through to the neutral
+        // glyph no matter what it said.
+        assertEquals("MapPin", drawerIconName("京都の週末", pinned = false))
+        assertEquals("MapPin", drawerIconName("Путешествие в Токио", pinned = false))
+        assertEquals("Atom", drawerIconName("解释量子物理", pinned = false))
+        assertEquals("Atom", drawerIconName("физика элементарных частиц", pinned = false))
+        assertEquals("CalendarCheck", drawerIconName("योजना बनाओ", pinned = false))
+        assertEquals("CalendarCheck", drawerIconName("خطة ليوم غد", pinned = false))
+        assertEquals("Utensils", drawerIconName("рецепт борща", pinned = false))
+    }
+
+    @Test
+    fun accentsAreFoldedSoCaseAndDiacriticsDoNotMatter() {
+        assertEquals("Atom", drawerIconName("FÍSICA CUÁNTICA", pinned = false))
+        assertEquals("Atom", drawerIconName("física cuántica", pinned = false))
+    }
+
+    @Test
     fun everyTopicNamesAnIcon() {
         for (topic in DrawerTopic.entries) {
             assertEquals(topic.name, true, topic.icon.isNotBlank())
