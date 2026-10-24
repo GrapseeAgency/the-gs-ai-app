@@ -298,8 +298,7 @@ struct ExploreView: View {
                 // at any scale and reads at the reference's saturation.
                 GeometryReader { geo in
                     HeroBubbleArt()
-                        .frame(width: geo.size.width * 0.66, height: geo.size.height)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .frame(width: geo.size.width, height: geo.size.height)
                         .allowsHitTesting(false)
                 }
                 VStack(alignment: .leading, spacing: 10) {
@@ -741,8 +740,10 @@ struct HeroBubbleArt: View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
-            let r = min(w, h) * 0.56
-            let cx = w * 0.58
+            // The bubble occupies the card's right side (the copy sits left).
+            let artW = w * 0.66
+            let r = min(artW, h) * 0.56
+            let cx = w - artW * 0.42
             let cy = h * 0.40
             let cr = r * 0.52
             let ccx = cx - r * 0.08

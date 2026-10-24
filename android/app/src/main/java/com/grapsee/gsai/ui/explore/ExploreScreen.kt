@@ -383,14 +383,10 @@ private fun HeroCard(
         // luminous glass bubble carrying the right side — drawn procedurally
         // (the ReferenceArt technique) so it is crisp at any scale and reads
         // at the reference's saturation, not an upscaled blur.
-        Box(
-            Modifier
-                .align(Alignment.CenterEnd)
-                .fillMaxHeight()
-                .fillMaxWidth(0.66f),
-        ) {
-            HeroBubbleArt(Modifier.matchParentSize())
-        }
+        // matchParentSize, not fillMaxHeight: the scroll's constraints are
+        // unbounded, so a fill would collapse the art to zero height. The
+        // canvas draws the bubble in the right portion of the full card.
+        HeroBubbleArt(Modifier.matchParentSize())
         Column(Modifier.padding(18.dp)) {
             Row(
                 Modifier
@@ -990,8 +986,11 @@ private fun HeroBubbleArt(modifier: Modifier = Modifier) {
     Canvas(modifier) {
         val w = size.width
         val h = size.height
-        val r = min(w, h) * 0.56f
-        val cx = w * 0.58f
+        // The bubble occupies the card's right side (the copy sits left), so
+        // the geometry is expressed against the right 66% of the canvas.
+        val artW = w * 0.66f
+        val r = min(artW, h) * 0.56f
+        val cx = w - artW * 0.42f
         val cy = h * 0.40f
 
         // Warm outer glow.
