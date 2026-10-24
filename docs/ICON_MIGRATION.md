@@ -92,6 +92,24 @@ must not trade an SF glyph for an icon-less row. Verify on a capture before
 converting. Rule 14 of `check_drawer_structure.py` counts `systemName:` only,
 so it neither catches these nor protects against re-introducing them.
 
+## Evidence state — read before claiming these done
+
+Step 5 of the recipe is a capture, and only Home has a harness that can make
+one. The `home-renders-ios` artifact of run 40118659001 is that proof for the
+12 Home sites: the dock's filled house, filled book and gear-with-hole, the
+family `sparkles` on Assistant and Generate, `menu`, the four pills, the
+outline `play` chip over the filled disc triangle, both chevrons, `arrowRight`
+and `lightbulb` — all rendered by Xcode, not asserted by a script.
+
+The 9 Chats sites have NO capture behind them: no test renders `ChatsListView`,
+the options sheet, the find bar, the offline pill or Chat Info (checked —
+`ios/App/Tests` never names those views). They are verified by (a) the real
+Xcode compile and XCTest run, which proves the wiring and nothing about the
+glyph, and (b) line-by-line comparison against Android's twin rows, which is
+how the `share` / `squarePen` / `trash2` / filled-disc corrections above were
+found. A chats render harness is the missing evidence step; until it exists,
+do not describe those 9 as capture-verified.
+
 ## The recipe that worked
 
 1. Read the three lines around the site — the size lives on the `.font` line and
