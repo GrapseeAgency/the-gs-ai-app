@@ -116,43 +116,10 @@ final class MenuChromeTests: XCTestCase {
             return
         }
 
-        // 4a. Header sparkle — long-press opens its menu.
-        let sparkle = app.buttons["New chat"].firstMatch.exists
-            ? app.buttons["New chat"].firstMatch
-            : app.buttons["Search in chat"].firstMatch
-        if sparkle.waitForExistence(timeout: 10),
-           openContextMenu(on: sparkle, app: app, expecting: "Voice input") {
-            // A chat pushed from the inbox may not offer "New chat"; the same
-            // menu then carries Search and Voice only.
-            var items: [(String, Slot)] = [
-                ("Search in chat", .leading),
-                ("Voice input", .leading),
-            ]
-            if app.buttons["New chat"].exists { items.insert(("New chat", .leading), at: 0) }
-            capture(name: "chat-header-sparkle", app: app, items: items)
-            dismissMenu(app: app, item: "Voice input")
-        } else {
-            record("chat-header-sparkle: the sparkle menu did not open")
-        }
-
-        // 4b. Header menu button — long-press opens a second menu.
-        let headerMenu = app.buttons["Open menu"].firstMatch
-        if headerMenu.waitForExistence(timeout: 10),
-           openContextMenu(on: headerMenu, app: app, expecting: "Chat options") {
-            capture(
-                name: "chat-header-menu",
-                app: app,
-                items: [
-                    ("Chat options", .leading),
-                    ("Search in chat", .leading),
-                    ("New chat", .leading),
-                ])
-            dismissMenu(app: app, item: "Chat options")
-        } else {
-            record("chat-header-menu: the header menu did not open")
-        }
-
-        // 5. User bubble — Copy / Edit.
+        // 5. User bubble — Copy / Edit. Bubbles come first: the header's menus
+        //    are the ones that can navigate away when a press is taken as the
+        //    button's action (run 40129349764), so nothing that must run after
+        //    them sits behind them.
         let userText = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "What should I pack")).firstMatch
         if userText.waitForExistence(timeout: 10),
@@ -183,7 +150,44 @@ final class MenuChromeTests: XCTestCase {
             record("assistant-bubble-context: the bubble menu did not open")
         }
 
-        // 7. The drawer's recent-row menu.
+        // 7. Header menus. If the thread is gone by now, a header press already
+        //    navigated and the menu is unreachable — say that, once, instead of
+        //    measuring menus that are not there.
+        let headerMenu = app.buttons["Open menu"].firstMatch
+        let sparkle = app.buttons["New chat"].firstMatch.exists
+            ? app.buttons["New chat"].firstMatch
+            : app.buttons["Search in chat"].firstMatch
+        if assistantText.exists, sparkle.waitForExistence(timeout: 10),
+           openContextMenu(on: sparkle, app: app, expecting: "Voice input") {
+            // A chat pushed from the inbox may not offer "New chat"; the same
+            // menu then carries Search and Voice only.
+            var items: [(String, Slot)] = [
+                ("Search in chat", .leading),
+                ("Voice input", .leading),
+            ]
+            if app.buttons["New chat"].exists { items.insert(("New chat", .leading), at: 0) }
+            capture(name: "chat-header-sparkle", app: app, items: items)
+            dismissMenu(app: app, item: "Voice input")
+        } else {
+            record("chat-header-sparkle: the sparkle menu did not open")
+        }
+
+        if headerMenu.waitForExistence(timeout: 10),
+           openContextMenu(on: headerMenu, app: app, expecting: "Chat options") {
+            capture(
+                name: "chat-header-menu",
+                app: app,
+                items: [
+                    ("Chat options", .leading),
+                    ("Search in chat", .leading),
+                    ("New chat", .leading),
+                ])
+            dismissMenu(app: app, item: "Chat options")
+        } else {
+            record("chat-header-menu: the header menu did not open")
+        }
+
+        // 8. The drawer's recent-row menu.
         if headerMenu.exists { headerMenu.tap() } else { record("drawer: no menu button") }
         let recent = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "Explain quantum physics")).firstMatch
@@ -216,7 +220,12 @@ final class MenuChromeTests: XCTestCase {
     }
 
     private func openContextMenu(on element: XCUIElement, app: XCUIApplication, expecting label: String) -> Bool {
-        element.press(forDuration: 1.3)
+        // A COORDINATE press, not element.press: run 40129349764 showed the two
+        // header buttons firing their ACTION on an element-level long press
+        // (the screen navigated to a new chat and every later menu vanished),
+        // while the same gesture through a coordinate opens the menu.
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 1.4)
         if app.buttons[label].waitForExistence(timeout: 12) { return true }
         // The menu may expose rows as cells or static texts on some OS
         // builds; only a total absence is a failure.
@@ -297,10 +306,16 @@ final class MenuChromeTests: XCTestCase {
                     record("\(name)/\(label): ink reaches x=\(Int(probe.bbox.maxX / scale)) but the title starts at \(Int(rect.minX)) — the icon is not in the leading slot")
                 }
             case (.leading, .row(let rect)):
-                // The row's own frame stands in for the title's: the icon must
-                // hug the leading edge, not float in the middle of the row.
-                if probe.bbox.minX / scale - rect.minX > 22 {
-                    record("\(name)/\(label): ink starts \(Int(probe.bbox.minX / scale - rect.minX)) pt into the row — not the leading slot")
+                // The row's own frame stands in for the title's. iOS puts a
+                // menu's icon column 27–29 pt in from the row's leading edge
+                // (measured on SF in run 40129349764), so the bound is 34: this
+                // catches an icon parked mid-row, not a menu's own gutter.
+                let inset = probe.bbox.minX / scale - rect.minX
+                if inset > 34 {
+                    record("\(name)/\(label): ink starts \(Int(inset)) pt into the row — not the leading slot")
+                }
+                if let index = measurements.indices.last {
+                    measurements[index]["leadingInsetPt"] = Double(round(inset * 10) / 10)
                 }
             case (.above, _):
                 break
@@ -346,8 +361,13 @@ final class MenuChromeTests: XCTestCase {
             // Stacked layout: the icon lives over the title, centred.
             return CGRect(x: rect.midX - 22, y: rect.minY - 28, width: 44, height: 26)
         case (.row(let rect), .above):
-            // Swipe actions: icon over title inside one button.
-            return CGRect(x: rect.minX + 4, y: rect.minY + 2, width: max(8, rect.width - 8), height: max(8, rect.height / 2 - 2))
+            // Swipe actions: the icon sits over the title inside one button.
+            // The band stops at 42% of the button so the title's own cap —
+            // 26.3 pt of merged ink in run 40129349764 — cannot pad the glyph's
+            // measured height.
+            let height = min(24, max(10, rect.height * 0.42))
+            let width = min(46, max(12, rect.width * 0.6))
+            return CGRect(x: rect.midX - width / 2, y: rect.minY + 2, width: width, height: height)
         }
     }
 
