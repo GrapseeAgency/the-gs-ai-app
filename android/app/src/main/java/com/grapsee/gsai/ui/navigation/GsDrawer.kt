@@ -3,7 +3,6 @@ package com.grapsee.gsai.ui.navigation
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,7 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,10 +42,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.paneTitle
@@ -52,56 +54,121 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.di.ServiceLocator
-import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
+import com.grapsee.gsai.ui.components.GlassFrostedPanel
+import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.RefArt
 import com.grapsee.gsai.ui.components.RefArtwork
-import com.grapsee.gsai.ui.components.RefAvatar
 import com.grapsee.gsai.ui.components.RefDivider
 import com.grapsee.gsai.ui.components.RefIconTile
-import com.grapsee.gsai.ui.components.RefPrimaryButton
 import com.grapsee.gsai.ui.components.gsConversationTitle
-import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.icons.GsIcons
+import com.grapsee.gsai.ui.navigation.drawer.DESTINATIONS
+import com.grapsee.gsai.ui.navigation.drawer.DrawerDestinationRow
+import com.grapsee.gsai.ui.navigation.drawer.DrawerFixture
+import com.grapsee.gsai.ui.navigation.drawer.DrawerFooter
+import com.grapsee.gsai.ui.navigation.drawer.DrawerHeroRow
+import com.grapsee.gsai.ui.navigation.drawer.DrawerIdentity
+import com.grapsee.gsai.ui.navigation.drawer.DrawerMetrics
+import com.grapsee.gsai.ui.navigation.drawer.DrawerRecent
+import com.grapsee.gsai.ui.navigation.drawer.DrawerRecentRow
+import com.grapsee.gsai.ui.navigation.drawer.DrawerSearchPill
+import com.grapsee.gsai.ui.navigation.drawer.DrawerSectionLabel
+import com.grapsee.gsai.ui.navigation.drawer.RECENT_LIMIT
+import com.grapsee.gsai.ui.navigation.drawer.drawerIcon
+import com.grapsee.gsai.ui.navigation.drawer.relativeTimeIso
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsTheme
-import com.grapsee.gsai.ui.theme.kineticPress
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /**
- * The history panel: identity, one search affordance, one primary action, the
- * real recents, and a footer that opens the account sheet.
+ * The navigation drawer, rebuilt to the sheet.
  *
- * Restyled in the reference pass. The old drawer painted its own peach
- * gradient over the app background and used Material surface roles for the
- * rows; this one is a cream-glass panel over the shared bloom, with the same
- * 40dp pale tiles and 22dp radii as every other page. No new destinations:
- * each row was already wired.
+ * WHAT CHANGED AND WHY
+ * --------------------
+ * The old panel was an opaque cream gradient with seven flat rows and no search
+ * affordance (`SearchPill` was declared and never called). The sheet has a
+ * different shape: a search pill, one warm "New chat" row, two labelled sections
+ * whose rows carry discs and chevrons, chat rows with relative times, and a
+ * footer with a gear. Those are not restyles of the old rows — they are a
+ * different set of parts — so the body was replaced and the parts moved to
+ * `ui/navigation/drawer/`, where each is measured in exactly one place
+ * (`DrawerMetrics`) and gated against the sheet by `scripts/check_drawer_render.py`.
+ *
+ * The shell stayed: edge-swipe, the scrim, dismissal, the account sheet and the
+ * long-press action sheet all already worked, and the plan's whole risk argument
+ * was to keep them.
+ *
+ * THE PANEL IS NOT A BLUR OF HOME. Measured on the sheet, the panel's internal
+ * high-frequency energy is 1.79 L with no card-shaped steps — a frosted bloom,
+ * not a live blur of the page underneath. `GlassFrostedPanel` is exactly that
+ * composite (frosted backdrop + translucency + rim), so the panel is drawn with
+ * it rather than `Modifier.blur`, which would ghost the bento cards through a
+ * surface the reference shows as opaque.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun GsDrawerContent(
     selectedRoute: String?,
     onNavigate: (String) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    /**
+     * A capture needs four rows and a name without a database. Production passes
+     * nothing; the harnesses pass a fixture, so no test ever writes to
+     * ConversationStore — Home's render test asserts the store is empty, and a
+     * seeding drawer test would fail it from a distance.
+     */
+    fixture: DrawerFixture? = null,
 ) {
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
     val storedName = AccountStore.displayName(context)
-    val storedEmail = AccountStore.email(context)
-    val recents by remember {
-        runCatching { ServiceLocator.chat.activeConversations() }.getOrElse { flowOf(emptyList()) }
+    // A fixture means the caller is supplying its own rows, so the store is not
+    // read at all. That keeps the capture and the interaction test independent of
+    // the database, and it is why they run on a bare JVM.
+    // A server-side auto-title reaches the local row only when someone refetches
+    // the list; the drawer is where the headline is read, so it asks once per
+    // opening. A fixture means a capture or a test, and no network.
+    LaunchedEffect(fixture) {
+        if (fixture == null) {
+            runCatching { ServiceLocator.chat.refreshConversations() }
+        }
+    }
+
+    val recentsFromStore by remember(fixture) {
+        if (fixture != null) flowOf(emptyList())
+        else runCatching { ServiceLocator.chat.activeConversations() }
+            .getOrElse { flowOf(emptyList()) }
     }.collectAsStateWithLifecycle(initialValue = emptyList())
 
     var actionTarget by remember { mutableStateOf<ConversationEntity?>(null) }
     var accountSheetOpen by remember { mutableStateOf(false) }
+
+    val identity = fixture?.identity ?: DrawerIdentity(
+        name = storedName.ifBlank { "Your account" },
+        workspace = "Personal workspace",
+        initials = initialsFor(storedName),
+    )
+    // The limit applies to BOTH sources. The fixture path used to skip it, so the
+    // 500-chat capture drew twelve text bands instead of nine — the drawer's
+    // "four rows" was a property of the store, not of the panel. DR11 caught it.
+    val recents: List<DrawerRecent> = fixture?.recents?.take(RECENT_LIMIT) ?: recentsFromStore
+        .take(RECENT_LIMIT)
+        .map { conversation ->
+            val title = gsConversationTitle(conversation.title)
+            DrawerRecent(
+                id = conversation.id,
+                title = title,
+                timestamp = relativeTimeIso(conversation.updatedAt),
+                icon = drawerIcon(title, conversation.pinned),
+            )
+        }
 
     val navigateFromSheet: (String) -> Unit = { route ->
         accountSheetOpen = false
@@ -117,175 +184,108 @@ fun GsDrawerContent(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxHeight()
-            .width(308.dp)
-            .clip(RoundedCornerShape(topEnd = 30.dp, bottomEnd = 30.dp))
-            .background(
-                // Opaque veil. A translucent top stop let the dashboard's
-                // greeting ghost through the brand lockup — the panel must be
-                // a surface, not a tint. Blend the accent INTO the nav surface
-                // so the peach cast survives without transparency.
-                Brush.verticalGradient(
-                    listOf(
-                        lerp(GsTheme.colors.navSurface, GsTheme.colors.accent, 0.10f),
-                        GsTheme.colors.navSurface,
-                        GsTheme.colors.navSurface
-                    )
-                )
-            )
-            .semantics { paneTitle = "Navigation drawer" }
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(horizontal = 14.dp)
+            .fillMaxWidth(DrawerMetrics.panelRatio)
+            .semantics { paneTitle = "Navigation drawer" },
     ) {
-        Spacer(Modifier.height(10.dp))
-
-        // Brand lockup — the reference's drawer header, with its close affordance.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 6.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        GlassFrostedPanel(
+            shape = RoundedCornerShape(bottomEnd = DrawerMetrics.cornerRadius),
+            role = GsGlassRole.Modal,
+            modifier = Modifier.fillMaxSize(),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(
-                            listOf(Color(0xFFFFE3CE), Color(0xFFFFC9A8), Color(0xFFFFB38F))
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                RefArtwork(art = RefArt.Bloom, size = 36.dp, contentDescription = "")
-            }
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = "Nexly",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                color = GsTheme.colors.textPrimary,
-                modifier = Modifier.weight(1f)
-            )
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        role = Role.Button,
-                        onClickLabel = "Close menu",
-                        onClick = onClose
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    GsIcons.X,
-                    contentDescription = "Close menu",
-                    tint = GsTheme.colors.textPrimary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
+            Column(Modifier.fillMaxSize()) {
+                DrawerHeader(onClose = onClose)
 
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-        ) {
-            // The reference's seven destinations, in its order.
-            DrawerRow("New chat", GsIcons.Plus, selected = false) {
-                onClose(); onNavigate(GsRoutes.chat(null))
-            }
-            DrawerRow("Search conversations", GsIcons.Search, selectedRoute == GsRoutes.CHAT_SEARCH) {
-                onClose(); onNavigate(GsRoutes.CHAT_SEARCH)
-            }
-            DrawerRow("Your chats", GsIcons.MessageCircle, selectedRoute == GsRoutes.CHATS) {
-                onClose(); onNavigate(GsRoutes.CHATS)
-            }
-            DrawerRow("Saved responses", GsIcons.Bookmark, selectedRoute == GsRoutes.CHAT_ARCHIVE) {
-                onClose(); onNavigate(GsRoutes.CHAT_ARCHIVE)
-            }
-            DrawerRow("Explore tools", GsIcons.Compass, selectedRoute == GsRoutes.TRAVEL_AGENT) {
-                onClose(); onNavigate(GsRoutes.TRAVEL_AGENT)
-            }
-            DrawerRow("Personalization", GsIcons.SlidersHorizontal, selectedRoute == GsRoutes.PROFILE) {
-                onClose(); onNavigate(GsRoutes.PROFILE)
-            }
-            DrawerRow("Settings", GsIcons.Settings, selectedRoute == GsRoutes.SETTINGS) {
-                onClose(); onNavigate(GsRoutes.SETTINGS)
-            }
-
-            Spacer(Modifier.height(10.dp))
-            DrawerLabel("Recent")
-            if (recents.isEmpty()) {
-                Text(
-                    text = "No conversations yet. The first one starts above.",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = GsTheme.colors.textSecondary,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-                )
-            } else {
-                recents.take(RECENT_LIMIT).forEach { conversation ->
-                    RecentRow(
-                        conversation = conversation,
-                        selected = selectedRoute == GsRoutes.chat(conversation.id),
-                        onOpen = {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                ) {
+                    item {
+                        Spacer(Modifier.height(18.dp))
+                        DrawerSearchPill(onOpenSearch = {
                             onClose()
-                            onNavigate(GsRoutes.chat(conversation.id))
-                        },
-                        onActions = {
-                            GsHaptics.longPress(haptics)
-                            actionTarget = conversation
+                            onNavigate(GsRoutes.CHAT_SEARCH)
+                        })
+                    }
+                    item {
+                        Spacer(Modifier.height(DrawerMetrics.pillToHero))
+                        DrawerHeroRow(
+                            label = "New chat",
+                            onClick = {
+                                onClose()
+                                onNavigate(GsRoutes.chat(null))
+                            },
+                        )
+                    }
+                    item { DrawerSectionLabel("YOUR SPACE") }
+                    items(DESTINATIONS) { destination ->
+                        DrawerDestinationRow(
+                            destination = destination,
+                            selected = selectedRoute == destination.route,
+                            onClick = {
+                                onClose()
+                                onNavigate(destination.route)
+                            },
+                        )
+                    }
+                    item {
+                        Spacer(Modifier.height(6.dp))
+                        Box(Modifier.padding(horizontal = DrawerMetrics.contentInset + 4.dp)) {
+                            RefDivider()
                         }
-                    )
+                        DrawerSectionLabel("RECENT CHATS")
+                    }
+                    if (recents.isEmpty()) {
+                        item {
+                            Text(
+                                text = "No conversations yet.",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = DrawerMetrics.timestampInk,
+                                modifier = Modifier.padding(
+                                    start = DrawerMetrics.contentInset,
+                                    top = 6.dp,
+                                    bottom = 10.dp,
+                                ),
+                            )
+                        }
+                    } else {
+                        items(recents) { recent ->
+                            DrawerRecentRow(
+                                recent = recent,
+                                selected = selectedRoute == GsRoutes.chat(recent.id),
+                                onClick = {
+                                    onClose()
+                                    onNavigate(GsRoutes.chat(recent.id))
+                                },
+                                onLongPress = {
+                                    val target = recentsFromStore.firstOrNull { it.id == recent.id }
+                                    if (target != null) {
+                                        GsHaptics.longPress(haptics)
+                                        actionTarget = target
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    item { Spacer(Modifier.height(10.dp)) }
                 }
-            }
-            Spacer(Modifier.height(12.dp))
-        }
 
-        RefDivider(startIndent = 4.dp)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    role = Role.Button,
-                    onClickLabel = "Account options"
-                ) { accountSheetOpen = true }
-                .semantics { contentDescription = "Account options" }
-                .padding(horizontal = 10.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            RefAvatar(initials = initialsFor(storedName), size = 36.dp)
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = storedName.ifBlank { "Your account" },
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = GsTheme.colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "Personal",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = GsTheme.colors.textSecondary
+                Box(Modifier.padding(horizontal = DrawerMetrics.contentInset + 4.dp)) {
+                    RefDivider()
+                }
+                DrawerFooter(
+                    identity = identity,
+                    onAccount = { accountSheetOpen = true },
+                    onSettings = { navigateFromSheet(GsRoutes.SETTINGS) },
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .padding(bottom = 4.dp),
                 )
             }
-            Icon(
-                GsIcons.ChevronRight,
-                contentDescription = null,
-                tint = GsTheme.colors.textTertiary,
-                modifier = Modifier.size(16.dp)
-            )
         }
-        Spacer(Modifier.height(8.dp))
     }
 
     if (actionTarget != null) {
@@ -302,7 +302,7 @@ fun GsDrawerContent(
                 if (target != null) {
                     scope.launch { runCatching { ServiceLocator.chat.rename(target.id, name) } }
                 }
-            }
+            },
         )
     }
 
@@ -316,91 +316,77 @@ fun GsDrawerContent(
     }
 }
 
+/**
+ * The header: the product's orb, the wordmark and its subtitle, and the close
+ * control. Its top inset is the safe area plus 4 dp (the sheet's orb starts
+ * 62.7 pt from the frame top, i.e. 3.7 pt below a 59 pt safe area).
+ */
 @Composable
-private fun SearchPill(onClick: () -> Unit) {
+private fun DrawerHeader(onClose: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(46.dp)
-            .gsGlass(GsGlassRole.Sunken, RoundedCornerShape(999.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                role = Role.Button,
-                onClickLabel = "Search chats",
-                onClick = onClick
+            .statusBarsPadding()
+            .padding(
+                start = DrawerMetrics.contentInset + 4.dp,
+                end = DrawerMetrics.contentInset,
+                top = 4.dp,
             )
-            .padding(horizontal = 16.dp),
+            .heightIn(min = DrawerMetrics.headerOrb + 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Icon(
-            GsIcons.Search,
-            contentDescription = null,
-            tint = GsTheme.colors.textTertiary,
-            modifier = Modifier.size(18.dp)
-        )
-        Text(
-            "Search your chats",
-            style = MaterialTheme.typography.labelMedium,
-            color = GsTheme.colors.textTertiary
-        )
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun RecentRow(
-    conversation: ConversationEntity,
-    selected: Boolean,
-    onOpen: () -> Unit,
-    onActions: () -> Unit
-) {
-    val interaction = remember { MutableInteractionSource() }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                if (selected) GsTheme.colors.accentSoft.copy(alpha = 0.85f)
-                else Color.Transparent
-            )
-            .combinedClickable(
-                interactionSource = interaction,
-                indication = null,
-                role = Role.Button,
-                onClick = onOpen,
-                onLongClick = onActions
-            )
-            .semantics { this.selected = selected }
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(6.dp)
+                .size(DrawerMetrics.headerOrb)
                 .clip(CircleShape)
-                .background(if (selected) GsTheme.colors.accent else Color.Transparent)
-        )
-        Text(
-            text = gsConversationTitle(conversation.title),
-            style = MaterialTheme.typography.bodySmall.copy(
-                fontSize = 13.5.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-            ),
-            color = if (selected) GsTheme.colors.accentStrong else GsTheme.colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        if (conversation.pinned) {
+                .background(
+                    Brush.linearGradient(
+                        listOf(Color(0xFFFFE9D5), Color(0xFFFFCDB0), Color(0xFFFFB9A0))
+                    )
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            RefArtwork(art = RefArt.Bloom, size = 44.dp, contentDescription = "")
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = "Nexly",
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = DrawerMetrics.wordmark,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = GsTheme.colors.textPrimary,
+                maxLines = 1,
+            )
+            Text(
+                text = "AI Companion",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = DrawerMetrics.subtitle
+                ),
+                color = DrawerMetrics.labelInk,
+                maxLines = 1,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(DrawerMetrics.closeHit + 10.dp)
+                .testTag("drawer-close")
+                .clip(CircleShape)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    role = Role.Button,
+                    onClickLabel = "Close menu",
+                    onClick = onClose,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
             Icon(
-                GsIcons.Star,
-                contentDescription = "Pinned",
-                tint = GsTheme.colors.textTertiary,
-                modifier = Modifier.size(12.dp)
+                GsIcons.X,
+                contentDescription = "Close menu",
+                tint = GsTheme.colors.textPrimary,
+                modifier = Modifier.size(DrawerMetrics.closeGlyph + 6.dp),
             )
         }
     }
@@ -410,7 +396,7 @@ private fun RecentRow(
 @OptIn(ExperimentalMaterial3Api::class)
 private fun DrawerNavSheet(
     onDismiss: () -> Unit,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -419,7 +405,7 @@ private fun DrawerNavSheet(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 14.dp)
                 .padding(bottom = 22.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             content()
         }
@@ -431,7 +417,7 @@ private fun SheetRow(
     title: String,
     icon: ImageVector?,
     selected: Boolean = false,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
     Row(
@@ -445,11 +431,11 @@ private fun SheetRow(
                 indication = null,
                 role = Role.Button,
                 onClickLabel = title,
-                onClick = onClick
+                onClick = onClick,
             )
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (icon != null) RefIconTile(icon)
         Text(
@@ -458,71 +444,16 @@ private fun SheetRow(
             color = GsTheme.colors.textPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
         Icon(
             GsIcons.ChevronRight,
             contentDescription = null,
             tint = GsTheme.colors.textTertiary,
-            modifier = Modifier.size(16.dp)
+            modifier = Modifier.size(16.dp),
         )
     }
 }
-
-@Composable
-private fun DrawerLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium.copy(
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 0.2.sp
-        ),
-        color = GsTheme.colors.textTertiary,
-        modifier = Modifier.padding(start = 10.dp, top = 18.dp, bottom = 6.dp)
-    )
-}
-
-@Composable
-private fun DrawerRow(
-    title: String,
-    icon: ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    val interaction = remember { MutableInteractionSource() }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 58.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(if (selected) GsTheme.colors.accentSoft.copy(alpha = 0.85f) else Color.Transparent)
-            .clickable(
-                interactionSource = interaction,
-                indication = null,
-                role = Role.Button,
-                onClickLabel = title,
-                onClick = onClick
-            )
-            .semantics { this.selected = selected }
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        RefIconTile(icon, tint = if (selected) GsTheme.colors.accentStrong else GsTheme.colors.textSecondary)
-        Text(
-            title,
-            style = MaterialTheme.typography.bodyMedium.copy(
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
-            ),
-            color = if (selected) GsTheme.colors.accentStrong else GsTheme.colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-private const val RECENT_LIMIT = 12
 
 private fun initialsFor(name: String): String {
     val words = name.trim().split(Regex("\\s+")).filter { it.isNotBlank() }

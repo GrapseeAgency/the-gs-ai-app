@@ -31,12 +31,21 @@ struct AeroDrawer: View {
     /// Live selected-state input: the route currently on screen.
     var activeRoute: AeroRoute? = nil
 
+    /// A capture needs four rows and a name without a database. Production
+    /// passes nil and the drawer reads the store ONCE per presentation (below) —
+    /// the old code called `store.activeConversations` from `body`, which is an
+    /// O(n log n) sort on every drag sample.
+    var recentFixture: DrawerFixture? = nil
+
+    @State private var recents: [DrawerRecent] = []
+    @Environment(\.colorScheme) private var scheme
+
     @ObservedObject private var store = ConversationStore.shared
     /// The drawer header shows the REAL stored identity — it re-renders the
     /// moment the account changes (sign-in, name edit).
     @ObservedObject private var account = AccountStore.shared
 
-    @State private var renameTarget: StoredConversation?
+    @State private var renameId: String?
     @State private var renameDraft = ""
     @State private var accountSheet = false
 
@@ -49,17 +58,33 @@ struct AeroDrawer: View {
     /// span the full screen; the scrim beyond it stays tappable and
     /// VoiceOver-reachable.
     private var panelWidth: CGFloat {
-        min(340, UIScreen.main.bounds.width * 0.85)
+        DrawerMetrics.panelWidth(in: UIScreen.main.bounds.width)
     }
 
-    // Theme-following navigation palette: cream in light mode and espresso
-    // in dark mode, with the same warm accent wash in both appearances.
-    private var panel: LinearGradient {
-        LinearGradient(
-            colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.18), Aero.navSurface, Aero.navSurface],
-            startPoint: .topLeading,
-            endPoint: .center
-        )
+    /// The panel's surface. Measured on the sheet: body 237 L, a lit rim on the
+    /// leading edge, and NO structure from the page behind it (HF p90 1.79 L) —
+    /// so this is a frosted bloom, not a blur of Home. It is drawn from the
+    /// backdrop's own blooms plus the warm wash, which is what a live blur would
+    /// have to approximate anyway, without an offscreen pass per frame.
+    private var panelSurface: some View {
+        ZStack {
+            Aero.navSurface
+            // In dark the wash is a 4% white lift over the dark nav surface. The
+            // first version painted the LIGHT cream at 85% in both appearances, so
+            // the dark capture measured 206 L — a light panel behind a dark page.
+            LinearGradient(
+                colors: scheme == .dark
+                    ? [Color.white.opacity(0.06), .clear]
+                    : [Color(red: 1.0, green: 0.94, blue: 0.90),
+                       Color(red: 0.98, green: 0.92, blue: 0.89)],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            ).opacity(scheme == .dark ? 0.9 : 0.85)
+            LinearGradient(
+                colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.16), .clear],
+                startPoint: .topLeading,
+                endPoint: .center
+            )
+        }
     }
 
     var body: some View {
@@ -71,20 +96,20 @@ struct AeroDrawer: View {
         .accessibilityLabel("Navigation menu")
         .accessibilityAction(.escape) { onClose() }
         .alert("Rename chat", isPresented: Binding(
-            get: { renameTarget != nil },
-            set: { if !$0 { renameTarget = nil } }
+            get: { renameId != nil },
+            set: { if !$0 { renameId = nil } }
         )) {
             TextField("Chat name", text: $renameDraft)
             Button("Rename") {
                 let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let target = renameTarget, !trimmed.isEmpty {
-                    store.rename(id: target.id, to: trimmed)
-                    sync(target.id, title: trimmed)
+                if let id = renameId, !trimmed.isEmpty {
+                    store.rename(id: id, to: trimmed)
+                    sync(id, title: trimmed)
                     GSHaptics.success()
                 }
-                renameTarget = nil
+                renameId = nil
             }
-            Button("Cancel", role: .cancel) { renameTarget = nil }
+            Button("Cancel", role: .cancel) { renameId = nil }
         } message: {
             Text("Give this conversation a name you'll recognise.")
         }
@@ -99,134 +124,417 @@ struct AeroDrawer: View {
     // decomposed into named sub-expressions)
 
     private var scrimLayer: some View {
-        Aero.scrim
+        DrawerMetrics.scrim
             .ignoresSafeArea()
-            .onTapGesture { onClose() }
-            .accessibilityLabel("Close menu")
-            .accessibilityAddTraits(.isButton)
-            .transition(.opacity)
     }
 
     private var panelLayer: some View {
         VStack(alignment: .leading, spacing: 0) {
+            brandHeader
             ScrollView(showsIndicators: false) {
                 panelList
             }
+            .frame(maxHeight: .infinity)
             footer
         }
-        .padding(.top, Aero.Spacing.xl)
         .frame(width: panelWidth, alignment: .top)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(panel)
-        .shadow(color: Color.black.opacity(0.18), radius: 24, x: 8)
+        .background(panelSurface)
+        .overlay(alignment: .leading) {
+            // The sheet's lit leading edge: ~+6 L over the body, 1 pt wide.
+            LinearGradient(colors: [Color.white.opacity(0.55), .clear],
+                           startPoint: .leading, endPoint: .trailing)
+                .frame(width: 1.5)
+        }
+        .clipShape(UnevenRoundedRectangle(bottomTrailingRadius: DrawerMetrics.cornerRadius))
         .offset(x: entryOffset + closeOffset)
         .gesture(closeDragGesture)
         .transition(.move(edge: .leading).combined(with: .opacity))
         .onAppear {
             // A stale tracked offset must never survive a fresh presentation.
             closeOffset = 0
+            refreshRecents()
         }
     }
 
     private var panelList: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-            newChatRow
-            navGroup
-            divider
-            recentGroup
-            divider
-            voiceRow
+        LazyVStack(alignment: .leading, spacing: 0) {
+            searchPill
+            heroRow
+            drawerSectionLabel("YOUR SPACE")
+            ForEach(DrawerDestination.allCases) { destinationRow($0) }
+            dividerRow
+            drawerSectionLabel("RECENT CHATS")
+            if recents.isEmpty {
+                Text("No conversations yet.")
+                    .font(Aero.specFont(DrawerMetrics.timestamp))
+                    .foregroundColor(DrawerMetrics.timestampInk)
+                    .padding(.leading, DrawerMetrics.contentInset)
+                    .padding(.vertical, 8)
+            } else {
+                ForEach(recents) { recentRow($0) }
+            }
+            dividerRow
         }
-        .padding(.horizontal, Aero.Spacing.m)
-        .padding(.bottom, Aero.Spacing.l)
+        .padding(.bottom, 4)
+    }
+
+    /// The brand lockup: the product orb, the wordmark and its subtitle, and the
+    /// close control. The sheet's orb starts 62.7 pt from the frame top, i.e.
+    /// 3.7 pt below a 59 pt safe area, which is why the padding is 4.
+    private var brandHeader: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(colors: [Color(red: 1, green: 0.914, blue: 0.835),
+                                                  Color(red: 1, green: 0.725, blue: 0.627)],
+                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: DrawerMetrics.headerOrb, height: DrawerMetrics.headerOrb)
+                Image(systemName: "sparkles")
+                    .font(Aero.specFont(22, .regular))
+                    .foregroundColor(.white.opacity(0.9))
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Nexly")
+                    .font(Aero.specFont(DrawerMetrics.wordmark, .semibold))
+                    .foregroundColor(Aero.text)
+                Text("AI Companion")
+                    .font(Aero.specFont(DrawerMetrics.subtitle))
+                    .foregroundColor(DrawerMetrics.labelInk)
+            }
+            Spacer(minLength: 0)
+            Button {
+                GSHaptics.tap()
+                onClose()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(Aero.specFont(DrawerMetrics.closeGlyph, .medium))
+                    .foregroundColor(Aero.text)
+                    .frame(width: DrawerMetrics.closeHit + 10,
+                           height: DrawerMetrics.closeHit + 10)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close menu")
+        }
+        .padding(.leading, DrawerMetrics.contentInset + 4)
+        .padding(.trailing, DrawerMetrics.contentInset)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+    }
+
+    /// The magnifier + placeholder pill. It opens the real search screen; the
+    /// sheet draws it as a field, and a field that filters in place would
+    /// duplicate a screen that already does.
+    private var searchPill: some View {
+        Button {
+            GSHaptics.tap()
+            onRoute(.chatSearch)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .font(Aero.specFont(DrawerMetrics.searchGlyph))
+                    .foregroundColor(DrawerMetrics.labelInk)
+                Text("Search chats")
+                    .font(Aero.specFont(DrawerMetrics.searchText))
+                    .foregroundColor(DrawerMetrics.labelInk)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: DrawerMetrics.searchHeight)
+            .background(Capsule().fill(Color.white.opacity(scheme == .dark ? 0.10 : 0.55)))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(scheme == .dark ? 0.14 : 0.65),
+                                            lineWidth: 1))
+            .padding(.horizontal, DrawerMetrics.contentInset)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Search chats")
+        .padding(.top, 18)
+    }
+
+    /// "New chat" — the sheet's one warm row.
+    private var heroRow: some View {
+        Button {
+            GSHaptics.tap()
+            onRoute(.chat(nil))
+        } label: {
+            HStack(spacing: DrawerMetrics.discToTitle) {
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(colors: [DrawerMetrics.heroOrbTop,
+                                                      DrawerMetrics.heroOrbBottom],
+                                             startPoint: .top, endPoint: .bottom))
+                        .frame(width: DrawerMetrics.heroOrb, height: DrawerMetrics.heroOrb)
+                    Image(systemName: "plus")
+                        .font(Aero.specFont(17, .semibold))
+                        .foregroundColor(.white)
+                }
+                Text("New chat")
+                    .font(Aero.specFont(DrawerMetrics.heroLabel, .semibold))
+                    .foregroundColor(Aero.text)
+                Spacer(minLength: 0)
+                chevron
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, DrawerMetrics.chevronInset)
+            .frame(minHeight: DrawerMetrics.heroHeight)
+            .background(
+                RoundedRectangle(cornerRadius: DrawerMetrics.heroRadius)
+                    .fill(LinearGradient(
+                        colors: scheme == .dark
+                            ? [DrawerMetrics.heroLeft.opacity(0.30),
+                               DrawerMetrics.heroRight.opacity(0.12)]
+                            : [DrawerMetrics.heroLeft, DrawerMetrics.heroRight],
+                        startPoint: .leading, endPoint: .trailing))
+            )
+            .padding(.horizontal, DrawerMetrics.contentInset)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("New chat")
+        .padding(.top, DrawerMetrics.pillToHero)
+    }
+
+    private func drawerSectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(DrawerMetrics.sectionLabelStyle())
+            .tracking(DrawerMetrics.sectionLabel * DrawerMetrics.sectionTracking)
+            .foregroundColor(DrawerMetrics.labelInk)
+            .padding(.leading, DrawerMetrics.contentInset)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
+    }
+
+    private var dividerRow: some View {
+        Rectangle()
+            .fill(Aero.outline)
+            .frame(height: 1)
+            .padding(.horizontal, DrawerMetrics.contentInset + 4)
+            .padding(.vertical, 6)
+    }
+
+    private func destinationRow(_ destination: DrawerDestination) -> some View {
+        Button {
+            GSHaptics.tap()
+            onRoute(destination.route)
+        } label: {
+            HStack(spacing: DrawerMetrics.discToTitle) {
+                disc(DrawerTopic.paths(named: destination.icon))
+                Text(destination.label)
+                    .font(Aero.specFont(DrawerMetrics.rowTitle))
+                    .foregroundColor(activeRoute == destination.route ? Aero.accent : Aero.text)
+                Spacer(minLength: 0)
+                chevron
+            }
+            .padding(.leading, DrawerMetrics.contentInset)
+            .padding(.trailing, DrawerMetrics.chevronInset)
+            .frame(minHeight: DrawerMetrics.destPitch)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(activeRoute == destination.route
+                          ? Aero.accent.opacity(0.12) : Color.clear)
+            )
+            .padding(.horizontal, 0)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(destination.label)
+        .accessibilityAddTraits(activeRoute == destination.route ? .isSelected : [])
+    }
+
+    private func recentRow(_ recent: DrawerRecent) -> some View {
+        Button {
+            GSHaptics.tap()
+            onRoute(.chat(recent.id))
+        } label: {
+            HStack(spacing: DrawerMetrics.discToTitle) {
+                disc(DrawerTopic.paths(title: recent.title, pinned: recent.pinned))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(recent.title)
+                        .font(Aero.specFont(DrawerMetrics.chatTitle, .semibold))
+                        .foregroundColor(Aero.text)
+                        .lineLimit(1)
+                    Text(recent.timestamp)
+                        .font(Aero.specFont(DrawerMetrics.timestamp))
+                        .foregroundColor(DrawerMetrics.timestampInk)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                chevron
+            }
+            .padding(.leading, DrawerMetrics.contentInset)
+            .padding(.trailing, DrawerMetrics.chevronInset)
+            .frame(minHeight: DrawerMetrics.recentPitch)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(recent.title), \(recent.timestamp)")
+        // The rebuild dropped the old drawer's per-row actions, which left Android
+        // able to pin/rename/archive/delete from the drawer and iOS unable to —
+        // a behavioural regression that the pixel gate could not see. Restored
+        // against the same store and API calls the old code used.
+        .contextMenu {
+            Button {
+                let next = !recent.pinned
+                GSHaptics.success()
+                store.setPinned(id: recent.id, next)
+                sync(recent.id, pinned: next)
+                // The row updates from the tap, not from the next presentation.
+                if let index = recents.firstIndex(where: { $0.id == recent.id }) {
+                    recents[index].pinned = next
+                    recents[index].symbol = DrawerTopic.iconName(title: recents[index].title, pinned: next)
+                }
+            } label: {
+                Label(recent.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
+            }
+            Button {
+                renameId = recent.id
+                renameDraft = recent.title
+            } label: {
+                Label("Rename…", systemImage: "pencil")
+            }
+            Button {
+                GSHaptics.success()
+                store.setArchived(id: recent.id, true)
+                sync(recent.id, archived: true)
+            } label: {
+                Label("Archive", systemImage: "archivebox")
+            }
+            Button(role: .destructive) {
+                GSHaptics.warning()
+                store.delete(id: recent.id)
+                syncDelete(recent.id)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+
+    /// The disc holds the icon family's own glyph — the same geometry Android
+    /// draws — rather than an SF Symbol. `GsIconView` had no caller before this:
+    /// the iOS target shipped 12,000 lines of icon data and drew none of it, so
+    /// the two apps had two icon languages.
+    private func disc(_ icon: GsIconPaths) -> some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(scheme == .dark ? 0.10 : 0.62))
+                .overlay(Circle().strokeBorder(
+                    Color.white.opacity(scheme == .dark ? 0.16 : 0.75), lineWidth: 1))
+                .frame(width: DrawerMetrics.disc, height: DrawerMetrics.disc)
+            GsIconView(icon, size: DrawerMetrics.discGlyph,
+                       color: Aero.text.opacity(0.75))
+        }
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(Aero.specFont(DrawerMetrics.chevron, .medium))
+            .foregroundColor(DrawerMetrics.labelInk)
+    }
+
+    /// Reads the store once per presentation and keeps the result in `@State`.
+    private func refreshRecents() {
+        if let fixture = recentFixture {
+            // prefix(4), not the whole fixture: the 500-chat capture drew twelve
+            // bands against nine, and the panel's "four rows" has to be a property
+            // of the panel rather than of where the rows came from.
+            recents = Array(fixture.recents.prefix(4))
+            return
+        }
+        recents = localRecents()
+        // The drawer used to read ONLY the local store, so a chat the server had
+        // auto-titled still read "New chat" here until something else refetched.
+        // One pull per presentation, then the rows are rebuilt from the merged
+        // store; a failed pull leaves the local rows exactly as they were.
+        Task {
+            guard await store.syncFromServer(limit: 30) else { return }
+            recents = localRecents()
+        }
+    }
+
+    /// The four newest local rows, as drawer rows.
+    private func localRecents() -> [DrawerRecent] {
+        ConversationStore.shared.activeConversations.prefix(4).map { conversation in
+            let title = gsConversationTitle(conversation.title)
+            return DrawerRecent(id: conversation.id, title: title,
+                                timestamp: DrawerTime.relative(iso: conversation.updatedAt),
+                                symbol: DrawerTopic.iconName(title: title, pinned: conversation.pinned),
+                                pinned: conversation.pinned)
+        }
     }
 
     /// The reference's destinations, in its order (New chat + Search already
     /// live in `newChatRow`). Each routes to a real screen.
-    private var navGroup: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-            row(title: "Your chats", icon: "bubble.left.and.bubble.right", isSelected: activeRoute == .chats) { onRoute(.chats) }
-            row(title: "Saved responses", icon: "bookmark", isSelected: activeRoute == .chatArchive) { onRoute(.chatArchive) }
-            row(title: "Explore tools", icon: "safari", isSelected: activeRoute == .explore) { onRoute(.explore) }
-            row(title: "Personalization", icon: "person.crop.circle", isSelected: activeRoute == .profile) { onRoute(.profile) }
-            row(title: "Settings", icon: "gearshape", isSelected: activeRoute == .settings) { onRoute(.settings) }
-        }
-    }
-
     /// Voice — the one wired non-chat capability, promoted to a real row.
-    private var voiceRow: some View {
-        row(title: "Voice", icon: "waveform", isSelected: activeRoute == .voice) { onRoute(.voice) }
-    }
-
     /// Account footer — pinned to the bottom of the panel, outside the
     /// scroll: identity + account sheet stay reachable from any scroll
     /// position (the More row that used to sit here is gone).
     private var footer: some View {
-        header
-            .padding(.horizontal, Aero.Spacing.m)
-            .padding(.bottom, Aero.Spacing.xl)
+        HStack(spacing: 10) {
+            Button {
+                GSHaptics.tap()
+                accountSheet = true
+            } label: {
+                HStack(spacing: 10) {
+                    ZStack {
+                        Circle().fill(Aero.accentSoft)
+                            .frame(width: DrawerMetrics.avatar, height: DrawerMetrics.avatar)
+                        Text(fixtureIdentity.initials)
+                            .font(Aero.specFont(DrawerMetrics.footerName, .semibold))
+                            .foregroundColor(Aero.text)
+                    }
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(fixtureIdentity.name)
+                            .font(Aero.specFont(DrawerMetrics.footerName, .semibold))
+                            .foregroundColor(Aero.text)
+                            .lineLimit(1)
+                        Text(fixtureIdentity.workspace)
+                            .font(Aero.specFont(DrawerMetrics.footerSub))
+                            .foregroundColor(DrawerMetrics.timestampInk)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Account options")
+
+            Button {
+                GSHaptics.tap()
+                onRoute(.settings)
+            } label: {
+                ZStack {
+                    Circle().fill(Color.white.opacity(scheme == .dark ? 0.10 : 0.62))
+                        .overlay(Circle().strokeBorder(
+                            Color.white.opacity(scheme == .dark ? 0.16 : 0.75), lineWidth: 1))
+                        .frame(width: DrawerMetrics.gear, height: DrawerMetrics.gear)
+                    Image(systemName: "gearshape")
+                        .font(Aero.specFont(DrawerMetrics.gearGlyph))
+                        .foregroundColor(Aero.text.opacity(0.8))
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Settings")
+        }
+        .padding(.horizontal, DrawerMetrics.contentInset)
+        .padding(.top, 8)
+        // 30 pt of clearance, ~the sheet's 34 pt above the home indicator: the
+        // panel is full-bleed, so without it the footer sits under the indicator
+        // and the panel's own bottom edge is pushed out of the frame.
+        .padding(.bottom, 30)
+    }
+
+    /// The identity the footer shows: the fixture when a capture is running, the
+    /// real account otherwise.
+    private var fixtureIdentity: (name: String, workspace: String, initials: String) {
+        if let fixture = recentFixture {
+            return (fixture.name, fixture.workspace, fixture.initials)
+        }
+        let name = account.displayName.isEmpty ? "Your account" : account.displayName
+        return (name, "Personal workspace", String(name.prefix(1)).uppercased())
     }
 
     /// New chat + Search — the two conversation actions, always first.
-    private var newChatRow: some View {
-        HStack(spacing: Aero.Spacing.s) {
-            Button {
-                GSHaptics.tap()
-                onRoute(.chat(nil))
-            } label: {
-                HStack(spacing: Aero.Spacing.s) {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 14))
-                        .foregroundColor(Aero.onAccent)
-                    Text("New chat")
-                        .font(Aero.body())
-                        .foregroundColor(Aero.onAccent)
-                    Spacer()
-                }
-                .padding(.horizontal, Aero.Spacing.m)
-                .padding(.vertical, 13)
-                .background(RoundedRectangle(cornerRadius: Aero.Radius.md).fill(Aero.accent))
-            }
-            .buttonStyle(KineticPressStyle())
-            .accessibilityLabel("New chat")
-
-            Button {
-                GSHaptics.tap()
-                onRoute(.chatSearch)
-            } label: {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(Aero.text)
-                    .frame(width: 48, height: 46)
-                    .background(RoundedRectangle(cornerRadius: Aero.Radius.md).fill(Aero.raisedSurface))
-            }
-            .buttonStyle(KineticPressStyle())
-            .accessibilityLabel("Search chats")
-        }
-        .padding(.bottom, Aero.Spacing.m)
-    }
-
     /// The heart of the sidebar — live conversations only. When the store is
     /// empty the panel says so honestly; nothing is invented.
-    private var recentGroup: some View {
-        Group {
-            sectionLabel("Recent")
-            if recentRows.isEmpty {
-                Text("No conversations yet")
-                    .font(Aero.bodyMedium())
-                    .foregroundColor(Aero.textSecondary)
-                    .padding(.horizontal, Aero.Spacing.m)
-                    .padding(.bottom, Aero.Spacing.s)
-            } else {
-                ForEach(recentRows) { conversation in
-                    recentRow(conversation)
-                }
-            }
-            // Always visible — the real overflow into the full history hub.
-            row(title: "All chats", icon: "tray", isSelected: activeRoute == .chats) { onRoute(.chats) }
-        }
-    }
-
     // MARK: Account reveal sheet
 
     private var accountSheetView: some View {
@@ -271,52 +579,6 @@ struct AeroDrawer: View {
             }
     }
 
-    // MARK: Live recents
-
-    private var recentRows: [StoredConversation] {
-        Array(store.activeConversations.prefix(12))
-    }
-
-    /// One live recent: tap to open, long-press for the benchmark action set.
-    private func recentRow(_ conversation: StoredConversation) -> some View {
-        row(title: gsConversationTitle(conversation.title), icon: nil, isPinned: conversation.pinned) {
-            onRoute(.chat(conversation.id))
-        }
-        .contextMenu {
-            Button {
-                GSHaptics.success()
-                let target = !conversation.pinned
-                store.setPinned(id: conversation.id, target)
-                GSHaptics.success()
-                sync(conversation.id, pinned: target)
-            } label: {
-                Label(conversation.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
-            }
-            Button {
-                renameTarget = conversation
-                renameDraft = conversation.title
-            } label: {
-                Label("Rename…", systemImage: "pencil")
-            }
-            Button {
-                GSHaptics.success()
-                store.setArchived(id: conversation.id, true)
-                GSHaptics.success()
-                sync(conversation.id, archived: true)
-            } label: {
-                Label("Archive", systemImage: "archivebox")
-            }
-            Button(role: .destructive) {
-                GSHaptics.warning()
-                store.delete(id: conversation.id)
-                GSHaptics.warning()
-                syncDelete(conversation.id)
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
-    }
-
     private func sync(_ id: String, pinned: Bool? = nil, archived: Bool? = nil, title: String? = nil) {
         guard !id.hasPrefix("demo-"), !id.hasPrefix("local-") else { return }
         Task { try? await APIClient.shared.updateConversation(id: id, pinned: pinned, archived: archived, title: title) }
@@ -333,46 +595,6 @@ struct AeroDrawer: View {
     /// fallback when the reader never gave a name). The whole row reveals the
     /// account sheet (Profile / Settings / Notifications / Billing) instead
     /// of spending sidebar rows on account chrome.
-    private var header: some View {
-        HStack(spacing: Aero.Spacing.s) {
-            ZStack {
-                Circle().fill(Aero.accentSoft).frame(width: 44, height: 44)
-                if account.displayName.isEmpty {
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 15))
-                        .foregroundColor(Aero.text)
-                } else {
-                    Text(accountInitials)
-                        .font(Aero.label())
-                        .foregroundColor(Aero.text)
-                }
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(account.displayName.isEmpty ? "GS account" : account.displayName)
-                    .font(Aero.body())
-                    .foregroundColor(Aero.text)
-                    .lineLimit(1)
-                if !account.email.isEmpty {
-                    Text(account.email)
-                        .font(Aero.caption())
-                        .foregroundColor(Aero.textSecondary)
-                        .lineLimit(1)
-                }
-            }
-            Spacer()
-            Image(systemName: "chevron.up")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Aero.textSecondary)
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            GSHaptics.tap()   // committed open — the account sheet reveals
-            accountSheet = true
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Account. Show account options")
-    }
-
     /// Up to two leading initials of the stored display name — derived only,
     /// never invented (empty name never reaches here).
     private var accountInitials: String {
@@ -383,61 +605,31 @@ struct AeroDrawer: View {
             .joined()
     }
 
-    private var divider: some View {
-        Rectangle()
-            .fill(Aero.outline)
-            .frame(height: 1)
-            .padding(.vertical, Aero.Spacing.m)
-    }
-
-    private func sectionLabel(_ text: String) -> some View {
-        Text(text.uppercased())
-            .font(Aero.label())
-            .foregroundColor(Aero.textSecondary)
-            .padding(.horizontal, 4)
-            .padding(.bottom, Aero.Spacing.s)
-    }
-
-    private func row(title: String, icon: String?, isPinned: Bool = false, isSelected: Bool = false, action: @escaping () -> Void) -> some View {
-        Button {
-            GSHaptics.tap()   // committed open — the drawer routes
-            action()
-        } label: {
-            HStack(spacing: Aero.Spacing.s) {
-                if let icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 13))
-                        .foregroundColor(isSelected ? Aero.text : Aero.textSecondary)
-                        .frame(width: 18)
-                }
-                Text(title)
-                    .font(Aero.body())
-                    .foregroundColor(Aero.text)
-                    .lineLimit(1)
-                Spacer()
-                if isPinned {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(Aero.textSecondary)
-                }
-            }
-            .padding(.horizontal, Aero.Spacing.m)
-            .padding(.vertical, 11)
-            .background {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: Aero.Radius.md).fill(Aero.accentSoft)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(KineticPressStyle())
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-    }
-
     /// One row inside the account / More reveal sheets. The route handler in
     /// RootView closes the drawer itself (which unmounts the sheet with it) —
     /// so the row only routes.
-    private func sheetRow(title: String, icon: String, isSelected: Bool = false, action: @escaping () -> Void) -> some View {
-        row(title: title, icon: icon, isSelected: isSelected, action: action)
+    private func sheetRow(title: String, icon: String, isSelected: Bool = false,
+                          action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(Aero.specFont(16))
+                    .foregroundColor(isSelected ? Aero.accent : Aero.text.opacity(0.8))
+                    .frame(width: 28)
+                Text(title)
+                    .font(Aero.specFont(DrawerMetrics.rowTitle))
+                    .foregroundColor(isSelected ? Aero.accent : Aero.text)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(Aero.specFont(DrawerMetrics.chevron, .medium))
+                    .foregroundColor(DrawerMetrics.labelInk)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 52)
+            .background(RoundedRectangle(cornerRadius: 16)
+                .fill(isSelected ? Aero.accent.opacity(0.12) : Color.clear))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 }

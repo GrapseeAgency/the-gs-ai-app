@@ -329,6 +329,44 @@ final class ConversationStore: ObservableObject {
         sql.loadMessages()
     }
 
+    /// Pull the server's page and merge it, in ONE published write.
+    ///
+    /// The merge lived inside `ChatsListView`, so the only surface that ever saw a
+    /// server-side headline was the inbox. The drawer read the local store alone,
+    /// which meant a chat the server had auto-titled still read "New chat" in the
+    /// sidebar until the user happened to open Chats. Same merge, one owner.
+    ///
+    /// Best-effort by design: an unreachable backend returns false and the local
+    /// store keeps the surface alive.
+    @MainActor
+    @discardableResult
+    func syncFromServer(limit: Int = 30) async -> Bool {
+        do {
+            let remote = try await APIClient.shared.conversations(limit: limit)
+            var rows: [StoredConversation] = []
+            rows.reserveCapacity(remote.count)
+            for conversation in remote {
+                let existing = self.conversation(withID: conversation.id)
+                rows.append(StoredConversation(
+                    id: conversation.id,
+                    title: conversation.title,
+                    modelId: conversation.modelId,
+                    pinned: conversation.pinned ?? existing?.pinned ?? false,
+                    archived: conversation.archived ?? existing?.archived ?? false,
+                    createdAt: conversation.createdAt.isEmpty
+                        ? (existing?.createdAt ?? ConversationStore.now())
+                        : conversation.createdAt,
+                    updatedAt: conversation.updatedAt.isEmpty
+                        ? (existing?.updatedAt ?? ConversationStore.now())
+                        : conversation.updatedAt))
+            }
+            upsert(rows)
+            return true
+        } catch {
+            return false
+        }
+    }
+
     /// Refresh path: merge a whole server page in ONE published write. The
     /// per-row upsert made the inbox re-render once per row per sync (each
     /// pass rebuilding every row's preview + relative label).

@@ -18,6 +18,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { messageToJson } from '@/lib/serializers'
 import { resolveModelRoute, OPENROUTER_MODELS, type ModelRoute } from '@/lib/models'
+import { deriveTitle, DEFAULT_CHAT_TITLE } from '@/lib/conversation-title'
 import {
   parseThinkingMode,
   resolveThinkingConfig,
@@ -153,7 +154,7 @@ import { getRun } from '@/lib/run-store'
 
 const HISTORY_LIMIT = 20
 const MAX_CONTENT_LENGTH = 32000
-const DEFAULT_TITLE = 'New chat'
+const DEFAULT_TITLE = DEFAULT_CHAT_TITLE
 const CURRENT_APP_VERSION = '0.73.0'
 
 export type TurnPush = (event: string, data: string) => void
@@ -403,17 +404,21 @@ export async function prepareTurn(
       data: { messageId: userMessage.id, conversationId: id },
     })
   }
-  if (shouldAutoTitle && !args.existingUserMessageId) {
-    await db.conversation.update({
-      where: { id },
-      data: {
-        title: (
-          content.trim().length > 0
-            ? content
-            : claimedAttachments[0]?.displayName ?? DEFAULT_TITLE
-        ).slice(0, 40),
-      },
-    })
+  // The headline is decided by one tested function, not by a slice of whatever
+  // the user typed: a message that opens with a code fence or a URL used to name
+  // the chat after the fence or the URL, and every cut was mid-word.
+  const autoTitle =
+    shouldAutoTitle && !args.existingUserMessageId
+      ? deriveTitle({ content, attachmentName: claimedAttachments[0]?.displayName })
+      : null
+  if (autoTitle) {
+    await db.conversation.update({ where: { id }, data: { title: autoTitle } })
+    // Told to the clients as it happens. Without this the stream finishes with
+    // the conversation still called "New chat" client-side until something else
+    // happens to refetch the list — the drawer row and the Chats card disagree
+    // with the server, and the row's icon (chosen from the headline's topic) is
+    // chosen from a title that no longer exists.
+    emit?.('conversation', { type: 'title', id, title: autoTitle })
   }
 
   // The model's memory has a cutoff; the app has a clock. Without this line a
@@ -630,7 +635,13 @@ export async function prepareTurn(
     conversationId: id,
     content,
     userMessage,
-    conversation: { id: conversation.id, assistantId: conversation.assistantId, title: conversation.title },
+    conversation: {
+      id: conversation.id,
+      assistantId: conversation.assistantId,
+      // The title as it stands AFTER auto-titling. `conversation` was read before
+      // the update, so this used to hand the rest of the turn a stale "New chat".
+      title: autoTitle ?? conversation.title,
+    },
     baseSystemPrompt,
     history,
     historyRowText,

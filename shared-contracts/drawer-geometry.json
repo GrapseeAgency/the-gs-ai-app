@@ -1,0 +1,88 @@
+{
+  "panel_ratio": {
+    "value": 0.786,
+    "band": [
+      0.76,
+      0.812
+    ]
+  },
+  "corner_radius_pt": {
+    "value": 26.19,
+    "band": [
+      24.0,
+      33.0
+    ]
+  },
+  "body_l": {
+    "value": 239.5,
+    "band": [
+      231.0,
+      244.0
+    ]
+  },
+  "rim_delta": {
+    "value": 9.6,
+    "band": [
+      4.0,
+      14.0
+    ]
+  },
+  "hf_p90": {
+    "value": 1.0,
+    "band": [
+      0.0,
+      3.0
+    ]
+  },
+  "column_spread": {
+    "value": 2.9,
+    "band": [
+      0.0,
+      12.0
+    ]
+  },
+  "inset_pt": {
+    "value": 25.1,
+    "band": [
+      23.0,
+      28.0
+    ]
+  },
+  "recent_ink_bands": {
+    "value": 5,
+    "band": [
+      5,
+      20
+    ]
+  },
+  "recent_grey_px": {
+    "value": 3532,
+    "band": [
+      1500,
+      1000000
+    ]
+  },
+  "footer_mid_ink": {
+    "value": 0,
+    "band": [
+      0,
+      0
+    ]
+  },
+  "detector": {
+    "edge_px": 529,
+    "edge_votes": 166,
+    "rows": 180,
+    "bottom_y": 1492,
+    "radius_px": 44.8,
+    "px_per_pt": 1.7125
+  },
+  "scrim_ratio": {
+    "value": 0.8,
+    "band": [
+      0.78,
+      0.82
+    ]
+  },
+  "reference_sha256": "02d3c84e99fdf547f5267015bf52d8bbdae7972cc9bdb2308635cf51d03ae82f"
+}
