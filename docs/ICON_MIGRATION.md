@@ -189,6 +189,12 @@ do not describe those 9 as capture-verified.
 Explore renders with their pixel probes). Run 40118659001 is the same verdict
 one commit earlier and is where the Home PNG above came from.
 
+**The menu conversion's green run is 40140193850** on `3a96ae12`: static gates,
+the Xcode build, all XCTests including `MenuChromeTests` (135 s, 27 rows
+measured), the menu-harness step (8 captures + `report.json` exported from the
+result bundle), every render probe, and the archive. The `menu-chrome-ios`
+artifact of that run is the picture set this doc refers to.
+
 **ios-native's app job was already red on `main` before this migration**, and
 the control proves it: run 40121938239 (branch at `84fa992a`, the commit this
 work started from) fails at the DEVICE build with
