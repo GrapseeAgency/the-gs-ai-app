@@ -343,6 +343,7 @@ jobs:
           DIR=ios/build/nexly-renders
           mkdir -p "$DIR"
           if [ -d "$SRC" ]; then cp "$SRC"/nexly-explore-ios-*.png "$DIR/" 2>/dev/null || true; fi
+          if [ -d "$SRC" ]; then cp "$SRC"/nexly-discover-ios-*.png "$DIR/" 2>/dev/null || true; fi
           for w in 393x852 411x914 360x780 393x1400; do
             test -s "$DIR/nexly-explore-ios-$w.png" \
               || { echo "::error::nexly-explore-ios-$w.png missing — the Explore render harness did not produce it"; exit 1; }
