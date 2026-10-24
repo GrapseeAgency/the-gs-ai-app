@@ -69,7 +69,7 @@ enum DrawerTopic: String, CaseIterable {
         case .travel:
             return [                    "travel", "trip", "flight", "hotel", "itinerary",
                     "kyoto", "paris", "tokyo", "london", "visa",
-                    "vacation", "holiday", "weekend in", "旅行", "путешествие",
+                    "vacation", "holiday", "weekend in", "京都", "東京", "东京", "旅行", "путешествие",
                     "viaje", "voyage", "reise", "सफ़र", "سفر"]
         case .food:
             return [                    "recipe", "cook", "dinner", "lunch", "breakfast",

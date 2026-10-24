@@ -60,7 +60,7 @@ enum class DrawerTopic(val icon: String, vararg val keywords: String) {
         "MapPin",
         "travel", "trip", "flight", "hotel", "itinerary",
         "kyoto", "paris", "tokyo", "london", "visa",
-        "vacation", "holiday", "weekend in", "旅行", "путешествие",
+        "vacation", "holiday", "weekend in", "京都", "東京", "东京", "旅行", "путешествие",
         "viaje", "voyage", "reise", "सफ़र", "سفر",
     ),
     Food(
