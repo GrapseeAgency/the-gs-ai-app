@@ -292,16 +292,12 @@ struct ExploreView: View {
 
     private var heroCard: some View {
         AeroCard {
-            ZStack(alignment: .trailing) {
-                // The art carries the right 66% only: a luminous glass bubble
-                // drawn procedurally (the GsArtwork technique) so it is crisp
-                // at any scale and reads at the reference's saturation.
-                GeometryReader { geo in
-                    HeroBubbleArt()
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .allowsHitTesting(false)
-                }
-                VStack(alignment: .leading, spacing: 10) {
+            // The art is a pure overlay: a luminous glass bubble drawn
+            // procedurally (the GsArtwork technique) over the card's right
+            // side. Overlay never participates in layout, so the copy column
+            // wraps exactly like the Android card and the card height is the
+            // content's height.
+            VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 5) {
                         NexlyGlyph(name: "sparkles", size: 11, color: ExplorePalette.discoverInk)
                         Text("Discover")
@@ -320,7 +316,7 @@ struct ExploreView: View {
                     Text("Powerful tools, creative features, and more ways to bring your ideas to life — all in one place.")
                         .font(Aero.bodyMedium())
                         .foregroundStyle(Aero.textMuted)
-                        .frame(maxWidth: 250, alignment: .leading)
+                        .frame(maxWidth: 215, alignment: .leading)
 
                     Button {
                         category = .all
@@ -341,6 +337,13 @@ struct ExploreView: View {
                 }
                 .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .trailing) {
+                HeroBubbleArt()
+                    .frame(maxWidth: 230)
+                    .frame(maxHeight: .infinity)
+                    .allowsHitTesting(false)
             }
         }
     }
@@ -765,8 +768,11 @@ struct HeroBubbleArt: View {
                 PetalShape()
                     .fill(
                         LinearGradient(
-                            colors: [Color(red: 1.0, green: 0.851, blue: 0.749).opacity(0.9),
-                                     Color(red: 0.973, green: 0.725, blue: 0.635).opacity(0.7)],
+                            stops: [
+                                .init(color: Color(red: 1.0, green: 0.851, blue: 0.749).opacity(0.85), location: 0),
+                                .init(color: Color(red: 0.973, green: 0.725, blue: 0.635).opacity(0.45), location: 0.72),
+                                .init(color: Color(red: 0.973, green: 0.725, blue: 0.635).opacity(0.0), location: 0.98),
+                            ],
                             startPoint: .leading, endPoint: .trailing
                         )
                     )
