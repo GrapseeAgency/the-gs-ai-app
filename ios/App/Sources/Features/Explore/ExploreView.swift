@@ -304,14 +304,18 @@ struct ExploreView: View {
                         Image("GSHomeBackdrop")
                             .resizable()
                             .scaledToFill()
-                            .frame(width: artWidth * 2.1, height: artHeight * 2.1)
-                            .offset(x: -artWidth * 0.62, y: -artHeight * 0.62)
-                            .frame(width: artWidth, height: artHeight, alignment: .topLeading)
+                            // The bubble sits at ~(0.74, 0.24) of the authored
+                            // render; the window keeps its band in view, and
+                            // the saturation lift makes the peach/lavender
+                            // read like the reference.
+                            .frame(width: artWidth, height: artHeight,
+                                   alignment: Alignment(x: 0.74, y: 0.15))
                             .clipped()
+                            .saturation(1.4)
                             .overlay(
                                 LinearGradient(
-                                    colors: [Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.92),
-                                             Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.22),
+                                    colors: [Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.85),
+                                             Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.15),
                                              .clear],
                                     startPoint: .leading, endPoint: .trailing
                                 )

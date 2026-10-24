@@ -42,6 +42,8 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -388,8 +390,14 @@ private fun HeroCard(
                 painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_backdrop),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                // The bubble sits at ~(0.74, 0.24) of the authored render.
-                alignment = BiasAlignment(0.74f, 0.24f),
+                // The bubble sits at ~(0.74, 0.24) of the authored render;
+                // band starts at 15% so the bubble fills the upper frame.
+                alignment = BiasAlignment(0.74f, 0.15f),
+                // The authored render is gentle; the reference's hero art is
+                // vivid — lift saturation so the peach/lavender reads.
+                colorFilter = ColorFilter.colorMatrix(
+                    ColorMatrix().apply { setToSaturation(1.4f) }
+                ),
                 modifier = Modifier.matchParentSize(),
             )
             Box(
@@ -397,8 +405,8 @@ private fun HeroCard(
                     .matchParentSize()
                     .background(
                         Brush.horizontalGradient(
-                            0f to Color(0xFFFDF1EC).copy(alpha = 0.92f),
-                            0.5f to Color(0xFFFDF1EC).copy(alpha = 0.22f),
+                            0f to Color(0xFFFDF1EC).copy(alpha = 0.85f),
+                            0.5f to Color(0xFFFDF1EC).copy(alpha = 0.15f),
                             1f to Color.Transparent,
                         ),
                     ),
