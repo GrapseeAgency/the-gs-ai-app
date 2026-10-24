@@ -31,7 +31,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
+import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
+import org.json.JSONObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -216,6 +220,25 @@ class ChatRepository(
 
     fun archivedConversations(): Flow<List<ConversationEntity>> = db.conversationDao().observeArchived()
 
+    /**
+     * The server titles a chat on its first turn and says so as it happens.
+     * Writing it into the local row is what makes the new headline live: the
+     * drawer row, the Chats card and the row's icon (chosen from the headline's
+     * topic) are right before the user next looks, not after some later refetch.
+     *
+     * Tolerant by construction: a malformed payload, an unknown subtype or a
+     * missing id leaves the local title alone. `rename` is the same event the
+     * user's own rename produces.
+     */
+    private suspend fun applyConversationEvent(raw: String) {
+        val payload = runCatching { JSONObject(raw) }.getOrNull() ?: return
+        if (payload.optString("type") != "title") return
+        val id = payload.optString("id").takeIf { it.isNotBlank() } ?: return
+        val title = payload.optString("title").trim()
+        if (title.isBlank()) return
+        runCatching { db.conversationDao().setTitle(id, title) }
+    }
+
     suspend fun refreshConversations() {
         try {
             val remote = api.conversations()
@@ -330,12 +353,19 @@ class ChatRepository(
         val accumulated = StringBuilder()
         try {
             scratchId = api.createConversation(title = "Translation").id
+            // The title write inherits this turn's scope: it cannot outlive the
+            // stream that carried it, and it needs a scope the callback can reach
+            // (a non-suspend lambda cannot read suspend-only coroutineContext).
+            val turnScope = CoroutineScope(coroutineContext)
             api.sendMessageStream(
                 conversationId = scratchId,
                 content = prompt,
                 onDelta = { delta ->
                     accumulated.append(delta)
                     onDelta(delta)
+                },
+                onConversationEvent = { raw ->
+                    turnScope.launch { applyConversationEvent(raw) }
                 },
                 onDone = { }
             )
@@ -539,6 +569,10 @@ class ChatRepository(
         var receivedAnyEvent = false
         val sendStartedAtMs = System.currentTimeMillis()
         try {
+            // The title write inherits this turn's scope: it cannot outlive the
+            // stream that carried it, and it needs a scope the callback can reach
+            // (a non-suspend lambda cannot read suspend-only coroutineContext).
+            val turnScope = CoroutineScope(coroutineContext)
             api.sendMessageStream(
                 conversationId = activeId,
                 content = content,
@@ -555,6 +589,9 @@ class ChatRepository(
                     onDelta(delta)
                 },
                 onStatus = { s -> receivedAnyEvent = true; onStatus(s) },
+                onConversationEvent = { raw ->
+                    turnScope.launch { applyConversationEvent(raw) }
+                },
                 onMode = { m -> receivedAnyEvent = true; onMode(m) },
                 onSearchEvent = { e -> receivedAnyEvent = true; onSearchEvent(e) },
                 onSourceEvent = { e -> receivedAnyEvent = true; onSourceEvent(e) },

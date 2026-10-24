@@ -248,6 +248,10 @@ class ApiClient(
         /** PHASE 5: deep-research branch progress (`ledger` events) — same
          *  double-encoded payload shape, same empty-payload tolerance. */
         onLedgerEvent: (String) -> Unit = {},
+        /** The server's own title for a chat, announced as it happens
+         *  (`conversation` events, payload {"type":"title","id":…,"title":…}).
+         *  Forwarded raw: this walker never interprets payloads. */
+        onConversationEvent: (String) -> Unit = {},
         /** REASONING TRACE: raw {"delta":"..."} frames from thinking-enabled
          *  stream turns. Forwarded untouched; empty payload ignored. */
         onReasoningEvent: (String) -> Unit = {},
@@ -401,6 +405,9 @@ class ApiClient(
                     // PHASE 5: deep-research branch progress (§ledger) — unknown to
                     // pre-ledger parsers, which skip it silently (same contract).
                     "ledger" -> if (!event.data.isNullOrBlank()) onLedgerEvent(event.data)
+                    // The headline the server just decided. Unknown to older
+                    // parsers, which skip it silently (same contract as ledger).
+                    "conversation" -> if (!event.data.isNullOrBlank()) onConversationEvent(event.data)
                     // REASONING TRACE — unknown to pre-reasoning parsers, which
                     // skip it silently (when-without-else contract).
                     "reasoning" -> if (!event.data.isNullOrBlank()) onReasoningEvent(event.data)
