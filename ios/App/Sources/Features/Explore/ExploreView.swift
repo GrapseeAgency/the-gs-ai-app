@@ -345,7 +345,6 @@ struct ExploreView: View {
                     .frame(maxHeight: .infinity)
                     .allowsHitTesting(false)
             }
-        }
     }
 
     // MARK: chips
