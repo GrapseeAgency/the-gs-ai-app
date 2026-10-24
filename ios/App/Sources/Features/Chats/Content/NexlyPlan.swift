@@ -999,78 +999,79 @@ struct NexlyChatBackdrop: View {
     /// transparent, the colour lives in a thin refraction band, and a crisp
     /// white rim plus a specular crescent carry the read. The first render
     /// proved that a bright centre at high opacity looks like a sticker.
+    ///
+    /// The gradients and the crescent are named constants before the chain,
+    /// since run 40116678867: eight overlays carrying inline gradient
+    /// literals in one expression is past what the ios-native compile could
+    /// type-check "in reasonable time" — the same class of failure Xcode
+    /// named in the dock (run 40117076973). Each `let` is its own
+    /// type-check unit, the chain then composes known types, and the paint
+    /// order is the one the first render shipped — a split into body and
+    /// crown sub-views would have reordered the refraction band under the
+    /// crescent, and "no deviation" does not tolerate that either.
     private func bubble(size: CGFloat, x: CGFloat, y: CGFloat, opacity: Double) -> some View {
-        Circle()
-            .fill(
-                RadialGradient(
-                    colors: [
-                        Color.white.opacity(0.16),
-                        Color(red: 1.0, green: 0.84, blue: 0.76).opacity(0.34),
-                        Color(red: 0.90, green: 0.85, blue: 1.0).opacity(0.24),
-                        Color(red: 0.78, green: 0.91, blue: 1.0).opacity(0.12),
-                        Color.clear,
-                    ],
-                    center: UnitPoint(x: 0.40, y: 0.40),
-                    startRadius: 0,
-                    endRadius: size * 0.52
-                )
-            )
+        let body = RadialGradient(
+            colors: [
+                Color.white.opacity(0.16),
+                Color(red: 1.0, green: 0.84, blue: 0.76).opacity(0.34),
+                Color(red: 0.90, green: 0.85, blue: 1.0).opacity(0.24),
+                Color(red: 0.78, green: 0.91, blue: 1.0).opacity(0.12),
+                Color.clear,
+            ],
+            center: UnitPoint(x: 0.40, y: 0.40),
+            startRadius: 0,
+            endRadius: size * 0.52
+        )
+        let rim = LinearGradient(
+            colors: [
+                Color.white.opacity(0.90),
+                Color(red: 1.0, green: 0.78, blue: 0.84).opacity(0.36),
+                Color(red: 0.77, green: 0.87, blue: 1.0).opacity(0.24),
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        let crescent = Circle()
+            .trim(from: 0.60, to: 0.86)
+            .stroke(Color.white.opacity(0.85),
+                    style: StrokeStyle(lineWidth: size * 0.028, lineCap: .round))
+            .padding(size * 0.10)
+            .rotationEffect(.degrees(8))
+        let broadGlint = Circle()
+            .fill(Color.white.opacity(0.80))
+            .frame(width: size * 0.22, height: size * 0.13)
+            .blur(radius: 2)
+            .offset(x: -size * 0.12, y: -size * 0.30)
+        let pinGlint = Circle()
+            .fill(Color.white.opacity(0.88))
+            .frame(width: size * 0.055, height: size * 0.055)
+            .offset(x: -size * 0.26, y: -size * 0.34)
+        let band = RadialGradient(
+            colors: [
+                Color.clear,
+                Color(red: 1.0, green: 0.80, blue: 0.88).opacity(0.20),
+            ],
+            center: .center,
+            startRadius: size * 0.24,
+            endRadius: size * 0.50
+        )
+        return Circle()
+            .fill(body)
             .overlay(
                 Circle().strokeBorder(Color.white.opacity(0.10), lineWidth: 7)
             )
             .overlay(
-                Circle().strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.90),
-                            Color(red: 1.0, green: 0.78, blue: 0.84).opacity(0.36),
-                            Color(red: 0.77, green: 0.87, blue: 1.0).opacity(0.24),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1.2
-                )
+                Circle().strokeBorder(rim, lineWidth: 1.2)
             )
             .overlay(
                 Circle()
                     .strokeBorder(Color.white.opacity(0.20), lineWidth: 0.8)
                     .padding(size * 0.055)
             )
-            .overlay(
-                Circle()
-                    .trim(from: 0.60, to: 0.86)
-                    .stroke(Color.white.opacity(0.85),
-                            style: StrokeStyle(lineWidth: size * 0.028, lineCap: .round))
-                    .padding(size * 0.10)
-                    .rotationEffect(.degrees(8))
-            )
-            .overlay(
-                Circle()
-                    .fill(Color.white.opacity(0.80))
-                    .frame(width: size * 0.22, height: size * 0.13)
-                    .blur(radius: 2)
-                    .offset(x: -size * 0.12, y: -size * 0.30)
-            )
-            .overlay(
-                Circle()
-                    .fill(Color.white.opacity(0.88))
-                    .frame(width: size * 0.055, height: size * 0.055)
-                    .offset(x: -size * 0.26, y: -size * 0.34)
-            )
-            .overlay(
-                Circle().fill(
-                    RadialGradient(
-                        colors: [
-                            Color.clear,
-                            Color(red: 1.0, green: 0.80, blue: 0.88).opacity(0.20),
-                        ],
-                        center: .center,
-                        startRadius: size * 0.24,
-                        endRadius: size * 0.50
-                    )
-                )
-            )
+            .overlay(crescent)
+            .overlay(broadGlint)
+            .overlay(pinGlint)
+            .overlay(Circle().fill(band))
             .frame(width: size, height: size)
             .shadow(color: Color(red: 0.95, green: 0.68, blue: 0.74).opacity(0.20),
                     radius: 12, y: 4)
