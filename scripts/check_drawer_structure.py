@@ -26,6 +26,8 @@ ANDROID_DRAWER = "android/app/src/main/java/com/grapsee/gsai/ui/navigation/GsDra
 ANDROID_ROWS = "android/app/src/main/java/com/grapsee/gsai/ui/navigation/drawer/DrawerRows.kt"
 ANDROID_NAV = "android/app/src/main/java/com/grapsee/gsai/ui/navigation/GsNavHost.kt"
 IOS_DRAWER = "ios/App/Sources/Components/AeroDrawer.swift"
+IOS_CHATS_LIST = "ios/App/Sources/Features/Chats/ChatsListView.swift"
+IOS_CHAT_DETAIL = "ios/App/Sources/Features/Chats/ChatDetailView.swift"
 
 
 def rules():
@@ -91,6 +93,14 @@ def rules():
         # Rows that take a FIXED height clip text the moment the type size grows.
         # A capture at the default size looks identical either way, which is why
         # this is a rule and not a measurement.
+        (IOS_CHATS_LIST,
+         "a new menu label was added with an SF Symbol (ceiling 8; convert with a capture)",
+         lambda t: t.count("systemImage:") > 8,
+         "\n".join(["Label(\"x\", systemImage: \"a\")"] * 9)),
+        (IOS_CHAT_DETAIL,
+         "a new menu label was added with an SF Symbol (ceiling 17; convert with a capture)",
+         lambda t: t.count("systemImage:") > 17,
+         "\n".join(["Label(\"x\", systemImage: \"a\")"] * 18)),
         (ANDROID_ROWS,
          "an interactive row has a fixed height, so large type is clipped",
          lambda t: re.search(r"\.height\(DrawerMetrics\.", t) is not None,

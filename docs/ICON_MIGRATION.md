@@ -174,3 +174,16 @@ test needs `.textViews` fallback) before ios-native can go green again.
 The report canvas at `~/.qoder/projects/-mnt-new-volume-Grapsee-Products-GS-AI/canvases/drawer-completion.canvas.tsx`
 still shows the pre-fix icons (hash-era). Refreshing it means downloading the run's
 capture artifacts and rewriting the icon section.
+
+
+## The 29 menu labels — frozen, not forgotten
+
+`Label(_:systemImage:)` still hands SwiftUI an SF name in 29 places: 8 in
+`ChatsListView`, 17 in `ChatDetailView`, 4 in `AeroDrawer`. A custom view inside a
+menu-item label is **not guaranteed the leading-icon slot**, so converting these
+needs a capture of each menu before and after — a different job from the in-row
+sites, which were geometry swaps.
+
+Until then they are bounded: rules 15 and 16 of
+`scripts/check_drawer_structure.py` fail the build if either count grows. The debt
+can shrink; it cannot spread.
