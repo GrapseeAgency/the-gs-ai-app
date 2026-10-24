@@ -58,7 +58,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.grapsee.gsai.R
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.components.ReferenceBackdrop
 import com.grapsee.gsai.ui.icons.GsIcons

@@ -26,6 +26,8 @@ struct ExploreTool: Identifiable, Hashable {
     let category: ExploreCategory
     /// Seeds the conversation this card opens — never a dead end.
     let prompt: String
+    /// The reference paints some tiles as saturated discs with white glyphs.
+    var filledTile: Bool = false
 }
 
 enum ExploreCategory: String, CaseIterable, Identifiable {
@@ -52,6 +54,7 @@ enum ExploreCatalog {
             subtitle: "Turn ideas into videos",
             glyph: "player-play", bg: ExplorePalette.lavenderBg, fg: ExplorePalette.lavenderFg,
             category: .creativity,
+            filledTile: true,
             prompt: "Help me plan a short video. Ask what it is for and who watches it, then give me a shot-by-shot outline with narration lines and on-screen text for each scene."
         ),
         ExploreTool(
@@ -318,6 +321,31 @@ struct ExploreComposerBar: View {
 }
 
 
+
+/// Section title + optional See All — shared by both pages.
+private struct ExploreSectionHeader: View {
+    let title: String
+    var action: (() -> Void)? = nil
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(Aero.title())
+                .foregroundStyle(Aero.text)
+            Spacer()
+            if let action {
+                Button(action: action) {
+                    HStack(spacing: 4) {
+                        Text("See All").font(Aero.caption()).foregroundStyle(Aero.textMuted)
+                        NexlyGlyph(name: "arrow-right", size: 11, color: Aero.textMuted)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
 // MARK: - EXPLORE — the mock with Popular Tools / Collections / Featured
 
 struct ExploreView: View {
@@ -353,11 +381,11 @@ struct ExploreView: View {
                             resultsSection
                         } else {
                             heroCard
-                            sectionHeader("Popular Tools", action: { onOpenDiscover() })
+                            ExploreSectionHeader(title: "Popular Tools", action: onOpenDiscover())
                             toolsGrid
-                            sectionHeader("Creative Collections")
+                            ExploreSectionHeader(title: "Creative Collections")
                             collectionsSection
-                            sectionHeader("Featured")
+                            ExploreSectionHeader(title: "Featured")
                             featuredSection
                         }
                     }
@@ -637,7 +665,7 @@ struct ExploreView: View {
     private var resultsSection: some View {
         let results = ExploreCatalog.search(query)
         return VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Results")
+            ExploreSectionHeader(title: "Results")
             if results.isEmpty {
                 emptySearch
             } else {
@@ -784,9 +812,9 @@ struct DiscoverView: View {
                         } else {
                             heroCard
                             chips
-                            sectionHeader("Featured Tools")
+                            ExploreSectionHeader(title: "Featured Tools")
                             toolsSection
-                            sectionHeader("Popular")
+                            ExploreSectionHeader(title: "Popular")
                             popularSection
                         }
                     }
@@ -948,7 +976,7 @@ struct DiscoverView: View {
 
     private var toolsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("Featured Tools")
+            ExploreSectionHeader(title: "Featured Tools")
             let tools = ExploreCatalog.byCategory(category)
             ForEach(0..<tools.count, id: \.self) { i in
                 if i % 2 == 0, i < tools.count {
@@ -1001,7 +1029,7 @@ struct DiscoverView: View {
 
     private var popularSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("Popular")
+            ExploreSectionHeader(title: "Popular")
             let rows = ExploreCatalog.tools.filter { ["study-plan", "logo-maker", "trip-planner", "doc-summary"].contains($0.id) }
                 .filter { category == .all || $0.category == category }
             VStack(spacing: 7) {
@@ -1043,7 +1071,7 @@ struct DiscoverView: View {
     private var resultsSection: some View {
         let results = ExploreCatalog.search(query)
         return VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Results")
+            ExploreSectionHeader(title: "Results")
             if results.isEmpty {
                 emptySearch
             } else {
