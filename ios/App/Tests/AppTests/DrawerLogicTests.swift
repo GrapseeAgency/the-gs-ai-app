@@ -27,7 +27,7 @@ final class DrawerLogicTests: XCTestCase {
             DrawerTopic.iconName(title: "Explain quantum physics", pinned: false),
             DrawerTopic.iconName(title: "Weekend in Kyoto", pinned: false),
         ]
-        XCTAssertEqual(icons, ["CalendarCheck", "Lightbulb", "Atom", "MapPin"])
+        XCTAssertEqual(icons, ["Sparkles", "Lightbulb", "Atom", "Sprout"])
         XCTAssertEqual(Set(icons).count, 4)
     }
 
@@ -36,8 +36,8 @@ final class DrawerLogicTests: XCTestCase {
     }
 
     func testAHeadlineInAnotherScriptStillFindsItsTopic() {
-        XCTAssertEqual(DrawerTopic.iconName(title: "京都の週末", pinned: false), "MapPin")
-        XCTAssertEqual(DrawerTopic.iconName(title: "Путешествие в Токио", pinned: false), "MapPin")
+        XCTAssertEqual(DrawerTopic.iconName(title: "京都の週末", pinned: false), "Sprout")
+        XCTAssertEqual(DrawerTopic.iconName(title: "Путешествие в Токио", pinned: false), "Sprout")
         XCTAssertEqual(DrawerTopic.iconName(title: "解释量子物理", pinned: false), "Atom")
         XCTAssertEqual(DrawerTopic.iconName(title: "خطة ليوم غد", pinned: false), "CalendarCheck")
         XCTAssertEqual(DrawerTopic.iconName(title: "FÍSICA CUÁNTICA", pinned: false), "Atom")
@@ -45,7 +45,7 @@ final class DrawerLogicTests: XCTestCase {
 
     func testMatchingIsOnWholeWords() {
         XCTAssertEqual(DrawerTopic.iconName(title: "planet fitness", pinned: false), "MessageCircle")
-        XCTAssertEqual(DrawerTopic.iconName(title: "plan the week", pinned: false), "CalendarCheck")
+        XCTAssertEqual(DrawerTopic.iconName(title: "plan the week", pinned: false), "Sparkles")
     }
 
     /// The same row object the drawer mutates when a pin is tapped: the icon must

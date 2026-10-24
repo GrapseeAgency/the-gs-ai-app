@@ -22,7 +22,7 @@ enum DrawerTopic: String, CaseIterable {
         case .code: return "Code"
         case .data: return "ChartLine"
         case .money: return "CircleDollarSign"
-        case .travel: return "MapPin"
+        case .travel: return "Sprout"
         case .food: return "Utensils"
         case .health: return "Heart"
         case .learning: return "GraduationCap"
@@ -30,7 +30,7 @@ enum DrawerTopic: String, CaseIterable {
         case .ideas: return "Lightbulb"
         case .design: return "Palette"
         case .writing: return "PenLine"
-        case .plan: return "CalendarCheck"
+        case .plan: return "Sparkles"
         case .music: return "Music"
         case .sport: return "Trophy"
         case .home: return "House"
@@ -210,6 +210,8 @@ enum DrawerTopic: String, CaseIterable {
         case "Palette": return GsIcons.palette
         case "PenLine": return GsIcons.penLine
         case "CalendarCheck": return GsIcons.calendarCheck
+        case "Sparkles": return GsIcons.sparkles
+        case "Sprout": return GsIcons.sprout
         case "Music": return GsIcons.music
         case "Trophy": return GsIcons.trophy
         case "House": return GsIcons.house
