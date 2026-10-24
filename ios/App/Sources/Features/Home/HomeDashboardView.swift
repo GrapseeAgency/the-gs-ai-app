@@ -826,9 +826,20 @@ private struct FilledHouseGlyph: Shape {
     }
 }
 
-/// Filled gear with an even-odd hole — Android's `FilledGear`, command for
-/// command, including the open second subpath Android leaves unclosed. The
-/// geometry is authored in the 24-unit space, as every family glyph is.
+/// Filled gear with a hub hole — Android's `FilledGear`, point for point, in
+/// the 24-unit space every family glyph is authored in.
+///
+/// Android asks for the hole with `PathFillType.EvenOdd`, and iOS cannot copy
+/// that verbatim: three runs proved the fill-rule API is not available at this
+/// page's floor — run 40117076973 rejected `eo:` on Shape.fill, run
+/// 40117461200 rejected `isEOFilled:` there, run 40118125849 rejected `eo:` on
+/// the Canvas context's fill too, and `PathFillStyle` is iOS 17 while the app
+/// ships at iOS 16. It turns out not to be needed. The shoelace sign of the
+/// two contours — ring +215.6, hub −28.8 — says they already wind OPPOSITE
+/// ways, so the DEFAULT nonzero rule leaves the hub empty: for two nested
+/// contours, even-odd and oppositely-wound nonzero are the same picture. The
+/// order below is therefore Android's, unchanged, and the fill takes no style.
+/// (Reversing the hub, it is worth recording, would have filled it SOLID.)
 private func gearGeometry(_ path: inout Path) {
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: y) }
     path.move(to: p(18.79, 9.6))
@@ -892,15 +903,14 @@ private func gearGeometry(_ path: inout Path) {
     path.addLine(to: p(12, 15.1))
     path.addLine(to: p(13.55, 14.68))
     path.addLine(to: p(14.68, 13.55))
+    // Compose leaves this subpath open and its fill closes it implicitly; the
+    // Canvas fill needs the ring shut to carve the hole.
+    path.closeSubpath()
 }
 
-/// The gear drawn through a Canvas, not a Shape.fill. Even-odd is the twin of
-/// Compose's PathFillType.EvenOdd — the ring and the hub wind the same way, so
-/// the nonzero rule would fill the hole solid — and the context's fill is the
-/// one API on this SDK that takes `FillStyle(eo:)`: run 40117076973 rejected
-/// `eo:` on Shape.fill, run 40117461200 rejected `isEOFilled:` there too, and
-/// `PathFillStyle` is iOS 17 while the page ships at iOS 16. GsIconView draws
-/// through the same Canvas for the same reason.
+/// The gear drawn through a Canvas, the same route `GsIconView` takes for its
+/// strokes: the page needs the glyph at a scaled side, and a Canvas owns its
+/// own 24-unit coordinate space.
 private struct FilledGearMark: View {
     let color: Color
     let side: CGFloat
@@ -910,7 +920,7 @@ private struct FilledGearMark: View {
             context.scaleBy(x: scale, y: scale)
             var path = Path()
             gearGeometry(&path)
-            context.fill(path, with: .color(color), style: FillStyle(eo: true))
+            context.fill(path, with: .color(color))
         }
         .frame(width: side, height: side)
     }
