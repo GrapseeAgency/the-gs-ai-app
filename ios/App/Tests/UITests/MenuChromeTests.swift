@@ -364,8 +364,11 @@ final class MenuChromeTests: XCTestCase {
                 "leadingInsetPt": Double(round(inset * 10) / 10),
             ])
 
-            // 1. The icon is drawn at all.
-            let minInk = Int(90 * (scale / 2) * (scale / 2))
+            // 1. The icon is drawn at all. The floor is generous on purpose:
+            //    a sparse glyph is still a glyph — the ellipsis row carries 137
+            //    px where a solid mark carries 800 (run 40137739658), and the
+            //    extent check below is what separates an icon from a speck.
+            let minInk = Int(40 * (scale / 2) * (scale / 2))
             if probe.count < minInk {
                 record("\(name)/\(label): only \(probe.count) ink px (need \(minInk)) — the icon is missing or hairline")
             }
