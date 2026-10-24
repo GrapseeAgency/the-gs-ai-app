@@ -153,9 +153,9 @@ fun ExploreScreen(
                 Modifier
                     .weight(1f)
                     .verticalScroll(scroll)
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 16.dp),
             ) {
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(10.dp))
 
                 if (query.isNotBlank()) {
                     SectionHeader("Results", inkHeader, inkMuted, count = ExploreCatalog.search(query).size)
@@ -179,9 +179,9 @@ fun ExploreScreen(
                             scope.launch { scroll.animateScrollTo(scroll.maxValue) }
                         },
                     )
-                    Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(14.dp))
                     CategoryChips(category, onSelect = { category = it })
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(16.dp))
 
                     val cat = category
                     val tools = ExploreCatalog.byCategory(cat)
@@ -192,7 +192,7 @@ fun ExploreScreen(
                         onSeeAll = { showAllTools = !showAllTools },
                         seeAllLabel = if (showAllTools) "Show less" else "See All",
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(10.dp))
                     val visible = if (showAllTools) tools else tools.take(4)
                     visible.chunked(2).forEach { rowTools ->
                         Row(
@@ -279,20 +279,20 @@ private fun ExploreHeader(
             painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.size(38.dp),
+            modifier = Modifier.size(34.dp),
         )
         Spacer(Modifier.width(10.dp))
         Column {
             Text(
                 "Nexly",
-                fontSize = 16.5.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = GsFonts.Product,
                 color = inkStrong,
             )
             Text(
                 "AI Companion",
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 fontFamily = GsFonts.Product,
                 color = inkMuted,
             )
@@ -300,7 +300,7 @@ private fun ExploreHeader(
         Spacer(Modifier.weight(1f))
         Box(
             Modifier
-                .size(40.dp)
+                .size(36.dp)
                 .exploreGlass(shape = CircleShape, elevation = 8.dp)
                 .clickable(role = Role.Button, onClickLabel = if (searchOpen) "Close search" else "Open search") {
                     onToggleSearch()
@@ -339,7 +339,7 @@ private fun SearchField(
             if (query.isEmpty()) {
                 Text(
                     "Search tools and abilities",
-                    fontSize = 13.5.sp,
+                    fontSize = 12.sp,
                     fontFamily = GsFonts.Product,
                     color = inkMuted,
                 )
@@ -349,7 +349,7 @@ private fun SearchField(
                 onValueChange = onQuery,
                 singleLine = true,
                 textStyle = TextStyle(
-                    fontSize = 13.5.sp,
+                    fontSize = 12.sp,
                     fontFamily = GsFonts.Product,
                     color = inkBody,
                 ),
@@ -390,13 +390,19 @@ private fun HeroCard(
         // as gs_explore_hero, its left edge fading into the pearl so the
         // copy sits on quiet ground. matchParentSize, not fillMaxHeight —
         // the scroll's constraints are unbounded and a fill would collapse.
-        Image(
-            painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_hero),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            alignment = Alignment.CenterEnd,
-            modifier = Modifier.matchParentSize(),
-        )
+        Box(
+            Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .fillMaxWidth(0.62f),
+        ) {
+            Image(
+                painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_hero),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+        }
         Box(
             Modifier
                 .matchParentSize()
@@ -408,7 +414,7 @@ private fun HeroCard(
                     ),
                 ),
         )
-        Column(Modifier.padding(18.dp)) {
+        Column(Modifier.padding(14.dp)) {
             Row(
                 Modifier
                     .background(ExploreTones.DiscoverBg, RoundedCornerShape(14.dp))
@@ -424,7 +430,7 @@ private fun HeroCard(
                 Spacer(Modifier.width(5.dp))
                 Text(
                     "Discover",
-                    fontSize = 11.5.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
                     fontFamily = GsFonts.Product,
                     color = ExploreTones.DiscoverInk,
@@ -433,8 +439,8 @@ private fun HeroCard(
             Spacer(Modifier.height(10.dp))
             Text(
                 "Explore AI\nPossibilities",
-                fontSize = 23.sp,
-                lineHeight = 27.sp,
+                fontSize = 17.5.sp,
+                lineHeight = 21.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = GsFonts.Product,
                 color = inkStrong,
@@ -443,8 +449,8 @@ private fun HeroCard(
             Spacer(Modifier.height(8.dp))
             Text(
                 "Powerful tools, creative features, and more ways to bring your ideas to life — all in one place.",
-                fontSize = 12.5.sp,
-                lineHeight = 17.sp,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
                 fontFamily = GsFonts.Product,
                 color = inkBody,
                 modifier = Modifier.widthIn(max = 215.dp),
@@ -471,12 +477,12 @@ private fun HeroCard(
                         RoundedCornerShape(18.dp),
                     )
                     .clickable(role = Role.Button, onClickLabel = "Explore all tools") { onExploreAll() }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     "Explore All",
-                    fontSize = 13.sp,
+                    fontSize = 11.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = GsFonts.Product,
                     color = inkStrong,
@@ -538,11 +544,11 @@ private fun CategoryChips(
                         },
                     )
                     .clickable(role = Role.Button, onClickLabel = cat.label) { onSelect(cat) }
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
             ) {
                 Text(
                     cat.label,
-                    fontSize = 13.sp,
+                    fontSize = 11.5.sp,
                     fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                     fontFamily = GsFonts.Product,
                     color = if (active) Color.White else inkMuted,
@@ -564,7 +570,7 @@ private fun SectionHeader(
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             title,
-            fontSize = 18.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = GsFonts.Product,
             color = inkHeader,
@@ -573,7 +579,7 @@ private fun SectionHeader(
             Spacer(Modifier.width(6.dp))
             Text(
                 count.toString(),
-                fontSize = 12.5.sp,
+                fontSize = 10.5.sp,
                 fontFamily = GsFonts.Product,
                 color = inkMuted,
             )
@@ -586,7 +592,7 @@ private fun SectionHeader(
             ) {
                 Text(
                     seeAllLabel,
-                    fontSize = 12.5.sp,
+                    fontSize = 11.sp,
                     fontFamily = GsFonts.Product,
                     color = inkMuted,
                 )
@@ -609,13 +615,13 @@ private fun ToolCard(
         Modifier
             .exploreGlass(shape = RoundedCornerShape(20.dp))
             .clickable(role = Role.Button, onClickLabel = tool.title) { onOpen() }
-            .padding(14.dp),
+            .padding(11.dp),
     ) {
-        ExploreIconCircle(tool = tool, circle = 46.dp, glyph = 20.dp)
+        ExploreIconCircle(tool = tool, circle = 40.dp, glyph = 17.dp)
         Spacer(Modifier.height(10.dp))
         Text(
             tool.title,
-            fontSize = 15.5.sp,
+            fontSize = 12.5.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = GsFonts.Product,
             color = inkStrong,
@@ -625,8 +631,8 @@ private fun ToolCard(
         Spacer(Modifier.height(4.dp))
         Text(
             tool.subtitle,
-            fontSize = 12.5.sp,
-            lineHeight = 16.sp,
+            fontSize = 10.5.sp,
+            lineHeight = 13.5.sp,
             fontFamily = GsFonts.Product,
             color = inkMuted,
             maxLines = 2,
@@ -660,7 +666,7 @@ private fun PromptRow(
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ExploreIconCircle(tool = tool, circle = 40.dp, glyph = 18.dp)
+        ExploreIconCircle(tool = tool, circle = 34.dp, glyph = 15.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -683,7 +689,7 @@ private fun PromptRow(
             )
         }
         Spacer(Modifier.width(8.dp))
-        Icon(GsIcons.ChevronRight, contentDescription = null, tint = inkMuted, modifier = Modifier.size(16.dp))
+        Icon(GsIcons.ChevronRight, contentDescription = null, tint = inkMuted, modifier = Modifier.size(14.dp))
     }
 }
 
@@ -697,14 +703,14 @@ private fun CollectionCard(
 ) {
     Column(
         Modifier
-            .width(168.dp)
+            .width(150.dp)
             .exploreGlass(shape = RoundedCornerShape(20.dp))
             .clickable(role = Role.Button, onClickLabel = collection.title) { onOpen() },
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(86.dp),
+                .height(74.dp),
         ) {
             // Each collection carries its own scene, like the reference set:
             // the lotus for Design, the pearl-drape scene for Work, the
@@ -739,11 +745,11 @@ private fun CollectionCard(
                     ),
             )
         }
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     collection.title,
-                    fontSize = 13.5.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = GsFonts.Product,
                     color = inkStrong,
@@ -757,7 +763,7 @@ private fun CollectionCard(
             Spacer(Modifier.height(2.dp))
             Text(
                 collection.subtitle,
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 fontFamily = GsFonts.Product,
                 color = inkMuted,
                 maxLines = 1,
@@ -850,7 +856,7 @@ private fun FeaturedCard(
             Column(Modifier.weight(1f)) {
                 Text(
                     ExploreCatalog.featured.title,
-                    fontSize = 14.5.sp,
+                    fontSize = 12.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = GsFonts.Product,
                     color = inkStrong,
@@ -858,8 +864,8 @@ private fun FeaturedCard(
                 Spacer(Modifier.height(2.dp))
                 Text(
                     ExploreCatalog.featured.subtitle,
-                    fontSize = 11.5.sp,
-                    lineHeight = 15.sp,
+                    fontSize = 10.5.sp,
+                    lineHeight = 14.sp,
                     fontFamily = GsFonts.Product,
                     color = inkMuted,
                     maxLines = 2,
@@ -917,7 +923,7 @@ private fun ExploreComposer(
             if (draft.isEmpty()) {
                 Text(
                     "Ask me anything…",
-                    fontSize = 13.5.sp,
+                    fontSize = 12.sp,
                     fontFamily = GsFonts.Product,
                     color = inkMuted,
                 )
@@ -940,7 +946,7 @@ private fun ExploreComposer(
         Spacer(Modifier.width(8.dp))
         Box(
             Modifier
-                .size(42.dp)
+                .size(38.dp)
                 .shadow(
                     elevation = 10.dp,
                     shape = CircleShape,
@@ -1003,7 +1009,7 @@ private fun EmptySearch(
     ) {
         Text(
             "No tool matches \"$query\" yet",
-            fontSize = 14.sp,
+            fontSize = 12.5.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = GsFonts.Product,
             color = inkBody,

@@ -239,12 +239,12 @@ struct ExploreView: View {
             Image("GSCompanionOrb")
                 .resizable()
                 .scaledToFill()
-                .frame(width: 38, height: 38)
+                .frame(width: 34, height: 34)
                 .clipShape(Circle())
                 .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1))
             VStack(alignment: .leading, spacing: 0) {
                 Text("Nexly")
-                    .font(.custom(Aero.productName(.bold), size: 16.5, relativeTo: .title3))
+                    .font(.custom(Aero.productName(.bold), size: 15, relativeTo: .title3))
                     .foregroundStyle(Aero.text)
                 Text("AI Companion")
                     .font(Aero.caption())
@@ -257,8 +257,8 @@ struct ExploreView: View {
                     if !searchOpen { query = "" }
                 }
             } label: {
-                NexlyGlyph(name: "search", size: 18, color: Aero.text)
-                    .modifier(IconCircleStyle(bg: Color(red: 0.996, green: 0.953, blue: 0.933), diameter: 40))
+                NexlyGlyph(name: "search", size: 16, color: Aero.text)
+                    .modifier(IconCircleStyle(bg: Color(red: 0.996, green: 0.953, blue: 0.933), diameter: 36))
             }
             .accessibilityLabel(searchOpen ? "Close search" : "Open search")
         }
@@ -312,7 +312,7 @@ struct ExploreView: View {
                     .background(Capsule().fill(ExplorePalette.discoverBg))
 
                     Text("Explore AI\nPossibilities")
-                        .font(.custom(Aero.productName(.bold), size: 22, relativeTo: .title2))
+                        .font(.custom(Aero.productName(.bold), size: 17.5, relativeTo: .title2))
                         .foregroundStyle(Aero.text)
                         .lineSpacing(2)
 
@@ -409,7 +409,7 @@ struct ExploreView: View {
     private func sectionHeader(_ title: String, action: (() -> Void)? = nil, actionLabel: String = "See All") -> some View {
         HStack {
             Text(title)
-                .font(Aero.headline())
+                .font(Aero.title())
                 .foregroundStyle(Aero.text)
             Spacer()
             if let action {
@@ -448,8 +448,8 @@ struct ExploreView: View {
             onOpenChat(.chatPrefill(tool.prompt))
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                NexlyGlyph(name: tool.glyph, size: 19, color: tool.fg)
-                    .modifier(IconCircleStyle(bg: tool.bg, diameter: 46))
+                NexlyGlyph(name: tool.glyph, size: 17, color: tool.fg)
+                    .modifier(IconCircleStyle(bg: tool.bg, diameter: 40))
                 Text(tool.title)
                     .font(Aero.bodyMedium().weight(.semibold))
                     .foregroundStyle(Aero.text)
@@ -489,9 +489,9 @@ struct ExploreView: View {
         Button {
             onOpenChat(.chatPrefill(tool.prompt))
         } label: {
-            HStack(spacing: 12) {
-                NexlyGlyph(name: tool.glyph, size: 17, color: tool.fg)
-                    .modifier(IconCircleStyle(bg: tool.bg, diameter: 40))
+            HStack(spacing: 10) {
+                NexlyGlyph(name: tool.glyph, size: 15, color: tool.fg)
+                    .modifier(IconCircleStyle(bg: tool.bg, diameter: 34))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(tool.title)
                         .font(Aero.bodyMedium().weight(.semibold))
@@ -503,9 +503,9 @@ struct ExploreView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                NexlyGlyph(name: "chevron-right", size: 14, color: Aero.textMuted)
+                NexlyGlyph(name: "chevron-right", size: 13, color: Aero.textMuted)
             }
-            .padding(12)
+            .padding(10)
             .modifier(ExploreGlass(corner: 18, elevation: 9))
         }
         .buttonStyle(.plain)
@@ -528,7 +528,7 @@ struct ExploreView: View {
                                 // pearl-drape scene for Work, the bubble
                                 // close-up for Learning.
                                 collectionArt(collection)
-                                    .frame(height: 86)
+                                    .frame(height: 74)
                                     .frame(maxWidth: .infinity)
                                     .clipped()
                                     .overlay(LinearGradient(colors: [.white.opacity(0.08), .white.opacity(0.38)], startPoint: .top, endPoint: .bottom))
@@ -550,7 +550,7 @@ struct ExploreView: View {
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 10)
                             }
-                            .frame(width: 168)
+                            .frame(width: 150)
                             .clipShape(RoundedRectangle(cornerRadius: 20))
                             .modifier(ExploreGlass(corner: 20))
                         }
@@ -608,8 +608,8 @@ struct ExploreView: View {
                     }
                 }
                 HStack(spacing: 12) {
-                    NexlyGlyph(name: ExploreCatalog.featured.glyph, size: 17, color: ExploreCatalog.featured.fg)
-                        .modifier(IconCircleStyle(bg: ExploreCatalog.featured.bg, diameter: 40))
+                    NexlyGlyph(name: ExploreCatalog.featured.glyph, size: 15, color: ExploreCatalog.featured.fg)
+                        .modifier(IconCircleStyle(bg: ExploreCatalog.featured.bg, diameter: 34))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ExploreCatalog.featured.title)
                             .font(Aero.body().weight(.semibold))
@@ -798,9 +798,9 @@ struct ExploreComposerBar: View {
                                 startPoint: .topLeading, endPoint: .bottomTrailing
                             )
                         )
-                    NexlyGlyph(name: "send", size: 17, color: canSend ? .white : Aero.textMuted)
+                    NexlyGlyph(name: "send", size: 15, color: canSend ? .white : Aero.textMuted)
                 }
-                .frame(width: 42, height: 42)
+                .frame(width: 38, height: 38)
                 .overlay(
                     Circle().strokeBorder(
                         LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.40)], startPoint: .topLeading, endPoint: .bottomTrailing),
