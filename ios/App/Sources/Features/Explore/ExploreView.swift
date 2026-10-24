@@ -741,13 +741,13 @@ struct HeroBubbleArt: View {
             let w = geo.size.width
             let h = geo.size.height
             // The bubble occupies the card's right side (the copy sits left).
-            let artW = w * 0.66
-            let r = min(artW, h) * 0.56
-            let cx = w - artW * 0.42
-            let cy = h * 0.40
-            let cr = r * 0.52
-            let ccx = cx - r * 0.08
-            let ccy = cy + r * 0.14
+            let artW = w * 0.60
+            let r = min(artW, h) * 0.46
+            let cx = w - artW * 0.38
+            let cy = h * 0.42
+            let cr = r * 0.42
+            let ccx = cx - r * 0.06
+            let ccy = cy + r * 0.12
             ZStack {
                 // Warm outer glow.
                 Circle()
@@ -776,9 +776,9 @@ struct HeroBubbleArt: View {
                 Circle()
                     .fill(
                         RadialGradient(
-                            colors: [.white.opacity(0.80),
-                                     Color(red: 1.0, green: 0.863, blue: 0.780).opacity(0.42),
-                                     Color(red: 0.953, green: 0.765, blue: 0.886).opacity(0.34),
+                            colors: [.white.opacity(0.62),
+                                     Color(red: 1.0, green: 0.863, blue: 0.780).opacity(0.34),
+                                     Color(red: 0.953, green: 0.765, blue: 0.886).opacity(0.28),
                                      .clear],
                             center: .init(x: 0.5, y: 0.5),
                             startRadius: 0,
@@ -788,16 +788,16 @@ struct HeroBubbleArt: View {
                     .frame(width: r * 2, height: r * 2)
                     .position(x: cx, y: cy)
                 Circle()
-                    .strokeBorder(.white.opacity(0.85), lineWidth: r * 0.032)
+                    .strokeBorder(.white.opacity(0.70), lineWidth: r * 0.028)
                     .frame(width: r * 2, height: r * 2)
                     .position(x: cx, y: cy)
                 // Peach core sphere with highlight.
                 Circle()
                     .fill(
                         RadialGradient(
-                            colors: [Color(red: 1.0, green: 0.953, blue: 0.894),
-                                     Color(red: 1.0, green: 0.780, blue: 0.620),
-                                     Color(red: 1.0, green: 0.620, blue: 0.388)],
+                            colors: [Color(red: 1.0, green: 0.961, blue: 0.910),
+                                     Color(red: 1.0, green: 0.820, blue: 0.643),
+                                     Color(red: 1.0, green: 0.694, blue: 0.467)],
                             center: .init(x: 0.5, y: 0.5),
                             startRadius: 0,
                             endRadius: cr

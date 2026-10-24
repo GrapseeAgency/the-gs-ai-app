@@ -417,7 +417,7 @@ private fun HeroCard(
                 fontWeight = FontWeight.Bold,
                 fontFamily = GsFonts.Product,
                 color = inkStrong,
-                modifier = Modifier.widthIn(max = 230.dp),
+                modifier = Modifier.widthIn(max = 205.dp),
             )
             Spacer(Modifier.height(8.dp))
             Text(
@@ -426,7 +426,7 @@ private fun HeroCard(
                 lineHeight = 17.sp,
                 fontFamily = GsFonts.Product,
                 color = inkBody,
-                modifier = Modifier.widthIn(max = 240.dp),
+                modifier = Modifier.widthIn(max = 215.dp),
             )
             Spacer(Modifier.height(14.dp))
             Row(
@@ -988,10 +988,10 @@ private fun HeroBubbleArt(modifier: Modifier = Modifier) {
         val h = size.height
         // The bubble occupies the card's right side (the copy sits left), so
         // the geometry is expressed against the right 66% of the canvas.
-        val artW = w * 0.66f
-        val r = min(artW, h) * 0.56f
-        val cx = w - artW * 0.42f
-        val cy = h * 0.40f
+        val artW = w * 0.60f
+        val r = min(artW, h) * 0.46f
+        val cx = w - artW * 0.38f
+        val cy = h * 0.42f
 
         // Warm outer glow.
         drawCircle(
@@ -1025,9 +1025,9 @@ private fun HeroBubbleArt(modifier: Modifier = Modifier) {
         drawCircle(
             Brush.radialGradient(
                 listOf(
-                    Color.White.copy(alpha = 0.80f),
-                    Color(0xFFFFDCC7).copy(alpha = 0.42f),
-                    Color(0xFFF3C3E2).copy(alpha = 0.34f),
+                    Color.White.copy(alpha = 0.62f),
+                    Color(0xFFFFDCC7).copy(alpha = 0.34f),
+                    Color(0xFFF3C3E2).copy(alpha = 0.28f),
                     Color.Transparent,
                 ),
                 center = Offset(cx, cy),
@@ -1037,22 +1037,22 @@ private fun HeroBubbleArt(modifier: Modifier = Modifier) {
             center = Offset(cx, cy),
         )
         drawCircle(
-            Color.White.copy(alpha = 0.85f),
-            style = Stroke(width = r * 0.032f),
+            Color.White.copy(alpha = 0.70f),
+            style = Stroke(width = r * 0.028f),
             radius = r,
             center = Offset(cx, cy),
         )
 
         // The peach core sphere with its highlight.
-        val cr = r * 0.52f
-        val ccx = cx - r * 0.08f
-        val ccy = cy + r * 0.14f
+        val cr = r * 0.42f
+        val ccx = cx - r * 0.06f
+        val ccy = cy + r * 0.12f
         drawCircle(
             Brush.radialGradient(
                 listOf(
-                    Color(0xFFFFF3E4),
-                    Color(0xFFFFC79E),
-                    Color(0xFFFF9E63),
+                    Color(0xFFFFF5E8),
+                    Color(0xFFFFD1A4),
+                    Color(0xFFFFB177),
                 ),
                 center = Offset(ccx, ccy),
                 radius = cr,
