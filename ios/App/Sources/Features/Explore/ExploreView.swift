@@ -353,8 +353,8 @@ struct ExploreView: View {
                     .overlay(
                         LinearGradient(
                             stops: [
-                                .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.80), location: 0),
-                                .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.10), location: 0.42),
+                                .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.94), location: 0),
+                                .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.22), location: 0.45),
                                 .init(color: .clear, location: 1),
                             ],
                             startPoint: .leading, endPoint: .trailing

@@ -396,8 +396,8 @@ private fun HeroCard(
                 .matchParentSize()
                 .background(
                     Brush.horizontalGradient(
-                        0f to Color(0xFFFDF1EC).copy(alpha = 0.80f),
-                        0.42f to Color(0xFFFDF1EC).copy(alpha = 0.10f),
+                        0f to Color(0xFFFDF1EC).copy(alpha = 0.94f),
+                        0.45f to Color(0xFFFDF1EC).copy(alpha = 0.22f),
                         1f to Color.Transparent,
                     ),
                 ),
