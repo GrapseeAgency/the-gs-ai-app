@@ -724,29 +724,45 @@ private struct DockIcon: View {
     var selected = false
     let action: () -> Void
 
+    /// The ink and the well's size, named once. They used to be re-inferred
+    /// inside every branch of the Group below; three shape fills x two ternary
+    /// inks x two scaledLength frames in one expression is what the compiler's
+    /// "unable to type-check this expression in reasonable time" named at
+    /// run 40116679302 — each mark is its own `some View` since.
+    private var ink: Color { selected ? Aero.text : Aero.text.opacity(0.78) }
+    private var markSide: CGFloat { Aero.scaledLength(20, relativeTo: .body) }
+
+    private var bookMark: some View {
+        OpenBookGlyph()
+            .fill(ink)
+            .frame(width: markSide, height: markSide)
+    }
+
+    private var houseMark: some View {
+        FilledHouseGlyph()
+            .fill(ink)
+            .frame(width: markSide, height: markSide)
+    }
+
+    private var gearMark: some View {
+        // Even-odd, the twin of Compose's PathFillType.EvenOdd: the ring and
+        // the hub wind the same way, so the nonzero rule would fill the hole
+        // solid. `PathFillStyle` is iOS 17; the page ships at iOS 16, so the
+        // rule rides the fill call.
+        FilledGearGlyph()
+            .fill(ink, style: FillStyle(eo: true))
+            .frame(width: markSide, height: markSide)
+    }
+
     var body: some View {
         Button(action: action) {
             Group {
                 if book {
-                    OpenBookGlyph()
-                        .fill(selected ? Aero.text : Aero.text.opacity(0.78))
-                        .frame(width: Aero.scaledLength(20, relativeTo: .body),
-                               height: Aero.scaledLength(20, relativeTo: .body))
+                    bookMark
                 } else if house {
-                    FilledHouseGlyph()
-                        .fill(selected ? Aero.text : Aero.text.opacity(0.78))
-                        .frame(width: Aero.scaledLength(20, relativeTo: .body),
-                               height: Aero.scaledLength(20, relativeTo: .body))
+                    houseMark
                 } else if gear {
-                    // Even-odd, the twin of Compose's PathFillType.EvenOdd: the
-                    // ring and the hub wind the same way, so the nonzero rule
-                    // would fill the hole solid. `PathFillStyle` is iOS 17; the
-                    // page ships at iOS 16, so the rule rides the fill call.
-                    FilledGearGlyph()
-                        .fill(selected ? Aero.text : Aero.text.opacity(0.78),
-                              style: FillStyle(eo: true))
-                        .frame(width: Aero.scaledLength(20, relativeTo: .body),
-                               height: Aero.scaledLength(20, relativeTo: .body))
+                    gearMark
                 }
             }
             .frame(width: Aero.scaledLength(46, relativeTo: .body),
