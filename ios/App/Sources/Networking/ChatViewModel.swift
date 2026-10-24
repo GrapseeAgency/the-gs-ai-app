@@ -743,6 +743,14 @@ final class ChatViewModel: ObservableObject {
                         }
                     },
                     onEvent: { [sink = self.streamSink] event in
+                        // The server titles a chat on its first turn and says so
+                        // as it happens. Applying it here is what makes the new
+                        // headline live: the drawer row, the Chats card and the
+                        // icon (chosen from the headline's topic) are correct
+                        // before the user sees them, not after some later refetch.
+                        if event.event == "conversation" {
+                            Self.applyConversationEvent(event.data)
+                        }
                         sink.append(event) // lock-guarded — drained in the flush loop
                     }
                 )
@@ -1086,6 +1094,23 @@ final class ChatViewModel: ObservableObject {
         let ranks: [ChatSearchPhase: Int] = [.idle: 0, .searching: 1, .working: 2, .composing: 3]
         if (ranks[next] ?? 0) > (ranks[searchPhase] ?? 0) {
             searchPhase = next
+        }
+    }
+
+    /// A `conversation` event carries `{"type":"title","id":"…","title":"…"}` as a
+    /// JSON string in the payload. Unknown subtypes are ignored, the same
+    /// forward-compatibility contract every other event name follows.
+    nonisolated static func applyConversationEvent(_ payload: String?) {
+        guard let payload,
+              let data = payload.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object["type"] as? String == "title",
+              let id = object["id"] as? String,
+              let title = object["title"] as? String,
+              !title.isEmpty
+        else { return }
+        Task { @MainActor in
+            ConversationStore.shared.rename(id: id, to: title)
         }
     }
 
