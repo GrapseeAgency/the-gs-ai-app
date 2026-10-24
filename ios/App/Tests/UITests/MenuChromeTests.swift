@@ -67,16 +67,25 @@ final class MenuChromeTests: XCTestCase {
             } else {
                 record("drawer-recent-context: no recent-row menu in the drawer")
             }
-            // Close the panel: a tap at the far right edge is outside it.
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
+            // Close the panel and PROVE it closed: run 40132162258 tapped the
+            // scrim while the menu was still dismissing, the drawer stayed up,
+            // and the next "chats row" was really a drawer row (its menu has no
+            // "Select", which is how the mistake surfaced).
+            closeDrawer(app)
         } else {
             record("drawer: Home never offered its menu button")
         }
 
-        // The chats hub.
+        // The chats hub. "Archived" is the quick-access card: it exists on the
+        // list and nowhere in the drawer, so it proves the panel is gone.
         let chatsDock = app.buttons["Chats"].firstMatch
         XCTAssertTrue(chatsDock.waitForExistence(timeout: 20), "Home never offered the Chats dock")
         chatsDock.tap()
+        guard app.buttons["Archived"].waitForExistence(timeout: 15) else {
+            XCTFail("the chats hub never opened — the drawer was probably still up")
+            try finish(app: app)
+            return
+        }
 
         let row = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "Weekend in Kyoto")).firstMatch
@@ -266,6 +275,18 @@ final class MenuChromeTests: XCTestCase {
         record("menu '\(label)' never appeared after long-press")
         attachTree(app)
         return false
+    }
+
+    /// Closes the drawer and waits for the page underneath to be hittable
+    /// again. A single blind tap is not enough: it lands while the context menu
+    /// is still dismissing and is swallowed (run 40132162258).
+    private func closeDrawer(_ app: XCUIApplication) {
+        for _ in 0..<5 {
+            if app.buttons["Chats"].isHittable { return }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        record("drawer: the panel did not close")
     }
 
     private func dismissMenu(app: XCUIApplication, item: String) {
