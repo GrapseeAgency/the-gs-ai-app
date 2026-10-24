@@ -24,10 +24,10 @@ struct ExploreTool: Identifiable, Hashable {
     let bg: Color
     let fg: Color
     let category: ExploreCategory
-    /// Seeds the conversation this card opens — never a dead end.
-    let prompt: String
     /// The reference paints some tiles as saturated discs with white glyphs.
     var filledTile: Bool = false
+    /// Seeds the conversation this card opens — never a dead end.
+    let prompt: String
 }
 
 enum ExploreCategory: String, CaseIterable, Identifiable {
