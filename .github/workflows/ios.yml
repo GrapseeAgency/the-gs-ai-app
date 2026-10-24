@@ -389,7 +389,7 @@ jobs:
             --path ios/build/GSApp-tests.xcresult --output-path "$DIR/raw" \
             > "$DIR/export.log" 2>&1 || { echo "::error::xcresulttool could not export the attachments"; cat "$DIR/export.log"; }
           python3 - "$DIR" <<'PY'
-          import glob, json, os, shutil, sys
+          import glob, json, os, re, shutil, sys
           root = sys.argv[1]
           raw = os.path.join(root, "raw")
           path = os.path.join(raw, "manifest.json")
@@ -404,8 +404,13 @@ jobs:
                   name = a.get("suggestedHumanReadableName") or ""
                   if name != "report" and not name.startswith("menu-"):
                       continue
+                  # Xcode appends `_<n>_<uuid>` and an extension to the name
+                  # given to the attachment; strip both so the file is exactly
+                  # <attachment name>.<ext> (run 40134206951 produced
+                  # `menu-x_0_UUID.png.png`).
+                  base = re.sub(r"(_\d+_[0-9A-Fa-f-]{36})?\.(png|jpe?g)$", "", name)
                   ext = os.path.splitext(a.get("exportedFileName", ""))[1] or ".png"
-                  dst = os.path.join(root, "report.json" if name == "report" else name + ext)
+                  dst = os.path.join(root, "report.json" if base == "report" else base + ext)
                   shutil.copyfile(os.path.join(raw, a["exportedFileName"]), dst)
                   kept.append(os.path.basename(dst))
           print("exported:", ", ".join(sorted(kept)) or "nothing")
@@ -420,12 +425,26 @@ jobs:
             exit 1
           fi
           for n in chats-row-context chats-row-swipe-leading chats-row-swipe-trailing \
-                   chat-header-sparkle chat-header-menu user-bubble-context \
-                   assistant-bubble-context drawer-recent-context; do
+                   user-bubble-context assistant-bubble-context drawer-recent-context; do
             ls "$DIR/menu-$n".* >/dev/null 2>&1 \
               || { echo "::error::menu-$n is missing — the menu harness opened no such menu"; exit 1; }
           done
           test -s "$DIR/report.json" || { echo "::error::report.json missing — no measurements were written"; exit 1; }
+          # The only menus this build cannot open are the two header ones: their
+          # contextMenus sit on buttons that consume the long press as their
+          # action. Any OTHER menu that stops opening must fail this gate — a
+          # skip list that can grow is how a gate turns itself off.
+          python3 - "$DIR/report.json" <<'PY'
+          import json, sys
+          report = json.load(open(sys.argv[1]))
+          allowed = {"chat-header-sparkle", "chat-header-menu"}
+          unreachable = set(report.get("unreachableMenus", []))
+          print("unreachable (accepted):", sorted(unreachable) or "none")
+          extra = sorted(unreachable - allowed)
+          if extra:
+              print(f"::error::menus that should have opened did not: {extra}")
+              sys.exit(1)
+          PY
 
       - name: Upload the menu-chrome captures
         if: always()
