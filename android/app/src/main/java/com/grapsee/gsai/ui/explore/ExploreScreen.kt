@@ -389,7 +389,7 @@ private fun HeroCard(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 // The bubble sits at ~(0.74, 0.24) of the authored render.
-                alignment = BiasBiasAlignment(0.74f, 0.24f),
+                alignment = BiasAlignment(0.74f, 0.24f),
                 modifier = Modifier.matchParentSize(),
             )
             Box(
