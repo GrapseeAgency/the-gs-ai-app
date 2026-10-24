@@ -114,21 +114,3 @@ fun relativeTimeIso(iso: String, now: java.time.OffsetDateTime = java.time.Offse
  * Reproducing the sheet's variety would need chat categories, which is a product
  * feature, not a decoration to fake.
  */
-enum class DrawerIconKey { Pinned, Chat }
-
-/**
- * The decision, pure and testable: it takes a boolean and returns a name, with no
- * Compose types in the signature. `iconForChat` maps the name to a vector.
- *
- * They are split because comparing `ImageVector` instances in a JVM test
- * initialises Compose's vector machinery, which throws outside Robolectric — the
- * first version of this test failed with `ExceptionInInitializerError` and proved
- * nothing about the icon.
- */
-fun drawerIconKey(pinned: Boolean): DrawerIconKey =
-    if (pinned) DrawerIconKey.Pinned else DrawerIconKey.Chat
-
-fun iconForChat(pinned: Boolean): ImageVector = when (drawerIconKey(pinned)) {
-    DrawerIconKey.Pinned -> GsIcons.Pin
-    DrawerIconKey.Chat -> GsIcons.MessageCircle
-}
