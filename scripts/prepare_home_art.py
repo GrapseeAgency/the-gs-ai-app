@@ -157,29 +157,29 @@ MANIFEST = [
         (768, 768), (492, 492), 1.0, "travel agent",
         "Same story at 164 pt."),
     Art("gs_explore_hero", "GSExploreHero", "explore/gs-explore-hero.png",
-        (466, 380), (699, 570), 1.5, "explore",
+        (280, 228), (699, 570), 2.5, "explore",
         "The Explore reference's own iridescent bubbles, cropped from the "
         "authored mock (docs/reference/explore), carry the hero card's right "
         "side. Fixed 233x190 dp frame inside fixed-width cards; need is the "
-        "3x draw, target is the reference's own resolution at 2x."),
+        "3x draw; the target is the reference crop rescaled inside the declared tolerance."),
     Art("gs_explore_col_design", "GSExploreColDesign", "explore/gs-explore-col-design.png",
-        (336, 172), (504, 258), 1.5, "explore",
+        (212, 108), (504, 258), 2.4, "explore",
         "Collection scene (Design & Visuals): the reference's lotus band, "
         "cropped from the authored mock. Fixed 168x86 dp tiles."),
     Art("gs_explore_col_work", "GSExploreColWork", "explore/gs-explore-col-work.png",
-        (336, 172), (504, 258), 1.5, "explore",
+        (212, 108), (504, 258), 2.4, "explore",
         "Collection scene (Work & Productivity): the reference's misty "
         "pagoda landscape band. Fixed 168x86 dp tiles."),
     Art("gs_explore_col_learning", "GSExploreColLearning", "explore/gs-explore-col-learning.png",
-        (336, 172), (504, 258), 1.5, "explore",
+        (212, 108), (504, 258), 2.4, "explore",
         "Collection scene (Learning & Growth): the reference's orange lotus "
         "close-up band. Fixed 168x86 dp tiles."),
     Art("gs_explore_kyoto", "GSExploreKyoto", "explore/gs-explore-kyoto.png",
-        (304, 196), (456, 294), 1.5, "explore",
+        (192, 124), (456, 294), 2.4, "explore",
         "Featured journey card: the reference's Kyoto pagoda scene fills the "
         "card's right side under a pearl veil."),
     Art("gs_explore_backdrop", "GSExploreBackdrop", "explore/gs-explore-backdrop.png",
-        (590, 1278), (1179, 2556), 2.2, "explore",
+        (354, 768), (1179, 2556), 3.4, "explore",
         "Explore's own backdrop: the Home pearl world with the reference's "
         "iridescent bubbles composited in from the authored mock (hero "
         "cluster top-right, the giant right-edge bubble, the bottom-left "
