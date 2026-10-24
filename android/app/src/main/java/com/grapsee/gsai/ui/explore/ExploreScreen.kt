@@ -277,7 +277,7 @@ private fun ExplorePage(
     inkHeader: Color,
     inkBody: Color,
     inkMuted: Color,
-    content: @Composable () -> Unit,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
     val isDark = LocalGsIsDark.current
     Box(Modifier.fillMaxSize()) {
@@ -1152,7 +1152,7 @@ fun DiscoverScreen(
                                     RoundedCornerShape(16.dp),
                                 )
                                 .clickable(role = Role.Button, onClickLabel = "Start exploring") {
-                                    scroll.animateScrollTo(scroll.maxValue)
+                                    category = ExploreCategory.All
                                 }
                                 .padding(horizontal = 13.dp, vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically,

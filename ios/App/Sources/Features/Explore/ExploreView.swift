@@ -381,7 +381,7 @@ struct ExploreView: View {
                             resultsSection
                         } else {
                             heroCard
-                            ExploreSectionHeader(title: "Popular Tools", action: onOpenDiscover())
+                            ExploreSectionHeader(title: "Popular Tools", action: onOpenDiscover)
                             toolsGrid
                             ExploreSectionHeader(title: "Creative Collections")
                             collectionsSection
