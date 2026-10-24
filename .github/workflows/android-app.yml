@@ -797,6 +797,26 @@ jobs:
             echo "::error::0 unit tests in $RESULTS -- an empty run is not a pass"
             exit 1
           fi
+          # A TOTAL IS NOT EVIDENCE THAT A PARTICULAR SUITE RAN. These two classes
+          # are the drawer's behavioural proof: the icon's decision and every
+          # pressed control's route. If either stops being collected -- renamed,
+          # moved out of the source set, filtered away -- the total still looks
+          # healthy and the drawer's behaviour is untested again. Named, counted,
+          # fatal.
+          for spec in DrawerInteractionTest:6 DrawerIconTest:3; do
+            cls=${spec%%:*}; want=${spec##*:}
+            xml=$(ls "$RESULTS"/TEST-*"$cls".xml 2>/dev/null | head -1 || true)
+            if [ -z "$xml" ]; then
+              echo "::error::$cls has no result XML -- the drawer's behaviour is not being tested"
+              exit 1
+            fi
+            got=$(python3 -c "import sys,xml.etree.ElementTree as E; r=E.parse(sys.argv[1]).getroot(); print(r.get('tests','0'))" "$xml")
+            if [ "$got" -lt "$want" ]; then
+              echo "::error::$cls ran $got case(s), expected at least $want"
+              exit 1
+            fi
+            echo "$cls: $got case(s)" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
           {
             echo "### android-app"
             echo "compileDebugKotlin: see the step above"

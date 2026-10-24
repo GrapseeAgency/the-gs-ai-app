@@ -386,6 +386,17 @@ jobs:
           APP_BUILT=$([ -d ios/build/DerivedData/Build/Products/Debug-iphonesimulator/App.app ] && echo "YES" || echo "NO")
           ARCHIVED=$([ -d ios/build/GSApp.xcarchive ] && echo "YES" || echo "NO")
           TESTS=$(grep -Eo "Test Suite 'All tests' (passed|failed)" ios/build/xcodebuild-test.log 2>/dev/null | sed -n '1p' || echo "n/a")
+          # A GREEN SUITE LINE DOES NOT SAY WHICH SUITES RAN. The drawer's iOS
+          # behaviour lives in DrawerLogicTests and its captures in
+          # DrawerRenderTests; if either stops being collected the summary still
+          # reads "passed" and the drawer is untested. Named here, for the same
+          # reason android-app.yml names its two classes.
+          for suite in DrawerLogicTests DrawerRenderTests; do
+            if ! grep -q "Test Suite '$suite' passed" ios/build/xcodebuild-test.log; then
+              echo "::error::$suite did not pass -- the drawer's iOS evidence is missing"
+              exit 1
+            fi
+          done
           {
             echo "## iOS CI summary"
             echo ""
