@@ -147,27 +147,10 @@ struct ChatsListView: View {
     private func load() async {
         isLoading = true
         defer { isLoading = false }
-        do {
-            let remote = try await APIClient.shared.conversations(limit: 30)
-            var rows: [StoredConversation] = []
-            rows.reserveCapacity(remote.count)
-            for conversation in remote {
-                let existing = store.conversation(withID: conversation.id)
-                rows.append(StoredConversation(
-                    id: conversation.id,
-                    title: conversation.title,
-                    modelId: conversation.modelId,
-                    pinned: conversation.pinned ?? existing?.pinned ?? false,
-                    archived: conversation.archived ?? existing?.archived ?? false,
-                    createdAt: conversation.createdAt.isEmpty ? (existing?.createdAt ?? ConversationStore.now()) : conversation.createdAt,
-                    updatedAt: conversation.updatedAt.isEmpty ? (existing?.updatedAt ?? ConversationStore.now()) : conversation.updatedAt))
-            }
-            store.upsert(rows)
-            isOffline = false
-        } catch {
-            // Backend unreachable: the store (and demo seed) keeps the surface alive.
-            isOffline = true
-        }
+        // The merge now lives in the store, because the drawer needs it too: a
+        // server-side auto-title could not reach the sidebar while the only
+        // caller of this path was the inbox.
+        isOffline = !(await store.syncFromServer(limit: 30))
     }
 
     private func sync(_ id: String, pinned: Bool? = nil, archived: Bool? = nil, title: String? = nil) {

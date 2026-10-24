@@ -35,6 +35,9 @@ object DrawerMetrics {
     val searchHeight = 42.dp
     val searchGlyph = 18.dp
 
+    /** The glyph inside a recent row's disc. */
+    val discGlyph = 18.dp
+
     /** Hero ("New chat"): 53.7 pt tall, 20.6 pt radius, 42.3 pt orb. */
     val heroHeight = 54.dp
     val heroRadius = 20.dp

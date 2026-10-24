@@ -36,6 +36,8 @@ on:
       - "scripts/check_drawer_render.py"
       - "scripts/check_drawer_dark.py"
       - "scripts/check_drawer_structure.py"
+      - "scripts/check_icon_catalogue.py"
+      - "ios/App/Sources/Components/Drawer/DrawerTopicIcons.swift"
       - "scripts/test_drawer_render_gate.py"
       - ".github/scripts/check_drawer_type_parity.py"
       - "assets/reference/drawer-reference.png"
@@ -464,6 +466,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/check_drawer_structure.py --self-test
+
+      - name: The icon catalogue (1,611 geometries, 5,466 names, both platforms)
+        run: |
+          set -euo pipefail
+          python3 scripts/check_icon_catalogue.py --self-test
 
       - name: The drawer in dark mode
         run: |

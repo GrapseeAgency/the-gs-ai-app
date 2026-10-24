@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,7 +79,7 @@ import com.grapsee.gsai.ui.navigation.drawer.DrawerRecentRow
 import com.grapsee.gsai.ui.navigation.drawer.DrawerSearchPill
 import com.grapsee.gsai.ui.navigation.drawer.DrawerSectionLabel
 import com.grapsee.gsai.ui.navigation.drawer.RECENT_LIMIT
-import com.grapsee.gsai.ui.navigation.drawer.iconForChat
+import com.grapsee.gsai.ui.navigation.drawer.drawerIcon
 import com.grapsee.gsai.ui.navigation.drawer.relativeTimeIso
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsTheme
@@ -131,6 +132,15 @@ fun GsDrawerContent(
     // A fixture means the caller is supplying its own rows, so the store is not
     // read at all. That keeps the capture and the interaction test independent of
     // the database, and it is why they run on a bare JVM.
+    // A server-side auto-title reaches the local row only when someone refetches
+    // the list; the drawer is where the headline is read, so it asks once per
+    // opening. A fixture means a capture or a test, and no network.
+    LaunchedEffect(fixture) {
+        if (fixture == null) {
+            runCatching { ServiceLocator.chat.refreshConversations() }
+        }
+    }
+
     val recentsFromStore by remember(fixture) {
         if (fixture != null) flowOf(emptyList())
         else runCatching { ServiceLocator.chat.activeConversations() }
@@ -156,7 +166,7 @@ fun GsDrawerContent(
                 id = conversation.id,
                 title = title,
                 timestamp = relativeTimeIso(conversation.updatedAt),
-                icon = iconForChat(conversation.pinned),
+                icon = drawerIcon(title, conversation.pinned),
             )
         }
 

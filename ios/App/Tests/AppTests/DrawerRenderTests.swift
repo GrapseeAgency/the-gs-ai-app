@@ -38,13 +38,16 @@ final class DrawerRenderTests: XCTestCase {
         recents: [
             // the production mapping, not hand-picked symbols
             DrawerRecent(id: "1", title: "Plan my tomorrow", timestamp: "Just now",
-                         symbol: DrawerTime.symbol(pinned: true), pinned: true),
+                         symbol: DrawerTopic.iconName(title: "Plan my tomorrow", pinned: true), pinned: true),
             DrawerRecent(id: "2", title: "Ideas for a brand launch", timestamp: "Yesterday",
-                         symbol: DrawerTime.symbol(pinned: false), pinned: false),
+                         symbol: DrawerTopic.iconName(title: "Ideas for a brand launch", pinned: false),
+                         pinned: false),
             DrawerRecent(id: "3", title: "Explain quantum physics", timestamp: "Yesterday",
-                         symbol: DrawerTime.symbol(pinned: false), pinned: false),
+                         symbol: DrawerTopic.iconName(title: "Explain quantum physics", pinned: false),
+                         pinned: false),
             DrawerRecent(id: "4", title: "Weekend in Kyoto", timestamp: "Mon",
-                         symbol: DrawerTime.symbol(pinned: false), pinned: false),
+                         symbol: DrawerTopic.iconName(title: "Weekend in Kyoto", pinned: false),
+                         pinned: false),
         ]
     )
 
@@ -208,7 +211,7 @@ final class DrawerRenderTests: XCTestCase {
             recents: (0..<500).map { index in
                 DrawerRecent(id: "m\(index)", title: "Conversation \(index + 1)",
                              timestamp: "Mon",
-                             symbol: DrawerTime.symbol(pinned: false), pinned: false)
+                             symbol: DrawerTopic.iconName(title: "Recent chat", pinned: false), pinned: false)
             }
         )
         try capture(size: CGSize(width: 393, height: 852), dark: false,

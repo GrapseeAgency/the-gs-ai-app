@@ -11,7 +11,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.grapsee.gsai.ui.home.HomeContent
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.navigation.drawer.DrawerFixture
-import com.grapsee.gsai.ui.navigation.drawer.iconForChat
+import com.grapsee.gsai.ui.navigation.drawer.drawerIcon
 import com.grapsee.gsai.ui.navigation.drawer.DrawerIdentity
 import com.grapsee.gsai.ui.navigation.drawer.DrawerMetrics
 import com.grapsee.gsai.ui.navigation.drawer.DrawerRecent
@@ -59,13 +59,13 @@ class DrawerScreenshotTest {
             // hardcoded icons meant the capture never exercised the function
             // that decides them, which is how a hash that collided three-in-four
             // stayed invisible.
-            DrawerRecent("1", "Plan my tomorrow", "Just now", iconForChat(true)),
-            DrawerRecent("2", "Ideas for a brand launch", "Yesterday", iconForChat(false)),
-            DrawerRecent("3", "Explain quantum physics", "Yesterday", iconForChat(false)),
-            DrawerRecent("4", "Weekend in Kyoto", "Mon", iconForChat(false)),
+            DrawerRecent("1", "Plan my tomorrow", "Just now", drawerIcon("Plan my tomorrow", true)),
+            DrawerRecent("2", "Ideas for a brand launch", "Yesterday", drawerIcon("Ideas for a brand launch", false)),
+            DrawerRecent("3", "Explain quantum physics", "Yesterday", drawerIcon("Explain quantum physics", false)),
+            DrawerRecent("4", "Weekend in Kyoto", "Mon", drawerIcon("Weekend in Kyoto", false)),
         ).let { rows ->
             if (count <= rows.size) rows else rows + List(count - rows.size) { i ->
-                DrawerRecent("x$i", "Conversation ${i + 5}", "Mon", iconForChat(false))
+                DrawerRecent("x$i", "Conversation ${i + 5}", "Mon", drawerIcon("Conversation ${i + 5}", false))
             }
         },
     )

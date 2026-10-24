@@ -153,7 +153,7 @@ fun DrawerHeroRow(label: String, onClick: () -> Unit, modifier: Modifier = Modif
                 GsIcons.Plus,
                 contentDescription = null,
                 tint = Color.White,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(DrawerMetrics.discGlyph),
             )
         }
         Text(
@@ -359,7 +359,7 @@ private fun DrawerDisc(icon: ImageVector) {
             icon,
             contentDescription = null,
             tint = GsTheme.colors.textSecondary,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(DrawerMetrics.discGlyph),
         )
     }
 }

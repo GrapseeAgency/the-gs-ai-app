@@ -19,11 +19,25 @@ final class DrawerLogicTests: XCTestCase {
         }
     }
 
-    func testTheRecentIconHasTwoDistinctAnswers() {
-        XCTAssertNotEqual(DrawerTime.symbol(pinned: true),
-                          DrawerTime.symbol(pinned: false))
-        XCTAssertEqual(DrawerTime.symbol(pinned: true), "pin")
-        XCTAssertEqual(DrawerTime.symbol(pinned: false), "bubble.left")
+    func testTheSheetsFourTitlesGetFourDifferentIcons() {
+        // The sheet's own titles are the test vector for the topic table.
+        let icons = [
+            DrawerTopic.iconName(title: "Plan my tomorrow", pinned: false),
+            DrawerTopic.iconName(title: "Ideas for a brand launch", pinned: false),
+            DrawerTopic.iconName(title: "Explain quantum physics", pinned: false),
+            DrawerTopic.iconName(title: "Weekend in Kyoto", pinned: false),
+        ]
+        XCTAssertEqual(icons, ["CalendarCheck", "Lightbulb", "Atom", "MapPin"])
+        XCTAssertEqual(Set(icons).count, 4)
+    }
+
+    func testAPinBeatsTheTopic() {
+        XCTAssertEqual(DrawerTopic.iconName(title: "Weekend in Kyoto", pinned: true), "Pin")
+    }
+
+    func testMatchingIsOnWholeWords() {
+        XCTAssertEqual(DrawerTopic.iconName(title: "planet fitness", pinned: false), "MessageCircle")
+        XCTAssertEqual(DrawerTopic.iconName(title: "plan the week", pinned: false), "CalendarCheck")
     }
 
     /// The same row object the drawer mutates when a pin is tapped: the icon must
@@ -32,10 +46,12 @@ final class DrawerLogicTests: XCTestCase {
     func testTogglingARowChangesItsIconInPlace() {
         var row = DrawerRecent(id: "c1", title: "Plan my tomorrow",
                                timestamp: "Just now",
-                               symbol: DrawerTime.symbol(pinned: false), pinned: false)
+                               symbol: DrawerTopic.iconName(title: "Plan my tomorrow", pinned: false),
+                               pinned: false)
+        XCTAssertEqual(row.symbol, "CalendarCheck")
         row.pinned = true
-        row.symbol = DrawerTime.symbol(pinned: row.pinned)
-        XCTAssertEqual(row.symbol, "pin")
+        row.symbol = DrawerTopic.iconName(title: row.title, pinned: row.pinned)
+        XCTAssertEqual(row.symbol, "Pin")
     }
 
     func testSectionsAndDestinationsAreOrderedAsTheSheetShows() {

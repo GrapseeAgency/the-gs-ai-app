@@ -8,7 +8,7 @@ import com.grapsee.gsai.ui.navigation.drawer.DESTINATIONS
 import com.grapsee.gsai.ui.navigation.drawer.DrawerFixture
 import com.grapsee.gsai.ui.navigation.drawer.DrawerIdentity
 import com.grapsee.gsai.ui.navigation.drawer.DrawerRecent
-import com.grapsee.gsai.ui.navigation.drawer.iconForChat
+import com.grapsee.gsai.ui.navigation.drawer.drawerIcon
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -39,8 +39,8 @@ class DrawerInteractionTest {
     private fun fixture() = DrawerFixture(
         identity = DrawerIdentity("Arafat", "Personal workspace", "A"),
         recents = listOf(
-            DrawerRecent("c1", "Plan my tomorrow", "Just now", iconForChat(true)),
-            DrawerRecent("c2", "Weekend in Kyoto", "Mon", iconForChat(false)),
+            DrawerRecent("c1", "Plan my tomorrow", "Just now", drawerIcon("Plan my tomorrow", true)),
+            DrawerRecent("c2", "Weekend in Kyoto", "Mon", drawerIcon("Weekend in Kyoto", false)),
         ),
     )
 

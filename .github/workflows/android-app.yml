@@ -57,6 +57,9 @@ on:
       - 'scripts/check_font_faces.py'
       - 'scripts/check_drawer_render.py'
       - 'scripts/check_drawer_structure.py'
+      - 'scripts/check_icon_catalogue.py'
+      - 'scripts/test-conversation-title.ts'
+      - 'src/lib/conversation-title.ts'
       - 'scripts/test_drawer_render_gate.py'
       - '.github/scripts/check_drawer_type_parity.py'
       - 'assets/reference/drawer-reference.png'
@@ -734,6 +737,22 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/check_drawer_structure.py --self-test
+
+      - name: The icon catalogue (1,611 geometries, 5,466 names, both platforms)
+        run: |
+          set -euo pipefail
+          python3 scripts/check_icon_catalogue.py --self-test
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: The headline's rules
+        run: |
+          set -euo pipefail
+          # A first message that opens with a code fence or a URL used to name the
+          # chat after the fence or the URL, and every cut was mid-word.
+          bun scripts/test-conversation-title.ts
 
       - name: The drawer in dark mode
         run: |

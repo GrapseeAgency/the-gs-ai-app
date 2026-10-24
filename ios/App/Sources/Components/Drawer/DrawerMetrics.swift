@@ -18,6 +18,9 @@ enum DrawerMetrics {
 
     static let searchHeight: CGFloat = 42       // sheet 42.0
     static let searchGlyph: CGFloat = 18
+
+    /// The glyph inside a recent row's disc.
+    static let discGlyph: CGFloat = 18
     static let heroHeight: CGFloat = 54         // sheet 53.7
     static let heroRadius: CGFloat = 20
     static let heroOrb: CGFloat = 42            // sheet 42.3
@@ -160,13 +163,9 @@ enum DrawerTime {
         return "\(days / 7)w ago"
     }
 
-    /// A recent row's icon says something TRUE about the chat, or nothing —
-    /// mirroring Android's `iconForChat`. The hash this replaces collided for
-    /// three of the sheet's four titles and disagreed with Kotlin for emoji or
-    /// CJK, because the two languages fold different code-unit domains.
-    static func symbol(pinned: Bool) -> String {
-        pinned ? "pin" : "bubble.left"
-    }
+    // The row's icon is no longer decided here. It comes from the headline's
+    // topic in `DrawerTopic.iconName`, which is mirrored by Android's
+    // `drawerIconName` and checked by scripts/check_icon_catalogue.py.
 
     private static let isoDateTimeFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()

@@ -346,7 +346,7 @@ struct AeroDrawer: View {
             onRoute(.chat(recent.id))
         } label: {
             HStack(spacing: DrawerMetrics.discToTitle) {
-                disc(recent.symbol)
+                disc(DrawerTopic.paths(title: recent.title, pinned: recent.pinned))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(recent.title)
                         .font(Aero.specFont(DrawerMetrics.chatTitle, .semibold))
@@ -379,7 +379,7 @@ struct AeroDrawer: View {
                 // The row updates from the tap, not from the next presentation.
                 if let index = recents.firstIndex(where: { $0.id == recent.id }) {
                     recents[index].pinned = next
-                    recents[index].symbol = DrawerTime.symbol(pinned: next)
+                    recents[index].symbol = DrawerTopic.iconName(title: recents[index].title, pinned: next)
                 }
             } label: {
                 Label(recent.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
@@ -407,16 +407,19 @@ struct AeroDrawer: View {
         }
     }
 
-    private func disc(_ symbol: String) -> some View {
+    /// The disc holds the icon family's own glyph — the same geometry Android
+    /// draws — rather than an SF Symbol. `GsIconView` had no caller before this:
+    /// the iOS target shipped 12,000 lines of icon data and drew none of it, so
+    /// the two apps had two icon languages.
+    private func disc(_ icon: GsIconPaths) -> some View {
         ZStack {
             Circle()
                 .fill(Color.white.opacity(scheme == .dark ? 0.10 : 0.62))
                 .overlay(Circle().strokeBorder(
                     Color.white.opacity(scheme == .dark ? 0.16 : 0.75), lineWidth: 1))
                 .frame(width: DrawerMetrics.disc, height: DrawerMetrics.disc)
-            Image(systemName: symbol)
-                .font(Aero.specFont(16))
-                .foregroundColor(Aero.text.opacity(0.75))
+            GsIconView(icon, size: DrawerMetrics.discGlyph,
+                       color: Aero.text.opacity(0.75))
         }
     }
 
@@ -435,11 +438,24 @@ struct AeroDrawer: View {
             recents = Array(fixture.recents.prefix(4))
             return
         }
-        recents = ConversationStore.shared.activeConversations.prefix(4).map { conversation in
+        recents = localRecents()
+        // The drawer used to read ONLY the local store, so a chat the server had
+        // auto-titled still read "New chat" here until something else refetched.
+        // One pull per presentation, then the rows are rebuilt from the merged
+        // store; a failed pull leaves the local rows exactly as they were.
+        Task {
+            guard await store.syncFromServer(limit: 30) else { return }
+            recents = localRecents()
+        }
+    }
+
+    /// The four newest local rows, as drawer rows.
+    private func localRecents() -> [DrawerRecent] {
+        ConversationStore.shared.activeConversations.prefix(4).map { conversation in
             let title = gsConversationTitle(conversation.title)
             return DrawerRecent(id: conversation.id, title: title,
                                 timestamp: DrawerTime.relative(iso: conversation.updatedAt),
-                                symbol: DrawerTime.symbol(pinned: conversation.pinned),
+                                symbol: DrawerTopic.iconName(title: title, pinned: conversation.pinned),
                                 pinned: conversation.pinned)
         }
     }
