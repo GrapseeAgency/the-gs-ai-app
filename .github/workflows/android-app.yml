@@ -822,7 +822,7 @@ jobs:
           # moved out of the source set, filtered away -- the total still looks
           # healthy and the drawer's behaviour is untested again. Named, counted,
           # fatal.
-          for spec in DrawerInteractionTest:6 DrawerIconTest:3; do
+          for spec in DrawerInteractionTest:6 DrawerIconTest:9; do
             cls=${spec%%:*}; want=${spec##*:}
             xml=$(ls "$RESULTS"/TEST-*"$cls".xml 2>/dev/null | head -1 || true)
             if [ -z "$xml" ]; then
