@@ -178,6 +178,12 @@ MANIFEST = [
         (304, 196), (456, 294), 1.5, "explore",
         "Featured journey card: the reference's Kyoto pagoda scene fills the "
         "card's right side under a pearl veil."),
+    Art("gs_explore_backdrop", "GSExploreBackdrop", "explore/gs-explore-backdrop.png",
+        (590, 1278), (1179, 2556), 2.2, "explore",
+        "Explore's own backdrop: the Home pearl world with the reference's "
+        "iridescent bubbles composited in from the authored mock (hero "
+        "cluster top-right, the giant right-edge bubble, the bottom-left "
+        "pearl) — the page reads as luminous as the reference does."),
 ]
 
 

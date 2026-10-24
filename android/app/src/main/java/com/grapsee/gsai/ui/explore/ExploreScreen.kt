@@ -6,6 +6,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
+import androidx.compose.runtime.composed
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -58,8 +65,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.SettingsStore
-import com.grapsee.gsai.ui.components.GsGlassRole
-import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.components.ReferenceBackdrop
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsFonts
@@ -295,7 +300,7 @@ private fun ExploreHeader(
         Box(
             Modifier
                 .size(40.dp)
-                .gsGlass(role = GsGlassRole.FloatingControl, shape = CircleShape)
+                .exploreGlass(shape = CircleShape, elevation = 8.dp)
                 .clickable(role = Role.Button, onClickLabel = if (searchOpen) "Close search" else "Open search") {
                     onToggleSearch()
                 },
@@ -323,7 +328,7 @@ private fun SearchField(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 4.dp)
-            .gsGlass(role = GsGlassRole.FloatingControl, shape = RoundedCornerShape(24.dp))
+            .exploreGlass(shape = RoundedCornerShape(24.dp), elevation = 10.dp)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -376,7 +381,7 @@ private fun HeroCard(
     Box(
         Modifier
             .fillMaxWidth()
-            .gsGlass(role = GsGlassRole.CardLight, shape = RoundedCornerShape(26.dp)),
+            .exploreGlass(shape = RoundedCornerShape(26.dp), elevation = 14.dp),
     ) {
         // The reference's hero: pearl on the left where the copy sits, a
         // The reference's OWN iridescent bubbles carry the card's right side:
@@ -446,8 +451,22 @@ private fun HeroCard(
             Spacer(Modifier.height(14.dp))
             Row(
                 Modifier
+                    .shadow(
+                        elevation = 10.dp,
+                        shape = RoundedCornerShape(18.dp),
+                        ambientColor = Color(0x2EEDBEA4),
+                        spotColor = Color(0x59EB9E72),
+                    )
                     .background(
                         Brush.horizontalGradient(listOf(ExploreTones.CtaTop, ExploreTones.CtaBottom)),
+                        RoundedCornerShape(18.dp),
+                    )
+                    .border(
+                        1.dp,
+                        Brush.verticalGradient(
+                            0f to Color.White.copy(alpha = 0.90f),
+                            1f to Color.White.copy(alpha = 0.35f),
+                        ),
                         RoundedCornerShape(18.dp),
                     )
                     .clickable(role = Role.Button, onClickLabel = "Explore all tools") { onExploreAll() }
@@ -494,12 +513,27 @@ private fun CategoryChips(
                 Modifier
                     .then(
                         if (active) {
-                            Modifier.background(
-                                Brush.horizontalGradient(listOf(ExploreTones.Peach, ExploreTones.PeachDeep)),
-                                RoundedCornerShape(17.dp),
-                            )
+                            Modifier
+                                .shadow(
+                                    elevation = 8.dp,
+                                    shape = RoundedCornerShape(17.dp),
+                                    ambientColor = Color(0x2EEDBEA4),
+                                    spotColor = Color(0x59EB9E72),
+                                )
+                                .background(
+                                    Brush.horizontalGradient(listOf(ExploreTones.Peach, ExploreTones.PeachDeep)),
+                                    RoundedCornerShape(17.dp),
+                                )
+                                .border(
+                                    1.dp,
+                                    Brush.verticalGradient(
+                                        0f to Color.White.copy(alpha = 0.85f),
+                                        1f to Color.White.copy(alpha = 0.30f),
+                                    ),
+                                    RoundedCornerShape(17.dp),
+                                )
                         } else {
-                            Modifier.gsGlass(role = GsGlassRole.FloatingControl, shape = RoundedCornerShape(17.dp))
+                            Modifier.exploreGlass(shape = RoundedCornerShape(17.dp), elevation = 6.dp)
                         },
                     )
                     .clickable(role = Role.Button, onClickLabel = cat.label) { onSelect(cat) }
@@ -572,23 +606,11 @@ private fun ToolCard(
 ) {
     Column(
         Modifier
-            .gsGlass(role = GsGlassRole.CardLight, shape = RoundedCornerShape(20.dp))
+            .exploreGlass(shape = RoundedCornerShape(20.dp))
             .clickable(role = Role.Button, onClickLabel = tool.title) { onOpen() }
             .padding(14.dp),
     ) {
-        Box(
-            Modifier
-                .size(46.dp)
-                .background(tool.tone.bg, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                exploreIcon(tool.icon),
-                contentDescription = null,
-                tint = tool.tone.fg,
-                modifier = Modifier.size(20.dp),
-            )
-        }
+        ExploreIconCircle(tool = tool, circle = 46.dp, glyph = 20.dp)
         Spacer(Modifier.height(10.dp))
         Text(
             tool.title,
@@ -632,24 +654,12 @@ private fun PromptRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .gsGlass(role = GsGlassRole.CardLight, shape = RoundedCornerShape(18.dp))
+            .exploreGlass(shape = RoundedCornerShape(18.dp), elevation = 9.dp)
             .clickable(role = Role.Button, onClickLabel = tool.title) { onOpen() }
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier
-                .size(40.dp)
-                .background(tool.tone.bg, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                exploreIcon(tool.icon),
-                contentDescription = null,
-                tint = tool.tone.fg,
-                modifier = Modifier.size(18.dp),
-            )
-        }
+        ExploreIconCircle(tool = tool, circle = 40.dp, glyph = 18.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -687,7 +697,7 @@ private fun CollectionCard(
     Column(
         Modifier
             .width(168.dp)
-            .gsGlass(role = GsGlassRole.CardLight, shape = RoundedCornerShape(20.dp))
+            .exploreGlass(shape = RoundedCornerShape(20.dp))
             .clickable(role = Role.Button, onClickLabel = collection.title) { onOpen() },
     ) {
         Box(
@@ -767,7 +777,7 @@ private fun FeaturedCard(
     Box(
         Modifier
             .fillMaxWidth()
-            .gsGlass(role = GsGlassRole.CardLight, shape = RoundedCornerShape(20.dp))
+            .exploreGlass(shape = RoundedCornerShape(20.dp))
             .clickable(role = Role.Button, onClickLabel = ExploreCatalog.featured.title) { onOpen() },
     ) {
         // The reference's featured card: the scene fills the card's right
@@ -805,7 +815,27 @@ private fun FeaturedCard(
             Box(
                 Modifier
                     .size(40.dp)
-                    .background(ExploreCatalog.featured.tone.bg, CircleShape),
+                    .shadow(
+                        elevation = 7.dp,
+                        shape = CircleShape,
+                        ambientColor = Color(0x2EEDBEA4),
+                        spotColor = Color(0x4DE29C7C),
+                    )
+                    .background(
+                        Brush.verticalGradient(
+                            0f to lerp(ExploreCatalog.featured.tone.bg, Color.White, 0.45f),
+                            1f to ExploreCatalog.featured.tone.bg,
+                        ),
+                        CircleShape,
+                    )
+                    .border(
+                        1.2.dp,
+                        Brush.verticalGradient(
+                            0f to Color.White.copy(alpha = 0.95f),
+                            1f to Color.White.copy(alpha = 0.40f),
+                        ),
+                        CircleShape,
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -871,7 +901,7 @@ private fun ExploreComposer(
             .padding(horizontal = 16.dp)
             .navigationBarsPadding()
             .padding(bottom = 10.dp, top = 4.dp)
-            .gsGlass(role = GsGlassRole.FloatingControl, shape = RoundedCornerShape(26.dp))
+            .exploreGlass(shape = RoundedCornerShape(26.dp), elevation = 14.dp)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -910,8 +940,25 @@ private fun ExploreComposer(
         Box(
             Modifier
                 .size(42.dp)
+                .shadow(
+                    elevation = 10.dp,
+                    shape = CircleShape,
+                    ambientColor = Color(0x2EEDBEA4),
+                    spotColor = Color(0x66EB9E72),
+                )
                 .background(
-                    Brush.linearGradient(listOf(ExploreTones.PeachPale, ExploreTones.Peach)),
+                    Brush.linearGradient(
+                        0f to Color(0xFFFFDDB8),
+                        1f to ExploreTones.Peach,
+                    ),
+                    CircleShape,
+                )
+                .border(
+                    1.4.dp,
+                    Brush.linearGradient(
+                        0f to Color.White.copy(alpha = 0.90f),
+                        1f to Color.White.copy(alpha = 0.40f),
+                    ),
                     CircleShape,
                 )
                 .then(
@@ -950,7 +997,7 @@ private fun EmptySearch(
     Column(
         Modifier
             .fillMaxWidth()
-            .gsGlass(role = GsGlassRole.CardLight, shape = RoundedCornerShape(20.dp))
+            .exploreGlass(shape = RoundedCornerShape(20.dp))
             .padding(18.dp),
     ) {
         Text(
@@ -971,8 +1018,22 @@ private fun EmptySearch(
         Spacer(Modifier.height(12.dp))
         Row(
             Modifier
+                .shadow(
+                    elevation = 9.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    ambientColor = Color(0x2EEDBEA4),
+                    spotColor = Color(0x59EB9E72),
+                )
                 .background(
                     Brush.horizontalGradient(listOf(ExploreTones.CtaTop, ExploreTones.CtaBottom)),
+                    RoundedCornerShape(16.dp),
+                )
+                .border(
+                    1.dp,
+                    Brush.verticalGradient(
+                        0f to Color.White.copy(alpha = 0.90f),
+                        1f to Color.White.copy(alpha = 0.35f),
+                    ),
                     RoundedCornerShape(16.dp),
                 )
                 .clickable(role = Role.Button, onClickLabel = "Ask about ${query.trim()}") { onAsk() }
@@ -990,6 +1051,86 @@ private fun EmptySearch(
             Spacer(Modifier.width(6.dp))
             Icon(GsIcons.ArrowRight, contentDescription = null, tint = inkBody, modifier = Modifier.size(13.dp))
         }
+    }
+}
+
+/**
+ * The reference's glass is RICH: every panel is a warm gradient fill with the
+ * bloom showing through, a luminous rim that brightens toward the top-left,
+ * and a soft warm shadow. Flat fills read as plastic next to it — the mock's
+ * buttons, icon circles and cards all carry this treatment, and so does
+ * everything on this page.
+ */
+@Composable
+private fun Modifier.exploreGlass(
+    shape: Shape,
+    elevation: Dp = 12.dp,
+): Modifier = composed {
+    val isDark = LocalGsIsDark.current
+    this
+        .shadow(
+            elevation = elevation,
+            shape = shape,
+            ambientColor = Color(0x2EEDBEA4),
+            spotColor = Color(0x55E29C7C),
+        )
+        .clip(shape)
+        .background(
+            Brush.linearGradient(
+                0f to Color(0xFFFFFAF6).copy(alpha = if (isDark) 0.90f else 0.97f),
+                1f to Color(0xFFFCEDE5).copy(alpha = if (isDark) 0.80f else 0.88f),
+                start = Offset.Zero,
+                end = Offset.Infinite,
+            ),
+            shape,
+        )
+        .border(
+            1.dp,
+            Brush.linearGradient(
+                0f to Color.White.copy(alpha = 0.95f),
+                1f to Color.White.copy(alpha = 0.30f),
+            ),
+            shape,
+        )
+}
+
+/** The icon circle: tinted gradient, white rim, its own soft glow. */
+@Composable
+private fun ExploreIconCircle(
+    tool: ExploreTool,
+    circle: Dp,
+    glyph: Dp,
+) {
+    val bgLight = lerp(tool.tone.bg, Color.White, 0.45f)
+    Box(
+        Modifier
+            .size(circle)
+            .shadow(
+                elevation = 7.dp,
+                shape = CircleShape,
+                ambientColor = Color(0x2EEDBEA4),
+                spotColor = Color(0x4DE29C7C),
+            )
+            .background(
+                Brush.verticalGradient(0f to bgLight, 1f to tool.tone.bg),
+                CircleShape,
+            )
+            .border(
+                1.2.dp,
+                Brush.verticalGradient(
+                    0f to Color.White.copy(alpha = 0.95f),
+                    1f to Color.White.copy(alpha = 0.40f),
+                ),
+                CircleShape,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            exploreIcon(tool.icon),
+            contentDescription = null,
+            tint = tool.tone.fg,
+            modifier = Modifier.size(glyph),
+        )
     }
 }
 

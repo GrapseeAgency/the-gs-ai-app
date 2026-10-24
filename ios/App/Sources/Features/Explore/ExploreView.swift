@@ -200,7 +200,13 @@ struct ExploreView: View {
 
     var body: some View {
         ZStack {
-            Aero.background
+            // Explore carries its own backdrop: the Home pearl world with the
+            // reference's iridescent bubbles composited in.
+            Image("GSExploreBackdrop")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
             VStack(spacing: 0) {
                 header
                 if searchOpen { searchField.transition(.opacity.combined(with: .move(edge: .top))) }
@@ -252,9 +258,7 @@ struct ExploreView: View {
                 }
             } label: {
                 NexlyGlyph(name: "search", size: 18, color: Aero.text)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(Aero.glassSurface))
-                    .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1))
+                    .modifier(IconCircleStyle(bg: Color(red: 0.996, green: 0.953, blue: 0.933), diameter: 40))
             }
             .accessibilityLabel(searchOpen ? "Close search" : "Open search")
         }
@@ -282,8 +286,7 @@ struct ExploreView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .background(Capsule().fill(Aero.glassSurface))
-        .overlay(Capsule().strokeBorder(.white.opacity(0.55), lineWidth: 1))
+        .modifier(ExploreGlass(corner: 22, elevation: 8))
         .padding(.horizontal, 20)
         .padding(.bottom, 4)
     }
@@ -331,6 +334,8 @@ struct ExploreView: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
                         .background(Capsule().fill(LinearGradient(colors: [ExplorePalette.ctaTop, ExplorePalette.ctaBottom], startPoint: .leading, endPoint: .trailing)))
+                        .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                        .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 9, x: 0, y: 5)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Explore all tools")
@@ -383,6 +388,8 @@ struct ExploreView: View {
                                 Group {
                                     if active {
                                         Capsule().fill(LinearGradient(colors: [ExplorePalette.peach, ExplorePalette.peachDeep], startPoint: .leading, endPoint: .trailing))
+                                            .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.85), .white.opacity(0.30)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                                            .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 8, x: 0, y: 4)
                                     } else {
                                         Capsule().fill(Aero.glassSurface)
                                     }
@@ -441,10 +448,8 @@ struct ExploreView: View {
             onOpenChat(.chatPrefill(tool.prompt))
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                Circle()
-                    .fill(tool.bg)
-                    .frame(width: 46, height: 46)
-                    .overlay(NexlyGlyph(name: tool.glyph, size: 19, color: tool.fg))
+                NexlyGlyph(name: tool.glyph, size: 19, color: tool.fg)
+                    .modifier(IconCircleStyle(bg: tool.bg, diameter: 46))
                 Text(tool.title)
                     .font(Aero.bodyMedium().weight(.semibold))
                     .foregroundStyle(Aero.text)
@@ -461,8 +466,7 @@ struct ExploreView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 20).fill(Aero.glassSurface))
-            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.5), lineWidth: 1))
+            .modifier(ExploreGlass(corner: 20))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(tool.title): \(tool.subtitle)")
@@ -486,10 +490,8 @@ struct ExploreView: View {
             onOpenChat(.chatPrefill(tool.prompt))
         } label: {
             HStack(spacing: 12) {
-                Circle()
-                    .fill(tool.bg)
-                    .frame(width: 40, height: 40)
-                    .overlay(NexlyGlyph(name: tool.glyph, size: 17, color: tool.fg))
+                NexlyGlyph(name: tool.glyph, size: 17, color: tool.fg)
+                    .modifier(IconCircleStyle(bg: tool.bg, diameter: 40))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(tool.title)
                         .font(Aero.bodyMedium().weight(.semibold))
@@ -504,8 +506,7 @@ struct ExploreView: View {
                 NexlyGlyph(name: "chevron-right", size: 14, color: Aero.textMuted)
             }
             .padding(12)
-            .background(RoundedRectangle(cornerRadius: 18).fill(Aero.glassSurface))
-            .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.5), lineWidth: 1))
+            .modifier(ExploreGlass(corner: 18, elevation: 9))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(tool.title): \(tool.subtitle)")
@@ -550,9 +551,8 @@ struct ExploreView: View {
                                 .padding(.vertical, 10)
                             }
                             .frame(width: 168)
-                            .background(RoundedRectangle(cornerRadius: 20).fill(Aero.glassSurface))
-                            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.5), lineWidth: 1))
                             .clipShape(RoundedRectangle(cornerRadius: 20))
+                            .modifier(ExploreGlass(corner: 20))
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("\(collection.title): \(collection.subtitle)")
@@ -608,10 +608,8 @@ struct ExploreView: View {
                     }
                 }
                 HStack(spacing: 12) {
-                    Circle()
-                        .fill(ExploreCatalog.featured.bg)
-                        .frame(width: 40, height: 40)
-                        .overlay(NexlyGlyph(name: ExploreCatalog.featured.glyph, size: 17, color: ExploreCatalog.featured.fg))
+                    NexlyGlyph(name: ExploreCatalog.featured.glyph, size: 17, color: ExploreCatalog.featured.fg)
+                        .modifier(IconCircleStyle(bg: ExploreCatalog.featured.bg, diameter: 40))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ExploreCatalog.featured.title)
                             .font(Aero.body().weight(.semibold))
@@ -629,8 +627,8 @@ struct ExploreView: View {
                 }
                 .padding(12)
             }
-                .background(RoundedRectangle(cornerRadius: 20).fill(Aero.glassSurface))
-                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.5), lineWidth: 1))
+                .modifier(ExploreGlass(corner: 20))
+
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(ExploreCatalog.featured.title): \(ExploreCatalog.featured.subtitle)")
@@ -664,14 +662,15 @@ struct ExploreView: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 9)
                         .background(Capsule().fill(LinearGradient(colors: [ExplorePalette.ctaTop, ExplorePalette.ctaBottom], startPoint: .leading, endPoint: .trailing)))
+                        .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                        .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 9, x: 0, y: 5)
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 6)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(18)
-                .background(RoundedRectangle(cornerRadius: 20).fill(Aero.glassSurface))
-                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.5), lineWidth: 1))
+                .modifier(ExploreGlass(corner: 20))
             } else {
                 VStack(spacing: 8) {
                     ForEach(results) { tool in
@@ -688,6 +687,83 @@ struct ExploreView: View {
         ExploreComposerBar { text in
             onOpenChat(.chatAutoSend(text))
         }
+    }
+}
+
+
+// MARK: - The reference's RICH glass — gradient fill, luminous rim, warm shadow
+
+private struct ExploreGlass: ViewModifier {
+    var corner: CGFloat
+    var elevation: CGFloat = 12
+
+    func body(content: Content) -> some View {
+        content
+            .shadow(
+                color: Color(red: 0.886, green: 0.612, blue: 0.486).opacity(0.33),
+                radius: elevation, x: 0, y: elevation * 0.5
+            )
+            .background(
+                RoundedRectangle(cornerRadius: corner)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 1.0, green: 0.980, blue: 0.965).opacity(0.97),
+                                Color(red: 0.988, green: 0.929, blue: 0.898).opacity(0.88),
+                            ],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: corner)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(0.95), .white.opacity(0.30)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: corner))
+    }
+}
+
+private struct IconCircleStyle: ViewModifier {
+    var bg: Color
+    var diameter: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .frame(width: diameter, height: diameter)
+            .background(
+                Circle().fill(
+                    LinearGradient(
+                        colors: [ExplorePalette.iconLight(bg), bg],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+            )
+            .overlay(
+                Circle().strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.95), .white.opacity(0.40)],
+                        startPoint: .top, endPoint: .bottom
+                    ),
+                    lineWidth: 1.2
+                )
+            )
+            .shadow(color: Color(red: 0.886, green: 0.612, blue: 0.486).opacity(0.30), radius: 7, x: 0, y: 4)
+    }
+}
+
+private extension ExplorePalette {
+    static func iconLight(_ c: Color) -> Color {
+        Color(
+            red: c.red * 0.55 + 0.45,
+            green: c.green * 0.55 + 0.45,
+            blue: c.blue * 0.55 + 0.45
+        )
     }
 }
 
@@ -711,17 +787,24 @@ struct ExploreComposerBar: View {
                 .onSubmit(send)
                 .accessibilityIdentifier("explore-composer-input")
             Button(action: send) {
-                NexlyGlyph(name: "send", size: 17, color: canSend ? .white : Aero.textMuted)
-                    .frame(width: 42, height: 42)
-                    .background(
-                        Circle().fill(
+                ZStack {
+                    Circle()
+                        .fill(
                             LinearGradient(
-                                colors: [ExplorePalette.peachPale, ExplorePalette.peach],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                                colors: [Color(red: 1.0, green: 0.867, blue: 0.722), ExplorePalette.peach],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
                             )
                         )
+                    NexlyGlyph(name: "send", size: 17, color: canSend ? .white : Aero.textMuted)
+                }
+                .frame(width: 42, height: 42)
+                .overlay(
+                    Circle().strokeBorder(
+                        LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.40)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        lineWidth: 1.4
                     )
+                )
+                .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.40), radius: 10, x: 0, y: 5)
             }
             .buttonStyle(.plain)
             .disabled(!canSend)
@@ -729,8 +812,7 @@ struct ExploreComposerBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(Capsule().fill(Aero.glassSurface))
-        .overlay(Capsule().strokeBorder(.white.opacity(0.55), lineWidth: 1))
+        .modifier(ExploreGlass(corner: 26, elevation: 14))
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 10)
