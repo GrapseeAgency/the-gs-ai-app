@@ -353,6 +353,10 @@ class ChatRepository(
         val accumulated = StringBuilder()
         try {
             scratchId = api.createConversation(title = "Translation").id
+            // The title write inherits this turn's scope: it cannot outlive the
+            // stream that carried it, and it needs a scope the callback can reach
+            // (a non-suspend lambda cannot read suspend-only coroutineContext).
+            val turnScope = CoroutineScope(coroutineContext)
             api.sendMessageStream(
                 conversationId = scratchId,
                 content = prompt,
@@ -361,7 +365,7 @@ class ChatRepository(
                     onDelta(delta)
                 },
                 onConversationEvent = { raw ->
-                    CoroutineScope(coroutineContext).launch { applyConversationEvent(raw) }
+                    turnScope.launch { applyConversationEvent(raw) }
                 },
                 onDone = { }
             )
@@ -565,6 +569,10 @@ class ChatRepository(
         var receivedAnyEvent = false
         val sendStartedAtMs = System.currentTimeMillis()
         try {
+            // The title write inherits this turn's scope: it cannot outlive the
+            // stream that carried it, and it needs a scope the callback can reach
+            // (a non-suspend lambda cannot read suspend-only coroutineContext).
+            val turnScope = CoroutineScope(coroutineContext)
             api.sendMessageStream(
                 conversationId = activeId,
                 content = content,
@@ -582,7 +590,7 @@ class ChatRepository(
                 },
                 onStatus = { s -> receivedAnyEvent = true; onStatus(s) },
                 onConversationEvent = { raw ->
-                    CoroutineScope(coroutineContext).launch { applyConversationEvent(raw) }
+                    turnScope.launch { applyConversationEvent(raw) }
                 },
                 onMode = { m -> receivedAnyEvent = true; onMode(m) },
                 onSearchEvent = { e -> receivedAnyEvent = true; onSearchEvent(e) },
