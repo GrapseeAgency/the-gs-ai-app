@@ -80,7 +80,7 @@ import kotlin.math.min
  * Every card opens a REAL conversation through [onOpenChat]; Explore's CTA
  * leads to Discover; nothing on either page is decorative.
  *
- * The artwork is authored vector art (assets/art/*.svg → rendered PNGs), and
+ * The artwork is authored vector art (assets/artExplore svg sources rendered to PNG), and
  * every panel carries the reference's rich glass: gradient fill, luminous
  * rim, warm shadow.
  */
