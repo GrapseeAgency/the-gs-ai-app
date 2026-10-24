@@ -347,6 +347,10 @@ jobs:
             test -s "$DIR/nexly-explore-ios-$w.png" \
               || { echo "::error::nexly-explore-ios-$w.png missing — the Explore render harness did not produce it"; exit 1; }
           done
+          for w in 393x852 393x1400; do
+            test -s "$DIR/nexly-discover-ios-$w.png" \
+              || { echo "::error::nexly-discover-ios-$w.png missing — the Discover render harness did not produce it"; exit 1; }
+          done
           test -s "$DIR/nexly-explore-ios-search-393x852.png" \
             || { echo "::error::the Explore search-state render was not produced"; exit 1; }
 

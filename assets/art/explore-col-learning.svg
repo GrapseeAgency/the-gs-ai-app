@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 215">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFE9D8"/>
+      <stop offset="0.6" stop-color="#FDDCC4"/>
+      <stop offset="1" stop-color="#F9CDB4"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="70%" cy="30%" r="60%">
+      <stop offset="0" stop-color="#FFF7E8" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#FFF7E8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="petalA" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFD9B4"/>
+      <stop offset="1" stop-color="#F9B184"/>
+    </linearGradient>
+    <linearGradient id="petalB" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFC99B"/>
+      <stop offset="1" stop-color="#F29E68"/>
+    </linearGradient>
+    <linearGradient id="petalC" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFF1DC"/>
+      <stop offset="1" stop-color="#FFD3A8"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="420" height="215" fill="url(#sky)"/>
+  <ellipse cx="300" cy="60" rx="200" ry="110" fill="url(#sun)"/>
+
+  <!-- the orange lotus, large, off-centre -->
+  <g transform="translate(180,150)">
+    <!-- back sweep -->
+    <path d="M 0 0 C -90 -10, -150 24, -172 62 C -110 40, -52 34, -6 44 Z" fill="url(#petalA)" opacity="0.9"/>
+    <path d="M 0 0 C 90 -10, 150 24, 172 62 C 110 40, 52 34, 6 44 Z" fill="url(#petalA)" opacity="0.9"/>
+    <!-- mid petals -->
+    <path d="M -8 2 C -60 -20, -110 -14, -138 22 C -92 14, -48 20, -8 38 Z" fill="url(#petalB)"/>
+    <path d="M 8 2 C 60 -20, 110 -14, 138 22 C 92 14, 48 20, 8 38 Z" fill="url(#petalB)"/>
+    <!-- standing petals -->
+    <path d="M -10 0 C -48 -30, -70 -68, -60 -106 C -28 -76, -6 -40, 2 0 Z" fill="url(#petalB)"/>
+    <path d="M 10 0 C 48 -30, 70 -68, 60 -106 C 28 -76, 6 -40, -2 0 Z" fill="url(#petalB)"/>
+    <!-- front light petals -->
+    <path d="M 0 -4 C -20 -46, -14 -84, 4 -112 C 22 -84, 20 -46, 8 -4 Z" fill="url(#petalC)"/>
+    <path d="M -4 10 C -36 2, -62 14, -74 36 C -44 32, -16 24, 2 12 Z" fill="url(#petalC)"/>
+    <path d="M 4 10 C 36 2, 62 14, 74 36 C 44 32, 16 24, -2 12 Z" fill="url(#petalC)"/>
+    <ellipse cx="0" cy="8" rx="15" ry="9" fill="#FFF7EA"/>
+  </g>
+
+  <!-- drifting light -->
+  <g fill="#FFF3DC" opacity="0.85">
+    <circle cx="70" cy="52" r="3"/>
+    <circle cx="360" cy="120" r="2.6"/>
+  </g>
+  <path d="M 330 54 l 5 12 12 5 -12 5 -5 12 -5 -12 -12 -5 12 -5 Z" fill="#FFF6E8" opacity="0.9"/>
+</svg>

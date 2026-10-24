@@ -638,7 +638,7 @@ jobs:
           # The full-page capture keeps the -full- name (chat-harness
           # convention). Roborazzi flushes asynchronously, so wait for each
           # file to be non-empty instead of failing on a racing check.
-          for name in nexly-explore-full-393x1400 nexly-explore-393x852 nexly-explore-411x914 nexly-explore-360x780 nexly-explore-search-393x852 nexly-explore-search-empty-393x852; do
+          for name in nexly-explore-full-393x1400 nexly-explore-393x852 nexly-explore-411x914 nexly-explore-360x780 nexly-discover-full-393x1400 nexly-discover-393x852 nexly-explore-search-393x852 nexly-explore-search-empty-393x852; do
             for attempt in 1 2 3 4 5 6; do
               [ -s "$SHOTS/$name.png" ] && break
               sleep 5

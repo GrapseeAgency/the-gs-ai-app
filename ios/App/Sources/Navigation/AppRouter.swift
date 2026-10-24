@@ -29,6 +29,7 @@ enum AeroRoute: Hashable {
     case chatSearch
     case travelAgent
     case explore
+    case discover
 
     // Section roots — reached from the drawer (no tab bar anywhere)
     case chats
@@ -200,7 +201,8 @@ struct AeroDestinations: ViewModifier {
             case .chatArchive: ArchivedChatsView()
             case .chatSearch: ChatSearchView()
             case .travelAgent: TravelAgentView(onBack: { router.path.removeLast() }, onSendToChat: { prompt in router.path.append(.chatPrefill(prompt)) })
-            case .explore: ExploreView(onOpenChat: { router.path.append($0) })
+            case .explore: ExploreView(onOpenChat: { router.path.append($0) }, onOpenDiscover: { router.path.append(.discover) })
+            case .discover: DiscoverView(onOpenChat: { router.path.append($0) })
 
             // Section roots (drawer)
             case .chats: ChatsListView()

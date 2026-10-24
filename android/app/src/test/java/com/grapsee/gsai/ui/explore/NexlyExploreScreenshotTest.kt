@@ -15,12 +15,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The Explore AI page, rendered on the JVM: the REAL screen — hero, chips,
- * search, Featured Tools grid, Popular rows, Collections, Featured journey,
- * composer — over the same pearl backdrop Home mounts. No mockup.
- *
- * The references are docs/reference/explore/explore-*.png; the captures sit
- * beside the chat renders in the nexly-chat-render-android artifact.
+ * BOTH Explore pages, rendered on the JVM: the Explore page (hero + Popular
+ * Tools + Collections + Featured) and the Discover page (EXPLORE hero + chips
+ * + Featured Tools + Popular + composer) — the real composables over the
+ * authored backdrop. No mockup.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -32,71 +30,66 @@ class NexlyExploreScreenshotTest {
         assumeTrue(System.getProperty("gs.screenshots") == "true")
     }
 
-    @Composable
-    private fun explorePage() {
-        ExploreScreen(
-            onOpenChat = { _, _ -> },
-            onBack = {},
-        )
-    }
-
-    private fun shoot(path: String) {
-        compose.setContent { TheGsAiTheme(darkTheme = false) { explorePage() } }
+    private fun shoot(path: String, content: @Composable () -> Unit) {
+        compose.setContent { TheGsAiTheme(darkTheme = false) { content() } }
         compose.onRoot().captureRoboImage(path)
     }
 
     @Test
     @Config(sdk = [34], qualifiers = "w393dp-h1400dp-xxhdpi")
     fun exploreFullPageAtReferenceHeight() =
-        shoot("build/screenshots/nexly-explore-full-393x1400.png")
+        shoot("build/screenshots/nexly-explore-full-393x1400.png") {
+            ExploreScreen(onOpenChat = { _, _ -> }, onOpenDiscover = {}, onBack = {})
+        }
 
     @Test
     @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
     fun exploreAtSheetSize() =
-        shoot("build/screenshots/nexly-explore-393x852.png")
+        shoot("build/screenshots/nexly-explore-393x852.png") {
+            ExploreScreen(onOpenChat = { _, _ -> }, onOpenDiscover = {}, onBack = {})
+        }
 
     @Test
     @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
     fun exploreAtPixel6() =
-        shoot("build/screenshots/nexly-explore-411x914.png")
+        shoot("build/screenshots/nexly-explore-411x914.png") {
+            ExploreScreen(onOpenChat = { _, _ -> }, onOpenDiscover = {}, onBack = {})
+        }
 
     @Test
     @Config(sdk = [34], qualifiers = "w360dp-h780dp-xxhdpi")
     fun exploreAtCompact() =
-        shoot("build/screenshots/nexly-explore-360x780.png")
+        shoot("build/screenshots/nexly-explore-360x780.png") {
+            ExploreScreen(onOpenChat = { _, _ -> }, onOpenDiscover = {}, onBack = {})
+        }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h1400dp-xxhdpi")
+    fun discoverFullPage() =
+        shoot("build/screenshots/nexly-discover-full-393x1400.png") {
+            DiscoverScreen(onOpenChat = { _, _ -> }, onBack = {})
+        }
 
     @Test
     @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
-    fun exploreSearchOpen() {
-        compose.setContent {
-            TheGsAiTheme(darkTheme = false) {
-                // The live results state: field open, real query filtering the
-                // real catalog into rows.
-                ExploreScreen(
-                    onOpenChat = { _, _ -> },
-                    onBack = {},
-                    initialQuery = "study",
-                    initialSearchOpen = true,
-                )
-            }
+    fun discoverAtSheetSize() =
+        shoot("build/screenshots/nexly-discover-393x852.png") {
+            DiscoverScreen(onOpenChat = { _, _ -> }, onBack = {})
         }
-        compose.onRoot().captureRoboImage("build/screenshots/nexly-explore-search-393x852.png")
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun discoverSearchState() {
+        shoot("build/screenshots/nexly-explore-search-393x852.png") {
+            DiscoverScreen(onOpenChat = { _, _ -> }, onBack = {}, initialQuery = "study", initialSearchOpen = true)
+        }
     }
 
     @Test
     @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
-    fun exploreSearchEmpty() {
-        compose.setContent {
-            TheGsAiTheme(darkTheme = false) {
-                // The honest empty state: the query becomes the conversation.
-                ExploreScreen(
-                    onOpenChat = { _, _ -> },
-                    onBack = {},
-                    initialQuery = "kintsugi",
-                    initialSearchOpen = true,
-                )
-            }
+    fun discoverSearchEmpty() {
+        shoot("build/screenshots/nexly-explore-search-empty-393x852.png") {
+            DiscoverScreen(onOpenChat = { _, _ -> }, onBack = {}, initialQuery = "kintsugi", initialSearchOpen = true)
         }
-        compose.onRoot().captureRoboImage("build/screenshots/nexly-explore-search-empty-393x852.png")
     }
 }

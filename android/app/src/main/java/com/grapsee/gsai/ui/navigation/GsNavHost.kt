@@ -59,6 +59,7 @@ import com.grapsee.gsai.ui.settings.ThemeCustomisationScreen
 import com.grapsee.gsai.ui.settings.VoiceSettingsScreen
 import com.grapsee.gsai.ui.specimen.GlassSpecimenScreen
 import com.grapsee.gsai.ui.voice.VoiceScreen
+import com.grapsee.gsai.ui.explore.DiscoverScreen
 import com.grapsee.gsai.ui.explore.ExploreScreen
 import com.grapsee.gsai.ui.home.HomeDashboardScreen
 import com.grapsee.gsai.ui.agents.TravelAgentScreen
@@ -272,6 +273,15 @@ fun GsNavHost(
         }
         composable(GsRoutes.EXPLORE) {
             ExploreScreen(
+                onOpenChat = { prompt, autoSend ->
+                    navController.navigate(GsRoutes.chat(null, prompt, autoSend))
+                },
+                onOpenDiscover = { open(GsRoutes.DISCOVER) },
+                onBack = back,
+            )
+        }
+        composable(GsRoutes.DISCOVER) {
+            DiscoverScreen(
                 onOpenChat = { prompt, autoSend ->
                     navController.navigate(GsRoutes.chat(null, prompt, autoSend))
                 },

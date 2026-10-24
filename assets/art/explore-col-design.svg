@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 215">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FBE3EF"/>
+      <stop offset="0.6" stop-color="#F8D9E6"/>
+      <stop offset="1" stop-color="#FCE9DE"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="42%" r="60%">
+      <stop offset="0" stop-color="#FFF4F8" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#FFF4F8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="petalBack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F9CFE3"/>
+      <stop offset="1" stop-color="#F3BBD6"/>
+    </linearGradient>
+    <linearGradient id="petalMid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FBC2DE"/>
+      <stop offset="1" stop-color="#F5AFCF"/>
+    </linearGradient>
+    <linearGradient id="petalFront" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FDEFF5"/>
+      <stop offset="1" stop-color="#F9CFE3"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="420" height="215" fill="url(#sky)"/>
+  <ellipse cx="210" cy="95" rx="240" ry="110" fill="url(#glow)"/>
+
+  <!-- distant petal silhouettes -->
+  <path d="M -20 190 C 60 120, 150 130, 210 190 Z" fill="#F5C3DC" opacity="0.5"/>
+  <path d="M 240 190 C 300 130, 390 125, 440 190 Z" fill="#F5C3DC" opacity="0.45"/>
+
+  <!-- the lotus: back petals -->
+  <g transform="translate(210,150)">
+    <path d="M 0 -6 C -58 -26, -118 -18, -150 22 C -100 10, -50 14, -6 34 Z" fill="url(#petalBack)"/>
+    <path d="M 0 -6 C 58 -26, 118 -18, 150 22 C 100 10, 50 14, 6 34 Z" fill="url(#petalBack)"/>
+    <path d="M -6 0 C -44 -44, -96 -50, -128 -22 C -86 -18, -46 0, -10 28 Z" fill="url(#petalMid)"/>
+    <path d="M 6 0 C 44 -44, 96 -50, 128 -22 C 86 -18, 46 0, 10 28 Z" fill="url(#petalMid)"/>
+    <!-- mid petals standing -->
+    <path d="M -8 4 C -40 -34, -60 -70, -52 -104 C -22 -76, -2 -40, 4 0 Z" fill="url(#petalMid)"/>
+    <path d="M 8 4 C 40 -34, 60 -70, 52 -104 C 22 -76, 2 -40, -4 0 Z" fill="url(#petalMid)"/>
+    <!-- front petals, lightest -->
+    <path d="M 0 -2 C -22 -40, -18 -78, 2 -104 C 22 -78, 24 -40, 8 -2 Z" fill="url(#petalFront)"/>
+    <path d="M -4 8 C -34 -2, -58 8, -72 30 C -44 28, -18 22, 0 10 Z" fill="url(#petalFront)"/>
+    <path d="M 4 8 C 34 -2, 58 8, 72 30 C 44 28, 18 22, 0 10 Z" fill="url(#petalFront)"/>
+    <!-- heart of the lotus -->
+    <ellipse cx="0" cy="6" rx="14" ry="8" fill="#FFF6FA"/>
+  </g>
+
+  <!-- drifting sparkles -->
+  <g fill="#FFFFFF" opacity="0.9">
+    <circle cx="70" cy="60" r="3"/>
+    <circle cx="352" cy="46" r="2.4"/>
+    <circle cx="300" cy="120" r="2"/>
+  </g>
+  <path d="M 130 44 l 4 10 10 4 -10 4 -4 10 -4 -10 -10 -4 10 -4 Z" fill="#FFF0F7"/>
+</svg>

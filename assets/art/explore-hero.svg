@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 699 570">
+  <defs>
+    <!-- pearl ground the bubbles float on -->
+    <radialGradient id="ground" cx="35%" cy="30%" r="95%">
+      <stop offset="0" stop-color="#FFF7F0"/>
+      <stop offset="0.55" stop-color="#FDEDE4"/>
+      <stop offset="1" stop-color="#F9E2DC"/>
+    </radialGradient>
+    <!-- the big glass bubble: white sheen into pink into lavender, fading out -->
+    <radialGradient id="bubbleA" cx="38%" cy="32%" r="80%">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.85"/>
+      <stop offset="0.35" stop-color="#FBD9EC" stop-opacity="0.55"/>
+      <stop offset="0.68" stop-color="#E3C6F2" stop-opacity="0.50"/>
+      <stop offset="0.92" stop-color="#D8BFF0" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#D8BFF0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bubbleB" cx="42%" cy="35%" r="78%">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.8"/>
+      <stop offset="0.4" stop-color="#FAD3E8" stop-opacity="0.5"/>
+      <stop offset="0.75" stop-color="#DEC9F4" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#DEC9F4" stop-opacity="0"/>
+    </radialGradient>
+    <!-- the peach core sphere -->
+    <radialGradient id="core" cx="36%" cy="30%" r="85%">
+      <stop offset="0" stop-color="#FFF6E8"/>
+      <stop offset="0.45" stop-color="#FFD5A4"/>
+      <stop offset="0.8" stop-color="#FFAE6E"/>
+      <stop offset="1" stop-color="#F89455"/>
+    </radialGradient>
+    <!-- flowing petal band -->
+    <linearGradient id="petal" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFD9BF" stop-opacity="0.95"/>
+      <stop offset="0.55" stop-color="#FBC9C2" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#F4B7D9" stop-opacity="0.45"/>
+    </linearGradient>
+    <linearGradient id="petal2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFE6D2" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#F7C2CE" stop-opacity="0.5"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="0.6" stop-color="#FFE9F4" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#E7D4F6" stop-opacity="0.2"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="699" height="570" fill="url(#ground)"/>
+
+  <!-- soft colour washes under everything -->
+  <ellipse cx="500" cy="150" rx="300" ry="220" fill="#F7CFE6" opacity="0.35"/>
+  <ellipse cx="180" cy="430" rx="260" ry="200" fill="#FBDCC3" opacity="0.4"/>
+
+  <!-- flowing petals: two sweeping bands under the bubbles -->
+  <path d="M 120 470 C 300 560, 520 520, 699 380 L 699 520 C 520 600, 300 590, 120 470 Z" fill="url(#petal)"/>
+  <path d="M 200 500 C 380 555, 560 500, 699 430 L 699 470 C 540 545, 360 570, 200 500 Z" fill="url(#petal2)" opacity="0.8"/>
+
+  <!-- second bubble, lower left, behind the big one -->
+  <circle cx="235" cy="300" r="150" fill="url(#bubbleB)"/>
+  <circle cx="235" cy="300" r="150" fill="none" stroke="url(#rim)" stroke-width="2.5"/>
+
+  <!-- the big bubble -->
+  <circle cx="430" cy="205" r="215" fill="url(#bubbleA)"/>
+  <circle cx="430" cy="205" r="215" fill="none" stroke="url(#rim)" stroke-width="3"/>
+  <!-- inner sheen arc, top-left -->
+  <path d="M 268 150 A 200 200 0 0 1 480 22" fill="none" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="7" stroke-linecap="round"/>
+  <!-- caustic shimmer inside the big bubble -->
+  <path d="M 330 330 C 380 300, 470 300, 540 340 C 470 355, 390 350, 330 330 Z" fill="#FFF3E0" opacity="0.55"/>
+  <path d="M 300 160 C 340 120, 420 100, 480 120 C 430 150, 360 170, 300 160 Z" fill="#FFFFFF" opacity="0.35"/>
+
+  <!-- the peach core sphere riding the bubble's lower half -->
+  <circle cx="395" cy="330" r="106" fill="url(#core)"/>
+  <ellipse cx="352" cy="282" rx="34" ry="24" fill="#FFFFFF" opacity="0.85"/>
+  <circle cx="452" cy="392" r="16" fill="#FFE9CF" opacity="0.8"/>
+
+  <!-- the small blossom at the bubble base -->
+  <g transform="translate(352,448)">
+    <ellipse rx="26" ry="12" cx="-24" cy="6"  fill="#FFC9A2" transform="rotate(-24)"/>
+    <ellipse rx="26" ry="12" cx="24"  cy="6"  fill="#FFC9A2" transform="rotate(24)"/>
+    <ellipse rx="24" ry="11" cx="0"   cy="-14" fill="#FFD9B8"/>
+    <ellipse rx="24" ry="11" cx="0"   cy="14"  fill="#FFBD8E"/>
+    <circle r="10" fill="#FFF1DC"/>
+  </g>
+
+  <!-- satellite bubbles -->
+  <circle cx="612" cy="120" r="34" fill="#FFFFFF" opacity="0.5"/>
+  <circle cx="612" cy="120" r="34" fill="none" stroke="#FFE2F0" stroke-opacity="0.9" stroke-width="2"/>
+  <circle cx="652" cy="220" r="16" fill="#FFFFFF" opacity="0.45"/>
+  <circle cx="96"  cy="150" r="22" fill="#FFFFFF" opacity="0.4"/>
+  <circle cx="60"  cy="240" r="10" fill="#FFFFFF" opacity="0.35"/>
+
+  <!-- sparkles: four-point stars -->
+  <g fill="#FFE3B8">
+    <path d="M 560 60  l 7 18 18 7 -18 7 -7 18 -7 -18 -18 -7 18 -7 Z"/>
+    <path d="M 640 330 l 5 13 13 5 -13 5 -5 13 -5 -13 -13 -5 13 -5 Z" fill="#F2C6E4"/>
+    <path d="M 130 90  l 5 13 13 5 -13 5 -5 13 -5 -13 -13 -5 13 -5 Z" fill="#FFFFFF" opacity="0.9"/>
+    <path d="M 500 470 l 4 11 11 4 -11 4 -4 11 -4 -11 -11 -4 11 -4 Z" fill="#CDBCF3"/>
+  </g>
+  <circle cx="585" cy="95" r="4" fill="#FFF3DC"/>
+  <circle cx="150" cy="120" r="3" fill="#F2C6E4"/>
+</svg>

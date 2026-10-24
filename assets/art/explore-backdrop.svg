@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 590 1278">
+  <defs>
+    <radialGradient id="ground" cx="30%" cy="20%" r="110%">
+      <stop offset="0" stop-color="#FFF6EF"/>
+      <stop offset="0.5" stop-color="#FCEDE3"/>
+      <stop offset="1" stop-color="#F8E0D8"/>
+    </radialGradient>
+    <radialGradient id="bubA" cx="38%" cy="32%" r="80%">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.8"/>
+      <stop offset="0.4" stop-color="#FAD5EA" stop-opacity="0.5"/>
+      <stop offset="0.72" stop-color="#E0C4F1" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#E0C4F1" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bubB" cx="40%" cy="36%" r="78%">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.7"/>
+      <stop offset="0.45" stop-color="#F8D2E6" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#E2C8F2" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bubC" cx="40%" cy="36%" r="78%">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.65"/>
+      <stop offset="0.5" stop-color="#FBD9E8" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#E8D2F4" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="petal" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFDCC2" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#F6C4DC" stop-opacity="0.4"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#E7D4F6" stop-opacity="0.15"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="590" height="1278" fill="url(#ground)"/>
+
+  <!-- warm washes -->
+  <ellipse cx="140" cy="240" rx="260" ry="220" fill="#FBE3D2" opacity="0.5"/>
+  <ellipse cx="470" cy="760" rx="240" ry="260" fill="#F6D3E4" opacity="0.30"/>
+  <ellipse cx="120" cy="1120" rx="260" ry="220" fill="#F9DCD4" opacity="0.45"/>
+
+  <!-- top-right: the hero's bubble cluster -->
+  <g transform="translate(60,-40) scale(0.9)">
+    <path d="M 250 560 C 420 640, 560 600, 660 480 L 660 590 C 540 660, 400 650, 250 560 Z" fill="url(#petal)" opacity="0.8"/>
+    <circle cx="430" cy="230" r="200" fill="url(#bubA)"/>
+    <circle cx="430" cy="230" r="200" fill="none" stroke="url(#rim)" stroke-width="3"/>
+    <path d="M 282 178 A 190 190 0 0 1 470 62" fill="none" stroke="#FFFFFF" stroke-opacity="0.8" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="398" cy="342" r="96" fill="#FFE0BE" opacity="0.9"/>
+    <circle cx="398" cy="342" r="96" fill="url(#bubA)" opacity="0.5"/>
+    <ellipse cx="360" cy="300" rx="30" ry="21" fill="#FFFFFF" opacity="0.8"/>
+    <circle cx="252" cy="330" r="120" fill="url(#bubB)"/>
+    <circle cx="252" cy="330" r="120" fill="none" stroke="url(#rim)" stroke-width="2"/>
+    <g fill="#FFE3B8">
+      <path d="M 560 96  l 6 16 16 6 -16 6 -6 16 -6 -16 -16 -6 16 -6 Z"/>
+      <path d="M 130 150 l 5 12 12 5 -12 5 -5 12 -5 -12 -12 -5 12 -5 Z" fill="#FFFFFF"/>
+    </g>
+    <g transform="translate(322,452) scale(0.9)">
+      <ellipse rx="24" ry="11" cx="-22" cy="6"  fill="#FFC9A2" transform="rotate(-24)"/>
+      <ellipse rx="24" ry="11" cx="22"  cy="6"  fill="#FFC9A2" transform="rotate(24)"/>
+      <ellipse rx="22" ry="10" cx="0"   cy="-13" fill="#FFD9B8"/>
+      <circle r="9" fill="#FFF1DC"/>
+    </g>
+  </g>
+
+  <!-- mid-right: the giant bubble sliding off the edge -->
+  <circle cx="600" cy="640" r="180" fill="url(#bubC)"/>
+  <circle cx="600" cy="640" r="180" fill="none" stroke="url(#rim)" stroke-width="2.5"/>
+  <path d="M 452 560 A 170 170 0 0 1 640 480" fill="none" stroke="#FFFFFF" stroke-opacity="0.65" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="520" cy="588" r="26" fill="#FFFFFF" opacity="0.5"/>
+
+  <!-- small companion bubble -->
+  <circle cx="470" cy="880" r="52" fill="url(#bubB)"/>
+  <circle cx="470" cy="880" r="52" fill="none" stroke="url(#rim)" stroke-width="2"/>
+
+  <!-- bottom-left: the pearl bubble -->
+  <circle cx="90" cy="1180" r="185" fill="url(#bubB)"/>
+  <circle cx="90" cy="1180" r="185" fill="none" stroke="url(#rim)" stroke-width="2.5"/>
+  <path d="M -60 1090 A 175 175 0 0 1 160 1010" fill="none" stroke="#FFFFFF" stroke-opacity="0.7" stroke-width="6" stroke-linecap="round"/>
+  <ellipse cx="60" cy="1120" rx="34" ry="22" fill="#FFFFFF" opacity="0.55"/>
+
+  <!-- drifting sparkles -->
+  <g fill="#FFFFFF" opacity="0.85">
+    <path d="M 80 420 l 5 13 13 5 -13 5 -5 13 -5 -13 -13 -5 13 -5 Z"/>
+    <path d="M 520 1030 l 4 11 11 4 -11 4 -4 11 -4 -11 -11 -4 11 -4 Z" fill="#F2C6E4"/>
+    <circle cx="300" cy="940" r="4"/>
+    <circle cx="210" cy="700" r="3"/>
+  </g>
+</svg>

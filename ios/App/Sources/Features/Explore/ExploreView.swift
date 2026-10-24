@@ -1,14 +1,19 @@
 import SwiftUI
 
-// MARK: - Explore AI — the discover page
+// MARK: - Explore + Discover — TWO pages, matching the two authored mocks
 //
-// Matches the Explore reference pair: pearl backdrop, luminous glass panels,
-// the featured hero with its Discover chip and Explore All door, category
-// chips, a live search field, Featured Tools, Popular prompt rows, Creative
-// Collections and the featured journey card. No bottom navigation bar — back
-// is the stack's edge swipe, and everything on the page opens a REAL
-// conversation through `.chatPrefill` / `.chatAutoSend`, the same dispatch
-// path Home's quick pills use. Palette pixel-sampled from the references.
+// EXPLORE (the mock with Popular Tools / Creative Collections / Featured):
+// the featured hero, the Popular Tools grid, Creative Collections and the
+// Featured journey card. No chips, no composer, no bottom navigation.
+//
+// DISCOVER (the mock with the EXPLORE hero / category chips / composer):
+// the "Discover what you can do with Nexly" hero, category chips, Featured
+// Tools, Popular prompt rows and the Ask-me-anything composer.
+//
+// Every card opens a REAL conversation through `.chatPrefill` /
+// `.chatAutoSend` — the same dispatch path Home's quick pills use. The
+// artwork is authored vector art; every panel carries the mock's rich
+// glass: gradient fill, luminous rim, warm shadow.
 
 /// One discoverable capability — the mirror of the Android catalog.
 struct ExploreTool: Identifiable, Hashable {
@@ -52,7 +57,7 @@ enum ExploreCatalog {
         ExploreTool(
             id: "voice-assistant", title: "Voice Assistant",
             subtitle: "Natural, human-like voices",
-            glyph: "microphone", bg: ExplorePalette.greenBg, fg: ExplorePalette.greenFg,
+            glyph: "chart-bar", bg: ExplorePalette.greenBg, fg: ExplorePalette.greenFg,
             category: .productivity,
             prompt: "Be my speaking coach. We'll practise a short introduction out loud: I'll type what I want to say, you tighten it, then give me feedback on clarity and tone."
         ),
@@ -94,7 +99,7 @@ enum ExploreCatalog {
         ExploreTool(
             id: "doc-summary", title: "Summarize a document",
             subtitle: "Save time with AI summaries",
-            glyph: "clipboard-text", bg: ExplorePalette.blueBg, fg: ExplorePalette.blueFg,
+            glyph: "file-description", bg: ExplorePalette.blueBg, fg: ExplorePalette.blueFg,
             category: .learning,
             prompt: "Summarize documents for me. I'll paste or attach one; give a five-bullet summary, the key numbers, and three questions I should ask about it."
         ),
@@ -172,527 +177,6 @@ enum ExplorePalette {
     static let inkMuted = Color(red: 0.553, green: 0.553, blue: 0.584)
 }
 
-struct ExploreView: View {
-    /// `.chatPrefill` when a card seeds a draft; `.chatAutoSend` when the
-    /// composer sends typed words.
-    let onOpenChat: (AeroRoute) -> Void
-
-    /// Render-harness entry points: the real states, driven from outside.
-    var initialQuery: String = ""
-    var initialSearchOpen: Bool = false
-
-    @State private var query: String
-    @State private var searchOpen: Bool
-    @State private var category: ExploreCategory = .all
-    @State private var showAllTools: Bool = false
-
-    init(
-        onOpenChat: @escaping (AeroRoute) -> Void,
-        initialQuery: String = "",
-        initialSearchOpen: Bool = false
-    ) {
-        self.onOpenChat = onOpenChat
-        self.initialQuery = initialQuery
-        self.initialSearchOpen = initialSearchOpen
-        _query = State(initialValue: initialQuery)
-        _searchOpen = State(initialValue: initialSearchOpen)
-    }
-
-    var body: some View {
-        ZStack {
-            // Explore carries its own backdrop: the Home pearl world with the
-            // reference's iridescent bubbles composited in.
-            Image("GSExploreBackdrop")
-                .resizable()
-                .scaledToFill()
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-            VStack(spacing: 0) {
-                header
-                if searchOpen { searchField.transition(.opacity.combined(with: .move(edge: .top))) }
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        if !query.trimmingCharacters(in: .whitespaces).isEmpty {
-                            resultsSection
-                        } else {
-                            heroCard
-                            chips
-                            toolsSection
-                            popularSection
-                            collectionsSection
-                            featuredSection
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
-                    .padding(.bottom, 18)
-                }
-                composer
-            }
-        }
-    }
-
-    // MARK: header — orb + product + the search circle
-
-    private var header: some View {
-        HStack(spacing: 10) {
-            Image("GSCompanionOrb")
-                .resizable()
-                .scaledToFill()
-                .frame(width: 34, height: 34)
-                .clipShape(Circle())
-                .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1))
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Nexly")
-                    .font(.custom(Aero.productName(.bold), size: 15, relativeTo: .title3))
-                    .foregroundStyle(Aero.text)
-                Text("AI Companion")
-                    .font(Aero.caption())
-                    .foregroundStyle(Aero.textMuted)
-            }
-            Spacer()
-            Button {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    searchOpen.toggle()
-                    if !searchOpen { query = "" }
-                }
-            } label: {
-                NexlyGlyph(name: "search", size: 16, color: Aero.text)
-                    .modifier(IconCircleStyle(bg: Color(red: 0.996, green: 0.953, blue: 0.933), diameter: 36))
-            }
-            .accessibilityLabel(searchOpen ? "Close search" : "Open search")
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-        .padding(.bottom, 6)
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 8) {
-            NexlyGlyph(name: "search", size: 15, color: Aero.textMuted)
-            TextField("Search tools and abilities", text: $query)
-                .font(Aero.bodyMedium())
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .accessibilityIdentifier("explore-search-input")
-            if !query.isEmpty {
-                Button {
-                    query = ""
-                } label: {
-                    NexlyGlyph(name: "x", size: 14, color: Aero.textMuted)
-                }
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .modifier(ExploreGlass(corner: 22, elevation: 8))
-        .padding(.horizontal, 20)
-        .padding(.bottom, 4)
-    }
-
-    // MARK: hero
-
-    private var heroCard: some View {
-        AeroCard {
-            // The art is a pure overlay: a luminous glass bubble drawn
-            // procedurally (the GsArtwork technique) over the card's right
-            // side. Overlay never participates in layout, so the copy column
-            // wraps exactly like the Android card and the card height is the
-            // content's height.
-            VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 5) {
-                        NexlyGlyph(name: "sparkles", size: 11, color: ExplorePalette.discoverInk)
-                        Text("Discover")
-                            .font(Aero.caption())
-                            .foregroundStyle(ExplorePalette.discoverInk)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Capsule().fill(ExplorePalette.discoverBg))
-
-                    Text("Explore AI\nPossibilities")
-                        .font(.custom(Aero.productName(.bold), size: 17.5, relativeTo: .title2))
-                        .foregroundStyle(Aero.text)
-                        .lineSpacing(2)
-
-                    Text("Powerful tools, creative features, and more ways to bring your ideas to life — all in one place.")
-                        .font(Aero.bodyMedium())
-                        .foregroundStyle(Aero.textMuted)
-                        .frame(maxWidth: 215, alignment: .leading)
-
-                    Button {
-                        category = .all
-                        showAllTools = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text("Explore All")
-                                .font(Aero.bodyMedium().weight(.semibold))
-                                .foregroundStyle(Aero.text)
-                            NexlyGlyph(name: "arrow-right", size: 13, color: Aero.text)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Capsule().fill(LinearGradient(colors: [ExplorePalette.ctaTop, ExplorePalette.ctaBottom], startPoint: .leading, endPoint: .trailing)))
-                        .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
-                        .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 9, x: 0, y: 5)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Explore all tools")
-                }
-                .padding(18)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxWidth: .infinity)
-            .overlay(alignment: .trailing) {
-                // The reference's OWN iridescent bubbles — cropped from the
-                // authored Explore mock, shipped as GSExploreHero — carry the
-                // card's right side; the scrim fades them into the pearl so
-                // the copy sits on quiet ground.
-                Image("GSExploreHero")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: 240)
-                    .frame(maxHeight: .infinity)
-                    .clipped()
-                    .overlay(
-                        LinearGradient(
-                            stops: [
-                                .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.94), location: 0),
-                                .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.22), location: 0.45),
-                                .init(color: .clear, location: 1),
-                            ],
-                            startPoint: .leading, endPoint: .trailing
-                        )
-                    )
-                    .allowsHitTesting(false)
-            }
-    }
-
-    // MARK: chips
-
-    private var chips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(ExploreCategory.allCases) { cat in
-                    let active = cat == category
-                    Button {
-                        category = cat
-                    } label: {
-                        Text(cat.rawValue)
-                            .font(Aero.bodyMedium())
-                            .foregroundStyle(active ? Color.white : Aero.textMuted)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(
-                                Group {
-                                    if active {
-                                        Capsule().fill(LinearGradient(colors: [ExplorePalette.peach, ExplorePalette.peachDeep], startPoint: .leading, endPoint: .trailing))
-                                            .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.85), .white.opacity(0.30)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
-                                            .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 8, x: 0, y: 4)
-                                    } else {
-                                        Capsule().fill(Aero.glassSurface)
-                                    }
-                                }
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(cat.rawValue)
-                }
-            }
-            .padding(.vertical, 2)
-        }
-    }
-
-    // MARK: sections
-
-    private func sectionHeader(_ title: String, action: (() -> Void)? = nil, actionLabel: String = "See All") -> some View {
-        HStack {
-            Text(title)
-                .font(Aero.title())
-                .foregroundStyle(Aero.text)
-            Spacer()
-            if let action {
-                Button(action: action) {
-                    HStack(spacing: 4) {
-                        Text(actionLabel).font(Aero.caption()).foregroundStyle(Aero.textMuted)
-                        NexlyGlyph(name: "arrow-right", size: 11, color: Aero.textMuted)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private var toolsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Featured Tools", action: { showAllTools.toggle() }, actionLabel: showAllTools ? "Show less" : "See All")
-            let tools = showAllTools ? ExploreCatalog.byCategory(category) : Array(ExploreCatalog.byCategory(category).prefix(4))
-            ForEach(0..<tools.count, id: \.self) { i in
-                if i % 2 == 0, i < tools.count {
-                    HStack(alignment: .top, spacing: 12) {
-                        toolCard(tools[i])
-                        if i + 1 < tools.count {
-                            toolCard(tools[i + 1])
-                        } else {
-                            Spacer().frame(maxWidth: .infinity)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func toolCard(_ tool: ExploreTool) -> some View {
-        Button {
-            onOpenChat(.chatPrefill(tool.prompt))
-        } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                NexlyGlyph(name: tool.glyph, size: 17, color: tool.fg)
-                    .modifier(IconCircleStyle(bg: tool.bg, diameter: 40))
-                Text(tool.title)
-                    .font(Aero.bodyMedium().weight(.semibold))
-                    .foregroundStyle(Aero.text)
-                    .lineLimit(1)
-                Text(tool.subtitle)
-                    .font(Aero.caption())
-                    .foregroundStyle(Aero.textMuted)
-                    .lineLimit(2)
-                    .frame(minHeight: 30, alignment: .top)
-                HStack {
-                    Spacer()
-                    NexlyGlyph(name: "arrow-right", size: 13, color: Aero.textMuted)
-                }
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .modifier(ExploreGlass(corner: 20))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(tool.title): \(tool.subtitle)")
-    }
-
-    private var popularSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Popular")
-            let rows = ExploreCatalog.tools.filter { ["study-plan", "logo-maker", "trip-planner", "doc-summary"].contains($0.id) }
-                .filter { category == .all || $0.category == category }
-            VStack(spacing: 8) {
-                ForEach(rows) { tool in
-                    promptRow(tool)
-                }
-            }
-        }
-    }
-
-    private func promptRow(_ tool: ExploreTool) -> some View {
-        Button {
-            onOpenChat(.chatPrefill(tool.prompt))
-        } label: {
-            HStack(spacing: 10) {
-                NexlyGlyph(name: tool.glyph, size: 15, color: tool.fg)
-                    .modifier(IconCircleStyle(bg: tool.bg, diameter: 34))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(tool.title)
-                        .font(Aero.bodyMedium().weight(.semibold))
-                        .foregroundStyle(Aero.text)
-                        .lineLimit(1)
-                    Text(tool.subtitle)
-                        .font(Aero.caption())
-                        .foregroundStyle(Aero.textMuted)
-                        .lineLimit(1)
-                }
-                Spacer()
-                NexlyGlyph(name: "chevron-right", size: 13, color: Aero.textMuted)
-            }
-            .padding(10)
-            .modifier(ExploreGlass(corner: 18, elevation: 9))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(tool.title): \(tool.subtitle)")
-    }
-
-    private var collectionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Creative Collections")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(ExploreCatalog.collections) { collection in
-                        Button {
-                            category = collection.category
-                            showAllTools = false
-                        } label: {
-                            VStack(alignment: .leading, spacing: 0) {
-                                // Each collection carries its own scene, like
-                                // the reference set: the lotus for Design, the
-                                // pearl-drape scene for Work, the bubble
-                                // close-up for Learning.
-                                collectionArt(collection)
-                                    .frame(height: 74)
-                                    .frame(maxWidth: .infinity)
-                                    .clipped()
-                                    .overlay(LinearGradient(colors: [.white.opacity(0.08), .white.opacity(0.38)], startPoint: .top, endPoint: .bottom))
-                                    .allowsHitTesting(false)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack {
-                                        Text(collection.title)
-                                            .font(Aero.bodyMedium().weight(.semibold))
-                                            .foregroundStyle(Aero.text)
-                                            .lineLimit(1)
-                                        Spacer()
-                                        NexlyGlyph(name: "arrow-right", size: 12, color: Aero.textMuted)
-                                    }
-                                    Text(collection.subtitle)
-                                        .font(Aero.caption())
-                                        .foregroundStyle(Aero.textMuted)
-                                        .lineLimit(1)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                            }
-                            .frame(width: 150)
-                            .clipShape(RoundedRectangle(cornerRadius: 20))
-                            .modifier(ExploreGlass(corner: 20))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("\(collection.title): \(collection.subtitle)")
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func collectionArt(_ collection: ExploreCatalog.Collection) -> some View {
-        // Each scene is cropped from the authored Explore mock: the lotus
-        // for Design, the misty pagoda landscape for Work, the orange lotus
-        // close-up for Learning.
-        switch collection.subtitle {
-        case "Work smarter, not harder":
-            Image("GSExploreColWork").resizable().scaledToFill()
-        case "Build new skills":
-            Image("GSExploreColLearning").resizable().scaledToFill()
-        default:
-            Image("GSExploreColDesign").resizable().scaledToFill()
-        }
-    }
-
-    private var featuredSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Featured")
-            Button {
-                onOpenChat(.chatPrefill(ExploreCatalog.featured.prompt))
-            } label: {
-                ZStack(alignment: .trailing) {
-                // The reference's featured card: the scene fills the card's
-                // right side under a pearl veil, words on the left.
-                GeometryReader { geo in
-                    HStack(spacing: 0) {
-                        Spacer(minLength: 0)
-                        Image("GSExploreKyoto")
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: geo.size.width * 0.46)
-                            .clipped()
-                            .overlay(
-                                LinearGradient(
-                                    stops: [
-                                        .init(color: Color(red: 0.984, green: 0.929, blue: 0.906).opacity(0.88), location: 0),
-                                        .init(color: Color(red: 0.984, green: 0.929, blue: 0.906).opacity(0.18), location: 0.55),
-                                        .init(color: .clear, location: 1),
-                                    ],
-                                    startPoint: .leading, endPoint: .trailing
-                                )
-                            )
-                            .allowsHitTesting(false)
-                    }
-                }
-                HStack(spacing: 12) {
-                    NexlyGlyph(name: ExploreCatalog.featured.glyph, size: 15, color: ExploreCatalog.featured.fg)
-                        .modifier(IconCircleStyle(bg: ExploreCatalog.featured.bg, diameter: 34))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(ExploreCatalog.featured.title)
-                            .font(Aero.body().weight(.semibold))
-                            .foregroundStyle(Aero.text)
-                        Text(ExploreCatalog.featured.subtitle)
-                            .font(Aero.caption())
-                            .foregroundStyle(Aero.textMuted)
-                            .lineLimit(2)
-                    }
-                    Spacer()
-                    Circle()
-                        .fill(.white.opacity(0.55))
-                        .frame(width: 30, height: 30)
-                        .overlay(NexlyGlyph(name: "chevron-right", size: 14, color: Aero.text))
-                }
-                .padding(12)
-            }
-                .modifier(ExploreGlass(corner: 20))
-
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("\(ExploreCatalog.featured.title): \(ExploreCatalog.featured.subtitle)")
-        }
-    }
-
-    // MARK: results (live search)
-
-    private var resultsSection: some View {
-        let results = ExploreCatalog.search(query)
-        return VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Results")
-            if results.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("No tool matches \"\(query.trimmingCharacters(in: .whitespaces))\" yet")
-                        .font(Aero.bodyMedium().weight(.semibold))
-                        .foregroundStyle(Aero.text)
-                    Text("I can still help — ask me directly and we'll figure it out together.")
-                        .font(Aero.caption())
-                        .foregroundStyle(Aero.textMuted)
-                    Button {
-                        onOpenChat(.chatAutoSend(query.trimmingCharacters(in: .whitespaces)))
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text("Ask about \"\(query.trimmingCharacters(in: .whitespaces))\"")
-                                .font(Aero.caption().weight(.semibold))
-                                .foregroundStyle(Aero.text)
-                                .lineLimit(1)
-                            NexlyGlyph(name: "arrow-right", size: 12, color: Aero.text)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
-                        .background(Capsule().fill(LinearGradient(colors: [ExplorePalette.ctaTop, ExplorePalette.ctaBottom], startPoint: .leading, endPoint: .trailing)))
-                        .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
-                        .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 9, x: 0, y: 5)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 6)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(18)
-                .modifier(ExploreGlass(corner: 20))
-            } else {
-                VStack(spacing: 8) {
-                    ForEach(results) { tool in
-                        promptRow(tool)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: composer — sends typed words into a fresh conversation
-
-    private var composer: some View {
-        ExploreComposerBar { text in
-            onOpenChat(.chatAutoSend(text))
-        }
-    }
-}
-
-
-// MARK: - The reference's RICH glass — gradient fill, luminous rim, warm shadow
-
 private struct ExploreGlass: ViewModifier {
     var corner: CGFloat
     var elevation: CGFloat = 12
@@ -732,16 +216,19 @@ private struct ExploreGlass: ViewModifier {
 private struct IconCircleStyle: ViewModifier {
     var bg: Color
     var diameter: CGFloat
+    var solidTile: Bool = false
 
     func body(content: Content) -> some View {
         content
             .frame(width: diameter, height: diameter)
             .background(
                 Circle().fill(
-                    LinearGradient(
-                        colors: [ExplorePalette.iconLight(bg), bg],
-                        startPoint: .top, endPoint: .bottom
-                    )
+                    solidTile
+                        ? AnyShapeStyle(bg)
+                        : AnyShapeStyle(LinearGradient(
+                            colors: [ExplorePalette.iconLight(bg), bg],
+                            startPoint: .top, endPoint: .bottom
+                        ))
                 )
             )
             .overlay(
@@ -829,3 +316,811 @@ struct ExploreComposerBar: View {
         focused = false
     }
 }
+
+
+// MARK: - EXPLORE — the mock with Popular Tools / Collections / Featured
+
+struct ExploreView: View {
+    let onOpenChat: (AeroRoute) -> Void
+    let onOpenDiscover: () -> Void
+
+    @State private var query = ""
+    @State private var searchOpen = false
+
+    init(
+        onOpenChat: @escaping (AeroRoute) -> Void,
+        onOpenDiscover: @escaping () -> Void = {},
+        initialSearchOpen: Bool = false
+    ) {
+        self.onOpenChat = onOpenChat
+        self.onOpenDiscover = onOpenDiscover
+        _searchOpen = State(initialValue: initialSearchOpen)
+    }
+
+    var body: some View {
+        ZStack {
+            Image("GSExploreBackdrop")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+            VStack(spacing: 0) {
+                header
+                if searchOpen { searchField.transition(.opacity.combined(with: .move(edge: .top))) }
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                            resultsSection
+                        } else {
+                            heroCard
+                            sectionHeader("Popular Tools", action: { onOpenDiscover() })
+                            toolsGrid
+                            sectionHeader("Creative Collections")
+                            collectionsSection
+                            sectionHeader("Featured")
+                            featuredSection
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
+                    .padding(.bottom, 16)
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            Image("GSCompanionOrb")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 34, height: 34)
+                .clipShape(Circle())
+                .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1))
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Nexly")
+                    .font(.custom(Aero.productName(.bold), size: 15, relativeTo: .title3))
+                    .foregroundStyle(Aero.text)
+                Text("AI Companion")
+                    .font(Aero.caption())
+                    .foregroundStyle(Aero.textMuted)
+            }
+            Spacer()
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    searchOpen.toggle()
+                    if !searchOpen { query = "" }
+                }
+            } label: {
+                NexlyGlyph(name: "search", size: 16, color: Aero.text)
+                    .modifier(IconCircleStyle(bg: Color(red: 0.996, green: 0.953, blue: 0.933), diameter: 36))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(searchOpen ? "Close search" : "Open search")
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            NexlyGlyph(name: "search", size: 14, color: Aero.textMuted)
+            TextField("Search tools and abilities", text: $query)
+                .font(Aero.bodyMedium())
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .accessibilityIdentifier("explore-search-input")
+            if !query.isEmpty {
+                Button { query = "" } label: {
+                    NexlyGlyph(name: "x", size: 13, color: Aero.textMuted)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .modifier(ExploreGlass(corner: 22, elevation: 8))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 4)
+    }
+
+    private var heroCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 4) {
+                NexlyGlyph(name: "sparkles", size: 10, color: ExplorePalette.discoverInk)
+                Text("Discover")
+                    .font(Aero.caption())
+                    .foregroundStyle(ExplorePalette.discoverInk)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(ExplorePalette.discoverBg))
+
+            Text("Explore AI\nPossibilities")
+                .font(.custom(Aero.productName(.bold), size: 17.5, relativeTo: .title2))
+                .foregroundStyle(Aero.text)
+                .lineSpacing(2)
+
+            Text("Powerful tools, creative features, and more ways to bring your ideas to life — all in one place.")
+                .font(Aero.caption())
+                .foregroundStyle(Aero.textMuted)
+                .frame(maxWidth: 220, alignment: .leading)
+
+            Button {
+                onOpenDiscover()
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Explore All")
+                        .font(Aero.caption().weight(.semibold))
+                        .foregroundStyle(Aero.text)
+                    NexlyGlyph(name: "arrow-right", size: 11, color: Aero.text)
+                }
+                .padding(.horizontal, 13)
+                .padding(.vertical, 7)
+                .background(Capsule().fill(LinearGradient(colors: [ExplorePalette.ctaTop, ExplorePalette.ctaBottom], startPoint: .leading, endPoint: .trailing)))
+                    .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                        .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 9, x: 0, y: 5)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Explore all tools")
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
+        .modifier(ExploreGlass(corner: 24, elevation: 14))
+        .overlay(alignment: .trailing) {
+            Image("GSExploreHero")
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: 216)
+                .frame(maxHeight: .infinity)
+                .clipped()
+                .overlay(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.94), location: 0),
+                            .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.22), location: 0.45),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                )
+                .allowsHitTesting(false)
+        }
+    }
+
+    private var toolsGrid: some View {
+        VStack(spacing: 10) {
+            let tools = Array(ExploreCatalog.tools.prefix(4))
+            ForEach(0..<tools.count, id: \.self) { i in
+                if i % 2 == 0, i < tools.count {
+                    HStack(alignment: .top, spacing: 10) {
+                        toolCardHorizontal(tools[i])
+                        if i + 1 < tools.count {
+                            toolCardHorizontal(tools[i + 1])
+                        } else {
+                            Spacer().frame(maxWidth: .infinity)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The reference's Popular Tools card: icon LEFT, copy right, arrow low-right.
+    private func toolCardHorizontal(_ tool: ExploreTool) -> some View {
+        Button {
+            onOpenChat(.chatPrefill(tool.prompt))
+        } label: {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 9) {
+                    NexlyGlyph(name: tool.glyph, size: 15, color: tool.filledTile ? .white : tool.fg)
+                        .modifier(IconCircleStyle(
+                            bg: tool.filledTile ? tool.fg : tool.bg,
+                            diameter: 36,
+                            solidTile: tool.filledTile
+                        ))
+                    Text(tool.title)
+                        .font(Aero.bodyMedium().weight(.semibold))
+                        .foregroundStyle(Aero.text)
+                        .lineLimit(1)
+                }
+                Text(tool.subtitle)
+                    .font(Aero.caption())
+                    .foregroundStyle(Aero.textMuted)
+                    .lineLimit(2)
+                    .frame(minHeight: 26, alignment: .top)
+                HStack {
+                    Spacer()
+                    NexlyGlyph(name: "arrow-right", size: 11, color: Aero.textMuted)
+                }
+            }
+            .padding(11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .modifier(ExploreGlass(corner: 18, elevation: 10))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(tool.title): \(tool.subtitle)")
+    }
+
+    private var collectionsSection: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(ExploreCatalog.collections) { collection in
+                    Button {
+                        onOpenDiscover()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 0) {
+                            collectionArt(collection)
+                                .frame(height: 72)
+                                .frame(maxWidth: .infinity)
+                                .clipped()
+                                .overlay(LinearGradient(colors: [.white.opacity(0.06), .white.opacity(0.34)], startPoint: .top, endPoint: .bottom))
+                                .allowsHitTesting(false)
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack {
+                                    Text(collection.title)
+                                        .font(Aero.bodyMedium().weight(.semibold))
+                                        .foregroundStyle(Aero.text)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    NexlyGlyph(name: "arrow-right", size: 12, color: Aero.textMuted)
+                                }
+                                Text(collection.subtitle)
+                                    .font(Aero.caption())
+                                    .foregroundStyle(Aero.textMuted)
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                        }
+                        .frame(width: 150)
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                        .modifier(ExploreGlass(corner: 18, elevation: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(collection.title): \(collection.subtitle)")
+                }
+            }
+        }
+    }
+
+    private var featuredSection: some View {
+        Button {
+            onOpenChat(.chatPrefill(ExploreCatalog.featured.prompt))
+        } label: {
+            ZStack(alignment: .trailing) {
+                Image("GSExploreKyoto")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 150)
+                    .clipped()
+                    .overlay(
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color(red: 0.984, green: 0.929, blue: 0.906).opacity(0.88), location: 0),
+                                .init(color: Color(red: 0.984, green: 0.929, blue: 0.906).opacity(0.18), location: 0.55),
+                                .init(color: .clear, location: 1),
+                            ],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                    )
+                    .allowsHitTesting(false)
+                HStack(spacing: 10) {
+                    NexlyGlyph(name: ExploreCatalog.featured.glyph, size: 15, color: ExploreCatalog.featured.fg)
+                        .modifier(IconCircleStyle(bg: ExploreCatalog.featured.bg, diameter: 34))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ExploreCatalog.featured.title)
+                            .font(Aero.bodyMedium().weight(.semibold))
+                            .foregroundStyle(Aero.text)
+                        Text(ExploreCatalog.featured.subtitle)
+                            .font(Aero.caption())
+                            .foregroundStyle(Aero.textMuted)
+                            .lineLimit(2)
+                    }
+                    Spacer()
+                    Circle()
+                        .fill(.white.opacity(0.55))
+                        .frame(width: 26, height: 26)
+                        .overlay(NexlyGlyph(name: "chevron-right", size: 13, color: Aero.text))
+                }
+                .padding(10)
+            }
+            .modifier(ExploreGlass(corner: 18, elevation: 10))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(ExploreCatalog.featured.title): \(ExploreCatalog.featured.subtitle)")
+    }
+
+    private var resultsSection: some View {
+        let results = ExploreCatalog.search(query)
+        return VStack(alignment: .leading, spacing: 12) {
+            sectionHeader("Results")
+            if results.isEmpty {
+                emptySearch
+            } else {
+                VStack(spacing: 7) {
+                    ForEach(results) { tool in promptRow(tool) }
+                }
+            }
+        }
+    }
+
+    private var emptySearch: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("No tool matches \(query.trimmingCharacters(in: .whitespaces)) yet")
+                .font(Aero.bodyMedium().weight(.semibold))
+                .foregroundStyle(Aero.text)
+            Text("I can still help — ask me directly and we'll figure it out together.")
+                .font(Aero.caption())
+                .foregroundStyle(Aero.textMuted)
+            Button {
+                onOpenChat(.chatAutoSend(query.trimmingCharacters(in: .whitespaces)))
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Ask about \(query.trimmingCharacters(in: .whitespaces))")
+                        .font(Aero.caption().weight(.semibold))
+                        .foregroundStyle(Aero.text)
+                        .lineLimit(1)
+                    NexlyGlyph(name: "arrow-right", size: 12, color: Aero.text)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(LinearGradient(colors: [ExplorePalette.ctaTop, ExplorePalette.ctaBottom], startPoint: .leading, endPoint: .trailing)))
+                    .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                        .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 9, x: 0, y: 5)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .modifier(ExploreGlass(corner: 18, elevation: 10))
+    }
+
+    private func sectionHeader(_ title: String, action: (() -> Void)? = nil, actionLabel: String = "See All") -> some View {
+        HStack {
+            Text(title)
+                .font(Aero.title())
+                .foregroundStyle(Aero.text)
+            Spacer()
+            if let action {
+                Button(action: action) {
+                    HStack(spacing: 4) {
+                        Text(actionLabel).font(Aero.caption()).foregroundStyle(Aero.textMuted)
+                        NexlyGlyph(name: "arrow-right", size: 11, color: Aero.textMuted)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func promptRow(_ tool: ExploreTool) -> some View {
+        Button {
+            onOpenChat(.chatPrefill(tool.prompt))
+        } label: {
+            HStack(spacing: 10) {
+                NexlyGlyph(name: tool.glyph, size: 15, color: tool.filledTile ? .white : tool.fg)
+                    .modifier(IconCircleStyle(
+                        bg: tool.filledTile ? tool.fg : tool.bg,
+                        diameter: 34,
+                        solidTile: tool.filledTile
+                    ))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(tool.title)
+                        .font(Aero.bodyMedium().weight(.semibold))
+                        .foregroundStyle(Aero.text)
+                        .lineLimit(1)
+                    Text(tool.subtitle)
+                        .font(Aero.caption())
+                        .foregroundStyle(Aero.textMuted)
+                        .lineLimit(1)
+                }
+                Spacer()
+                NexlyGlyph(name: "chevron-right", size: 14, color: Aero.textMuted)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .modifier(ExploreGlass(corner: 16, elevation: 9))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(tool.title): \(tool.subtitle)")
+    }
+
+    @ViewBuilder
+    private func collectionArt(_ collection: ExploreCatalog.Collection) -> some View {
+        switch collection.subtitle {
+        case "Work smarter, not harder":
+            Image("GSExploreColWork").resizable().scaledToFill()
+        case "Build new skills":
+            Image("GSExploreColLearning").resizable().scaledToFill()
+        default:
+            Image("GSExploreColDesign").resizable().scaledToFill()
+        }
+    }
+}
+
+// MARK: - DISCOVER — the mock with the EXPLORE hero / chips / composer
+
+struct DiscoverView: View {
+    let onOpenChat: (AeroRoute) -> Void
+
+    var initialQuery: String = ""
+    var initialSearchOpen: Bool = false
+
+    @State private var query: String
+    @State private var searchOpen: Bool
+    @State private var category: ExploreCategory = .all
+
+    init(
+        onOpenChat: @escaping (AeroRoute) -> Void,
+        initialQuery: String = "",
+        initialSearchOpen: Bool = false
+    ) {
+        self.onOpenChat = onOpenChat
+        self.initialQuery = initialQuery
+        self.initialSearchOpen = initialSearchOpen
+        _query = State(initialValue: initialQuery)
+        _searchOpen = State(initialValue: initialSearchOpen)
+    }
+
+    var body: some View {
+        ZStack {
+            Image("GSExploreBackdrop")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+            VStack(spacing: 0) {
+                header
+                if searchOpen { searchField.transition(.opacity.combined(with: .move(edge: .top))) }
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                            resultsSection
+                        } else {
+                            heroCard
+                            chips
+                            sectionHeader("Featured Tools")
+                            toolsSection
+                            sectionHeader("Popular")
+                            popularSection
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
+                    .padding(.bottom, 14)
+                }
+                composer
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            Image("GSCompanionOrb")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 34, height: 34)
+                .clipShape(Circle())
+                .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1))
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Nexly")
+                    .font(.custom(Aero.productName(.bold), size: 15, relativeTo: .title3))
+                    .foregroundStyle(Aero.text)
+                Text("AI Companion")
+                    .font(Aero.caption())
+                    .foregroundStyle(Aero.textMuted)
+            }
+            Spacer()
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    searchOpen.toggle()
+                    if !searchOpen { query = "" }
+                }
+            } label: {
+                NexlyGlyph(name: "search", size: 16, color: Aero.text)
+                    .modifier(IconCircleStyle(bg: Color(red: 0.996, green: 0.953, blue: 0.933), diameter: 36))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(searchOpen ? "Close search" : "Open search")
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            NexlyGlyph(name: "search", size: 14, color: Aero.textMuted)
+            TextField("Search tools and abilities", text: $query)
+                .font(Aero.bodyMedium())
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .accessibilityIdentifier("explore-search-input")
+            if !query.isEmpty {
+                Button { query = "" } label: {
+                    NexlyGlyph(name: "x", size: 13, color: Aero.textMuted)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .modifier(ExploreGlass(corner: 22, elevation: 8))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 4)
+    }
+
+    /// The reference's eyebrow + two-line title + Start Exploring.
+    private var heroCard: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("EXPLORE")
+                .font(Aero.caption().weight(.semibold))
+                .foregroundStyle(Aero.textMuted)
+                .kerning(2)
+            Text("Discover what\nyou can do with Nexly")
+                .font(.custom(Aero.productName(.bold), size: 17, relativeTo: .title2))
+                .foregroundStyle(Aero.text)
+                .lineSpacing(2)
+            Text("AI tools, creative features and smart experiences — all in one place.")
+                .font(Aero.caption())
+                .foregroundStyle(Aero.textMuted)
+                .frame(maxWidth: 240, alignment: .leading)
+            Button {
+                withAnimation { category = .all }
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Start Exploring")
+                        .font(Aero.caption().weight(.semibold))
+                        .foregroundStyle(Aero.text)
+                    NexlyGlyph(name: "arrow-right", size: 11, color: Aero.text)
+                }
+                .padding(.horizontal, 13)
+                .padding(.vertical, 7)
+                .background(Capsule().fill(LinearGradient(colors: [ExplorePalette.ctaTop, ExplorePalette.ctaBottom], startPoint: .leading, endPoint: .trailing)))
+                    .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                        .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 9, x: 0, y: 5)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Start exploring")
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .modifier(ExploreGlass(corner: 24, elevation: 14))
+        .overlay(alignment: .trailing) {
+            Image("GSExploreHero")
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: 200)
+                .frame(maxHeight: .infinity)
+                .clipped()
+                .overlay(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.94), location: 0),
+                            .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.22), location: 0.45),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                )
+                .allowsHitTesting(false)
+        }
+    }
+
+    private var chips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) {
+                ForEach(ExploreCategory.allCases) { cat in
+                    let active = cat == category
+                    Button {
+                        category = cat
+                    } label: {
+                        Text(cat.rawValue)
+                            .font(Aero.bodyMedium())
+                            .foregroundStyle(active ? Color.white : Aero.textMuted)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 6)
+                            .background(
+                                Group {
+                                    if active {
+                                        Capsule().fill(LinearGradient(colors: [ExplorePalette.peach, ExplorePalette.peachDeep], startPoint: .leading, endPoint: .trailing))
+                                            .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.85), .white.opacity(0.30)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                                            .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 8, x: 0, y: 4)
+                                    } else {
+                                        Capsule().fill(Color.white.opacity(0.88))
+                                    }
+                                }
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(cat.rawValue)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private var toolsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("Featured Tools")
+            let tools = ExploreCatalog.byCategory(category)
+            ForEach(0..<tools.count, id: \.self) { i in
+                if i % 2 == 0, i < tools.count {
+                    HStack(alignment: .top, spacing: 10) {
+                        toolCardVertical(tools[i])
+                        if i + 1 < tools.count {
+                            toolCardVertical(tools[i + 1])
+                        } else {
+                            Spacer().frame(maxWidth: .infinity)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The reference's Featured Tools card: icon top, copy below, arrow low-right.
+    private func toolCardVertical(_ tool: ExploreTool) -> some View {
+        Button {
+            onOpenChat(.chatPrefill(tool.prompt))
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                NexlyGlyph(name: tool.glyph, size: 15, color: tool.filledTile ? .white : tool.fg)
+                    .modifier(IconCircleStyle(
+                        bg: tool.filledTile ? tool.fg : tool.bg,
+                        diameter: 36,
+                        solidTile: tool.filledTile
+                    ))
+                Text(tool.title)
+                    .font(Aero.bodyMedium().weight(.semibold))
+                    .foregroundStyle(Aero.text)
+                    .lineLimit(1)
+                Text(tool.subtitle)
+                    .font(Aero.caption())
+                    .foregroundStyle(Aero.textMuted)
+                    .lineLimit(2)
+                    .frame(minHeight: 26, alignment: .top)
+                HStack {
+                    Spacer()
+                    NexlyGlyph(name: "arrow-right", size: 11, color: Aero.textMuted)
+                }
+            }
+            .padding(11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .modifier(ExploreGlass(corner: 18, elevation: 10))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(tool.title): \(tool.subtitle)")
+    }
+
+    private var popularSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("Popular")
+            let rows = ExploreCatalog.tools.filter { ["study-plan", "logo-maker", "trip-planner", "doc-summary"].contains($0.id) }
+                .filter { category == .all || $0.category == category }
+            VStack(spacing: 7) {
+                ForEach(rows) { tool in
+                    Button {
+                        onOpenChat(.chatPrefill(tool.prompt))
+                    } label: {
+                        HStack(spacing: 10) {
+                            NexlyGlyph(name: tool.glyph, size: 15, color: tool.filledTile ? .white : tool.fg)
+                                .modifier(IconCircleStyle(
+                                    bg: tool.filledTile ? tool.fg : tool.bg,
+                                    diameter: 34,
+                                    solidTile: tool.filledTile
+                                ))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(tool.title)
+                                    .font(Aero.bodyMedium().weight(.semibold))
+                                    .foregroundStyle(Aero.text)
+                                    .lineLimit(1)
+                                Text(tool.subtitle)
+                                    .font(Aero.caption())
+                                    .foregroundStyle(Aero.textMuted)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            NexlyGlyph(name: "chevron-right", size: 14, color: Aero.textMuted)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .modifier(ExploreGlass(corner: 16, elevation: 9))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(tool.title): \(tool.subtitle)")
+                }
+            }
+        }
+    }
+
+    private var resultsSection: some View {
+        let results = ExploreCatalog.search(query)
+        return VStack(alignment: .leading, spacing: 12) {
+            sectionHeader("Results")
+            if results.isEmpty {
+                emptySearch
+            } else {
+                VStack(spacing: 7) {
+                    ForEach(results) { tool in
+                        Button {
+                            onOpenChat(.chatPrefill(tool.prompt))
+                        } label: {
+                            HStack(spacing: 10) {
+                                NexlyGlyph(name: tool.glyph, size: 15, color: tool.filledTile ? .white : tool.fg)
+                                    .modifier(IconCircleStyle(
+                                        bg: tool.filledTile ? tool.fg : tool.bg,
+                                        diameter: 34,
+                                        solidTile: tool.filledTile
+                                    ))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(tool.title)
+                                        .font(Aero.bodyMedium().weight(.semibold))
+                                        .foregroundStyle(Aero.text)
+                                        .lineLimit(1)
+                                    Text(tool.subtitle)
+                                        .font(Aero.caption())
+                                        .foregroundStyle(Aero.textMuted)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                NexlyGlyph(name: "chevron-right", size: 14, color: Aero.textMuted)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .modifier(ExploreGlass(corner: 16, elevation: 9))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(tool.title): \(tool.subtitle)")
+                    }
+                }
+            }
+        }
+    }
+
+    private var emptySearch: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("No tool matches \(query.trimmingCharacters(in: .whitespaces)) yet")
+                .font(Aero.bodyMedium().weight(.semibold))
+                .foregroundStyle(Aero.text)
+            Text("I can still help — ask me directly and we'll figure it out together.")
+                .font(Aero.caption())
+                .foregroundStyle(Aero.textMuted)
+            Button {
+                onOpenChat(.chatAutoSend(query.trimmingCharacters(in: .whitespaces)))
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Ask about \(query.trimmingCharacters(in: .whitespaces))")
+                        .font(Aero.caption().weight(.semibold))
+                        .foregroundStyle(Aero.text)
+                        .lineLimit(1)
+                    NexlyGlyph(name: "arrow-right", size: 12, color: Aero.text)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(LinearGradient(colors: [ExplorePalette.ctaTop, ExplorePalette.ctaBottom], startPoint: .leading, endPoint: .trailing)))
+                    .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                        .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 9, x: 0, y: 5)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .modifier(ExploreGlass(corner: 18, elevation: 10))
+    }
+
+    /// The reference's composer: the typed words auto-send into a fresh chat.
+    private var composer: some View {
+        ExploreComposerBar { text in
+            onOpenChat(.chatAutoSend(text))
+        }
+    }
+}
+

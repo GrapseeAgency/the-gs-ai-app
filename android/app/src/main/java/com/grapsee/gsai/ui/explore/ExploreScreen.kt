@@ -6,15 +6,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
-import androidx.compose.ui.composed
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.foundation.border
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -22,8 +15,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -42,19 +35,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
-import kotlin.math.min
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -63,216 +55,264 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.grapsee.gsai.R
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.components.ReferenceBackdrop
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsFonts
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.LocalGsIsDark
-import kotlinx.coroutines.launch
+import kotlin.math.min
 
 /**
- * Explore AI — the discover page.
+ * Explore + Discover — TWO pages, matching the two authored mocks.
  *
- * Matches the Explore reference pair at full brightness: pearl backdrop,
- * luminous glass panels, the featured hero with its Discover chip and Explore
- * All door, category chips, a live search field, the Featured Tools grid,
- * Popular prompt rows, Creative Collections and the featured journey card.
- * No bottom navigation bar — the reference's nav is intentionally absent;
- * back is the system gesture, and everything on the page leads into a real
- * conversation via [onOpenChat] (prompt prefill / auto-send), the same real
- * dispatch path Home's quick pills use.
+ * EXPLORE (the reference with Popular Tools / Creative Collections / Featured):
+ * the featured hero, the Popular Tools grid, Creative Collections and the
+ * Featured journey card. No chips, no composer, no bottom navigation.
+ *
+ * DISCOVER (the reference with the EXPLORE hero / category chips / composer):
+ * the "Discover what you can do with Nexly" hero, category chips, Featured
+ * Tools, Popular prompt rows and the Ask-me-anything composer.
+ *
+ * Every card opens a REAL conversation through [onOpenChat]; Explore's CTA
+ * leads to Discover; nothing on either page is decorative.
+ *
+ * The artwork is authored vector art (assets/art/*.svg → rendered PNGs), and
+ * every panel carries the reference's rich glass: gradient fill, luminous
+ * rim, warm shadow.
  */
+
+// ---------------------------------------------------------------------------
+// palette (pixel-sampled from the authored mocks)
+// ---------------------------------------------------------------------------
+
+object ExploreTones {
+    val PinkBg = Color(0xFFFBD7E7)
+    val LavenderBg = Color(0xFFDED8FD)
+    val GreenBg = Color(0xFFCAEBD4)
+    val ApricotBg = Color(0xFFFEDFC5)
+    val BlueBg = Color(0xFFD6E6FC)
+
+    val PinkFg = Color(0xFFC43366)
+    val LavenderFg = Color(0xFF5A50D6)
+    val GreenFg = Color(0xFF177A50)
+    val ApricotFg = Color(0xFFB85C12)
+    val BlueFg = Color(0xFF1663C4)
+
+    val Peach = Color(0xFFFEB47D)
+    val PeachDeep = Color(0xFFFEC493)
+    val PeachPale = Color(0xFFFEDFC5)
+    val CtaTop = Color(0xFFFFE9DC)
+    val CtaBottom = Color(0xFFFED3C0)
+
+    val DiscoverBg = Color(0xFFFBE6F5)
+    val DiscoverInk = Color(0xFFC0447E)
+
+    val InkStrong = Color(0xFF181C30)
+    val InkHeader = Color(0xFF2B2C37)
+    val InkBody = Color(0xFF4A4B55)
+    val InkMuted = Color(0xFF8D8D95)
+}
+
+// ---------------------------------------------------------------------------
+// catalog
+// ---------------------------------------------------------------------------
+
+data class ExploreTone(val bg: Color, val fg: Color)
+
+enum class ExploreCategory(val label: String) {
+    All("All"),
+    Productivity("Productivity"),
+    Creativity("Creativity"),
+    Learning("Learning"),
+    Lifestyle("Lifestyle"),
+}
+
+data class ExploreTool(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val icon: String,
+    val tone: ExploreTone,
+    val category: ExploreCategory,
+    /** Seeds the conversation this card opens — never a dead end. */
+    val prompt: String,
+    /** The reference paints some tiles as saturated discs with white glyphs. */
+    val filledTile: Boolean = false,
+)
+
+object ExploreCatalog {
+    val tools = listOf(
+        ExploreTool(
+            id = "image-studio",
+            title = "Image Studio",
+            subtitle = "Create stunning images with AI",
+            icon = "photo",
+            tone = ExploreTone(ExploreTones.PinkBg, ExploreTones.PinkFg),
+            category = ExploreCategory.Creativity,
+            prompt = "Act as my image studio director. Ask me the subject, mood and style one question at a time, then write three detailed image prompts I can paste into any image generator.",
+        ),
+        ExploreTool(
+            id = "video-generator",
+            title = "Video Generator",
+            subtitle = "Turn ideas into videos",
+            icon = "player-play",
+            tone = ExploreTone(ExploreTones.LavenderBg, Color.White),
+            category = ExploreCategory.Creativity,
+            prompt = "Help me plan a short video. Ask what it is for and who watches it, then give me a shot-by-shot outline with narration lines and on-screen text for each scene.",
+            filledTile = true,
+        ),
+        ExploreTool(
+            id = "voice-assistant",
+            title = "Voice Assistant",
+            subtitle = "Natural, human-like voices",
+            icon = "waveform",
+            tone = ExploreTone(ExploreTones.GreenBg, ExploreTones.GreenFg),
+            category = ExploreCategory.Productivity,
+            prompt = "Be my speaking coach. We'll practise a short introduction out loud: I'll type what I want to say, you tighten it, then give me feedback on clarity and tone.",
+        ),
+        ExploreTool(
+            id = "code-assistant",
+            title = "Code Assistant",
+            subtitle = "Write, debug, and build faster",
+            icon = "code",
+            tone = ExploreTone(ExploreTones.ApricotBg, ExploreTones.ApricotFg),
+            category = ExploreCategory.Productivity,
+            prompt = "Be my pair programmer. Ask what I'm building and which language, then help me write and debug it step by step, explaining every fix.",
+        ),
+        ExploreTool(
+            id = "writing-assistant",
+            title = "Writing Assistant",
+            subtitle = "Craft, improve and perfect your text",
+            icon = "file-text",
+            tone = ExploreTone(ExploreTones.BlueBg, ExploreTones.BlueFg),
+            category = ExploreCategory.Productivity,
+            prompt = "Be my editor. I'll paste text; you keep my voice, fix grammar and flow, and show me a short list of what you changed and why.",
+        ),
+        ExploreTool(
+            id = "study-plan",
+            title = "Create a study plan",
+            subtitle = "Personalized learning plan for your goals",
+            icon = "school",
+            tone = ExploreTone(ExploreTones.LavenderBg, ExploreTones.LavenderFg),
+            category = ExploreCategory.Learning,
+            prompt = "Build me a personalized study plan. Ask my subject, deadline and weekly hours first, then give a day-by-day plan with one review session per week.",
+        ),
+        ExploreTool(
+            id = "logo-maker",
+            title = "Generate a logo",
+            subtitle = "Turn your idea into a unique logo",
+            icon = "brush",
+            tone = ExploreTone(ExploreTones.ApricotBg, ExploreTones.ApricotFg),
+            category = ExploreCategory.Creativity,
+            prompt = "Help me design a logo. Ask about the name, feeling and where it will live, then propose three concepts described precisely enough to brief a designer or generator.",
+        ),
+        ExploreTool(
+            id = "trip-planner",
+            title = "Plan a trip",
+            subtitle = "Get a custom travel itinerary",
+            icon = "plane",
+            tone = ExploreTone(ExploreTones.GreenBg, ExploreTones.GreenFg),
+            category = ExploreCategory.Lifestyle,
+            prompt = "Plan a trip with me. Ask the destination, dates and pace, then build a day-by-day itinerary with one highlight, one meal and one rest stop per day.",
+        ),
+        ExploreTool(
+            id = "doc-summary",
+            title = "Summarize a document",
+            subtitle = "Save time with AI summaries",
+            icon = "file-description",
+            tone = ExploreTone(ExploreTones.BlueBg, ExploreTones.BlueFg),
+            category = ExploreCategory.Learning,
+            prompt = "Summarize documents for me. I'll paste or attach one; give a five-bullet summary, the key numbers, and three questions I should ask about it.",
+        ),
+    )
+
+    data class Collection(
+        val title: String,
+        val subtitle: String,
+        val category: ExploreCategory,
+    )
+
+    val collections = listOf(
+        Collection("Design & Visuals", "For creators & dreamers", ExploreCategory.Creativity),
+        Collection("Work & Productivity", "Work smarter, not harder", ExploreCategory.Productivity),
+        Collection("Learning & Growth", "Build new skills", ExploreCategory.Learning),
+    )
+
+    /** The featured journey card (the reference's Weekend in Kyoto). */
+    val featured = ExploreTool(
+        id = "kyoto-weekend",
+        title = "Weekend in Kyoto",
+        subtitle = "A creative journey through Japan's timeless beauty",
+        icon = "sparkles",
+        tone = ExploreTone(ExploreTones.ApricotBg, ExploreTones.ApricotFg),
+        category = ExploreCategory.Lifestyle,
+        prompt = "Plan a creative weekend in Kyoto. Ask my pace and interests, then give me one day per page: morning temple light, one craft workshop, one quiet meal, and one place locals actually go.",
+    )
+
+    fun byCategory(category: ExploreCategory): List<ExploreTool> =
+        if (category == ExploreCategory.All) tools else tools.filter { it.category == category }
+
+    fun search(query: String): List<ExploreTool> {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return tools
+        return tools.filter {
+            it.title.lowercase().contains(q) ||
+                it.subtitle.lowercase().contains(q) ||
+                it.category.label.lowercase().contains(q)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// shared: page scaffold, header, glass, icon circle, section header
+// ---------------------------------------------------------------------------
+
 @Composable
-fun ExploreScreen(
-    onOpenChat: (prompt: String, autoSend: Boolean) -> Unit,
-    onBack: () -> Unit = {},
-    /** Render-harness entry points: the real states, driven from outside. */
-    initialQuery: String = "",
-    initialSearchOpen: Boolean = false,
+private fun ExplorePage(
+    inkStrong: Color,
+    inkHeader: Color,
+    inkBody: Color,
+    inkMuted: Color,
+    content: @Composable () -> Unit,
 ) {
-    val colors = GsTheme.colors
     val isDark = LocalGsIsDark.current
-    val inkStrong = if (isDark) colors.textPrimary else Color(0xFF181C30)
-    val inkHeader = if (isDark) colors.textPrimary else Color(0xFF2B2C37)
-    val inkBody = if (isDark) colors.textSecondary else Color(0xFF4A4B55)
-    val inkMuted = if (isDark) colors.textTertiary else Color(0xFF8D8D95)
-
-    var query by rememberSaveable { mutableStateOf(initialQuery) }
-    var searchOpen by rememberSaveable { mutableStateOf(initialSearchOpen) }
-    var category by rememberSaveable { mutableStateOf(ExploreCategory.All) }
-    var showAllTools by rememberSaveable { mutableStateOf(false) }
-    val scroll = rememberScrollState()
-    val scope = rememberCoroutineScope()
-
     Box(Modifier.fillMaxSize()) {
-        // Same pearl world as Home: the authored full-bleed render in light,
-        // the procedural gradient for Solid style and dark.
         if (isDark || SettingsStore.backgroundStyle == "Solid") {
             ReferenceBackdrop(Modifier.matchParentSize(), showBlossom = false, bokeh = false)
         } else {
             Image(
-                painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_backdrop),
+                painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_backdrop),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
             )
         }
-
         Column(
             Modifier
                 .fillMaxSize()
                 .statusBarsPadding(),
         ) {
-            ExploreHeader(
-                inkStrong = inkStrong,
-                inkMuted = inkMuted,
-                searchOpen = searchOpen,
-                onToggleSearch = {
-                    searchOpen = !searchOpen
-                    if (!searchOpen) query = ""
-                },
-            )
-
-            AnimatedVisibility(
-                visible = searchOpen,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically(),
-            ) {
-                SearchField(
-                    query = query,
-                    onQuery = { query = it },
-                    inkBody = inkBody,
-                    inkMuted = inkMuted,
-                )
-            }
-
-            Column(
-                Modifier
-                    .weight(1f)
-                    .verticalScroll(scroll)
-                    .padding(horizontal = 16.dp),
-            ) {
-                Spacer(Modifier.height(10.dp))
-
-                if (query.isNotBlank()) {
-                    SectionHeader("Results", inkHeader, inkMuted, count = ExploreCatalog.search(query).size)
-                    Spacer(Modifier.height(10.dp))
-                    val results = ExploreCatalog.search(query)
-                    if (results.isEmpty()) {
-                        EmptySearch(query, inkBody, inkMuted, onAsk = { onOpenChat(query, true) })
-                    } else {
-                        results.forEach { tool ->
-                            PromptRow(tool, inkStrong, inkMuted) { onOpenChat(tool.prompt, false) }
-                            Spacer(Modifier.height(8.dp))
-                        }
-                    }
-                } else {
-                    HeroCard(
-                        inkStrong = inkStrong,
-                        inkBody = inkBody,
-                        onExploreAll = {
-                            category = ExploreCategory.All
-                            showAllTools = true
-                            scope.launch { scroll.animateScrollTo(scroll.maxValue) }
-                        },
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    CategoryChips(category, onSelect = { category = it })
-                    Spacer(Modifier.height(16.dp))
-
-                    val cat = category
-                    val tools = ExploreCatalog.byCategory(cat)
-                    SectionHeader(
-                        "Featured Tools",
-                        inkHeader,
-                        inkMuted,
-                        onSeeAll = { showAllTools = !showAllTools },
-                        seeAllLabel = if (showAllTools) "Show less" else "See All",
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    val visible = if (showAllTools) tools else tools.take(4)
-                    visible.chunked(2).forEach { rowTools ->
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            rowTools.forEach { tool ->
-                                Box(Modifier.weight(1f)) {
-                                    ToolCard(tool, inkStrong, inkMuted) {
-                                        onOpenChat(tool.prompt, false)
-                                    }
-                                }
-                            }
-                            if (rowTools.size == 1) Spacer(Modifier.weight(1f))
-                        }
-                        Spacer(Modifier.height(12.dp))
-                    }
-
-                    val promptRows = ExploreCatalog.tools.filter { it.id in setOf("study-plan", "logo-maker", "trip-planner", "doc-summary") }
-                        .filter { cat == ExploreCategory.All || it.category == cat }
-                    if (promptRows.isNotEmpty()) {
-                        Spacer(Modifier.height(12.dp))
-                        SectionHeader("Popular", inkHeader, inkMuted)
-                        Spacer(Modifier.height(12.dp))
-                        promptRows.forEach { tool ->
-                            PromptRow(tool, inkStrong, inkMuted) { onOpenChat(tool.prompt, false) }
-                            Spacer(Modifier.height(8.dp))
-                        }
-                    }
-
-                    Spacer(Modifier.height(14.dp))
-                    SectionHeader("Creative Collections", inkHeader, inkMuted)
-                    Spacer(Modifier.height(12.dp))
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        ExploreCatalog.collections.forEach { collection ->
-                            CollectionCard(collection, inkStrong, inkMuted) {
-                                category = collection.category
-                                showAllTools = false
-                                scope.launch { scroll.animateScrollTo(0) }
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(20.dp))
-                    SectionHeader("Featured", inkHeader, inkMuted)
-                    Spacer(Modifier.height(12.dp))
-                    FeaturedCard(inkStrong, inkBody, inkMuted) {
-                        onOpenChat(ExploreCatalog.featured.prompt, false)
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-            }
-
-            ExploreComposer(
-                inkBody = inkBody,
-                inkMuted = inkMuted,
-                onSend = { text -> onOpenChat(text, true) },
-            )
+            content()
         }
     }
 }
 
-/** Header: orb + product name + the search circle (reference-exact). */
 @Composable
-private fun ExploreHeader(
+private fun ExplorePageHeader(
     inkStrong: Color,
     inkMuted: Color,
     searchOpen: Boolean,
     onToggleSearch: () -> Unit,
 ) {
-    val colors = GsTheme.colors
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Image(
@@ -285,7 +325,7 @@ private fun ExploreHeader(
         Column {
             Text(
                 "Nexly",
-                fontSize = 12.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = GsFonts.Product,
                 color = inkStrong,
@@ -302,24 +342,24 @@ private fun ExploreHeader(
             Modifier
                 .size(36.dp)
                 .exploreGlass(shape = CircleShape, elevation = 8.dp)
-                .clickable(role = Role.Button, onClickLabel = if (searchOpen) "Close search" else "Open search") {
-                    onToggleSearch()
-                },
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = if (searchOpen) "Close search" else "Open search",
+                ) { onToggleSearch() },
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 GsIcons.Search,
                 contentDescription = null,
                 tint = inkStrong,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(16.dp),
             )
         }
     }
 }
 
-/** The expanding search field. Filters the real catalog; nothing faked. */
 @Composable
-private fun SearchField(
+private fun ExploreSearchField(
     query: String,
     onQuery: (String) -> Unit,
     inkBody: Color,
@@ -328,12 +368,12 @@ private fun SearchField(
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp)
-            .exploreGlass(shape = RoundedCornerShape(24.dp), elevation = 10.dp)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .exploreGlass(shape = RoundedCornerShape(22.dp), elevation = 8.dp)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(GsIcons.Search, contentDescription = null, tint = inkMuted, modifier = Modifier.size(16.dp))
+        Icon(GsIcons.Search, contentDescription = null, tint = inkMuted, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(8.dp))
         Box(Modifier.weight(1f)) {
             if (query.isEmpty()) {
@@ -365,201 +405,89 @@ private fun SearchField(
                 contentDescription = "Clear search",
                 tint = inkMuted,
                 modifier = Modifier
-                    .size(16.dp)
+                    .size(14.dp)
                     .clickable(role = Role.Button, onClickLabel = "Clear search") { onQuery("") },
             )
         }
     }
 }
 
-/** Hero: Discover chip + title + body + the Explore All door + ethereal art. */
+/**
+ * The reference's rich glass: warm gradient fill with the bloom showing
+ * through, a luminous rim toward the top-left, a soft warm shadow.
+ */
 @Composable
-private fun HeroCard(
-    inkStrong: Color,
-    inkBody: Color,
-    onExploreAll: () -> Unit,
-) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .exploreGlass(shape = RoundedCornerShape(26.dp), elevation = 14.dp),
-    ) {
-        // The reference's hero: pearl on the left where the copy sits, a
-        // The reference's OWN iridescent bubbles carry the card's right side:
-        // the artwork is cropped from the authored Explore mock and shipped
-        // as gs_explore_hero, its left edge fading into the pearl so the
-        // copy sits on quiet ground. matchParentSize, not fillMaxHeight —
-        // the scroll's constraints are unbounded and a fill would collapse.
-        // The art layer spans the card (matchParentSize is bounded even under
-        // the scroll's unbounded constraints); the bubbles live in a fixed
-        // 230dp frame pinned to the card's right edge.
-        Box(Modifier.matchParentSize()) {
-            Box(
-                Modifier
-                    .align(Alignment.CenterEnd)
-                    .fillMaxHeight()
-                    .width(230.dp),
-            ) {
-                Image(
-                    painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_hero),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.matchParentSize(),
-                )
-            }
-        }
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(
-                    Brush.horizontalGradient(
-                        0f to Color(0xFFFDF1EC).copy(alpha = 0.94f),
-                        0.45f to Color(0xFFFDF1EC).copy(alpha = 0.22f),
-                        1f to Color.Transparent,
-                    ),
-                ),
+private fun Modifier.exploreGlass(
+    shape: Shape,
+    elevation: Dp = 12.dp,
+): Modifier = composed {
+    val isDark = LocalGsIsDark.current
+    this
+        .shadow(
+            elevation = elevation,
+            shape = shape,
+            ambientColor = Color(0x2EEDBEA4),
+            spotColor = Color(0x55E29C7C),
         )
-        Column(Modifier.padding(14.dp)) {
-            Row(
-                Modifier
-                    .background(ExploreTones.DiscoverBg, RoundedCornerShape(14.dp))
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    GsIcons.Sparkles,
-                    contentDescription = null,
-                    tint = ExploreTones.DiscoverInk,
-                    modifier = Modifier.size(12.dp),
-                )
-                Spacer(Modifier.width(5.dp))
-                Text(
-                    "Discover",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    fontFamily = GsFonts.Product,
-                    color = ExploreTones.DiscoverInk,
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            Text(
-                "Explore AI\nPossibilities",
-                fontSize = 17.5.sp,
-                lineHeight = 21.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = GsFonts.Product,
-                color = inkStrong,
-                modifier = Modifier.widthIn(max = 205.dp),
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Powerful tools, creative features, and more ways to bring your ideas to life — all in one place.",
-                fontSize = 11.sp,
-                lineHeight = 15.sp,
-                fontFamily = GsFonts.Product,
-                color = inkBody,
-                modifier = Modifier.widthIn(max = 215.dp),
-            )
-            Spacer(Modifier.height(14.dp))
-            Row(
-                Modifier
-                    .shadow(
-                        elevation = 10.dp,
-                        shape = RoundedCornerShape(18.dp),
-                        ambientColor = Color(0x2EEDBEA4),
-                        spotColor = Color(0x59EB9E72),
-                    )
-                    .background(
-                        Brush.horizontalGradient(listOf(ExploreTones.CtaTop, ExploreTones.CtaBottom)),
-                        RoundedCornerShape(18.dp),
-                    )
-                    .border(
-                        1.dp,
-                        Brush.verticalGradient(
-                            0f to Color.White.copy(alpha = 0.90f),
-                            1f to Color.White.copy(alpha = 0.35f),
-                        ),
-                        RoundedCornerShape(18.dp),
-                    )
-                    .clickable(role = Role.Button, onClickLabel = "Explore all tools") { onExploreAll() }
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "Explore All",
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GsFonts.Product,
-                    color = inkStrong,
-                )
-                Spacer(Modifier.width(8.dp))
-                Icon(
-                    GsIcons.ArrowRight,
-                    contentDescription = null,
-                    tint = inkStrong,
-                    modifier = Modifier.size(14.dp),
-                )
-            }
-        }
-    }
+        .clip(shape)
+        .background(
+            Brush.linearGradient(
+                0f to Color(0xFFFFFAF6).copy(alpha = if (isDark) 0.90f else 0.97f),
+                1f to Color(0xFFFCEDE5).copy(alpha = if (isDark) 0.80f else 0.88f),
+                start = androidx.compose.ui.geometry.Offset.Zero,
+                end = androidx.compose.ui.geometry.Offset.Infinite,
+            ),
+            shape,
+        )
+        .border(
+            1.dp,
+            Brush.linearGradient(
+                0f to Color.White.copy(alpha = 0.95f),
+                1f to Color.White.copy(alpha = 0.30f),
+            ),
+            shape,
+        )
 }
 
-/** Category chips — live filter, peach when selected. */
+/** The icon circle: tinted gradient, white rim, its own glow. */
 @Composable
-private fun CategoryChips(
-    selected: ExploreCategory,
-    onSelect: (ExploreCategory) -> Unit,
+private fun ExploreIconCircle(
+    tool: ExploreTool,
+    circle: Dp,
+    glyph: Dp,
 ) {
-    val isDark = LocalGsIsDark.current
-    val colors = GsTheme.colors
-    val inkMuted = if (isDark) colors.textTertiary else Color(0xFF7A7B85)
-    Row(
+    val tileBg = if (tool.filledTile) tool.tone.fg else tool.tone.bg
+    val glyphTint = if (tool.filledTile) Color.White else tool.tone.fg
+    val bgLight = lerp(tileBg, Color.White, 0.45f)
+    Box(
         Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .size(circle)
+            .shadow(
+                elevation = 7.dp,
+                shape = CircleShape,
+                ambientColor = Color(0x2EEDBEA4),
+                spotColor = Color(0x4DE29C7C),
+            )
+            .background(
+                Brush.verticalGradient(0f to bgLight, 1f to tileBg),
+                CircleShape,
+            )
+            .border(
+                1.2.dp,
+                Brush.verticalGradient(
+                    0f to Color.White.copy(alpha = 0.95f),
+                    1f to Color.White.copy(alpha = 0.40f),
+                ),
+                CircleShape,
+            ),
+        contentAlignment = Alignment.Center,
     ) {
-        ExploreCategory.entries.forEach { cat ->
-            val active = cat == selected
-            Box(
-                Modifier
-                    .then(
-                        if (active) {
-                            Modifier
-                                .shadow(
-                                    elevation = 8.dp,
-                                    shape = RoundedCornerShape(17.dp),
-                                    ambientColor = Color(0x2EEDBEA4),
-                                    spotColor = Color(0x59EB9E72),
-                                )
-                                .background(
-                                    Brush.horizontalGradient(listOf(ExploreTones.Peach, ExploreTones.PeachDeep)),
-                                    RoundedCornerShape(17.dp),
-                                )
-                                .border(
-                                    1.dp,
-                                    Brush.verticalGradient(
-                                        0f to Color.White.copy(alpha = 0.85f),
-                                        1f to Color.White.copy(alpha = 0.30f),
-                                    ),
-                                    RoundedCornerShape(17.dp),
-                                )
-                        } else {
-                            Modifier.exploreGlass(shape = RoundedCornerShape(17.dp), elevation = 6.dp)
-                        },
-                    )
-                    .clickable(role = Role.Button, onClickLabel = cat.label) { onSelect(cat) }
-                    .padding(horizontal = 14.dp, vertical = 7.dp),
-            ) {
-                Text(
-                    cat.label,
-                    fontSize = 11.5.sp,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    fontFamily = GsFonts.Product,
-                    color = if (active) Color.White else inkMuted,
-                )
-            }
-        }
+        Icon(
+            exploreIcon(tool.icon),
+            contentDescription = null,
+            tint = glyphTint,
+            modifier = Modifier.size(glyph),
+        )
     }
 }
 
@@ -568,9 +496,7 @@ private fun SectionHeader(
     title: String,
     inkHeader: Color,
     inkMuted: Color,
-    count: Int? = null,
     onSeeAll: (() -> Unit)? = null,
-    seeAllLabel: String = "See All",
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -580,37 +506,280 @@ private fun SectionHeader(
             fontFamily = GsFonts.Product,
             color = inkHeader,
         )
-        if (count != null) {
-            Spacer(Modifier.width(6.dp))
-            Text(
-                count.toString(),
-                fontSize = 10.5.sp,
-                fontFamily = GsFonts.Product,
-                color = inkMuted,
-            )
-        }
         Spacer(Modifier.weight(1f))
         if (onSeeAll != null) {
             Row(
-                Modifier.clickable(role = Role.Button, onClickLabel = seeAllLabel) { onSeeAll() },
+                Modifier.clickable(role = Role.Button, onClickLabel = "See All") { onSeeAll() },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    seeAllLabel,
+                    "See All",
                     fontSize = 11.sp,
                     fontFamily = GsFonts.Product,
                     color = inkMuted,
                 )
                 Spacer(Modifier.width(4.dp))
-                Icon(GsIcons.ArrowRight, contentDescription = null, tint = inkMuted, modifier = Modifier.size(12.dp))
+                Icon(GsIcons.ArrowRight, contentDescription = null, tint = inkMuted, modifier = Modifier.size(11.dp))
             }
         }
     }
 }
 
-/** Featured Tools grid card. Tapping opens the tool's real conversation. */
+/** Catalog icon ids (kebab, shared with the iOS glyph table) → vectors. */
+private fun exploreIcon(id: String): ImageVector = when (id) {
+    "photo" -> GsIcons.Image
+    "player-play" -> GsIcons.PlayCircle
+    "waveform" -> GsIcons.AudioWaveform
+    "code" -> GsIcons.Code
+    "file-text" -> GsIcons.FileText
+    "file-description" -> GsIcons.FileText
+    "school" -> GsIcons.School
+    "brush" -> GsIcons.Brush
+    "plane" -> GsIcons.Plane
+    "clipboard-text" -> GsIcons.ClipboardList
+    "salad" -> GsIcons.Salad
+    "sparkles" -> GsIcons.Sparkles
+    else -> GsIcons.Sparkles
+}
+
+// ---------------------------------------------------------------------------
+// EXPLORE — the reference with Popular Tools / Collections / Featured
+// ---------------------------------------------------------------------------
+
 @Composable
-private fun ToolCard(
+fun ExploreScreen(
+    onOpenChat: (prompt: String, autoSend: Boolean) -> Unit,
+    onOpenDiscover: () -> Unit,
+    onBack: () -> Unit = {},
+    /** Render-harness entry points: the real states, driven from outside. */
+    initialSearchOpen: Boolean = false,
+) {
+    val colors = GsTheme.colors
+    val isDark = LocalGsIsDark.current
+    val inkStrong = if (isDark) colors.textPrimary else ExploreTones.InkStrong
+    val inkHeader = if (isDark) colors.textPrimary else ExploreTones.InkHeader
+    val inkBody = if (isDark) colors.textSecondary else ExploreTones.InkBody
+    val inkMuted = if (isDark) colors.textTertiary else ExploreTones.InkMuted
+
+    var query by rememberSaveable { mutableStateOf("") }
+    var searchOpen by rememberSaveable { mutableStateOf(initialSearchOpen) }
+    val scroll = rememberScrollState()
+
+    ExplorePage(inkStrong, inkHeader, inkBody, inkMuted) {
+        ExplorePageHeader(
+            inkStrong = inkStrong,
+            inkMuted = inkMuted,
+            searchOpen = searchOpen,
+            onToggleSearch = {
+                searchOpen = !searchOpen
+                if (!searchOpen) query = ""
+            },
+        )
+
+        AnimatedVisibility(
+            visible = searchOpen,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            ExploreSearchField(query, { query = it }, inkBody, inkMuted)
+        }
+
+        Column(
+            Modifier
+                .weight(1f)
+                .verticalScroll(scroll)
+                .padding(horizontal = 16.dp),
+        ) {
+            Spacer(Modifier.height(10.dp))
+
+            if (query.isNotBlank()) {
+                SectionHeader("Results", inkHeader, inkMuted)
+                Spacer(Modifier.height(8.dp))
+                val results = ExploreCatalog.search(query)
+                if (results.isEmpty()) {
+                    ExploreEmptySearch(query, inkBody, inkMuted, onAsk = { onOpenChat(query, true) })
+                } else {
+                    results.forEach { tool ->
+                        ExplorePromptRow(tool, inkStrong, inkMuted) { onOpenChat(tool.prompt, false) }
+                        Spacer(Modifier.height(7.dp))
+                    }
+                }
+            } else {
+                // HERO — the Discover chip, the bubbles on the right, the door
+                // into the full Discover page.
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .exploreGlass(shape = RoundedCornerShape(24.dp), elevation = 14.dp),
+                ) {
+                    Box(Modifier.matchParentSize()) {
+                        Box(
+                            Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight()
+                                .width(216.dp),
+                        ) {
+                            Image(
+                                painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_hero),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.matchParentSize(),
+                            )
+                        }
+                        Box(
+                            Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.horizontalGradient(
+                                        0f to Color(0xFFFDF1EC).copy(alpha = 0.94f),
+                                        0.45f to Color(0xFFFDF1EC).copy(alpha = 0.22f),
+                                        1f to Color.Transparent,
+                                    ),
+                                ),
+                        )
+                    }
+                    Column(Modifier.padding(13.dp)) {
+                        Row(
+                            Modifier
+                                .background(ExploreTones.DiscoverBg, RoundedCornerShape(13.dp))
+                                .padding(horizontal = 9.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                GsIcons.Sparkles,
+                                contentDescription = null,
+                                tint = ExploreTones.DiscoverInk,
+                                modifier = Modifier.size(10.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "Discover",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = GsFonts.Product,
+                                color = ExploreTones.DiscoverInk,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Explore AI\nPossibilities",
+                            fontSize = 17.5.sp,
+                            lineHeight = 21.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = GsFonts.Product,
+                            color = inkStrong,
+                            modifier = Modifier.widthIn(max = 200.dp),
+                        )
+                        Spacer(Modifier.height(7.dp))
+                        Text(
+                            "Powerful tools, creative features, and more ways to bring your ideas to life — all in one place.",
+                            fontSize = 10.5.sp,
+                            lineHeight = 14.sp,
+                            fontFamily = GsFonts.Product,
+                            color = inkBody,
+                            modifier = Modifier.widthIn(max = 200.dp),
+                        )
+                        Spacer(Modifier.height(11.dp))
+                        Row(
+                            Modifier
+                                .shadow(
+                                    elevation = 9.dp,
+                                    shape = RoundedCornerShape(16.dp),
+                                    ambientColor = Color(0x2EEDBEA4),
+                                    spotColor = Color(0x59EB9E72),
+                                )
+                                .background(
+                                    Brush.horizontalGradient(listOf(ExploreTones.CtaTop, ExploreTones.CtaBottom)),
+                                    RoundedCornerShape(16.dp),
+                                )
+                                .border(
+                                    1.dp,
+                                    Brush.verticalGradient(
+                                        0f to Color.White.copy(alpha = 0.90f),
+                                        1f to Color.White.copy(alpha = 0.35f),
+                                    ),
+                                    RoundedCornerShape(16.dp),
+                                )
+                                .clickable(role = Role.Button, onClickLabel = "Explore all tools") { onOpenDiscover() }
+                                .padding(horizontal = 13.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "Explore All",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = GsFonts.Product,
+                                color = inkStrong,
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                GsIcons.ArrowRight,
+                                contentDescription = null,
+                                tint = inkStrong,
+                                modifier = Modifier.size(11.dp),
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+
+                // POPULAR TOOLS — the reference's horizontal cards
+                SectionHeader("Popular Tools", inkHeader, inkMuted, onSeeAll = onOpenDiscover)
+                Spacer(Modifier.height(10.dp))
+                val grid = ExploreCatalog.tools.take(4)
+                grid.chunked(2).forEach { rowTools ->
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        rowTools.forEach { tool ->
+                            Box(Modifier.weight(1f)) {
+                                ExploreToolCardHorizontal(tool, inkStrong, inkMuted) {
+                                    onOpenChat(tool.prompt, false)
+                                }
+                            }
+                        }
+                        if (rowTools.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                    Spacer(Modifier.height(10.dp))
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // CREATIVE COLLECTIONS
+                SectionHeader("Creative Collections", inkHeader, inkMuted)
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    ExploreCatalog.collections.forEach { collection ->
+                        ExploreCollectionCard(collection, inkStrong, inkMuted) {
+                            // a collection opens the Discover page
+                            onOpenDiscover()
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // FEATURED — the Kyoto journey
+                SectionHeader("Featured", inkHeader, inkMuted)
+                Spacer(Modifier.height(10.dp))
+                ExploreFeaturedCard(inkStrong, inkBody, inkMuted) {
+                    onOpenChat(ExploreCatalog.featured.prompt, false)
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+        }
+    }
+}
+
+/** The reference's Popular Tools card: icon left, copy right, arrow low-right. */
+@Composable
+private fun ExploreToolCardHorizontal(
     tool: ExploreTool,
     inkStrong: Color,
     inkMuted: Color,
@@ -618,89 +787,47 @@ private fun ToolCard(
 ) {
     Column(
         Modifier
-            .exploreGlass(shape = RoundedCornerShape(20.dp))
+            .exploreGlass(shape = RoundedCornerShape(18.dp), elevation = 10.dp)
             .clickable(role = Role.Button, onClickLabel = tool.title) { onOpen() }
             .padding(11.dp),
     ) {
-        ExploreIconCircle(tool = tool, circle = 40.dp, glyph = 17.dp)
-        Spacer(Modifier.height(10.dp))
-        Text(
-            tool.title,
-            fontSize = 12.5.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = GsFonts.Product,
-            color = inkStrong,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            tool.subtitle,
-            fontSize = 10.5.sp,
-            lineHeight = 13.5.sp,
-            fontFamily = GsFonts.Product,
-            color = inkMuted,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Spacer(Modifier.height(8.dp))
-        Icon(
-            GsIcons.ArrowRight,
-            contentDescription = null,
-            tint = inkMuted,
-            modifier = Modifier
-                .size(14.dp)
-                .align(Alignment.End),
-        )
-    }
-}
-
-/** Popular / results row. */
-@Composable
-private fun PromptRow(
-    tool: ExploreTool,
-    inkStrong: Color,
-    inkMuted: Color,
-    onOpen: () -> Unit,
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .exploreGlass(shape = RoundedCornerShape(18.dp), elevation = 9.dp)
-            .clickable(role = Role.Button, onClickLabel = tool.title) { onOpen() }
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ExploreIconCircle(tool = tool, circle = 34.dp, glyph = 15.dp)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ExploreIconCircle(tool = tool, circle = 36.dp, glyph = 15.dp)
+            Spacer(Modifier.width(9.dp))
             Text(
                 tool.title,
-                fontSize = 15.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = GsFonts.Product,
                 color = inkStrong,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                tool.subtitle,
-                fontSize = 12.5.sp,
-                fontFamily = GsFonts.Product,
-                color = inkMuted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
-        Spacer(Modifier.width(8.dp))
-        Icon(GsIcons.ChevronRight, contentDescription = null, tint = inkMuted, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.height(7.dp))
+        Text(
+            tool.subtitle,
+            fontSize = 10.sp,
+            lineHeight = 13.sp,
+            fontFamily = GsFonts.Product,
+            color = inkMuted,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(6.dp))
+        Icon(
+            GsIcons.ArrowRight,
+            contentDescription = null,
+            tint = inkMuted,
+            modifier = Modifier
+                .size(11.dp)
+                .align(Alignment.End),
+        )
     }
 }
 
-/** Collection card: artwork wash + title, taps filter the page. */
 @Composable
-private fun CollectionCard(
+private fun ExploreCollectionCard(
     collection: ExploreCatalog.Collection,
     inkStrong: Color,
     inkMuted: Color,
@@ -709,25 +836,14 @@ private fun CollectionCard(
     Column(
         Modifier
             .width(150.dp)
-            .exploreGlass(shape = RoundedCornerShape(20.dp))
+            .exploreGlass(shape = RoundedCornerShape(18.dp), elevation = 10.dp)
             .clickable(role = Role.Button, onClickLabel = collection.title) { onOpen() },
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(74.dp),
+                .height(72.dp),
         ) {
-            // Each collection carries its own scene, like the reference set:
-            // the lotus for Design, the pearl-drape scene for Work, the
-            // bubble close-up for Learning.
-            val alignment = when (collection.subtitle) {
-                "Work smarter, not harder" -> BiasAlignment(0.5f, 0.62f)
-                "Build new skills" -> BiasAlignment(0.74f, 0.24f)
-                else -> Alignment.Center
-            }
-            // Each scene is cropped from the authored Explore mock: the
-            // lotus for Design, the misty pagoda landscape for Work, the
-            // orange lotus close-up for Learning.
             val art = when (collection.subtitle) {
                 "Work smarter, not harder" -> com.grapsee.gsai.R.drawable.gs_explore_col_work
                 "Build new skills" -> com.grapsee.gsai.R.drawable.gs_explore_col_learning
@@ -744,8 +860,8 @@ private fun CollectionCard(
                     .matchParentSize()
                     .background(
                         Brush.verticalGradient(
-                            0f to Color.White.copy(alpha = 0.10f),
-                            1f to Color.White.copy(alpha = 0.38f),
+                            0f to Color.White.copy(alpha = 0.06f),
+                            1f to Color.White.copy(alpha = 0.34f),
                         ),
                     ),
             )
@@ -763,7 +879,7 @@ private fun CollectionCard(
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(4.dp))
-                Icon(GsIcons.ArrowRight, contentDescription = null, tint = inkMuted, modifier = Modifier.size(13.dp))
+                Icon(GsIcons.ArrowRight, contentDescription = null, tint = inkMuted, modifier = Modifier.size(12.dp))
             }
             Spacer(Modifier.height(2.dp))
             Text(
@@ -778,9 +894,8 @@ private fun CollectionCard(
     }
 }
 
-/** The featured journey card (reference: Weekend in Kyoto). */
 @Composable
-private fun FeaturedCard(
+private fun ExploreFeaturedCard(
     inkStrong: Color,
     inkBody: Color,
     inkMuted: Color,
@@ -789,18 +904,15 @@ private fun FeaturedCard(
     Box(
         Modifier
             .fillMaxWidth()
-            .exploreGlass(shape = RoundedCornerShape(20.dp))
+            .exploreGlass(shape = RoundedCornerShape(18.dp), elevation = 10.dp)
             .clickable(role = Role.Button, onClickLabel = ExploreCatalog.featured.title) { onOpen() },
     ) {
-        // The reference's featured card: the scene fills the card's right
-        // side under a pearl veil, words on the left. No pagoda asset ships,
-        // so the scene is drawn — soft sky, distant hills, the pagoda's
-        // three tiers and a blossom branch — in the reference's palette.
+        // the authored Kyoto scene fills the card's right side under a veil
         Box(
             Modifier
                 .align(Alignment.CenterEnd)
                 .fillMaxHeight()
-                .fillMaxWidth(0.50f),
+                .width(150.dp),
         ) {
             Image(
                 painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_kyoto),
@@ -813,20 +925,20 @@ private fun FeaturedCard(
                     .matchParentSize()
                     .background(
                         Brush.horizontalGradient(
-                            0f to Color(0xFFFBEDE7).copy(alpha = 0.80f),
-                            0.45f to Color(0xFFFBEDE7).copy(alpha = 0.12f),
+                            0f to Color(0xFFFBEDE7).copy(alpha = 0.88f),
+                            0.55f to Color(0xFFFBEDE7).copy(alpha = 0.18f),
                             1f to Color.Transparent,
                         ),
                     ),
             )
         }
         Row(
-            Modifier.padding(12.dp),
+            Modifier.padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 Modifier
-                    .size(40.dp)
+                    .size(34.dp)
                     .shadow(
                         elevation = 7.dp,
                         shape = CircleShape,
@@ -854,10 +966,10 @@ private fun FeaturedCard(
                     GsIcons.Sparkles,
                     contentDescription = null,
                     tint = ExploreCatalog.featured.tone.fg,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(15.dp),
                 )
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     ExploreCatalog.featured.title,
@@ -880,7 +992,7 @@ private fun FeaturedCard(
             Spacer(Modifier.width(8.dp))
             Box(
                 Modifier
-                    .size(30.dp)
+                    .size(26.dp)
                     .background(Color.White.copy(alpha = 0.55f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
@@ -888,119 +1000,451 @@ private fun FeaturedCard(
                     GsIcons.ChevronRight,
                     contentDescription = null,
                     tint = inkBody,
-                    modifier = Modifier.size(15.dp),
+                    modifier = Modifier.size(13.dp),
                 )
             }
         }
     }
 }
 
-/**
- * The composer (reference #2): "Ask me anything…" that sends a REAL message
- * into a fresh conversation — auto-send, the same path as the chat screen.
- */
+// ---------------------------------------------------------------------------
+// DISCOVER — the reference with the EXPLORE hero / chips / composer
+// ---------------------------------------------------------------------------
+
 @Composable
-private fun ExploreComposer(
-    inkBody: Color,
-    inkMuted: Color,
-    onSend: (String) -> Unit,
+fun DiscoverScreen(
+    onOpenChat: (prompt: String, autoSend: Boolean) -> Unit,
+    onBack: () -> Unit = {},
+    initialQuery: String = "",
+    initialSearchOpen: Boolean = false,
 ) {
+    val colors = GsTheme.colors
+    val isDark = LocalGsIsDark.current
+    val inkStrong = if (isDark) colors.textPrimary else ExploreTones.InkStrong
+    val inkHeader = if (isDark) colors.textPrimary else ExploreTones.InkHeader
+    val inkBody = if (isDark) colors.textSecondary else ExploreTones.InkBody
+    val inkMuted = if (isDark) colors.textTertiary else ExploreTones.InkMuted
+
+    var query by rememberSaveable { mutableStateOf(initialQuery) }
+    var searchOpen by rememberSaveable { mutableStateOf(initialSearchOpen) }
+    var category by rememberSaveable { mutableStateOf(ExploreCategory.All) }
+    val scroll = rememberScrollState()
     var draft by rememberSaveable { mutableStateOf("") }
     val canSend = draft.isNotBlank()
+
+    ExplorePage(inkStrong, inkHeader, inkBody, inkMuted) {
+        ExplorePageHeader(
+            inkStrong = inkStrong,
+            inkMuted = inkMuted,
+            searchOpen = searchOpen,
+            onToggleSearch = {
+                searchOpen = !searchOpen
+                if (!searchOpen) query = ""
+            },
+        )
+
+        AnimatedVisibility(
+            visible = searchOpen,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            ExploreSearchField(query, { query = it }, inkBody, inkMuted)
+        }
+
+        Column(
+            Modifier
+                .weight(1f)
+                .verticalScroll(scroll)
+                .padding(horizontal = 16.dp),
+        ) {
+            Spacer(Modifier.height(10.dp))
+
+            if (query.isNotBlank()) {
+                SectionHeader("Results", inkHeader, inkMuted)
+                Spacer(Modifier.height(8.dp))
+                val results = ExploreCatalog.search(query)
+                if (results.isEmpty()) {
+                    ExploreEmptySearch(query, inkBody, inkMuted, onAsk = { onOpenChat(query, true) })
+                } else {
+                    results.forEach { tool ->
+                        ExplorePromptRow(tool, inkStrong, inkMuted) { onOpenChat(tool.prompt, false) }
+                        Spacer(Modifier.height(7.dp))
+                    }
+                }
+            } else {
+                // HERO — the reference's eyebrow + two-line title + Start Exploring
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .exploreGlass(shape = RoundedCornerShape(24.dp), elevation = 14.dp),
+                ) {
+                    Box(Modifier.matchParentSize()) {
+                        Box(
+                            Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight()
+                                .width(200.dp),
+                        ) {
+                            Image(
+                                painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_hero),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.matchParentSize(),
+                            )
+                        }
+                        Box(
+                            Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.horizontalGradient(
+                                        0f to Color(0xFFFDF1EC).copy(alpha = 0.94f),
+                                        0.45f to Color(0xFFFDF1EC).copy(alpha = 0.22f),
+                                        1f to Color.Transparent,
+                                    ),
+                                ),
+                        )
+                    }
+                    Column(Modifier.padding(13.dp)) {
+                        Text(
+                            "EXPLORE",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = GsFonts.Product,
+                            color = inkMuted,
+                            letterSpacing = 2.sp,
+                        )
+                        Spacer(Modifier.height(7.dp))
+                        Text(
+                            "Discover what\nyou can do with Nexly",
+                            fontSize = 17.sp,
+                            lineHeight = 21.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = GsFonts.Product,
+                            color = inkStrong,
+                        )
+                        Spacer(Modifier.height(7.dp))
+                        Text(
+                            "AI tools, creative features and smart experiences — all in one place.",
+                            fontSize = 10.5.sp,
+                            lineHeight = 14.sp,
+                            fontFamily = GsFonts.Product,
+                            color = inkBody,
+                            modifier = Modifier.widthIn(max = 220.dp),
+                        )
+                        Spacer(Modifier.height(11.dp))
+                        Row(
+                            Modifier
+                                .shadow(
+                                    elevation = 9.dp,
+                                    shape = RoundedCornerShape(16.dp),
+                                    ambientColor = Color(0x2EEDBEA4),
+                                    spotColor = Color(0x59EB9E72),
+                                )
+                                .background(
+                                    Brush.horizontalGradient(listOf(ExploreTones.CtaTop, ExploreTones.CtaBottom)),
+                                    RoundedCornerShape(16.dp),
+                                )
+                                .border(
+                                    1.dp,
+                                    Brush.verticalGradient(
+                                        0f to Color.White.copy(alpha = 0.90f),
+                                        1f to Color.White.copy(alpha = 0.35f),
+                                    ),
+                                    RoundedCornerShape(16.dp),
+                                )
+                                .clickable(role = Role.Button, onClickLabel = "Start exploring") {
+                                    scroll.animateScrollTo(scroll.maxValue)
+                                }
+                                .padding(horizontal = 13.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "Start Exploring",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = GsFonts.Product,
+                                color = inkStrong,
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                GsIcons.ArrowRight,
+                                contentDescription = null,
+                                tint = inkStrong,
+                                modifier = Modifier.size(11.dp),
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+
+                // CATEGORY CHIPS
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    ExploreCategory.entries.forEach { cat ->
+                        val active = cat == category
+                        Box(
+                            Modifier
+                                .then(
+                                    if (active) {
+                                        Modifier
+                                            .shadow(
+                                                elevation = 8.dp,
+                                                shape = RoundedCornerShape(15.dp),
+                                                ambientColor = Color(0x2EEDBEA4),
+                                                spotColor = Color(0x59EB9E72),
+                                            )
+                                            .background(
+                                                Brush.horizontalGradient(listOf(ExploreTones.Peach, ExploreTones.PeachDeep)),
+                                                RoundedCornerShape(15.dp),
+                                            )
+                                            .border(
+                                                1.dp,
+                                                Brush.verticalGradient(
+                                                    0f to Color.White.copy(alpha = 0.85f),
+                                                    1f to Color.White.copy(alpha = 0.30f),
+                                                ),
+                                                RoundedCornerShape(15.dp),
+                                            )
+                                    } else {
+                                        Modifier.exploreGlass(shape = RoundedCornerShape(15.dp), elevation = 5.dp)
+                                    },
+                                )
+                                .clickable(role = Role.Button, onClickLabel = cat.label) { category = cat }
+                                .padding(horizontal = 13.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                cat.label,
+                                fontSize = 11.5.sp,
+                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                                fontFamily = GsFonts.Product,
+                                color = if (active) Color.White else inkMuted,
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+
+                // FEATURED TOOLS — the reference's vertical cards
+                SectionHeader("Featured Tools", inkHeader, inkMuted)
+                Spacer(Modifier.height(10.dp))
+                val visible = ExploreCatalog.byCategory(category)
+                visible.chunked(2).forEach { rowTools ->
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        rowTools.forEach { tool ->
+                            Box(Modifier.weight(1f)) {
+                                DiscoverToolCardVertical(tool, inkStrong, inkMuted) {
+                                    onOpenChat(tool.prompt, false)
+                                }
+                            }
+                        }
+                        if (rowTools.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                    Spacer(Modifier.height(10.dp))
+                }
+
+                // POPULAR — prompt rows
+                Spacer(Modifier.height(6.dp))
+                SectionHeader("Popular", inkHeader, inkMuted)
+                Spacer(Modifier.height(10.dp))
+                val promptRows = ExploreCatalog.tools.filter {
+                    it.id in setOf("study-plan", "logo-maker", "trip-planner", "doc-summary")
+                }.filter { category == ExploreCategory.All || it.category == category }
+                promptRows.forEach { tool ->
+                    ExplorePromptRow(tool, inkStrong, inkMuted) { onOpenChat(tool.prompt, false) }
+                    Spacer(Modifier.height(7.dp))
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+
+        // COMPOSER — the reference's Ask me anything with the paper plane
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 8.dp, top = 4.dp)
+                .exploreGlass(shape = RoundedCornerShape(24.dp), elevation = 14.dp)
+                .padding(horizontal = 11.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                GsIcons.Sparkles,
+                contentDescription = null,
+                tint = inkMuted,
+                modifier = Modifier.size(15.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.weight(1f)) {
+                if (draft.isEmpty()) {
+                    Text(
+                        "Ask me anything…",
+                        fontSize = 12.sp,
+                        fontFamily = GsFonts.Product,
+                        color = inkMuted,
+                    )
+                }
+                BasicTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        fontSize = 12.sp,
+                        fontFamily = GsFonts.Product,
+                        color = inkBody,
+                    ),
+                    cursorBrush = SolidColor(ExploreTones.Peach),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("explore-composer-input"),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier
+                    .size(38.dp)
+                    .shadow(
+                        elevation = 10.dp,
+                        shape = CircleShape,
+                        ambientColor = Color(0x2EEDBEA4),
+                        spotColor = Color(0x66EB9E72),
+                    )
+                    .background(
+                        Brush.linearGradient(
+                            0f to Color(0xFFFFDDB8),
+                            1f to ExploreTones.Peach,
+                        ),
+                        CircleShape,
+                    )
+                    .border(
+                        1.4.dp,
+                        Brush.linearGradient(
+                            0f to Color.White.copy(alpha = 0.90f),
+                            1f to Color.White.copy(alpha = 0.40f),
+                        ),
+                        CircleShape,
+                    )
+                    .then(
+                        if (canSend) {
+                            Modifier.clickable(role = Role.Button, onClickLabel = "Send") {
+                                onOpenChat(draft.trim(), true)
+                                draft = ""
+                            }
+                        } else {
+                            Modifier
+                        },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    GsIcons.Navigation,
+                    contentDescription = if (canSend) "Send message" else null,
+                    tint = if (canSend) Color.White else inkMuted,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+    }
+}
+
+/** The reference's Featured Tools card: icon top, copy below, arrow low-right. */
+@Composable
+private fun DiscoverToolCardVertical(
+    tool: ExploreTool,
+    inkStrong: Color,
+    inkMuted: Color,
+    onOpen: () -> Unit,
+) {
+    Column(
+        Modifier
+            .exploreGlass(shape = RoundedCornerShape(18.dp), elevation = 10.dp)
+            .clickable(role = Role.Button, onClickLabel = tool.title) { onOpen() }
+            .padding(11.dp),
+    ) {
+        ExploreIconCircle(tool = tool, circle = 36.dp, glyph = 15.dp)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            tool.title,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = GsFonts.Product,
+            color = inkStrong,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(3.dp))
+        Text(
+            tool.subtitle,
+            fontSize = 10.sp,
+            lineHeight = 13.sp,
+            fontFamily = GsFonts.Product,
+            color = inkMuted,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(5.dp))
+        Icon(
+            GsIcons.ArrowRight,
+            contentDescription = null,
+            tint = inkMuted,
+            modifier = Modifier
+                .size(11.dp)
+                .align(Alignment.End),
+        )
+    }
+}
+
+@Composable
+private fun ExplorePromptRow(
+    tool: ExploreTool,
+    inkStrong: Color,
+    inkMuted: Color,
+    onOpen: () -> Unit,
+) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .navigationBarsPadding()
-            .padding(bottom = 10.dp, top = 4.dp)
-            .exploreGlass(shape = RoundedCornerShape(26.dp), elevation = 14.dp)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .exploreGlass(shape = RoundedCornerShape(16.dp), elevation = 9.dp)
+            .clickable(role = Role.Button, onClickLabel = tool.title) { onOpen() }
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            GsIcons.Sparkles,
-            contentDescription = null,
-            tint = inkMuted,
-            modifier = Modifier.size(17.dp),
-        )
-        Spacer(Modifier.width(8.dp))
-        Box(Modifier.weight(1f)) {
-            if (draft.isEmpty()) {
-                Text(
-                    "Ask me anything…",
-                    fontSize = 12.sp,
-                    fontFamily = GsFonts.Product,
-                    color = inkMuted,
-                )
-            }
-            BasicTextField(
-                value = draft,
-                onValueChange = { draft = it },
-                singleLine = true,
-                textStyle = TextStyle(
-                    fontSize = 13.5.sp,
-                    fontFamily = GsFonts.Product,
-                    color = inkBody,
-                ),
-                cursorBrush = SolidColor(ExploreTones.Peach),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("explore-composer-input"),
+        ExploreIconCircle(tool = tool, circle = 34.dp, glyph = 15.dp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                tool.title,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GsFonts.Product,
+                color = inkStrong,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                tool.subtitle,
+                fontSize = 10.5.sp,
+                fontFamily = GsFonts.Product,
+                color = inkMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         Spacer(Modifier.width(8.dp))
-        Box(
-            Modifier
-                .size(38.dp)
-                .shadow(
-                    elevation = 10.dp,
-                    shape = CircleShape,
-                    ambientColor = Color(0x2EEDBEA4),
-                    spotColor = Color(0x66EB9E72),
-                )
-                .background(
-                    Brush.linearGradient(
-                        0f to Color(0xFFFFDDB8),
-                        1f to ExploreTones.Peach,
-                    ),
-                    CircleShape,
-                )
-                .border(
-                    1.4.dp,
-                    Brush.linearGradient(
-                        0f to Color.White.copy(alpha = 0.90f),
-                        1f to Color.White.copy(alpha = 0.40f),
-                    ),
-                    CircleShape,
-                )
-                .then(
-                    if (canSend) {
-                        Modifier.clickable(
-                            role = Role.Button,
-                            onClickLabel = "Send",
-                        ) {
-                            onSend(draft.trim())
-                            draft = ""
-                        }
-                    } else {
-                        Modifier
-                    },
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                GsIcons.Navigation,
-                contentDescription = if (canSend) "Send message" else null,
-                tint = if (canSend) Color.White else inkMuted,
-                modifier = Modifier.size(18.dp),
-            )
-        }
+        Icon(GsIcons.ChevronRight, contentDescription = null, tint = inkMuted, modifier = Modifier.size(14.dp))
     }
 }
 
-/** Honest empty state: the query becomes the conversation. */
 @Composable
-private fun EmptySearch(
+private fun ExploreEmptySearch(
     query: String,
     inkBody: Color,
     inkMuted: Color,
@@ -1009,8 +1453,8 @@ private fun EmptySearch(
     Column(
         Modifier
             .fillMaxWidth()
-            .exploreGlass(shape = RoundedCornerShape(20.dp))
-            .padding(18.dp),
+            .exploreGlass(shape = RoundedCornerShape(18.dp), elevation = 10.dp)
+            .padding(14.dp),
     ) {
         Text(
             "No tool matches \"$query\" yet",
@@ -1019,26 +1463,26 @@ private fun EmptySearch(
             fontFamily = GsFonts.Product,
             color = inkBody,
         )
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(5.dp))
         Text(
             "I can still help — ask me directly and we'll figure it out together.",
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
+            fontSize = 10.5.sp,
+            lineHeight = 14.sp,
             fontFamily = GsFonts.Product,
             color = inkMuted,
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
         Row(
             Modifier
                 .shadow(
                     elevation = 9.dp,
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(14.dp),
                     ambientColor = Color(0x2EEDBEA4),
                     spotColor = Color(0x59EB9E72),
                 )
                 .background(
                     Brush.horizontalGradient(listOf(ExploreTones.CtaTop, ExploreTones.CtaBottom)),
-                    RoundedCornerShape(16.dp),
+                    RoundedCornerShape(14.dp),
                 )
                 .border(
                     1.dp,
@@ -1046,118 +1490,22 @@ private fun EmptySearch(
                         0f to Color.White.copy(alpha = 0.90f),
                         1f to Color.White.copy(alpha = 0.35f),
                     ),
-                    RoundedCornerShape(16.dp),
+                    RoundedCornerShape(14.dp),
                 )
                 .clickable(role = Role.Button, onClickLabel = "Ask about ${query.trim()}") { onAsk() }
-                .padding(horizontal = 14.dp, vertical = 9.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 "Ask about \"${query.trim()}\"",
-                fontSize = 12.5.sp,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = GsFonts.Product,
                 color = inkBody,
                 maxLines = 1,
             )
             Spacer(Modifier.width(6.dp))
-            Icon(GsIcons.ArrowRight, contentDescription = null, tint = inkBody, modifier = Modifier.size(13.dp))
+            Icon(GsIcons.ArrowRight, contentDescription = null, tint = inkBody, modifier = Modifier.size(12.dp))
         }
     }
-}
-
-/**
- * The reference's glass is RICH: every panel is a warm gradient fill with the
- * bloom showing through, a luminous rim that brightens toward the top-left,
- * and a soft warm shadow. Flat fills read as plastic next to it — the mock's
- * buttons, icon circles and cards all carry this treatment, and so does
- * everything on this page.
- */
-@Composable
-private fun Modifier.exploreGlass(
-    shape: Shape,
-    elevation: Dp = 12.dp,
-): Modifier = composed {
-    val isDark = LocalGsIsDark.current
-    this
-        .shadow(
-            elevation = elevation,
-            shape = shape,
-            ambientColor = Color(0x2EEDBEA4),
-            spotColor = Color(0x55E29C7C),
-        )
-        .clip(shape)
-        .background(
-            Brush.linearGradient(
-                0f to Color(0xFFFFFAF6).copy(alpha = if (isDark) 0.90f else 0.97f),
-                1f to Color(0xFFFCEDE5).copy(alpha = if (isDark) 0.80f else 0.88f),
-                start = Offset.Zero,
-                end = Offset.Infinite,
-            ),
-            shape,
-        )
-        .border(
-            1.dp,
-            Brush.linearGradient(
-                0f to Color.White.copy(alpha = 0.95f),
-                1f to Color.White.copy(alpha = 0.30f),
-            ),
-            shape,
-        )
-}
-
-/** The icon circle: tinted gradient, white rim, its own soft glow. */
-@Composable
-private fun ExploreIconCircle(
-    tool: ExploreTool,
-    circle: Dp,
-    glyph: Dp,
-) {
-    val bgLight = lerp(tool.tone.bg, Color.White, 0.45f)
-    Box(
-        Modifier
-            .size(circle)
-            .shadow(
-                elevation = 7.dp,
-                shape = CircleShape,
-                ambientColor = Color(0x2EEDBEA4),
-                spotColor = Color(0x4DE29C7C),
-            )
-            .background(
-                Brush.verticalGradient(0f to bgLight, 1f to tool.tone.bg),
-                CircleShape,
-            )
-            .border(
-                1.2.dp,
-                Brush.verticalGradient(
-                    0f to Color.White.copy(alpha = 0.95f),
-                    1f to Color.White.copy(alpha = 0.40f),
-                ),
-                CircleShape,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            exploreIcon(tool.icon),
-            contentDescription = null,
-            tint = tool.tone.fg,
-            modifier = Modifier.size(glyph),
-        )
-    }
-}
-
-/** Catalog icon ids (kebab, shared with the iOS glyph table) → vectors. */
-private fun exploreIcon(id: String): ImageVector = when (id) {
-    "photo" -> GsIcons.Image
-    "player-play" -> GsIcons.PlayCircle
-    "microphone" -> GsIcons.Mic
-    "code" -> GsIcons.Code
-    "file-text" -> GsIcons.FileText
-    "school" -> GsIcons.School
-    "brush" -> GsIcons.Brush
-    "plane" -> GsIcons.Plane
-    "clipboard-text" -> GsIcons.ClipboardList
-    "salad" -> GsIcons.Salad
-    "sparkles" -> GsIcons.Sparkles
-    else -> GsIcons.Sparkles
 }

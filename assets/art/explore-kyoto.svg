@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 458 296">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F6D9E3"/>
+      <stop offset="0.45" stop-color="#F8DFD2"/>
+      <stop offset="1" stop-color="#F4CDBB"/>
+    </linearGradient>
+    <radialGradient id="haze" cx="62%" cy="55%" r="70%">
+      <stop offset="0" stop-color="#FFF2E2" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#FFF2E2" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="hill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#D9B8C8"/>
+      <stop offset="1" stop-color="#CBA4BC"/>
+    </linearGradient>
+    <linearGradient id="roof" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B49BD0"/>
+      <stop offset="1" stop-color="#967FB8"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E8D3EC"/>
+      <stop offset="1" stop-color="#CBB2DC"/>
+    </linearGradient>
+    <linearGradient id="mist" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FBE9DC" stop-opacity="0"/>
+      <stop offset="1" stop-color="#FBE9DC" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="blossom" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FBD9E4"/>
+      <stop offset="1" stop-color="#F2B7CC"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="458" height="296" fill="url(#sky)"/>
+  <ellipse cx="290" cy="170" rx="240" ry="140" fill="url(#haze)"/>
+
+  <!-- distant hills -->
+  <path d="M -10 208 C 70 160, 150 158, 230 200 C 300 234, 380 230, 468 196 L 468 296 L -10 296 Z" fill="url(#hill)" opacity="0.75"/>
+
+  <!-- the pagoda, warm-lit -->
+  <g transform="translate(302,192)">
+    <rect x="-3.5" y="-92" width="7" height="14" fill="url(#roof)"/>
+    <path d="M 0 -100 L 7 -84 L -7 -84 Z" fill="url(#roof)"/>
+    <!-- tier 1 (top) -->
+    <path d="M -30 -74 C -14 -82, 14 -82, 30 -74 L 22 -66 L -22 -66 Z" fill="url(#roof)"/>
+    <rect x="-14" y="-66" width="28" height="16" fill="url(#body)"/>
+    <!-- tier 2 -->
+    <path d="M -40 -50 C -20 -59, 20 -59, 40 -50 L 30 -41 L -30 -41 Z" fill="url(#roof)"/>
+    <rect x="-19" y="-41" width="38" height="20" fill="url(#body)"/>
+    <!-- tier 3 -->
+    <path d="M -52 -21 C -28 -32, 28 -32, 52 -21 L 40 -10 L -40 -10 Z" fill="url(#roof)"/>
+    <rect x="-25" y="-10" width="50" height="30" fill="url(#body)"/>
+    <!-- lantern glow in the doorway -->
+    <circle cx="0" cy="8" r="6" fill="#FFD9A0"/>
+    <!-- finial shadow lines -->
+    <rect x="-24" y="-45" width="48" height="2.4" fill="#8E77B0" opacity="0.5"/>
+    <rect x="-32" y="-13" width="64" height="2.4" fill="#8E77B0" opacity="0.5"/>
+  </g>
+
+  <!-- cherry blossom branches, foreground left and bottom -->
+  <g stroke="#C998A8" stroke-width="5" fill="none" stroke-linecap="round">
+    <path d="M -10 262 C 60 250, 120 254, 170 232"/>
+    <path d="M 60 256 C 88 240, 108 234, 130 236"/>
+  </g>
+  <g fill="url(#blossom)">
+    <circle cx="26"  cy="256" r="17"/>
+    <circle cx="62"  cy="248" r="13"/>
+    <circle cx="100" cy="246" r="15"/>
+    <circle cx="136" cy="240" r="11"/>
+    <circle cx="166" cy="232" r="12"/>
+    <circle cx="14"  cy="280" r="13"/>
+    <circle cx="84"  cy="264" r="10"/>
+    <circle cx="192" cy="246" r="8" opacity="0.9"/>
+  </g>
+  <g fill="#FFF0F5">
+    <circle cx="48" cy="252" r="4"/>
+    <circle cx="116" cy="242" r="3.4"/>
+    <circle cx="148" cy="234" r="3"/>
+  </g>
+
+  <!-- ground mist -->
+  <rect x="0" y="226" width="458" height="70" fill="url(#mist)"/>
+</svg>

@@ -4,36 +4,57 @@ import UIKit
 @testable import GSApp
 
 /**
- * The REAL Explore AI page rendered on the simulator: hero, chips, search,
- * Featured Tools grid, Popular rows, Collections, Featured journey, composer
- * — over the same pearl backdrop Home mounts. No mockup.
- *
- * The references are the Explore screenshots in docs/reference/explore; the
- * PNGs are the evidence.
+ * BOTH Explore pages rendered on the simulator: the Explore page (hero,
+ * Popular Tools grid, Collections, Featured) and the Discover page (EXPLORE
+ * hero, chips, Featured Tools, Popular, composer) — the PNGs are the
+ * evidence, compared against the two authored mocks.
  */
 @MainActor
 final class ExploreRenderTests: XCTestCase {
 
     private static let scale: CGFloat = 3
 
-    func testExploreRenders() async throws {
+    func testExplorePageRenders() async throws {
+        try await capturePage(
+            view: { ExploreView(onOpenChat: { _ in }, onOpenDiscover: {}) },
+            prefix: "nexly-explore-ios",
+            targets: [(393, 852, "393x852"), (411, 914, "411x914"), (360, 780, "360x780"), (393, 1400, "393x1400")]
+        )
+    }
+
+    func testDiscoverPageRenders() async throws {
+        try await capturePage(
+            view: { DiscoverView(onOpenChat: { _ in }) },
+            prefix: "nexly-discover-ios",
+            targets: [(393, 852, "393x852"), (393, 1400, "393x1400")]
+        )
+    }
+
+    func testDiscoverSearchStateRenders() async throws {
+        try await capturePage(
+            view: { DiscoverView(onOpenChat: { _ in }, initialQuery: "study", initialSearchOpen: true) },
+            prefix: "nexly-explore-ios-search",
+            targets: [(393, 852, "393x852")]
+        )
+    }
+
+    // MARK: helpers (same windowed drawHierarchy channel as the chat harness)
+
+    private func capturePage(
+        view: @escaping () -> some View,
+        prefix: String,
+        targets: [(CGFloat, CGFloat, String)]
+    ) async throws {
         let dir = Self.outputDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        let targets: [(CGFloat, CGFloat, String)] = [
-            (393, 852, "393x852"),
-            (411, 914, "411x914"),
-            (360, 780, "360x780"),
-            (393, 1400, "393x1400"),
-        ]
         for target in targets {
             let size = CGSize(width: target.0, height: target.1)
-            let view = ExploreView(onOpenChat: { _ in })
+            let v = view()
                 .frame(width: size.width, height: size.height)
                 .ignoresSafeArea()
                 .environment(\.layoutDirection, .leftToRight)
-            guard let image = try await Self.capture(view: view, size: size) else {
-                XCTFail("explore did not composite at \(target.2) — nothing was drawn")
+            guard let image = try await Self.capture(view: v, size: size) else {
+                XCTFail("\(prefix) did not composite at \(target.2) — nothing was drawn")
                 continue
             }
             guard let data = image.pngData() else {
@@ -42,36 +63,13 @@ final class ExploreRenderTests: XCTestCase {
             }
             XCTAssertGreaterThan(
                 data.count, 20_000,
-                "\(target.2) is suspiciously small for a full Explore render"
+                "\(target.2) is suspiciously small for a full render"
             )
-            let url = dir.appendingPathComponent("nexly-explore-ios-\(target.2).png")
+            let url = dir.appendingPathComponent("\(prefix)-\(target.2).png")
             FileManager.default.createFile(atPath: url.path, contents: data)
             XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
         }
     }
-
-    func testExploreSearchStateRenders() async throws {
-        let dir = Self.outputDirectory()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let size = CGSize(width: 393, height: 852)
-        let view = ExploreViewSearchHarness()
-            .frame(width: size.width, height: size.height)
-            .ignoresSafeArea()
-            .environment(\.layoutDirection, .leftToRight)
-        guard let image = try await Self.capture(view: view, size: size) else {
-            XCTFail("explore search state did not composite")
-            return
-        }
-        guard let data = image.pngData() else {
-            XCTFail("no PNG data for the search state")
-            return
-        }
-        let url = dir.appendingPathComponent("nexly-explore-ios-search-393x852.png")
-        FileManager.default.createFile(atPath: url.path, contents: data)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
-    }
-
-    // MARK: helpers (same windowed drawHierarchy channel as the chat harness)
 
     private static func outputDirectory() -> URL {
         if let custom = ProcessInfo.processInfo.environment["GS_NEXLY_RENDER_DIR"], !custom.isEmpty {
@@ -105,13 +103,5 @@ final class ExploreRenderTests: XCTestCase {
                                            afterScreenUpdates: true)
         }
         return drew ? image : nil
-    }
-}
-
-/// The live search state: field open, a real query filtering the real catalog,
-/// driven through the same init parameters the Android harness uses.
-struct ExploreViewSearchHarness: View {
-    var body: some View {
-        ExploreView(onOpenChat: { _ in }, initialQuery: "study", initialSearchOpen: true)
     }
 }
