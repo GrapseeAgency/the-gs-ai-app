@@ -40,11 +40,24 @@ struct GSApp: App {
         //       FAILURE). The path is the verified 0.5B GGUF the ios-native
         //       workflow stages on the runner host, visible inside the
         //       simulator.
+        //
+        //   -gs_test_seed_chats
+        //       Three fixed conversations with one user and one assistant
+        //       turn each, so MenuChromeTests can open the REAL menus — the
+        //       chats row's context menu and swipes, both bubble menus, the
+        //       two header long-press menus and the drawer's recent-row
+        //       menu — on a store an XCUITest cannot write itself. Debug
+        //       only: a Release build ships no seed.
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-gs_test_session_active") {
             sessionActive = true
             onboarded = true
         }
+        #if DEBUG
+        if args.contains("-gs_test_seed_chats") {
+            MenuChromeSeed.install()
+        }
+        #endif
         if let i = args.firstIndex(of: "-gs_test_local_model"),
            args.indices.contains(i + 1) {
             let modelPath = args[i + 1]

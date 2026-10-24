@@ -364,6 +364,48 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: The menu harness ran, and left its captures
+        if: always()
+        run: |
+          set -euo pipefail
+          # The 29 menu rows are drawn by UIKit's menu chrome, which decides
+          # whether a Label's icon is drawn at all — the one thing no static
+          # check can see. MenuChromeTests opens every real menu and measures
+          # the ink beside each title; this step proves the harness RAN (a
+          # skipped or never-started test leaves no log line) and that every
+          # presented menu left its PNG. Both halves are the gate: a capture
+          # with no test is a screenshot of nothing, and a test with no
+          # capture cannot be read by a human afterwards.
+          LOG=ios/build/xcodebuild-test.log
+          if ! grep -q "Test Case '-\[GsChatUITests.MenuChromeTests testEveryMenuPutsItsGlyphInTheLeadingSlot\]' passed" "$LOG"; then
+            echo "::error::MenuChromeTests did not pass in this run — the menu gate is not live"
+            grep -E "MenuChromeTests" "$LOG" || true
+            exit 1
+          fi
+          SRC=/tmp/gs-menu-chrome
+          DIR=ios/build/menu-chrome
+          mkdir -p "$DIR"
+          if [ -d "$SRC" ]; then cp "$SRC"/* "$DIR/" 2>/dev/null || true; fi
+          for n in chats-row-context chats-row-swipe-leading chats-row-swipe-trailing \
+                   chat-header-sparkle chat-header-menu user-bubble-context \
+                   assistant-bubble-context drawer-recent-context; do
+            test -s "$DIR/menu-$n.png" \
+              || { echo "::error::menu-$n.png missing — the menu harness opened no such menu"; exit 1; }
+          done
+          test -s "$DIR/report.json" || { echo "::error::report.json missing — no measurements were written"; exit 1; }
+          # Printed, not just uploaded: the numbers are the evidence a glyph is
+          # in the leading slot, and a reader should not need an artifact zip.
+          cat "$DIR/report.json"
+
+      - name: Upload the menu-chrome captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: menu-chrome-ios
+          path: ios/build/menu-chrome/*
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Package — zip unsigned simulator .app
         run: |
           # XcodeGen's default PRODUCT_NAME = target name → the built bundle
