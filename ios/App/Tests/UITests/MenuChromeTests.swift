@@ -389,7 +389,7 @@ final class MenuChromeTests: XCTestCase {
                 // mid-row without failing a menu's own gutter.
                 record("\(name)/\(label): ink starts \(Int(inset)) pt into the row — not the leading slot")
             }
-            if slot == .leading, case .textInRow(let rect, _) = box, inset > 34 {
+            if slot == .leading, case .textInRow(_, _) = box, inset > 34 {
                 record("\(name)/\(label): ink starts \(Int(inset)) pt into the row — not the leading slot")
             }
         }

@@ -402,15 +402,18 @@ jobs:
           for group in groups:
               for a in group.get("attachments", []):
                   name = a.get("suggestedHumanReadableName") or ""
-                  if name != "report" and not name.startswith("menu-"):
-                      continue
                   # Xcode appends `_<n>_<uuid>` and an extension to the name
-                  # given to the attachment; strip both so the file is exactly
-                  # <attachment name>.<ext> (run 40134206951 produced
-                  # `menu-x_0_UUID.png.png`).
-                  base = re.sub(r"(_\d+_[0-9A-Fa-f-]{36})?\.(png|jpe?g)$", "", name)
-                  ext = os.path.splitext(a.get("exportedFileName", ""))[1] or ".png"
-                  dst = os.path.join(root, "report.json" if base == "report" else base + ext)
+                  # given to the attachment (run 40134206951 produced
+                  # `menu-x_0_UUID.png.png`, run 40139415325 `report.json`),
+                  # so the NAME is normalised first and matched after.
+                  base = re.sub(r"(_\d+_[0-9A-Fa-f-]{36})?\.(png|jpe?g|json)$", "", name)
+                  if base != "report" and not base.startswith("menu-"):
+                      continue
+                  if base == "report":
+                      dst = os.path.join(root, "report.json")
+                  else:
+                      ext = os.path.splitext(a.get("exportedFileName", ""))[1] or ".png"
+                      dst = os.path.join(root, base + ext)
                   shutil.copyfile(os.path.join(raw, a["exportedFileName"]), dst)
                   kept.append(os.path.basename(dst))
           print("exported:", ", ".join(sorted(kept)) or "nothing")
