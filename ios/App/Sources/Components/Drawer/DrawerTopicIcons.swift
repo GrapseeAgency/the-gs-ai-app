@@ -150,7 +150,13 @@ enum DrawerTopic: String, CaseIterable {
     /// The drawing. Every name the table can produce has a branch; the catalogue
     /// check fails if the table gains one this misses.
     static func paths(title: String, pinned: Bool) -> GsIconPaths {
-        switch iconName(title: title, pinned: pinned) {
+        paths(named: iconName(title: title, pinned: pinned))
+    }
+
+    /// A catalogue name resolved to geometry — used by the topic rows and by the
+    /// destination rows, which name their icons directly.
+    static func paths(named name: String) -> GsIconPaths {
+        switch name {
         case "Pin": return GsIcons.pin
         case "Atom": return GsIcons.atom
         case "Code": return GsIcons.code
@@ -174,6 +180,9 @@ enum DrawerTopic: String, CaseIterable {
         case "Scale": return GsIcons.scale
         case "Image": return GsIcons.image
         case "MessageCircle": return GsIcons.messageCircle
+        case "Compass": return GsIcons.compass
+        case "Activity": return GsIcons.activity
+        case "Bookmark": return GsIcons.bookmark
         default: return GsIcons.messageCircle
         }
     }

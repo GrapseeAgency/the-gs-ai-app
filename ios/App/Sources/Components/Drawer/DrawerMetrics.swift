@@ -92,12 +92,15 @@ enum DrawerDestination: String, CaseIterable, Identifiable {
         }
     }
 
-    var symbol: String {
+    /// The same four Lucide names Android's `DESTINATIONS` uses, so the two
+    /// apps draw one icon language rather than one of Lucide plus one of SF
+    /// Symbols.
+    var icon: String {
         switch self {
-        case .explore: return "safari"
-        case .imageStudio: return "photo"
-        case .voice: return "waveform"
-        case .savedCreations: return "bookmark"
+        case .explore: return "Compass"
+        case .imageStudio: return "Image"
+        case .voice: return "Activity"
+        case .savedCreations: return "Bookmark"
         }
     }
 

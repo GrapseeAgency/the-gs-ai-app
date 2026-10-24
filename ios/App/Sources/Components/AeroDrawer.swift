@@ -318,7 +318,7 @@ struct AeroDrawer: View {
             onRoute(destination.route)
         } label: {
             HStack(spacing: DrawerMetrics.discToTitle) {
-                disc(destination.symbol)
+                disc(DrawerTopic.paths(named: destination.icon))
                 Text(destination.label)
                     .font(Aero.specFont(DrawerMetrics.rowTitle))
                     .foregroundColor(activeRoute == destination.route ? Aero.accent : Aero.text)
