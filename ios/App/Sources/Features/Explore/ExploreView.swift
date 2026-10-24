@@ -293,39 +293,14 @@ struct ExploreView: View {
     private var heroCard: some View {
         AeroCard {
             ZStack(alignment: .trailing) {
-                // The art carries the right 66% only; its left edge fades
-                // into the pearl card. The art is the authored backdrop's own
-                // luminous bubble (upper-right region of that render).
+                // The art carries the right 66% only: a luminous glass bubble
+                // drawn procedurally (the GsArtwork technique) so it is crisp
+                // at any scale and reads at the reference's saturation.
                 GeometryReader { geo in
-                    let artWidth = geo.size.width * 0.66
-                    let artHeight = geo.size.height
-                    HStack(spacing: 0) {
-                        Spacer(minLength: 0)
-                        Image("GSHomeBackdrop")
-                            .resizable()
-                            .scaledToFill()
-                            // The authored render is 590x1278; at window
-                            // width the image is 2.1653x taller. Offset the
-                            // band so the bubble (~12-38% of image height)
-                            // centers in the window, then clip. The
-                            // saturation lift makes the peach/lavender read
-                            // like the reference.
-                            .frame(width: artWidth)
-                            .frame(height: artWidth * 2.1653, alignment: .top)
-                            .offset(y: -artWidth * 0.17)
-                            .frame(width: artWidth, height: artHeight, alignment: .top)
-                            .clipped()
-                            .saturation(1.4)
-                            .overlay(
-                                LinearGradient(
-                                    colors: [Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.85),
-                                             Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.15),
-                                             .clear],
-                                    startPoint: .leading, endPoint: .trailing
-                                )
-                            )
-                            .allowsHitTesting(false)
-                    }
+                    HeroBubbleArt()
+                        .frame(width: geo.size.width * 0.66, height: geo.size.height)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .allowsHitTesting(false)
                 }
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 5) {
@@ -754,5 +729,111 @@ struct ExploreComposerBar: View {
         onSend(text)
         draft = ""
         focused = false
+    }
+}
+
+
+/// The Explore hero's luminous bubble — the SwiftUI twin of the Android
+/// `HeroBubbleArt` canvas: glass sphere, peach core, flowing petal, satellites
+/// and sparkles, the reference hero's exact motif at full crispness.
+struct HeroBubbleArt: View {
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let r = min(w, h) * 0.56
+            let cx = w * 0.58
+            let cy = h * 0.40
+            let cr = r * 0.52
+            let ccx = cx - r * 0.08
+            let ccy = cy + r * 0.14
+            ZStack {
+                // Warm outer glow.
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [Color(red: 1.0, green: 0.851, blue: 0.745).opacity(0.55), .clear],
+                            center: .init(x: 0.5, y: 0.5),
+                            startRadius: 0,
+                            endRadius: r * 1.6
+                        )
+                    )
+                    .frame(width: r * 3.2, height: r * 3.2)
+                    .position(x: cx, y: cy)
+                // Flowing petal sweeping to the right edge.
+                PetalShape()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color(red: 1.0, green: 0.851, blue: 0.749).opacity(0.9),
+                                     Color(red: 0.973, green: 0.725, blue: 0.635).opacity(0.7)],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                    )
+                    .frame(width: w, height: h)
+                    .position(x: w / 2, y: h / 2)
+                // Glass sphere.
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [.white.opacity(0.80),
+                                     Color(red: 1.0, green: 0.863, blue: 0.780).opacity(0.42),
+                                     Color(red: 0.953, green: 0.765, blue: 0.886).opacity(0.34),
+                                     .clear],
+                            center: .init(x: 0.5, y: 0.5),
+                            startRadius: 0,
+                            endRadius: r
+                        )
+                    )
+                    .frame(width: r * 2, height: r * 2)
+                    .position(x: cx, y: cy)
+                Circle()
+                    .strokeBorder(.white.opacity(0.85), lineWidth: r * 0.032)
+                    .frame(width: r * 2, height: r * 2)
+                    .position(x: cx, y: cy)
+                // Peach core sphere with highlight.
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [Color(red: 1.0, green: 0.953, blue: 0.894),
+                                     Color(red: 1.0, green: 0.780, blue: 0.620),
+                                     Color(red: 1.0, green: 0.620, blue: 0.388)],
+                            center: .init(x: 0.5, y: 0.5),
+                            startRadius: 0,
+                            endRadius: cr
+                        )
+                    )
+                    .frame(width: cr * 2, height: cr * 2)
+                    .position(x: ccx, y: ccy)
+                Circle()
+                    .fill(.white.opacity(0.85))
+                    .frame(width: cr * 0.44, height: cr * 0.44)
+                    .position(x: ccx - cr * 0.34, y: ccy - cr * 0.36)
+                // Satellites and sparkles.
+                Circle().fill(.white.opacity(0.55)).frame(width: r * 0.20, height: r * 0.20).position(x: cx + r * 0.78, y: cy - r * 0.58)
+                Circle().fill(.white.opacity(0.40)).frame(width: r * 0.10, height: r * 0.10).position(x: cx + r * 0.98, y: cy - r * 0.18)
+                Circle().fill(Color(red: 1.0, green: 0.851, blue: 0.659).opacity(0.9)).frame(width: r * 0.09, height: r * 0.09).position(x: cx + r * 0.38, y: cy - r * 0.88)
+                Circle().fill(Color(red: 0.969, green: 0.776, blue: 0.878).opacity(0.9)).frame(width: r * 0.07, height: r * 0.07).position(x: cx - r * 0.12, y: cy - r * 0.96)
+                Circle().fill(Color(red: 0.788, green: 0.741, blue: 0.961).opacity(0.8)).frame(width: r * 0.06, height: r * 0.06).position(x: cx + r * 0.95, y: cy + r * 0.45)
+            }
+        }
+    }
+}
+
+/// The petal sweep: bezier from under the sphere to the right edge.
+private struct PetalShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let r = min(rect.width, rect.height) * 0.56
+        let cx = rect.width * 0.58
+        let cy = rect.height * 0.40
+        p.move(to: CGPoint(x: cx - r * 0.15, y: cy + r * 0.62))
+        p.addCurve(
+            to: CGPoint(x: rect.width * 1.05, y: cy - r * 0.55),
+            control1: CGPoint(x: cx + r * 0.85, y: cy + r * 1.18),
+            control2: CGPoint(x: rect.width * 1.05, y: cy + r * 0.15)
+        )
+        p.addLine(to: CGPoint(x: rect.width * 1.05, y: cy + r * 0.9))
+        p.closeSubpath()
+        return p
     }
 }

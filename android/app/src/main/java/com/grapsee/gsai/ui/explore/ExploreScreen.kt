@@ -41,6 +41,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
@@ -376,41 +380,17 @@ private fun HeroCard(
             .fillMaxWidth()
             .gsGlass(role = GsGlassRole.CardLight, shape = RoundedCornerShape(26.dp)),
     ) {
-        // The reference's hero: pearl on the left where the copy sits, the
-        // luminous bubble artwork carrying the right side. The art is the
-        // authored backdrop's own bubble (upper-right region of that render),
-        // full-strength, with its left edge fading into the pearl card.
+        // The reference's hero: pearl on the left where the copy sits, a
+        // luminous glass bubble carrying the right side — drawn procedurally
+        // (the ReferenceArt technique) so it is crisp at any scale and reads
+        // at the reference's saturation, not an upscaled blur.
         Box(
             Modifier
                 .align(Alignment.CenterEnd)
                 .fillMaxHeight()
                 .fillMaxWidth(0.66f),
         ) {
-            Image(
-                painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_backdrop),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                // The bubble sits at ~(0.74, 0.24) of the authored render;
-                // band starts at 15% so the bubble fills the upper frame.
-                alignment = BiasAlignment(0.74f, 0.15f),
-                // The authored render is gentle; the reference's hero art is
-                // vivid — lift saturation so the peach/lavender reads.
-                colorFilter = ColorFilter.colorMatrix(
-                    ColorMatrix().apply { setToSaturation(1.4f) }
-                ),
-                modifier = Modifier.matchParentSize(),
-            )
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.horizontalGradient(
-                            0f to Color(0xFFFDF1EC).copy(alpha = 0.85f),
-                            0.5f to Color(0xFFFDF1EC).copy(alpha = 0.15f),
-                            1f to Color.Transparent,
-                        ),
-                    ),
-            )
+            HeroBubbleArt(Modifier.matchParentSize())
         }
         Column(Modifier.padding(18.dp)) {
             Row(
@@ -998,6 +978,102 @@ private fun EmptySearch(
             Spacer(Modifier.width(6.dp))
             Icon(GsIcons.ArrowRight, contentDescription = null, tint = inkBody, modifier = Modifier.size(13.dp))
         }
+    }
+}
+
+/**
+ * The Explore hero's luminous bubble, drawn like the ReferenceArt scenes: a
+ * glass sphere with a peach core riding a flowing petal, small satellites and
+ * sparkles — the reference hero's exact motif, crisp at any resolution.
+ */
+@Composable
+private fun HeroBubbleArt(modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        val r = min(w, h) * 0.56f
+        val cx = w * 0.58f
+        val cy = h * 0.40f
+
+        // Warm outer glow.
+        drawCircle(
+            Brush.radialGradient(
+                listOf(Color(0xFFFFD9BE).copy(alpha = 0.55f), Color.Transparent),
+                center = Offset(cx, cy),
+                radius = r * 1.6f,
+            ),
+            radius = r * 1.6f,
+            center = Offset(cx, cy),
+        )
+
+        // Flowing petal sweeping to the right edge, under the sphere.
+        val petal = Path().apply {
+            moveTo(cx - r * 0.15f, cy + r * 0.62f)
+            cubicTo(cx + r * 0.85f, cy + r * 1.18f, w * 1.05f, cy + r * 0.15f, w * 1.05f, cy - r * 0.55f)
+            lineTo(w * 1.05f, cy + r * 0.9f)
+            close()
+        }
+        drawPath(
+            petal,
+            Brush.horizontalGradient(
+                listOf(
+                    Color(0xFFFFD9BF).copy(alpha = 0.9f),
+                    Color(0xFFF8B9A2).copy(alpha = 0.7f),
+                ),
+            ),
+        )
+
+        // Glass sphere: light body, lavender cast at the base, bright rim.
+        drawCircle(
+            Brush.radialGradient(
+                listOf(
+                    Color.White.copy(alpha = 0.80f),
+                    Color(0xFFFFDCC7).copy(alpha = 0.42f),
+                    Color(0xFFF3C3E2).copy(alpha = 0.34f),
+                    Color.Transparent,
+                ),
+                center = Offset(cx, cy),
+                radius = r,
+            ),
+            radius = r,
+            center = Offset(cx, cy),
+        )
+        drawCircle(
+            Color.White.copy(alpha = 0.85f),
+            style = Stroke(width = r * 0.032f),
+            radius = r,
+            center = Offset(cx, cy),
+        )
+
+        // The peach core sphere with its highlight.
+        val cr = r * 0.52f
+        val ccx = cx - r * 0.08f
+        val ccy = cy + r * 0.14f
+        drawCircle(
+            Brush.radialGradient(
+                listOf(
+                    Color(0xFFFFF3E4),
+                    Color(0xFFFFC79E),
+                    Color(0xFFFF9E63),
+                ),
+                center = Offset(ccx, ccy),
+                radius = cr,
+            ),
+            radius = cr,
+            center = Offset(ccx, ccy),
+        )
+        drawCircle(
+            Color.White.copy(alpha = 0.85f),
+            radius = cr * 0.22f,
+            center = Offset(ccx - cr * 0.34f, ccy - cr * 0.36f),
+        )
+
+        // Satellite bubbles and sparkles.
+        drawCircle(Color.White.copy(alpha = 0.55f), radius = r * 0.10f, center = Offset(cx + r * 0.78f, cy - r * 0.58f))
+        drawCircle(Color.White.copy(alpha = 0.40f), radius = r * 0.05f, center = Offset(cx + r * 0.98f, cy - r * 0.18f))
+        drawCircle(Color(0xFFFFD9A8).copy(alpha = 0.9f), radius = r * 0.045f, center = Offset(cx + r * 0.38f, cy - r * 0.88f))
+        drawCircle(Color(0xFFF7C6E0).copy(alpha = 0.9f), radius = r * 0.035f, center = Offset(cx - r * 0.12f, cy - r * 0.96f))
+        drawCircle(Color(0xFFC9BDF5).copy(alpha = 0.8f), radius = r * 0.03f, center = Offset(cx + r * 0.95f, cy + r * 0.45f))
     }
 }
 
