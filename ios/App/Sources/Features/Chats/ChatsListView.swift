@@ -175,9 +175,7 @@ struct ChatsListView: View {
             Button {
                 router.path.append(.chatSearch)
             } label: {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(Aero.text)
+                GsIconView(GsIcons.search, size: 18, color: Aero.text)
             }
             .buttonStyle(KineticPressStyle())
             .accessibilityLabel("Search chats")
@@ -185,9 +183,7 @@ struct ChatsListView: View {
             Button {
                 router.path.append(.chat(nil))
             } label: {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 24))
-                    .foregroundStyle(Aero.accent)
+                GsIconView(GsIcons.circlePlus, size: 24, color: Aero.accent)
             }
             .buttonStyle(KineticPressStyle())
             .accessibilityLabel("New chat")
@@ -389,9 +385,7 @@ struct ChatsListView: View {
                 Button {
                     selection.removeAll()
                 } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Aero.textSecondary)
+                    GsIconView(GsIcons.x, size: 14, color: Aero.textSecondary)
                         .frame(width: 34, height: 34)
                 }
                 .buttonStyle(KineticPressStyle())
