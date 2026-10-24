@@ -122,20 +122,24 @@ family measurement (the drawer's recents, run 40134206951) lands on them:
 h 15.3–16.7 pt, inset 27.7–30.0 pt — same column, same optical size, and the
 destructive row's glyph reddens like SF's did (see `menu-chrome-ios`).
 
-The harness paid for itself before a single row was converted, by finding four
+The harness also paid for itself before converting anything, by finding five
 things the code hid:
 
 1. iOS's menu icon column starts 27–29 pt into the row — the first bound of
    22 pt failed SF's own glyphs.
-2. A swipe action stacks icon over title INSIDE one button, so a band above the
-   text has to be clamped inside the button; unclamped it measured 26.3 pt of
-   page.
+2. A swipe action is a tinted capsule with the icon INSIDE it and the title
+   drawn beneath, in the page's ink — so the glyph is the capsule's centre, not
+   the space above the text (a band there measured 22 pt of capsule gradient).
 3. The user bubble's text is selectable — a press on it starts a selection, not
    the bubble's menu; the press moves onto the bubble's padding.
 4. An element-level long press on the two HEADER buttons fires their ACTION (the
    sparkle opened a new chat, the menu button opened the drawer). The same
    gesture through a coordinate opens the menu instead — both header menus were
    measured that way in run 40135074617, so nothing is stranded.
+5. "Is this glyph-sized" is max(height, width), not height: the header's options
+   row is an ellipsis — 3 pt tall, 11 wide, 137 ink px where a solid mark
+   carries 800 (run 40137739658). A height-only bound would call a correct
+   glyph missing.
 
 ## The 29 rows → the family
 
@@ -184,6 +188,12 @@ do not describe those 9 as capture-verified.
 (static gates → real Xcode build → the app's XCTests → the Home, Nexly-chat and
 Explore renders with their pixel probes). Run 40118659001 is the same verdict
 one commit earlier and is where the Home PNG above came from.
+
+**The menu conversion's green run is 40140193850** on `3a96ae12`: static gates,
+the Xcode build, all XCTests including `MenuChromeTests` (135 s, 27 rows
+measured), the menu-harness step (8 captures + `report.json` exported from the
+result bundle), every render probe, and the archive. The `menu-chrome-ios`
+artifact of that run is the picture set this doc refers to.
 
 **ios-native's app job was already red on `main` before this migration**, and
 the control proves it: run 40121938239 (branch at `84fa992a`, the commit this
