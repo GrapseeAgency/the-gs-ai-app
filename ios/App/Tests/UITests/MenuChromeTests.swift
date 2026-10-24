@@ -277,13 +277,15 @@ final class MenuChromeTests: XCTestCase {
         return false
     }
 
-    /// Closes the drawer and waits for the page underneath to be hittable
-    /// again. A single blind tap is not enough: it lands while the context menu
-    /// is still dismissing and is swallowed (run 40132162258).
+    /// Closes the drawer through its own control and waits for the page
+    /// underneath to be hittable again. A blind scrim tap does not work: the
+    /// panel has no tap-to-dismiss scrim, so five taps at the right edge left
+    /// it standing (run 40133180902) and the next "chats row" was a drawer row.
     private func closeDrawer(_ app: XCUIApplication) {
-        for _ in 0..<5 {
+        let close = app.buttons["Close menu"].firstMatch
+        for _ in 0..<4 {
             if app.buttons["Chats"].isHittable { return }
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
+            if close.exists { close.tap() }
             Thread.sleep(forTimeInterval: 0.5)
         }
         record("drawer: the panel did not close")

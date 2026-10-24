@@ -335,7 +335,7 @@ struct ChatsListView: View {
             Button {
                 togglePin(row)
             } label: {
-                Label(row.pinned ? "Unpin" : "Pin", systemImage: "pin")
+                GsMenuLabel(row.pinned ? "Unpin" : "Pin", icon: GsIcons.pin)
             }
             .tint(Aero.accent)
         }
@@ -343,12 +343,12 @@ struct ChatsListView: View {
             Button(role: .destructive) {
                 deleteRow(row)
             } label: {
-                Label("Delete", systemImage: "trash")
+                GsMenuLabel("Delete", icon: GsIcons.trash2)
             }
             Button {
                 archiveRow(row)
             } label: {
-                Label("Archive", systemImage: "archivebox")
+                GsMenuLabel("Archive", icon: GsIcons.archive)
             }
             .tint(Aero.accent)
         }
@@ -357,27 +357,27 @@ struct ChatsListView: View {
                 selection.insert(row.id)
                 GSHaptics.select()
             } label: {
-                Label("Select", systemImage: "checkmark.circle")
+                GsMenuLabel("Select", icon: GsIcons.circleCheck)
             }
             Button {
                 togglePin(row)
             } label: {
-                Label(row.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
+                GsMenuLabel(row.pinned ? "Unpin" : "Pin to top", icon: GsIcons.pin)
             }
             Button {
                 startRename(row)
             } label: {
-                Label("Rename…", systemImage: "pencil")
+                GsMenuLabel("Rename…", icon: GsIcons.squarePen)
             }
             Button {
                 archiveRow(row)
             } label: {
-                Label("Archive", systemImage: "archivebox")
+                GsMenuLabel("Archive", icon: GsIcons.archive)
             }
             Button(role: .destructive) {
                 deleteRow(row)
             } label: {
-                Label("Delete", systemImage: "trash")
+                GsMenuLabel("Delete", icon: GsIcons.trash2)
             }
         }
         .gsListRowChrome(rowInsets)

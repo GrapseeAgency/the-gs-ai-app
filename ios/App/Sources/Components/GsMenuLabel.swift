@@ -92,12 +92,12 @@ enum GsMenuGlyph {
 /// One menu row: the title, and the family's glyph in the icon slot SwiftUI
 /// gives a `Label`.
 ///
-/// 17 pt is the optical size of a menu's leading icon — the size SF Symbols
-/// render at beside a 17 pt body label — and the harness
-/// (`ios/App/Tests/UITests/MenuChromeTests.swift`) measures the rasterised ink
-/// against that number instead of trusting it.
+/// 18 pt is the optical size of a menu's leading icon: Android's menu rows
+/// draw theirs at 18.dp, and SF's own box beside a 17 pt label is the same.
+/// The harness (`ios/App/Tests/UITests/MenuChromeTests.swift`) measures the
+/// rasterised ink against that number instead of trusting it.
 struct GsMenuLabel: View {
-    static let glyphSide: CGFloat = 17
+    static let glyphSide: CGFloat = 18
 
     private let title: String
     private let icon: GsIconPaths

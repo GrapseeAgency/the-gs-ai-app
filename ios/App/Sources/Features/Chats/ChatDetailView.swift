@@ -266,18 +266,18 @@ struct ChatDetailView: View {
             sparkleMenu: {
                 if let newChat = onNewChat {
                     Button(action: newChat) {
-                        Label("New chat", systemImage: "square.and.pencil")
+                        GsMenuLabel("New chat", icon: GsIcons.squarePen)
                     }
                 }
                 Button {
                     toggleSearch()
                 } label: {
-                    Label("Search in chat", systemImage: "magnifyingglass")
+                    GsMenuLabel("Search in chat", icon: GsIcons.search)
                 }
                 Button {
                     router.path.append(.voice)
                 } label: {
-                    Label("Voice input", systemImage: "mic")
+                    GsMenuLabel("Voice input", icon: GsIcons.mic)
                 }
             },
             menuMenu: {
@@ -285,17 +285,17 @@ struct ChatDetailView: View {
                     Button {
                         showOptions = true
                     } label: {
-                        Label("Chat options", systemImage: "ellipsis")
+                        GsMenuLabel("Chat options", icon: GsIcons.ellipsis)
                     }
                 }
                 Button {
                     toggleSearch()
                 } label: {
-                    Label("Search in chat", systemImage: "magnifyingglass")
+                    GsMenuLabel("Search in chat", icon: GsIcons.search)
                 }
                 if let newChat = onNewChat {
                     Button(action: newChat) {
-                        Label("New chat", systemImage: "square.and.pencil")
+                        GsMenuLabel("New chat", icon: GsIcons.squarePen)
                     }
                 }
             }
@@ -1162,7 +1162,7 @@ private struct TranslationSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Label("Translation", systemImage: "translate")
+                GsMenuLabel("Translation", icon: GsIcons.languages, side: 17)
                     .font(Aero.responsive(17, .semibold, relativeTo: .body))
                     .foregroundStyle(Aero.text)
                 Spacer()
@@ -1196,9 +1196,10 @@ private struct TranslationSheet: View {
                         withAnimation(Aero.chatCurve) { copied = false }
                     }
                 } label: {
-                    Label(
+                    GsMenuLabel(
                         copied ? "Copied" : "Copy translation",
-                        systemImage: copied ? "checkmark" : "doc.on.doc"
+                        icon: copied ? GsIcons.check : GsIcons.copy,
+                        side: 14
                     )
                     .font(Aero.responsive(14, relativeTo: .subheadline))
                     .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
@@ -1366,11 +1367,11 @@ struct MessageBubble: View, Equatable {
             Button {
                 copyAndConfirm(message.content)
             } label: {
-                Label("Copy", systemImage: "doc.on.doc")
+                GsMenuLabel("Copy", icon: GsIcons.copy)
             }
             if editEnabled {
                 Button(action: onEditStart) {
-                    Label("Edit", systemImage: "pencil")
+                    GsMenuLabel("Edit", icon: GsIcons.squarePen)
                 }
             }
         }
@@ -1558,26 +1559,26 @@ struct MessageBubble: View, Equatable {
             Button {
                 copyAndConfirm(message.content)
             } label: {
-                Label("Copy", systemImage: "doc.on.doc")
+                GsMenuLabel("Copy", icon: GsIcons.copy)
             }
             Button(action: onReadAloud) {
-                Label(isSpeaking ? "Stop reading" : "Read aloud",
-                      systemImage: isSpeaking ? "stop.fill" : "speaker.wave.2")
+                GsMenuLabel(isSpeaking ? "Stop reading" : "Read aloud",
+                            icon: isSpeaking ? GsIcons.volumeX : GsIcons.volume2)
             }
             Button(action: onRegenerate) {
-                Label("Regenerate", systemImage: "arrow.clockwise")
+                GsMenuLabel("Regenerate", icon: GsIcons.refreshCw)
             }
             Button(action: onTranslate) {
-                Label("Translate", systemImage: "translate")
+                GsMenuLabel("Translate", icon: GsIcons.languages)
             }
             Button(action: onSave) {
-                Label("Save", systemImage: "bookmark")
+                GsMenuLabel("Save", icon: GsIcons.bookmark)
             }
             Button(action: onBranch) {
-                Label("Branch new chat", systemImage: "arrow.triangle.branch")
+                GsMenuLabel("Branch new chat", icon: GsIcons.split)
             }
             ShareLink(item: message.content) {
-                Label("Share", systemImage: "square.and.arrow.up")
+                GsMenuLabel("Share", icon: GsIcons.share)
             }
         }
     }
