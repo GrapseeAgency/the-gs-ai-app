@@ -747,10 +747,11 @@ private struct DockIcon: View {
     private var gearMark: some View {
         // Even-odd, the twin of Compose's PathFillType.EvenOdd: the ring and
         // the hub wind the same way, so the nonzero rule would fill the hole
-        // solid. `PathFillStyle` is iOS 17; the page ships at iOS 16, so the
-        // rule rides the fill call.
+        // solid. `PathFillStyle` is iOS 17 and the page ships at iOS 16; the
+        // SDK spells the shape-fill's flag `isEOFilled` (run 40117076973
+        // rejected `eo:` — that label belongs to the Canvas context's fill).
         FilledGearGlyph()
-            .fill(ink, style: FillStyle(eo: true))
+            .fill(ink, style: FillStyle(isEOFilled: true, antialiased: true))
             .frame(width: markSide, height: markSide)
     }
 
