@@ -759,10 +759,13 @@ private struct IconCircleStyle: ViewModifier {
 
 private extension ExplorePalette {
     static func iconLight(_ c: Color) -> Color {
-        Color(
-            red: c.red * 0.55 + 0.45,
-            green: c.green * 0.55 + 0.45,
-            blue: c.blue * 0.55 + 0.45
+        let ui = UIColor(c)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        ui.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return Color(
+            red: min(1, r * 0.55 + 0.45),
+            green: min(1, g * 0.55 + 0.45),
+            blue: min(1, b * 0.55 + 0.45)
         )
     }
 }
