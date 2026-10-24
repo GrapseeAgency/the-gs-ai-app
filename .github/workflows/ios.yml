@@ -285,7 +285,8 @@ jobs:
           # pick a drawer frame up and mis-register a Home probe on it.
           DSRC=/tmp/gs-drawer-renders
           if [ -d "$DSRC" ]; then cp "$DSRC"/drawer-ios-*.png "$DIR/" 2>/dev/null || true; fi
-          for n in drawer-ios-393x852 drawer-ios-393x852-dark drawer-ios-360x780; do
+          for n in drawer-ios-393x852 drawer-ios-393x852-dark drawer-ios-360x780 \
+                   drawer-ios-500chats-393x852; do
             test -s "$DIR/$n.png" \
               || { echo "::error::$n.png missing — the drawer harness did not produce it"; exit 1; }
           done
@@ -432,6 +433,7 @@ jobs:
           python3 scripts/check_drawer_render.py \
             --render ios/build/home-renders/drawer-ios-393x852.png \
             --home ios/build/home-renders/home-ios-393x852.png \
+            --same-frame ios/build/home-renders/drawer-ios-500chats-393x852.png \
             --probe-set ios --label ios-drawer
 
       # The drawer gate's own non-vacuity, executed every run: eight doctored

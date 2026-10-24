@@ -49,7 +49,8 @@ final class DrawerRenderTests: XCTestCase {
     )
 
     @MainActor
-    private func render(size: CGSize, dark: Bool) throws -> UIImage? {
+    private func render(size: CGSize, dark: Bool,
+                        fixture: DrawerFixture = DrawerRenderTests.fixture) throws -> UIImage? {
         let home = HomeDashboardView(
             onNewChat: {}, onOpenDrawer: {}, onOpenChats: {}, onOpenAgent: {},
             onOpenConversation: { _ in }, onStartPrompt: { _ in },
@@ -62,7 +63,7 @@ final class DrawerRenderTests: XCTestCase {
                 onRoute: { _ in },
                 onClose: {},
                 activeRoute: nil,
-                recentFixture: Self.fixture
+                recentFixture: fixture
             )
         }
         .frame(width: size.width, height: size.height)
@@ -119,7 +120,9 @@ final class DrawerRenderTests: XCTestCase {
     }
 
     @MainActor
-    private func capture(size: CGSize, dark: Bool, name: String) throws {
+    @MainActor
+    private func capture(size: CGSize, dark: Bool, name: String,
+                         fixture: DrawerFixture = DrawerRenderTests.fixture) throws {
         var problems = ["the capture was never taken"]
         for _ in 1...3 {
             guard let image = try render(size: size, dark: dark) else {
@@ -157,7 +160,8 @@ final class DrawerRenderTests: XCTestCase {
 
         let dir = Self.outputDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        guard let image = try render(size: size, dark: dark), let data = image.pngData() else {
+        guard let image = try render(size: size, dark: dark, fixture: fixture),
+              let data = image.pngData() else {
             XCTFail("no PNG data")
             return
         }
@@ -190,5 +194,25 @@ final class DrawerRenderTests: XCTestCase {
     func testDrawerAtNarrowWidth() throws {
         try capture(size: CGSize(width: 360, height: 780), dark: false,
                     name: "drawer-ios-360x780.png")
+    }
+
+    /// Five hundred conversations, captured so DR11 can compare this frame with
+    /// the sheet-sized one. Android proved the fixture once bypassed the row
+    /// limit and drew twelve bands; this is the same question asked of iOS, and
+    /// the answer is checked rather than assumed.
+    @MainActor
+    func testDrawerWithFiveHundredConversations() throws {
+        let many = DrawerFixture(
+            name: "Arafat",
+            workspace: "Personal workspace",
+            initials: "A",
+            recents: (0..<500).map { index in
+                DrawerRecent(id: "m\(index)", title: "Conversation \(index + 1)",
+                             timestamp: "Mon",
+                             symbol: DrawerTime.symbol(pinned: false), pinned: false)
+            }
+        )
+        try capture(size: CGSize(width: 393, height: 852), dark: false,
+                    name: "drawer-ios-500chats-393x852.png", fixture: many)
     }
 }

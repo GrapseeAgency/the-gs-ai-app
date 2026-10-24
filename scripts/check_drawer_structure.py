@@ -88,6 +88,17 @@ def rules():
          "the drawer animates forever, so it repaints the page behind it",
          lambda t: ".repeatForever" in t,
          ".animation(.easeIn.repeatForever())"),
+        # Rows that take a FIXED height clip text the moment the type size grows.
+        # A capture at the default size looks identical either way, which is why
+        # this is a rule and not a measurement.
+        (ANDROID_ROWS,
+         "an interactive row has a fixed height, so large type is clipped",
+         lambda t: re.search(r"\.height\(DrawerMetrics\.", t) is not None,
+         "Modifier.height(DrawerMetrics.recentPitch)"),
+        (IOS_DRAWER,
+         "an interactive row has a fixed height, so large type is clipped",
+         lambda t: re.search(r"\.frame\(height: DrawerMetrics\.(searchHeight|heroHeight|destPitch|recentPitch)\)", t) is not None,
+         ".frame(height: DrawerMetrics.recentPitch)"),
     ]
 
 

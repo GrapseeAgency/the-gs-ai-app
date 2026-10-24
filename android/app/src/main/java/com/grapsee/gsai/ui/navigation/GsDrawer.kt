@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.paneTitle
@@ -127,8 +128,13 @@ fun GsDrawerContent(
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
     val storedName = AccountStore.displayName(context)
-    val recentsFromStore by remember {
-        runCatching { ServiceLocator.chat.activeConversations() }.getOrElse { flowOf(emptyList()) }
+    // A fixture means the caller is supplying its own rows, so the store is not
+    // read at all. That keeps the capture and the interaction test independent of
+    // the database, and it is why they run on a bare JVM.
+    val recentsFromStore by remember(fixture) {
+        if (fixture != null) flowOf(emptyList())
+        else runCatching { ServiceLocator.chat.activeConversations() }
+            .getOrElse { flowOf(emptyList()) }
     }.collectAsStateWithLifecycle(initialValue = emptyList())
 
     var actionTarget by remember { mutableStateOf<ConversationEntity?>(null) }
@@ -355,6 +361,7 @@ private fun DrawerHeader(onClose: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(DrawerMetrics.closeHit + 10.dp)
+                .testTag("drawer-close")
                 .clip(CircleShape)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },

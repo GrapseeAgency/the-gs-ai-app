@@ -119,6 +119,11 @@ struct RootView: View {
                     onClose: { withAnimation(Aero.motion(Aero.spring)) { showDrawer = false } },
                     activeRoute: router.path.last
                 )
+                // The sheet's panel runs to the screen edge, and its own footer
+                // keeps the 30 pt clearance the capture measures. Without this the
+                // panel stops at the safe area and the device frame differs from
+                // every render the gate approves.
+                .ignoresSafeArea()
                 .transition(.opacity)
             }
         }

@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -81,7 +82,8 @@ fun DrawerSearchPill(onOpenSearch: () -> Unit, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = DrawerMetrics.contentInset)
-            .height(DrawerMetrics.searchHeight)
+            .heightIn(min = DrawerMetrics.searchHeight)
+            .testTag("drawer-search")
             .gsGlass(GsGlassRole.Sunken, CircleShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -116,7 +118,8 @@ fun DrawerHeroRow(label: String, onClick: () -> Unit, modifier: Modifier = Modif
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = DrawerMetrics.contentInset)
-            .height(DrawerMetrics.heroHeight)
+            .heightIn(min = DrawerMetrics.heroHeight)
+            .testTag("drawer-hero")
             .clip(RoundedCornerShape(DrawerMetrics.heroRadius))
             .background(
                 // The measured gradient: warm apricot at the left stop, the
@@ -179,7 +182,8 @@ fun DrawerDestinationRow(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = DrawerMetrics.contentInset)
-            .height(DrawerMetrics.destPitch)
+            .heightIn(min = DrawerMetrics.destPitch)
+            .testTag("drawer-dest-${destination.label}")
             .clip(RoundedCornerShape(14.dp))
             .background(if (selected) DrawerMetrics.selectedFill else Color.Transparent)
             .clickable(
@@ -229,7 +233,8 @@ fun DrawerRecentRow(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = DrawerMetrics.contentInset)
-            .height(DrawerMetrics.recentPitch)
+            .heightIn(min = DrawerMetrics.recentPitch)
+            .testTag("drawer-recent-${recent.id}")
             .clip(RoundedCornerShape(14.dp))
             .background(if (selected) DrawerMetrics.selectedFill else Color.Transparent)
             .combinedClickable(
@@ -321,6 +326,7 @@ fun DrawerFooter(
         Box(
             modifier = Modifier
                 .size(DrawerMetrics.gear)
+                .testTag("drawer-settings")
                 .gsGlass(GsGlassRole.FloatingControl, CircleShape)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },

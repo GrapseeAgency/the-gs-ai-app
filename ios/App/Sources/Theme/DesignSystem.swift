@@ -342,6 +342,17 @@ enum Aero {
         return .system(size: resolved, weight: weight, design: design)
     }
 
+    /// An arbitrary spec size drawn in the product face, scaling with Dynamic
+    /// Type. The drawer's sizes come from the sheet (42/54/56 pt rows, 13 pt
+    /// labels), so it needs the engine rather than one of the named roles — and
+    /// it should not fall back to `.system(size:)`, which is what it did: the
+    /// drawer painted in SF Pro while the rest of the app painted in Inter Tight,
+    /// and no text in it responded to the user's type size.
+    static func specFont(_ size: CGFloat, _ weight: Font.Weight = .regular,
+                         relativeTo style: Font.TextStyle = .body) -> Font {
+        scaledFont(size, weight, .default, relativeTo: style)
+    }
+
     static func displayTitle() -> Font { scaledFont(34, .semibold, .default, relativeTo: .largeTitle) }
     /// The length counterpart to `scaledFont`. A layout constant that exists to
     /// contain text — a pill row height, a bento row, an artwork frame — must

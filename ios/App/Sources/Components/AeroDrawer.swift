@@ -167,7 +167,7 @@ struct AeroDrawer: View {
             drawerSectionLabel("RECENT CHATS")
             if recents.isEmpty {
                 Text("No conversations yet.")
-                    .font(.system(size: DrawerMetrics.timestamp))
+                    .font(Aero.specFont(DrawerMetrics.timestamp))
                     .foregroundColor(DrawerMetrics.timestampInk)
                     .padding(.leading, DrawerMetrics.contentInset)
                     .padding(.vertical, 8)
@@ -191,15 +191,15 @@ struct AeroDrawer: View {
                                          startPoint: .topLeading, endPoint: .bottomTrailing))
                     .frame(width: DrawerMetrics.headerOrb, height: DrawerMetrics.headerOrb)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 22, weight: .regular))
+                    .font(Aero.specFont(22, .regular))
                     .foregroundColor(.white.opacity(0.9))
             }
             VStack(alignment: .leading, spacing: 0) {
                 Text("Nexly")
-                    .font(.system(size: DrawerMetrics.wordmark, weight: .semibold))
+                    .font(Aero.specFont(DrawerMetrics.wordmark, .semibold))
                     .foregroundColor(Aero.text)
                 Text("AI Companion")
-                    .font(.system(size: DrawerMetrics.subtitle))
+                    .font(Aero.specFont(DrawerMetrics.subtitle))
                     .foregroundColor(DrawerMetrics.labelInk)
             }
             Spacer(minLength: 0)
@@ -208,7 +208,7 @@ struct AeroDrawer: View {
                 onClose()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: DrawerMetrics.closeGlyph, weight: .medium))
+                    .font(Aero.specFont(DrawerMetrics.closeGlyph, .medium))
                     .foregroundColor(Aero.text)
                     .frame(width: DrawerMetrics.closeHit + 10,
                            height: DrawerMetrics.closeHit + 10)
@@ -233,15 +233,15 @@ struct AeroDrawer: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: DrawerMetrics.searchGlyph))
+                    .font(Aero.specFont(DrawerMetrics.searchGlyph))
                     .foregroundColor(DrawerMetrics.labelInk)
                 Text("Search chats")
-                    .font(.system(size: DrawerMetrics.searchText))
+                    .font(Aero.specFont(DrawerMetrics.searchText))
                     .foregroundColor(DrawerMetrics.labelInk)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 16)
-            .frame(height: DrawerMetrics.searchHeight)
+            .frame(minHeight: DrawerMetrics.searchHeight)
             .background(Capsule().fill(Color.white.opacity(scheme == .dark ? 0.10 : 0.55)))
             .overlay(Capsule().strokeBorder(Color.white.opacity(scheme == .dark ? 0.14 : 0.65),
                                             lineWidth: 1))
@@ -266,18 +266,18 @@ struct AeroDrawer: View {
                                              startPoint: .top, endPoint: .bottom))
                         .frame(width: DrawerMetrics.heroOrb, height: DrawerMetrics.heroOrb)
                     Image(systemName: "plus")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(Aero.specFont(17, .semibold))
                         .foregroundColor(.white)
                 }
                 Text("New chat")
-                    .font(.system(size: DrawerMetrics.heroLabel, weight: .semibold))
+                    .font(Aero.specFont(DrawerMetrics.heroLabel, .semibold))
                     .foregroundColor(Aero.text)
                 Spacer(minLength: 0)
                 chevron
             }
             .padding(.leading, 8)
             .padding(.trailing, DrawerMetrics.chevronInset)
-            .frame(height: DrawerMetrics.heroHeight)
+            .frame(minHeight: DrawerMetrics.heroHeight)
             .background(
                 RoundedRectangle(cornerRadius: DrawerMetrics.heroRadius)
                     .fill(LinearGradient(
@@ -320,14 +320,14 @@ struct AeroDrawer: View {
             HStack(spacing: DrawerMetrics.discToTitle) {
                 disc(destination.symbol)
                 Text(destination.label)
-                    .font(.system(size: DrawerMetrics.rowTitle))
+                    .font(Aero.specFont(DrawerMetrics.rowTitle))
                     .foregroundColor(activeRoute == destination.route ? Aero.accent : Aero.text)
                 Spacer(minLength: 0)
                 chevron
             }
             .padding(.leading, DrawerMetrics.contentInset)
             .padding(.trailing, DrawerMetrics.chevronInset)
-            .frame(height: DrawerMetrics.destPitch)
+            .frame(minHeight: DrawerMetrics.destPitch)
             .background(
                 RoundedRectangle(cornerRadius: 14)
                     .fill(activeRoute == destination.route
@@ -349,11 +349,11 @@ struct AeroDrawer: View {
                 disc(recent.symbol)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(recent.title)
-                        .font(.system(size: DrawerMetrics.chatTitle, weight: .semibold))
+                        .font(Aero.specFont(DrawerMetrics.chatTitle, .semibold))
                         .foregroundColor(Aero.text)
                         .lineLimit(1)
                     Text(recent.timestamp)
-                        .font(.system(size: DrawerMetrics.timestamp))
+                        .font(Aero.specFont(DrawerMetrics.timestamp))
                         .foregroundColor(DrawerMetrics.timestampInk)
                         .lineLimit(1)
                 }
@@ -362,7 +362,7 @@ struct AeroDrawer: View {
             }
             .padding(.leading, DrawerMetrics.contentInset)
             .padding(.trailing, DrawerMetrics.chevronInset)
-            .frame(height: DrawerMetrics.recentPitch)
+            .frame(minHeight: DrawerMetrics.recentPitch)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(recent.title), \(recent.timestamp)")
@@ -372,9 +372,15 @@ struct AeroDrawer: View {
         // against the same store and API calls the old code used.
         .contextMenu {
             Button {
+                let next = !recent.pinned
                 GSHaptics.success()
-                store.setPinned(id: recent.id, !recent.pinned)
-                sync(recent.id, pinned: !recent.pinned)
+                store.setPinned(id: recent.id, next)
+                sync(recent.id, pinned: next)
+                // The row updates from the tap, not from the next presentation.
+                if let index = recents.firstIndex(where: { $0.id == recent.id }) {
+                    recents[index].pinned = next
+                    recents[index].symbol = DrawerTime.symbol(pinned: next)
+                }
             } label: {
                 Label(recent.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
             }
@@ -409,14 +415,14 @@ struct AeroDrawer: View {
                     Color.white.opacity(scheme == .dark ? 0.16 : 0.75), lineWidth: 1))
                 .frame(width: DrawerMetrics.disc, height: DrawerMetrics.disc)
             Image(systemName: symbol)
-                .font(.system(size: 16))
+                .font(Aero.specFont(16))
                 .foregroundColor(Aero.text.opacity(0.75))
         }
     }
 
     private var chevron: some View {
         Image(systemName: "chevron.right")
-            .font(.system(size: DrawerMetrics.chevron, weight: .medium))
+            .font(Aero.specFont(DrawerMetrics.chevron, .medium))
             .foregroundColor(DrawerMetrics.labelInk)
     }
 
@@ -455,16 +461,16 @@ struct AeroDrawer: View {
                         Circle().fill(Aero.accentSoft)
                             .frame(width: DrawerMetrics.avatar, height: DrawerMetrics.avatar)
                         Text(fixtureIdentity.initials)
-                            .font(.system(size: DrawerMetrics.footerName, weight: .semibold))
+                            .font(Aero.specFont(DrawerMetrics.footerName, .semibold))
                             .foregroundColor(Aero.text)
                     }
                     VStack(alignment: .leading, spacing: 1) {
                         Text(fixtureIdentity.name)
-                            .font(.system(size: DrawerMetrics.footerName, weight: .semibold))
+                            .font(Aero.specFont(DrawerMetrics.footerName, .semibold))
                             .foregroundColor(Aero.text)
                             .lineLimit(1)
                         Text(fixtureIdentity.workspace)
-                            .font(.system(size: DrawerMetrics.footerSub))
+                            .font(Aero.specFont(DrawerMetrics.footerSub))
                             .foregroundColor(DrawerMetrics.timestampInk)
                             .lineLimit(1)
                     }
@@ -485,7 +491,7 @@ struct AeroDrawer: View {
                             Color.white.opacity(scheme == .dark ? 0.16 : 0.75), lineWidth: 1))
                         .frame(width: DrawerMetrics.gear, height: DrawerMetrics.gear)
                     Image(systemName: "gearshape")
-                        .font(.system(size: DrawerMetrics.gearGlyph))
+                        .font(Aero.specFont(DrawerMetrics.gearGlyph))
                         .foregroundColor(Aero.text.opacity(0.8))
                 }
             }
@@ -591,15 +597,15 @@ struct AeroDrawer: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 Image(systemName: icon)
-                    .font(.system(size: 16))
+                    .font(Aero.specFont(16))
                     .foregroundColor(isSelected ? Aero.accent : Aero.text.opacity(0.8))
                     .frame(width: 28)
                 Text(title)
-                    .font(.system(size: DrawerMetrics.rowTitle))
+                    .font(Aero.specFont(DrawerMetrics.rowTitle))
                     .foregroundColor(isSelected ? Aero.accent : Aero.text)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: DrawerMetrics.chevron, weight: .medium))
+                    .font(Aero.specFont(DrawerMetrics.chevron, .medium))
                     .foregroundColor(DrawerMetrics.labelInk)
             }
             .padding(.horizontal, 12)

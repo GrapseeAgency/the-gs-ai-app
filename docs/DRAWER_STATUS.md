@@ -111,3 +111,33 @@ stronger claim made falsely.
    context menu, so Android could pin/rename/archive/delete from the drawer and iOS
    could not. Restored, against the same store and API calls; the pixel gate could
    not have seen it either way.
+
+
+## What is verified, and how
+
+| Question | Answered by | Where |
+|---|---|---|
+| Does the panel match the sheet? | 11 quantities derived from the PNG, 5 self-anchored checks | `check_drawer_render.py` |
+| Does it hold in dark? | panel/ink/scrim bands in both schemes | `check_drawer_dark.py` |
+| Is the gate capable of failing? | 8 doctored frames, each caught by its own rule | `test_drawer_render_gate.py` |
+| Is the list bounded? | 500-chat frame compared with the sheet-sized frame | DR11, both platforms |
+| Do both platforms agree on numbers? | 32 metric names, 10 literals | `check_drawer_type_parity.py` |
+| Is anything quietly expensive? | 13 structural rules with their own counter-examples | `check_drawer_structure.py` |
+| Does each control go where it says? | 6 pressed controls, asserted routes | `DrawerInteractionTest` (Android) |
+| Do the iOS destinations and icon agree? | 4 assertions without a screen | `DrawerLogicTests` (iOS) |
+| Does the type hold up? | rows use `heightIn(min:)`/`minHeight:`; both platforms draw the product face, iOS through the Dynamic Type engine | structure rules 12–13, `Aero.specFont` |
+
+## What is still not 100%
+
+1. **Image Studio is a prefill, not a screen.** The drawer row routes to a chat
+   seeded with an image prompt. Building the studio is a page of work, not a
+   drawer change.
+2. **Device verification is the user's.** The capture runs with the safe area
+   zeroed; production now ignores it too (so the panel is full-bleed exactly as
+   the sheet), and the footer keeps a 30 pt clearance measured from the capture.
+   Whether the home indicator still clears it on hardware is a device question.
+3. **Two quantities remain token-gated, not measured**: pill height (42 pt) and
+   the chevron inset. The detectors for them were unstable on the sheet itself,
+   and a band that passes for the wrong reason is worse than a stated gap.
+4. **iOS draws the panel's bottom-right arc from a constant**, not from a
+   measurement: the arc's own centre sits outside the sheet's crop.

@@ -120,11 +120,14 @@ struct DrawerRecent: Identifiable {
     let id: String
     let title: String
     let timestamp: String
-    let symbol: String
+    /// Mutable so a pin toggled from the row is reflected in the row immediately.
+    /// A snapshot that only refreshes on `onAppear` left the icon stale until the
+    /// drawer was closed and reopened, which Android does not do.
+    var symbol: String
     /// The row's own state, carried so a row's actions never have to search the
     /// store: a lookup in `body` is a linear scan per row per evaluation, which
     /// is the cost this drawer was rebuilt to remove.
-    let pinned: Bool
+    var pinned: Bool
 }
 
 /// A capture needs rows without a database. Production passes nil.
