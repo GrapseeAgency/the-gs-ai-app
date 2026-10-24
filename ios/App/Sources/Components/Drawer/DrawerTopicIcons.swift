@@ -224,6 +224,10 @@ enum DrawerTopic: String, CaseIterable {
         case "Compass": return GsIcons.compass
         case "Activity": return GsIcons.activity
         case "Bookmark": return GsIcons.bookmark
+        case "User": return GsIcons.user
+        case "Settings": return GsIcons.settings
+        case "Bell": return GsIcons.bell
+        case "CreditCard": return GsIcons.creditCard
         default: return GsIcons.messageCircle
         }
     }

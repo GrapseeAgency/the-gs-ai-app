@@ -1,0 +1,189 @@
+# Icon migration — state and handoff
+
+The app ships one icon family: 1,611 Lucide geometries, 5,466 public names, in
+`GsIcons.kt` (Compose vectors) and `GsIcons.swift` (stroke paths + `GsIconView`).
+This file records where the migration of the **iOS** surfaces onto that family
+stands, so a fresh session does not have to rediscover it.
+
+Audited on every CI run by `scripts/check_icon_catalogue.py`: geometry and name
+counts against each file's own claim, duplicate names, alias resolution, identical
+name sets across platforms (Swift's backticked keywords included), the topic tables
+keyword-for-keyword, a render branch per topic, and every icon the app references.
+Four doctored catalogues prove the check can fail.
+
+## Done
+
+| Surface | State |
+|---|---|
+| `Components/AeroDrawer.swift` | **0** `systemName:` — panel chrome, destinations, recent rows, account sheet |
+| `Features/Chats/ChatsListView.swift` | 8 → 3 → **0** |
+| `Features/Chats/ChatDetailView.swift` | 11 → 6 → **0** |
+| `Features/Home/HomeDashboardView.swift` | 12 → **0** |
+| Android | `GsIcons` throughout; nothing to migrate |
+
+Gated by rule 14 of `scripts/check_drawer_structure.py`: **one `systemName:` in
+`AeroDrawer.swift` fails the build**, with its own counter-example in `--self-test`.
+Read that rule before adding an icon to the drawer.
+
+## The 21 sites — done (2026-10-24)
+
+All 21 `Image(systemName:)` sites are migrated; the three surfaces now carry
+**0** `systemName:`. The parameterised helpers no longer take a name string at
+all — `quickCard` / `selectionAction` / `optionLabel` / `row` /
+`GlassCircleButton` / `HomePill` take a `GsIconPaths`, so the compiler checks
+what a lookup table used to check at runtime.
+
+What the sites became, surface by surface:
+
+- **ChatsListView** — quick-access card `archivebox` → `GsIcons.archive`;
+  selection tick `checkmark.circle.fill / circle` → a filled `Aero.accent` disc
+  carrying `GsIcons.check` (14) over `Aero.onAccent`, unselected `GsIcons.circle`
+  — the construction Android's selection Box uses, and the picture SF drew;
+  `circleCheck` was rejected as a stroked ring, which would read as an outline
+  on both phones. Selection bar → `star / archive / trash2`, the exact trio
+  Android's `SelectionAction` row draws.
+- **ChatDetailView** — `wifi.slash` → `wifiOff` (size 12); options sheet →
+  `share / squarePen / info / fileText / eraser / trash2 / x`, each named for
+  Android's option row rather than for the SF shape it replaced (the sheet's
+  Share is `Share`, its rename is `SquarePen`, its delete is `Trash2`); find
+  bar → `chevronUp / chevronDown / x` (14), matching ChatScreen; Chat Info
+  rows → `squarePen / cpu / brain`, matching ChatInfoScreen.kt.
+- **HomeDashboardView** — `arrow.right` → `arrowRight`, `sparkle` → `sparkle`
+  (one four-point star), `lightbulb` → `lightbulb`, `sparkles` → `sparkles`,
+  `chevron.right` → `chevronRight`, chip `play` → `play` (Android's
+  `ReferenceChip` draws the same outline). Header circles → `sparkles` / `menu`
+  (Android's `GsIcons.Menu` twin); pills → `plus` / `compass` / `sparkles` /
+  `ellipsis` (Android: `Plus` / `Compass` / `Sparkles` / `Ellipsis`).
+
+Glyph size is the spec number wrapped in `Aero.scaledLength(_, relativeTo:)`, so
+an icon keeps the accessibility contract the page's text already honours — the
+same rule as the drawer's `DrawerMetrics` glyph constants.
+
+The handoff's list of verified names mostly held (`arrowRight`, `sparkles`,
+`lightbulb`, `play`, `chevronRight`, `chevronUp`, `chevronDown`, `x`, `wifiOff`,
+`circle`), with two corrections found by reading Android's twins instead of the
+SF shapes it replaced: the selection mark is a filled disc + `check`, not
+`circleCheck`, and the options sheet is `share` / `squarePen` / `trash2`, not
+`squareArrowUp` / `pencil` / `trash`. Where a suggested name and the twin's
+shape disagree, the twin wins — the two apps ship one icon language.
+
+Four silhouettes are hand-drawn in the 24-unit space beside `OpenBookGlyph`,
+because the generated set is stroke-only by contract: the dock's `FilledHouse`
+and `FilledGear` and the video disc's `FilledPlay` — each the point-for-point
+twin of Android's `Filled*` in `HomeDashboardScreen.kt`. The gear's hub hole
+needs no fill-rule API: Android reaches it with `PathFillType.EvenOdd`, but
+this SDK exposes even-odd nowhere below iOS 17 — runs 40117076973 and
+40117461200 rejected `eo:` and `isEOFilled:` on `Shape.fill`, and run
+40118125849 rejected `eo:` on the Canvas context's fill too. The shoelace
+signs of Android's two contours (+215.6 ring, −28.8 hub) show they already
+wind opposite, and oppositely-wound nonzero paints the same picture for nested
+contours, so the geometry ships in Android's order with a plain fill.
+Reversing the hub to "create" the hole would have filled it solid — a wrong
+glyph no compile can catch, which is why the winding was measured first.
+
+## Remaining — the menu chrome
+
+29 `Label(systemImage:)` sites still draw SF glyphs: 8 in ChatsListView (row
+context menu + swipes), 17 in ChatDetailView (message menu, translation menu,
+overflow), 4 in AeroDrawer (recents menu). They have survived every pass
+because their icons are drawn by SwiftUI's menu chrome, and a `GsIconView`
+inside a menu-item label is not guaranteed a leading icon slot — the migration
+must not trade an SF glyph for an icon-less row. Verify on a capture before
+converting. Rule 14 of `check_drawer_structure.py` counts `systemName:` only,
+so it neither catches these nor protects against re-introducing them.
+
+## Evidence state — read before claiming these done
+
+Step 5 of the recipe is a capture, and only Home has a harness that can make
+one. The `home-renders-ios` artifact of run 40118659001 is that proof for the
+12 Home sites: the dock's filled house, filled book and gear-with-hole, the
+family `sparkles` on Assistant and Generate, `menu`, the four pills, the
+outline `play` chip over the filled disc triangle, both chevrons, `arrowRight`
+and `lightbulb` — all rendered by Xcode, not asserted by a script.
+
+The 9 Chats sites have NO capture behind them: no test renders `ChatsListView`,
+the options sheet, the find bar, the offline pill or Chat Info (checked —
+`ios/App/Tests` never names those views). They are verified by (a) the real
+Xcode compile and XCTest run, which proves the wiring and nothing about the
+glyph, and (b) line-by-line comparison against Android's twin rows, which is
+how the `share` / `squarePen` / `trash2` / filled-disc corrections above were
+found. A chats render harness is the missing evidence step; until it exists,
+do not describe those 9 as capture-verified.
+
+## What the two workflows say (step 4, run 2026-10-24)
+
+**ios.yml — the iOS compile gate — is green**: run 40120041698 on `b563f113`
+(static gates → real Xcode build → the app's XCTests → the Home, Nexly-chat and
+Explore renders with their pixel probes). Run 40118659001 is the same verdict
+one commit earlier and is where the Home PNG above came from.
+
+**ios-native's app job was already red on `main` before this migration**, and
+the control proves it: run 40121938239 (branch at `84fa992a`, the commit this
+work started from) fails at the DEVICE build with
+`NexlyPlan.swift:1003: the compiler is unable to type-check this expression in
+reasonable time` — a pre-existing defect, not an icon one. This branch fixes
+that expression, so the job now gets as far as the tests.
+
+There it fails one test, and a control run says it is not this branch's
+failure: `ci/uitest-control` (`2af5ae98` = `84fa992a` + ONLY the NexlyPlan
+compile fix, no icon change) reports the identical result —
+`passed=80 failed=1`, `GsChatUiTests.testSendHelloRendersARealAssistantReply`,
+"composer field never appeared", with XCUITest's own note
+`Automation type mismatch: computed TextField from legacy attributes vs TextView
+from modern attribute` on `XC_kAXXCAttributeElementType =
+SwiftUI.VerticalTextView`. The composer is `AeroInputBar`
+(`Components/AeroComponents.swift`), which no commit here touches; the runner
+now boots an iPhone 17 Pro image where `app.textFields["Ask anything…"]` no
+longer matches a `VerticalTextView`, and the last green ios-native (run
+39673169516, 2026-10-21) predates both that image and the five model-backed
+tests that now run. **Open defect, separate from this migration:**
+`GsChatUiTests` needs a query that accepts the modern automation type (or the
+test needs `.textViews` fallback) before ios-native can go green again.
+
+## The recipe that worked
+
+1. Read the three lines around the site — the size lives on the `.font` line and
+   the colour on `.foregroundStyle` / `.foregroundColor`.
+2. Replace with `GsIconView(GsIcons.<lucide>, size: <same number>, color: <same expr>)`.
+3. Keep whatever `.frame(...)` followed, so layout does not move.
+4. Run `python3 scripts/check_icon_catalogue.py`, then both workflows.
+5. Capture the screen. A screenshot is the only evidence a glyph is the right
+   glyph — see `docs/DRAWER_STATUS.md` for the capture pattern. The Home
+   capture from run 40118659001 is that evidence for this page: dock house /
+   book / gear-with-hole, the `sparkles` on Assistant and Generate, `menu`,
+   the four pills (`plus` / `compass` / `sparkles` / `ellipsis`), the outline
+   `play` chip over the filled disc triangle, both `chevronRight`s,
+   `arrowRight` and `lightbulb`.
+6. A parameterised site is not done until its CALLER stops naming an SF Symbol.
+   Changing `Image(systemName: icon)` to a `GsIconView` while the caller still
+   passes `"archivebox"` just moves the symbol name into a string that nothing
+   reads — these helpers now take a `GsIconPaths`, so the compiler refuses the
+   old name outright.
+7. Check the twin's NAME, not the SF shape. `archivebox`/`trash`/`pencil` are
+   SF spellings of shapes the family draws under different names, and Android
+   already picked them: `archive`, `trash2`, `squarePen`, `share`. Reading the
+   Kotlin row for the same control settled every one of these.
+8. The two iOS workflows are NOT the same compile. An expression that sails
+   through ios.yml's build can time out under ios-native's (that is exactly
+   what `NexlyPlan`'s bubble did). And when a workflow fails on a line you
+   never touched, run a control — a branch at the base commit plus only the
+   fix in question — before believing your diff caused it.
+
+## Also open
+
+The report canvas at `~/.qoder/projects/-mnt-new-volume-Grapsee-Products-GS-AI/canvases/drawer-completion.canvas.tsx`
+still shows the pre-fix icons (hash-era). Refreshing it means downloading the run's
+capture artifacts and rewriting the icon section.
+
+
+## The 29 menu labels — frozen, not forgotten
+
+`Label(_:systemImage:)` still hands SwiftUI an SF name in 29 places: 8 in
+`ChatsListView`, 17 in `ChatDetailView`, 4 in `AeroDrawer`. A custom view inside a
+menu-item label is **not guaranteed the leading-icon slot**, so converting these
+needs a capture of each menu before and after — a different job from the in-row
+sites, which were geometry swaps.
+
+Until then they are bounded: rules 15 and 16 of
+`scripts/check_drawer_structure.py` fail the build if either count grows. The debt
+can shrink; it cannot spread.
