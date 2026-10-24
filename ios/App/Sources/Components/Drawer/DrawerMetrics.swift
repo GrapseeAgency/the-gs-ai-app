@@ -121,6 +121,10 @@ struct DrawerRecent: Identifiable {
     let title: String
     let timestamp: String
     let symbol: String
+    /// The row's own state, carried so a row's actions never have to search the
+    /// store: a lookup in `body` is a linear scan per row per evaluation, which
+    /// is the cost this drawer was rebuilt to remove.
+    let pinned: Bool
 }
 
 /// A capture needs rows without a database. Production passes nil.
@@ -153,13 +157,12 @@ enum DrawerTime {
         return "\(days / 7)w ago"
     }
 
-    /// A decorative glyph chosen by a stable hash of the title, mirroring
-    /// Android's `iconForTitle` so the two platforms pick the same family.
-    static func symbol(for title: String) -> String {
-        let glyphs = ["sparkles", "chart.line.uptrend.xyaxis", "atom", "paintbrush"]
-        var hash = 7
-        for scalar in title.unicodeScalars { hash = (hash &* 31 &+ Int(scalar.value)) & 0x7fff_ffff }
-        return glyphs[hash % glyphs.count]
+    /// A recent row's icon says something TRUE about the chat, or nothing —
+    /// mirroring Android's `iconForChat`. The hash this replaces collided for
+    /// three of the sheet's four titles and disagreed with Kotlin for emoji or
+    /// CJK, because the two languages fold different code-unit domains.
+    static func symbol(pinned: Bool) -> String {
+        pinned ? "pin" : "bubble.left"
     }
 
     private static let isoDateTimeFormatter: ISO8601DateFormatter = {

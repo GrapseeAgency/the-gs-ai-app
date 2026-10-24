@@ -98,6 +98,16 @@ stronger claim made falsely.
 5. **Dark mode is designed, not referenced.** The sheet has no dark frame; the dark
    page is scored against physical requirements (panel dark, glass present, copy
    legible, hero warm) rather than against a picture.
-6. **The recent-chat icons are decorative.** The sheet shows four different glyphs;
-   a chat has no icon of its own, so each row gets a stable hash of its title. Same
-   family, same variety, no invented data.
+6. **The recent-chat icons are ONE glyph, not four — deliberately.** The sheet shows
+   four different icons (a lightbulb for "ideas", an atom for "quantum physics"), and
+   they are *semantic*. The first implementation hashed the title into four glyphs to
+   reproduce that variety; measured, three of the sheet's four titles hashed to the
+   same glyph, and emoji or CJK titles hashed differently on Kotlin (UTF-16 units)
+   than on Swift (Unicode scalars), so one chat drew two different icons on the two
+   platforms. The icon is now driven by the one per-chat fact the drawer holds:
+   pinned chats show a pin, everything else a neutral chat glyph. Real variety needs
+   chat categories, which is a product feature rather than a decoration to fake.
+7. **iOS row actions were briefly missing.** The rebuild dropped the old drawer's
+   context menu, so Android could pin/rename/archive/delete from the drawer and iOS
+   could not. Restored, against the same store and API calls; the pixel gate could
+   not have seen it either way.

@@ -99,13 +99,20 @@ fun relativeTimeIso(iso: String, now: java.time.OffsetDateTime = java.time.Offse
     }.getOrElse { "Earlier" }
 
 /**
- * Recents get a decorative icon, chosen by a stable hash of the title so the
- * same chat always draws the same glyph. The sheet's four rows carry four
- * different icons; a chat has no icon of its own, so this is the honest way to
- * reproduce that variety without inventing data.
+ * A recent row's icon says something TRUE about the chat, or it says nothing.
+ *
+ * The first version hashed the title into one of four glyphs to reproduce the
+ * sheet's four different icons. Measured, it was not honest and barely varied:
+ * three of the sheet's four titles hashed to the SAME glyph, and titles with
+ * emoji or CJK hashed differently on Kotlin (UTF-16 units) than on Swift (Unicode
+ * scalars), so the same chat drew two different icons on the two platforms. The
+ * sheet's glyphs are semantic — a bulb for "ideas", an atom for "quantum physics"
+ * — and no hash recovers meaning from copy.
+ *
+ * So the icon is driven by the one per-chat fact the drawer actually holds:
+ * `pinned`. A pinned chat shows a pin; everything else shows a neutral chat glyph.
+ * Reproducing the sheet's variety would need chat categories, which is a product
+ * feature, not a decoration to fake.
  */
-fun iconForTitle(title: String): ImageVector {
-    val glyphs = listOf(GsIcons.Sparkles, GsIcons.TrendingUp, GsIcons.Atom, GsIcons.Brush)
-    val h = title.fold(7) { acc, c -> (acc * 31 + c.code) and 0x7fffffff }
-    return glyphs[h % glyphs.size]
-}
+fun iconForChat(pinned: Boolean): ImageVector =
+    if (pinned) GsIcons.Pin else GsIcons.MessageCircle

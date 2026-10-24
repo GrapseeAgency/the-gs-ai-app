@@ -45,7 +45,7 @@ struct AeroDrawer: View {
     /// moment the account changes (sign-in, name edit).
     @ObservedObject private var account = AccountStore.shared
 
-    @State private var renameTarget: StoredConversation?
+    @State private var renameId: String?
     @State private var renameDraft = ""
     @State private var accountSheet = false
 
@@ -96,20 +96,20 @@ struct AeroDrawer: View {
         .accessibilityLabel("Navigation menu")
         .accessibilityAction(.escape) { onClose() }
         .alert("Rename chat", isPresented: Binding(
-            get: { renameTarget != nil },
-            set: { if !$0 { renameTarget = nil } }
+            get: { renameId != nil },
+            set: { if !$0 { renameId = nil } }
         )) {
             TextField("Chat name", text: $renameDraft)
             Button("Rename") {
                 let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let target = renameTarget, !trimmed.isEmpty {
-                    store.rename(id: target.id, to: trimmed)
-                    sync(target.id, title: trimmed)
+                if let id = renameId, !trimmed.isEmpty {
+                    store.rename(id: id, to: trimmed)
+                    sync(id, title: trimmed)
                     GSHaptics.success()
                 }
-                renameTarget = nil
+                renameId = nil
             }
-            Button("Cancel", role: .cancel) { renameTarget = nil }
+            Button("Cancel", role: .cancel) { renameId = nil }
         } message: {
             Text("Give this conversation a name you'll recognise.")
         }
@@ -343,11 +343,7 @@ struct AeroDrawer: View {
     private func recentRow(_ recent: DrawerRecent) -> some View {
         Button {
             GSHaptics.tap()
-            if let match = ConversationStore.shared.activeConversations.first(where: { $0.id == recent.id }) {
-                onRoute(.chat(match.id))
-            } else if recentFixture != nil {
-                onRoute(.chat(nil))
-            }
+            onRoute(.chat(recent.id))
         } label: {
             HStack(spacing: DrawerMetrics.discToTitle) {
                 disc(recent.symbol)
@@ -370,6 +366,39 @@ struct AeroDrawer: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(recent.title), \(recent.timestamp)")
+        // The rebuild dropped the old drawer's per-row actions, which left Android
+        // able to pin/rename/archive/delete from the drawer and iOS unable to —
+        // a behavioural regression that the pixel gate could not see. Restored
+        // against the same store and API calls the old code used.
+        .contextMenu {
+            Button {
+                GSHaptics.success()
+                store.setPinned(id: recent.id, pinned: !recent.pinned)
+                sync(recent.id, pinned: !recent.pinned)
+            } label: {
+                Label(recent.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
+            }
+            Button {
+                renameId = recent.id
+                renameDraft = recent.title
+            } label: {
+                Label("Rename…", systemImage: "pencil")
+            }
+            Button {
+                GSHaptics.success()
+                store.setArchived(id: recent.id, archived: true)
+                sync(recent.id, archived: true)
+            } label: {
+                Label("Archive", systemImage: "archivebox")
+            }
+            Button(role: .destructive) {
+                GSHaptics.warning()
+                store.delete(id: recent.id)
+                syncDelete(recent.id)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
     }
 
     private func disc(_ symbol: String) -> some View {
@@ -404,7 +433,8 @@ struct AeroDrawer: View {
             let title = gsConversationTitle(conversation.title)
             return DrawerRecent(id: conversation.id, title: title,
                                 timestamp: DrawerTime.relative(iso: conversation.updatedAt),
-                                symbol: DrawerTime.symbol(for: title))
+                                symbol: DrawerTime.symbol(pinned: conversation.pinned),
+                                pinned: conversation.pinned)
         }
     }
 

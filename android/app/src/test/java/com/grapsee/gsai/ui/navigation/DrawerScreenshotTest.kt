@@ -11,6 +11,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.grapsee.gsai.ui.home.HomeContent
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.navigation.drawer.DrawerFixture
+import com.grapsee.gsai.ui.navigation.drawer.iconForChat
 import com.grapsee.gsai.ui.navigation.drawer.DrawerIdentity
 import com.grapsee.gsai.ui.navigation.drawer.DrawerMetrics
 import com.grapsee.gsai.ui.navigation.drawer.DrawerRecent
@@ -54,13 +55,17 @@ class DrawerScreenshotTest {
     private fun fixture(count: Int = 4) = DrawerFixture(
         identity = DrawerIdentity("Arafat", "Personal workspace", "A"),
         recents = listOf(
-            DrawerRecent("1", "Plan my tomorrow", "Just now", GsIcons.Sparkles),
-            DrawerRecent("2", "Ideas for a brand launch", "Yesterday", GsIcons.TrendingUp),
-            DrawerRecent("3", "Explain quantum physics", "Yesterday", GsIcons.Atom),
-            DrawerRecent("4", "Weekend in Kyoto", "Mon", GsIcons.Brush),
+            // The production mapping, not a hand-picked list: the previously
+            // hardcoded icons meant the capture never exercised the function
+            // that decides them, which is how a hash that collided three-in-four
+            // stayed invisible.
+            DrawerRecent("1", "Plan my tomorrow", "Just now", iconForChat(true)),
+            DrawerRecent("2", "Ideas for a brand launch", "Yesterday", iconForChat(false)),
+            DrawerRecent("3", "Explain quantum physics", "Yesterday", iconForChat(false)),
+            DrawerRecent("4", "Weekend in Kyoto", "Mon", iconForChat(false)),
         ).let { rows ->
             if (count <= rows.size) rows else rows + List(count - rows.size) { i ->
-                DrawerRecent("x$i", "Conversation ${i + 5}", "Mon", GsIcons.Sparkles)
+                DrawerRecent("x$i", "Conversation ${i + 5}", "Mon", iconForChat(false))
             }
         },
     )

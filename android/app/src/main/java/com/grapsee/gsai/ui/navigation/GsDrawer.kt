@@ -77,7 +77,7 @@ import com.grapsee.gsai.ui.navigation.drawer.DrawerRecentRow
 import com.grapsee.gsai.ui.navigation.drawer.DrawerSearchPill
 import com.grapsee.gsai.ui.navigation.drawer.DrawerSectionLabel
 import com.grapsee.gsai.ui.navigation.drawer.RECENT_LIMIT
-import com.grapsee.gsai.ui.navigation.drawer.iconForTitle
+import com.grapsee.gsai.ui.navigation.drawer.iconForChat
 import com.grapsee.gsai.ui.navigation.drawer.relativeTimeIso
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsTheme
@@ -150,7 +150,7 @@ fun GsDrawerContent(
                 id = conversation.id,
                 title = title,
                 timestamp = relativeTimeIso(conversation.updatedAt),
-                icon = iconForTitle(title),
+                icon = iconForChat(conversation.pinned),
             )
         }
 

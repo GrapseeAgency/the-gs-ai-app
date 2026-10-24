@@ -36,10 +36,15 @@ final class DrawerRenderTests: XCTestCase {
         workspace: "Personal workspace",
         initials: "A",
         recents: [
-            DrawerRecent(id: "1", title: "Plan my tomorrow", timestamp: "Just now", symbol: "sparkles"),
-            DrawerRecent(id: "2", title: "Ideas for a brand launch", timestamp: "Yesterday", symbol: "chart.line.uptrend.xyaxis"),
-            DrawerRecent(id: "3", title: "Explain quantum physics", timestamp: "Yesterday", symbol: "atom"),
-            DrawerRecent(id: "4", title: "Weekend in Kyoto", timestamp: "Mon", symbol: "paintbrush"),
+            // the production mapping, not hand-picked symbols
+            DrawerRecent(id: "1", title: "Plan my tomorrow", timestamp: "Just now",
+                         symbol: DrawerTime.symbol(pinned: true), pinned: true),
+            DrawerRecent(id: "2", title: "Ideas for a brand launch", timestamp: "Yesterday",
+                         symbol: DrawerTime.symbol(pinned: false), pinned: false),
+            DrawerRecent(id: "3", title: "Explain quantum physics", timestamp: "Yesterday",
+                         symbol: DrawerTime.symbol(pinned: false), pinned: false),
+            DrawerRecent(id: "4", title: "Weekend in Kyoto", timestamp: "Mon",
+                         symbol: DrawerTime.symbol(pinned: false), pinned: false),
         ]
     )
 
