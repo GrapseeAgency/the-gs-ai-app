@@ -141,3 +141,40 @@ stronger claim made falsely.
    and a band that passes for the wrong reason is worse than a stated gap.
 4. **iOS draws the panel's bottom-right arc from a constant**, not from a
    measurement: the arc's own centre sits outside the sheet's crop.
+
+
+## The headline, the sync, and the icons
+
+Three things turned out to be missing behind the drawer's "recent chats" section.
+
+**The headline was a slice.** A chat was named `content.trim().slice(0, 40)`. A
+first message that opened with a code fence named the chat after the fence; a
+message that was a URL named it after the URL; every cut landed mid-word and
+newlines stayed in. `src/lib/conversation-title.ts` now strips fences, bare URLs,
+attachment placeholders and markdown, collapses whitespace, cuts on a word
+boundary and falls back to the attachment's name — with 20 cases in
+`scripts/test-conversation-title.ts`. The turn also emits the new title as a
+`conversation` event, and its prompt context no longer receives the stale title it
+was built before updating.
+
+**The headline did not reach the drawer.** iOS merged the server's conversation
+page only inside the Chats inbox, so a server-side auto-title could never reach the
+sidebar; that merge now lives in `ConversationStore.syncFromServer` and the drawer
+calls it once per presentation. Android's drawer asks
+`ChatRepository.refreshConversations` on open for the same reason.
+
+**The icons.** 5,466 Lucide names ship on both platforms. iOS shipped them and
+drew none of them: `GsIconView` had no caller, so the drawer's rows were SF Symbols
+while Android drew Lucide — two icon languages in one product. Rows now draw the
+family on both platforms, and the glyph is chosen from the headline's topic
+(`DrawerTopic`, 22 topics, whole-word matches, specific before general), so
+"Explain quantum physics" is an atom rather than a graduation cap. The sheet's own
+four titles are the test vector: plan → CalendarCheck, ideas → Lightbulb,
+quantum → Atom, Kyoto → MapPin.
+
+`scripts/check_icon_catalogue.py` audits the whole family on every run: 1,611
+geometries and 5,466 names per platform, header claims matching the file, no
+duplicate names, every alias resolving to a real geometry, identical name sets
+across the two platforms (including Swift's backticked keywords), the topic tables
+identical keyword-for-keyword, a render branch for every topic, and every icon the
+app references present. Four doctored catalogues prove it can fail.
