@@ -110,6 +110,36 @@ how the `share` / `squarePen` / `trash2` / filled-disc corrections above were
 found. A chats render harness is the missing evidence step; until it exists,
 do not describe those 9 as capture-verified.
 
+## What the two workflows say (step 4, run 2026-10-24)
+
+**ios.yml — the iOS compile gate — is green**: run 40120041698 on `b563f113`
+(static gates → real Xcode build → the app's XCTests → the Home, Nexly-chat and
+Explore renders with their pixel probes). Run 40118659001 is the same verdict
+one commit earlier and is where the Home PNG above came from.
+
+**ios-native's app job was already red on `main` before this migration**, and
+the control proves it: run 40121938239 (branch at `84fa992a`, the commit this
+work started from) fails at the DEVICE build with
+`NexlyPlan.swift:1003: the compiler is unable to type-check this expression in
+reasonable time` — a pre-existing defect, not an icon one. This branch fixes
+that expression, so the job now gets as far as the tests.
+
+There it fails one test, and a control run says it is not this branch's
+failure: `ci/uitest-control` (`2af5ae98` = `84fa992a` + ONLY the NexlyPlan
+compile fix, no icon change) reports the identical result —
+`passed=80 failed=1`, `GsChatUiTests.testSendHelloRendersARealAssistantReply`,
+"composer field never appeared", with XCUITest's own note
+`Automation type mismatch: computed TextField from legacy attributes vs TextView
+from modern attribute` on `XC_kAXXCAttributeElementType =
+SwiftUI.VerticalTextView`. The composer is `AeroInputBar`
+(`Components/AeroComponents.swift`), which no commit here touches; the runner
+now boots an iPhone 17 Pro image where `app.textFields["Ask anything…"]` no
+longer matches a `VerticalTextView`, and the last green ios-native (run
+39673169516, 2026-10-21) predates both that image and the five model-backed
+tests that now run. **Open defect, separate from this migration:**
+`GsChatUiTests` needs a query that accepts the modern automation type (or the
+test needs `.textViews` fallback) before ios-native can go green again.
+
 ## The recipe that worked
 
 1. Read the three lines around the site — the size lives on the `.font` line and
@@ -129,6 +159,15 @@ do not describe those 9 as capture-verified.
    passes `"archivebox"` just moves the symbol name into a string that nothing
    reads — these helpers now take a `GsIconPaths`, so the compiler refuses the
    old name outright.
+7. Check the twin's NAME, not the SF shape. `archivebox`/`trash`/`pencil` are
+   SF spellings of shapes the family draws under different names, and Android
+   already picked them: `archive`, `trash2`, `squarePen`, `share`. Reading the
+   Kotlin row for the same control settled every one of these.
+8. The two iOS workflows are NOT the same compile. An expression that sails
+   through ios.yml's build can time out under ios-native's (that is exactly
+   what `NexlyPlan`'s bubble did). And when a workflow fails on a line you
+   never touched, run a control — a branch at the base commit plus only the
+   fix in question — before believing your diff caused it.
 
 ## Also open
 
