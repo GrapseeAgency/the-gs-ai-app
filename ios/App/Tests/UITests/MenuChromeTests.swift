@@ -215,13 +215,10 @@ final class MenuChromeTests: XCTestCase {
         if headerMenu.waitForExistence(timeout: 10),
            openContextMenu(on: headerMenu, app: app, expecting: "Chat options", press: .center) {
             // A pushed chat offers two rows here, not three: "New chat" is the
-            // sparkle's row and only exists when the screen has the action.
-            var items: [(String, Slot)] = [
-                ("Chat options", .leading),
-                ("Search in chat", .leading),
-            ]
-            if app.buttons["New chat"].exists { items.append(("New chat", .leading)) }
-            capture(name: "chat-header-menu", app: app, items: items)
+            // sparkle's row. (The header's sparkle BUTTON also answers to that
+            // label, so never ask the page whether a row exists.)
+            capture(name: "chat-header-menu", app: app,
+                    items: [("Chat options", .leading), ("Search in chat", .leading)])
             dismissMenu(app: app, item: "Chat options")
         } else {
             recordSkip("chat-header-menu", because: "the header menu button consumes the long press as its action")
@@ -373,8 +370,11 @@ final class MenuChromeTests: XCTestCase {
                 record("\(name)/\(label): only \(probe.count) ink px (need \(minInk)) — the icon is missing or hairline")
             }
             // 2. It is an icon's size, not a speck and not a paragraph.
-            if height < 9 || height > 24 {
-                record("\(name)/\(label): glyph height \(String(format: "%.1f", height)) pt is outside 9–24 pt")
+            //    max(h, w), not h: an ellipsis is 3 pt tall and 11 wide, and the
+            //    size question is "is this glyph-sized", not "is it square".
+            let extent = max(height, width)
+            if extent < 9 || extent > 26 {
+                record("\(name)/\(label): glyph extent \(String(format: "%.1f", extent)) pt is outside 9–26 pt")
             }
             // 3. It sits in the slot its label implies.
             if slot == .leading, case .text(let rect) = box, probe.bbox.maxX > rect.minX + 1 {
@@ -450,10 +450,18 @@ final class MenuChromeTests: XCTestCase {
             // Stacked layout with only the text known: stop short of the box.
             return CGRect(x: rect.midX - 22, y: rect.minY - 24, width: 44, height: 22)
         case (.textInRow(let rect, let row), .above):
-            // Swipe actions: the icon sits over the title inside one button.
-            // The band is clamped INSIDE the button (run 40131109721 measured
-            // 26.3 pt because 28 pt above the text reached past its top edge
-            // into the page), and stops short of the text's own cap.
+            if rect.minY >= row.maxY - 6 {
+                // The label sits BELOW the capsule — iOS draws a swipe action's
+                // icon inside it and its title underneath (see
+                // menu-chats-row-swipe-leading.png) — so the glyph is the
+                // button's centre, not the space above the text.
+                let side = min(26, max(16, min(row.width, row.height) * 0.8))
+                return CGRect(x: row.midX - side / 2, y: row.midY - side / 2,
+                              width: side, height: side)
+            }
+            // Otherwise the label is inside the button, under the glyph: clamp
+            // the band INSIDE the button (run 40131109721 measured 26.3 pt of
+            // page because 28 pt above the text reached past its top edge).
             let top = max(row.minY + 2, rect.minY - 24)
             let bottom = rect.minY - 2
             let height = max(8, bottom - top)
