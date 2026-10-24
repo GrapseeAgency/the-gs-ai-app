@@ -755,13 +755,18 @@ struct ChatDetailView: View {
             ScrollView {
                 VStack(spacing: 4) {
                     ShareLink(item: transcriptText) {
-                        optionLabel(GsIcons.squareArrowUp, "Share Chat", "Share this conversation")
+                        // `share`, not `squareArrowUp`: the SF glyph this row
+                        // carried was square.and.arrow.up, but Android's sheet
+                        // draws GsIcons.Share (ChatScreen's option row), and one
+                        // product means one icon per action.
+                        optionLabel(GsIcons.share, "Share Chat", "Share this conversation")
                     }
                     Button {
                         showOptions = false
                         openAfterDismiss { showRename = true }
                     } label: {
-                        optionLabel(GsIcons.pencil, "Rename Chat", "Give your chat a new name")
+                        // squarePen — Android's rename mark (GsIcons.SquarePen).
+                        optionLabel(GsIcons.squarePen, "Rename Chat", "Give your chat a new name")
                     }
                     Button {
                         showOptions = false
@@ -782,7 +787,7 @@ struct ChatDetailView: View {
                         showOptions = false
                         openAfterDismiss { showDeleteConfirm = true }
                     } label: {
-                        optionLabel(GsIcons.trash, "Delete Chat", "Permanently delete this chat", destructive: true)
+                        optionLabel(GsIcons.trash2, "Delete Chat", "Permanently delete this chat", destructive: true)
                     }
                     Button {
                         showOptions = false
@@ -1774,7 +1779,7 @@ private struct ChatInfoSheet: View {
 
                 AeroCard {
                     VStack(alignment: .leading, spacing: 14) {
-                        row(GsIcons.pencil, "Chat name", title)
+                        row(GsIcons.squarePen, "Chat name", title)
                         Divider().overlay(Aero.outline)
                         row(GsIcons.cpu, "Model", local ? "On-device engine" : "Nexly Cloud")
                         Divider().overlay(Aero.outline)

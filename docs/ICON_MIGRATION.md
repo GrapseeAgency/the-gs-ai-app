@@ -36,12 +36,18 @@ what a lookup table used to check at runtime.
 What the sites became, surface by surface:
 
 - **ChatsListView** — quick-access card `archivebox` → `GsIcons.archive`;
-  selection tick `checkmark.circle.fill / circle` → `circleCheck / circle` at
-  the same 20 pt and colors; selection bar → `star / archive / trash2`, the
-  exact trio Android's `SelectionAction` row draws.
+  selection tick `checkmark.circle.fill / circle` → a filled `Aero.accent` disc
+  carrying `GsIcons.check` (14) over `Aero.onAccent`, unselected `GsIcons.circle`
+  — the construction Android's selection Box uses, and the picture SF drew;
+  `circleCheck` was rejected as a stroked ring, which would read as an outline
+  on both phones. Selection bar → `star / archive / trash2`, the exact trio
+  Android's `SelectionAction` row draws.
 - **ChatDetailView** — `wifi.slash` → `wifiOff` (size 12); options sheet →
-  `squareArrowUp / pencil / info / fileText / eraser / trash / x`; find bar →
-  `chevronUp / chevronDown / x` (14); Chat Info rows → `pencil / cpu / brain`.
+  `share / squarePen / info / fileText / eraser / trash2 / x`, each named for
+  Android's option row rather than for the SF shape it replaced (the sheet's
+  Share is `Share`, its rename is `SquarePen`, its delete is `Trash2`); find
+  bar → `chevronUp / chevronDown / x` (14), matching ChatScreen; Chat Info
+  rows → `squarePen / cpu / brain`, matching ChatInfoScreen.kt.
 - **HomeDashboardView** — `arrow.right` → `arrowRight`, `sparkle` → `sparkle`
   (one four-point star), `lightbulb` → `lightbulb`, `sparkles` → `sparkles`,
   `chevron.right` → `chevronRight`, chip `play` → `play` (Android's
@@ -53,12 +59,27 @@ Glyph size is the spec number wrapped in `Aero.scaledLength(_, relativeTo:)`, so
 an icon keeps the accessibility contract the page's text already honours — the
 same rule as the drawer's `DrawerMetrics` glyph constants.
 
+The handoff's list of verified names mostly held (`arrowRight`, `sparkles`,
+`lightbulb`, `play`, `chevronRight`, `chevronUp`, `chevronDown`, `x`, `wifiOff`,
+`circle`), with two corrections found by reading Android's twins instead of the
+SF shapes it replaced: the selection mark is a filled disc + `check`, not
+`circleCheck`, and the options sheet is `share` / `squarePen` / `trash2`, not
+`squareArrowUp` / `pencil` / `trash`. Where a suggested name and the twin's
+shape disagree, the twin wins — the two apps ship one icon language.
+
 Four silhouettes are hand-drawn in the 24-unit space beside `OpenBookGlyph`,
 because the generated set is stroke-only by contract: the dock's `FilledHouse`
-and `FilledGear` and the video disc's `FilledPlay` — each the cubic-for-cubic
-twin of Android's `Filled*` in `HomeDashboardScreen.kt`, gear hub carved with
-even-odd on the fill call (`FillStyle(eo: true)`; `PathFillStyle` is iOS 17 and
-the app ships at iOS 16), as Compose does with `PathFillType.EvenOdd`.
+and `FilledGear` and the video disc's `FilledPlay` — each the point-for-point
+twin of Android's `Filled*` in `HomeDashboardScreen.kt`. The gear's hub hole
+needs no fill-rule API: Android reaches it with `PathFillType.EvenOdd`, but
+this SDK exposes even-odd nowhere below iOS 17 — runs 40117076973 and
+40117461200 rejected `eo:` and `isEOFilled:` on `Shape.fill`, and run
+40118125849 rejected `eo:` on the Canvas context's fill too. The shoelace
+signs of Android's two contours (+215.6 ring, −28.8 hub) show they already
+wind opposite, and oppositely-wound nonzero paints the same picture for nested
+contours, so the geometry ships in Android's order with a plain fill.
+Reversing the hub to "create" the hole would have filled it solid — a wrong
+glyph no compile can catch, which is why the winding was measured first.
 
 ## Remaining — the menu chrome
 
@@ -79,7 +100,17 @@ so it neither catches these nor protects against re-introducing them.
 3. Keep whatever `.frame(...)` followed, so layout does not move.
 4. Run `python3 scripts/check_icon_catalogue.py`, then both workflows.
 5. Capture the screen. A screenshot is the only evidence a glyph is the right
-   glyph — see `docs/DRAWER_STATUS.md` for the capture pattern.
+   glyph — see `docs/DRAWER_STATUS.md` for the capture pattern. The Home
+   capture from run 40118659001 is that evidence for this page: dock house /
+   book / gear-with-hole, the `sparkles` on Assistant and Generate, `menu`,
+   the four pills (`plus` / `compass` / `sparkles` / `ellipsis`), the outline
+   `play` chip over the filled disc triangle, both `chevronRight`s,
+   `arrowRight` and `lightbulb`.
+6. A parameterised site is not done until its CALLER stops naming an SF Symbol.
+   Changing `Image(systemName: icon)` to a `GsIconView` while the caller still
+   passes `"archivebox"` just moves the symbol name into a string that nothing
+   reads — these helpers now take a `GsIconPaths`, so the compiler refuses the
+   old name outright.
 
 ## Also open
 

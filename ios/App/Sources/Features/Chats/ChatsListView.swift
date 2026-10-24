@@ -311,12 +311,20 @@ struct ChatsListView: View {
                 },
                 trailing: {
                     if selecting {
-                        // circleCheck / circle — the family's own tick and ring,
-                        // the icon-side twin of Android's selection Box.
-                        GsIconView(
-                            selection.contains(row.id) ? GsIcons.circleCheck : GsIcons.circle,
-                            size: 20,
-                            color: selection.contains(row.id) ? Aero.accent : Aero.textMuted)
+                        // Android draws this mark as a FILLED disc with the
+                        // family's own Check inside (ChatsScreen's selection Box),
+                        // and SF's `checkmark.circle.fill` drew the same picture.
+                        // `circleCheck` would not: it is a stroked ring, so the
+                        // selected row would read as an outline on both phones.
+                        // Same construction as Android — disc from the shape, tick
+                        // from the family.
+                        if selection.contains(row.id) {
+                            GsIconView(GsIcons.check, size: 14, color: Aero.onAccent)
+                                .frame(width: 20, height: 20)
+                                .background(Circle().fill(Aero.accent))
+                        } else {
+                            GsIconView(GsIcons.circle, size: 20, color: Aero.textMuted)
+                        }
                     } else if row.pinned {
                         GsIconView(GsIcons.star, size: 13, color: Aero.accent)
                     }
