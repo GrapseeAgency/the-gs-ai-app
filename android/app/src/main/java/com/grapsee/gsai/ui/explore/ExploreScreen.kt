@@ -390,18 +390,23 @@ private fun HeroCard(
         // as gs_explore_hero, its left edge fading into the pearl so the
         // copy sits on quiet ground. matchParentSize, not fillMaxHeight —
         // the scroll's constraints are unbounded and a fill would collapse.
-        Box(
-            Modifier
-                .align(Alignment.CenterEnd)
-                .fillMaxHeight()
-                .fillMaxWidth(0.62f),
-        ) {
-            Image(
-                painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_hero),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize(),
-            )
+        // The art layer spans the card (matchParentSize is bounded even under
+        // the scroll's unbounded constraints); the bubbles live in a fixed
+        // 230dp frame pinned to the card's right edge.
+        Box(Modifier.matchParentSize()) {
+            Box(
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .width(230.dp),
+            ) {
+                Image(
+                    painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_hero),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize(),
+                )
+            }
         }
         Box(
             Modifier
