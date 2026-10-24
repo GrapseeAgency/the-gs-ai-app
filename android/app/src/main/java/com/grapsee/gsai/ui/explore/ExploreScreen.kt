@@ -41,11 +41,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.foundation.Canvas
 import kotlin.math.min
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -380,13 +379,29 @@ private fun HeroCard(
             .gsGlass(role = GsGlassRole.CardLight, shape = RoundedCornerShape(26.dp)),
     ) {
         // The reference's hero: pearl on the left where the copy sits, a
-        // luminous glass bubble carrying the right side — drawn procedurally
-        // (the ReferenceArt technique) so it is crisp at any scale and reads
-        // at the reference's saturation, not an upscaled blur.
-        // matchParentSize, not fillMaxHeight: the scroll's constraints are
-        // unbounded, so a fill would collapse the art to zero height. The
-        // canvas draws the bubble in the right portion of the full card.
-        HeroBubbleArt(Modifier.matchParentSize())
+        // The reference's OWN iridescent bubbles carry the card's right side:
+        // the artwork is cropped from the authored Explore mock and shipped
+        // as gs_explore_hero, its left edge fading into the pearl so the
+        // copy sits on quiet ground. matchParentSize, not fillMaxHeight —
+        // the scroll's constraints are unbounded and a fill would collapse.
+        Image(
+            painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_hero),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.CenterEnd,
+            modifier = Modifier.matchParentSize(),
+        )
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(
+                    Brush.horizontalGradient(
+                        0f to Color(0xFFFDF1EC).copy(alpha = 0.80f),
+                        0.42f to Color(0xFFFDF1EC).copy(alpha = 0.10f),
+                        1f to Color.Transparent,
+                    ),
+                ),
+        )
         Column(Modifier.padding(18.dp)) {
             Row(
                 Modifier
@@ -412,8 +427,8 @@ private fun HeroCard(
             Spacer(Modifier.height(10.dp))
             Text(
                 "Explore AI\nPossibilities",
-                fontSize = 22.sp,
-                lineHeight = 26.sp,
+                fontSize = 23.sp,
+                lineHeight = 27.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = GsFonts.Product,
                 color = inkStrong,
@@ -514,7 +529,7 @@ private fun SectionHeader(
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             title,
-            fontSize = 16.5.sp,
+            fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = GsFonts.Product,
             color = inkHeader,
@@ -577,7 +592,7 @@ private fun ToolCard(
         Spacer(Modifier.height(10.dp))
         Text(
             tool.title,
-            fontSize = 14.sp,
+            fontSize = 15.5.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = GsFonts.Product,
             color = inkStrong,
@@ -587,8 +602,8 @@ private fun ToolCard(
         Spacer(Modifier.height(4.dp))
         Text(
             tool.subtitle,
-            fontSize = 11.5.sp,
-            lineHeight = 15.sp,
+            fontSize = 12.5.sp,
+            lineHeight = 16.sp,
             fontFamily = GsFonts.Product,
             color = inkMuted,
             maxLines = 2,
@@ -639,7 +654,7 @@ private fun PromptRow(
         Column(Modifier.weight(1f)) {
             Text(
                 tool.title,
-                fontSize = 13.5.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = GsFonts.Product,
                 color = inkStrong,
@@ -649,7 +664,7 @@ private fun PromptRow(
             Spacer(Modifier.height(2.dp))
             Text(
                 tool.subtitle,
-                fontSize = 11.5.sp,
+                fontSize = 12.5.sp,
                 fontFamily = GsFonts.Product,
                 color = inkMuted,
                 maxLines = 1,
@@ -688,18 +703,19 @@ private fun CollectionCard(
                 "Build new skills" -> BiasAlignment(0.74f, 0.24f)
                 else -> Alignment.Center
             }
+            // Each scene is cropped from the authored Explore mock: the
+            // lotus for Design, the misty pagoda landscape for Work, the
+            // orange lotus close-up for Learning.
             val art = when (collection.subtitle) {
-                "Work smarter, not harder" -> com.grapsee.gsai.R.drawable.gs_home_video_art
-                "Build new skills" -> com.grapsee.gsai.R.drawable.gs_home_backdrop
-                else -> com.grapsee.gsai.R.drawable.gs_home_lotus_new
+                "Work smarter, not harder" -> com.grapsee.gsai.R.drawable.gs_explore_col_work
+                "Build new skills" -> com.grapsee.gsai.R.drawable.gs_explore_col_learning
+                else -> com.grapsee.gsai.R.drawable.gs_explore_col_design
             }
             Image(
                 painter = painterResource(art),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                alignment = alignment,
                 modifier = Modifier.matchParentSize(),
-                alpha = 0.9f,
             )
             Box(
                 Modifier
@@ -755,27 +771,28 @@ private fun FeaturedCard(
             .clickable(role = Role.Button, onClickLabel = ExploreCatalog.featured.title) { onOpen() },
     ) {
         // The reference's featured card: the scene fills the card's right
-        // side under a pearl veil, words on the left.
+        // side under a pearl veil, words on the left. No pagoda asset ships,
+        // so the scene is drawn — soft sky, distant hills, the pagoda's
+        // three tiers and a blossom branch — in the reference's palette.
         Box(
             Modifier
                 .align(Alignment.CenterEnd)
                 .fillMaxHeight()
-                .fillMaxWidth(0.46f),
+                .fillMaxWidth(0.50f),
         ) {
             Image(
-                painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
+                painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_kyoto),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
-                alpha = 0.9f,
             )
             Box(
                 Modifier
                     .matchParentSize()
                     .background(
                         Brush.horizontalGradient(
-                            0f to Color(0xFFFBEDE7).copy(alpha = 0.94f),
-                            0.5f to Color(0xFFFBEDE7).copy(alpha = 0.30f),
+                            0f to Color(0xFFFBEDE7).copy(alpha = 0.80f),
+                            0.45f to Color(0xFFFBEDE7).copy(alpha = 0.12f),
                             1f to Color.Transparent,
                         ),
                     ),
@@ -913,7 +930,7 @@ private fun ExploreComposer(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                GsIcons.Sparkles,
+                GsIcons.Navigation,
                 contentDescription = if (canSend) "Send message" else null,
                 tint = if (canSend) Color.White else inkMuted,
                 modifier = Modifier.size(18.dp),
@@ -973,105 +990,6 @@ private fun EmptySearch(
             Spacer(Modifier.width(6.dp))
             Icon(GsIcons.ArrowRight, contentDescription = null, tint = inkBody, modifier = Modifier.size(13.dp))
         }
-    }
-}
-
-/**
- * The Explore hero's luminous bubble, drawn like the ReferenceArt scenes: a
- * glass sphere with a peach core riding a flowing petal, small satellites and
- * sparkles — the reference hero's exact motif, crisp at any resolution.
- */
-@Composable
-private fun HeroBubbleArt(modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val w = size.width
-        val h = size.height
-        // The bubble occupies the card's right side (the copy sits left), so
-        // the geometry is expressed against the right 66% of the canvas.
-        val artW = w * 0.60f
-        val r = min(artW, h) * 0.46f
-        val cx = w - artW * 0.38f
-        val cy = h * 0.42f
-
-        // Warm outer glow.
-        drawCircle(
-            Brush.radialGradient(
-                listOf(Color(0xFFFFD9BE).copy(alpha = 0.55f), Color.Transparent),
-                center = Offset(cx, cy),
-                radius = r * 1.6f,
-            ),
-            radius = r * 1.6f,
-            center = Offset(cx, cy),
-        )
-
-        // Flowing petal sweeping to the right edge, under the sphere.
-        val petal = Path().apply {
-            moveTo(cx - r * 0.15f, cy + r * 0.62f)
-            cubicTo(cx + r * 0.85f, cy + r * 1.18f, w * 1.05f, cy + r * 0.15f, w * 1.05f, cy - r * 0.55f)
-            lineTo(w * 1.05f, cy + r * 0.9f)
-            close()
-        }
-        drawPath(
-            petal,
-            Brush.horizontalGradient(
-                listOf(
-                    Color(0xFFFFD9BF).copy(alpha = 0.9f),
-                    Color(0xFFF8B9A2).copy(alpha = 0.7f),
-                ),
-            ),
-        )
-
-        // Glass sphere: light body, lavender cast at the base, bright rim.
-        drawCircle(
-            Brush.radialGradient(
-                listOf(
-                    Color.White.copy(alpha = 0.62f),
-                    Color(0xFFFFDCC7).copy(alpha = 0.34f),
-                    Color(0xFFF3C3E2).copy(alpha = 0.28f),
-                    Color.Transparent,
-                ),
-                center = Offset(cx, cy),
-                radius = r,
-            ),
-            radius = r,
-            center = Offset(cx, cy),
-        )
-        drawCircle(
-            Color.White.copy(alpha = 0.70f),
-            style = Stroke(width = r * 0.028f),
-            radius = r,
-            center = Offset(cx, cy),
-        )
-
-        // The peach core sphere with its highlight.
-        val cr = r * 0.42f
-        val ccx = cx - r * 0.06f
-        val ccy = cy + r * 0.12f
-        drawCircle(
-            Brush.radialGradient(
-                listOf(
-                    Color(0xFFFFF5E8),
-                    Color(0xFFFFD1A4),
-                    Color(0xFFFFB177),
-                ),
-                center = Offset(ccx, ccy),
-                radius = cr,
-            ),
-            radius = cr,
-            center = Offset(ccx, ccy),
-        )
-        drawCircle(
-            Color.White.copy(alpha = 0.85f),
-            radius = cr * 0.22f,
-            center = Offset(ccx - cr * 0.34f, ccy - cr * 0.36f),
-        )
-
-        // Satellite bubbles and sparkles.
-        drawCircle(Color.White.copy(alpha = 0.55f), radius = r * 0.10f, center = Offset(cx + r * 0.78f, cy - r * 0.58f))
-        drawCircle(Color.White.copy(alpha = 0.40f), radius = r * 0.05f, center = Offset(cx + r * 0.98f, cy - r * 0.18f))
-        drawCircle(Color(0xFFFFD9A8).copy(alpha = 0.9f), radius = r * 0.045f, center = Offset(cx + r * 0.38f, cy - r * 0.88f))
-        drawCircle(Color(0xFFF7C6E0).copy(alpha = 0.9f), radius = r * 0.035f, center = Offset(cx - r * 0.12f, cy - r * 0.96f))
-        drawCircle(Color(0xFFC9BDF5).copy(alpha = 0.8f), radius = r * 0.03f, center = Offset(cx + r * 0.95f, cy + r * 0.45f))
     }
 }
 

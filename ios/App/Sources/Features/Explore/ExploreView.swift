@@ -340,9 +340,26 @@ struct ExploreView: View {
             }
             .frame(maxWidth: .infinity)
             .overlay(alignment: .trailing) {
-                HeroBubbleArt()
-                    .frame(maxWidth: 230)
+                // The reference's OWN iridescent bubbles — cropped from the
+                // authored Explore mock, shipped as GSExploreHero — carry the
+                // card's right side; the scrim fades them into the pearl so
+                // the copy sits on quiet ground.
+                Image("GSExploreHero")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: 240)
                     .frame(maxHeight: .infinity)
+                    .clipped()
+                    .overlay(
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.80), location: 0),
+                                .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.10), location: 0.42),
+                                .init(color: .clear, location: 1),
+                            ],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                    )
                     .allowsHitTesting(false)
             }
     }
@@ -547,23 +564,16 @@ struct ExploreView: View {
 
     @ViewBuilder
     private func collectionArt(_ collection: ExploreCatalog.Collection) -> some View {
+        // Each scene is cropped from the authored Explore mock: the lotus
+        // for Design, the misty pagoda landscape for Work, the orange lotus
+        // close-up for Learning.
         switch collection.subtitle {
         case "Work smarter, not harder":
-            Image("GSHomeVideoArt")
-                .resizable()
-                .scaledToFill()
+            Image("GSExploreColWork").resizable().scaledToFill()
         case "Build new skills":
-            // The authored backdrop's bubble region.
-            Image("GSHomeBackdrop")
-                .resizable()
-                .scaledToFill()
-                .frame(width: 340, height: 340)
-                .offset(x: 24, y: -60)
-                .frame(width: 168, height: 86, alignment: .topLeading)
+            Image("GSExploreColLearning").resizable().scaledToFill()
         default:
-            Image("GSHomeLotusNew")
-                .resizable()
-                .scaledToFill()
+            Image("GSExploreColDesign").resizable().scaledToFill()
         }
     }
 
@@ -579,16 +589,18 @@ struct ExploreView: View {
                 GeometryReader { geo in
                     HStack(spacing: 0) {
                         Spacer(minLength: 0)
-                        Image("GSHomeLotusNew")
+                        Image("GSExploreKyoto")
                             .resizable()
                             .scaledToFill()
                             .frame(width: geo.size.width * 0.46)
                             .clipped()
                             .overlay(
                                 LinearGradient(
-                                    colors: [Color(red: 0.984, green: 0.929, blue: 0.906).opacity(0.94),
-                                             Color(red: 0.984, green: 0.929, blue: 0.906).opacity(0.30),
-                                             .clear],
+                                    stops: [
+                                        .init(color: Color(red: 0.984, green: 0.929, blue: 0.906).opacity(0.88), location: 0),
+                                        .init(color: Color(red: 0.984, green: 0.929, blue: 0.906).opacity(0.18), location: 0.55),
+                                        .init(color: .clear, location: 1),
+                                    ],
                                     startPoint: .leading, endPoint: .trailing
                                 )
                             )
@@ -699,7 +711,7 @@ struct ExploreComposerBar: View {
                 .onSubmit(send)
                 .accessibilityIdentifier("explore-composer-input")
             Button(action: send) {
-                NexlyGlyph(name: "sparkles", size: 17, color: canSend ? .white : Aero.textMuted)
+                NexlyGlyph(name: "send", size: 17, color: canSend ? .white : Aero.textMuted)
                     .frame(width: 42, height: 42)
                     .background(
                         Circle().fill(
@@ -730,116 +742,5 @@ struct ExploreComposerBar: View {
         onSend(text)
         draft = ""
         focused = false
-    }
-}
-
-
-/// The Explore hero's luminous bubble — the SwiftUI twin of the Android
-/// `HeroBubbleArt` canvas: glass sphere, peach core, flowing petal, satellites
-/// and sparkles, the reference hero's exact motif at full crispness.
-struct HeroBubbleArt: View {
-    var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            // The bubble occupies the card's right side (the copy sits left).
-            let artW = w * 0.60
-            let r = min(artW, h) * 0.46
-            let cx = w - artW * 0.38
-            let cy = h * 0.42
-            let cr = r * 0.42
-            let ccx = cx - r * 0.06
-            let ccy = cy + r * 0.12
-            ZStack {
-                // Warm outer glow.
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [Color(red: 1.0, green: 0.851, blue: 0.745).opacity(0.55), .clear],
-                            center: .init(x: 0.5, y: 0.5),
-                            startRadius: 0,
-                            endRadius: r * 1.6
-                        )
-                    )
-                    .frame(width: r * 3.2, height: r * 3.2)
-                    .position(x: cx, y: cy)
-                // Flowing petal sweeping to the right edge.
-                PetalShape()
-                    .fill(
-                        LinearGradient(
-                            stops: [
-                                .init(color: Color(red: 1.0, green: 0.851, blue: 0.749).opacity(0.85), location: 0),
-                                .init(color: Color(red: 0.973, green: 0.725, blue: 0.635).opacity(0.45), location: 0.72),
-                                .init(color: Color(red: 0.973, green: 0.725, blue: 0.635).opacity(0.0), location: 0.98),
-                            ],
-                            startPoint: .leading, endPoint: .trailing
-                        )
-                    )
-                    .frame(width: w, height: h)
-                    .position(x: w / 2, y: h / 2)
-                // Glass sphere.
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [.white.opacity(0.62),
-                                     Color(red: 1.0, green: 0.863, blue: 0.780).opacity(0.34),
-                                     Color(red: 0.953, green: 0.765, blue: 0.886).opacity(0.28),
-                                     .clear],
-                            center: .init(x: 0.5, y: 0.5),
-                            startRadius: 0,
-                            endRadius: r
-                        )
-                    )
-                    .frame(width: r * 2, height: r * 2)
-                    .position(x: cx, y: cy)
-                Circle()
-                    .strokeBorder(.white.opacity(0.70), lineWidth: r * 0.028)
-                    .frame(width: r * 2, height: r * 2)
-                    .position(x: cx, y: cy)
-                // Peach core sphere with highlight.
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [Color(red: 1.0, green: 0.961, blue: 0.910),
-                                     Color(red: 1.0, green: 0.820, blue: 0.643),
-                                     Color(red: 1.0, green: 0.694, blue: 0.467)],
-                            center: .init(x: 0.5, y: 0.5),
-                            startRadius: 0,
-                            endRadius: cr
-                        )
-                    )
-                    .frame(width: cr * 2, height: cr * 2)
-                    .position(x: ccx, y: ccy)
-                Circle()
-                    .fill(.white.opacity(0.85))
-                    .frame(width: cr * 0.44, height: cr * 0.44)
-                    .position(x: ccx - cr * 0.34, y: ccy - cr * 0.36)
-                // Satellites and sparkles.
-                Circle().fill(.white.opacity(0.55)).frame(width: r * 0.20, height: r * 0.20).position(x: cx + r * 0.78, y: cy - r * 0.58)
-                Circle().fill(.white.opacity(0.40)).frame(width: r * 0.10, height: r * 0.10).position(x: cx + r * 0.98, y: cy - r * 0.18)
-                Circle().fill(Color(red: 1.0, green: 0.851, blue: 0.659).opacity(0.9)).frame(width: r * 0.09, height: r * 0.09).position(x: cx + r * 0.38, y: cy - r * 0.88)
-                Circle().fill(Color(red: 0.969, green: 0.776, blue: 0.878).opacity(0.9)).frame(width: r * 0.07, height: r * 0.07).position(x: cx - r * 0.12, y: cy - r * 0.96)
-                Circle().fill(Color(red: 0.788, green: 0.741, blue: 0.961).opacity(0.8)).frame(width: r * 0.06, height: r * 0.06).position(x: cx + r * 0.95, y: cy + r * 0.45)
-            }
-        }
-    }
-}
-
-/// The petal sweep: bezier from under the sphere to the right edge.
-private struct PetalShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var p = Path()
-        let r = min(rect.width, rect.height) * 0.56
-        let cx = rect.width * 0.58
-        let cy = rect.height * 0.40
-        p.move(to: CGPoint(x: cx - r * 0.15, y: cy + r * 0.62))
-        p.addCurve(
-            to: CGPoint(x: rect.width * 1.05, y: cy - r * 0.55),
-            control1: CGPoint(x: cx + r * 0.85, y: cy + r * 1.18),
-            control2: CGPoint(x: rect.width * 1.05, y: cy + r * 0.15)
-        )
-        p.addLine(to: CGPoint(x: rect.width * 1.05, y: cy + r * 0.9))
-        p.closeSubpath()
-        return p
     }
 }
