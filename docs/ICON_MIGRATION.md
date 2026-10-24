@@ -117,7 +117,10 @@ fails if the test did not pass or a capture is missing.
 
 **The SF baseline** (runs 40131109721, 40132162258, 40133180902): menu rows
 measure h 12.3–19.3 pt at a leading inset of 27.7–29.7 pt. Those are the
-calibration numbers; the family's rows are held to the same bounds.
+calibration numbers; the family's rows are held to the same bounds. The first
+family measurement (the drawer's recents, run 40134206951) lands on them:
+h 15.3–16.7 pt, inset 27.7–30.0 pt — same column, same optical size, and the
+destructive row's glyph reddens like SF's did (see `menu-chrome-ios`).
 
 The harness paid for itself before a single row was converted, by finding four
 things the code hid:
@@ -129,10 +132,10 @@ things the code hid:
    page.
 3. The user bubble's text is selectable — a press on it starts a selection, not
    the bubble's menu; the press moves onto the bubble's padding.
-4. The header buttons fire their ACTION on a long press (the sparkle opened a
-   new chat, the menu button opened the drawer), which is why the harness now
-   presses their coordinates. Whether their menus can be opened by gesture at
-   all is the open question below.
+4. An element-level long press on the two HEADER buttons fires their ACTION (the
+   sparkle opened a new chat, the menu button opened the drawer). The same
+   gesture through a coordinate opens the menu instead — both header menus were
+   measured that way in run 40135074617, so nothing is stranded.
 
 ## The 29 rows → the family
 
@@ -241,19 +244,15 @@ still shows the pre-fix icons (hash-era). Refreshing it means downloading the ru
 capture artifacts and rewriting the icon section.
 
 
-## The 29 menu labels — converted, one open question
+## The 29 menu labels — converted and measured
 
-All 29 are on the family and capped at zero by rules 15–17. Two kinds of
-evidence back them:
+All 29 are on the family, capped at zero by rules 15–17, and every one of the
+eight menus is driven and measured by `MenuChromeTests` on every run. The
+family's own numbers, from run 40135074617: menu rows h 13.3–16.7 pt at a
+leading inset of 27.7–30.0 pt — the same column and the same optical size as
+SF's 12.3–19.3 at 27.7–29.7, with the destructive row's glyph still red.
 
-- **Measured by the harness**: the chats row menu, both swipes, both bubble
-  menus and the drawer's recent menu — the screenshots and `report.json` land in
-  the `menu-chrome-ios` artifact of every run.
-- **Not measurable yet**: the SIX header rows (3 sparkle + 3 menu-button). Their
-  `.contextMenu`s sit on `Button`s that take the whole long-press gesture as
-  their ACTION — the press opens a new chat or the drawer instead of a menu —
-  so the harness can drive the press but no menu appears. That is a UI defect in
-  its own right: `sparkleMenu` / `menuMenu` are written and unreachable. It is
-  recorded here rather than papered over; the 6 rows are converted (so they
-  cannot drift back to SF) but not capture-verified until the header wraps those
-  menus in something a gesture can open.
+The harness also carries a bound it does not currently need: a menu that cannot
+be opened is recorded in `unreachableMenus` rather than silently skipped, and
+the workflow fails if that list ever names anything beyond the two header menus
+it was written for. A skip list that can grow is how a gate turns itself off.

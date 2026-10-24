@@ -214,14 +214,14 @@ final class MenuChromeTests: XCTestCase {
             : app.buttons["Back"].firstMatch
         if headerMenu.waitForExistence(timeout: 10),
            openContextMenu(on: headerMenu, app: app, expecting: "Chat options", press: .center) {
-            capture(
-                name: "chat-header-menu",
-                app: app,
-                items: [
-                    ("Chat options", .leading),
-                    ("Search in chat", .leading),
-                    ("New chat", .leading),
-                ])
+            // A pushed chat offers two rows here, not three: "New chat" is the
+            // sparkle's row and only exists when the screen has the action.
+            var items: [(String, Slot)] = [
+                ("Chat options", .leading),
+                ("Search in chat", .leading),
+            ]
+            if app.buttons["New chat"].exists { items.append(("New chat", .leading)) }
+            capture(name: "chat-header-menu", app: app, items: items)
             dismissMenu(app: app, item: "Chat options")
         } else {
             recordSkip("chat-header-menu", because: "the header menu button consumes the long press as its action")
@@ -325,9 +325,11 @@ final class MenuChromeTests: XCTestCase {
             record("\(name): the menu was not open at capture time")
             return
         }
+        // Let the menu finish presenting. Run 40135074617 measured its first
+        // row mid-animation: 3.3 pt of ink where the settled rows carry 16.7.
+        Thread.sleep(forTimeInterval: 0.45)
         let shot = XCUIScreen.main.screenshot()
         attach(shot, name: "menu-\(name)")
-
         guard let image = shot.image.cgImage else {
             record("\(name): the screenshot had no bitmap")
             return
@@ -340,7 +342,11 @@ final class MenuChromeTests: XCTestCase {
                 continue
             }
             let band = probeBand(for: box, slot: slot)
-            guard let probe = probeInk(image: image, band: band, scale: scale) else {
+            // A swipe action's background is a tint gradient, so its ink has to
+            // clear a higher bar than a menu card's flat field (run 40135074617
+            // measured 36x22 pt of "ink" — the whole band — at threshold 40).
+            let threshold = slot == .leading ? 40 : 70
+            guard let probe = probeInk(image: image, band: band, scale: scale, threshold: threshold) else {
                 record("\(name)/\(label): the probe band was degenerate")
                 continue
             }
@@ -464,7 +470,8 @@ final class MenuChromeTests: XCTestCase {
     /// Ink = pixels that differ from the band's own median by more than a
     /// fraction of the range. Scheme-agnostic: it works on white-on-black,
     /// black-on-white and white-on-tint alike.
-    private func probeInk(image: CGImage, band: CGRect, scale: CGFloat) -> (count: Int, bbox: CGRect)? {
+    private func probeInk(image: CGImage, band: CGRect, scale: CGFloat,
+                          threshold: Int = 40) -> (count: Int, bbox: CGRect)? {
         let width = image.width, height = image.height
         // A context that owns its buffer: passing `&array` here would be a
         // pointer valid only for the initialiser's call, and the draw below
@@ -496,7 +503,7 @@ final class MenuChromeTests: XCTestCase {
         for y in minY...maxY {
             for x in minX...maxX {
                 let v = Int(gray[y * width + x])
-                if abs(v - background) > 40 {
+                if abs(v - background) > threshold {
                     count += 1
                     boxMinX = min(boxMinX, x); boxMaxX = max(boxMaxX, x)
                     boxMinY = min(boxMinY, y); boxMaxY = max(boxMaxY, y)
