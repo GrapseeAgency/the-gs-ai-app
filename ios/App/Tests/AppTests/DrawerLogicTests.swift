@@ -39,7 +39,7 @@ final class DrawerLogicTests: XCTestCase {
         XCTAssertEqual(DrawerTopic.iconName(title: "京都の週末", pinned: false), "Sprout")
         XCTAssertEqual(DrawerTopic.iconName(title: "Путешествие в Токио", pinned: false), "Sprout")
         XCTAssertEqual(DrawerTopic.iconName(title: "解释量子物理", pinned: false), "Atom")
-        XCTAssertEqual(DrawerTopic.iconName(title: "خطة ليوم غد", pinned: false), "CalendarCheck")
+        XCTAssertEqual(DrawerTopic.iconName(title: "خطة ليوم غد", pinned: false), "Sparkles")
         XCTAssertEqual(DrawerTopic.iconName(title: "FÍSICA CUÁNTICA", pinned: false), "Atom")
     }
 
@@ -56,7 +56,7 @@ final class DrawerLogicTests: XCTestCase {
                                timestamp: "Just now",
                                symbol: DrawerTopic.iconName(title: "Plan my tomorrow", pinned: false),
                                pinned: false)
-        XCTAssertEqual(row.symbol, "CalendarCheck")
+        XCTAssertEqual(row.symbol, "Sparkles")
         row.pinned = true
         row.symbol = DrawerTopic.iconName(title: row.title, pinned: row.pinned)
         XCTAssertEqual(row.symbol, "Pin")
