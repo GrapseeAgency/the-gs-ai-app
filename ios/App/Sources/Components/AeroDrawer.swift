@@ -373,7 +373,7 @@ struct AeroDrawer: View {
         .contextMenu {
             Button {
                 GSHaptics.success()
-                store.setPinned(id: recent.id, pinned: !recent.pinned)
+                store.setPinned(id: recent.id, !recent.pinned)
                 sync(recent.id, pinned: !recent.pinned)
             } label: {
                 Label(recent.pinned ? "Unpin" : "Pin to top", systemImage: "pin")
@@ -386,7 +386,7 @@ struct AeroDrawer: View {
             }
             Button {
                 GSHaptics.success()
-                store.setArchived(id: recent.id, archived: true)
+                store.setArchived(id: recent.id, true)
                 sync(recent.id, archived: true)
             } label: {
                 Label("Archive", systemImage: "archivebox")

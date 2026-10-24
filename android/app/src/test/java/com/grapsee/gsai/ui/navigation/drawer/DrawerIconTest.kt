@@ -1,6 +1,5 @@
 package com.grapsee.gsai.ui.navigation.drawer
 
-import com.grapsee.gsai.ui.icons.GsIcons
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -15,21 +14,25 @@ import org.junit.Test
  * while Swift folds Unicode scalars — so one chat drew two different icons on the
  * two platforms. A rule with two inputs can be verified; a hash pretending to know
  * what a chat is about cannot.
+ *
+ * The test asserts the DECISION, not the vector: comparing ImageVectors in a plain
+ * JVM test initialises Compose's vector machinery and throws before any assertion
+ * runs (the first version of this file did exactly that).
  */
 class DrawerIconTest {
 
     @Test
-    fun pinnedChatsShowAPin() {
-        assertEquals(GsIcons.Pin, iconForChat(pinned = true))
+    fun pinnedChatsAskForAPin() {
+        assertEquals(DrawerIconKey.Pinned, drawerIconKey(pinned = true))
     }
 
     @Test
-    fun unpinnedChatsShowTheNeutralChatGlyph() {
-        assertEquals(GsIcons.MessageCircle, iconForChat(pinned = false))
+    fun unpinnedChatsAskForTheNeutralGlyph() {
+        assertEquals(DrawerIconKey.Chat, drawerIconKey(pinned = false))
     }
 
     @Test
-    fun theTwoStatesAreVisuallyDistinct() {
-        assertNotEquals(iconForChat(pinned = true), iconForChat(pinned = false))
+    fun theTwoStatesAreDistinct() {
+        assertNotEquals(drawerIconKey(pinned = true), drawerIconKey(pinned = false))
     }
 }
