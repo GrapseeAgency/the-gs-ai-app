@@ -577,9 +577,7 @@ struct ChatDetailView: View {
                     proxy.scrollTo(liveEdgeID, anchor: .bottom)
                 }
             } label: {
-                Image(systemName: "arrow.down")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Aero.text)
+                GsIconView(GsIcons.arrowDown, size: 14, color: Aero.text)
                     .frame(width: 36, height: 36)
                     .background(Circle().fill(Aero.surface))
                     .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
@@ -603,9 +601,7 @@ struct ChatDetailView: View {
         VStack(spacing: 6) {
             if let message = toast {
                 HStack(spacing: Aero.Spacing.xs) {
-                    Image(systemName: "checkmark.circle")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Aero.accent)
+                    GsIconView(GsIcons.circleCheck, size: 12, color: Aero.accent)
                     Text(message)
                         .font(Aero.label())
                         .foregroundStyle(Aero.textMuted)
@@ -622,9 +618,7 @@ struct ChatDetailView: View {
             }
             if let reason = attachments.sendBlockReason {
                 HStack(spacing: Aero.Spacing.xs) {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Aero.textMuted)
+                    GsIconView(GsIcons.info, size: 12, color: Aero.textMuted)
                     Text(reason)
                         .font(Aero.label())
                         .foregroundStyle(Aero.textMuted)
@@ -985,9 +979,7 @@ struct ChatDetailView: View {
 
     private func searchBar(_ proxy: ScrollViewProxy) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 13))
-                .foregroundStyle(Aero.textMuted)
+            GsIconView(GsIcons.search, size: 13, color: Aero.textMuted)
             TextField("Search in chat", text: $searchQuery)
                 .font(Aero.body())
                 .foregroundStyle(Aero.text)
@@ -1654,9 +1646,7 @@ private struct ReasoningTracePanel: View {
                 expanded.toggle()
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Aero.textMuted)
+                    GsIconView(GsIcons.chevronRight, size: 10, color: Aero.textMuted)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                     Text(label)
                         .font(Aero.label())
