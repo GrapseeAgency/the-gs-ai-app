@@ -199,12 +199,15 @@ struct ChatsListView: View {
         VStack(alignment: .leading, spacing: Aero.Spacing.s) {
             SectionHeader(title: "Quick access")
             HStack(spacing: Aero.Spacing.s) {
-                quickCard("Archived", icon: "archivebox", route: .chatArchive)
+                quickCard("Archived", icon: GsIcons.archive, route: .chatArchive)
             }
         }
     }
 
-    private func quickCard(_ title: String, icon: String, route: AeroRoute) -> some View {
+    /// The icon is a catalogue geometry, not an SF Symbol name: a caller that
+    /// asked for a name the family does not carry used to render a system glyph
+    /// silently. `GsIconPaths` cannot be wrong — the compiler checks it.
+    private func quickCard(_ title: String, icon: GsIconPaths, route: AeroRoute) -> some View {
         AeroCard {
             // Router-path append, not NavigationLink — a List row renders the
             // system chevron on links (Task 86-e).
@@ -212,9 +215,7 @@ struct ChatsListView: View {
                 router.path.append(route)
             } label: {
                 VStack(alignment: .leading, spacing: 6) {
-                    Image(systemName: icon)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(Aero.accent)
+                    GsIconView(icon, size: 16, color: Aero.accent)
                     Text(title)
                         .font(Aero.label())
                         .foregroundStyle(Aero.text)
@@ -310,9 +311,12 @@ struct ChatsListView: View {
                 },
                 trailing: {
                     if selecting {
-                        Image(systemName: selection.contains(row.id) ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 20))
-                            .foregroundStyle(selection.contains(row.id) ? Aero.accent : Aero.textMuted)
+                        // circleCheck / circle — the family's own tick and ring,
+                        // the icon-side twin of Android's selection Box.
+                        GsIconView(
+                            selection.contains(row.id) ? GsIcons.circleCheck : GsIcons.circle,
+                            size: 20,
+                            color: selection.contains(row.id) ? Aero.accent : Aero.textMuted)
                     } else if row.pinned {
                         GsIconView(GsIcons.star, size: 13, color: Aero.accent)
                     }
@@ -393,13 +397,13 @@ struct ChatsListView: View {
 
                 Spacer(minLength: 0)
 
-                selectionAction("pin", "Pin selected") { applyToSelection { id in
+                selectionAction(GsIcons.star, "Pin selected") { applyToSelection { id in
                     store.setPinned(id: id, true)
                 } }
-                selectionAction("archivebox", "Archive selected") { applyToSelection { id in
+                selectionAction(GsIcons.archive, "Archive selected") { applyToSelection { id in
                     store.setArchived(id: id, true)
                 } }
-                selectionAction("trash", "Delete selected", destructive: true) {
+                selectionAction(GsIcons.trash2, "Delete selected", destructive: true) {
                     applyToSelection { id in store.delete(id: id) }
                 }
             }
@@ -409,15 +413,13 @@ struct ChatsListView: View {
     }
 
     private func selectionAction(
-        _ icon: String,
+        _ icon: GsIconPaths,
         _ label: String,
         destructive: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(destructive ? Aero.danger : Aero.textSecondary)
+            GsIconView(icon, size: 15, color: destructive ? Aero.danger : Aero.textSecondary)
                 .frame(width: 34, height: 34)
         }
         .buttonStyle(KineticPressStyle())

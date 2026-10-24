@@ -671,8 +671,8 @@ struct ChatDetailView: View {
     /// thread keeps working until connectivity returns.
     private var offlinePill: some View {
         HStack(spacing: Aero.Spacing.s) {
-            Image(systemName: "wifi.slash")
-                .font(.system(size: 12))
+            // wifiOff — the same geometry Android's offline banner draws.
+            GsIconView(GsIcons.wifiOff, size: 12, color: Aero.textMuted)
             Text("Offline, replies come from the on-device responder until you reconnect.")
                 .font(Aero.label())
                 .foregroundStyle(Aero.textMuted)
@@ -755,39 +755,39 @@ struct ChatDetailView: View {
             ScrollView {
                 VStack(spacing: 4) {
                     ShareLink(item: transcriptText) {
-                        optionLabel("square.and.arrow.up", "Share Chat", "Share this conversation")
+                        optionLabel(GsIcons.squareArrowUp, "Share Chat", "Share this conversation")
                     }
                     Button {
                         showOptions = false
                         openAfterDismiss { showRename = true }
                     } label: {
-                        optionLabel("pencil", "Rename Chat", "Give your chat a new name")
+                        optionLabel(GsIcons.pencil, "Rename Chat", "Give your chat a new name")
                     }
                     Button {
                         showOptions = false
                         openAfterDismiss { showInfo = true }
                     } label: {
-                        optionLabel("info.circle", "Chat Details", "View info & stats")
+                        optionLabel(GsIcons.info, "Chat Details", "View info & stats")
                     }
                     ShareLink(item: exportText) {
-                        optionLabel("doc.text", "Export Chat", "Send the transcript as text")
+                        optionLabel(GsIcons.fileText, "Export Chat", "Send the transcript as text")
                     }
                     Button {
                         showOptions = false
                         openAfterDismiss { showClearConfirm = true }
                     } label: {
-                        optionLabel("eraser", "Clear Chat", "Remove all messages")
+                        optionLabel(GsIcons.eraser, "Clear Chat", "Remove all messages")
                     }
                     Button {
                         showOptions = false
                         openAfterDismiss { showDeleteConfirm = true }
                     } label: {
-                        optionLabel("trash", "Delete Chat", "Permanently delete this chat", destructive: true)
+                        optionLabel(GsIcons.trash, "Delete Chat", "Permanently delete this chat", destructive: true)
                     }
                     Button {
                         showOptions = false
                     } label: {
-                        optionLabel("xmark", "Cancel", "")
+                        optionLabel(GsIcons.x, "Cancel", "")
                     }
                 }
                 .buttonStyle(.plain)
@@ -801,15 +801,13 @@ struct ChatDetailView: View {
     }
 
     private func optionLabel(
-        _ icon: String,
+        _ icon: GsIconPaths,
         _ title: String,
         _ subtitle: String,
         destructive: Bool = false
     ) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(destructive ? Aero.danger : Aero.textSecondary)
+            GsIconView(icon, size: 15, color: destructive ? Aero.danger : Aero.textSecondary)
                 .frame(width: 38, height: 38)
                 .gsGlass(.sunken, corner: 12)
             VStack(alignment: .leading, spacing: 1) {
@@ -1004,7 +1002,7 @@ struct ChatDetailView: View {
             Button {
                 stepSearch(-1, proxy: proxy)
             } label: {
-                Image(systemName: "chevron.up")
+                GsIconView(GsIcons.chevronUp, size: 14, color: Aero.text)
             }
             .buttonStyle(KineticPressStyle())
             .disabled(searchMatches.isEmpty)
@@ -1012,7 +1010,7 @@ struct ChatDetailView: View {
             Button {
                 stepSearch(1, proxy: proxy)
             } label: {
-                Image(systemName: "chevron.down")
+                GsIconView(GsIcons.chevronDown, size: 14, color: Aero.text)
             }
             .buttonStyle(KineticPressStyle())
             .disabled(searchMatches.isEmpty)
@@ -1022,7 +1020,7 @@ struct ChatDetailView: View {
                 searchQuery = ""
                 searchIndex = 0
             } label: {
-                Image(systemName: "xmark")
+                GsIconView(GsIcons.x, size: 14, color: Aero.text)
             }
             .buttonStyle(KineticPressStyle())
             .accessibilityLabel("Close search")
@@ -1776,11 +1774,11 @@ private struct ChatInfoSheet: View {
 
                 AeroCard {
                     VStack(alignment: .leading, spacing: 14) {
-                        row("pencil", "Chat name", title)
+                        row(GsIcons.pencil, "Chat name", title)
                         Divider().overlay(Aero.outline)
-                        row("cpu", "Model", local ? "On-device engine" : "Nexly Cloud")
+                        row(GsIcons.cpu, "Model", local ? "On-device engine" : "Nexly Cloud")
                         Divider().overlay(Aero.outline)
-                        row("brain", "Chat mode", modeDetail)
+                        row(GsIcons.brain, "Chat mode", modeDetail)
                     }
                     .padding(16)
                 }
@@ -1802,11 +1800,9 @@ private struct ChatInfoSheet: View {
         }
     }
 
-    private func row(_ icon: String, _ title: String, _ detail: String) -> some View {
+    private func row(_ icon: GsIconPaths, _ title: String, _ detail: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Aero.textSecondary)
+            GsIconView(icon, size: 14, color: Aero.textSecondary)
                 .frame(width: 34, height: 34)
                 .gsGlass(.sunken, corner: 11)
             VStack(alignment: .leading, spacing: 1) {

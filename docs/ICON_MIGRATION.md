@@ -16,50 +16,60 @@ Four doctored catalogues prove the check can fail.
 | Surface | State |
 |---|---|
 | `Components/AeroDrawer.swift` | **0** `systemName:` — panel chrome, destinations, recent rows, account sheet |
-| `Features/Chats/ChatsListView.swift` | 8 → 3 |
-| `Features/Chats/ChatDetailView.swift` | 11 → 6 |
+| `Features/Chats/ChatsListView.swift` | 8 → 3 → **0** |
+| `Features/Chats/ChatDetailView.swift` | 11 → 6 → **0** |
+| `Features/Home/HomeDashboardView.swift` | 12 → **0** |
 | Android | `GsIcons` throughout; nothing to migrate |
 
 Gated by rule 14 of `scripts/check_drawer_structure.py`: **one `systemName:` in
 `AeroDrawer.swift` fails the build**, with its own counter-example in `--self-test`.
 Read that rule before adding an icon to the drawer.
 
-## Remaining — 21 sites, all listed
+## The 21 sites — done (2026-10-24)
 
-Each was left alone because it does not match the three-line shape
-(`Image(systemName:)` + `.font(...)` + `.foregroundStyle(...)`) that the safe
-mechanical pass handled: a `Label(systemImage:)`, a ternary, or a parameterised
-`icon:` / `system:` argument.
+All 21 `Image(systemName:)` sites are migrated; the three surfaces now carry
+**0** `systemName:`. The parameterised helpers no longer take a name string at
+all — `quickCard` / `selectionAction` / `optionLabel` / `row` /
+`GlassCircleButton` / `HomePill` take a `GsIconPaths`, so the compiler checks
+what a lookup table used to check at runtime.
 
-```
-Chats/ChatsListView.swift:215   Image(systemName: icon)                  (param)
-Chats/ChatsListView.swift:313   checkmark.circle.fill / circle           (ternary)
-Chats/ChatsListView.swift:418   Image(systemName: icon)                  (param)
-Chats/ChatDetailView.swift:674  wifi.slash
-Chats/ChatDetailView.swift:810  Image(systemName: icon)                  (param)
-Chats/ChatDetailView.swift:1007 chevron.up
-Chats/ChatDetailView.swift:1015 chevron.down
-Chats/ChatDetailView.swift:1025 xmark
-Chats/ChatDetailView.swift:1807 Image(systemName: icon)                  (param)
-Home/HomeDashboardView.swift:205  arrow.right
-Home/HomeDashboardView.swift:283  sparkle
-Home/HomeDashboardView.swift:358  arrow.right
-Home/HomeDashboardView.swift:381  lightbulb
-Home/HomeDashboardView.swift:417  sparkles
-Home/HomeDashboardView.swift:451  Image(systemName: system)              (param)
-Home/HomeDashboardView.swift:475  Image(systemName: system)              (param)
-Home/HomeDashboardView.swift:541  play
-Home/HomeDashboardView.swift:578  play.fill
-Home/HomeDashboardView.swift:629  chevron.right
-Home/HomeDashboardView.swift:663  chevron.right
-Home/HomeDashboardView.swift:718  Image(systemName: system)              (param)
-```
+What the sites became, surface by surface:
 
-Verified names for these: `arrowRight`, `sparkles`, `lightbulb`, `play`,
-`chevronRight`, `chevronUp`, `chevronDown`, `x`, `wifiOff`, `circleCheck`,
-`circle`. For the parameterised ones, change the caller's string to the Lucide
-name and resolve it with `DrawerTopic.paths(named:)` (it already covers Compass /
-Activity / Bookmark / User / Settings / Bell / CreditCard), or add the name there.
+- **ChatsListView** — quick-access card `archivebox` → `GsIcons.archive`;
+  selection tick `checkmark.circle.fill / circle` → `circleCheck / circle` at
+  the same 20 pt and colors; selection bar → `star / archive / trash2`, the
+  exact trio Android's `SelectionAction` row draws.
+- **ChatDetailView** — `wifi.slash` → `wifiOff` (size 12); options sheet →
+  `squareArrowUp / pencil / info / fileText / eraser / trash / x`; find bar →
+  `chevronUp / chevronDown / x` (14); Chat Info rows → `pencil / cpu / brain`.
+- **HomeDashboardView** — `arrow.right` → `arrowRight`, `sparkle` → `sparkle`
+  (one four-point star), `lightbulb` → `lightbulb`, `sparkles` → `sparkles`,
+  `chevron.right` → `chevronRight`, chip `play` → `play` (Android's
+  `ReferenceChip` draws the same outline). Header circles → `sparkles` / `menu`
+  (Android's `GsIcons.Menu` twin); pills → `plus` / `compass` / `sparkles` /
+  `ellipsis` (Android: `Plus` / `Compass` / `Sparkles` / `Ellipsis`).
+
+Glyph size is the spec number wrapped in `Aero.scaledLength(_, relativeTo:)`, so
+an icon keeps the accessibility contract the page's text already honours — the
+same rule as the drawer's `DrawerMetrics` glyph constants.
+
+Four silhouettes are hand-drawn in the 24-unit space beside `OpenBookGlyph`,
+because the generated set is stroke-only by contract: the dock's `FilledHouse`
+and `FilledGear` and the video disc's `FilledPlay` — each the cubic-for-cubic
+twin of Android's `Filled*` in `HomeDashboardScreen.kt`, gear hub carved with
+even-odd on the fill call (`FillStyle(eo: true)`; `PathFillStyle` is iOS 17 and
+the app ships at iOS 16), as Compose does with `PathFillType.EvenOdd`.
+
+## Remaining — the menu chrome
+
+29 `Label(systemImage:)` sites still draw SF glyphs: 8 in ChatsListView (row
+context menu + swipes), 17 in ChatDetailView (message menu, translation menu,
+overflow), 4 in AeroDrawer (recents menu). They have survived every pass
+because their icons are drawn by SwiftUI's menu chrome, and a `GsIconView`
+inside a menu-item label is not guaranteed a leading icon slot — the migration
+must not trade an SF glyph for an icon-less row. Verify on a capture before
+converting. Rule 14 of `check_drawer_structure.py` counts `systemName:` only,
+so it neither catches these nor protects against re-introducing them.
 
 ## The recipe that worked
 

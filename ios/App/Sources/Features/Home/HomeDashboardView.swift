@@ -148,8 +148,8 @@ struct HomeDashboardView: View {
                     .foregroundStyle(Aero.textMuted)
             }
             Spacer()
-            GlassCircleButton(system: "sparkles", label: "Assistant", action: onOpenVoice)
-            GlassCircleButton(system: "line.3.horizontal", label: "Open menu", action: onOpenDrawer)
+            GlassCircleButton(icon: GsIcons.sparkles, label: "Assistant", action: onOpenVoice)
+            GlassCircleButton(icon: GsIcons.menu, label: "Open menu", action: onOpenDrawer)
         }
     }
 
@@ -202,9 +202,9 @@ struct HomeDashboardView: View {
                                     .foregroundStyle(Aero.textMuted)
                                     .lineLimit(1)
                                 Spacer(minLength: 0)
-                                Image(systemName: "arrow.right")
-                                    .font(Aero.responsive(13, .semibold, relativeTo: .caption))
-                                    .foregroundStyle(Aero.accent)
+                                GsIconView(GsIcons.arrowRight,
+                                           size: Aero.scaledLength(13, relativeTo: .caption),
+                                           color: Aero.accent)
                             }
                         }
                         .padding(16)
@@ -280,9 +280,9 @@ struct HomeDashboardView: View {
                     .font(Aero.responsive(26, .semibold, relativeTo: .title))
                     .foregroundStyle(Aero.text)
                 // One four-point star, not the three-star cluster.
-                Image(systemName: "sparkle")
-                    .font(Aero.responsive(22, .semibold, relativeTo: .title2))
-                    .foregroundStyle(Aero.accent)
+                GsIconView(GsIcons.sparkle,
+                           size: Aero.scaledLength(22, relativeTo: .title2),
+                           color: Aero.accent)
             }
             // 12.5 with a 3 pt leading: the sheet's subtitle lines are 18 pt apart.
             // 15/22 was the contract's value and the contract was derived from the
@@ -307,11 +307,11 @@ struct HomeDashboardView: View {
         GeometryReader { geo in
             let compact = geo.size.width < 330
             HStack(spacing: compact ? 3 : 4) {
-                HomePill(system: "plus", title: "New Chat", compact: compact, action: onNewChat)
-                HomePill(system: "safari", title: "Explore", compact: compact, action: onOpenAgent)
-                HomePill(system: "sparkles", title: "Create", compact: compact,
+                HomePill(icon: GsIcons.plus, title: "New Chat", compact: compact, action: onNewChat)
+                HomePill(icon: GsIcons.compass, title: "Explore", compact: compact, action: onOpenAgent)
+                HomePill(icon: GsIcons.sparkles, title: "Create", compact: compact,
                          action: { onStartPrompt(HomeDispatch.createPrompt) })
-                HomePill(system: "ellipsis", title: "More", compact: compact, action: onOpenDrawer)
+                HomePill(icon: GsIcons.ellipsis, title: "More", compact: compact, action: onOpenDrawer)
             }
         }
         // Height derived from the pill's own text curve, not pinned: a literal
@@ -355,8 +355,9 @@ struct HomeDashboardView: View {
                 HStack(spacing: 4) {
                     // 11: the sheet's band is 7.89 pt against our 10.33 at 14.
                     Text("See All").font(Aero.responsive(11, .semibold, relativeTo: .callout))
-                    Image(systemName: "arrow.right")
-                        .font(Aero.responsive(11, .semibold, relativeTo: .caption))
+                    GsIconView(GsIcons.arrowRight,
+                               size: Aero.scaledLength(11, relativeTo: .caption),
+                               color: Aero.textMuted)
                 }
                 .foregroundStyle(Aero.textMuted)
             }
@@ -378,9 +379,9 @@ struct HomeDashboardView: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color.white.opacity(0.55))
                         .frame(width: 32, height: 32)
-                    Image(systemName: "lightbulb")
-                        .font(Aero.responsive(15, .medium, relativeTo: .body))
-                        .foregroundStyle(Aero.text)
+                    GsIconView(GsIcons.lightbulb,
+                               size: Aero.scaledLength(15, relativeTo: .body),
+                               color: Aero.text)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Suggestions")
@@ -408,14 +409,20 @@ struct HomeDashboardView: View {
             // Tapping the tab you are already on means "go back to the top".
             // It used to be `action: {}`, which leaves a labelled, focusable,
             // VoiceOver-announced control that does nothing when used.
-            DockIcon(system: "house.fill", label: "Home", selected: true, action: scrollToTop)
+            // The dock's Home and Settings marks are the family's FILLED
+            // silhouettes — the twins of Android's `FilledHouse` / `FilledGear`
+            // in HomeDashboardScreen.kt, drawn in the same 24-unit space as
+            // OpenBookGlyph below — because the reference's dock is solid and
+            // the generated set is stroke-only by contract.
+            DockIcon(house: true, label: "Home", selected: true, action: scrollToTop)
             DockIcon(book: true, label: "Chats", action: onOpenChats)
             // The reference seats the peach pill inside a white well, so the
             // dock reads as three glass buttons and one lit action.
             Button(action: onNewChat) {
                 HStack(spacing: 6) {
-                    Image(systemName: "sparkles")
-                        .font(Aero.responsive(18, .semibold, relativeTo: .body))
+                    GsIconView(GsIcons.sparkles,
+                               size: Aero.scaledLength(18, relativeTo: .body),
+                               color: Color(red: 0.29, green: 0.14, blue: 0.08))
                     // 12: the sheet's band is 8.50 pt against our 10.33 at 15.
                     Text("Generate")
                         .font(Aero.responsive(12, .semibold, relativeTo: .callout))
@@ -433,7 +440,7 @@ struct HomeDashboardView: View {
                 .background(Capsule().fill(Color.white.opacity(0.55)))
             }
             .buttonStyle(KineticPressStyle())
-            DockIcon(system: "gearshape.fill", label: "Settings", action: onOpenSettings)
+            DockIcon(gear: true, label: "Settings", action: onOpenSettings)
         }
         .padding(14)
         .gsCapsuleGlass(.floatingControl)
@@ -443,14 +450,14 @@ struct HomeDashboardView: View {
 // MARK: - Building blocks
 
 private struct GlassCircleButton: View {
-    let system: String
+    let icon: GsIconPaths
     let label: String
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            Image(systemName: system)
-                .font(Aero.responsive(17, .medium, relativeTo: .body))
-                .foregroundStyle(Aero.text)
+            GsIconView(icon,
+                       size: Aero.scaledLength(17, relativeTo: .body),
+                       color: Aero.text)
                 .frame(width: Aero.scaledLength(46, relativeTo: .body),
                        height: Aero.scaledLength(46, relativeTo: .body))
                 // Half the button, whatever size it scaled to. The literal 23 it
@@ -465,15 +472,16 @@ private struct GlassCircleButton: View {
 }
 
 private struct HomePill: View {
-    let system: String
+    let icon: GsIconPaths
     let title: String
     var compact = false
     let action: () -> Void
     var body: some View {
         Button(action: action) {
             HStack(spacing: compact ? 3 : 4) {
-                Image(systemName: system)
-                    .font(Aero.responsive(compact ? 11 : 13, .medium, relativeTo: .caption))
+                GsIconView(icon,
+                           size: Aero.scaledLength(compact ? 11 : 13, relativeTo: .caption),
+                           color: Aero.text)
                 Text(title)
                     .font(Aero.responsive(compact ? 11.5 : 13, .medium, relativeTo: .caption))
                     .lineLimit(1)
@@ -538,8 +546,9 @@ private struct VideoCard: View {
                     // Copy stacks from the top exactly as the sheet does; only
                     // the play control is pinned to the bottom of the card.
                     HStack(spacing: 5) {
-                        Image(systemName: "play")
-                            .font(Aero.responsive(8, .bold, relativeTo: .caption2))
+                        GsIconView(GsIcons.play,
+                                   size: Aero.scaledLength(8, relativeTo: .caption2),
+                                   color: Aero.text)
                         // 10 pt: the sheet's chip is 7.2 pt tall with its icon. 11 was
                         // 3.8 pt over; 13 (Aero.caption()) was the iOS half of the
                         // "Video 12 vs 13" pair a review listed.
@@ -575,9 +584,15 @@ private struct VideoCard: View {
                     // outline glyph here while iOS drew SF's solid `play`; Android now
                     // draws a filled triangle of the sheet's 9.2 x 11.5 pt.
                     Circle().fill(Color.white.opacity(0.55)).frame(width: 37, height: 37)
-                        Image(systemName: "play.fill")
-                            .font(Aero.responsive(15, .regular, relativeTo: .body))
-                            .foregroundStyle(Aero.text)
+                        // The family's filled triangle — Android draws this same
+                        // 9 × 11 solid mark on its 37dp disc; the generated set
+                        // carries only the outline `play`, so the silhouette is
+                        // hand-drawn here exactly like OpenBookGlyph below.
+                        FilledPlayGlyph()
+                            .fill(Aero.text)
+                            .frame(width: Aero.scaledLength(9, relativeTo: .body),
+                                   height: Aero.scaledLength(11, relativeTo: .body))
+                            .offset(x: 1)
                     }
                 }
                 .padding(14)
@@ -626,9 +641,9 @@ private struct MindGuideCard: View {
                 .padding(.vertical, 8)
                 HStack {
                     Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(Aero.responsive(11, .semibold, relativeTo: .caption2))
-                        .foregroundStyle(Aero.textMuted)
+                    GsIconView(GsIcons.chevronRight,
+                               size: Aero.scaledLength(11, relativeTo: .caption2),
+                               color: Aero.textMuted)
                         .padding(.trailing, 10)
                 }
             }
@@ -660,9 +675,9 @@ private struct ReflectionCard: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(Aero.responsive(12, .semibold, relativeTo: .caption))
-                        .foregroundStyle(Aero.textMuted)
+                    GsIconView(GsIcons.chevronRight,
+                               size: Aero.scaledLength(12, relativeTo: .caption),
+                               color: Aero.textMuted)
                 }
                 Text("Take a moment to check in with yourself.")
                     .font(Aero.responsive(10.5, .medium, relativeTo: .caption))
@@ -698,10 +713,13 @@ private struct ReflectionCard: View {
 }
 
 private struct DockIcon: View {
-    var system: String = ""
     /// The sheet's Chats glyph is a filled OPEN book; SF only offers an open
     /// outline or a closed fill, so the Android silhouette is drawn here too.
     var book: Bool = false
+    /// Home and Settings are solid in the sheet as well — same arrangement,
+    /// same Android twins (`FilledHouse`, `FilledGear`).
+    var house: Bool = false
+    var gear: Bool = false
     let label: String
     var selected = false
     let action: () -> Void
@@ -714,10 +732,21 @@ private struct DockIcon: View {
                         .fill(selected ? Aero.text : Aero.text.opacity(0.78))
                         .frame(width: Aero.scaledLength(20, relativeTo: .body),
                                height: Aero.scaledLength(20, relativeTo: .body))
-                } else {
-                    Image(systemName: system)
-                        .font(Aero.responsive(18, .semibold, relativeTo: .body))
-                        .foregroundStyle(selected ? Aero.text : Aero.text.opacity(0.78))
+                } else if house {
+                    FilledHouseGlyph()
+                        .fill(selected ? Aero.text : Aero.text.opacity(0.78))
+                        .frame(width: Aero.scaledLength(20, relativeTo: .body),
+                               height: Aero.scaledLength(20, relativeTo: .body))
+                } else if gear {
+                    // Even-odd, the twin of Compose's PathFillType.EvenOdd: the
+                    // ring and the hub wind the same way, so the nonzero rule
+                    // would fill the hole solid. `PathFillStyle` is iOS 17; the
+                    // page ships at iOS 16, so the rule rides the fill call.
+                    FilledGearGlyph()
+                        .fill(selected ? Aero.text : Aero.text.opacity(0.78),
+                              style: FillStyle(eo: true))
+                        .frame(width: Aero.scaledLength(20, relativeTo: .body),
+                               height: Aero.scaledLength(20, relativeTo: .body))
                 }
             }
             .frame(width: Aero.scaledLength(46, relativeTo: .body),
@@ -750,6 +779,124 @@ private struct OpenBookGlyph: Shape {
         path.addCurve(to: p(12.0, 6.4), control1: p(17.8, 4.9), control2: p(14.6, 4.9))
         path.addLine(to: p(12.0, 17.4))
         path.addCurve(to: p(11.2, 17.2), control1: p(11.8, 17.4), control2: p(11.4, 17.3))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// Filled house, the twin of Android's `FilledHouse` in HomeDashboardScreen.kt
+/// — the same 24-unit outline, cubic for cubic. The reference's dock is solid;
+/// the generated Lucide set is stroke-only by contract, so this silhouette (and
+/// its gear and play twins) lives with the page that draws it, as the book's
+/// already does.
+private struct FilledHouseGlyph: Shape {
+    func path(in rect: CGRect) -> Path {
+        let s = rect.width / 24
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
+        var path = Path()
+        path.move(to: p(12.0, 3.1))
+        path.addLine(to: p(2.7, 10.8))
+        path.addCurve(to: p(3.1, 11.9), control1: p(2.3, 11.2), control2: p(2.5, 11.9))
+        path.addLine(to: p(4.6, 11.9))
+        path.addLine(to: p(4.6, 19.3))
+        path.addCurve(to: p(5.8, 20.5), control1: p(4.6, 20.0), control2: p(5.1, 20.5))
+        path.addLine(to: p(9.5, 20.5))
+        path.addLine(to: p(9.5, 15.5))
+        path.addCurve(to: p(10.4, 14.6), control1: p(9.5, 15.0), control2: p(9.9, 14.6))
+        path.addLine(to: p(13.6, 14.6))
+        path.addCurve(to: p(14.5, 15.5), control1: p(14.1, 14.6), control2: p(14.5, 15.0))
+        path.addLine(to: p(14.5, 20.5))
+        path.addLine(to: p(18.2, 20.5))
+        path.addCurve(to: p(19.4, 19.3), control1: p(18.9, 20.5), control2: p(19.4, 20.0))
+        path.addLine(to: p(19.4, 11.9))
+        path.addLine(to: p(20.9, 11.9))
+        path.addCurve(to: p(21.3, 10.8), control1: p(21.5, 11.9), control2: p(21.7, 11.2))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// Filled gear with an even-odd hole — Android's `FilledGear`, command for
+/// command, including the open second subpath Android leaves unclosed.
+private struct FilledGearGlyph: Shape {
+    func path(in rect: CGRect) -> Path {
+        let s = rect.width / 24
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
+        var path = Path()
+        path.move(to: p(18.79, 9.6))
+        path.addLine(to: p(19.02, 10.38))
+        path.addLine(to: p(21.28, 10.53))
+        path.addLine(to: p(21.28, 13.47))
+        path.addLine(to: p(19.02, 13.62))
+        path.addLine(to: p(18.79, 14.4))
+        path.addLine(to: p(18.5, 15.1))
+        path.addLine(to: p(18.11, 15.82))
+        path.addLine(to: p(19.6, 17.53))
+        path.addLine(to: p(17.53, 19.6))
+        path.addLine(to: p(15.82, 18.11))
+        path.addLine(to: p(15.1, 18.5))
+        path.addLine(to: p(14.4, 18.79))
+        path.addLine(to: p(13.62, 19.02))
+        path.addLine(to: p(13.47, 21.28))
+        path.addLine(to: p(10.53, 21.28))
+        path.addLine(to: p(10.38, 19.02))
+        path.addLine(to: p(9.6, 18.79))
+        path.addLine(to: p(8.9, 18.5))
+        path.addLine(to: p(8.18, 18.11))
+        path.addLine(to: p(6.47, 19.6))
+        path.addLine(to: p(4.4, 17.53))
+        path.addLine(to: p(5.89, 15.82))
+        path.addLine(to: p(5.5, 15.1))
+        path.addLine(to: p(5.21, 14.4))
+        path.addLine(to: p(4.98, 13.62))
+        path.addLine(to: p(2.72, 13.47))
+        path.addLine(to: p(2.72, 10.53))
+        path.addLine(to: p(4.98, 10.38))
+        path.addLine(to: p(5.21, 9.6))
+        path.addLine(to: p(5.5, 8.9))
+        path.addLine(to: p(5.89, 8.18))
+        path.addLine(to: p(4.4, 6.47))
+        path.addLine(to: p(6.47, 4.4))
+        path.addLine(to: p(8.18, 5.89))
+        path.addLine(to: p(8.9, 5.5))
+        path.addLine(to: p(9.6, 5.21))
+        path.addLine(to: p(10.38, 4.98))
+        path.addLine(to: p(10.53, 2.72))
+        path.addLine(to: p(13.47, 2.72))
+        path.addLine(to: p(13.62, 4.98))
+        path.addLine(to: p(14.4, 5.21))
+        path.addLine(to: p(15.1, 5.5))
+        path.addLine(to: p(15.82, 5.89))
+        path.addLine(to: p(17.53, 4.4))
+        path.addLine(to: p(19.6, 6.47))
+        path.addLine(to: p(18.11, 8.18))
+        path.addLine(to: p(18.5, 8.9))
+        path.closeSubpath()
+        path.move(to: p(15.1, 12))
+        path.addLine(to: p(14.68, 10.45))
+        path.addLine(to: p(13.55, 9.32))
+        path.addLine(to: p(12, 8.9))
+        path.addLine(to: p(10.45, 9.32))
+        path.addLine(to: p(9.32, 10.45))
+        path.addLine(to: p(8.9, 12))
+        path.addLine(to: p(9.32, 13.55))
+        path.addLine(to: p(10.45, 14.68))
+        path.addLine(to: p(12, 15.1))
+        path.addLine(to: p(13.55, 14.68))
+        path.addLine(to: p(14.68, 13.55))
+        return path
+    }
+}
+
+/// The video card's play mark: a solid triangle, the twin of the 9 × 11 Canvas
+/// path Android draws on its 37dp disc. `play` in the family is the outline;
+/// the sheet's disc is filled, and an outline on 37pt of glass reads as a ring.
+private struct FilledPlayGlyph: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
         path.closeSubpath()
         return path
     }
