@@ -304,12 +304,16 @@ struct ExploreView: View {
                         Image("GSHomeBackdrop")
                             .resizable()
                             .scaledToFill()
-                            // The bubble sits at ~(0.74, 0.24) of the authored
-                            // render; the window keeps its band in view, and
-                            // the saturation lift makes the peach/lavender
-                            // read like the reference.
-                            .frame(width: artWidth, height: artHeight,
-                                   alignment: Alignment(x: 0.74, y: 0.15))
+                            // The authored render is 590x1278; at window
+                            // width the image is 2.1653x taller. Offset the
+                            // band so the bubble (~12-38% of image height)
+                            // centers in the window, then clip. The
+                            // saturation lift makes the peach/lavender read
+                            // like the reference.
+                            .frame(width: artWidth)
+                            .frame(height: artWidth * 2.1653, alignment: .top)
+                            .offset(y: -artWidth * 0.17)
+                            .frame(width: artWidth, height: artHeight, alignment: .top)
                             .clipped()
                             .saturation(1.4)
                             .overlay(
