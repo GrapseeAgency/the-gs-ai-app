@@ -240,7 +240,10 @@ jobs:
           # otherwise a capture left behind by an earlier run would satisfy the
           # probe below even if this run's harness produced nothing at all.
           rm -rf /tmp/gs-home-renders
-          RESULT_BUNDLE="ios/build/GSApp-tests-$(date +%Y%m%dT%H%M%S).xcresult"
+          # A FIXED path, because the menu-chrome step later exports this
+          # bundle's attachments: a timestamped name would make each step guess
+          # at the other's output.
+          RESULT_BUNDLE="ios/build/GSApp-tests.xcresult"
           rm -rf "$RESULT_BUNDLE"
           xcodebuild test \
             -project "$PROJECT_FILE" \
@@ -368,29 +371,52 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          # The 29 menu rows are drawn by UIKit's menu chrome, which decides
+          # The 29 menu rows were drawn by UIKit's menu chrome, which decides
           # whether a Label's icon is drawn at all — the one thing no static
           # check can see. MenuChromeTests opens every real menu and measures
           # the ink beside each title; this step proves the harness RAN (a
-          # skipped or never-started test leaves no log line) and that every
-          # presented menu left its PNG. Both halves are the gate: a capture
-          # with no test is a screenshot of nothing, and a test with no
-          # capture cannot be read by a human afterwards.
+          # skipped or never-started test leaves no log line) and exports the
+          # captures it left. Both halves are the gate: a capture with no test
+          # is a screenshot of nothing, and a test with no capture cannot be
+          # read by a human afterwards.
           LOG=ios/build/xcodebuild-test.log
           if ! grep -q "Test Case '-\[GsChatUITests.MenuChromeTests testEveryMenuPutsItsGlyphInTheLeadingSlot\]' passed" "$LOG"; then
             echo "::error::MenuChromeTests did not pass in this run — the menu gate is not live"
-            grep -E "MenuChromeTests" "$LOG" || true
+            grep -E "MenuChromeTests|error: -\[" "$LOG" | head -40 || true
             exit 1
           fi
-          SRC=/tmp/gs-menu-chrome
+          # A UI-test RUNNER is sandboxed away from the host-visible /tmp that
+          # the in-app render harnesses write to (run 40128411165 produced no
+          # PNGs there at all), so the captures leave as XCTAttachments and are
+          # exported from the result bundle the test step wrote.
           DIR=ios/build/menu-chrome
-          mkdir -p "$DIR"
-          if [ -d "$SRC" ]; then cp "$SRC"/* "$DIR/" 2>/dev/null || true; fi
+          rm -rf "$DIR"; mkdir -p "$DIR"
+          xcrun xcresulttool export attachments \
+            --path ios/build/GSApp-tests.xcresult --output-path "$DIR/raw" \
+            > "$DIR/export.log" 2>&1 || { echo "::error::xcresulttool could not export the attachments"; cat "$DIR/export.log"; exit 1; }
+          python3 - "$DIR" <<'PY'
+          import glob, json, os, shutil, sys
+          root = sys.argv[1]
+          raw = os.path.join(root, "raw")
+          manifest = json.load(open(os.path.join(raw, "manifest.json")))
+          groups = manifest if isinstance(manifest, list) else [manifest]
+          kept = []
+          for group in groups:
+              for a in group.get("attachments", []):
+                  name = a.get("suggestedHumanReadableName") or ""
+                  if name != "report" and not name.startswith("menu-"):
+                      continue
+                  ext = os.path.splitext(a.get("exportedFileName", ""))[1] or ".png"
+                  dst = os.path.join(root, "report.json" if name == "report" else name + ext)
+                  shutil.copyfile(os.path.join(raw, a["exportedFileName"]), dst)
+                  kept.append(os.path.basename(dst))
+          print("exported:", ", ".join(sorted(kept)) or "nothing")
+          PY
           for n in chats-row-context chats-row-swipe-leading chats-row-swipe-trailing \
                    chat-header-sparkle chat-header-menu user-bubble-context \
                    assistant-bubble-context drawer-recent-context; do
-            test -s "$DIR/menu-$n.png" \
-              || { echo "::error::menu-$n.png missing — the menu harness opened no such menu"; exit 1; }
+            ls "$DIR/menu-$n".* >/dev/null 2>&1 \
+              || { echo "::error::menu-$n is missing — the menu harness opened no such menu"; exit 1; }
           done
           test -s "$DIR/report.json" || { echo "::error::report.json missing — no measurements were written"; exit 1; }
           # Printed, not just uploaded: the numbers are the evidence a glyph is
@@ -403,7 +429,7 @@ jobs:
         with:
           name: menu-chrome-ios
           path: ios/build/menu-chrome/*
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
 
       - name: Package — zip unsigned simulator .app

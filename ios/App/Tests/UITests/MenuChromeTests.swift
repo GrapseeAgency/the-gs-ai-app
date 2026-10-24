@@ -27,10 +27,10 @@ import XCTest
  */
 final class MenuChromeTests: XCTestCase {
 
-    /// Screenshots and measurements land here; the simulator shares the host's
-    /// /tmp, which is the channel the render harnesses already use.
-    private static let outputDir = URL(fileURLWithPath: "/tmp/gs-menu-chrome", isDirectory: true)
-
+    /// Screenshots leave the runner as XCTAttachments: a UI-test runner has
+    /// its own sandbox and cannot write the host-visible /tmp that the in-app
+    /// render harnesses use (run 40128411165 produced no PNGs at all). The
+    /// workflow exports the attachments out of the result bundle instead.
     private var failures: [String] = []
     private var measurements: [[String: Any]] = []
 
@@ -38,8 +38,6 @@ final class MenuChromeTests: XCTestCase {
 
     func testEveryMenuPutsItsGlyphInTheLeadingSlot() throws {
         continueAfterFailure = true
-        try FileManager.default.createDirectory(
-            at: Self.outputDir, withIntermediateDirectories: true)
 
         let app = XCUIApplication()
         app.launchArguments += ["-gs_test_session_active", "-gs_test_seed_chats"]
@@ -60,29 +58,34 @@ final class MenuChromeTests: XCTestCase {
             return
         }
 
-        // 1. The row's context menu (5 rows).
-        openContextMenu(on: row, app: app, expecting: "Pin to top")
-        capture(
-            name: "chats-row-context",
-            app: app,
-            items: [
-                ("Select", .leading),
-                ("Unpin", .leading),       // seed row 1 is pinned
-                ("Rename…", .leading),
-                ("Archive", .leading),
-                ("Delete", .leading),
-            ])
-        dismissMenu(app: app)
+        // 1. The row's context menu (5 rows). The seeded first row is
+        //    PINNED, so its menu says "Unpin" — expecting "Pin to top" here
+        //    is how run 40128411165 failed to recognise a menu that had
+        //    opened perfectly well.
+        let opened = openContextMenu(on: row, app: app, expecting: "Unpin")
+        if opened {
+            capture(
+                name: "chats-row-context",
+                app: app,
+                items: [
+                    ("Select", .leading),
+                    ("Unpin", .leading),
+                    ("Rename…", .leading),
+                    ("Archive", .leading),
+                    ("Delete", .leading),
+                ])
+        }
+        dismissMenu(app: app, item: "Unpin")
 
         // 2. The leading swipe (1 row).
         row.swipeRight()
         if app.buttons["Unpin"].waitForExistence(timeout: 8) {
             capture(name: "chats-row-swipe-leading", app: app, items: [("Unpin", .above)])
-            closeSwipe(row: row, app: app)
         } else {
             record("swipe-leading: Unpin never appeared after swipeRight")
-            closeSwipe(row: row, app: app)
         }
+        row.swipeLeft()          // closes the leading actions
+        Thread.sleep(forTimeInterval: 0.4)
 
         // 3. The trailing swipe (2 rows).
         row.swipeLeft()
@@ -91,17 +94,23 @@ final class MenuChromeTests: XCTestCase {
                 name: "chats-row-swipe-trailing",
                 app: app,
                 items: [("Delete", .above), ("Archive", .above)])
-            closeSwipe(row: row, app: app)
         } else {
             record("swipe-trailing: Archive never appeared after swipeLeft")
-            closeSwipe(row: row, app: app)
         }
+        row.swipeRight()         // closes the trailing actions
+        Thread.sleep(forTimeInterval: 0.4)
 
         // 4. Into the conversation: both bubble menus and the header menus.
-        row.tap()
+        //    A swipe that did not fully close swallows the first tap, so the
+        //    open is attempted twice before it counts as a failure.
         let assistantText = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "Layers, a compact umbrella")).firstMatch
-        guard assistantText.waitForExistence(timeout: 20) else {
+        for attempt in 0..<2 where !assistantText.exists {
+            row.tap()
+            if assistantText.waitForExistence(timeout: 8) { break }
+            if attempt == 1 { break }
+        }
+        guard assistantText.waitForExistence(timeout: 10) else {
             XCTFail("seeded conversation never opened")
             try finish(app: app)
             return
@@ -111,37 +120,25 @@ final class MenuChromeTests: XCTestCase {
         let sparkle = app.buttons["New chat"].firstMatch.exists
             ? app.buttons["New chat"].firstMatch
             : app.buttons["Search in chat"].firstMatch
-        if sparkle.waitForExistence(timeout: 10) {
-            openContextMenu(on: sparkle, app: app, expecting: "Voice input")
-            if app.buttons["Voice input"].exists {
-                capture(
-                    name: "chat-header-sparkle",
-                    app: app,
-                    items: [
-                        ("New chat", .leading),
-                        ("Search in chat", .leading),
-                        ("Voice input", .leading),
-                    ])
-            } else {
-                // A chat pushed from the inbox may not offer "New chat"; the
-                // same menu then carries Search and Voice only.
-                capture(
-                    name: "chat-header-sparkle",
-                    app: app,
-                    items: [
-                        ("Search in chat", .leading),
-                        ("Voice input", .leading),
-                    ])
-            }
-            dismissMenu(app: app)
+        if sparkle.waitForExistence(timeout: 10),
+           openContextMenu(on: sparkle, app: app, expecting: "Voice input") {
+            // A chat pushed from the inbox may not offer "New chat"; the same
+            // menu then carries Search and Voice only.
+            var items: [(String, Slot)] = [
+                ("Search in chat", .leading),
+                ("Voice input", .leading),
+            ]
+            if app.buttons["New chat"].exists { items.insert(("New chat", .leading), at: 0) }
+            capture(name: "chat-header-sparkle", app: app, items: items)
+            dismissMenu(app: app, item: "Voice input")
         } else {
-            record("chat-header-sparkle: the sparkle button was not found")
+            record("chat-header-sparkle: the sparkle menu did not open")
         }
 
         // 4b. Header menu button — long-press opens a second menu.
         let headerMenu = app.buttons["Open menu"].firstMatch
-        if headerMenu.waitForExistence(timeout: 10) {
-            openContextMenu(on: headerMenu, app: app, expecting: "Chat options")
+        if headerMenu.waitForExistence(timeout: 10),
+           openContextMenu(on: headerMenu, app: app, expecting: "Chat options") {
             capture(
                 name: "chat-header-menu",
                 app: app,
@@ -150,45 +147,48 @@ final class MenuChromeTests: XCTestCase {
                     ("Search in chat", .leading),
                     ("New chat", .leading),
                 ])
-            dismissMenu(app: app)
+            dismissMenu(app: app, item: "Chat options")
         } else {
-            record("chat-header-menu: the header menu button was not found")
+            record("chat-header-menu: the header menu did not open")
         }
 
         // 5. User bubble — Copy / Edit.
         let userText = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "What should I pack")).firstMatch
-        if userText.waitForExistence(timeout: 10) {
-            openContextMenu(on: userText, app: app, expecting: "Edit")
+        if userText.waitForExistence(timeout: 10),
+           openContextMenu(on: userText, app: app, expecting: "Edit") {
             capture(name: "user-bubble-context", app: app,
                     items: [("Copy", .leading), ("Edit", .leading)])
-            dismissMenu(app: app)
+            dismissMenu(app: app, item: "Edit")
         } else {
-            record("user-bubble-context: the user turn was not found")
+            record("user-bubble-context: the user turn's menu did not open")
         }
 
         // 6. Assistant bubble — seven rows.
-        openContextMenu(on: assistantText, app: app, expecting: "Branch new chat")
-        capture(
-            name: "assistant-bubble-context",
-            app: app,
-            items: [
-                ("Copy", .leading),
-                ("Read aloud", .leading),
-                ("Regenerate", .leading),
-                ("Translate", .leading),
-                ("Save", .leading),
-                ("Branch new chat", .leading),
-                ("Share", .leading),
-            ])
-        dismissMenu(app: app)
+        if openContextMenu(on: assistantText, app: app, expecting: "Branch new chat") {
+            capture(
+                name: "assistant-bubble-context",
+                app: app,
+                items: [
+                    ("Copy", .leading),
+                    ("Read aloud", .leading),
+                    ("Regenerate", .leading),
+                    ("Translate", .leading),
+                    ("Save", .leading),
+                    ("Branch new chat", .leading),
+                    ("Share", .leading),
+                ])
+            dismissMenu(app: app, item: "Branch new chat")
+        } else {
+            record("assistant-bubble-context: the bubble menu did not open")
+        }
 
         // 7. The drawer's recent-row menu.
         if headerMenu.exists { headerMenu.tap() } else { record("drawer: no menu button") }
         let recent = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "Explain quantum physics")).firstMatch
-        if recent.waitForExistence(timeout: 12) {
-            openContextMenu(on: recent, app: app, expecting: "Rename…")
+        if recent.waitForExistence(timeout: 12),
+           openContextMenu(on: recent, app: app, expecting: "Rename…") {
             capture(
                 name: "drawer-recent-context",
                 app: app,
@@ -198,9 +198,9 @@ final class MenuChromeTests: XCTestCase {
                     ("Archive", .leading),
                     ("Delete", .leading),
                 ])
-            dismissMenu(app: app)
+            dismissMenu(app: app, item: "Rename…")
         } else {
-            record("drawer-recent-context: no recent row in the drawer")
+            record("drawer-recent-context: no recent-row menu in the drawer")
         }
 
         try finish(app: app)
@@ -215,39 +215,41 @@ final class MenuChromeTests: XCTestCase {
         case above
     }
 
-    private func openContextMenu(on element: XCUIElement, app: XCUIApplication, expecting label: String) {
+    private func openContextMenu(on element: XCUIElement, app: XCUIApplication, expecting label: String) -> Bool {
         element.press(forDuration: 1.3)
-        if !app.buttons[label].waitForExistence(timeout: 12) {
-            // The menu may expose rows as cells or static texts on some OS
-            // builds; only a total absence is a failure.
-            Thread.sleep(forTimeInterval: 0.6)
-            if app.staticTexts[label].exists || app.cells[label].exists { return }
-            record("menu '\(label)' never appeared after long-press")
-            attachTree(app)
-        }
+        if app.buttons[label].waitForExistence(timeout: 12) { return true }
+        // The menu may expose rows as cells or static texts on some OS
+        // builds; only a total absence is a failure.
+        if app.staticTexts[label].exists || app.cells[label].exists { return true }
+        record("menu '\(label)' never appeared after long-press")
+        attachTree(app)
+        return false
     }
 
-    private func dismissMenu(app: XCUIApplication) {
-        // Menus close on a tap outside their card; the top strip is outside
-        // every menu this harness opens.
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.04)).tap()
-        // Wait for the dismissal, so the next step's long-press lands on the
-        // page and not on a vanishing overlay.
-        for _ in 0..<20 where app.buttons["Rename…"].exists || app.buttons["Regenerate"].exists {
+    private func dismissMenu(app: XCUIApplication, item: String) {
+        // Menus close on a tap outside their card. The card is centred with a
+        // margin, so the far-left edge is always outside it — and away from
+        // the status bar, whose band swallows taps (the first run tapped
+        // 4% from the top and left the menu standing).
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5)).tap()
+        for _ in 0..<30 {
+            if !app.buttons[item].exists && !app.staticTexts[item].exists { return }
             Thread.sleep(forTimeInterval: 0.1)
         }
-    }
-
-    private func closeSwipe(row: XCUIElement, app: XCUIApplication) {
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.04)).tap()
-        _ = row.waitForExistence(timeout: 2)
+        record("menu '\(item)' did not dismiss — later gestures would land on it")
     }
 
     // MARK: - Capture + measure
 
     private func capture(name: String, app: XCUIApplication, items: [(String, Slot)]) {
+        // No menu, no capture: measuring a closed overlay is how the first run
+        // recorded five rows of zero ink and called it a glyph problem.
+        guard app.buttons[items[0].0].exists || app.staticTexts[items[0].0].exists else {
+            record("\(name): the menu was not open at capture time")
+            return
+        }
         let shot = XCUIScreen.main.screenshot()
-        write(shot.pngRepresentation, to: "menu-\(name).png")
+        attach(shot, name: "menu-\(name)")
 
         guard let image = shot.image.cgImage else {
             record("\(name): the screenshot had no bitmap")
@@ -256,11 +258,11 @@ final class MenuChromeTests: XCTestCase {
         let scale = CGFloat(image.width) / shot.image.size.width
 
         for (label, slot) in items {
-            guard let frame = titleFrame(label, app: app) else {
+            guard let box = titleBox(label, app: app) else {
                 record("\(name)/\(label): the row is not in the menu")
                 continue
             }
-            let band = probeBand(for: frame, slot: slot)
+            let band = probeBand(for: box, slot: slot)
             guard let probe = probeInk(image: image, band: band, scale: scale) else {
                 record("\(name)/\(label): the probe band was degenerate")
                 continue
@@ -269,13 +271,14 @@ final class MenuChromeTests: XCTestCase {
                 "menu": name,
                 "item": label,
                 "slot": slot == .leading ? "leading" : "above",
+                "geometry": box.kind,
                 "inkPixels": probe.count,
                 "inkHeightPt": Double(round(probe.bbox.height / scale * 10) / 10),
                 "inkWidthPt": Double(round(probe.bbox.width / scale * 10) / 10),
                 "bandWidthPt": Double(round(band.width * 10) / 10),
             ])
 
-            // 1. The icon is drawn at all. An 17 pt stroke glyph carries a few
+            // 1. The icon is drawn at all. An 18 pt stroke glyph carries a few
             //    hundred pixels at 2x; a dropped icon carries none, and a
             //    hairline carries a handful.
             let minInk = Int(90 * (scale / 2) * (scale / 2))
@@ -288,34 +291,63 @@ final class MenuChromeTests: XCTestCase {
                 record("\(name)/\(label): glyph height \(String(format: "%.1f", height)) pt is outside 9–24 pt")
             }
             // 3. It sits in the slot its label implies, not somewhere else.
-            if slot == .leading, probe.bbox.maxX > frame.minX + 1 {
-                record("\(name)/\(label): ink reaches x=\(Int(probe.bbox.maxX / scale)) but the title starts at \(Int(frame.minX)) — the icon is not in the leading slot")
+            switch (slot, box) {
+            case (.leading, .text(let rect)):
+                if probe.bbox.maxX > rect.minX + 1 {
+                    record("\(name)/\(label): ink reaches x=\(Int(probe.bbox.maxX / scale)) but the title starts at \(Int(rect.minX)) — the icon is not in the leading slot")
+                }
+            case (.leading, .row(let rect)):
+                // The row's own frame stands in for the title's: the icon must
+                // hug the leading edge, not float in the middle of the row.
+                if probe.bbox.minX / scale - rect.minX > 22 {
+                    record("\(name)/\(label): ink starts \(Int(probe.bbox.minX / scale - rect.minX)) pt into the row — not the leading slot")
+                }
+            case (.above, _):
+                break
             }
         }
     }
 
-    /// The row's title box. Menu rows expose one or the other depending on the
-    /// OS build; the fallback uses the button's own frame and the row's
-    /// standard leading inset.
-    private func titleFrame(_ label: String, app: XCUIApplication) -> CGRect? {
+    /// Where a row put its title. Menus normally expose the text as its own
+    /// element; some builds expose only the row, and the fallback has to probe
+    /// INSIDE the row's leading edge rather than outside it.
+    private enum TitleBox {
+        case text(CGRect)
+        case row(CGRect)
+
+        var kind: String {
+            switch self {
+            case .text: return "text"
+            case .row: return "row"
+            }
+        }
+    }
+
+    private func titleBox(_ label: String, app: XCUIApplication) -> TitleBox? {
         let text = app.staticTexts[label].firstMatch
-        if text.exists, !text.frame.isEmpty { return text.frame }
+        if text.exists, !text.frame.isEmpty { return .text(text.frame) }
         let button = app.buttons[label].firstMatch
-        if button.exists, !button.frame.isEmpty { return button.frame }
+        if button.exists, !button.frame.isEmpty { return .row(button.frame) }
         let cell = app.cells[label].firstMatch
-        if cell.exists, !cell.frame.isEmpty { return cell.frame }
+        if cell.exists, !cell.frame.isEmpty { return .row(cell.frame) }
         return nil
     }
 
-    private func probeBand(for frame: CGRect, slot: Slot) -> CGRect {
-        switch slot {
-        case .leading:
+    private func probeBand(for box: TitleBox, slot: Slot) -> CGRect {
+        switch (box, slot) {
+        case (.text(let rect), .leading):
             // Immediately left of the title: the leading icon slot. 34 pt
-            // clears an SF glyph's 17 pt box plus the 8–12 pt gap menus use.
-            return CGRect(x: frame.minX - 34, y: frame.midY - 12, width: 32, height: 24)
-        case .above:
+            // clears an 18 pt glyph box plus the 8–12 pt gap menus use.
+            return CGRect(x: rect.minX - 34, y: rect.midY - 12, width: 32, height: 24)
+        case (.row(let rect), .leading):
+            // Inside the row's leading edge, where a menu's icon column sits.
+            return CGRect(x: rect.minX + 4, y: rect.midY - 13, width: 36, height: 26)
+        case (.text(let rect), .above):
             // Stacked layout: the icon lives over the title, centred.
-            return CGRect(x: frame.midX - 22, y: frame.minY - 28, width: 44, height: 26)
+            return CGRect(x: rect.midX - 22, y: rect.minY - 28, width: 44, height: 26)
+        case (.row(let rect), .above):
+            // Swipe actions: icon over title inside one button.
+            return CGRect(x: rect.minX + 4, y: rect.minY + 2, width: max(8, rect.width - 8), height: max(8, rect.height / 2 - 2))
         }
     }
 
@@ -382,10 +414,12 @@ final class MenuChromeTests: XCTestCase {
         add(attachment)
     }
 
-    private func write(_ data: Data?, to name: String) {
-        guard let data else { return }
-        let url = Self.outputDir.appendingPathComponent(name)
-        try? data.write(to: url)
+    /// Attachment named for the file the workflow's exporter expects.
+    private func attach(_ shot: XCUIScreenshot, name: String) {
+        let attachment = XCTAttachment(screenshot: shot)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     private func finish(app: XCUIApplication) throws {
@@ -395,7 +429,10 @@ final class MenuChromeTests: XCTestCase {
             "failures": failures,
         ]
         if let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]) {
-            write(data, to: "report.json")
+            let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+            attachment.name = "report"
+            attachment.lifetime = .keepAlways
+            add(attachment)
         }
         attachTree(app)
     }
