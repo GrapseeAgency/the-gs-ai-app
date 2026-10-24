@@ -1078,32 +1078,25 @@ fun DiscoverScreen(
                         .fillMaxWidth()
                         .exploreGlass(shape = RoundedCornerShape(24.dp), elevation = 14.dp),
                 ) {
-                    Box(Modifier.matchParentSize()) {
-                        Box(
-                            Modifier
-                                .align(Alignment.CenterEnd)
-                                .fillMaxHeight()
-                                .width(200.dp),
-                        ) {
-                            Image(
-                                painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_hero),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.matchParentSize(),
-                            )
-                        }
-                        Box(
-                            Modifier
-                                .matchParentSize()
-                                .background(
-                                    Brush.horizontalGradient(
-                                        0f to Color(0xFFFDF1EC).copy(alpha = 0.94f),
-                                        0.45f to Color(0xFFFDF1EC).copy(alpha = 0.22f),
-                                        1f to Color.Transparent,
-                                    ),
+                    // Same de-seamed artwork: full-card bleed, no frame edge.
+                    Image(
+                        painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_hero),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        alignment = Alignment.TopEnd,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                    Box(
+                        Modifier
+                            .matchParentSize()
+                            .background(
+                                Brush.horizontalGradient(
+                                    0f to Color(0xFFFDF1EC).copy(alpha = 0.55f),
+                                    0.5f to Color.Transparent,
+                                    1f to Color.Transparent,
                                 ),
-                        )
-                    }
+                            ),
+                    )
                     Column(Modifier.padding(13.dp)) {
                         Text(
                             "EXPLORE",
@@ -1198,14 +1191,17 @@ fun DiscoverScreen(
                                                 spotColor = Color(0x59EB9E72),
                                             )
                                             .background(
-                                                Brush.horizontalGradient(listOf(ExploreTones.Peach, ExploreTones.PeachDeep)),
+                                                Brush.verticalGradient(
+                                                    0f to Color(0xFFFFCDA2),
+                                                    1f to ExploreTones.Peach,
+                                                ),
                                                 RoundedCornerShape(15.dp),
                                             )
                                             .border(
-                                                1.dp,
+                                                1.2.dp,
                                                 Brush.verticalGradient(
-                                                    0f to Color.White.copy(alpha = 0.85f),
-                                                    1f to Color.White.copy(alpha = 0.30f),
+                                                    0f to Color.White.copy(alpha = 0.95f),
+                                                    1f to Color.White.copy(alpha = 0.45f),
                                                 ),
                                                 RoundedCornerShape(15.dp),
                                             )
@@ -1231,7 +1227,11 @@ fun DiscoverScreen(
                 // FEATURED TOOLS — the reference's vertical cards
                 SectionHeader("Featured Tools", inkHeader, inkMuted)
                 Spacer(Modifier.height(10.dp))
-                val visible = ExploreCatalog.byCategory(category)
+                // The reference's Featured Tools are exactly these four;
+                // the chips filter within them.
+                val visible = ExploreCatalog.tools.filter {
+                    it.id in setOf("image-studio", "voice-assistant", "writing-assistant", "code-assistant")
+                }.filter { category == ExploreCategory.All || it.category == category }
                 visible.chunked(2).forEach { rowTools ->
                     Row(
                         Modifier.fillMaxWidth(),

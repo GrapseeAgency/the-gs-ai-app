@@ -105,15 +105,7 @@ enum ExploreCatalog {
             glyph: "file-description", bg: ExplorePalette.blueBg, fg: ExplorePalette.blueFg,
             category: .learning,
             prompt: "Summarize documents for me. I'll paste or attach one; give a five-bullet summary, the key numbers, and three questions I should ask about it."
-        ),
-        ExploreTool(
-            id: "meal-planner", title: "Weekly meal planner",
-            subtitle: "Eat well without the guesswork",
-            glyph: "salad", bg: ExplorePalette.greenBg, fg: ExplorePalette.greenFg,
-            category: .lifestyle,
-            prompt: "Be my meal planner. Ask dietary needs and cooking time per day, then write a seven-day plan with one shared grocery list."
-        ),
-    ]
+        ),    ]
 
     struct Collection: Identifiable, Hashable {
         let id = UUID()
@@ -498,18 +490,18 @@ struct ExploreView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(maxWidth: .infinity)
         .modifier(ExploreGlass(corner: 24, elevation: 14))
+        // The artwork bleeds across the whole card — no frame edge, no seam.
         .overlay(alignment: .trailing) {
             Image("GSExploreHero")
                 .resizable()
                 .scaledToFill()
-                .frame(maxWidth: 216)
-                .frame(maxHeight: .infinity, alignment: .topTrailing)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 .clipped()
                 .overlay(
                     LinearGradient(
                         stops: [
-                            .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.94), location: 0),
-                            .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.22), location: 0.45),
+                            .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.55), location: 0),
+                            .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.0), location: 0.5),
                             .init(color: .clear, location: 1),
                         ],
                         startPoint: .leading, endPoint: .trailing
@@ -924,14 +916,13 @@ struct DiscoverView: View {
             Image("GSExploreHero")
                 .resizable()
                 .scaledToFill()
-                .frame(maxWidth: 200)
-                .frame(maxHeight: .infinity, alignment: .topTrailing)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 .clipped()
                 .overlay(
                     LinearGradient(
                         stops: [
-                            .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.94), location: 0),
-                            .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.22), location: 0.45),
+                            .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.55), location: 0),
+                            .init(color: Color(red: 0.992, green: 0.945, blue: 0.925).opacity(0.0), location: 0.5),
                             .init(color: .clear, location: 1),
                         ],
                         startPoint: .leading, endPoint: .trailing
@@ -957,8 +948,8 @@ struct DiscoverView: View {
                             .background(
                                 Group {
                                     if active {
-                                        Capsule().fill(LinearGradient(colors: [ExplorePalette.peach, ExplorePalette.peachDeep], startPoint: .leading, endPoint: .trailing))
-                                            .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.85), .white.opacity(0.30)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                                        Capsule().fill(LinearGradient(colors: [Color(red: 1.0, green: 0.804, blue: 0.635), ExplorePalette.peach], startPoint: .top, endPoint: .bottom))
+                                            .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.95), .white.opacity(0.45)], startPoint: .top, endPoint: .bottom), lineWidth: 1.2))
                                             .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 8, x: 0, y: 4)
                                     } else {
                                         Capsule().fill(Color.white.opacity(0.88))
@@ -977,7 +968,9 @@ struct DiscoverView: View {
     private var toolsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             ExploreSectionHeader(title: "Featured Tools")
-            let tools = ExploreCatalog.byCategory(category)
+            let tools = ExploreCatalog.tools.filter {
+                ["image-studio", "voice-assistant", "writing-assistant", "code-assistant"].contains($0.id)
+            }.filter { category == .all || $0.category == category }
             ForEach(0..<tools.count, id: \.self) { i in
                 if i % 2 == 0, i < tools.count {
                     HStack(alignment: .top, spacing: 10) {

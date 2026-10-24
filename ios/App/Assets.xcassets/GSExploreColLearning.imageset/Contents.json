@@ -1,9 +1,12 @@
 {
-  "images" : [
+  "images": [
     {
-      "filename" : "gs-explore-col-learning",
-      "idiom" : "universal"
+      "filename": "gs-explore-col-learning.png",
+      "idiom": "universal"
     }
   ],
-  "info" : { "author" : "xcode", "version" : 1 }
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
 }
