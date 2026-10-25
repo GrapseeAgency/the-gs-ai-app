@@ -443,3 +443,40 @@ not that the answer's text was checked. The follow-up filter
 "Today"/"Yesterday", "d MMM yyyy", "yyyy-MM-dd" — before choosing the reply,
 and a red run now prints every label the query saw. The assertions themselves
 are unchanged and now apply to the assistant's words.
+
+### The repaired state (final)
+
+The fix series on main is `fce2dff4` (both root causes) → `8a6969d8`
+(streaming-safe reply wait) → `3111741e` (reply is the last staticText
+that is not transcript chrome). The final commit's green:
+
+- **ios-native run 40181545717** on `3111741e` — all three jobs success;
+  both tests passed:
+  `GsChatUiTests.testSendHelloRendersARealAssistantReply` (168.472 s) and
+  `MenuChromeTests.testEveryMenuPutsItsGlyphInTheLeadingSlot` (124.102 s),
+  with the honest diagnostics this work added:
+  `GsChatUiTests: reply bubble = hello! how can i assist you today?`
+  (the model's real answer, not the canned prefix, not the prompt echo,
+  not a timestamp) and
+  `chat-header-menu/Chat options ink=193 h=3.3 w=13.3 inset=33.3
+  band=60x26` (the true unclipped glyph on iOS 26.4's column position).
+- **ios.yml** green on `ba22f169` (run 40183665282) and `d8b37ec9`
+  (run 40181847570), both of which contain `3111741e` unchanged.
+- **android-app.yml** green on `590d3b7b` (run 40183769705) and
+  `d8b37ec9` (run 40181861869), same ancestry.
+
+One dispatch on the final commit — run **40181550214**, dispatched five
+seconds after 40181545717 and executed after it on the same commit —
+failed in "Run the XCTests" (xcodebuild exit 65). Its cause is UNREAD at
+the time of writing: artifact download requires credentials the session
+lost (the GitHub token lived only in git's credential-cache daemon, which
+a diagnostic `git credential-cache--exit` destroyed). Run C proves the
+same commit green end-to-end; run D's failure is undiagnosed and must not
+be waved off as a flake. The first thing to check when its
+`ios-simulator-logs` artifact is reachable: whether `MenuChromeTests`
+tripped the `inset > 34` leading-slot bound — run 40176354400 measured
+`Pin to top` at inset exactly `34.0`, and iOS 26.4's icon column sits at
+32.3–34.0, so a 0.05 pt draw variance crosses a bound calibrated for iOS
+26.2's 27.7–30.0 column. If that is the cause, the bound — whose comment
+says it exists to catch an icon "parked mid-row" — should move to ~45 pt
+(title text starts ~61 pt in), not the assertion.
