@@ -80,26 +80,10 @@ struct AeroDrawer: View {
     /// re-tinted to move the gate's body number — it already matches the picture.
     private var panelSurface: some View {
         ZStack {
+            // Opaque ground: the panel must never show Home's bento cards
+            // through it, which is the structure DR3's HF ceiling forbids.
             Aero.navSurface
-            // In dark the wash is a 4% white lift over the dark nav surface. The
-            // first version painted the LIGHT cream at 85% in both appearances, so
-            // the dark capture measured 206 L — a light panel behind a dark page.
-            LinearGradient(
-                colors: scheme == .dark
-                    ? [Color.white.opacity(0.06), .clear]
-                    : [Color(red: 1.0, green: 0.94, blue: 0.90),
-                       Color(red: 0.98, green: 0.92, blue: 0.89)],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            ).opacity(scheme == .dark ? 0.9 : 0.85)
-            // The bloom the glass is seen through. Over the fill, not under it:
-            // light scattered inside the glass arrives at the eye last, which is
-            // the order Android paints its veil in.
-            DrawerPanelBloom(dark: scheme == .dark)
-            LinearGradient(
-                colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.16), .clear],
-                startPoint: .topLeading,
-                endPoint: .center
-            )
+            DrawerPanelSurface(dark: scheme == .dark)
         }
     }
 
@@ -671,8 +655,8 @@ struct AeroDrawer: View {
     }
 }
 
-/// The bloom inside the panel: the soft light field the sheet carries under the
-/// cream, painted instead of composited.
+/// The panel's surface, painted in ONE `Canvas`: the cream body, the bloom the
+/// glass is seen through, and the sheet's warm wash.
 ///
 /// The sheet's panel interior is a low-frequency field — p90 derivative 1.0 L,
 /// no card-shaped steps, 236 L at the leading margin rising to 246 L where the
@@ -683,46 +667,78 @@ struct AeroDrawer: View {
 /// the reference has no card edges in it). Android paints the same field from
 /// radial gradients for the same reason.
 ///
-/// Amplitudes are deliberately small — each stop is a 2–3 L lift over the 240 L
+/// ONE `Canvas`, not four stacked SwiftUI gradients, because STACKED GRADIENTS
+/// ARE WHAT THE GATE MEASURES. SwiftUI dithers every gradient layer separately
+/// to stop banding, and the dither does not cancel: three stacked radians took
+/// the panel's blank margin from HF p90 2.72 L to 5.07 L (run 40201896377) —
+/// over DR3's 3.0 L ceiling, i.e. the bloom scored as the ghosting the ceiling
+/// exists to catch. The surface is one Core Graphics pass now, so the field
+/// costs no layer and the fill's own dither has nothing to add to.
+///
+/// Amplitudes are deliberately small — each glow is a 2–3 L lift over the 240 L
 /// body, which is what the sheet's own low-pass shows in this band. A stronger
 /// wash would read as a spotlight rather than as light in glass. In dark the
-/// whole field is scaled to 12% because the sheet has no dark frame and a warm
-/// wash at full strength turns the panel brown.
-private struct DrawerPanelBloom: View {
+/// field is scaled to 12% because the sheet has no dark frame and a warm wash
+/// at full strength turns the panel brown; the fill there is the 4% white lift
+/// this surface has always carried over the dark nav ground.
+private struct DrawerPanelSurface: View {
     let dark: Bool
 
     var body: some View {
-        GeometryReader { geo in
-            let w = max(geo.size.width, 1)
-            let strength = dark ? 0.12 : 1.0
-            ZStack {
-                // The warm light behind the header — the sheet's brightest
-                // part of the field, and the reason its R−B reads +23 there.
-                RadialGradient(
-                    colors: [Color(red: 1.0, green: 0.955, blue: 0.90)
-                                .opacity(0.55 * strength), .clear],
-                    center: UnitPoint(x: 0.02, y: 0.0),
-                    startRadius: 0,
-                    endRadius: w * 1.05
-                )
+        Canvas { ctx, size in
+            let w = size.width
+            let h = size.height
+            let s = dark ? 0.12 : 1.0
+            let field = Path(CGRect(origin: .zero, size: size))
+
+            // 1. The frosted cream, 85% over the ground in light — the layer
+            //    that renders (250.7, 238.6, 229.1) against the sheet's
+            //    (251.0, 237.2, 232.0). Dark is the 4% white lift instead: the
+            //    first version painted the LIGHT cream in both appearances, so
+            //    the dark capture measured 206 L — a light panel behind a dark
+            //    page.
+            let cream = dark
+                ? [Color.white.opacity(0.054), Color.white.opacity(0)]
+                : [Color(red: 1.0, green: 0.94, blue: 0.90).opacity(0.85),
+                   Color(red: 0.98, green: 0.92, blue: 0.89).opacity(0.85)]
+            ctx.fill(field, with: .linearGradient(
+                Gradient(colors: cream),
+                startPoint: .zero,
+                endPoint: CGPoint(x: w, y: h)))
+
+            // 2. The bloom. x and radius are fractions of the panel's width, y
+            //    of its height; one radial per row, in painterly order.
+            let glows: [(r: Double, g: Double, b: Double, a: Double,
+                         x: Double, y: Double, radius: Double)] = [
+                // The warm light behind the header — the sheet's brightest part
+                // of the field, and the reason its R−B reads +23 there.
+                (1.0, 0.955, 0.90, 0.55, 0.02, 0.0, 1.05),
                 // The blush down the leading edge.
-                RadialGradient(
-                    colors: [Color(red: 1.0, green: 0.93, blue: 0.93)
-                                .opacity(0.28 * strength), .clear],
-                    center: UnitPoint(x: 0.0, y: 0.42),
-                    startRadius: 0,
-                    endRadius: w * 0.85
-                )
+                (1.0, 0.93, 0.93, 0.28, 0.00, 0.42, 0.85),
                 // Cool light under the footer: the sheet's field is a degree
                 // cooler at the bottom than at the top.
-                RadialGradient(
-                    colors: [Color(red: 0.965, green: 0.955, blue: 0.95)
-                                .opacity(0.30 * strength), .clear],
-                    center: UnitPoint(x: 0.45, y: 1.0),
+                (0.965, 0.955, 0.95, 0.30, 0.45, 1.0, 0.95),
+            ]
+            for glow in glows {
+                let colour = Color(red: glow.r, green: glow.g, blue: glow.b)
+                ctx.fill(field, with: .radialGradient(
+                    Gradient(stops: [
+                        .init(color: colour.opacity(glow.a * s), location: 0),
+                        .init(color: colour.opacity(0), location: 1),
+                    ]),
+                    center: CGPoint(x: w * glow.x, y: h * glow.y),
                     startRadius: 0,
-                    endRadius: w * 0.95
-                )
+                    endRadius: w * glow.radius))
             }
+
+            // 3. The sheet's warm wash, top-leading to the centre — the layer
+            //    the panel carried before this pass, in the same place and the
+            //    same alpha, so the peach at the header does not move.
+            ctx.fill(field, with: .linearGradient(
+                Gradient(colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.16),
+                                  .clear]),
+                startPoint: .zero,
+                endPoint: CGPoint(x: w * 0.5, y: h * 0.5)))
         }
         .allowsHitTesting(false)
     }
