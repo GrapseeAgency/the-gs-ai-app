@@ -112,6 +112,9 @@ CTA_PERCENTILE = 90
 # EDGE rather than from a hard-coded y — which is what lets the same table hold
 # both platforms, whose safe-area handling puts the same card a few points apart.
 SCREENS = {
+    # The hub's second group card. `card_dy` sits low in it on purpose: there the
+    # backdrop is ~10 L brighter than the glass token, which is where the
+    # residual can SEE the fill (sensitivity 4.4 / 3.2 L).
     "hub": {
         "about": "the Personalization group card",
         "rim_y": 339.0,
@@ -120,8 +123,9 @@ SCREENS = {
         "card_dx": (26.0, 368.0),
         "card_dy": (91.0, 181.0),
         "cta_dx": (250.0, 355.0),
-        "cta_dy": (-124.0, -54.0),
+        "cta_dy": (-124.0, -54.0),   # the Upgrade pill, one card up
     },
+    # The Profile card's last row, same reason (ground 244.5, sensitivity 4.2 L).
     "profile": {
         "about": "the Profile group card",
         "rim_y": 250.0,
@@ -129,9 +133,11 @@ SCREENS = {
         "rim_span_x": (70.0, 330.0),
         "card_dx": (26.0, 368.0),
         "card_dy": (180.0, 216.0),
-        "cta_dx": None,
+        "cta_dx": None,              # this mock paints no peach pill
         "cta_dy": None,
     },
+    # Memory's Manage Memory card. Its ground meets the fill (238 L vs 235.2), so
+    # the residual is not identifiable here and the rim and the pill carry it.
     "memory": {
         "about": "the Manage Memory group card",
         "rim_y": 501.0,
@@ -140,7 +146,7 @@ SCREENS = {
         "card_dx": (26.0, 368.0),
         "card_dy": (5.0, 199.0),
         "cta_dx": (215.0, 320.0),
-        "cta_dy": (-343.0, -305.0),
+        "cta_dy": (-343.0, -305.0),  # the "Manage →" pill, in the hero card
     },
 }
 
