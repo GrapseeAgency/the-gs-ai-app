@@ -162,6 +162,13 @@ MANIFEST = [
         "authored mock (docs/reference/explore), carry the hero card's right "
         "side. Fixed 233x190 dp frame inside fixed-width cards; need is the "
         "3x draw; the target is the reference crop rescaled inside the declared tolerance."),
+    Art("gs_discover_hero", "GSDiscoverHero", "explore/gs-discover-hero.png",
+        (298, 172), (1083, 450), 3.7, "discover",
+        "The Discover reference's own bubble cluster (purple bloom over the "
+        "orange sphere), cropped from the committed mock crop inside the card "
+        "rims. The hero bleeds the full card, so need is the 3x card; the "
+        "source is the mock's own pixels at 1.48 px/pt, and the 3.7x draw of a "
+        "soft-focus bubble crop invents no detail — declared, not accidental."),
     Art("gs_explore_col_design", "GSExploreColDesign", "explore/gs-explore-col-design.png",
         (212, 108), (504, 258), 2.4, "explore",
         "Collection scene (Design & Visuals): the reference's lotus band, "

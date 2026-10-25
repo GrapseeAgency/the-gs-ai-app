@@ -233,6 +233,12 @@ enum ExplorePalette {
     static let peachPale = Color(red: 0.996, green: 0.875, blue: 0.773)
     static let ctaTop = Color(red: 1.0, green: 0.914, blue: 0.863)
     static let ctaBottom = Color(red: 0.996, green: 0.827, blue: 0.753)
+    /// The mocks' hero CTAs are FLAT fills, not the ctaTop→ctaBottom gradient:
+    /// Explore's "Explore All" measures #FEE7E0 across its whole width,
+    /// Discover's "Start Exploring" a paler pearl #FEF4E6 (column medians of
+    /// the committed crops, 2026-10-25).
+    static let ctaPink = Color(red: 0.996, green: 0.906, blue: 0.878)
+    static let ctaPearl = Color(red: 0.996, green: 0.957, blue: 0.902)
 
     static let discoverBg = Color(red: 0.984, green: 0.902, blue: 0.961)
     static let discoverInk = Color(red: 0.753, green: 0.267, blue: 0.494)
@@ -657,7 +663,7 @@ struct ExploreView: View {
                 }
                 .padding(.horizontal, 13)
                 .padding(.vertical, 7)
-                .background(Capsule().fill(LinearGradient(colors: [ExplorePalette.ctaTop, ExplorePalette.ctaBottom], startPoint: .leading, endPoint: .trailing)))
+                .background(Capsule().fill(ExplorePalette.ctaPink))
                     .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
                         .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 9, x: 0, y: 5)
             }
@@ -1096,7 +1102,7 @@ struct DiscoverView: View {
                 }
                 .padding(.horizontal, 13)
                 .padding(.vertical, 7)
-                .background(Capsule().fill(LinearGradient(colors: [ExplorePalette.ctaTop, ExplorePalette.ctaBottom], startPoint: .leading, endPoint: .trailing)))
+                .background(Capsule().fill(ExplorePalette.ctaPearl))
                     .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
                         .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 9, x: 0, y: 5)
             }
@@ -1107,7 +1113,9 @@ struct DiscoverView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .modifier(ExploreGlass(corner: 24, elevation: 14))
         .background(alignment: .topTrailing) {
-            Image("GSExploreHero")
+            // The Discover mock's own bubble cluster — purple bloom over the
+            // orange sphere, cropped from the committed reference.
+            Image("GSDiscoverHero")
                 .resizable()
                 .scaledToFill()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)

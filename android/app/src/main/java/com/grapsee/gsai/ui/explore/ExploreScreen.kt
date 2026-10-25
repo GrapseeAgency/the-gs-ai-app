@@ -119,6 +119,11 @@ object ExploreTones {
     val PeachPale = Color(0xFFFEDFC5)
     val CtaTop = Color(0xFFFFE9DC)
     val CtaBottom = Color(0xFFFED3C0)
+    // The mocks' hero CTAs are FLAT fills, not the CtaTop→CtaBottom gradient:
+    // Explore's "Explore All" measures #FEE7E0, Discover's "Start Exploring"
+    // a paler pearl #FEF4E6 (column medians of the committed crops).
+    val CtaPink = Color(0xFFFEE7E0)
+    val CtaPearl = Color(0xFFFEF4E6)
 
     val DiscoverBg = Color(0xFFFBE6F5)
     val DiscoverInk = Color(0xFFC0447E)
@@ -925,7 +930,7 @@ fun ExploreScreen(
                                     spotColor = Color(0x59EB9E72),
                                 )
                                 .background(
-                                    Brush.horizontalGradient(listOf(ExploreTones.CtaTop, ExploreTones.CtaBottom)),
+                                    ExploreTones.CtaPink,
                                     RoundedCornerShape(16.dp),
                                 )
                                 .border(
@@ -1367,9 +1372,11 @@ fun DiscoverScreen(
                         .fillMaxWidth()
                         .exploreGlass(shape = RoundedCornerShape(24.dp), elevation = 14.dp),
                 ) {
-                    // Same de-seamed artwork: full-card bleed, no frame edge.
+                    // The Discover mock's own bubble cluster — purple bloom
+                    // over the orange sphere, cropped from the committed
+                    // reference. Full-card bleed, same de-seaming as Explore.
                     Image(
-                        painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_hero),
+                        painter = painterResource(com.grapsee.gsai.R.drawable.gs_discover_hero),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         alignment = Alignment.TopEnd,
@@ -1423,7 +1430,7 @@ fun DiscoverScreen(
                                     spotColor = Color(0x59EB9E72),
                                 )
                                 .background(
-                                    Brush.horizontalGradient(listOf(ExploreTones.CtaTop, ExploreTones.CtaBottom)),
+                                    ExploreTones.CtaPearl,
                                     RoundedCornerShape(16.dp),
                                 )
                                 .border(
