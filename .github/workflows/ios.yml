@@ -551,7 +551,7 @@ jobs:
           # re-runs the gate's non-vacuity doctoring on the same capture.
           python3 scripts/check_explore_render.py \
             --render ios/build/nexly-renders/nexly-explore-ios-393x852.png \
-            --label ios-393
+            --platform ios --label ios-393
           python3 scripts/check_explore_render.py \
             --render ios/build/nexly-renders/nexly-explore-ios-393x852.png \
             --self-test

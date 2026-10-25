@@ -68,7 +68,13 @@ BYTES_PER_PIXEL = 4    # ARGB_8888 on Android, and RGBA8 for a CGContext draw on
 HOME_BUDGET_MB = 9.0
 # Everything this manifest accounts for, per platform, at 3x. Screens that draw
 # more than one orb at a time would need this raised with a reason.
-ALL_BUDGET_MB = 14.0
+# Raised 14.0 -> 16.0 (2026-10-25): the Explore/Discover parity work added the
+# collection/kyoto/discover-hero art, and when the scanner learned to see the
+# catalog-referenced names (Image(journey.art) is not a literal), the honest
+# iOS total sat ON the old ceiling — a blocking gate with 0.0 MB of slack is a
+# coin flip, not a budget. 16.0 carries the real load plus ~2 MB of headroom;
+# the number that moved is this comment's responsibility.
+ALL_BUDGET_MB = 16.0
 
 # Dead art that predates this script, named so it cannot grow. Unreferenced
 # drawables are stripped from the release APK by `isShrinkResources = true`, so
@@ -222,7 +228,12 @@ def source_names() -> tuple[set[str], set[str]]:
                     android.add(token)
     for p in IOS_SRC.rglob("*.swift"):
         t = p.read_text(encoding="utf-8", errors="ignore")
-        for marker in ('Image("', 'imageName: "'):
+        # 'art: "' is the FeaturedJourney catalog field that carries an
+        # imageset name. The carousel draws Image(journey.art), so a literal
+        # Image("…") no longer names GSExploreKyoto — without this marker the
+        # scanner drops it from used_ios and its decoded cost vanishes from
+        # the budget total, under-counting the very accounting Home relies on.
+        for marker in ('Image("', 'imageName: "', 'art: "'):
             for chunk in t.split(marker)[1:]:
                 token = chunk.split('"')[0]
                 if token:

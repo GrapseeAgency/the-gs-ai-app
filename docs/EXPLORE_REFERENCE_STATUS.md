@@ -101,3 +101,9 @@ of the rim band — floor 249.5, not the page level):
   platforms (gradient + pearls fallback); ExploreGlass carries Android's
   0.85/0.74 dark alphas on iOS too; the dock pill keeps its fixed
   deep-brown ink in either scheme, per Home's Generate pill.
+- **`discoverFeatured` is a deliberate fork** of the shared catalog, not a
+  duplicate to be merged: the two mocks give the same concepts different
+  copy, icons and tones (Explore's Image Studio is "Create stunning images
+  with AI" with the photo glyph; Discover's is "Turn ideas into stunning
+  visuals with AI." with sparkles). Search and Popular rows still read
+  `tools`; a copy edit to a shared concept must decide which mock owns it.

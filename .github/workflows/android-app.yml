@@ -75,6 +75,8 @@ on:
       - 'native/cpp/**'
       - 'native/crates/**'
       - 'scripts/check_home_render.py'
+      - 'scripts/check_explore_render.py'
+      - 'shared-contracts/explore-geometry.json'
       # The adversarial suite and the artwork manifest are part of the gate's
       # evidence, so a commit to either has to run the job that uses them.
       - 'scripts/test_home_render_gate.py'
@@ -659,14 +661,18 @@ jobs:
           # while the dock never painted. This blocks on the capsule hairline
           # and the lit pill's saturation, measured off the CI render itself.
           # Runs from the repo root; the gradle render step set its own cwd.
+          # This step is if: always(), so prove the artifact exists first: a
+          # missing PNG is a clear named error, not the script's opaque exit 2
+          # masquerading as a measurement.
+          PNG=android/app/build/screenshots/nexly-explore-393x852.png
+          test -s "$PNG" \
+            || { echo "::error::$PNG was not produced — nothing to measure"; exit 1; }
           python3 scripts/check_explore_render.py \
-            --render android/app/build/screenshots/nexly-explore-393x852.png \
-            --label android-393
+            --render "$PNG" --platform android --label android-393
           # The gate's own non-vacuity: doctor the pill and the rim out, and
           # both probes must go red on the doctored copy.
           python3 scripts/check_explore_render.py \
-            --render android/app/build/screenshots/nexly-explore-393x852.png \
-            --self-test
+            --render "$PNG" --self-test
 
       - name: Upload the Nexly Explore renders
         if: always()

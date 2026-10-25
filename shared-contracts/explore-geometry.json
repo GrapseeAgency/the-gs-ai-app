@@ -23,9 +23,18 @@
         "saturation": [55.0, 140.0],
         "luma": [135.0, 205.0]
       },
+      "bands_android": {
+        "saturation": [85.0, 130.0],
+        "luma": [140.0, 190.0]
+      },
+      "bands_ios": {
+        "saturation": [60.0, 105.0],
+        "luma": [135.0, 185.0]
+      },
+      "_bands_note": "The shared band is a fallback; --platform selects the per-side band. Android's pill reads a hotter peach (sat 109) than iOS (sat 79) because the two gradients differ in stops — one wide band would have to span 79..109 and could not fail on a real desaturation. Tight per-platform bands can.",
       "_measured": {
-        "android": {"saturation": 109.1, "luma": 164.66},
-        "ios": {"saturation": 79.2, "luma": 161.69},
+        "android": {"saturation": 109.14, "luma": 164.66},
+        "ios": {"saturation": 79.16, "luma": 161.69},
         "reference_crop": {"saturation": 60.9, "luma": 209.8, "note": "the mock window includes label ink; anchors presence only"}
       }
     }

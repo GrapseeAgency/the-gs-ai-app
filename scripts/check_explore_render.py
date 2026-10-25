@@ -74,24 +74,30 @@ def pill_fill(a, probe):
     return luma, sat
 
 
-def measure(path, geo):
+def measure(path, geo, platform=None):
     a = load_rgb(path)
     rows = []
     probes = geo["probes"]
 
+    def bands_for(probe):
+        # Per-platform bands where the two captures legitimately differ (the
+        # drawer/home gates do the same); shared "bands" otherwise.
+        return probe.get(f"bands_{platform}", probe["bands"]) if platform else probe["bands"]
+
     hp = probes["dock"]
     hl, hy, (lo, hi) = hairline(a, hp)
-    band = hp["bands"]["hairline"]
+    band = bands_for(hp)["hairline"]
     ok = band[0] <= hl <= band[1]
     rows.append(("dock", "hairline", hl, band, ok,
                  f"edge row {hy} (window {lo}..{hi})"))
 
     pp = probes["dock-pill"]
     luma, sat = pill_fill(a, pp)
-    ok_l = pp["bands"]["luma"][0] <= luma <= pp["bands"]["luma"][1]
-    ok_s = pp["bands"]["saturation"][0] <= sat <= pp["bands"]["saturation"][1]
-    rows.append(("dock-pill", "luma", luma, pp["bands"]["luma"], ok_l, ""))
-    rows.append(("dock-pill", "saturation", sat, pp["bands"]["saturation"], ok_s, ""))
+    pb = bands_for(pp)
+    ok_l = pb["luma"][0] <= luma <= pb["luma"][1]
+    ok_s = pb["saturation"][0] <= sat <= pb["saturation"][1]
+    rows.append(("dock-pill", "luma", luma, pb["luma"], ok_l, ""))
+    rows.append(("dock-pill", "saturation", sat, pb["saturation"], ok_s, ""))
 
     return rows
 
@@ -108,13 +114,17 @@ def doctor_self_test(path, geo):
     iy0, iy1 = int(y * h), int((y + bh) * h)
     m = doctored[iy0:iy1, ix0:ix1]
     doctored[iy0:iy1, ix0:ix1] = np.repeat(m.mean(axis=2, keepdims=True), 3, axis=2)
-    # 2. dock capsule -> no capsule: paint a band wide enough to bury the
-    #    rim's full hairline (the first pass painted yc-2..yc+3 and the row
-    #    just above survived — the self-test exists to catch exactly that)
+    # 2. dock capsule -> no capsule: bury EVERY row the probe's search window
+    #    can reach. Painting a narrower band than rim_search means a render
+    #    whose rim legitimately drifted 9-24 px would still show a bright row
+    #    in the doctored copy, and the self-test would scream "the gate
+    #    cannot fail" at a render that is fine — the review caught the first
+    #    version painting only +/- 8 while the probe searched +/- 24.
     hp = geo["probes"]["dock"]
     yc = int(hp["rim_y"] * h)
     x0, x1 = [int(f * w) for f in hp["rim_span_x"]]
-    doctored[yc - 8:yc + 8, x0:x1] = 236
+    rad = int(hp.get("rim_search", 8))
+    doctored[max(0, yc - rad):yc + rad, x0:x1] = 236
 
     rows_clean = measure(path, geo)
     fails_clean = [r for r in rows_clean if not r[4]]
@@ -144,6 +154,9 @@ def main() -> int:
     ap.add_argument("--render", required=True)
     ap.add_argument("--geometry", default=GEOMETRY)
     ap.add_argument("--label", default="explore")
+    ap.add_argument("--platform", choices=["android", "ios"],
+                    help="use the probe's per-platform band override where the "
+                         "two captures legitimately differ")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
 
@@ -153,7 +166,7 @@ def main() -> int:
     if args.self_test:
         return doctor_self_test(args.render, geo)
 
-    rows = measure(args.render, geo)
+    rows = measure(args.render, geo, args.platform)
     print(f"\n=== {args.label}: {args.render} ===")
     print(f"{'probe':<12}{'metric':<12}{'measured':>10}   {'band':<18} verdict")
     bad = 0
