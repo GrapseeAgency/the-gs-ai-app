@@ -5256,3 +5256,17 @@ Work Log:
 Stage Summary:
 - Server LIVE on latest origin/main (3b561c3): homepage 200, health ok, eval-monitor up, watchdog orphaned to PID 1.
 - BLOCKER for OpenRouter models: keypool empty — operator must re-paste the 35 sk-or-v1 keys, then: sed/awk dedupe | bun scripts/provision-keys.ts (writes all 3 layers).
+
+---
+
+Task ID: explore-parity
+Agent: Qoder (main)
+Task: Bring the Explore page to full parity with the user's production reference mock
+
+Work Log:
+- Audited the reference PNG pixel-first: rectified the phone screen (crop 186-836 x 18-1492 of the 1024x1536 mock) and committed it as docs/reference/explore/explore-home-reference.png + a probe-space sidecar JSON. The audit VOIDED two suspected gaps: the hero headline measures 16.3pt caps at 24.8pt pitch (the shipped 17.5pt is already right) and the Featured card has NO page dots — its only control is a glass bubble chevron near the card edge.
+- Real gaps, all fixed on both platforms: iOS Voice tile drew chart-bar where the catalog id (shared kebab with Android) says waveform — now GsIcons.audioWaveform via a shared exploreToolGlyph helper; iOS Popular-Tools video tile never passed the existing playGlyph plumbing; Creative Collections lost its See All; Featured was one static slide, now a 3-journey carousel (Kyoto + two journeys on already-shipping collection art — zero new rasters, prepare_home_art untouched); the reference's floating dock is a page-scoped ExploreDock overlay (ADR-008) on blur-free floatingControl glass, Home pop / Settings push, with scroll clearance and scroll-to-top on the lit pill.
+- iOS Collection ids + art keying now mirror Android's stable ids instead of subtitle string matching.
+
+Stage Summary:
+- Explore page reference parity landed commit-by-commit; CI renders are the review surface. Next: promote Explore from existence-gated to pixel-gated (explore probe set in check_home_render.py).

@@ -4,7 +4,8 @@ import SwiftUI
 //
 // EXPLORE (the mock with Popular Tools / Creative Collections / Featured):
 // the featured hero, the Popular Tools grid, Creative Collections and the
-// Featured journey card. No chips, no composer, no bottom navigation.
+// Featured journey card. No chips, no composer; the reference's floating
+// dock is ExploreDock — an overlay, not a navigation-graph rewrite.
 //
 // DISCOVER (the mock with the EXPLORE hero / category chips / composer):
 // the "Discover what you can do with Nexly" hero, category chips, Featured
@@ -419,6 +420,8 @@ private struct ExploreSectionHeader: View {
 struct ExploreView: View {
     let onOpenChat: (AeroRoute) -> Void
     let onOpenDiscover: () -> Void
+    let onOpenHome: () -> Void
+    let onOpenSettings: () -> Void
 
     @State private var query = ""
     @State private var searchOpen = false
@@ -427,10 +430,14 @@ struct ExploreView: View {
     init(
         onOpenChat: @escaping (AeroRoute) -> Void,
         onOpenDiscover: @escaping () -> Void = {},
+        onOpenHome: @escaping () -> Void = {},
+        onOpenSettings: @escaping () -> Void = {},
         initialSearchOpen: Bool = false
     ) {
         self.onOpenChat = onOpenChat
         self.onOpenDiscover = onOpenDiscover
+        self.onOpenHome = onOpenHome
+        self.onOpenSettings = onOpenSettings
         _searchOpen = State(initialValue: initialSearchOpen)
     }
 
@@ -441,26 +448,41 @@ struct ExploreView: View {
                 .scaledToFill()
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
-            VStack(spacing: 0) {
-                header
-                if searchOpen { searchField.transition(.opacity.combined(with: .move(edge: .top))) }
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if !query.trimmingCharacters(in: .whitespaces).isEmpty {
-                            resultsSection
-                        } else {
-                            heroCard
-                            ExploreSectionHeader(title: "Popular Tools", action: onOpenDiscover)
-                            toolsGrid
-                            ExploreSectionHeader(title: "Creative Collections", action: onOpenDiscover)
-                            collectionsSection
-                            ExploreSectionHeader(title: "Featured")
-                            featuredSection
+            ScrollViewReader { proxy in
+                VStack(spacing: 0) {
+                    header
+                    if searchOpen { searchField.transition(.opacity.combined(with: .move(edge: .top))) }
+                    ScrollView(showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                                resultsSection
+                            } else {
+                                heroCard
+                                ExploreSectionHeader(title: "Popular Tools", action: onOpenDiscover)
+                                toolsGrid
+                                ExploreSectionHeader(title: "Creative Collections", action: onOpenDiscover)
+                                collectionsSection
+                                ExploreSectionHeader(title: "Featured")
+                                featuredSection
+                            }
                         }
+                        .id("explore-top")
+                        .padding(.horizontal, 16)
+                        .padding(.top, 6)
+                        // clearance for the floating dock (height + margins)
+                        .padding(.bottom, 96)
                     }
+                }
+                .overlay(alignment: .bottom) {
+                    ExploreDock(
+                        onOpenHome: onOpenHome,
+                        onScrollToTop: {
+                            withAnimation { proxy.scrollTo("explore-top", anchor: .top) }
+                        },
+                        onOpenSettings: onOpenSettings
+                    )
                     .padding(.horizontal, 16)
-                    .padding(.top, 6)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, 8)
                 }
             }
         }

@@ -64,7 +64,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.ReferenceBackdrop
+import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsFonts
 import com.grapsee.gsai.ui.theme.GsTheme
@@ -77,7 +79,8 @@ import kotlin.math.min
  *
  * EXPLORE (the reference with Popular Tools / Creative Collections / Featured):
  * the featured hero, the Popular Tools grid, Creative Collections and the
- * Featured journey card. No chips, no composer, no bottom navigation.
+ * Featured journey carousel. No chips, no composer; the reference's floating
+ * dock is ExploreDock — an overlay, not a navigation-graph rewrite.
  *
  * DISCOVER (the reference with the EXPLORE hero / category chips / composer):
  * the "Discover what you can do with Nexly" hero, category chips, Featured
@@ -318,6 +321,7 @@ private fun ExplorePage(
     inkHeader: Color,
     inkBody: Color,
     inkMuted: Color,
+    bottomOverlay: @Composable () -> Unit = {},
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
     val isDark = LocalGsIsDark.current
@@ -338,6 +342,15 @@ private fun ExplorePage(
                 .statusBarsPadding(),
         ) {
             content()
+        }
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            bottomOverlay()
         }
     }
 }
@@ -394,6 +407,100 @@ private fun ExplorePageHeader(
                 tint = inkStrong,
                 modifier = Modifier.size(16.dp),
             )
+        }
+    }
+}
+
+/**
+ * The Explore page's floating dock — the reference mock's bottom bar: a
+ * glass capsule carrying Home, the lit Explore pill, and Settings.
+ *
+ * Overlay only. It does NOT rewrite the navigation contract: the drawer
+ * stays the app's section switcher, Home pops back, Settings is a plain
+ * push. The capsule wears the measured FloatingControl glass, which
+ * ships blur-free on purpose — the same law the Home dock obeys.
+ */
+@Composable
+private fun ExploreDock(
+    inkStrong: Color,
+    onOpenHome: () -> Unit,
+    onScrollToTop: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .gsGlass(GsGlassRole.FloatingControl, CircleShape)
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(46.dp)
+                .gsGlass(GsGlassRole.FloatingControl, CircleShape)
+                .clickable(role = Role.Button, onClickLabel = "Home") { onOpenHome() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(GsIcons.House, contentDescription = null, tint = inkStrong, modifier = Modifier.size(17.dp))
+        }
+        Spacer(Modifier.weight(1f))
+        // the mock's lit action: a peach capsule, compass seated in a white well
+        Row(
+            Modifier
+                .widthIn(max = 157.dp)
+                .height(46.dp)
+                .shadow(
+                    elevation = 8.dp,
+                    shape = CircleShape,
+                    ambientColor = Color(0x2EEDBEA4),
+                    spotColor = Color(0x4DE29C7C),
+                )
+                .background(
+                    Brush.horizontalGradient(listOf(ExploreTones.CtaTop, ExploreTones.Peach)),
+                    CircleShape,
+                )
+                .border(
+                    1.dp,
+                    Brush.verticalGradient(
+                        0f to Color.White.copy(alpha = 0.85f),
+                        1f to Color.White.copy(alpha = 0.35f),
+                    ),
+                    CircleShape,
+                )
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = "Explore, current tab. Scrolls to top",
+                ) { onScrollToTop() }
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .size(30.dp)
+                    .background(Color.White.copy(alpha = 0.55f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(GsIcons.Compass, contentDescription = null, tint = inkStrong, modifier = Modifier.size(15.dp))
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "Explore",
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GsFonts.Product,
+                color = inkStrong,
+                maxLines = 1,
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        Box(
+            Modifier
+                .size(46.dp)
+                .gsGlass(GsGlassRole.FloatingControl, CircleShape)
+                .clickable(role = Role.Button, onClickLabel = "Settings") { onOpenSettings() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(GsIcons.Settings, contentDescription = null, tint = inkStrong, modifier = Modifier.size(17.dp))
         }
     }
 }
@@ -608,6 +715,7 @@ fun ExploreScreen(
     onOpenChat: (prompt: String, autoSend: Boolean) -> Unit,
     onOpenDiscover: () -> Unit,
     onBack: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     /** Render-harness entry points: the real states, driven from outside. */
     initialSearchOpen: Boolean = false,
 ) {
@@ -621,8 +729,22 @@ fun ExploreScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var searchOpen by rememberSaveable { mutableStateOf(initialSearchOpen) }
     val scroll = rememberScrollState()
+    val scrollScope = rememberCoroutineScope()
 
-    ExplorePage(inkStrong, inkHeader, inkBody, inkMuted) {
+    ExplorePage(
+        inkStrong = inkStrong,
+        inkHeader = inkHeader,
+        inkBody = inkBody,
+        inkMuted = inkMuted,
+        bottomOverlay = {
+            ExploreDock(
+                inkStrong = inkStrong,
+                onOpenHome = onBack,
+                onScrollToTop = { scrollScope.launch { scroll.animateScrollTo(0) } },
+                onOpenSettings = onOpenSettings,
+            )
+        },
+    ) {
         ExplorePageHeader(
             inkStrong = inkStrong,
             inkMuted = inkMuted,
@@ -830,7 +952,8 @@ fun ExploreScreen(
                     onOpenChat(prompt, false)
                 }
             }
-            Spacer(Modifier.height(14.dp))
+            // clearance for the floating dock (height + margins)
+            Spacer(Modifier.height(96.dp))
         }
     }
 }

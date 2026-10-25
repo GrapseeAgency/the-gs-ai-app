@@ -278,6 +278,9 @@ fun GsNavHost(
                 },
                 onOpenDiscover = { open(GsRoutes.DISCOVER) },
                 onBack = back,
+                // the reference dock's Settings is the same push every
+                // other surface uses; its Home is the plain pop (onBack).
+                onOpenSettings = { open(GsRoutes.SETTINGS) },
             )
         }
         composable(GsRoutes.DISCOVER) {

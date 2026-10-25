@@ -43,3 +43,11 @@ ADR-style record of the decisions that shape this platform.
 **Decision:** Both platforms seed a shared visual language: layered surfaces, subtle tonal steps, deep-black/navy dark mode, serif display type for editorial voice, sans for UI, copper accent. Forbidden: cheap gradients, heavy glass, generic Material default.
 
 **Why:** Consistency across 100+ future screens starts with tokens, not screens.
+
+## ADR-008 — The Explore page's floating dock is a page-scoped overlay
+
+**Decision:** The Explore reference mock paints a bottom floating dock (Home / lit Explore pill / Settings). It ships as `ExploreDock` on both platforms — an overlay mounted inside the Explore page only. The drawer remains the app's section switcher and the navigation contract is untouched: Home pops the pushed path to the root, Settings is a plain push. The rest of the app still has no tab bar.
+
+**Why:** The user's production reference is the parity contract for this page, and the earlier frozen stance ("no tab bar anywhere", AppRouter comment) predated it. An overlay keeps the decision reversible — one file per platform — where a global tab-bar shell would have rewritten NavigationStack/NavHost and invalidated the pixel-gated Home dock in the same cycle.
+
+**Consequences:** `AppRouter.swift`'s section-roots comment, both page header comments, and this ADR record the exception together, so the stale-comment drift that once got Explore deleted as "fake padding" cannot repeat.

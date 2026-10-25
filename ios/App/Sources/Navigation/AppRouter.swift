@@ -31,7 +31,10 @@ enum AeroRoute: Hashable {
     case explore
     case discover
 
-    // Section roots — reached from the drawer (no tab bar anywhere)
+    // Section roots — reached from the drawer. The drawer stays the app's
+    // section switcher; the one exception is the Explore page's reference
+    // mock, which paints its own floating dock (ExploreDock) as a
+    // page-scoped overlay — Home pops this path, Settings pushes onto it.
     case chats
     case profile
     case billing
@@ -201,7 +204,14 @@ struct AeroDestinations: ViewModifier {
             case .chatArchive: ArchivedChatsView()
             case .chatSearch: ChatSearchView()
             case .travelAgent: TravelAgentView(onBack: { router.path.removeLast() }, onSendToChat: { prompt in router.path.append(.chatPrefill(prompt)) })
-            case .explore: ExploreView(onOpenChat: { router.path.append($0) }, onOpenDiscover: { router.path.append(.discover) })
+            case .explore: ExploreView(
+                onOpenChat: { router.path.append($0) },
+                onOpenDiscover: { router.path.append(.discover) },
+                // The dock's Home is a pop to the root surface; Settings is
+                // the same push every other surface uses.
+                onOpenHome: { router.path = [] },
+                onOpenSettings: { router.path.append(.settings) }
+            )
             case .discover: DiscoverView(onOpenChat: { router.path.append($0) })
 
             // Section roots (drawer)
