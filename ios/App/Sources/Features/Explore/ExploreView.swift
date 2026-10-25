@@ -673,8 +673,11 @@ struct ExploreView: View {
         .padding(13)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(maxWidth: .infinity)
-        .modifier(ExploreGlass(corner: 24, elevation: 14))
         // The artwork bleeds across the whole card — no frame edge, no seam.
+        // The order is the whole fix: background FIRST (art lands directly
+        // behind the text), ExploreGlass SECOND (its fill goes behind the
+        // art). Reversed, the 90%-opaque glass painted over the bubbles and
+        // the hero read as a washed-out rectangle the mock never shows.
         .background(alignment: .topTrailing) {
             Image("GSExploreHero")
                 .resizable()
@@ -693,6 +696,7 @@ struct ExploreView: View {
                 )
                 .allowsHitTesting(false)
         }
+        .modifier(ExploreGlass(corner: 24, elevation: 14))
     }
 
     private var toolsGrid: some View {
@@ -1111,7 +1115,8 @@ struct DiscoverView: View {
         }
         .padding(13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .modifier(ExploreGlass(corner: 24, elevation: 14))
+        // Art directly behind the text, glass behind the art — the same
+        // layering the Explore hero now carries (see its note).
         .background(alignment: .topTrailing) {
             // The Discover mock's own bubble cluster — purple bloom over the
             // orange sphere, cropped from the committed reference.
@@ -1132,6 +1137,7 @@ struct DiscoverView: View {
                 )
                 .allowsHitTesting(false)
         }
+        .modifier(ExploreGlass(corner: 24, elevation: 14))
     }
 
     private var chips: some View {
