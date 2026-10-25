@@ -29,6 +29,26 @@ import XCTest
 ///      the launch arguments are provisioning, not a result.
 final class GsChatUiTests: XCTestCase {
 
+    /// The composer, whichever control the current simulator image exposes.
+    ///
+    /// The placeholder sits on a `SwiftUI.VerticalTextView` on newer images and on
+    /// a `UITextField` on older ones, so `app.textFields[...]` alone began failing
+    /// with "composer field never appeared" on a build where nothing in the app had
+    /// changed. Probing both is the difference between testing the composer and
+    /// testing the runner's image.
+    private func composerElement(_ app: XCUIApplication, timeout: TimeInterval) -> XCUIElement {
+        let field = app.textFields["Ask anything…"].firstMatch
+        let view = app.textViews["Ask anything…"].firstMatch
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if field.exists { return field }
+            if view.exists { return view }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        } while Date() < deadline
+        return field
+    }
+
+
     /// The model path, if one has been provisioned. `nil` means the model-backed
     /// tests skip.
     ///
@@ -95,8 +115,8 @@ final class GsChatUiTests: XCTestCase {
         // lives inside a conversation), so reach a chat first. Without this the
         // suite looked for the composer on the dashboard and failed at 15 s —
         // which is what kept the whole iOS gate red.
-        let composer = app.textFields["Ask anything…"].firstMatch
-        if !composer.waitForExistence(timeout: 6) {
+        let composer = composerElement(app, timeout: 6)
+        if !composer.exists {
             let newChat = app.buttons["New Chat"].firstMatch
             if newChat.waitForExistence(timeout: 5) {
                 newChat.tap()
@@ -109,9 +129,8 @@ final class GsChatUiTests: XCTestCase {
         }
 
         // 1. tap the chat input, 2. type "hello".
-        let field = app.textFields["Ask anything…"].firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 20),
-                      "composer field never appeared")
+        let field = composerElement(app, timeout: 20)
+        XCTAssertTrue(field.exists, "composer field never appeared")
         // THE TAP CAN BE DROPPED WHILE THE APP IS STILL LOADING THE MODEL.
         // GSApp.init initialises the GGUF synchronously, so the composer is in
         // the tree long before the main thread is free. On run 39342295960
