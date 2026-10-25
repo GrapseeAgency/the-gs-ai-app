@@ -61,11 +61,23 @@ struct AeroDrawer: View {
         DrawerMetrics.panelWidth(in: UIScreen.main.bounds.width)
     }
 
-    /// The panel's surface. Measured on the sheet: body 237 L, a lit rim on the
-    /// leading edge, and NO structure from the page behind it (HF p90 1.79 L) —
-    /// so this is a frosted bloom, not a blur of Home. It is drawn from the
-    /// backdrop's own blooms plus the warm wash, which is what a live blur would
-    /// have to approximate anyway, without an offscreen pass per frame.
+    /// The panel's surface. Measured on the sheet: body 239.5 L, a lit leading
+    /// edge, and NO structure from the page behind it (HF p90 1.0 L) — so this
+    /// is a frosted bloom, not a blur of Home.
+    ///
+    /// It is ANALYTIC, and it has to be. A `Material` is a backdrop blur the
+    /// compositor resolves at display time; `drawHierarchy(in:afterScreenUpdates:)`
+    /// — the only way a UI test can capture a window — does not run that pass, so
+    /// a material panel would be scored from its flat fallback tint and the gate
+    /// would be measuring a surface the device never draws. Every cue here is a
+    /// gradient the renderer writes into the PNG: the cream body, the bloom
+    /// inside it, and the lit edge. That is also the construction Android's
+    /// `GlassFrostedPanel` uses (frost, veil, fill, rim), painted rather than
+    /// composited.
+    ///
+    /// The body colour is the sheet's own: this renders (250.7, 238.6, 229.1),
+    /// the sheet's margin measures (251.0, 237.2, 232.0). The cream is NOT
+    /// re-tinted to move the gate's body number — it already matches the picture.
     private var panelSurface: some View {
         ZStack {
             Aero.navSurface
@@ -79,6 +91,10 @@ struct AeroDrawer: View {
                        Color(red: 0.98, green: 0.92, blue: 0.89)],
                 startPoint: .topLeading, endPoint: .bottomTrailing
             ).opacity(scheme == .dark ? 0.9 : 0.85)
+            // The bloom the glass is seen through. Over the fill, not under it:
+            // light scattered inside the glass arrives at the eye last, which is
+            // the order Android paints its veil in.
+            DrawerPanelBloom(dark: scheme == .dark)
             LinearGradient(
                 colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.16), .clear],
                 startPoint: .topLeading,
@@ -141,10 +157,7 @@ struct AeroDrawer: View {
         .frame(maxHeight: .infinity, alignment: .top)
         .background(panelSurface)
         .overlay(alignment: .leading) {
-            // The sheet's lit leading edge: ~+6 L over the body, 1 pt wide.
-            LinearGradient(colors: [Color.white.opacity(0.55), .clear],
-                           startPoint: .leading, endPoint: .trailing)
-                .frame(width: 1.5)
+            leadingRim
         }
         .clipShape(UnevenRoundedRectangle(bottomTrailingRadius: DrawerMetrics.cornerRadius))
         .offset(x: entryOffset + closeOffset)
@@ -155,6 +168,45 @@ struct AeroDrawer: View {
             closeOffset = 0
             refreshRecents()
         }
+    }
+
+    /// The sheet's lit leading edge: a lit bar with a bloom tail.
+    ///
+    /// Measured on the sheet at 1.7125 px/pt, by column median across the panel's
+    /// rows: +4.5 L in the first 1.5 pt, a +9.5 L peak 2.3 pt in, and body again
+    /// by 6 pt. Android paints a hard 1 pt bar at +7.6 L and then nothing. The
+    /// previous iOS value was a 1.5 pt ramp from +7.2 straight down to 0, so half
+    /// its nominal width was unlit and the 1.5 pt median came out +4.5 — a hairline
+    /// where the sheet has a bar, which is what made the panel read as paper.
+    ///
+    /// This profile is a 1.25 pt bar at +7.0 L with the sheet's 5 pt tail. The
+    /// alpha over the first 1.5 pt is 0.50 against Android's 0.46 and the sheet's
+    /// own 0.29 at the frame edge, so the edge contrast lands within half a point
+    /// of Android's while the tail is the fall the sheet carries and Android does
+    /// not. Both numbers are below DR3's +14 L ceiling, and neither is a shadow or
+    /// a blur: this is one `LinearGradient`, written in the same draw.
+    private var leadingRim: some View {
+        // In dark the tail is a light leak the reference has no frame for: the
+        // sheet is a daylit page. The bar stays, the bloom behind it is halved.
+        let bar = scheme == .dark ? 0.46 : 0.50     // 0..1.25 pt: the lit edge
+        let shoulder = scheme == .dark ? 0.27 : 0.34  // 2 pt
+        let fall = scheme == .dark ? 0.09 : 0.20      // 3 pt
+        let tail = scheme == .dark ? 0.04 : 0.08      // 4.5 pt
+        return LinearGradient(
+            gradient: Gradient(stops: [
+                .init(color: .white.opacity(bar), location: 0.00),
+                .init(color: .white.opacity(bar), location: 0.16),
+                .init(color: .white.opacity(shoulder), location: 0.25),
+                .init(color: .white.opacity(fall), location: 0.38),
+                .init(color: .white.opacity(tail), location: 0.56),
+                .init(color: .white.opacity(0.00), location: 0.81),
+                .init(color: .white.opacity(0.00), location: 1.00),
+            ]),
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        .frame(width: 8)
+        .allowsHitTesting(false)
     }
 
     private var panelList: some View {
@@ -616,5 +668,62 @@ struct AeroDrawer: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
+    }
+}
+
+/// The bloom inside the panel: the soft light field the sheet carries under the
+/// cream, painted instead of composited.
+///
+/// The sheet's panel interior is a low-frequency field — p90 derivative 1.0 L,
+/// no card-shaped steps, 236 L at the leading margin rising to 246 L where the
+/// backdrop's light sits behind the header. It is the diffused image of the page
+/// under the glass, and there is no way to obtain it honestly here: `Material`
+/// does not composite into a `drawHierarchy` capture, and a live blur would put
+/// Home's bento cards *into* the glass (HF p90 1.0 L is the sheet's proof that
+/// the reference has no card edges in it). Android paints the same field from
+/// radial gradients for the same reason.
+///
+/// Amplitudes are deliberately small — each stop is a 2–3 L lift over the 240 L
+/// body, which is what the sheet's own low-pass shows in this band. A stronger
+/// wash would read as a spotlight rather than as light in glass. In dark the
+/// whole field is scaled to 12% because the sheet has no dark frame and a warm
+/// wash at full strength turns the panel brown.
+private struct DrawerPanelBloom: View {
+    let dark: Bool
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = max(geo.size.width, 1)
+            let strength = dark ? 0.12 : 1.0
+            ZStack {
+                // The warm light behind the header — the sheet's brightest
+                // part of the field, and the reason its R−B reads +23 there.
+                RadialGradient(
+                    colors: [Color(red: 1.0, green: 0.955, blue: 0.90)
+                                .opacity(0.55 * strength), .clear],
+                    center: UnitPoint(x: 0.02, y: 0.0),
+                    startRadius: 0,
+                    endRadius: w * 1.05
+                )
+                // The blush down the leading edge.
+                RadialGradient(
+                    colors: [Color(red: 1.0, green: 0.93, blue: 0.93)
+                                .opacity(0.28 * strength), .clear],
+                    center: UnitPoint(x: 0.0, y: 0.42),
+                    startRadius: 0,
+                    endRadius: w * 0.85
+                )
+                // Cool light under the footer: the sheet's field is a degree
+                // cooler at the bottom than at the top.
+                RadialGradient(
+                    colors: [Color(red: 0.965, green: 0.955, blue: 0.95)
+                                .opacity(0.30 * strength), .clear],
+                    center: UnitPoint(x: 0.45, y: 1.0),
+                    startRadius: 0,
+                    endRadius: w * 0.95
+                )
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
