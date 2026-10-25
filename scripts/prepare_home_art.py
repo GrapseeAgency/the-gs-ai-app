@@ -166,9 +166,11 @@ MANIFEST = [
         (298, 172), (1083, 450), 3.7, "discover",
         "The Discover reference's own bubble cluster (purple bloom over the "
         "orange sphere), cropped from the committed mock crop inside the card "
-        "rims. The hero bleeds the full card, so need is the 3x card; the "
-        "source is the mock's own pixels at 1.48 px/pt, and the 3.7x draw of a "
-        "soft-focus bubble crop invents no detail — declared, not accidental."),
+        "rims. The crop's left 148px carried the mock's headline tail — it is "
+        "mirror-patched and blurred (veil territory; the right-side bubbles "
+        "keep their crispness). The hero bleeds the full card, so need is the "
+        "3x card; the source is the mock's own pixels at 1.48 px/pt, and the "
+        "3.7x draw of a soft-focus bubble crop invents no detail — declared."),
     Art("gs_explore_col_design", "GSExploreColDesign", "explore/gs-explore-col-design.png",
         (212, 108), (504, 258), 2.4, "explore",
         "Collection scene (Design & Visuals): the reference's lotus band, "
