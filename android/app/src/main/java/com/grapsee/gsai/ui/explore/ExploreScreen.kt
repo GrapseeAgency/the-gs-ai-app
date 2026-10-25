@@ -753,7 +753,7 @@ private fun exploreIcon(id: String): ImageVector = when (id) {
     "code" -> GsIcons.Code
     "file-text" -> GsIcons.FileText
     "file-description" -> GsIcons.FileText
-    "school" -> GsIcons.School
+    "school" -> GsIcons.GraduationCap  // the mock paints a mortarboard, not a schoolhouse
     "brush" -> GsIcons.Brush
     "plane" -> GsIcons.Plane
     "clipboard-text" -> GsIcons.ClipboardList
@@ -1694,10 +1694,10 @@ private fun DiscoverToolCardVertical(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(5.dp))
             Box(
                 Modifier
-                    .size(24.dp)
+                    .size(22.dp)
                     .background(Color.White.copy(alpha = 0.60f), CircleShape)
                     .border(1.dp, Color.White.copy(alpha = 0.85f), CircleShape),
                 contentAlignment = Alignment.Center,

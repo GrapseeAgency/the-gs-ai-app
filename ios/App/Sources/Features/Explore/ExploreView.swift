@@ -1148,9 +1148,25 @@ struct DiscoverView: View {
                                     } else {
                                         // The mock's inactive chips are translucent
                                         // glass the page shows through, not opaque
-                                        // white — and this is what Android already
-                                        // paints (exploreGlass, corner 15).
-                                        Capsule().modifier(ExploreGlass(corner: 15, elevation: 5))
+                                        // white — the same fill/rim/shadow recipe
+                                        // ExploreGlass paints, drawn on the shape
+                                        // itself. (First attempt wrapped a bare
+                                        // Capsule() in ExploreGlass: a shape-as-view
+                                        // defaults to black ON TOP of its own glass
+                                        // background, and the first CI render said
+                                        // so in pitch black.)
+                                        Capsule()
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [
+                                                        Color(red: 1.0, green: 0.980, blue: 0.965).opacity(0.90),
+                                                        Color(red: 0.988, green: 0.929, blue: 0.898).opacity(0.79),
+                                                    ],
+                                                    startPoint: .topLeading, endPoint: .bottomTrailing
+                                                )
+                                            )
+                                            .overlay(Capsule().strokeBorder(.white.opacity(0.60), lineWidth: 1))
+                                            .shadow(color: Color(red: 0.886, green: 0.612, blue: 0.486).opacity(0.33), radius: 5, x: 0, y: 3)
                                     }
                                 }
                             )
@@ -1209,19 +1225,22 @@ struct DiscoverView: View {
                     .lineLimit(1)
                 // The mock seats the arrow in a small glass well beside the
                 // subtitle, not on its own row below it.
-                HStack(alignment: .center, spacing: 6) {
+                HStack(alignment: .center, spacing: 5) {
                     Text(tool.subtitle)
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textMuted)
                         .lineLimit(2)
+                        // SF is wider than the mock's face; shrink before
+                        // ellipsizing (the first render cut "with AI." to "wit…").
+                        .minimumScaleFactor(0.85)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     ZStack {
                         Circle()
                             .fill(.white.opacity(0.60))
-                            .frame(width: 24, height: 24)
+                            .frame(width: 22, height: 22)
                         Circle()
                             .strokeBorder(.white.opacity(0.85), lineWidth: 1)
-                            .frame(width: 24, height: 24)
+                            .frame(width: 22, height: 22)
                         NexlyGlyph(name: "arrow-right", size: 11, color: Aero.textMuted)
                     }
                 }
