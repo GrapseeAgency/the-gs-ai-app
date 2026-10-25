@@ -766,7 +766,7 @@ fun ExploreScreen(
                 Spacer(Modifier.height(8.dp))
 
                 // CREATIVE COLLECTIONS
-                SectionHeader("Creative Collections", inkHeader, inkMuted)
+                SectionHeader("Creative Collections", inkHeader, inkMuted, onSeeAll = onOpenDiscover)
                 Spacer(Modifier.height(10.dp))
                 Row(
                     Modifier

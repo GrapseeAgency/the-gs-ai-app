@@ -421,7 +421,7 @@ struct ExploreView: View {
                             heroCard
                             ExploreSectionHeader(title: "Popular Tools", action: onOpenDiscover)
                             toolsGrid
-                            ExploreSectionHeader(title: "Creative Collections")
+                            ExploreSectionHeader(title: "Creative Collections", action: onOpenDiscover)
                             collectionsSection
                             ExploreSectionHeader(title: "Featured")
                             featuredSection
