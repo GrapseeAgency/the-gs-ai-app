@@ -1,0 +1,37 @@
+{
+  "_about": "Explore-page pixel probes. Rects are normalised (x, y, w, h) fractions of the capture and were measured OFF THE CI RENDERS, not guessed off the mock — run 40177639269 (android-app @ c48aa78f) and run 40177187833 (iOS Xcode build @ c48aa78f), captures nexly-explore-393x852.png / nexly-explore-ios-393x852.png (1179x2556). The mock (docs/reference/explore/explore-home-reference.png) is NOT rectified — its screen crop is aspect 0.441 against the device 0.4613 — so it anchors presence, never a shared y.",
+  "_rule": "A probe fails when its measurement leaves its band. rim_search is the +/- pixel window the hairline search spans around rim_y; the hairline is the brightest row in it, so a 1-2 pt vertical drift reads the same number.",
+  "probes": {
+    "dock": {
+      "_what": "The floating dock's glass capsule. The dock is new chrome added for reference parity (ADR-008); this certifies the capsule actually painted and its rim kept the floatingControl level the Home pill measures (252-253). A dock that regressed to bare floating controls, or a re-tinted rim, fails here instead of by eye.",
+      "rim_y": 0.9140,
+      "rim_search": 24,
+      "rim_span_x": [0.12, 0.30],
+      "bands": {
+        "hairline": [249.5, 254.5]
+      },
+      "_measured": {
+        "android_hairline": 253.16,
+        "ios_hairline": 252.88,
+        "band_note": "The floor is NOT the page level: on Android the Featured card's glow reads 247 inside the search window, and the doctoring self-test proved a capsule-less capture would pass at 246. 249.5 sits 2.5 L above the worst glow and 3.4 L below both platforms' true rim. The self-test in scripts/check_explore_render.py is what found this."
+      }
+    },
+    "dock-pill": {
+      "_what": "The lit Explore pill. Sampled right of the label, inside the peach gradient; saturation (R-B) is the cue — plain glass over this page measures 16-18, peach measures 79-109. If the pill is ever painted as another glass capsule, this is the check that says so.",
+      "interior": [0.585, 0.945, 0.030, 0.010],
+      "bands": {
+        "saturation": [55.0, 140.0],
+        "luma": [135.0, 205.0]
+      },
+      "_measured": {
+        "android": {"saturation": 109.1, "luma": 164.66},
+        "ios": {"saturation": 79.2, "luma": 161.69},
+        "reference_crop": {"saturation": 60.9, "luma": 209.8, "note": "the mock window includes label ink; anchors presence only"}
+      }
+    }
+  },
+  "_not_gated_yet": {
+    "capsule_interior_tint": "android reads 233.07 against a 234.69 page, ios 223.23 against 230.35 — the iOS delta is the bloom under the capsule's right side, not the material. Position-dependent numbers on a page whose ground varies across the frame; needs the home gate's material-law treatment before it can mean anything.",
+    "featured_bubble_and_waveform": "the bubble sits at different y per platform and per scroll state; the glyph identity (waveform vs chart) is below this gate's resolution. The 393x852 captures and the render harness filenames stay the human check."
+  }
+}

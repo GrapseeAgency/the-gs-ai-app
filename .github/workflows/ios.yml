@@ -27,6 +27,8 @@ on:
       # gate could be made stricter or looser in total silence — the same defect
       # `check_workflow_trigger_covers_scripts.py` exists for, one directory over.
       - "scripts/check_home_render.py"
+      - "scripts/check_explore_render.py"
+      - "shared-contracts/explore-geometry.json"
       # The adversarial suite below runs the pixel gate against doctored frames;
       # changing it, or the artwork manifest it feeds, has to run this job too.
       - "scripts/test_home_render_gate.py"
@@ -538,6 +540,21 @@ jobs:
           python3 scripts/check_home_render.py \
             --reference assets/reference/home-reference.png \
             --render "$DIR/home-ios-393x852.png" --probe-set ios --label ios-393
+
+      - name: Measure the Explore dock against its pixel contract
+        run: |
+          set -euo pipefail
+          # The Explore renders were gated on existence only, which is why the
+          # page could look done with the dock never painted. This blocks on
+          # the capsule hairline and the lit pill's saturation, both measured
+          # off the CI renders (shared-contracts/explore-geometry.json), and
+          # re-runs the gate's non-vacuity doctoring on the same capture.
+          python3 scripts/check_explore_render.py \
+            --render ios/build/nexly-renders/nexly-explore-ios-393x852.png \
+            --label ios-393
+          python3 scripts/check_explore_render.py \
+            --render ios/build/nexly-renders/nexly-explore-ios-393x852.png \
+            --self-test
 
       - name: Measure the drawer against its reference sheet
         run: |

@@ -49,6 +49,8 @@ on:
       # The render step below blocks on this script's verdict, so the script is
       # as much a part of this job as the Kotlin it compiles.
       - 'scripts/check_home_render.py'
+      - 'scripts/check_explore_render.py'
+      - 'shared-contracts/explore-geometry.json'
       # The adversarial suite and the artwork manifest are part of the gate's
       # evidence, so a commit to either has to run the job that uses them.
       - 'scripts/test_home_render_gate.py'
@@ -647,6 +649,24 @@ jobs:
               || { echo "::error::$name.png was not produced"; exit 1; }
           done
           echo "rendered all six Explore captures"
+
+      - name: Measure the Explore dock against its pixel contract
+        if: always()
+        run: |
+          set -euo pipefail
+          # The Explore renders were previously gated on EXISTENCE only (the
+          # six-PNG >20 KB check above), which is why a screen could look done
+          # while the dock never painted. This blocks on the capsule hairline
+          # and the lit pill's saturation, measured off the CI render itself.
+          # Runs from the repo root; the gradle render step set its own cwd.
+          python3 scripts/check_explore_render.py \
+            --render android/app/build/screenshots/nexly-explore-393x852.png \
+            --label android-393
+          # The gate's own non-vacuity: doctor the pill and the rim out, and
+          # both probes must go red on the doctored copy.
+          python3 scripts/check_explore_render.py \
+            --render android/app/build/screenshots/nexly-explore-393x852.png \
+            --self-test
 
       - name: Upload the Nexly Explore renders
         if: always()
