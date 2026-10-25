@@ -81,32 +81,69 @@ enum ExploreCatalog {
         ),
         ExploreTool(
             id: "study-plan", title: "Create a study plan",
-            subtitle: "Personalized learning plan for your goals",
+            subtitle: "Personalized learning plan for your goals.",
             glyph: "school", bg: ExplorePalette.lavenderBg, fg: ExplorePalette.lavenderFg,
             category: .learning,
             prompt: "Build me a personalized study plan. Ask my subject, deadline and weekly hours first, then give a day-by-day plan with one review session per week."
         ),
         ExploreTool(
             id: "logo-maker", title: "Generate a logo",
-            subtitle: "Turn your idea into a unique logo",
+            subtitle: "Turn your idea into a unique logo.",
             glyph: "brush", bg: ExplorePalette.apricotBg, fg: ExplorePalette.apricotFg,
             category: .creativity,
             prompt: "Help me design a logo. Ask about the name, feeling and where it will live, then propose three concepts described precisely enough to brief a designer or generator."
         ),
         ExploreTool(
             id: "trip-planner", title: "Plan a trip",
-            subtitle: "Get a custom travel itinerary",
+            subtitle: "Get a custom travel itinerary.",
             glyph: "plane", bg: ExplorePalette.greenBg, fg: ExplorePalette.greenFg,
             category: .lifestyle,
             prompt: "Plan a trip with me. Ask the destination, dates and pace, then build a day-by-day itinerary with one highlight, one meal and one rest stop per day."
         ),
         ExploreTool(
             id: "doc-summary", title: "Summarize a document",
-            subtitle: "Save time with AI summaries",
+            subtitle: "Save time with AI summaries.",
             glyph: "file-description", bg: ExplorePalette.blueBg, fg: ExplorePalette.blueFg,
             category: .learning,
             prompt: "Summarize documents for me. I'll paste or attach one; give a five-bullet summary, the key numbers, and three questions I should ask about it."
         ),    ]
+
+    /// Discover's Featured Tools — the mock's OWN four cards. They share the
+    /// Explore page's concepts but not its copy, icons or tones (the Discover
+    /// mock paints Image Studio with sparkles, titles Voice simply "Voice"
+    /// on lavender, and Code Helper "Code Helper" in vermilion), so they are
+    /// their own entries rather than a re-skin that would drift the Explore
+    /// mock's Popular Tools.
+    static let discoverFeatured: [ExploreTool] = [
+        ExploreTool(
+            id: "discover-image-studio", title: "Image Studio",
+            subtitle: "Turn ideas into stunning visuals with AI.",
+            glyph: "sparkles", bg: ExplorePalette.apricotBg, fg: ExplorePalette.apricotFg,
+            category: .creativity,
+            prompt: "Act as my image studio director. Ask me the subject, mood and style one question at a time, then write three detailed image prompts I can paste into any image generator."
+        ),
+        ExploreTool(
+            id: "discover-voice", title: "Voice",
+            subtitle: "Create natural voice responses and audio.",
+            glyph: "waveform", bg: ExplorePalette.lavenderBg, fg: ExplorePalette.lavenderFg,
+            category: .productivity,
+            prompt: "Be my speaking coach. We'll practise a short introduction out loud: I'll type what I want to say, you tighten it, then give me feedback on clarity and tone."
+        ),
+        ExploreTool(
+            id: "discover-writing", title: "Writing Assistant",
+            subtitle: "Craft, improve and perfect your text.",
+            glyph: "file-text", bg: ExplorePalette.pinkBg, fg: ExplorePalette.vermilionFg,
+            category: .productivity,
+            prompt: "Be my editor. I'll paste text; you keep my voice, fix grammar and flow, and show me a short list of what you changed and why."
+        ),
+        ExploreTool(
+            id: "discover-code", title: "Code Helper",
+            subtitle: "Get coding help, explanations and more.",
+            glyph: "code", bg: ExplorePalette.apricotBg, fg: ExplorePalette.vermilionFg,
+            category: .productivity,
+            prompt: "Be my pair programmer. Ask what I'm building and which language, then help me write and debug it step by step, explaining every fix."
+        ),
+    ]
 
     struct Collection: Identifiable, Hashable {
         let id: String
@@ -187,6 +224,9 @@ enum ExplorePalette {
     static let greenFg = Color(red: 0.090, green: 0.478, blue: 0.314)
     static let apricotFg = Color(red: 0.722, green: 0.361, blue: 0.071)
     static let blueFg = Color(red: 0.086, green: 0.388, blue: 0.769)
+    /// The Discover mock's Writing Assistant / Code Helper icons are a warm
+    /// vermilion, distinct from the brown-orange apricot fg they'd inherit.
+    static let vermilionFg = Color(red: 0.910, green: 0.376, blue: 0.298)
 
     static let peach = Color(red: 0.996, green: 0.706, blue: 0.490)
     static let peachDeep = Color(red: 0.996, green: 0.769, blue: 0.576)
@@ -370,7 +410,17 @@ struct ExploreComposerBar: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            NexlyGlyph(name: "sparkles", size: 16, color: Aero.textMuted)
+            // The mock seats the sparkles in a small white well, tinted the
+            // warm apricot the empty composer wears before anything is typed.
+            ZStack {
+                Circle()
+                    .fill(.white.opacity(0.60))
+                    .frame(width: 30, height: 30)
+                Circle()
+                    .strokeBorder(.white.opacity(0.85), lineWidth: 1)
+                    .frame(width: 30, height: 30)
+                NexlyGlyph(name: "sparkles", size: 15, color: ExplorePalette.apricotFg)
+            }
             TextField("Ask me anything…", text: $draft)
                 .font(Aero.bodyMedium())
                 .focused($focused)
@@ -386,7 +436,7 @@ struct ExploreComposerBar: View {
                                 startPoint: .topLeading, endPoint: .bottomTrailing
                             )
                         )
-                    NexlyGlyph(name: "send", size: 15, color: canSend ? .white : Aero.textMuted)
+                    NexlyGlyph(name: "send", size: 15, color: .white)
                 }
                 .frame(width: 38, height: 38)
                 .overlay(
@@ -424,6 +474,9 @@ struct ExploreComposerBar: View {
 private struct ExploreSectionHeader: View {
     let title: String
     var action: (() -> Void)? = nil
+    /// The Explore mock capitalises "See All"; the Discover mock writes
+    /// "See all". Both are the contract of their own page.
+    var actionLabel: String = "See All"
 
     var body: some View {
         HStack {
@@ -434,7 +487,7 @@ private struct ExploreSectionHeader: View {
             if let action {
                 Button(action: action) {
                     HStack(spacing: 4) {
-                        Text("See All").font(Aero.caption()).foregroundStyle(Aero.textMuted)
+                        Text(actionLabel).font(Aero.caption()).foregroundStyle(Aero.textMuted)
                         NexlyGlyph(name: "arrow-right", size: 11, color: Aero.textMuted)
                     }
                 }
@@ -863,24 +916,6 @@ struct ExploreView: View {
         .modifier(ExploreGlass(corner: 18, elevation: 10))
     }
 
-    private func sectionHeader(_ title: String, action: (() -> Void)? = nil, actionLabel: String = "See All") -> some View {
-        HStack {
-            Text(title)
-                .font(Aero.title())
-                .foregroundStyle(Aero.text)
-            Spacer()
-            if let action {
-                Button(action: action) {
-                    HStack(spacing: 4) {
-                        Text(actionLabel).font(Aero.caption()).foregroundStyle(Aero.textMuted)
-                        NexlyGlyph(name: "arrow-right", size: 11, color: Aero.textMuted)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
     private func promptRow(_ tool: ExploreTool) -> some View {
         Button {
             onOpenChat(.chatPrefill(tool.prompt))
@@ -1111,7 +1146,11 @@ struct DiscoverView: View {
                                             .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.95), .white.opacity(0.45)], startPoint: .top, endPoint: .bottom), lineWidth: 1.2))
                                             .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 8, x: 0, y: 4)
                                     } else {
-                                        Capsule().fill(Color.white.opacity(0.88))
+                                        // The mock's inactive chips are translucent
+                                        // glass the page shows through, not opaque
+                                        // white — and this is what Android already
+                                        // paints (exploreGlass, corner 15).
+                                        Capsule().modifier(ExploreGlass(corner: 15, elevation: 5))
                                     }
                                 }
                             )
@@ -1124,12 +1163,18 @@ struct DiscoverView: View {
         }
     }
 
+    /// "See all" on this page's section headers opens the search field —
+    /// the one honest way the page already has to show the whole catalogue.
+    private func openSearch() {
+        withAnimation(.easeOut(duration: 0.2)) { searchOpen = true }
+    }
+
     private var toolsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ExploreSectionHeader(title: "Featured Tools")
-            let tools = ExploreCatalog.tools.filter {
-                ["image-studio", "voice-assistant", "writing-assistant", "code-assistant"].contains($0.id)
-            }.filter { category == .all || $0.category == category }
+            ExploreSectionHeader(title: "Featured Tools", action: openSearch, actionLabel: "See all")
+            let tools = ExploreCatalog.discoverFeatured.filter {
+                category == .all || $0.category == category
+            }
             ForEach(0..<tools.count, id: \.self) { i in
                 if i % 2 == 0, i < tools.count {
                     HStack(alignment: .top, spacing: 10) {
@@ -1162,14 +1207,23 @@ struct DiscoverView: View {
                     .font(Aero.bodyMedium().weight(.semibold))
                     .foregroundStyle(Aero.text)
                     .lineLimit(1)
-                Text(tool.subtitle)
-                    .font(Aero.caption())
-                    .foregroundStyle(Aero.textMuted)
-                    .lineLimit(2)
-                    .frame(minHeight: 26, alignment: .top)
-                HStack {
-                    Spacer()
-                    NexlyGlyph(name: "arrow-right", size: 11, color: Aero.textMuted)
+                // The mock seats the arrow in a small glass well beside the
+                // subtitle, not on its own row below it.
+                HStack(alignment: .center, spacing: 6) {
+                    Text(tool.subtitle)
+                        .font(Aero.caption())
+                        .foregroundStyle(Aero.textMuted)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ZStack {
+                        Circle()
+                            .fill(.white.opacity(0.60))
+                            .frame(width: 24, height: 24)
+                        Circle()
+                            .strokeBorder(.white.opacity(0.85), lineWidth: 1)
+                            .frame(width: 24, height: 24)
+                        NexlyGlyph(name: "arrow-right", size: 11, color: Aero.textMuted)
+                    }
                 }
             }
             .padding(11)
@@ -1182,7 +1236,7 @@ struct DiscoverView: View {
 
     private var popularSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ExploreSectionHeader(title: "Popular")
+            ExploreSectionHeader(title: "Popular", action: openSearch, actionLabel: "See all")
             let rows = ExploreCatalog.tools.filter { ["study-plan", "logo-maker", "trip-planner", "doc-summary"].contains($0.id) }
                 .filter { category == .all || $0.category == category }
             VStack(spacing: 7) {
