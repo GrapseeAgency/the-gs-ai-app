@@ -203,11 +203,40 @@ enum ExplorePalette {
     static let inkMuted = Color(red: 0.553, green: 0.553, blue: 0.584)
 }
 
+/// The page bloom behind both Explore and Discover. The authored bubble
+/// art is a light-mode artifact: dark falls back to the warm gradient +
+/// pearls, the same rule Home obeys and Android's ExplorePage enforces.
+struct ExploreBackdrop: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        if scheme == .dark {
+            ZStack {
+                LinearGradient(
+                    colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.30), Aero.background],
+                    startPoint: .topLeading, endPoint: .center
+                )
+                PearlBackdrop()
+            }
+            .ignoresSafeArea()
+        } else {
+            Image("GSExploreBackdrop")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
+        }
+    }
+}
+
 private struct ExploreGlass: ViewModifier {
     var corner: CGFloat
     var elevation: CGFloat = 12
+    @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {
+        // Dark keeps the warm glass, lifted one notch of alpha — the exact
+        // numbers Android's exploreGlass carries (b10 parity).
+        let dark = scheme == .dark
         content
             .shadow(
                 color: Color(red: 0.886, green: 0.612, blue: 0.486).opacity(0.33),
@@ -218,8 +247,8 @@ private struct ExploreGlass: ViewModifier {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color(red: 1.0, green: 0.980, blue: 0.965).opacity(0.90),
-                                Color(red: 0.988, green: 0.929, blue: 0.898).opacity(0.79),
+                                Color(red: 1.0, green: 0.980, blue: 0.965).opacity(dark ? 0.85 : 0.90),
+                                Color(red: 0.988, green: 0.929, blue: 0.898).opacity(dark ? 0.74 : 0.79),
                             ],
                             startPoint: .topLeading, endPoint: .bottomTrailing
                         )
@@ -443,10 +472,7 @@ struct ExploreView: View {
 
     var body: some View {
         ZStack {
-            Image("GSExploreBackdrop")
-                .resizable()
-                .scaledToFill()
-                .ignoresSafeArea()
+            ExploreBackdrop()
                 .allowsHitTesting(false)
             ScrollViewReader { proxy in
                 VStack(spacing: 0) {
@@ -927,10 +953,7 @@ struct DiscoverView: View {
 
     var body: some View {
         ZStack {
-            Image("GSExploreBackdrop")
-                .resizable()
-                .scaledToFill()
-                .ignoresSafeArea()
+            ExploreBackdrop()
                 .allowsHitTesting(false)
             VStack(spacing: 0) {
                 header

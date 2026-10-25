@@ -427,6 +427,9 @@ private fun ExploreDock(
     onScrollToTop: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    // the pill's ink is fixed deep brown in both mocks and on Home's
+    // Generate pill — the peach capsule never inverts with the scheme
+    val pillInk = Color(0xFF4A2414)
     Row(
         Modifier
             .fillMaxWidth()
@@ -480,7 +483,7 @@ private fun ExploreDock(
                     .background(Color.White.copy(alpha = 0.55f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(GsIcons.Compass, contentDescription = null, tint = inkStrong, modifier = Modifier.size(15.dp))
+                Icon(GsIcons.Compass, contentDescription = null, tint = pillInk, modifier = Modifier.size(15.dp))
             }
             Spacer(Modifier.width(8.dp))
             Text(
@@ -488,7 +491,7 @@ private fun ExploreDock(
                 fontSize = 12.5.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = GsFonts.Product,
-                color = inkStrong,
+                color = pillInk,
                 maxLines = 1,
             )
         }

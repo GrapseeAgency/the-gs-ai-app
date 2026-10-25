@@ -14,6 +14,10 @@ struct ExploreDock: View {
     var onScrollToTop: () -> Void = {}
     var onOpenSettings: () -> Void = {}
 
+    /// The pill's ink is fixed deep brown in both mocks and on Home's
+    /// Generate pill — the peach capsule never inverts with the scheme.
+    private static let pillInk = Color(red: 0.29, green: 0.14, blue: 0.08)
+
     var body: some View {
         HStack(spacing: 0) {
             dockCircle(glyph: "home", label: "Home", action: onOpenHome)
@@ -35,11 +39,11 @@ struct ExploreDock: View {
                     Circle()
                         .fill(.white.opacity(0.55))
                         .frame(width: 30, height: 30)
-                    NexlyGlyph(name: "compass", size: 15, color: ExplorePalette.inkStrong)
+                    NexlyGlyph(name: "compass", size: 15, color: Self.pillInk)
                 }
                 Text("Explore")
                     .font(Aero.bodyMedium().weight(.semibold))
-                    .foregroundStyle(ExplorePalette.inkStrong)
+                    .foregroundStyle(Self.pillInk)
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
             }
@@ -68,7 +72,7 @@ struct ExploreDock: View {
 
     private func dockCircle(glyph: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            NexlyGlyph(name: glyph, size: 17, color: ExplorePalette.inkStrong)
+            NexlyGlyph(name: glyph, size: 17, color: Aero.text)
                 .frame(width: 46, height: 46)
                 .gsGlass(.floatingControl, corner: 23)
         }

@@ -979,7 +979,7 @@ private struct PearlOrb: View {
 }
 
 /// The ambient backdrop: very large, very soft pearls behind the content.
-private struct PearlBackdrop: View {
+struct PearlBackdrop: View {
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
