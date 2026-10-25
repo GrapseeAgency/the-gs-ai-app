@@ -4,8 +4,10 @@ name: Font evaluation
 # before anyone edits a single line of app code.
 #
 # The two numbers that decide acceptance (see docs/TYPOGRAPHY.md):
-#   * width of "Good morning," at matched cap height, relative to the shipped
-#     Poppins SemiBold — the reference sits at 0.824;
+#   * width of "Good morning," at matched cap height, relative to Poppins
+#     SemiBold — the historical baseline and the eval's denominator (it is
+#     fetched like any other family now; it no longer ships); the reference
+#     sits at 0.824;
 #   * x-height / cap height — the reference sits at ~0.85.
 #
 # Both are scale-free ratios, so this needs no app build and no device: it
@@ -116,7 +118,7 @@ jobs:
           base_cap = band(POPPINS, "H")
           base_wcap = base_f.getlength("Good morning,") / base_cap
 
-          rows = [("Poppins SemiBold (shipped)", 1.0, band(POPPINS, "o") / base_cap, "baseline")]
+          rows = [("Poppins SemiBold (baseline)", 1.0, band(POPPINS, "o") / base_cap, "baseline")]
           for fam in sorted(glob.glob("fonts/*/")):
               name = os.path.basename(fam.rstrip("/"))
               p = os.path.join(fam, "SemiBold-600.ttf")

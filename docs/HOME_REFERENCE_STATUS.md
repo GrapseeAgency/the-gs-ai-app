@@ -118,12 +118,16 @@ with each other. It is now a 37 pt disc with a drawn filled triangle on both.
 
 ## What does not match, and why it is not a code change
 
-**The reference is not set in Poppins.** At matched cap height "Good morning,"
-spans 159 pt in the mock, 171 pt in SF Pro and 193 pt in Poppins, and the mock's
-`g` is double-storey where Poppins' is single. Poppins is the product's declared
-family and the only face bundled for both platforms, so it is what the parity
-mandate can satisfy — but the letterforms are not the mock's. Deciding otherwise
-means choosing and licensing another family for both platforms.
+**The reference's face is not free.** The product family is now **Inter
+Tight** (vendored upright, four weights — see `docs/TYPOGRAPHY.md`), chosen by
+CI measurement: at matched cap height it sits +0.011 off the reference's width
+where the old Poppins baseline was +0.176, the only candidate inside the
+acceptance band. The residual no free face closes is the reference's x-height
+(x/cap 0.850; the whole OFL pool reads ≤0.818, Inter Tight 0.777), which is
+why a few wraps still differ from the mock. Closing that means commissioning
+or licensing a non-OFL family for both platforms — a product decision, not a
+code gap. (The pre-swap notes below, naming Poppins and a double-storey `g`,
+are kept as history; the `g` was re-checked at 6× and is single-storey.)
 
 **The video card's artwork is the right kind of picture, shipped upside down to be
 less wrong.** Its saturation and lightness match the reference (chroma mean 22.1

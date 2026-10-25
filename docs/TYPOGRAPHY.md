@@ -2,66 +2,64 @@
 
 ## What ships
 
-**Poppins** (SIL Open Font License 1.1), four weights — 400 / 500 / 600 / 700 — as static
-files, identical bytes on both platforms:
+**Inter Tight** (SIL Open Font License 1.1), four weights — 400 / 500 / 600 /
+700 — as static files, identical bytes on both platforms. It replaced Poppins
+(commit "type: vendor Inter Tight as the product family"); the swap story and
+the italic-cut near-miss are under "The face the app ships", below.
 
 | | Android | iOS |
 |---|---|---|
-| files | `app/src/main/res/font/poppins_{regular,medium,semibold,bold}.ttf` | `App/Resources/Poppins-{Regular,Medium,SemiBold,Bold}.ttf` |
-| family | `GsFonts.Poppins` (`ui/theme/GsFonts.kt`) | `UIAppFonts` in `project.yml`, resolved by `Aero.poppinsName(_:)` |
-| fallback | — | `Font.system` when the face is missing (`Aero.poppinsLoaded`) |
+| files | `app/src/main/res/font/inter_tight_{regular,medium,semibold,bold}.ttf` | `App/Resources/InterTight-*.ttf` |
+| family | `GsFonts.Product` (`ui/theme/GsFonts.kt`) | `UIAppFonts` in `project.yml`, resolved by `Aero.productName(_:)` |
+| fallback | — | `Font.system` when the face is missing |
 
-Sizes, weights and tracking are not per-file decisions: they live in `GsTypography`
-(Android) and `Aero` (iOS) and are held together by
-`.github/scripts/check_home_type_parity.py` against `shared-contracts/home-type-roles.json`
-— 15 Home roles, both platforms, failing on any drift. Monospace stays on the platform
-face; code must look like code.
+Sizes, weights and tracking are not per-file decisions: they live in
+`GsTypography` (Android) and `Aero` (iOS) and are held together by
+`.github/scripts/check_home_type_parity.py` against
+`shared-contracts/home-type-roles.json` — 15 Home roles, both platforms,
+failing on any drift. Monospace stays on the platform face; code must look
+like code.
 
-## The known gap: Poppins is wider than the reference
+## The measured table, re-run upright (2026-10-25, run 40199378450)
 
-> **Correction, and it matters.** Every number in the table below was measured on the
-> *italic* cut of whichever family the runner fetched, because the eval step selected
-> "the first `.ttf`" in `ofl/<slug>` and several families ship `X-Italic[wght].ttf` beside
-> `X[wght].ttf`. That is the same selection bug that vendored Inter Tight Italic into the
-> app (see *The face the app ships*, below). The rows are therefore **not** measurements of
-> the faces they name, and the Inter Tight row in particular describes slanted glyphs.
->
-> The selection is fixed (italics are excluded), but the table has **not** been
-> re-measured: the eval's denominator (`POPPINS`) pointed at
-> `android/.../poppins_semibold.ttf`, which stopped existing when Inter Tight was vendored,
-> and the replacement path is still being fixed. Treat the numbers as historical until a
-> green run prints a new table. What *is* verified today is the shipped face's shape:
-> upright, four weights, identical bytes on both platforms (`scripts/check_font_faces.py`).
-
-Measured in CI (`.github/workflows/font-eval.yml`) at matched cap height, over the
-string the reference sets largest — "Good morning," at 26 pt. Every number is from the
-same script, on the same runner, so they are comparable to each other:
+The correction that was owed: the first table was measured on italic cuts and
+never re-run because the eval's denominator pointed at the Poppins file the
+vendoring had deleted. The eval now fetches Poppins itself as the denominator
+(it is no longer shipped), italics are excluded, and this is the honest
+upright re-measurement — width of "Good morning," at matched cap height
+relative to Poppins SemiBold, and x-height/cap:
 
 | face | width ÷ Poppins | x-height ÷ cap | vs reference (0.824 / 0.850) |
 |---|---|---|---|
 | the reference's own face | 0.824 | 0.850 | — |
-| **Poppins SemiBold (shipped)** | **1.000** | 0.826 | +0.176 wide, −0.024 x-height |
-| **Inter Tight** | **0.844** | 0.777 | **+0.020 wide**, −0.073 x-height |
-| Manrope | 0.893 | 0.792 | +0.069, −0.058 |
-| Outfit | 0.879 | 0.718 | +0.055, −0.132 |
-| Figtree | 0.883 | 0.746 | +0.059, −0.104 |
-| Hanken Grotesk | 0.877 | 0.728 | +0.053, −0.122 |
-| DM Sans | 0.900 | 0.786 | +0.076, −0.064 |
+| Poppins SemiBold (baseline) | 1.000 | 0.818 | +0.176 wide |
+| **Inter Tight (shipped)** | **0.835** | 0.777 | **+0.011 wide** — the only face inside the band |
+| Hanken Grotesk | 0.866 | 0.732 | +0.042 wide |
+| Outfit | 0.870 | 0.718 | +0.046 wide |
+| Figtree | 0.879 | 0.750 | +0.055 wide |
+| Manrope | 0.885 | 0.792 | +0.061 wide |
+| DM Sans | 0.893 | 0.786 | +0.069 wide |
+| Onest | 0.897 | 0.771 | +0.073 wide |
+| Karla | 0.979 | 0.799 | +0.155 wide |
 
-Scored with width weighted double because line breaks are what the eye reads first,
-**Inter Tight** is the clear winner — 0.020 off the reference's width against Poppins'
-0.176. Three claims made earlier from prose, not measurement, died here: Manrope is not
-semi-condensed (0.893), Outfit is not narrow (0.879), and Poppins' own x-height is 0.826,
-not the 0.804 I had recorded, which puts the reference only 0.024 above it.
+(Bricolage Grotesk was requested and never fetched — the google/fonts tree
+names it under `ofl/bricolagegrotesk` with multi-axis files; it stays
+unmeasured, not rejected.)
 
-Consequences of the shipped gap: the video card's body sets **three lines where the
-reference sets two** ("beautiful videos in minutes." needs 164 pt at 12 pt in a 131 pt
-column), and the headline's strokes read heavier at the same point size.
+Two verdicts, stated as numbers:
 
-The reference's letterforms were re-checked at 6× after an earlier draft claimed a
-double-storey `g`: it is **single-storey**, with round geometric bowls — Poppins' shape,
-narrower. Inter Tight is single-storey too, which is why it can substitute without the
-letterforms changing family.
+1. **The width decision is settled and was right.** Inter Tight lands +0.011
+   off the reference's width where Poppins sat +0.176 — the only candidate
+   inside the 0.80–0.85 acceptance band, and the reason line wraps now match
+   the mock far more often.
+2. **The x-height gate is unreachable, and that is the residual gap.** The
+   reference's face carries x/cap 0.850; not one candidate in the OFL pool
+   clears even the gate's own 0.82 floor — the highest readings are Poppins
+   0.818 and Karla 0.799, Inter Tight 0.777. So the gate prints "x-height"
+   for every row and must be read as: *no free geometric sans has the
+   reference's proportions.* Closing that fully means commissioning or
+   licensing a non-OFL face — a product decision, not a CI failure. The gate
+   stays as written; a candidate that clears it would be news, not noise.
 
 ## Accepting a replacement face
 
@@ -84,8 +82,8 @@ Adwaita Sans (variable font, 0.889), Fira Sans (humanist terminals and a differe
 
 1. Drop the four TTFs into `android/app/src/main/res/font/` (lowercase, underscores) and
    `ios/App/Resources/`.
-2. `GsFonts.Poppins` → the new `FontFamily`; `Aero.poppinsName(_:)` → the new PostScript
-   names; `Aero.poppinsLoaded` → a probe on one of them.
+2. `GsFonts.Product` → the new `FontFamily`; `Aero.productName(_:)` → the new PostScript
+   names; the fallback probe likewise.
 3. Add the four files to `UIAppFonts` in `ios/project.yml`.
 4. Run `python3 .github/scripts/check_home_type_parity.py` — it must stay green with no
    contract edits.

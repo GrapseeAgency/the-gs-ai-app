@@ -88,8 +88,11 @@ of the rim band — floor 249.5, not the page level):
 
 ## Known differences, on purpose
 
-- **Typeface**: the mock's face is not Poppins; app-wide frozen debt,
-  same as `HOME_REFERENCE_STATUS.md` records — no per-page decision here.
+- **Typeface**: the shipped family is Inter Tight, measured +0.011 off the
+  mock's width — the only candidate inside the acceptance band (see
+  `TYPOGRAPHY.md`). The mock's x-height (x/cap 0.850) is unreachable in the
+  OFL pool, so a few line wraps still differ; closing that is a licensing
+  decision, not a code gap.
 - **Status bar 9:41**: render harnesses capture without system chrome.
 - **Vertical rhythm**: the mock fits everything above the dock at ~891 pt
   of stretched canvas; a real 852 pt screen scrolls, with 96 pt of
