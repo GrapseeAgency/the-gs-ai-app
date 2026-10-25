@@ -110,6 +110,9 @@ object ExploreTones {
     val GreenFg = Color(0xFF177A50)
     val ApricotFg = Color(0xFFB85C12)
     val BlueFg = Color(0xFF1663C4)
+    // The Discover mock's Writing Assistant / Code Helper icons are a warm
+    // vermilion, distinct from the brown-orange apricot fg they'd inherit.
+    val VermilionFg = Color(0xFFE8604C)
 
     val Peach = Color(0xFFFEB47D)
     val PeachDeep = Color(0xFFFEC493)
@@ -204,7 +207,7 @@ object ExploreCatalog {
         ExploreTool(
             id = "study-plan",
             title = "Create a study plan",
-            subtitle = "Personalized learning plan for your goals",
+            subtitle = "Personalized learning plan for your goals.",
             icon = "school",
             tone = ExploreTone(ExploreTones.LavenderBg, ExploreTones.LavenderFg),
             category = ExploreCategory.Learning,
@@ -213,7 +216,7 @@ object ExploreCatalog {
         ExploreTool(
             id = "logo-maker",
             title = "Generate a logo",
-            subtitle = "Turn your idea into a unique logo",
+            subtitle = "Turn your idea into a unique logo.",
             icon = "brush",
             tone = ExploreTone(ExploreTones.ApricotBg, ExploreTones.ApricotFg),
             category = ExploreCategory.Creativity,
@@ -222,7 +225,7 @@ object ExploreCatalog {
         ExploreTool(
             id = "trip-planner",
             title = "Plan a trip",
-            subtitle = "Get a custom travel itinerary",
+            subtitle = "Get a custom travel itinerary.",
             icon = "plane",
             tone = ExploreTone(ExploreTones.GreenBg, ExploreTones.GreenFg),
             category = ExploreCategory.Lifestyle,
@@ -231,7 +234,7 @@ object ExploreCatalog {
         ExploreTool(
             id = "doc-summary",
             title = "Summarize a document",
-            subtitle = "Save time with AI summaries",
+            subtitle = "Save time with AI summaries.",
             icon = "file-description",
             tone = ExploreTone(ExploreTones.BlueBg, ExploreTones.BlueFg),
             category = ExploreCategory.Learning,
@@ -250,6 +253,53 @@ object ExploreCatalog {
         Collection("design", "Design & Visuals", "For creators & dreamers", ExploreCategory.Creativity),
         Collection("work", "Work & Productivity", "Work smarter, not harder", ExploreCategory.Productivity),
         Collection("learning", "Learning & Growth", "Build new skills", ExploreCategory.Learning),
+    )
+
+    /**
+     * Discover's Featured Tools — the mock's OWN four cards. They share the
+     * Explore page's concepts but not its copy, icons or tones (the Discover
+     * mock paints Image Studio with sparkles, titles Voice simply "Voice"
+     * on lavender, and Code Helper "Code Helper" in vermilion), so they are
+     * their own entries rather than a re-skin that would drift the Explore
+     * mock's Popular Tools. Mirror of iOS ExploreCatalog.discoverFeatured.
+     */
+    val discoverFeatured = listOf(
+        ExploreTool(
+            id = "discover-image-studio",
+            title = "Image Studio",
+            subtitle = "Turn ideas into stunning visuals with AI.",
+            icon = "sparkles",
+            tone = ExploreTone(ExploreTones.ApricotBg, ExploreTones.ApricotFg),
+            category = ExploreCategory.Creativity,
+            prompt = "Act as my image studio director. Ask me the subject, mood and style one question at a time, then write three detailed image prompts I can paste into any image generator.",
+        ),
+        ExploreTool(
+            id = "discover-voice",
+            title = "Voice",
+            subtitle = "Create natural voice responses and audio.",
+            icon = "waveform",
+            tone = ExploreTone(ExploreTones.LavenderBg, ExploreTones.LavenderFg),
+            category = ExploreCategory.Productivity,
+            prompt = "Be my speaking coach. We'll practise a short introduction out loud: I'll type what I want to say, you tighten it, then give me feedback on clarity and tone.",
+        ),
+        ExploreTool(
+            id = "discover-writing",
+            title = "Writing Assistant",
+            subtitle = "Craft, improve and perfect your text.",
+            icon = "file-text",
+            tone = ExploreTone(ExploreTones.PinkBg, ExploreTones.VermilionFg),
+            category = ExploreCategory.Productivity,
+            prompt = "Be my editor. I'll paste text; you keep my voice, fix grammar and flow, and show me a short list of what you changed and why.",
+        ),
+        ExploreTool(
+            id = "discover-code",
+            title = "Code Helper",
+            subtitle = "Get coding help, explanations and more.",
+            icon = "code",
+            tone = ExploreTone(ExploreTones.ApricotBg, ExploreTones.VermilionFg),
+            category = ExploreCategory.Productivity,
+            prompt = "Be my pair programmer. Ask what I'm building and which language, then help me write and debug it step by step, explaining every fix.",
+        ),
     )
 
     /**
@@ -664,6 +714,9 @@ private fun SectionHeader(
     inkHeader: Color,
     inkMuted: Color,
     onSeeAll: (() -> Unit)? = null,
+    // The Explore mock capitalises "See All"; the Discover mock writes
+    // "See all". Both are the contract of their own page.
+    label: String = "See All",
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -680,7 +733,7 @@ private fun SectionHeader(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "See All",
+                    label,
                     fontSize = 11.sp,
                     fontFamily = GsFonts.Product,
                     color = inkMuted,
@@ -1460,14 +1513,15 @@ fun DiscoverScreen(
                 }
                 Spacer(Modifier.height(16.dp))
 
-                // FEATURED TOOLS — the reference's vertical cards
-                SectionHeader("Featured Tools", inkHeader, inkMuted)
+                // FEATURED TOOLS — the reference's vertical cards. "See all"
+                // opens the search field: the honest whole-catalogue gesture
+                // this page already owns.
+                SectionHeader("Featured Tools", inkHeader, inkMuted, onSeeAll = { searchOpen = true }, label = "See all")
                 Spacer(Modifier.height(10.dp))
-                // The reference's Featured Tools are exactly these four;
-                // the chips filter within them.
-                val visible = ExploreCatalog.tools.filter {
-                    it.id in setOf("image-studio", "voice-assistant", "writing-assistant", "code-assistant")
-                }.filter { category == ExploreCategory.All || it.category == category }
+                // The reference's Featured Tools are the mock's own four
+                // cards; the chips filter within them.
+                val visible = ExploreCatalog.discoverFeatured
+                    .filter { category == ExploreCategory.All || it.category == category }
                 visible.chunked(2).forEach { rowTools ->
                     Row(
                         Modifier.fillMaxWidth(),
@@ -1487,7 +1541,7 @@ fun DiscoverScreen(
 
                 // POPULAR — prompt rows
                 Spacer(Modifier.height(6.dp))
-                SectionHeader("Popular", inkHeader, inkMuted)
+                SectionHeader("Popular", inkHeader, inkMuted, onSeeAll = { searchOpen = true }, label = "See all")
                 Spacer(Modifier.height(10.dp))
                 val promptRows = ExploreCatalog.tools.filter {
                     it.id in setOf("study-plan", "logo-maker", "trip-planner", "doc-summary")
@@ -1511,12 +1565,22 @@ fun DiscoverScreen(
                 .padding(horizontal = 11.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                GsIcons.Sparkles,
-                contentDescription = null,
-                tint = inkMuted,
-                modifier = Modifier.size(15.dp),
-            )
+            // the mock seats the sparkles in a small white well, tinted the
+            // warm apricot the empty composer wears
+            Box(
+                Modifier
+                    .size(30.dp)
+                    .background(Color.White.copy(alpha = 0.60f), CircleShape)
+                    .border(1.dp, Color.White.copy(alpha = 0.85f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    GsIcons.Sparkles,
+                    contentDescription = null,
+                    tint = ExploreTones.ApricotFg,
+                    modifier = Modifier.size(15.dp),
+                )
+            }
             Spacer(Modifier.width(8.dp))
             Box(Modifier.weight(1f)) {
                 if (draft.isEmpty()) {
@@ -1582,7 +1646,7 @@ fun DiscoverScreen(
                 Icon(
                     GsIcons.Navigation,
                     contentDescription = if (canSend) "Send message" else null,
-                    tint = if (canSend) Color.White else inkMuted,
+                    tint = Color.White,
                     modifier = Modifier.size(16.dp),
                 )
             }
@@ -1617,24 +1681,35 @@ private fun DiscoverToolCardVertical(
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(3.dp))
-        Text(
-            tool.subtitle,
-            fontSize = 10.sp,
-            lineHeight = 13.sp,
-            fontFamily = GsFonts.Product,
-            color = inkMuted,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Spacer(Modifier.height(5.dp))
-        Icon(
-            GsIcons.ArrowRight,
-            contentDescription = null,
-            tint = inkMuted,
-            modifier = Modifier
-                .size(11.dp)
-                .align(Alignment.End),
-        )
+        // the mock seats the arrow in a small glass well beside the subtitle,
+        // not on its own row below it
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                tool.subtitle,
+                fontSize = 10.sp,
+                lineHeight = 13.sp,
+                fontFamily = GsFonts.Product,
+                color = inkMuted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(6.dp))
+            Box(
+                Modifier
+                    .size(24.dp)
+                    .background(Color.White.copy(alpha = 0.60f), CircleShape)
+                    .border(1.dp, Color.White.copy(alpha = 0.85f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    GsIcons.ArrowRight,
+                    contentDescription = null,
+                    tint = inkMuted,
+                    modifier = Modifier.size(11.dp),
+                )
+            }
+        }
     }
 }
 
