@@ -1,0 +1,18 @@
+{
+  "source": "user reference mock, 2026-10-25 (Discover page)",
+  "sourceSize": [
+    941,
+    1671
+  ],
+  "screenRectPx": [
+    181,
+    20,
+    763,
+    1585
+  ],
+  "cropSize": [
+    582,
+    1565
+  ],
+  "note": "normalized probe rects expressed in crop space (x/582, y/1565); the mock is not rectified (aspect 0.372)"
+}
