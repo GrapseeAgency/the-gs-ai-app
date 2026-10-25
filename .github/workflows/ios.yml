@@ -360,6 +360,25 @@ jobs:
           test -s "$DIR/nexly-explore-ios-search-393x852.png" \
             || { echo "::error::the Explore search-state render was not produced"; exit 1; }
 
+      - name: Collect the Settings renders
+        if: always()
+        run: |
+          set -euo pipefail
+          # SettingsRenderTests shares the same /tmp channel: the three
+          # settings screens from docs/reference/settings/, two widths each.
+          SRC=/tmp/gs-nexly-renders
+          DIR=ios/build/nexly-renders
+          mkdir -p "$DIR"
+          if [ -d "$SRC" ]; then cp "$SRC"/nexly-settings-ios-*.png "$DIR/" 2>/dev/null || true; fi
+          if [ -d "$SRC" ]; then cp "$SRC"/nexly-profile-ios-*.png "$DIR/" 2>/dev/null || true; fi
+          if [ -d "$SRC" ]; then cp "$SRC"/nexly-memory-ios-*.png "$DIR/" 2>/dev/null || true; fi
+          for name in nexly-settings-ios nexly-profile-ios nexly-memory-ios; do
+            for w in 393x852 360x780; do
+              test -s "$DIR/$name-$w.png" \
+                || { echo "::error::$name-$w.png missing — the Settings render harness did not produce it"; exit 1; }
+            done
+          done
+
       - name: Upload the Nexly chat response render
         if: always()
         uses: actions/upload-artifact@v4

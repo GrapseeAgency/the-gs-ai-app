@@ -652,6 +652,40 @@ jobs:
           done
           echo "rendered all six Explore captures"
 
+      - name: Nexly Settings renders (real Compose tree, JVM)
+        if: always()
+        working-directory: android
+        run: |
+          set -euo pipefail
+          # The three settings screens from docs/reference/settings/: hub,
+          # Profile & Preferences, Memory Management. One class = one Gradle
+          # invocation; six captures (3 screens x 2 widths).
+          ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest \
+            --rerun --tests "com.grapsee.gsai.ui.settings.SettingsScreenshotTest" \
+            -PgsShots=true
+          SHOTS=app/build/screenshots
+          for name in nexly-settings-393x852 nexly-settings-360x780 nexly-profile-393x852 nexly-profile-360x780 nexly-memory-393x852 nexly-memory-360x780; do
+            for attempt in 1 2 3 4 5 6; do
+              [ -s "$SHOTS/$name.png" ] && break
+              sleep 5
+            done
+            test -s "$SHOTS/$name.png" \
+              || { echo "::error::$name.png was not produced"; exit 1; }
+          done
+          echo "rendered all six Settings captures"
+
+      - name: Upload the Nexly Settings renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexly-settings-render-android
+          path: |
+            android/app/build/screenshots/nexly-settings-*.png
+            android/app/build/screenshots/nexly-profile-*.png
+            android/app/build/screenshots/nexly-memory-*.png
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Measure the Explore dock against its pixel contract
         if: always()
         run: |
