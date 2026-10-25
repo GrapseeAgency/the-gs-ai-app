@@ -694,11 +694,11 @@ private struct DrawerPanelSurface: View {
             let field = Path(CGRect(origin: .zero, size: size))
 
             // 1. The frosted cream, 85% over the ground in light — the layer
-            //    that renders (250.7, 238.6, 229.1) against the sheet's
-            //    (251.0, 237.2, 232.0). Dark is the 4% white lift instead: the
-            //    first version painted the LIGHT cream in both appearances, so
-            //    the dark capture measured 206 L — a light panel behind a dark
-            //    page.
+            //    that renders the sheet's 240 L body: (250.8, 238.7, 229.8) on
+            //    the final capture against the sheet's (251.0, 237.2, 232.0).
+            //    Dark is the 4% white lift instead: the first version painted the
+            //    LIGHT cream in both appearances, so the dark capture measured
+            //    206 L — a light panel behind a dark page.
             let cream = dark
                 ? [Color.white.opacity(0.054), Color.white.opacity(0)]
                 : [Color(red: 1.0, green: 0.94, blue: 0.90).opacity(0.85),
