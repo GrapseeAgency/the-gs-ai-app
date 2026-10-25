@@ -60,7 +60,7 @@ enum ExploreCatalog {
         ExploreTool(
             id: "voice-assistant", title: "Voice Assistant",
             subtitle: "Natural, human-like voices",
-            glyph: "chart-bar", bg: ExplorePalette.greenBg, fg: ExplorePalette.greenFg,
+            glyph: "waveform", bg: ExplorePalette.greenBg, fg: ExplorePalette.greenFg,
             category: .productivity,
             prompt: "Be my speaking coach. We'll practise a short introduction out loud: I'll type what I want to say, you tighten it, then give me feedback on clarity and tone."
         ),
@@ -281,6 +281,20 @@ private extension ExplorePalette {
             green: min(1, g * 0.55 + 0.45),
             blue: min(1, b * 0.55 + 0.45)
         )
+    }
+}
+
+/// The tile icon for a catalog entry. The Nexly font set carries no
+/// waveform, so that id draws the shared GsIcons path — the same vector
+/// Android's exploreIcon map resolves "waveform" to. Catalog ids stay
+/// the kebab names shared across the two platforms.
+@ViewBuilder
+private func exploreToolGlyph(_ tool: ExploreTool, size: CGFloat) -> some View {
+    let tint = tool.filledTile ? Color.white : tool.fg
+    if tool.glyph == "waveform" {
+        GsIconView(GsIcons.audioWaveform, size: size, color: tint)
+    } else {
+        NexlyGlyph(name: tool.glyph, size: size, color: tint)
     }
 }
 
@@ -568,11 +582,12 @@ struct ExploreView: View {
         } label: {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 9) {
-                    NexlyGlyph(name: tool.glyph, size: 15, color: tool.filledTile ? .white : tool.fg)
+                    exploreToolGlyph(tool, size: 15)
                         .modifier(IconCircleStyle(
                             bg: tool.filledTile ? tool.fg : tool.bg,
                             diameter: 36,
-                            solidTile: tool.filledTile
+                            solidTile: tool.filledTile,
+                            playGlyph: tool.glyph == "player-play"
                         ))
                     Text(tool.title)
                         .font(Aero.bodyMedium().weight(.semibold))
@@ -755,7 +770,7 @@ struct ExploreView: View {
             onOpenChat(.chatPrefill(tool.prompt))
         } label: {
             HStack(spacing: 10) {
-                NexlyGlyph(name: tool.glyph, size: 15, color: tool.filledTile ? .white : tool.fg)
+                exploreToolGlyph(tool, size: 15)
                     .modifier(IconCircleStyle(
                         bg: tool.filledTile ? tool.fg : tool.bg,
                         diameter: 34,
@@ -1023,7 +1038,7 @@ struct DiscoverView: View {
             onOpenChat(.chatPrefill(tool.prompt))
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                NexlyGlyph(name: tool.glyph, size: 15, color: tool.filledTile ? .white : tool.fg)
+                exploreToolGlyph(tool, size: 15)
                     .modifier(IconCircleStyle(
                         bg: tool.filledTile ? tool.fg : tool.bg,
                         diameter: 36,
@@ -1063,7 +1078,7 @@ struct DiscoverView: View {
                         onOpenChat(.chatPrefill(tool.prompt))
                     } label: {
                         HStack(spacing: 10) {
-                            NexlyGlyph(name: tool.glyph, size: 15, color: tool.filledTile ? .white : tool.fg)
+                            exploreToolGlyph(tool, size: 15)
                                 .modifier(IconCircleStyle(
                                     bg: tool.filledTile ? tool.fg : tool.bg,
                                     diameter: 34,
@@ -1107,7 +1122,7 @@ struct DiscoverView: View {
                             onOpenChat(.chatPrefill(tool.prompt))
                         } label: {
                             HStack(spacing: 10) {
-                                NexlyGlyph(name: tool.glyph, size: 15, color: tool.filledTile ? .white : tool.fg)
+                                exploreToolGlyph(tool, size: 15)
                                     .modifier(IconCircleStyle(
                                         bg: tool.filledTile ? tool.fg : tool.bg,
                                         diameter: 34,
