@@ -1,15 +1,29 @@
-# EXPLORE — reference status
+# EXPLORE + DISCOVER — reference status
 
 The parity contract for the Explore page is the user's production mock,
 committed rectified: `docs/reference/explore/explore-home-reference.png`
 (the phone-screen interior cropped from the 1024×1536 mock; crop box and
-probe-space note in the sidecar JSON). This page records what the shipped
-iOS and Android builds measure against it, what intentionally differs,
-and what the CI gate now enforces.
+probe-space note in the sidecar JSON). The Discover page's contract is the
+second mock, committed the same way: `discover-home-reference.png`
+(crop 181-763 × 20-1585 of its 941×1671 canvas). This page records what the
+shipped iOS and Android builds measure against them, what intentionally
+differs, and what the CI gate now enforces.
 
 Audit date: 2026-10-25 (commits `57a51938`…`c48aa78f`, verified against
 the CI renders of `c48aa78f`: runs 40177639269 android-app, 40177187833
-ios.yml).
+ios.yml). Discover pass: commits `e1f37058`/`d8b37ec9`/`ba22f169`, graded
+from the first CI renders of `d8b37ec9` (runs 40181861869, 40181847570).
+
+## Explore vs Discover — what the two pages are
+
+They are two surfaces, not two names for one screen. **Explore** is the
+curated showcase reached from Home's assistant orb: hero → Popular Tools →
+Creative Collections → the Featured journey carousel, with the floating dock
+at its foot. **Discover** is the full catalogue browser reached from
+Explore's "See All": the "Discover what you can do with Nexly" hero, the
+category chips that filter the page, the mock's own four Featured Tools,
+the Popular prompt rows, and the "Ask me anything…" composer that
+auto-sends into a fresh chat. Each has its own mock, copy and cards.
 
 ## What the mock shows, and where it is enforced
 
@@ -26,6 +40,18 @@ ios.yml).
 | Floating dock: home circle / Explore peach pill / settings circle | shipped | `ExploreDock.swift` + `ExploreDock` in `ExploreScreen.kt`; ADR-008; blur-free `floatingControl` glass |
 | Pearlescent bubble backdrop | shipped | `GSExploreBackdrop`, dark-mode fallback both platforms |
 | Hero headline scale | shipped — **no change needed** | mock measures 16.3 pt caps at 24.8 pt pitch; the built 17.5 pt is inside it. The suspected "much smaller" gap did not survive pixel measurement |
+
+## The Discover page against its mock
+
+| Element | Status |
+|---|---|
+| Header, hero card (EXPLORE eyebrow → Start Exploring pill, bubble bleed) | shipped — copy matches the mock line for line |
+| Category chips — All/Productivity/Creativity/Learning/Lifestyle, peach active | shipped; inactive chips are translucent glass (the first iOS attempt rendered them pitch black — a shape-as-view's default fill sits ON TOP of its own glass background; fixed on render evidence) |
+| Featured Tools + "See all" (lowercase a — the mock writes it differently from Explore's "See All") | shipped; opens the search field, the page's honest whole-catalogue gesture |
+| Featured Tools cards — the mock's OWN four: Image Studio (sparkles/apricot), Voice (lavender), Writing Assistant + Code Helper (vermilion, new sampled token) | shipped as `discoverFeatured`, separate from the Explore catalog so neither mock drifts the other |
+| Arrow in a glass well beside the subtitle | shipped both platforms (22pt, subtitle shrinks before ellipsizing) |
+| Popular rows + "See all", subtitles with their periods | shipped; Android's `school` id now resolves GraduationCap — it was painting a schoolhouse where the mock paints a mortarboard |
+| Composer — sparkles in a white well, "Ask me anything…", white paper plane | shipped |
 
 ## Measured numbers (the pixel contract)
 
