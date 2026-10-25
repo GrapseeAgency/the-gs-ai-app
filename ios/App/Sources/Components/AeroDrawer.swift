@@ -75,8 +75,9 @@ struct AeroDrawer: View {
     /// `GlassFrostedPanel` uses (frost, veil, fill, rim), painted rather than
     /// composited.
     ///
-    /// The body colour is the sheet's own: this renders (250.7, 238.6, 229.1),
-    /// the sheet's margin measures (251.0, 237.2, 232.0). The cream is NOT
+    /// The body colour is the sheet's own: this renders (250.8, 238.7, 229.8) on
+    /// the final capture, the sheet's margin measures (251.0, 237.2, 232.0), and
+    /// it rendered (250.7, 238.6, 229.1) before this pass. The cream is NOT
     /// re-tinted to move the gate's body number — it already matches the picture.
     private var panelSurface: some View {
         ZStack {
@@ -164,11 +165,12 @@ struct AeroDrawer: View {
     /// where the sheet has a bar, which is what made the panel read as paper.
     ///
     /// This profile is a 1.25 pt bar at +7.0 L with the sheet's 5 pt tail. The
-    /// alpha over the first 1.5 pt is 0.50 against Android's 0.46 and the sheet's
-    /// own 0.29 at the frame edge, so the edge contrast lands within half a point
-    /// of Android's while the tail is the fall the sheet carries and Android does
-    /// not. Both numbers are below DR3's +14 L ceiling, and neither is a shadow or
-    /// a blur: this is one `LinearGradient`, written in the same draw.
+    /// effective white alpha over each panel's own body is 0.50 here, 0.39 on
+    /// Android (7.6 L over 235.5) and 0.29 on the sheet at its frame edge (4.5 L
+    /// over 239.5) — so the edge contrast lands within half a point of Android's
+    /// while the tail is the fall the sheet carries and Android does not. Both
+    /// numbers are below DR3's +14 L ceiling, and neither is a shadow or a blur:
+    /// this is one `LinearGradient`, written in the same draw.
     private var leadingRim: some View {
         // In dark the tail is a light leak the reference has no frame for: the
         // sheet is a daylit page. The bar stays, the bloom behind it is halved.

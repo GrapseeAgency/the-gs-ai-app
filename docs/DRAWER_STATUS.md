@@ -92,7 +92,9 @@ Column medians across rows 20–90 %, delta from each panel's own body:
 iOS had the right peak and the wrong profile: a 1.5 pt ramp from +7.2 to 0, so
 half its nominal width was unlit — a hairline where the sheet has a bar. It is a
 1.25 pt bar at +7.0 L with the sheet's 5 pt tail now, one `LinearGradient` with
-explicit stops.
+explicit stops. In effective white alpha over each panel's own body that is
+0.50 here, **0.39** on Android (7.6 L over 235.5) and **0.29** on the sheet at
+its frame edge (4.5 L over 239.5).
 
 ### Why it is painted, and why it is ONE pass
 
@@ -114,12 +116,13 @@ field painted in one Core Graphics pass measures **1.07 L**, below Android's
 of about one dither: a layer added for looks is a layer taken out of the budget.
 
 The body colour was NOT retuned to move a number. iOS renders
-(250.7, 238.6, 229.1) and the sheet's own margin measures (251.0, 237.2, 232.0)
-— 1.4 L apart in luma, on a band of [231, 244]. What was missing was structure,
-not hue: the text-free margin's column median varied 0.5 L where the sheet's
-varies 2.9 L. It is 1.86 L now, from the field the surface carries: a warm glow
-behind the header, a blush down the leading edge, a cool veil under the footer,
-at the sheet's own 2–3 L amplitude.
+(250.8, 238.7, 229.8) on the final capture and the sheet's own margin measures
+(251.0, 237.2, 232.0) — 1.4 L apart in luma, on a band of [231, 244] — and it
+rendered (250.7, 238.6, 229.1) before. What was missing was structure, not hue:
+the text-free margin's column median varied 0.5 L where the sheet's varies
+2.9 L. It is 1.86 L now, from the field the surface carries: a warm glow behind
+the header, a blush down the leading edge, a cool veil under the footer, at the
+sheet's own 2–3 L amplitude.
 
 Dark is unchanged in construction and improves in measurement: panel 28.70 →
 **34.56 L** (Android 41.90), separation from the strip 7.21 → **12.14 L**
