@@ -50,6 +50,10 @@ on:
       # as much a part of this job as the Kotlin it compiles.
       - 'scripts/check_home_render.py'
       - 'scripts/check_explore_render.py'
+      # The Settings pixel gate below blocks on this script and on the mocks
+      # whose numbers it enforces, so a commit to either must run this job.
+      - 'scripts/check_settings_render.py'
+      - 'docs/reference/settings/**'
       - 'shared-contracts/explore-geometry.json'
       # The adversarial suite and the artwork manifest are part of the gate's
       # evidence, so a commit to either has to run the job that uses them.
@@ -76,6 +80,10 @@ on:
       - 'native/crates/**'
       - 'scripts/check_home_render.py'
       - 'scripts/check_explore_render.py'
+      # The Settings pixel gate below blocks on this script and on the mocks
+      # whose numbers it enforces, so a commit to either must run this job.
+      - 'scripts/check_settings_render.py'
+      - 'docs/reference/settings/**'
       - 'shared-contracts/explore-geometry.json'
       # The adversarial suite and the artwork manifest are part of the gate's
       # evidence, so a commit to either has to run the job that uses them.
@@ -673,6 +681,43 @@ jobs:
               || { echo "::error::$name.png was not produced"; exit 1; }
           done
           echo "rendered all six Settings captures"
+
+      - name: Measure the Settings trio against its pixel contract
+        if: always()
+        run: |
+          set -euo pipefail
+          # The six captures above were gated on EXISTENCE only, which is how a
+          # settings card can go flat, a lit rim stop painting or the peach CTA
+          # come back as glass while the job stays green. This blocks on the
+          # mock's own numbers (docs/reference/settings/settings-geometry.json):
+          # the card's composite against the ground actually under it — read out
+          # of the shipped backdrop, verified to +/-0.01 L against these
+          # captures — its lit rim, and the CTA's saturation. Probes hang off the
+          # rim they FIND, so a layout that moves a few points cannot shift what
+          # is measured.
+          # This step is if: always(), so prove the artifact exists first: a
+          # missing PNG must be a named error, not the script's opaque exit 2.
+          SHOTS=android/app/build/screenshots
+          for pair in hub:nexly-settings profile:nexly-profile memory:nexly-memory; do
+            screen=${pair%%:*}
+            stem=${pair##*:}
+            for w in 393x852 360x780; do
+              PNG="$SHOTS/$stem-$w.png"
+              test -s "$PNG" \
+                || { echo "::error::$PNG was not produced — nothing to measure"; exit 1; }
+              python3 scripts/check_settings_render.py \
+                --render "$PNG" --screen "$screen" --label "android-$screen-$w"
+            done
+          done
+          # The gate's own non-vacuity: paint each card flat onto its ground,
+          # bury its rim and desaturate the pill, and every gated probe must go
+          # red on the doctored copy. A probe that cannot fail is not a gate.
+          for pair in hub:nexly-settings profile:nexly-profile memory:nexly-memory; do
+            screen=${pair%%:*}
+            stem=${pair##*:}
+            python3 scripts/check_settings_render.py \
+              --render "$SHOTS/$stem-393x852.png" --screen "$screen" --self-test
+          done
 
       - name: Upload the Nexly Settings renders
         if: always()

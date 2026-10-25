@@ -28,6 +28,10 @@ on:
       # `check_workflow_trigger_covers_scripts.py` exists for, one directory over.
       - "scripts/check_home_render.py"
       - "scripts/check_explore_render.py"
+      # The Settings pixel gate below runs this script and enforces the numbers
+      # in those mocks, so a commit to either has to run this job.
+      - "scripts/check_settings_render.py"
+      - "docs/reference/settings/**"
       - "shared-contracts/explore-geometry.json"
       # The adversarial suite below runs the pixel gate against doctored frames;
       # changing it, or the artwork manifest it feeds, has to run this job too.
@@ -377,6 +381,44 @@ jobs:
               test -s "$DIR/$name-$w.png" \
                 || { echo "::error::$name-$w.png missing — the Settings render harness did not produce it"; exit 1; }
             done
+          done
+
+      - name: Measure the Settings trio against its pixel contract
+        if: always()
+        run: |
+          set -euo pipefail
+          # The captures above were gated on EXISTENCE only, which is how a
+          # settings card can go flat, a lit rim stop painting or the peach CTA
+          # come back as glass while the job stays green. This blocks on the
+          # mock's own numbers (docs/reference/settings/settings-geometry.json):
+          # the card's composite against the ground actually under it — read out
+          # of the shipped backdrop, identical bytes on both platforms — its lit
+          # rim, and the CTA's saturation. Probes hang off the rim they FIND, so
+          # iOS's safe-area difference cannot shift what is measured.
+          # This step is if: always(), so prove the artifact exists first: a
+          # missing PNG must be a named error, not the script's opaque exit 2.
+          DIR=ios/build/nexly-renders
+          for pair in hub:nexly-settings-ios profile:nexly-profile-ios memory:nexly-memory-ios; do
+            screen=${pair%%:*}
+            stem=${pair##*:}
+            for w in 393x852 360x780; do
+              PNG="$DIR/$stem-$w.png"
+              test -s "$PNG" \
+                || { echo "::error::$PNG was not produced — nothing to measure"; exit 1; }
+              python3 scripts/check_settings_render.py \
+                --render "$PNG" --screen "$screen" --label "ios-$screen-$w" \
+                --backdrop "ios/App/Assets.xcassets/GSHomeBackdrop.imageset/gs-home-backdrop.png"
+            done
+          done
+          # The gate's own non-vacuity: paint each card flat onto its ground,
+          # bury its rim and desaturate the pill, and every gated probe must go
+          # red on the doctored copy. A probe that cannot fail is not a gate.
+          for pair in hub:nexly-settings-ios profile:nexly-profile-ios memory:nexly-memory-ios; do
+            screen=${pair%%:*}
+            stem=${pair##*:}
+            python3 scripts/check_settings_render.py \
+              --render "$DIR/$stem-393x852.png" --screen "$screen" --self-test \
+              --backdrop "ios/App/Assets.xcassets/GSHomeBackdrop.imageset/gs-home-backdrop.png"
           done
 
       - name: Upload the Nexly chat response render
