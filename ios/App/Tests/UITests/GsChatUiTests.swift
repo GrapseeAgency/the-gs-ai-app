@@ -4,8 +4,9 @@ import XCTest
 /// `ChatUiReplyTest`.
 ///
 /// Drives the app the way a user does: finds the chat composer's text field
-/// (AeroInputBar, placeholder "Ask anything…"), types "hello", taps the
-/// Send button (accessibilityLabel "Send"), and asserts a real, non-blank
+/// (placeholder "Ask me anything..." — NexlyComposerBar,
+/// ios/App/Sources/Features/Chats/NexlyChatShell.swift), types "hello", taps
+/// the Send button (accessibilityLabel "Send"), and asserts a real, non-blank
 /// assistant bubble appears in the UI within a bounded time — and that the
 /// text is NOT the canned greeting `ChatViewModel.localReply` fabricates
 /// when the engine is absent.
@@ -29,20 +30,50 @@ import XCTest
 ///      the launch arguments are provisioning, not a result.
 final class GsChatUiTests: XCTestCase {
 
+    /// The composer's placeholder, verbatim from NexlyComposerBar
+    /// (ios/App/Sources/Features/Chats/NexlyChatShell.swift):
+    ///
+    ///     TextField("Ask me anything...", text: $text, axis: .vertical)
+    ///
+    /// THE STRING THIS SUITE USED TO LOOK FOR NO LONGER EXISTS. Until
+    /// 5f78d9f2 the queries asked for "Ask anything…" — AeroInputBar's
+    /// DEFAULT placeholder, which no conversation screen passes since the
+    /// reference redesign moved the composer into NexlyComposerBar. So every
+    /// probe at every element type was pointed at a string the app does not
+    /// render, and runs 40116678867 through 40167513280 all failed with
+    /// "composer field never appeared" while the composer was on screen the
+    /// whole time. (Run 40167513280's tap failure even names the element in
+    /// its "Possibly caused by" hint — a SwiftUI.VerticalTextView, i.e. this
+    /// exact TextField — under a query for the wrong identifier.)
+    ///
+    /// NOTE the three ASCII dots, not "…": ExploreView.swift carries a
+    /// DIFFERENT field whose placeholder is "Ask me anything…" with a real
+    /// ellipsis. The conversation composer is the ASCII-dots spelling, and a
+    /// test that mixed them up would quietly match the wrong screen's field.
+    private static let composerPlaceholder = "Ask me anything..."
+
     /// The composer, whichever control the current simulator image exposes.
     ///
-    /// The placeholder sits on a `SwiftUI.VerticalTextView` on newer images and on
-    /// a `UITextField` on older ones, so `app.textFields[...]` alone began failing
-    /// with "composer field never appeared" on a build where nothing in the app had
-    /// changed. Probing both is the difference between testing the composer and
-    /// testing the runner's image.
+    /// The field is a `SwiftUI.VerticalTextView` on newer images and answers
+    /// as a `UITextField` on older ones, and on some images the two
+    /// classifications disagree with each other (run 40167513280:
+    /// "Automation type mismatch: computed TextField from legacy attributes
+    /// vs TextView from modern attribute") so NEITHER typed query resolves.
+    /// The third probe matches any element type by identifier or label, which
+    /// cannot be defeated by the classification — it asks for the string,
+    /// not the control.
     private func composerElement(_ app: XCUIApplication, timeout: TimeInterval) -> XCUIElement {
-        let field = app.textFields["Ask anything…"].firstMatch
-        let view = app.textViews["Ask anything…"].firstMatch
+        let field = app.textFields[Self.composerPlaceholder].firstMatch
+        let view = app.textViews[Self.composerPlaceholder].firstMatch
+        let anyTyped = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == %@ OR label == %@",
+                                  Self.composerPlaceholder, Self.composerPlaceholder))
+            .firstMatch
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
             if field.exists { return field }
             if view.exists { return view }
+            if anyTyped.exists { return anyTyped }
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         } while Date() < deadline
         return field
@@ -130,6 +161,19 @@ final class GsChatUiTests: XCTestCase {
 
         // 1. tap the chat input, 2. type "hello".
         let field = composerElement(app, timeout: 20)
+        if !field.exists {
+            // THE ACCESSIBILITY TREE IS THE EVIDENCE. A "never appeared"
+            // failure without the tree is a guess about what was on screen;
+            // with it, the next reader can see which element type and
+            // identifier the composer really exposed. Printed (the workflow
+            // uploads the test log) and attached (it rides the result bundle).
+            let tree = app.debugDescription
+            print("GsChatUiTests: composer '\(Self.composerPlaceholder)' absent; tree:\n\(tree)")
+            let attachment = XCTAttachment(string: tree)
+            attachment.name = "composer-missing-tree"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
         XCTAssertTrue(field.exists, "composer field never appeared")
         // THE TAP CAN BE DROPPED WHILE THE APP IS STILL LOADING THE MODEL.
         // GSApp.init initialises the GGUF synchronously, so the composer is in
@@ -168,7 +212,7 @@ final class GsChatUiTests: XCTestCase {
         repeat {
             let matches = app.staticTexts
                 .matching(NSPredicate(format: "label != '' AND label != %@ AND label != %@ AND NOT (label BEGINSWITH %@)",
-                                      "Ask anything…", "hello", "Search"))
+                                      Self.composerPlaceholder, "hello", "Search"))
                 .allElementsBoundByIndex
                 .map(\.label)
                 .filter { $0 != cannedPrefix && !$0.isEmpty }

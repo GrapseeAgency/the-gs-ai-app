@@ -209,14 +209,16 @@ compile fix, no icon change) reports the identical result —
 "composer field never appeared", with XCUITest's own note
 `Automation type mismatch: computed TextField from legacy attributes vs TextView
 from modern attribute` on `XC_kAXXCAttributeElementType =
-SwiftUI.VerticalTextView`. The composer is `AeroInputBar`
-(`Components/AeroComponents.swift`), which no commit here touches; the runner
-now boots an iPhone 17 Pro image where `app.textFields["Ask anything…"]` no
-longer matches a `VerticalTextView`, and the last green ios-native (run
-39673169516, 2026-10-21) predates both that image and the five model-backed
-tests that now run. **Open defect, separate from this migration:**
-`GsChatUiTests` needs a query that accepts the modern automation type (or the
-test needs `.textViews` fallback) before ios-native can go green again.
+SwiftUI.VerticalTextView`.
+
+> **2026-10-25 correction.** The runner-image theory below was wrong, and the
+> next section proves it with run ids: the last green ios-native
+> (39673169516, 2026-10-21) ran on the SAME Xcode 26.6 and the SAME iPhone 17
+> Pro (UDID `0183276C-C5F7-4A53-B0AF-C3D9117595F6`) as the red runs of Oct 24.
+> What changed between green and red was the APP: conversations moved from
+> `AeroInputBar` (placeholder "Ask anything…") to `NexlyComposerBar`
+> (placeholder "Ask me anything..."), and the test kept querying a string the
+> app no longer renders. The defect was the test's string, not the image.
 
 ## The recipe that worked
 
@@ -266,3 +268,114 @@ The harness also carries a bound it does not currently need: a menu that cannot
 be opened is recorded in `unreachableMenus` rather than silently skipped, and
 the workflow fails if that list ever names anything beyond the two header menus
 it was written for. A skip list that can grow is how a gate turns itself off.
+
+## ios-native green again — the two red UITests, root-caused (2026-10-25)
+
+`ios-native` run **40167513280** (commit `5f78d9f2`) failed two UI tests.
+ios-native uploads NO `.xcresult` (its artifacts are `ios-simulator-logs` —
+the full `xcodebuild` output — plus binaries), so the assertions below are
+copied verbatim from that run's `ios-simulator-logs` artifact, which carries
+XCTest's own `file:line: error:` lines. They are the recorded test output,
+not the job-log summary.
+
+### Assertion 1 — GsChatUiTests
+
+```
+ios/App/Tests/UITests/GsChatUiTests.swift:133: error: -[GsChatUITests.GsChatUiTests testSendHelloRendersARealAssistantReply] : XCTAssertTrue failed - composer field never appeared
+ios/App/Tests/UITests/GsChatUiTests.swift:142: error: -[GsChatUITests.GsChatUiTests testSendHelloRendersARealAssistantReply] : Failed to tap "Ask anything…" TextField: No matches found for first query match sequence: `Descendants matching type TextField` -> `Elements matching predicate '"Ask anything…" IN identifiers'`, given input App element pid: 25602
+Possibly caused by runtime issues:
+Automation type mismatch: computed TextField from legacy attributes vs TextView from modern attribute. Input attributes and values: {
+    "XC_kAXXCAttributeAutomationType" = 52;
+    "XC_kAXXCAttributeElementBaseType" = UITextView;
+    "XC_kAXXCAttributeElementType" = "SwiftUI.VerticalTextView";
+    "XC_kAXXCAttributeTraits" = 146029150208;
+}
+```
+
+**Root cause: the test queried a placeholder the app no longer renders.**
+`AeroComponents.swift` is UNCHANGED in the entire red window, and the run
+people blamed — the last green, **39673169516** on `2384e324` (2026-10-21) —
+passed `GsChatUiTests` on the SAME Xcode 26.6 and the SAME iPhone 17 Pro
+(UDID `0183276C…`) as every red run after it, so the image did not change.
+What changed is the conversation composer: `ChatDetailView` now composes
+through `NexlyComposerBar` (`NexlyChatShell.swift:131`),
+
+```swift
+TextField("Ask me anything...", text: $text, axis: .vertical)
+```
+
+while the test still asked for `AeroInputBar`'s default "Ask anything…" — a
+string that now appears in NO conversation. The `5f78d9f2` probe-both-types
+helper was correct in shape and useless in substance: both probes carried the
+wrong string. The `Automation type mismatch` hint in the failure text is real
+(the field IS a TextField/TextView hybrid on this image) but it was a hint on
+a query that could not have matched anyway — the mismatched element it names
+is the composer itself, under the wrong identifier.
+
+**The fix** (`GsChatUiTests.swift`): query `"Ask me anything..."` — note the
+three ASCII dots; `ExploreView.swift` carries a DIFFERENT field spelled
+"Ask me anything…" with a real ellipsis — through three probes in order:
+`textFields`, `textViews`, then any-type descendants matching
+`identifier == … OR label == …`, which cannot be defeated by the
+legacy/modern classification disagreement. On total failure the test now
+prints and attaches `app.debugDescription`, so the next red run carries the
+accessibility tree instead of a guess. Nothing downstream changed: the same
+tap → keyboard → type → Send → real-reply assertions run as before.
+
+### Assertion 2 — MenuChromeTests
+
+```
+ios/App/Tests/UITests/MenuChromeTests.swift:535: error: -[GsChatUITests.MenuChromeTests testEveryMenuPutsItsGlyphInTheLeadingSlot] : failed - chat-header-menu/Chat options: glyph extent 7.0 pt is outside 9–26 pt
+```
+
+with the run's own measurement line:
+
+```
+MEASURE chat-header-menu/Chat options geometry=row ink=110 h=3.3 w=7.0 inset=33.3 band=36x26
+```
+
+**Root cause: the harness's row-anchored probe band CLIPPED every glyph it
+measured, and iOS 26.4 moved the icon column into the clip.** The band was
+36 pt wide starting at `row.minX + 4`, so its right edge sat at `row.minX +
+40` — and in the green baseline's own `report.json` (run **40140193850**,
+Xcode 26.3 / iOS 26.2 / iPhone 16 Pro), ALL 21 row-geometry measurements have
+`inset + width = 40.0–40.4`: every width was the clipped remainder of a wider
+glyph. Read directly off that run's `menu-chat-header-menu.png`, the true
+ellipsis beside "Chat options" spans **13.3 pt** (report said 11.0) and the
+magnifyingglass **14.7 pt** (report said 12.0).
+
+On run 40167513280 (Xcode 26.6 / iOS 26.4 / iPhone 17 Pro) the same column
+sits at inset 32.3–34.0, so the same 13 pt glyph was clipped to
+`40 − 33.3 = 7.0 pt` and failed a 9 pt floor it had never been honestly
+measured against. This is not a race and not a flake: running the OLD
+arithmetic on the green screenshot with the icon columns shifted +4 pt
+reproduces the red run's numbers almost exactly —
+`h=3.3 w=7.0 extent=7.0 inset=33.3` (ink 108 px vs the run's 110). The
+product glyph never changed; the instrument was calibrated to one runtime's
+column position.
+
+**The fix** (`MenuChromeTests.swift`): the row-anchored leading band is now
+60 pt wide, and `probeInk` measures the LEADING INK CLUSTER — columns cut at
+the first blank gap of ≥ 10 pt, which separates the glyph from the row's
+title (the icon→title gutter is 18.3 pt in the green pixels; a glyph's
+internal gaps are ≤ 3 pt, the ellipsis's dots 2.25 pt apart). On the green
+run's own pixels the new arithmetic reads the true extents — 13.3 pt ellipsis,
+15.0 pt magnifyingglass — and on the +4 pt shifted simulation it still reads
+13.3. NO assertion moved: the 9–26 pt extent floor, the ink floor, the
+inset ≤ 34 leading-slot check and the reaches-past-title check are the same
+bounds over an unclipped measurement. The `.above` (swipe) path is untouched.
+
+### Control runs
+
+- **40172679213** (`bb90d07f`, unchanged, dispatched 2026-10-25 07:25): the
+  "re-run once unchanged" run. It never reached the tests — it died at the
+  DEVICE build on `ExploreView.swift: value of type 'ExploreTool' has no
+  member 'icon'` ×4, a compile break introduced by `4d03347c` and fixed by
+  `d7f1a7a4` ("the catalog member is glyph, not icon"). Not this work's
+  failure; noted so the run id is not mistaken for a test verdict.
+- **40173943127** (`d7f1a7a4`, unchanged, compiles): the same two failures
+  reproduce with the same assertions on a commit this work does not touch —
+  recorded in that run's `ios-simulator-logs`.
+- The repaired runs on this work's commit are recorded in the session report;
+  the harness's own `MEASURE` lines in those logs are the arithmetic behind
+  the green.

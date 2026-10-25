@@ -343,7 +343,12 @@ final class MenuChromeTests: XCTestCase {
             // clear a higher bar than a menu card's flat field (run 40135074617
             // measured 36x22 pt of "ink" — the whole band — at threshold 40).
             let threshold = slot == .leading ? 40 : 70
-            guard let probe = probeInk(image: image, band: band, scale: scale, threshold: threshold) else {
+            // The leading slot is measured as the leading ink CLUSTER, because
+            // the row-anchored band is wide enough to reach the row's title —
+            // see probeInk for the gap arithmetic.
+            guard let probe = probeInk(image: image, band: band, scale: scale,
+                                       threshold: threshold,
+                                       leadingClusterGapPt: slot == .leading ? 10 : nil) else {
                 record("\(name)/\(label): the probe band was degenerate")
                 continue
             }
@@ -420,6 +425,17 @@ final class MenuChromeTests: XCTestCase {
             case .textInRow(_, let row): return row.minX
             }
         }
+
+        /// The frame the row-anchored leading bands are laid out against —
+        /// the row for `.row`/`.textInRow`, the text itself for `.text`
+        /// (which has no row frame to anchor on).
+        var rowRect: CGRect {
+            switch self {
+            case .text(let rect): return rect
+            case .row(let rect): return rect
+            case .textInRow(_, let row): return row
+            }
+        }
     }
 
     private func titleBox(_ label: String, app: XCUIApplication) -> TitleBox? {
@@ -444,11 +460,33 @@ final class MenuChromeTests: XCTestCase {
         case (.text(let rect), .leading):
             // Immediately left of the title: the leading icon slot.
             return CGRect(x: rect.minX - 34, y: rect.midY - 12, width: 32, height: 24)
-        case (.row(let rect), .leading):
+        case (.row, .leading), (.textInRow, .leading):
             // Inside the row's leading edge, where a menu's icon column sits.
-            return CGRect(x: rect.minX + 4, y: rect.midY - 13, width: 36, height: 26)
-        case (.textInRow(_, let row), .leading):
-            return CGRect(x: row.minX + 4, y: row.midY - 13, width: 36, height: 26)
+            //
+            // 60 pt, not the 36 this band used to be, and the reason is
+            // measured, not guessed. EVERY row-geometry glyph in the green
+            // baseline's report.json (run 40140193850) has
+            //     inset + width = 40.0–40.4
+            // across 21 measurements — the old band ended at row.minX + 40,
+            // so each width was the CLIPPED remainder of a wider glyph. Read
+            // off the run's own screenshot pixels, the true ellipsis beside
+            // "Chat options" spans 13.3 pt (the report said 11.0) and the
+            // magnifyingglass 14.7 pt (the report said 12.0).
+            //
+            // That calibration error was invisible while the icon column sat
+            // at inset ~28 (SF baseline, iOS 26.2): the clipped widths still
+            // cleared the 9 pt extent floor. iOS 26.4 (run 40167513280)
+            // moved the column to inset 33.3, so the same 13 pt glyph was
+            // clipped to 40 − 33.3 = 7.0 pt and failed a check it was never
+            // honestly measured against.
+            //
+            // The band now reaches past the column wherever the runtime
+            // parks it; `probeInk` isolates the glyph as the leading ink
+            // CLUSTER so the band's overlap with the row's title (which
+            // starts ~18 pt right of the glyph) cannot contaminate the
+            // measurement.
+            let rect = box.rowRect
+            return CGRect(x: rect.minX + 4, y: rect.midY - 13, width: 60, height: 26)
         case (.text(let rect), .above):
             // Stacked layout with only the text known: stop short of the box.
             return CGRect(x: rect.midX - 22, y: rect.minY - 24, width: 44, height: 22)
@@ -481,8 +519,22 @@ final class MenuChromeTests: XCTestCase {
     /// Ink = pixels that differ from the band's own median by more than a
     /// fraction of the range. Scheme-agnostic: it works on white-on-black,
     /// black-on-white and white-on-tint alike.
+    ///
+    /// `leadingClusterGapPt`, when non-nil, measures the LEADING ink cluster
+    /// instead of everything in the band: columns are grouped into clusters
+    /// separated by blank runs of at least that many points, and the FIRST
+    /// cluster — the leading icon slot's glyph — is what returns. The
+    /// row-anchored leading band is 60 pt wide so it can cover the icon
+    /// column wherever the runtime parks it (inset ~28 on iOS 26.2, ~33 on
+    /// iOS 26.4), which means it also reaches the row's title; the cluster
+    /// cut is what keeps the title out of the glyph's bbox. The gap is 10 pt
+    /// because the measured gutters sit on either side of it: the icon→title
+    /// gap is 18.3 pt in the green baseline's own screenshot pixels, while a
+    /// glyph's internal gaps are ≤ 3 pt (the ellipsis's dots are 2.25 pt
+    /// apart at the menu's 18 pt raster).
     private func probeInk(image: CGImage, band: CGRect, scale: CGFloat,
-                          threshold: Int = 40) -> (count: Int, bbox: CGRect)? {
+                          threshold: Int = 40,
+                          leadingClusterGapPt: CGFloat? = nil) -> (count: Int, bbox: CGRect)? {
         let width = image.width, height = image.height
         // A context that owns its buffer: passing `&array` here would be a
         // pointer valid only for the initialiser's call, and the draw below
@@ -495,8 +547,8 @@ final class MenuChromeTests: XCTestCase {
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         guard let gray = context.data?.assumingMemoryBound(to: UInt8.self) else { return nil }
 
-        let minX = max(0, Int(band.minX * scale))
-        let maxX = min(width - 1, Int(band.maxX * scale))
+        var minX = max(0, Int(band.minX * scale))
+        var maxX = min(width - 1, Int(band.maxX * scale))
         let minY = max(0, Int(band.minY * scale))
         let maxY = min(height - 1, Int(band.maxY * scale))
         guard maxX > minX + 2, maxY > minY + 2 else { return nil }
@@ -509,11 +561,43 @@ final class MenuChromeTests: XCTestCase {
         let sorted = samples.sorted()
         let background = Int(sorted[sorted.count / 2])
 
+        // Per-column ink tally — the cluster cut below is decided on columns,
+        // before anything is measured.
+        var colInk = [Int](repeating: 0, count: maxX - minX + 1)
+        for y in minY...maxY {
+            let row = y * width
+            for x in minX...maxX {
+                let v = Int(gray[row + x])
+                if abs(v - background) > threshold {
+                    colInk[x - minX] += 1
+                }
+            }
+        }
+
+        if let gapPt = leadingClusterGapPt {
+            let gapPx = max(2, Int(gapPt * scale))
+            var start = 0
+            while start < colInk.count, colInk[start] == 0 { start += 1 }
+            guard start < colInk.count else { return (0, .zero) }
+            var end = start
+            var x = start
+            while x < colInk.count {
+                if colInk[x] > 0 { end = x; x += 1; continue }
+                var run = 0
+                while x + run < colInk.count, colInk[x + run] == 0 { run += 1 }
+                if run >= gapPx { break }
+                x += run
+            }
+            minX = minX + start
+            maxX = minX + (end - start)
+        }
+
         var count = 0
         var boxMinX = Int.max, boxMinY = Int.max, boxMaxX = Int.min, boxMaxY = Int.min
         for y in minY...maxY {
+            let row = y * width
             for x in minX...maxX {
-                let v = Int(gray[y * width + x])
+                let v = Int(gray[row + x])
                 if abs(v - background) > threshold {
                     count += 1
                     boxMinX = min(boxMinX, x); boxMaxX = max(boxMaxX, x)
