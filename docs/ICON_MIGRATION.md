@@ -421,3 +421,25 @@ ios/App/Tests/UITests/GsChatUiTests.swift:217: error: -[GsChatUITests.GsChatUiTe
   the code against the runner's own measurements (~135 s per CPU-simulator
   generation, GS-PERF `tapToFirstVisibleCharMs=41704`), inside the scheme's
   600 s per-test allowance.
+
+### The first green, and the timestamp it caught (run 40179201146)
+
+With the streaming-safe wait on main (`8a6969d8`), ios-native run
+**40179201146** went green — both tests:
+
+```
+Test Case '-[GsChatUITests.GsChatUiTests testSendHelloRendersARealAssistantReply]' passed (115.844 seconds).
+Test Case '-[GsChatUITests.MenuChromeTests testEveryMenuPutsItsGlyphInTheLeadingSlot]' passed (96.767 seconds).
+Executed 2 tests, with 0 failures (0 unexpected) in 212.611 (212.618) seconds
+```
+
+— but its own diagnostic print disqualified one line of it:
+`GsChatUiTests: reply bubble = 9:27 AM`. The bottom-most staticText in the
+transcript is the CLOCK STAMP under a turn (`GSFormatters.clock`,
+"h:mm a"), so the reply-content assertions had run against a timestamp — a
+green that proved the engine answered (the Stop control appeared and left) but
+not that the answer's text was checked. The follow-up filter
+(`isTranscriptChrome`) removes the transcript's own furniture — clock stamps,
+"Today"/"Yesterday", "d MMM yyyy", "yyyy-MM-dd" — before choosing the reply,
+and a red run now prints every label the query saw. The assertions themselves
+are unchanged and now apply to the assistant's words.

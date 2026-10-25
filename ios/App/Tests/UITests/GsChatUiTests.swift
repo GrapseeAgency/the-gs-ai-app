@@ -126,6 +126,26 @@ final class GsChatUiTests: XCTestCase {
         return dir.appendingPathComponent(name).path
     }
 
+    /// Transcript chrome that is a plain `Text` and therefore shows up among
+    /// the reply candidates. Run 40179201146 — the first run green through
+    /// this test — printed `reply bubble = 9:27 AM`: the clock stamp under a
+    /// turn (`GSFormatters.clock`, format "h:mm a") is the BOTTOM-most
+    /// staticText, so the content assertions ran against a timestamp and
+    /// proved nothing about the reply. These three patterns are the
+    /// transcript's own furniture — clock stamps, day separators ("Today",
+    /// "Yesterday", "d MMM yyyy", "yyyy-MM-dd") — and none of them can be the
+    /// model's answer to "hello".
+    private static func isTranscriptChrome(_ label: String) -> Bool {
+        let t = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t == "Today" || t == "Yesterday" { return true }
+        for pattern in ["^\\d{1,2}:\\d{2}\\s?(AM|PM)?$",
+                        "^\\d{1,2} [A-Za-z]{3} \\d{4}$",
+                        "^\\d{4}-\\d{2}-\\d{2}$"] {
+            if t.range(of: pattern, options: .regularExpression) != nil { return true }
+        }
+        return false
+    }
+
     func testSendHelloRendersARealAssistantReply() throws {
         guard ProcessInfo.processInfo.environment["GS_UI_TEST_MODE"] == "1" else {
             throw XCTSkip("set GS_UI_TEST_MODE=1 in the scheme's test action")
@@ -253,16 +273,26 @@ final class GsChatUiTests: XCTestCase {
             // screen top-to-bottom, and the reply is the newest bubble at the
             // bottom — the first match is a header or chrome text (eight
             // staticTexts matched this predicate in run 40176354400, and the
-            // conversation had exactly one reply).
+            // conversation had exactly one reply). Transcript chrome (clock
+            // stamps, day separators) is filtered out by isTranscriptChrome
+            // so the chosen text is the assistant's own words, not the
+            // furniture around them.
             if let text = replyQuery.allElementsBoundByIndex
                 .map(\.label)
-                .filter({ $0 != cannedPrefix && !$0.isEmpty })
+                .filter({ !$0.isEmpty && $0 != cannedPrefix && !Self.isTranscriptChrome($0) })
                 .last {
                 bubbleText = text
                 break
             }
         }
 
+        if bubbleText == nil {
+            // The labels the query DID see, so a red run names what was on
+            // screen instead of making the reader guess which chrome text
+            // beat the reply.
+            let seen = replyQuery.allElementsBoundByIndex.map(\.label)
+            print("GsChatUiTests: no reply candidate; transcript labels = \(seen)")
+        }
         XCTAssertNotNil(bubbleText,
                         "no assistant reply rendered within 300s of sending 'hello'")
         let reply = bubbleText ?? ""
