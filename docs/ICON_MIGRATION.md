@@ -379,3 +379,45 @@ bounds over an unclipped measurement. The `.above` (swipe) path is untouched.
 - The repaired runs on this work's commit are recorded in the session report;
   the harness's own `MEASURE` lines in those logs are the arithmetic behind
   the green.
+
+### The first repaired run, and the second defect it exposed (run 40176354400)
+
+With both fixes on main (`fce2dff4`, carried by `98985224`), run
+**40176354400**:
+
+- `MenuChromeTests` **PASSED** (129.4 s), and the fixed instrument read the
+  TRUE extents on iOS 26.4's column position — 25 of 25 rows measured,
+  `chat-header-menu/Chat options ink=193 h=3.3 w=13.3 inset=33.3 band=60x26`
+  where the clipped band had read `w=7.0`. The swipe-action (`.above`)
+  numbers are byte-identical to the green baseline's — that path was not
+  touched, and its measurements did not move.
+- `GsChatUiTests` got PAST the composer (found `"Ask me anything..."`
+  TextField at t=43 s, tapped, keyboard, typed `hello`, tapped Send at
+  t=64 s) — the placeholder fix works — and then failed on a SECOND,
+  distinct defect:
+
+```
+ios/App/Tests/UITests/GsChatUiTests.swift:217: error: -[GsChatUITests.GsChatUiTests testSendHelloRendersARealAssistantReply] : Failed to get matching snapshot: Timed out while evaluating UI query.
+```
+
+  The reply-wait loop's first poll (`allElementsBoundByIndex` over the
+  transcript's staticTexts) resolved seven elements in two seconds, then
+  hung on "Element at index 7" for 107 s: the app streams the reply token
+  by token, every token invalidates the accessibility snapshot mid-
+  resolution, and XCUITest records the timeout as a test failure. The loop
+  never completed one iteration.
+
+  The follow-up fix (same file): the wait now watches the composer's own
+  **Stop generating** control — `NexlyComposerBar` shows it exactly while
+  `isStreaming` — using `waitForExistence` (the non-fatal waiter; a bare
+  `.exists`/`allElementsBoundByIndex` resolution that runs slow is recorded
+  as a failure), and reads the transcript only after the engine has gone
+  quiet, re-confirming the Stop control is absent after a settle pause.
+  The reply assertions are unchanged: non-empty, not the canned
+  `localReply` prefix, not the prompt echoed back — and the match taken is
+  now the LAST matching staticText (screen bottom = newest bubble; the
+  first match is header chrome — eight staticTexts matched the predicate in
+  this run for a one-reply conversation). The deadline is 300 s, named in
+  the code against the runner's own measurements (~135 s per CPU-simulator
+  generation, GS-PERF `tapToFirstVisibleCharMs=41704`), inside the scheme's
+  600 s per-test allowance.

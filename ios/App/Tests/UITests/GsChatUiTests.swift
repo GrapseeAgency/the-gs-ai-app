@@ -206,23 +206,65 @@ final class GsChatUiTests: XCTestCase {
         //        string (XCTElementQueryInvalidPredicate)
         //    -- at this exact line, after the composer and Send both worked.
         //    `label != ''` says the same thing in valid syntax.
+        //
+        //    THE APP CANNOT SERVE SNAPSHOTS WHILE IT STREAMS. Run 40176354400
+        //    tapped Send at t=64 s; the FIRST poll of this loop resolved its
+        //    first seven staticTexts in two seconds and then hung on "Element
+        //    at index 7" for 107 s — every streamed token invalidates the
+        //    snapshot mid-resolution — and died with
+        //        Failed to get matching snapshot: Timed out while evaluating
+        //        UI query
+        //    before the loop body ran even once. So the wait watches the
+        //    composer's own Stop control (NexlyComposerBar shows it exactly
+        //    while `isStreaming`), one cheap existence probe at a time, and
+        //    only reads the transcript once the engine has gone quiet — the
+        //    transcript query itself is fast when the app is idle (it
+        //    resolved the same eight elements in 2 s at t=66 s, before the
+        //    generation began). The reply assertions are unchanged.
         let cannedPrefix = "Hey — good to see you."
-        let deadline = Date().addingTimeInterval(180)
+        let stopGenerating = app.buttons["Stop generating"].firstMatch
+        let replyQuery = app.staticTexts
+            .matching(NSPredicate(format: "label != '' AND label != %@ AND label != %@ AND NOT (label BEGINSWITH %@)",
+                                  Self.composerPlaceholder, "hello", "Search"))
+        // 300 s, not the old 180: the runner's own measurements put a
+        // CPU-simulator generation at ~135 s (GS-PERF tapToFirstVisibleCharMs
+        // = 41704 in this very workflow's unit tests) and run 40176354400
+        // spent 107 s of its budget on ONE doomed query retry. The bound is
+        // still far inside the scheme's 600 s per-test allowance.
+        let deadline = Date().addingTimeInterval(300)
         var bubbleText: String?
-        repeat {
-            let matches = app.staticTexts
-                .matching(NSPredicate(format: "label != '' AND label != %@ AND label != %@ AND NOT (label BEGINSWITH %@)",
-                                      Self.composerPlaceholder, "hello", "Search"))
-                .allElementsBoundByIndex
+        while Date() < deadline {
+            // waitForExistence, NOT a bare `.exists`: the waiter retries
+            // inside XCUITest and returns false on timeout, where a direct
+            // snapshot resolution that runs slow is recorded as a test
+            // failure — the exact error this loop exists to avoid.
+            if stopGenerating.waitForExistence(timeout: 2) {
+                Thread.sleep(forTimeInterval: 2)
+                continue
+            }
+            // Settle: a query fired during the post-stream relayout dies the
+            // same way one fired mid-stream does.
+            Thread.sleep(forTimeInterval: 1.5)
+            // Confirm after the settle — a probe that timed out mid-stream
+            // reads as "absent", and querying the transcript on that false
+            // negative is the failure this loop exists to avoid.
+            if stopGenerating.waitForExistence(timeout: 2) { continue }
+            // The LAST match, not the first: accessibility order follows the
+            // screen top-to-bottom, and the reply is the newest bubble at the
+            // bottom — the first match is a header or chrome text (eight
+            // staticTexts matched this predicate in run 40176354400, and the
+            // conversation had exactly one reply).
+            if let text = replyQuery.allElementsBoundByIndex
                 .map(\.label)
-                .filter { $0 != cannedPrefix && !$0.isEmpty }
-            bubbleText = matches.first
-            if bubbleText != nil { break }
-            Thread.sleep(forTimeInterval: 0.5)
-        } while Date() < deadline
+                .filter({ $0 != cannedPrefix && !$0.isEmpty })
+                .last {
+                bubbleText = text
+                break
+            }
+        }
 
         XCTAssertNotNil(bubbleText,
-                        "no assistant reply rendered within 180s of sending 'hello'")
+                        "no assistant reply rendered within 300s of sending 'hello'")
         let reply = bubbleText ?? ""
         print("GsChatUiTests: reply bubble = \(reply.prefix(120))")
         XCTAssertFalse(reply.hasPrefix(cannedPrefix),
