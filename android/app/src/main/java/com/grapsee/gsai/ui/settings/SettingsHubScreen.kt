@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsWellTone
+import com.grapsee.gsai.ui.components.LOTUS_BLEED_ALPHA
 import com.grapsee.gsai.ui.components.RefAvatar
 import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefGroupHeader
@@ -82,8 +84,11 @@ fun SettingsHubScreen(
         // ---- Identity card ------------------------------------------------
         RefCard(role = GsGlassRole.CardLight) {
             Box(Modifier.fillMaxWidth()) {
-                // The mock's blossom bleed: the shipped lotus photograph,
-                // faded into the card's right edge (no new raster minted).
+                // The mock's blossom bleed: the shipped lotus photograph, faded
+                // into the card's right edge (no new raster minted). Drawn at
+                // [LOTUS_BLEED_ALPHA] so it reads as the mock's pale
+                // impression — the raw photograph measures R-B 44 / contrast
+                // 18.9 in that corner where the mock measures 33.5 / 9.6.
                 Image(
                     painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
                     contentDescription = null,
@@ -91,7 +96,8 @@ fun SettingsHubScreen(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .fillMaxHeight()
-                        .width(190.dp),
+                        .width(190.dp)
+                        .alpha(LOTUS_BLEED_ALPHA),
                 )
                 Box(
                     Modifier

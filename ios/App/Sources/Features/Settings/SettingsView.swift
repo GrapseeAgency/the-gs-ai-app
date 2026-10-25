@@ -262,6 +262,33 @@ struct SettingsView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 11)
         .contentShape(Rectangle())
+        // The mock's blossom bleed: the shipped lotus photograph, faded into the
+        // card's right edge and drawn at 45% so it reads as the reference's pale
+        // impression rather than a flower pasted onto a settings page. The raw
+        // photograph measures R-B 44 and an 18.9 L spread in that corner where
+        // the mock measures 33.5 and 9.6; over the card's pearl fill 45% lands
+        // both within ~2 L of the mock. Android draws the same number
+        // (`LOTUS_BLEED_ALPHA`).
+        // Behind the row and clipped to the card's corner, so no petal escapes:
+        // `.gsGlass` fills a shape but does not clip the content above it.
+        .background(alignment: .trailing) {
+            GeometryReader { geo in
+                Image("GSHomeLotusNew")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 190, height: geo.size.height)
+                    .clipped()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .opacity(0.45)
+                    .mask(
+                        LinearGradient(
+                            colors: [.clear, .white.opacity(0.55), .white],
+                            startPoint: .leading, endPoint: .trailing)
+                    )
+            }
+            .allowsHitTesting(false)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     private func hubRow(

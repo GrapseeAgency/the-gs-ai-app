@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -30,6 +31,7 @@ import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.data.OnboardingProfileStore
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsWellTone
+import com.grapsee.gsai.ui.components.LOTUS_BLEED_ALPHA
 import com.grapsee.gsai.ui.components.RefAvatar
 import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefGroupHeader
@@ -80,7 +82,8 @@ fun ProfileScreen(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .fillMaxHeight()
-                        .width(190.dp),
+                        .width(190.dp)
+                        .alpha(LOTUS_BLEED_ALPHA),
                 )
                 Row(
                     modifier = Modifier

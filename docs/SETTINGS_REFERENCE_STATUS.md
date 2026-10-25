@@ -18,7 +18,7 @@ card with internal hairlines on iOS.
 |---|---|---|
 | Page frame | `GsSettingsPage` (`GsSettingsKit.swift`): pearl backdrop, 36pt glass back well, 18/12 header, `LazyVStack` content inset 22 | `RefSettingsPage` (`ReferenceGroupKit.kt`): `gs_home_backdrop` in light, 36dp back well, same header, scroll inset 22 |
 | Grouped card | `GsGroupCard` — one `.gsGlass(.cardLight, corner: 22)` per group, hairlines as row overlays (1/3 pt, 50 pt indent) | `RefCard(role = GsGlassRole.CardLight)` + `RefRowDivider(50.dp)` |
-| Identity card | initials avatar + edit pencil badge, name/email from `AccountStore`, `Free Plan` pill, blossom bleed | same, `RefAvatar` + `gs_home_lotus_new` masked right 45 % |
+| Identity card | initials avatar + edit pencil badge, name/email from `AccountStore`, `Free Plan` pill, `GSHomeLotusNew` bleed at 45 % masked into the right edge | same, `RefAvatar` + `gs_home_lotus_new` at `LOTUS_BLEED_ALPHA` |
 | Upgrade card | `GsWellTile(peach)` + copy + `GsInlinePill("Upgrade")` | `RefWellTile(GsWellTone.Peach)` + `RefInlinePill` |
 | Section heads | `GsGroupHeader` 17/12 with right caption | `RefGroupHeader` 17/12 with right caption |
 | Wells | `GsWellTile` 28–34 pt pastel circles | `RefWellTile` 28–34 dp pastel circles |
@@ -107,7 +107,11 @@ law), which is what makes "the card lost its glass" visible at all.
 1. **No stock portrait.** The identity card uses the app's own avatar treatment
    (initials in `RefAvatar`) with the mock's edit-pencil badge. Shipping a
    stranger's face as the reader's avatar is the one thing the mock cannot ask
-   for.
+   for. The blossom bleed behind it is the shipped `GSHomeLotusNew` photograph
+   drawn at 45 % over the card's fill: in that corner the raw photograph measures
+   R−B 44 and an 18.9 L spread where the mock measures 33.5 and 9.6, and 45 %
+   brings both within ~2 L of the mock. Before this pass Android drew it opaque
+   (twice the mock's contrast) and iOS drew no bleed at all.
 2. **Recent Memories are real.** The mock's four seeded rows ("You're a student",
    "Sep 16") do not exist. Both platforms render `savedItemDao` /
    `ConversationStore.savedLibraryItems()` (date + snippet) and an honest empty

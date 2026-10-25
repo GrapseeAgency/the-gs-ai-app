@@ -61,6 +61,19 @@ import com.grapsee.gsai.ui.theme.LocalGsIsDark
  * kit instead (the plan's "one kit per platform" rule).
  */
 
+/**
+ * How much of the shipped lotus photograph the identity card shows.
+ *
+ * The mock's blossom corner measures R-B 33.5 and a 9.6 L spread; the raw
+ * photograph in the same corner measures 44.1 and 18.9 — twice the contrast and
+ * further into magenta. Drawn at 45% over the card's pearl fill both numbers
+ * land within a couple of L of the mock, which is what makes it read as the
+ * reference's pale impression instead of a flower pasted onto a settings page.
+ * iOS mirrors the same number (`GsSettingsKit`), so the two platforms bleed
+ * identically.
+ */
+const val LOTUS_BLEED_ALPHA = 0.45f
+
 /** The mocks' pastel wells: a pale wash and the ink drawn on it. */
 enum class GsWellTone(val wash: Color, val ink: Color) {
     Peach(Color(0xFFFDE8DA), Color(0xFFB85C12)),
