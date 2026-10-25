@@ -11,6 +11,13 @@ Three classes of defect are invisible in a capture and expensive in production:
      panel, which is a gaussian blur of ~2.6 Mpx every frame while the panel
      slides.
 
+Rule 18 adds a fourth, one the other three cannot see: the panel's surface is a
+`Canvas` now, and a Canvas that reads drag state re-rasterises a full panel in
+Core Graphics on every touch sample — the same cost class as 2 and 3, reached
+from a direction no regex over `.shadow(` or `activeConversations` covers. It is
+cheap to write and the invariant is real: the surface's only legal inputs are
+its appearance and the size it is proposed.
+
 Each rule below names the mistake it forbids. `--self-test` writes a doctored
 copy of each file into a temp directory and proves the rule fires, so this is not
 a lint that can only ever pass.
@@ -28,6 +35,23 @@ ANDROID_NAV = "android/app/src/main/java/com/grapsee/gsai/ui/navigation/GsNavHos
 IOS_DRAWER = "ios/App/Sources/Components/AeroDrawer.swift"
 IOS_CHATS_LIST = "ios/App/Sources/Features/Chats/ChatsListView.swift"
 IOS_CHAT_DETAIL = "ios/App/Sources/Features/Chats/ChatDetailView.swift"
+
+# The panel's surface, from its declaration to the first closing brace at column
+# 0. Everything inside it is indented, so that brace is its own.
+SURFACE = re.compile(r"private struct DrawerPanelSurface[\s\S]*?\n}\n")
+
+
+def surface_reads_drag_state(text):
+    """Rule 18: the Canvas surface must not depend on the gesture that moves it.
+
+    The panel sits inside the subtree whose `.offset` follows the finger. With one
+    stored `Bool` as its only input SwiftUI short-circuits the surface and the drag
+    stays a compositing transform; one read of `entryOffset` / `closeOffset` from
+    inside turns the same drag into ~2.1 MPix of gradient work per sample, on the
+    main thread, which is exactly the cost rules 2 and 3 exist to forbid.
+    """
+    found = SURFACE.search(text)
+    return bool(found) and re.search(r"entryOffset|closeOffset", found.group(0)) is not None
 
 
 def rules():
@@ -127,6 +151,17 @@ def rules():
          "an interactive row has a fixed height, so large type is clipped",
          lambda t: re.search(r"\.frame\(height: DrawerMetrics\.(searchHeight|heroHeight|destPitch|recentPitch)\)", t) is not None,
          ".frame(height: DrawerMetrics.recentPitch)"),
+        # Rule 18. The surface is a Canvas, so `drawWithCache`'s "built once per
+        # size change" guarantee does not apply to it: only SwiftUI's equality
+        # check stands between this and a per-sample raster. That check is worth
+        # one rule.
+        (IOS_DRAWER,
+         "the panel surface reads drag state, so a full-panel raster runs per touch sample",
+         surface_reads_drag_state,
+         "private struct DrawerPanelSurface: View {\n"
+         "    let dark: Bool\n"
+         "    let drag: CGFloat = entryOffset\n"
+         "}\n"),
     ]
 
 

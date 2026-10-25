@@ -58,10 +58,14 @@ that changed the surface.
 Captures, all at 393 × 852: `home-renders-ios` from ios.yml run **40200332103**
 and `home-renders` from android-app run **40200334070**, both on `main` at
 **7897bdd4** (the "before"); `home-renders-ios` from ios.yml run **40202990869**
-at **98e0f565** (the "after"). Android's capture is byte-identical in
-40197395473, 40200334070 and 40201927842 — sha256
-`0d0970b7b3dce5fd3a5656ed3d9fa7b511d6bd0c4ff6c1f7dfa55b3a1e2bedbf` — so the
-platform that did not change is a control, not a second variable.
+at **98e0f565** (the first "after", the pass that rebuilt the surface) and from
+run **40212723504** at **f9088f66** (the final code: the same surface plus the
+dark-edge rescale). Run 40212723504 was dispatched on a throwaway branch of
+`f9088f66` because `main` was red at the time from a concurrent workstream's
+commit — the commit is the one on `main`, the branch only named the ref.
+Android's capture is byte-identical in 40197395473, 40200334070 and 40201927842 —
+sha256 `0d0970b7b3dce5fd3a5656ed3d9fa7b511d6bd0c4ff6c1f7dfa55b3a1e2bedbf` — so
+the platform that did not change is a control, not a second variable.
 
 **Every number in the table below is printed by the gates themselves**, on those
 captures: `check_drawer_render.py` prints `panel_mean`, `panel_std`, `rim_1p5_pt`
@@ -78,7 +82,7 @@ instrument behind any number here.
 | reference sheet | 233.5 | 28.5 | 239.5 | +1.3 | +9.6 | 1.00 | 2.9 |
 | Android | 231.2 | 26.5 | 235.48 | +6.51 | 7.65 | 1.79 | 1.00 |
 | iOS before | 236.8 | 26.5 | 240.91 | **+4.50** | 7.66 | 2.72 | 0.79 |
-| iOS after | 236.9 | 26.5 | 240.98 | **+7.01** | 7.15 | 1.07 | 1.86 |
+| iOS after | 236.9 | 26.5 | 240.97 | **+7.01** | 7.16 | 1.15 | 2.15 |
 
 iOS's rim is 0.50 L from Android's at 1.5 pt — it was 2.0 L below — and 0.50 L at
 the peak. Both platforms are inside [4, 14]. The sheet's +1.3 in the 1.5 pt
@@ -94,7 +98,7 @@ Column medians across rows 20–90 %, delta from each panel's own body — the
 | sheet (1.71 px/pt) | −19.2 | +4.6 | +4.6 | +5.2 | +9.6 | +2.8 | +0.7 | +0.1 |
 | Android (3 px/pt) | +7.5 | +7.7 | +7.5 | 0.0 | −0.1 | −0.1 | 0.0 | −0.1 |
 | iOS before | +7.7 | +5.2 | +4.4 | +3.4 | +1.0 | +0.5 | +0.3 | +0.4 |
-| iOS after | +7.0 | +6.9 | +7.2 | +6.9 | +6.7 | +4.5 | +2.5 | +1.6 |
+| iOS after | +7.0 | +6.9 | +7.2 | +6.9 | +6.8 | +4.6 | +2.6 | +1.5 |
 
 iOS had the right peak and the wrong profile: a 1.5 pt ramp from +7.7 at the
 frame edge to +1.0 by 1.33 pt, so half its nominal width was unlit — a hairline
@@ -130,7 +134,7 @@ stacked three SwiftUI `RadialGradient`s. SwiftUI dithers each gradient layer
 separately to stop banding and the dither does not cancel: the text-free margin
 went from |d| p90 2.72 L to **5.07 L** and DR3 failed on run **40201896377** —
 the bloom scored as exactly the ghosting the ceiling exists to catch. The same
-field painted in one Core Graphics pass measures **1.07 L**, below Android's
+field painted in one Core Graphics pass measures **1.15 L**, below Android's
 1.79 and level with the sheet's 1.00. On this panel the HF ceiling is a budget
 of about one dither: a layer added for looks is a layer taken out of the budget.
 
@@ -139,20 +143,22 @@ The body colour was NOT retuned to move a number. iOS renders
 (251.0, 237.2, 232.0) — 1.4 L apart in luma, on a band of [231, 244] — and it
 rendered (250.7, 238.6, 229.1) before. What was missing was structure, not hue:
 the text-free margin's column median varied **0.79 L** where the sheet's varies
-**2.86 L**. It is 1.86 L now, from the field the surface carries: a warm glow
+**2.86 L**. It is 2.15 L now, from the field the surface carries: a warm glow
 behind the header, a blush down the leading edge, a cool veil under the footer,
 at the sheet's own 2–3 L amplitude.
 
 Dark gains the same painted bloom, scaled to 12 %, and its own measurement: the
 panel went 28.70 → **34.56 L** (Android 41.90) and its separation from the strip
 7.21 → **12.14 L** (Android 17.14), copy contrast 212.0 L, 0.04 % blown, hero
-R−B 22.1 — all from run 40202990869's `check_drawer_dark.py`. The dark EDGE is a
-separate story and a defect this pass shipped: the light profile reused at
-strength measured **+99.22 L** over the 34.56 L body where Android's is **+20.00**
-over 41.90 — a 1.25 pt white bar is a lamp on a dark panel, and no gate could see
-it. It is now the same shape at a fifth of the alpha, and `check_drawer_dark.py`
-grew K6 (`rim_delta` in [4, 40]) so it cannot regress unwatched: the new check
-fails the shipped capture at 99.22 and passes Android at 20.00.
+R−B 22.1 — all from `check_drawer_dark.py` on runs 40200332103 (before) and
+40212723504 (after). The dark EDGE is a separate story and a defect this pass
+shipped: the light profile reused at strength measured **+99.22 L** over the
+34.56 L body where Android's is **+20.00** over 41.90 — a 1.25 pt white bar is a
+lamp on a dark panel, and no gate could see it. It is now the same shape at a
+fifth of the alpha and measures **+17.79 L** (Android 20.00, 2.2 L apart), and
+`check_drawer_dark.py` grew K6 (`rim_delta` in [4, 40]) so it cannot regress
+unwatched: the new check fails the shipped capture at 99.22 and passes both the
+rescued iOS edge at 17.79 and Android at 20.00.
 
 ## What is gated where — and why the split
 
@@ -181,9 +187,10 @@ stronger claim made falsely.
 - `scripts/check_drawer_dark.py` — dark panel, glass still present over it, copy
   contrast, no blown highlight, hero warmth, and the leading edge (K6: the light
   gate's rim probe, re-based for a 35 L body — lit, and not a lamp).
-- `scripts/check_drawer_structure.py` — 17 rules (lazy list, no eager scroll, no
+- `scripts/check_drawer_structure.py` — 18 rules (lazy list, no eager scroll, no
   draw-time blur, no per-frame shadow, no store read from `body`, no infinite
-  animation), each with a counter-example it must reject, run with `--self-test`.
+  animation, and no drag state read from the panel's `Canvas` surface), each
+  with a counter-example it must reject, run with `--self-test`.
 - `.github/scripts/check_drawer_type_parity.py` — 32 metric names identical on both
   platforms, 10 labels rendered on both.
 
@@ -232,7 +239,7 @@ stronger claim made falsely.
 | Is the gate capable of failing? | 8 doctored frames, each caught by its own rule | `test_drawer_render_gate.py` |
 | Is the list bounded? | 500-chat frame compared with the sheet-sized frame | DR11, both platforms |
 | Do both platforms agree on numbers? | 32 metric names, 10 literals | `check_drawer_type_parity.py` |
-| Is anything quietly expensive? | 17 structural rules with their own counter-examples | `check_drawer_structure.py` |
+| Is anything quietly expensive? | 18 structural rules with their own counter-examples | `check_drawer_structure.py` |
 | Does each control go where it says? | 6 pressed controls, asserted routes | `DrawerInteractionTest` (Android) |
 | Do the iOS destinations and icon agree? | 4 assertions without a screen | `DrawerLogicTests` (iOS) |
 | Does the type hold up? | rows use `heightIn(min:)`/`minHeight:`; both platforms draw the product face, iOS through the Dynamic Type engine | structure rules 12–13, `Aero.specFont` |
