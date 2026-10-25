@@ -6,8 +6,8 @@
       <stop offset="1" stop-color="#F8E0D8"/>
     </radialGradient>
     <radialGradient id="bubA" cx="38%" cy="32%" r="80%">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.8"/>
-      <stop offset="0.4" stop-color="#FAD5EA" stop-opacity="0.5"/>
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="0.4" stop-color="#F9CBE6" stop-opacity="0.62"/>
       <stop offset="0.72" stop-color="#E0C4F1" stop-opacity="0.45"/>
       <stop offset="1" stop-color="#E0C4F1" stop-opacity="0"/>
     </radialGradient>
@@ -62,17 +62,21 @@
   </g>
 
   <!-- mid-right: the giant bubble sliding off the edge -->
-  <circle cx="600" cy="640" r="180" fill="url(#bubC)"/>
+  <circle cx="600" cy="640" r="205" fill="url(#bubC)"/>
   <circle cx="600" cy="640" r="180" fill="none" stroke="url(#rim)" stroke-width="2.5"/>
   <path d="M 452 560 A 170 170 0 0 1 640 480" fill="none" stroke="#FFFFFF" stroke-opacity="0.65" stroke-width="5" stroke-linecap="round"/>
   <circle cx="520" cy="588" r="26" fill="#FFFFFF" opacity="0.5"/>
+
+  <circle cx="20" cy="480" r="120" fill="url(#bubB)"/>
+  <circle cx="20" cy="480" r="120" fill="none" stroke="url(#rim)" stroke-width="2"/>
+  <path d="M -70 400 A 115 115 0 0 1 110 372" fill="none" stroke="#FFFFFF" stroke-opacity="0.7" stroke-width="5" stroke-linecap="round"/>
 
   <!-- small companion bubble -->
   <circle cx="470" cy="880" r="52" fill="url(#bubB)"/>
   <circle cx="470" cy="880" r="52" fill="none" stroke="url(#rim)" stroke-width="2"/>
 
   <!-- bottom-left: the pearl bubble -->
-  <circle cx="90" cy="1180" r="185" fill="url(#bubB)"/>
+  <circle cx="80" cy="1180" r="215" fill="url(#bubB)"/>
   <circle cx="90" cy="1180" r="185" fill="none" stroke="url(#rim)" stroke-width="2.5"/>
   <path d="M -60 1090 A 175 175 0 0 1 160 1010" fill="none" stroke="#FFFFFF" stroke-opacity="0.7" stroke-width="6" stroke-linecap="round"/>
   <ellipse cx="60" cy="1120" rx="34" ry="22" fill="#FFFFFF" opacity="0.55"/>

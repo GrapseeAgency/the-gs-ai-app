@@ -6,6 +6,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.Path
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -431,8 +433,8 @@ private fun Modifier.exploreGlass(
         .clip(shape)
         .background(
             Brush.linearGradient(
-                0f to Color(0xFFFFFAF6).copy(alpha = if (isDark) 0.90f else 0.97f),
-                1f to Color(0xFFFCEDE5).copy(alpha = if (isDark) 0.80f else 0.88f),
+                0f to Color(0xFFFFFAF6).copy(alpha = if (isDark) 0.85f else 0.90f),
+                1f to Color(0xFFFCEDE5).copy(alpha = if (isDark) 0.74f else 0.79f),
                 start = androidx.compose.ui.geometry.Offset.Zero,
                 end = androidx.compose.ui.geometry.Offset.Infinite,
             ),
@@ -481,12 +483,29 @@ private fun ExploreIconCircle(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            exploreIcon(tool.icon),
-            contentDescription = null,
-            tint = glyphTint,
-            modifier = Modifier.size(glyph),
-        )
+        if (tool.icon == "player-play") {
+            // the mock's play is a filled rounded triangle, not an outline glyph
+            Canvas(Modifier.size(glyph)) {
+                val w = size.width
+                val h = size.height
+                val p = Path().apply {
+                    moveTo(w * 0.28f, h * 0.16f)
+                    cubicTo(w * 0.42f, h * 0.08f, w * 0.55f, h * 0.14f, w * 0.82f, h * 0.42f)
+                    cubicTo(w * 0.92f, h * 0.52f, w * 0.92f, h * 0.48f, w * 0.82f, h * 0.58f)
+                    cubicTo(w * 0.55f, h * 0.86f, w * 0.42f, h * 0.92f, w * 0.28f, h * 0.84f)
+                    cubicTo(w * 0.16f, h * 0.76f, w * 0.16f, h * 0.24f, w * 0.28f, h * 0.16f)
+                    close()
+                }
+                drawPath(p, Color.White)
+            }
+        } else {
+            Icon(
+                exploreIcon(tool.icon),
+                contentDescription = null,
+                tint = glyphTint,
+                modifier = Modifier.size(glyph),
+            )
+        }
     }
 }
 

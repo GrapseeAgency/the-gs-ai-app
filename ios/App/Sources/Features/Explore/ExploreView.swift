@@ -187,8 +187,8 @@ private struct ExploreGlass: ViewModifier {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color(red: 1.0, green: 0.980, blue: 0.965).opacity(0.97),
-                                Color(red: 0.988, green: 0.929, blue: 0.898).opacity(0.88),
+                                Color(red: 1.0, green: 0.980, blue: 0.965).opacity(0.90),
+                                Color(red: 0.988, green: 0.929, blue: 0.898).opacity(0.79),
                             ],
                             startPoint: .topLeading, endPoint: .bottomTrailing
                         )
@@ -208,14 +208,46 @@ private struct ExploreGlass: ViewModifier {
     }
 }
 
+/// The mock's play: a filled rounded triangle (no filled-play glyph in the set).
+private struct PlayTriangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let w = rect.width; let h = rect.height
+        p.move(to: CGPoint(x: w * 0.28, y: h * 0.16))
+        p.addCurve(to: CGPoint(x: w * 0.82, y: h * 0.42),
+                   control1: CGPoint(x: w * 0.42, y: h * 0.08),
+                   control2: CGPoint(x: w * 0.55, y: h * 0.14))
+        p.addCurve(to: CGPoint(x: w * 0.82, y: h * 0.58),
+                   control1: CGPoint(x: w * 0.92, y: h * 0.52),
+                   control2: CGPoint(x: w * 0.92, y: h * 0.48))
+        p.addCurve(to: CGPoint(x: w * 0.28, y: h * 0.84),
+                   control1: CGPoint(x: w * 0.55, y: h * 0.86),
+                   control2: CGPoint(x: w * 0.42, y: h * 0.92))
+        p.addCurve(to: CGPoint(x: w * 0.28, y: h * 0.16),
+                   control1: CGPoint(x: w * 0.16, y: h * 0.76),
+                   control2: CGPoint(x: w * 0.16, y: h * 0.24))
+        p.closeSubpath()
+        return p
+    }
+}
+
 private struct IconCircleStyle: ViewModifier {
     var bg: Color
     var diameter: CGFloat
     var solidTile: Bool = false
+    /// Draws the filled play triangle instead of a glyph (video tile).
+    var playGlyph: Bool = false
 
     func body(content: Content) -> some View {
         content
             .frame(width: diameter, height: diameter)
+            .overlay {
+                if playGlyph {
+                    PlayTriangle()
+                        .fill(.white)
+                        .frame(width: diameter * 0.42, height: diameter * 0.42)
+                }
+            }
             .background(
                 Circle().fill(
                     solidTile
@@ -727,7 +759,8 @@ struct ExploreView: View {
                     .modifier(IconCircleStyle(
                         bg: tool.filledTile ? tool.fg : tool.bg,
                         diameter: 34,
-                        solidTile: tool.filledTile
+                        solidTile: tool.filledTile,
+                        playGlyph: tool.icon == "player-play"
                     ))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(tool.title)
@@ -994,7 +1027,8 @@ struct DiscoverView: View {
                     .modifier(IconCircleStyle(
                         bg: tool.filledTile ? tool.fg : tool.bg,
                         diameter: 36,
-                        solidTile: tool.filledTile
+                        solidTile: tool.filledTile,
+                        playGlyph: tool.icon == "player-play"
                     ))
                 Text(tool.title)
                     .font(Aero.bodyMedium().weight(.semibold))
@@ -1033,7 +1067,8 @@ struct DiscoverView: View {
                                 .modifier(IconCircleStyle(
                                     bg: tool.filledTile ? tool.fg : tool.bg,
                                     diameter: 34,
-                                    solidTile: tool.filledTile
+                                    solidTile: tool.filledTile,
+                                    playGlyph: tool.icon == "player-play"
                                 ))
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(tool.title)
@@ -1076,7 +1111,8 @@ struct DiscoverView: View {
                                     .modifier(IconCircleStyle(
                                         bg: tool.filledTile ? tool.fg : tool.bg,
                                         diameter: 34,
-                                        solidTile: tool.filledTile
+                                        solidTile: tool.filledTile,
+                                        playGlyph: tool.icon == "player-play"
                                     ))
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(tool.title)
