@@ -53,6 +53,26 @@ auto-sends into a fresh chat. Each has its own mock, copy and cards.
 | Popular rows + "See all", subtitles with their periods | shipped; Android's `school` id now resolves GraduationCap — it was painting a schoolhouse where the mock paints a mortarboard |
 | Composer — sparkles in a white well, "Ask me anything…", white paper plane | shipped |
 
+## The polish pass (2026-10-25, commits 5935b3bc…04ae8e94)
+
+- **Hero CTAs are flat fills, not gradients**: column medians of the committed
+  crops read #FEE7E0 (Explore "Explore All") and a paler pearl #FEF4E6
+  (Discover "Start Exploring") — both shipped as `ctaPink`/`ctaPearl` tokens
+  on both platforms.
+- **The Featured bubble measured back as already correct**: ~28pt sphere,
+  8pt inside the card edge, vertically centred (the 89pt mask hit the sakura
+  art). The shipped 30pt/8pt stays; this closes the claim, not a defect.
+- **Discover draws its own hero art**: `gs_discover_hero` is cropped from the
+  Discover mock itself (purple bloom over the orange sphere). Its left 148px
+  carried the mock's headline tail — mirror-patched and blurred, which is
+  veil territory. Registered in `prepare_home_art` with the 3.7x draw
+  declared; byte-identical on both platforms.
+- **iOS hero layering was a real bug the renders caught**: the chain ran
+  ExploreGlass BEFORE the art background, so the 90%-opaque fill painted over
+  the bubbles — both heroes read washed-out on iOS while Compose drew them
+  correctly. Order swapped (art directly behind the text, glass behind the
+  art); the post-fix renders show the mock's saturation on both platforms.
+
 ## Measured numbers (the pixel contract)
 
 `shared-contracts/explore-geometry.json`, run by
