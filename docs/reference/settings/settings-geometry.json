@@ -1,0 +1,49 @@
+{
+  "_about": "Shared geometry/colour contract for the Settings hub, Profile & Preferences, and Memory Management mocks (docs/reference/settings/*.png, 1024x1536 canvases, phone screen x186-836 y18-1492 -> 650x1474 crop, 1.654 px/pt at 393pt). Horizontal ratios are device-true; vertical ones are NOT (crop aspect 0.441 vs device 0.4613) and are re-derived from renders.",
+  "screenCrop": [186, 18, 836, 1492],
+  "pxPerPt": 1.654,
+  "card": {
+    "insetX_ratio": 0.0554,
+    "insetX_pt": 21.8,
+    "width_ratio": 0.891,
+    "corner_pt": 22,
+    "fill_rgb": [246, 236, 233],
+    "rim_top_excess_L_min": 6.0,
+    "interior_vs_page_band_L": [1.0, 10.0]
+  },
+  "well": {
+    "diameter_pt": 28,
+    "diameter_ratio_of_card": 0.080,
+    "rim_alpha": 0.95
+  },
+  "row": {
+    "pitch_pt_measured": 43.5,
+    "title_pt": 15.0,
+    "subtitle_pt": 12.5,
+    "divider_indent_pt": 50,
+    "divider_alpha": 0.35
+  },
+  "header": {
+    "back_circle_pt": 36,
+    "title_pt": 18.3,
+    "title_cap_pt_measured": 13.3,
+    "subtitle_pt": 12.5,
+    "title_offset_x_pt": 62
+  },
+  "section": {
+    "title_pt": 17.0,
+    "caption_pt": 12.0,
+    "gap_below_pt": 8
+  },
+  "pills": {
+    "cta_fill_hex": "#FEB58D",
+    "cta_h_pt": 32,
+    "cta_w_pt_measured": 110,
+    "plan_fill_hex": "#F5CFB5",
+    "memory_on_fill_hex": "#C3DCCB"
+  },
+  "probes": {
+    "card": { "_what": "One probe per screen: interior sample vs the page BESIDE the card at the same y (ground differs down the page, so an absolute fill is not a contract). The rim row is the +6 L minimum." },
+    "cta": { "_what": "Saturation (R-B) of the hub's Upgrade pill: the mock reads ~110 at #FEB58D; a glass pill reads <=20." }
+  }
+}
