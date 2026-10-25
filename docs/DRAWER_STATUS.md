@@ -48,6 +48,83 @@ measures the *resulting* luma as a ratio against the Home capture of the same ru
 square at every sampled height; the current drawer rounded both ends. DR1 asserts
 the top inset is 0 at 5% height, and an arc fit for the bottom.
 
+## The panel surface, before and after (2026-10-25)
+
+The iOS panel measured weaker than Android's and weaker than the sheet, and the
+report canvas was still showing 24 Oct captures. Both were settled on fresh
+pixels from the same commit.
+
+Captures, all at 393 × 852: `home-renders-ios` from ios.yml run **40200332103**
+and `home-renders` from android-app run **40200334070**, both dispatched on
+`main` at **7897bdd4** (the "before"); `home-renders-ios` from ios.yml run
+**40202990869** at **98e0f565** (the "after"). Android's capture is
+byte-identical in 40197395473, 40200334070 and 40201927842 — sha256
+`0d0970b7b3dce5fd3a5656ed3d9fa7b511d6bd0c4ff6c1f7dfa55b3a1e2bedbf` — so the
+platform that did not change is a control, not a second variable.
+
+The instrument is the one `check_drawer_render.py` uses: panel mean and std over
+the panel rectangle, body = median of `BLANK_BAND`, the leading rim = median of
+the leftmost 1.5 pt minus the body, HF p90 = derivative p90 inside `BLANK_BAND`.
+
+| | panel mean | std | body | rim @1.5 pt | rim peak | HF p90 |
+|---|---|---|---|---|---|---|
+| reference sheet | 233.5 | 28.5 | 239.5 | +1.3 | +9.6 | 1.00 |
+| Android | 231.2 | 26.5 | 235.5 | +6.5 | +7.7 | 1.79 |
+| iOS before | 236.7 | 26.7 | 240.9 | **+4.5** | +7.7 | 2.72 |
+| iOS after | 236.8 | 26.7 | 241.0 | **+7.0** | +7.2 | 1.07 |
+
+iOS's rim is 0.5 L from Android's at 1.5 pt — it was 2.0 L below — and 0.5 L at
+the peak. On the gate's own probe (`rim_delta`, the brightest column median in
+the rim band) the two platforms read **7.15** and **7.65**, both inside
+[4, 14]. The sheet's +1.3 in that column is not a weak rim: its frame edge is
+the device bezel (−19.3 L), and its lit line sits 2.3 pt inside the panel, which
+is why its peak is the strongest of the four.
+
+Column medians across rows 20–90 %, delta from each panel's own body:
+
+| px from the edge | 0 | 1 | 2 | 3 | 4 | 6 | 9 | 12 |
+|---|---|---|---|---|---|---|---|---|
+| sheet (1.71 px/pt) | −19.3 | +4.5 | +4.6 | +5.1 | +9.5 | +2.7 | +0.6 | +0.1 |
+| Android (3 px/pt) | +7.6 | +7.7 | +7.6 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| iOS before | +7.2 | +4.7 | +3.9 | +2.9 | +0.5 | 0.0 | 0.0 | 0.0 |
+| iOS after | +6.9 | +6.8 | +7.0 | +6.8 | +6.5 | +4.4 | +2.4 | +1.4 |
+
+iOS had the right peak and the wrong profile: a 1.5 pt ramp from +7.2 to 0, so
+half its nominal width was unlit — a hairline where the sheet has a bar. It is a
+1.25 pt bar at +7.0 L with the sheet's 5 pt tail now, one `LinearGradient` with
+explicit stops.
+
+### Why it is painted, and why it is ONE pass
+
+**A `Material` cannot be the fix, and neither can a blur.** `drawHierarchy(in:
+afterScreenUpdates:)` — the only way a UI test can capture a window — does not
+run the compositor's backdrop pass, so a material panel is captured as its flat
+fallback tint and the gate scores a surface the device never draws. Structure
+rule 4 forbids a draw-time blur and rule 13 a per-frame shadow. Every cue is
+therefore painted, which is also how Android's `GlassFrostedPanel` works: frost,
+veil, fill and rim, all drawn.
+
+**One `Canvas`, not five stacked gradients.** The first attempt at the bloom
+stacked three SwiftUI `RadialGradient`s. SwiftUI dithers each gradient layer
+separately to stop banding and the dither does not cancel: the text-free margin
+went from |d| p90 2.72 L to **5.07 L** and DR3 failed on run **40201896377** —
+the bloom scored as exactly the ghosting the ceiling exists to catch. The same
+field painted in one Core Graphics pass measures **1.07 L**, below Android's
+1.79 and level with the sheet's 1.00. On this panel the HF ceiling is a budget
+of about one dither: a layer added for looks is a layer taken out of the budget.
+
+The body colour was NOT retuned to move a number. iOS renders
+(250.7, 238.6, 229.1) and the sheet's own margin measures (251.0, 237.2, 232.0)
+— 1.4 L apart in luma, on a band of [231, 244]. What was missing was structure,
+not hue: the text-free margin's column median varied 0.5 L where the sheet's
+varies 2.9 L. It is 1.86 L now, from the field the surface carries: a warm glow
+behind the header, a blush down the leading edge, a cool veil under the footer,
+at the sheet's own 2–3 L amplitude.
+
+Dark is unchanged in construction and improves in measurement: panel 28.70 →
+**34.56 L** (Android 41.90), separation from the strip 7.21 → **12.14 L**
+(Android 17.14), copy contrast 212.0 L, 0.04 % blown, hero R−B 22.1.
+
 ## What is gated where — and why the split
 
 Pixels can see some of this and not all of it. The ones pixels cannot see are
@@ -74,7 +151,7 @@ stronger claim made falsely.
   and the hero gradient's R−B drop. Exit 2 when a measurement is impossible.
 - `scripts/check_drawer_dark.py` — dark panel, glass still present over it, copy
   contrast, no blown highlight, hero warmth.
-- `scripts/check_drawer_structure.py` — 11 rules (lazy list, no eager scroll, no
+- `scripts/check_drawer_structure.py` — 17 rules (lazy list, no eager scroll, no
   draw-time blur, no per-frame shadow, no store read from `body`, no infinite
   animation), each with a counter-example it must reject, run with `--self-test`.
 - `.github/scripts/check_drawer_type_parity.py` — 32 metric names identical on both
@@ -98,15 +175,18 @@ stronger claim made falsely.
 5. **Dark mode is designed, not referenced.** The sheet has no dark frame; the dark
    page is scored against physical requirements (panel dark, glass present, copy
    legible, hero warm) rather than against a picture.
-6. **The recent-chat icons are ONE glyph, not four — deliberately.** The sheet shows
-   four different icons (a lightbulb for "ideas", an atom for "quantum physics"), and
-   they are *semantic*. The first implementation hashed the title into four glyphs to
-   reproduce that variety; measured, three of the sheet's four titles hashed to the
-   same glyph, and emoji or CJK titles hashed differently on Kotlin (UTF-16 units)
-   than on Swift (Unicode scalars), so one chat drew two different icons on the two
-   platforms. The icon is now driven by the one per-chat fact the drawer holds:
-   pinned chats show a pin, everything else a neutral chat glyph. Real variety needs
-   chat categories, which is a product feature rather than a decoration to fake.
+6. **The recent-chat icons are the topic table's, not one glyph.** The sheet shows
+   four different icons (a lightbulb for "ideas", an atom for "quantum physics"),
+   and they are *semantic*. The first implementation hashed the title into four
+   glyphs to reproduce that variety; measured, three of the sheet's four titles
+   hashed to the same glyph, and emoji or CJK titles hashed differently on Kotlin
+   (UTF-16 units) than on Swift (Unicode scalars). The glyph now comes from the
+   headline's topic — `DrawerTopic`, 22 topics, whole-word matches, specific
+   before general — so the sheet's own four titles draw the sheet's own four
+   glyphs: Sparkles, Lightbulb, Atom, Sprout. The first row is pinned, so it draws
+   a pin instead — a fact about the row rather than a guess about its name.
+   `scripts/check_icon_catalogue.py` asserts the topic tables are identical on
+   both platforms, keyword for keyword, and that every topic has a render branch.
 7. **iOS row actions were briefly missing.** The rebuild dropped the old drawer's
    context menu, so Android could pin/rename/archive/delete from the drawer and iOS
    could not. Restored, against the same store and API calls; the pixel gate could
@@ -122,7 +202,7 @@ stronger claim made falsely.
 | Is the gate capable of failing? | 8 doctored frames, each caught by its own rule | `test_drawer_render_gate.py` |
 | Is the list bounded? | 500-chat frame compared with the sheet-sized frame | DR11, both platforms |
 | Do both platforms agree on numbers? | 32 metric names, 10 literals | `check_drawer_type_parity.py` |
-| Is anything quietly expensive? | 13 structural rules with their own counter-examples | `check_drawer_structure.py` |
+| Is anything quietly expensive? | 17 structural rules with their own counter-examples | `check_drawer_structure.py` |
 | Does each control go where it says? | 6 pressed controls, asserted routes | `DrawerInteractionTest` (Android) |
 | Do the iOS destinations and icon agree? | 4 assertions without a screen | `DrawerLogicTests` (iOS) |
 | Does the type hold up? | rows use `heightIn(min:)`/`minHeight:`; both platforms draw the product face, iOS through the Dynamic Type engine | structure rules 12–13, `Aero.specFont` |
@@ -169,8 +249,8 @@ while Android drew Lucide — two icon languages in one product. Rows now draw t
 family on both platforms, and the glyph is chosen from the headline's topic
 (`DrawerTopic`, 22 topics, whole-word matches, specific before general), so
 "Explain quantum physics" is an atom rather than a graduation cap. The sheet's own
-four titles are the test vector: plan → CalendarCheck, ideas → Lightbulb,
-quantum → Atom, Kyoto → MapPin.
+four titles are the test vector: plan → Sparkles, ideas → Lightbulb,
+quantum → Atom, Kyoto → Sprout.
 
 `scripts/check_icon_catalogue.py` audits the whole family on every run: 1,611
 geometries and 5,466 names per platform, header claims matching the file, no
