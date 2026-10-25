@@ -13,6 +13,15 @@ meet, and each one fails for a named, ordinary mistake:
                                                 local panel body
   K4 no blown highlight                         < 1% above 250 L
   K5 the hero row keeps its warmth              R−B ≥ 12 at its left stop
+  K6 the leading edge is lit, and not a lamp    rim_delta in [4, 40] — the same
+                                                probe the light gate uses, on a
+                                                panel 7× darker. It exists because
+                                                the first iOS bloom pass shipped a
+                                                +99 L edge here and NOTHING in this
+                                                file could see it: the light gate's
+                                                [4, 14] is about a 240 L body, and
+                                                no light-mode number describes a
+                                                white bar over a 35 L panel.
 
 Unmeasurable exits 2, never 0.
 """
@@ -32,6 +41,11 @@ BANDS = {
     "copy_contrast": (60.0, 255.0),
     "blown": (0.0, 1.0),
     "hero_left_rb": (12.0, 120.0),
+    # Measured on the captures: Android 20.0, iOS 99.2 before its rim was rescaled
+    # (the 0.46 white bar the light mode needs over a 240 L body is a lamp over a
+    # 35 L one). The band is [4, 40]: below 4 the edge is not lit, above 40 it is
+    # 2× Android's and a light leak.
+    "rim_delta": (4.0, 40.0),
 }
 
 
@@ -49,6 +63,9 @@ def measure(render, home=None, panel_ratio=0.786):
     body = l[int(0.28 * H):int(0.70 * H), int(0.02 * edge):int(0.05 * edge)]
     strip = l[int(0.28 * H):int(0.90 * H), edge + 8:W - 6]
     ink = l[int(0.30 * H):int(0.85 * H), int(0.10 * edge):int(0.85 * edge)]
+    # K6: the same band the light gate uses for rim_delta — 0..1.4% of the panel's
+    # width, rows 20..90%, brightest column median minus the body median.
+    rim = l[int(0.20 * H):int(0.90 * H), :max(1, int(0.014 * edge))]
 
     ratio = float("nan")
     if home is not None:
@@ -68,6 +85,7 @@ def measure(render, home=None, panel_ratio=0.786):
         "copy_contrast": float(np.percentile(ink, 99) - np.median(body)),
         "blown": float(100.0 * (l > 250).sum() / l.size),
         "hero_left_rb": float(hero_left[0] - hero_left[2]),
+        "rim_delta": float(np.max(np.median(rim, axis=0)) - np.median(body)),
     }
 
 
@@ -101,7 +119,8 @@ def main() -> int:
         for p in problems:
             print(f"  - {p}")
         return 1
-    print("\nOK: dark panel, present glass, legible copy, warm hero, no blown highlight")
+    print("\nOK: dark panel, present glass, legible copy, warm hero, "
+          "lit-but-not-blown edge, no blown highlight")
     return 0
 
 

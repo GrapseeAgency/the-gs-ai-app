@@ -105,6 +105,15 @@ FOOTER_BAND = (0.0, 0.895, 1.0, 0.930)
 # Bands. Each is derived from the sheet's own measurement (printed by --derive),
 # widened by the detector's error. A band that does not contain the sheet's own
 # number is a bug in this file, not a defect in the render.
+#
+# `panel_mean`, `panel_std` and `rim_1p5_pt` are DERIVED AND PRINTED, not gated.
+# They are the three numbers `docs/DRAWER_STATUS.md`'s before/after table quotes,
+# so they have to come from this file rather than from a scratch script; but none
+# of them can carry a band. The sheet's own rim over its first 1.5 pt is +1.3 L,
+# not +9.6, because its frame edge is the device bezel — a band around the renders
+# (+6.5..+7.0) would fail the reference, and a band wide enough to hold both
+# would pass anything. Printed, labelled "derived, not gated", the way the pill's
+# height and the chevron inset already are.
 BANDS = {
     "panel_ratio": (0.760, 0.812),     # sheet 0.786
     "corner_radius_pt": (24.0, 33.0),  # sheet 26.2–28.9 (the crop clips the arc)
@@ -449,6 +458,18 @@ def derive(reference):
     # The rim is a 1-2 px column, not a bright pixel: take the brightest COLUMN
     # median in the band, so a bloom inside the band cannot fake a rim.
     rim_peak = float(np.max(np.median(rim, axis=0))) if rim.size else float("nan")
+    # The task's own rim definition — the median of the leftmost 1.5 pt minus the
+    # body. The sheet's own value is +1.3 L, not +9.6: its frame edge is the device
+    # bezel and its lit line sits 2.3 pt inside. Which is why this is PRINTED and
+    # the peak is the gated one (see the note above BANDS).
+    rim_1p5 = l[int(0.20 * H):int(0.90 * H),
+                :max(1, int(round(1.5 * PX_PER_PT_REF)))]
+    # The profile: the first 13 columns' medians, delta from the body. A hairline
+    # and a bar can share a peak and still differ here — this is the reading that
+    # separates them, and it is printed so the table in DRAWER_STATUS can be
+    # reproduced from this file alone.
+    rim_profile = [round(float(v) - body_l, 1)
+                   for v in np.median(l[int(0.20 * H):int(0.90 * H), :13], axis=0)]
     strip = band(l, STRIP_BAND)
 
     # Pill and hero are found by STRUCTURE (warmth and brightness relative to the
@@ -498,6 +519,10 @@ def derive(reference):
         "panel_ratio": round(panel_ratio, 4),
         "corner_radius_pt": round(radius_px / PX_PER_PT_REF, 2),
         "body_l": round(body_l, 1),
+        "panel_mean": round(float(np.mean(l[int(0.02 * H):int(0.98 * H), :edge])), 1),
+        "panel_std": round(float(np.std(l[int(0.02 * H):int(0.98 * H), :edge])), 1),
+        "rim_1p5_pt": round(float(np.median(rim_1p5)) - body_l, 1),
+        "rim_profile": rim_profile,
         "rim_delta": round(rim_peak - float(np.median(body)), 1),
         "hf_p90": round(hf_p90(body), 2),
         "column_spread": round(column_spread(l, panel_ratio), 1),
@@ -625,6 +650,10 @@ def measure_render(render, home=None):
 
     body = band(l, BLANK_BAND, panel_ratio)
     rim = band(l, RIM_BAND, panel_ratio)
+    # The task's own rim definition: the median of the leftmost 1.5 pt minus the
+    # body. Distinct from `rim_delta` (the brightest COLUMN) — a hairline and a
+    # bar share a peak and differ here, which is the whole of the 2026-10-25 fix.
+    rim_1p5 = l[int(0.20 * H):int(0.90 * H), :max(1, int(round(1.5 * px_per_pt)))]
     strip = band(l, STRIP_BAND)
 
     scrim_ratio = float("nan")
@@ -677,6 +706,11 @@ def measure_render(render, home=None):
         "corner_radius_pt": radius_px / px_per_pt if np.isfinite(radius_px) else float("nan"),
         "arc_in_frame": arc_in_frame,
         "body_l": float(np.median(body)),
+        "panel_mean": float(np.mean(l[int(0.02 * H):int(0.98 * H), :edge])),
+        "panel_std": float(np.std(l[int(0.02 * H):int(0.98 * H), :edge])),
+        "rim_1p5_pt": float(np.median(rim_1p5)) - float(np.median(body)),
+        "rim_profile": [round(float(v) - float(np.median(body)), 1)
+                        for v in np.median(l[int(0.20 * H):int(0.90 * H), :13], axis=0)],
         "rim_delta": float(np.max(np.median(rim, axis=0)) - np.median(body))
         if rim.size else float("nan"),
         "hf_p90": hf_p90(body),
@@ -854,6 +888,13 @@ def main() -> int:
 
     print(f"=== {args.label} ({args.probe_set}) ===")
     print(f"  frame edge {r['edge_px']} px, {r['px_per_pt']:.3f} px/pt")
+    print(f"  panel mean / std      {r['panel_mean']:.1f} / {r['panel_std']:.1f}"
+          f"   (derived, not gated)")
+    print(f"  rim @1.5 pt           {r['rim_1p5_pt']:+.2f} L"
+          f"          (derived, not gated)")
+    print("  rim profile px 0..12  "
+          + " ".join(f"{v:+.1f}" for v in r["rim_profile"])
+          + "   (derived, not gated)")
     problems, notes = check(r, c, args.label)
     for line in notes:
         print(line)
