@@ -480,3 +480,31 @@ tripped the `inset > 34` leading-slot bound — run 40176354400 measured
 26.2's 27.7–30.0 column. If that is the cause, the bound — whose comment
 says it exists to catch an icon "parked mid-row" — should move to ~45 pt
 (title text starts ~61 pt in), not the assertion.
+
+### Run 40181550214, read at last — the freeze-ladder coin flip
+
+With credentials restored, the second dispatch's log answered the open
+question, and the suspicion recorded above was WRONG (good — it was never
+acted on): `MenuChromeTests` passed again; the failure was
+
+```
+ios/App/Tests/UITests/GsChatUiTests.swift:261: error: -[GsChatUITests.GsChatUiTests testSendHelloRendersARealAssistantReply] : Failed to get matching snapshots: Timed out while evaluating UI query.
+```
+
+Line 261 was the loop's own Stop probe. The two same-commit runs together
+measure the mechanism exactly: after Send, the app cannot serve
+accessibility snapshots for ~95–105 s (green 40181545717: probe hung
+70→161 s, third internal retry landed just past the freeze; red
+40181550214: probe hung 53→146 s, retries ran out 12 s early), while
+XCUITest's internal retry ladder is three attempts ~31 s apart — ~93 s,
+shorter than the freeze. A green run and a red run of the SAME commit
+differed only in whether the ladder outlived the window: a coin flip, and
+an uncatchable failure when it lands badly.
+
+The fix (same file): issue NO query at all for 120 s after Send — the
+measured freeze plus margin — and only then probe whether the Stop control
+has gone, confirm it is absent twice, and read the transcript once. Reply
+assertions unchanged; deadline 360 s (120 s quiet + ~135 s worst-case
+generation), inside the scheme's 600 s per-test allowance. The race the
+sleep exists for is named here and in the commit message: the post-send
+generation freeze vs XCUITest's 93 s query ladder.

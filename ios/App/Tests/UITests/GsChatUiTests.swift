@@ -227,31 +227,36 @@ final class GsChatUiTests: XCTestCase {
         //    -- at this exact line, after the composer and Send both worked.
         //    `label != ''` says the same thing in valid syntax.
         //
-        //    THE APP CANNOT SERVE SNAPSHOTS WHILE IT STREAMS. Run 40176354400
-        //    tapped Send at t=64 s; the FIRST poll of this loop resolved its
-        //    first seven staticTexts in two seconds and then hung on "Element
-        //    at index 7" for 107 s — every streamed token invalidates the
-        //    snapshot mid-resolution — and died with
-        //        Failed to get matching snapshot: Timed out while evaluating
-        //        UI query
-        //    before the loop body ran even once. So the wait watches the
-        //    composer's own Stop control (NexlyComposerBar shows it exactly
-        //    while `isStreaming`), one cheap existence probe at a time, and
-        //    only reads the transcript once the engine has gone quiet — the
-        //    transcript query itself is fast when the app is idle (it
-        //    resolved the same eight elements in 2 s at t=66 s, before the
-        //    generation began). The reply assertions are unchanged.
+        //    THE POST-SEND FREEZE, MEASURED IN TWO RUNS OF THE SAME COMMIT.
+        //    Sending hands the main thread to the engine: prompt evaluation
+        //    plus the stream's per-token relayout keep the app unable to
+        //    answer XCUITest's snapshot requests for ~95–105 s —
+        //        run 40181545717 (green): probe hung 70→161 s, 3rd internal
+        //            retry landed just past the freeze;
+        //        run 40181550214 (red):   probe hung 53→146 s, retries ran
+        //            out 12 s early and the query FAILED the test
+        //                "Failed to get matching snapshots: Timed out while
+        //                 evaluating UI query"
+        //    XCUITest's own retry ladder is three attempts ~31 s apart (~93 s
+        //    total) — shorter than the freeze. ANY query issued inside the
+        //    window — Stop probe, transcript read, allElementsBoundByIndex —
+        //    is a coin flip on whether the ladder outlasts the freeze, and a
+        //    lost flip is an uncatchable test failure. So the test issues NO
+        //    query at all for 120 s after Send (the measured window plus
+        //    margin), and only then begins probing whether the composer's
+        //    Stop control (`NexlyComposerBar` shows it exactly while
+        //    `isStreaming`) has gone.
         let cannedPrefix = "Hey — good to see you."
         let stopGenerating = app.buttons["Stop generating"].firstMatch
         let replyQuery = app.staticTexts
             .matching(NSPredicate(format: "label != '' AND label != %@ AND label != %@ AND NOT (label BEGINSWITH %@)",
                                   Self.composerPlaceholder, "hello", "Search"))
-        // 300 s, not the old 180: the runner's own measurements put a
-        // CPU-simulator generation at ~135 s (GS-PERF tapToFirstVisibleCharMs
-        // = 41704 in this very workflow's unit tests) and run 40176354400
-        // spent 107 s of its budget on ONE doomed query retry. The bound is
-        // still far inside the scheme's 600 s per-test allowance.
-        let deadline = Date().addingTimeInterval(300)
+        // 360 s, not the old 180/300: 120 s of named quiet wait plus a
+        // generation the runner itself measures at ~135 s worst case
+        // (GS-PERF tapToFirstVisibleCharMs=41704), still inside the
+        // scheme's 600 s per-test allowance.
+        let deadline = Date().addingTimeInterval(360)
+        Thread.sleep(forTimeInterval: 120)
         var bubbleText: String?
         while Date() < deadline {
             // waitForExistence, NOT a bare `.exists`: the waiter retries
@@ -259,15 +264,13 @@ final class GsChatUiTests: XCTestCase {
             // snapshot resolution that runs slow is recorded as a test
             // failure — the exact error this loop exists to avoid.
             if stopGenerating.waitForExistence(timeout: 2) {
-                Thread.sleep(forTimeInterval: 2)
+                Thread.sleep(forTimeInterval: 5)
                 continue
             }
-            // Settle: a query fired during the post-stream relayout dies the
-            // same way one fired mid-stream does.
-            Thread.sleep(forTimeInterval: 1.5)
-            // Confirm after the settle — a probe that timed out mid-stream
-            // reads as "absent", and querying the transcript on that false
-            // negative is the failure this loop exists to avoid.
+            // Settle, then CONFIRM: a probe that timed out mid-stream reads
+            // as "absent", and querying the transcript on that false
+            // negative re-enters the freeze the quiet wait just avoided.
+            Thread.sleep(forTimeInterval: 2)
             if stopGenerating.waitForExistence(timeout: 2) { continue }
             // The LAST match, not the first: accessibility order follows the
             // screen top-to-bottom, and the reply is the newest bubble at the
@@ -294,7 +297,7 @@ final class GsChatUiTests: XCTestCase {
             print("GsChatUiTests: no reply candidate; transcript labels = \(seen)")
         }
         XCTAssertNotNil(bubbleText,
-                        "no assistant reply rendered within 300s of sending 'hello'")
+                        "no assistant reply rendered within 360s of sending 'hello'")
         let reply = bubbleText ?? ""
         print("GsChatUiTests: reply bubble = \(reply.prefix(120))")
         XCTAssertFalse(reply.hasPrefix(cannedPrefix),
