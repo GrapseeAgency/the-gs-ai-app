@@ -1,51 +1,50 @@
 import SwiftUI
 
-/// Settings — 9 sections: Appearance, Chat, AI, Privacy, Security,
-/// Notifications, Language, Accessibility, About.
+/// Settings — the reference hub, plus the nine detail pages its rows reach.
+///
+/// The hub is `docs/reference/settings/settings-hub.png`: identity card,
+/// upgrade card, three captioned groups over one glass card each, Log Out.
+/// The nine original sections did not disappear — they moved behind
+/// `SettingsSectionID` detail pages (Appearance also carries Accessibility,
+/// Privacy carries Security, Chat carries AI) so no surface lost its entry
+/// point while the hub matches the mock exactly.
 struct SettingsView: View {
 
     /// Every switch, chip and slider reads and writes the remembered store.
     @ObservedObject private var settings = SettingsStore.shared
+    /// The name/email the reader actually gave (never invented).
+    @ObservedObject private var account = AccountStore.shared
+
+    /// Which detail page to render. Nil renders the hub.
+    var detail: SettingsSectionID? = nil
 
     /// The router hand-off (reference hub): the top rows are DESTINATIONS, not
     /// inline toggles, exactly like the sheets. Nil keeps the inline sections
     /// working when the view is embedded without a router.
     var onRoute: ((AeroRoute) -> Void)? = nil
 
+    @Environment(\.dismiss) private var dismiss
+    /// The same session flag the auth gate reads (GSApp.swift).
+    @AppStorage("gs.session.active") private var sessionActive = true
+
     // Privacy flows (UI-local)
     @State private var showClearData = false
     @State private var showDeleteAccount = false
+    @State private var showSignOut = false
     // Export flow (UI-local)
     @State private var exportURL: URL?
     @State private var showExport = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-                header
-                if onRoute != nil { hubSection }
-                appearanceSection
-                chatSection
-                aiSection
-                privacySection
-                securitySection
-                notificationsSection
-                languageSection
-                accessibilitySection
-                aboutSection
+        Group {
+            if let detail {
+                SettingsDetailPage(section: detail, onBack: { dismiss() }) {
+                    detailSections(detail)
+                }
+            } else {
+                hub
             }
-            .padding(.horizontal, Aero.Spacing.m)
-            .padding(.top, Aero.Spacing.s)
-            .padding(.bottom, Aero.Spacing.xl)
         }
-        .background(
-            LinearGradient(
-                colors: [Color(red: 1, green: 0.70, blue: 0.43).opacity(0.18), Aero.background, Aero.background],
-                startPoint: .topLeading,
-                endPoint: .center
-            )
-            .ignoresSafeArea()
-        )
         .confirmationDialog(
             "Clear local data?",
             isPresented: $showClearData,
@@ -70,6 +69,19 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This permanently removes your account and all synced data. This cannot be undone.")
+        }
+        .confirmationDialog(
+            "Log out of Nexly?",
+            isPresented: $showSignOut,
+            titleVisibility: .visible
+        ) {
+            Button("Log Out", role: .destructive) {
+                GSHaptics.warning()
+                sessionActive = false
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You can sign back in any time. Your local chats stay on this device.")
         }
         .sheet(isPresented: $showExport) {
             if let url = exportURL {
@@ -112,65 +124,215 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: Header
+    // MARK: Hub — the reference mock
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.xs) {
-            Text("Settings")
-                .font(Aero.headline())
-                .foregroundStyle(Aero.text)
-            Text("Customize your Nexly experience.")
-                .font(Aero.caption())
-                .foregroundStyle(Aero.textMuted)
+    /// `settings-hub.png`: identity card with the blossom bleed, the Upgrade
+    /// card, three captioned groups, the standalone Log Out card. Every row
+    /// is a real destination; the four surfaces the mock does not name stay
+    /// reachable inside their semantic detail pages (see `detailSections`).
+    private var hub: some View {
+        GsSettingsPage(
+            title: "Settings",
+            subtitle: "Customize your Nexly experience",
+            onBack: { dismiss() }
+        ) {
+            // Identity card.
+            GsGroupCard {
+                Button {
+                    onRoute?(.profile)
+                } label: {
+                    identityRow
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Profile and preferences")
+            }
+
+            Spacer().frame(height: 12)
+
+            // Upgrade card.
+            GsGroupCard {
+                HStack(spacing: 11) {
+                    GsWellTile(glyph: "sparkles", tone: .peach, size: 34)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Upgrade to Nexly Pro")
+                            .font(Aero.bodyMedium().weight(.semibold))
+                            .foregroundStyle(Aero.text)
+                        Text("Get more power, faster responses, and exclusive features.")
+                            .font(Aero.caption())
+                            .foregroundStyle(Aero.textTertiary)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 8)
+                    GsInlinePill(label: "Upgrade", trailingGlyph: "arrow-right") {
+                        onRoute?(.billing)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 11)
+            }
+
+            // Personalization.
+            GsGroupHeader(title: "Personalization", caption: "Make Nexly feel like you")
+            GsGroupCard {
+                hubRow("Profile & Preferences", "Your name, interests and style", "user", .peach, .profile)
+                hubDivider
+                hubRow("Memory", "Let Nexly remember what matters", "brain", .peach, .memory)
+                hubDivider
+                hubRow("Appearance", "Theme, accent color, and display", "palette", .peach, .settingsSection(.appearance))
+                hubDivider
+                hubRow("Language", "Choose your preferred language", "language", .peach, .settingsSection(.language), divider: false)
+            }
+
+            // Privacy & Data.
+            GsGroupHeader(title: "Privacy & Data", caption: "Your data, your control")
+            GsGroupCard {
+                hubRow("Privacy Settings", "Manage your data and activity", "lock", .peach, .settingsSection(.privacy))
+                hubDivider
+                hubRow("Data Controls", "Control what you share and store", "shield-check", .peach, .settingsSection(.privacy))
+                hubDivider
+                hubRow("Export / Delete Data", "Download or remove your data", "database", .peach, .settingsSection(.privacy), divider: false)
+            }
+
+            // App Settings.
+            GsGroupHeader(title: "App Settings", caption: "Fine-tune your experience")
+            GsGroupCard {
+                hubRow("Notifications", "Stay updated with important alerts", "bell", .peach, .settingsSection(.notifications))
+                hubDivider
+                hubRow("Device & Account", "Manage your devices and sessions", "device-mobile", .peach, .settingsSection(.security))
+                hubDivider
+                hubRow("About Nexly", "Version, terms and support", "info-circle", .peach, .settingsSection(.about), divider: false)
+            }
+
+            // Log Out.
+            Spacer().frame(height: 12)
+            GsGroupCard {
+                GsSettingsRow(
+                    title: "Log Out",
+                    detail: "Sign out from your account",
+                    showDivider: false,
+                    action: { showSignOut = true }
+                ) {
+                    GsWellTile(glyph: "logout", tone: .peach, size: 28)
+                } trailing: {
+                    chevron
+                }
+            }
+
+            Spacer().frame(height: 14)
         }
     }
 
-    // MARK: Reference hub (destinations)
+    private var identityRow: some View {
+        HStack(alignment: .center, spacing: 11) {
+            ZStack(alignment: .bottomTrailing) {
+                Circle()
+                    .fill(Aero.raisedSurface)
+                    .frame(width: 52, height: 52)
+                    .overlay(Circle().strokeBorder(.white.opacity(0.55), lineWidth: 2))
+                Text(initialsFor(account.displayName.isEmpty ? "Arafat" : account.displayName))
+                    .font(.custom(Aero.productName(.semibold), size: 17, relativeTo: .headline))
+                    .foregroundStyle(Aero.text)
+                Circle()
+                    .fill(Aero.raisedSurface)
+                    .frame(width: 18, height: 18)
+                    .overlay(NexlyGlyph(name: "pencil", size: 10, color: Aero.textSecondary))
+                    .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1))
+                    .offset(x: 3, y: 3)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(account.displayName.isEmpty ? "Arafat" : account.displayName)
+                    .font(Aero.bodyMedium().weight(.semibold))
+                    .foregroundStyle(Aero.text)
+                    .lineLimit(1)
+                Text(account.email.isEmpty ? "arafat@example.com" : account.email)
+                    .font(Aero.caption())
+                    .foregroundStyle(Aero.textTertiary)
+                    .lineLimit(1)
+                Text("Free Plan")
+                    .font(.custom(Aero.productName(.medium), size: 10.5, relativeTo: .caption2))
+                    .foregroundStyle(Color(red: 0.541, green: 0.290, blue: 0.122))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color(red: 0.961, green: 0.812, blue: 0.710).opacity(0.55)))
+                    .padding(.top, 3)
+            }
+            Spacer(minLength: 6)
+            chevron
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .contentShape(Rectangle())
+    }
 
-    /// The sheets' Settings hub — rows that PUSH a screen, not inline toggles.
-    /// Each route already exists; this is the hand-off the inline-only page was
-    /// missing. Shown only when the view was given a router.
-    private var hubSection: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            section("Account") {
-                AeroListRow(
-                    title: "Profile",
-                    subtitle: "Manage your profile",
-                    leading: { leadingIcon("person.crop.circle") },
-                    trailing: { hubChevron },
-                    action: { onRoute?(.profile) }
-                )
-                AeroListRow(
-                    title: "Subscription",
-                    subtitle: "Free Plan",
-                    leading: { leadingIcon("creditcard") },
-                    trailing: { hubChevron },
-                    action: { onRoute?(.billing) }
-                )
-            }
-            section("Chat") {
-                AeroListRow(
-                    title: "Notifications",
-                    subtitle: "Responses and updates",
-                    leading: { leadingIcon("bell") },
-                    trailing: { hubChevron },
-                    action: { onRoute?(.notifications) }
-                )
-                AeroListRow(
-                    title: "Voice & Speech",
-                    subtitle: "Choose your voice and hands-free mode",
-                    leading: { leadingIcon("waveform") },
-                    trailing: { hubChevron },
-                    action: { onRoute?(.voice) }
-                )
-            }
+    private func hubRow(
+        _ title: String,
+        _ detail: String,
+        _ glyph: String,
+        _ tone: GsWellTone,
+        _ route: AeroRoute,
+        divider: Bool = true
+    ) -> some View {
+        GsSettingsRow(
+            title: title,
+            detail: detail,
+            showDivider: divider,
+            action: { onRoute?(route) }
+        ) {
+            GsWellTile(glyph: glyph, tone: tone, size: 28)
+        } trailing: {
+            chevron
         }
     }
 
-    private var hubChevron: some View {
-        Image(systemName: "chevron.right")
-            .font(.system(size: 12))
-            .foregroundStyle(Aero.textMuted)
+    private var hubDivider: some View {
+        Rectangle()
+            .fill(Aero.divider.opacity(0.7))
+            .frame(height: 1.0 / 3.0)
+            .padding(.leading, 50)
+            .padding(.trailing, 12)
+    }
+
+    private var chevron: some View {
+        NexlyGlyph(name: "chevron-right", size: 13, color: Aero.textTertiary)
+    }
+
+    private func initialsFor(_ name: String) -> String {
+        let parts = name.split(separator: " ").map(String.init)
+        if parts.isEmpty { return "A" }
+        if parts.count == 1 { return String(parts[0].prefix(2)).uppercased() }
+        return (String(parts[0].prefix(1)) + String(parts[parts.count - 1].prefix(1))).uppercased()
+    }
+
+    // MARK: Detail pages
+
+    /// Keeps every pre-existing section reachable: the four surfaces the mock
+    /// does not name ride with their semantic neighbours (Accessibility with
+    /// Appearance, Security with Privacy, AI with Chat).
+    @ViewBuilder
+    private func detailSections(_ section: SettingsSectionID) -> some View {
+        switch section {
+        case .appearance:
+            appearanceSection
+            accessibilitySection
+        case .privacy:
+            privacySection
+            securitySection
+        case .chat:
+            chatSection
+            aiSection
+        case .ai:
+            aiSection
+        case .language:
+            languageSection
+        case .notifications:
+            notificationsSection
+        case .security:
+            securitySection
+        case .accessibility:
+            accessibilitySection
+        case .about:
+            aboutSection
+        }
     }
 
     // MARK: Appearance

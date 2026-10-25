@@ -46,6 +46,10 @@ object SettingsStore {
     var preferLocal by mutableStateOf(false); private set
     // Notifications
     var pushNotifications by mutableStateOf(true); private set
+    /** Memory: whether Nexly keeps and surfaces saved memories. iOS twin:
+     *  SettingsStore.memory. The Memory Management mock's "Memory is ON" pill
+     *  reads and writes this; default ON because the app already remembers. */
+    var memory by mutableStateOf(true); private set
     // Accessibility
     var fontScale by mutableStateOf(1.0f); private set
     var highContrast by mutableStateOf(false); private set
@@ -71,6 +75,7 @@ object SettingsStore {
         // local AI on without asking is the worse failure.
         preferLocal = p.bool(K.preferLocal, preferLocal)
         pushNotifications = p.bool(K.pushNotifications, pushNotifications)
+        memory = p.bool(K.memory, memory)
         fontScale = p.flt(K.fontScale, fontScale)
         highContrast = p.bool(K.highContrast, highContrast)
         reduceMotion = p.bool(K.reduceMotion, reduceMotion)
@@ -94,6 +99,7 @@ object SettingsStore {
         const val reduceAnimations = "settings.reduceAnimations"
         const val preferLocal = "settings.preferLocal"
         const val pushNotifications = "settings.pushNotifications"
+        const val memory = "settings.memory"
         const val fontScale = "settings.fontScale"
         const val highContrast = "settings.highContrast"
         const val reduceMotion = "settings.reduceMotion"
@@ -145,6 +151,7 @@ object SettingsStore {
     fun updatePreferLocal(v: Boolean) { preferLocal = v; put(K.preferLocal, v) }
     // Notifications
     fun updatePushNotifications(v: Boolean) { pushNotifications = v; put(K.pushNotifications, v) }
+    fun updateMemory(v: Boolean) { memory = v; put(K.memory, v) }
     // Accessibility
     /** Live stage during a slider drag: memory only, no disk write per frame.
      *  The commit lands once in [updateFontScale] on release. */

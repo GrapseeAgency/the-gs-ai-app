@@ -30,6 +30,11 @@ enum AeroRoute: Hashable {
     case travelAgent
     case explore
     case discover
+    /// One settings detail page (the hub's rows). Keeps the five mock
+    /// destinations AND the four surfaces the mock does not name reachable
+    /// through a single case instead of nine ad-hoc routes.
+    case settingsSection(SettingsSectionID)
+    case memory
 
     // Section roots — reached from the drawer. The drawer stays the app's
     // section switcher; the one exception is the Explore page's reference
@@ -199,6 +204,9 @@ struct AeroDestinations: ViewModifier {
             case .chatAutoSend(let prompt): ChatDetailView(conversationID: nil, prefill: prompt, autoSendPrefill: true)
             case .search: SearchView()
             case .settings: SettingsView(onRoute: { router.path.append($0) })
+            case .settingsSection(let section):
+                SettingsView(detail: section, onRoute: { router.path.append($0) })
+            case .memory: MemoryManagementView()
             case .notifications: NotificationsView()
             case .voice: VoiceView()
             case .chatArchive: ArchivedChatsView()
@@ -216,7 +224,7 @@ struct AeroDestinations: ViewModifier {
 
             // Section roots (drawer)
             case .chats: ChatsListView()
-            case .profile: ProfileView()
+            case .profile: ProfilePreferencesView()
             case .billing: BillingView()
             }
         }

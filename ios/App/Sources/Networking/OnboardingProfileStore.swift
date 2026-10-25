@@ -15,15 +15,13 @@ import Foundation
  *  - Hydrates once at init from UserDefaults, the same local-first shape as
  *    AccountStore / SettingsStore / ConversationStore.
  *  - What is READ today, honestly: [capabilities] is read by Home and the chat
- *    empty state (HomeDispatch.selectedSuggestions(for:)), which is the whole
- *    reason the store exists. [interests], [responseStyle] and [personality]
- *    are written by the wizard and have no reader on either platform yet — the
- *    Profile surface that would show them, and the prompt prefix that would
- *    shape tone from them, are not built. They are kept because the alternative
- *    is deleting a person's answers on exit, which is the bug this store was
- *    written to fix. The previous wording here claimed "only the fields Home
- *    actually consumes are stored"; that was not true, and a false contract
- *    comment is worse than an admitted gap because it is quoted as proof.
+ *    empty state (HomeDispatch.selectedSuggestions(for:)), and as of the
+ *    Settings reference pass [interests], [responseStyle] and [personality]
+ *    are read by Profile & Preferences (Response Style and Personalization
+ *    Preferences groups). The previous wording here claimed "only the fields
+ *    Home actually consumes are stored"; that was not true, and a false
+ *    contract comment is worse than an admitted gap because it is quoted as
+ *    proof.
  *  - Sets are written as a sorted CSV so a re-save of identical answers never
  *    churns the stored string.
  */

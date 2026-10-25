@@ -373,3 +373,53 @@ struct GsSettingsPage<Content: View>: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 }
+
+// MARK: - Detail pages
+
+/// Every settings surface the hub's rows reach — the mock's five destinations
+/// plus the surfaces the mock does not name (chat, AI, security,
+/// accessibility), which stay reachable inside their semantic neighbours.
+enum SettingsSectionID: String, Hashable, CaseIterable {
+    case appearance, chat, ai, privacy, security, notifications, language, accessibility, about
+
+    var title: String {
+        switch self {
+        case .appearance: return "Appearance"
+        case .chat: return "Chat"
+        case .ai: return "AI Model"
+        case .privacy: return "Privacy Settings"
+        case .security: return "Device & Account"
+        case .notifications: return "Notifications"
+        case .language: return "Language"
+        case .accessibility: return "Accessibility"
+        case .about: return "About Nexly"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .appearance: return "Theme, accent color, and display"
+        case .chat: return "How new chats behave"
+        case .ai: return "Model and intelligence"
+        case .privacy: return "Manage your data and activity"
+        case .security: return "Manage your devices and sessions"
+        case .notifications: return "Stay updated with important alerts"
+        case .language: return "Choose your preferred language"
+        case .accessibility: return "High contrast, larger text, calmer motion"
+        case .about: return "Version, terms and support"
+        }
+    }
+}
+
+/// A detail page's scaffold: the same header/back/backdrop shell as the hub.
+struct SettingsDetailPage<Content: View>: View {
+    let section: SettingsSectionID
+    var onBack: () -> Void
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        GsSettingsPage(title: section.title, subtitle: section.subtitle, onBack: onBack) {
+            content()
+        }
+    }
+}

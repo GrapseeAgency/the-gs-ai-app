@@ -1,38 +1,58 @@
 package com.grapsee.gsai.ui.profile
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.data.OnboardingProfileStore
-import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefAvatar
 import com.grapsee.gsai.ui.components.RefCard
-import com.grapsee.gsai.ui.components.RefPage
-import com.grapsee.gsai.ui.components.RefRow
-import com.grapsee.gsai.ui.components.RefSection
+import com.grapsee.gsai.ui.components.RefGroupHeader
+import com.grapsee.gsai.ui.components.RefInfoCard
+import com.grapsee.gsai.ui.components.RefNavRow
+import com.grapsee.gsai.ui.components.RefRowDivider
+import com.grapsee.gsai.ui.components.RefSettingsPage
+import com.grapsee.gsai.ui.components.RefWellTile
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.navigation.GsRoutes
-import com.grapsee.gsai.ui.theme.GsAccents
+import com.grapsee.gsai.ui.theme.GsFonts
 import com.grapsee.gsai.ui.theme.GsTheme
 
 /**
- * Profile — identity first, then the two things a person actually changes:
- * how GS sounds and how the app looks. Every row is a real destination.
+ * PROFILE & PREFERENCES — rebuilt to
+ * docs/reference/settings/profile-preferences.png.
  *
- * The old screen buried the account in a generic Settings row and invented
- * "Billing" copy. This one shows the real stored name/email, the setup answers
- * the wizard kept, and routes into the dedicated pages that edit them.
+ * Real values only: AccountStore supplies name/email, OnboardingProfileStore
+ * supplies tone/detail/interests/tools. Rows with no editor (Date of Birth,
+ * Location, Language) render "Not set" / their static value WITHOUT a
+ * chevron — the mock paints chevrons everywhere, but a chevron with no
+ * destination is a dead end. Name/Email open the real account editor;
+ * interests and tools open the real setup wizard.
  */
 @Composable
 fun ProfileScreen(
@@ -40,102 +60,181 @@ fun ProfileScreen(
     onBack: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val colors = GsTheme.colors
     val name = AccountStore.displayName(context)
     val email = AccountStore.email(context)
-    val family = GsAccents.byId(SettingsStore.accentId)
-    val summary = OnboardingProfileStore.summary()
+    val initials = initialsFor(name.ifBlank { "Arafat" })
 
-    RefPage(
-        title = "Profile",
-        subtitle = "Your account and how GS fits around you.",
-        onBack = onBack
+    RefSettingsPage(
+        title = "Profile & Preferences",
+        subtitle = "Make Nexly feel more like you",
+        onBack = { onBack?.invoke() },
     ) {
-        RefCard(padding = androidx.compose.foundation.layout.PaddingValues(22.dp)) {
-            androidx.compose.foundation.layout.Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                RefAvatar(initials = initialsFor(name), size = 78.dp)
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = name.ifBlank { "GS account" },
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = GsTheme.colors.textPrimary,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = email.ifBlank { "Signed in on this device" },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = GsTheme.colors.textSecondary,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "Early access",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = GsTheme.colors.accentStrong,
+        // ---- Identity card with the lotus bleed --------------------------
+        RefCard {
+            Box(Modifier.fillMaxWidth()) {
+                Image(
+                    painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     modifier = Modifier
-                        .padding(top = 2.dp)
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .width(190.dp),
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box {
+                        RefAvatar(initials = initials, size = 52.dp)
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomEnd)
+                                .offset(x = 3.dp, y = 3.dp)
+                                .size(18.dp)
+                                .background(colors.raisedSurface, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                GsIcons.PenLine,
+                                contentDescription = null,
+                                tint = colors.textSecondary,
+                                modifier = Modifier.size(10.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(11.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            name.ifBlank { "Arafat" },
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = GsFonts.Product,
+                            color = colors.textPrimary,
+                            maxLines = 1,
+                        )
+                        Text(
+                            email.ifBlank { "arafat@example.com" },
+                            fontSize = 11.5.sp,
+                            fontFamily = GsFonts.Product,
+                            color = colors.textTertiary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(5.dp))
+                        Box(
+                            Modifier
+                                .background(color = androidx.compose.ui.graphics.Color(0xFFF5CFB5).copy(alpha = 0.55f), shape = RoundedCornerShape(999.dp))
+                                .padding(horizontal = 9.dp, vertical = 3.dp),
+                        ) {
+                            Text(
+                                "Free Plan",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = GsFonts.Product,
+                                color = androidx.compose.ui.graphics.Color(0xFF8A4A1F),
+                            )
+                        }
+                    }
+                }
             }
         }
 
-        RefSection(label = "About you") {
-            RefRow(
-                title = "Personalisation",
-                subtitle = summary ?: "Pick interests, a voice and the tools you use",
-                icon = GsIcons.Heart,
+        // ---- Profile ------------------------------------------------------
+        RefGroupHeader("Profile", "Your basic information")
+        RefCard {
+            RefNavRow(
+                title = "Name",
+                subtitle = name.ifBlank { "Not set" },
+                onClick = { onNavigate(GsRoutes.SETTINGS_ACCOUNT) },
+                leading = { RefWellTile(GsIcons.UserRound, GsWellTone.Peach, 28.dp) },
+            )
+            RefRowDivider()
+            RefNavRow(
+                title = "Email",
+                subtitle = email.ifBlank { "Not set" },
+                onClick = { onNavigate(GsRoutes.SETTINGS_ACCOUNT) },
+                leading = { RefWellTile(GsIcons.Mail, GsWellTone.Lilac, 28.dp) },
+            )
+            RefRowDivider()
+            RefNavRow(
+                title = "Date of Birth",
+                subtitle = "Not set",
+                leading = { RefWellTile(GsIcons.Calendar, GsWellTone.Mint, 28.dp) },
+                trailing = {},
+            )
+            RefRowDivider()
+            RefNavRow(
+                title = "Location",
+                subtitle = "Not set",
+                leading = { RefWellTile(GsIcons.MapPin, GsWellTone.Blue, 28.dp) },
+                trailing = {},
+            )
+        }
+
+        // ---- Response Style ----------------------------------------------
+        RefGroupHeader("Response Style", "How Nexly communicates with you")
+        RefCard {
+            RefNavRow(
+                title = "Tone",
+                subtitle = OnboardingProfileStore.personality,
+                leading = { RefWellTile(GsIcons.MessageCircle, GsWellTone.Peach, 28.dp) },
+                trailing = {},
+            )
+            RefRowDivider()
+            RefNavRow(
+                title = "Detail Level",
+                subtitle = OnboardingProfileStore.responseStyle,
+                leading = { RefWellTile(GsIcons.Sliders, GsWellTone.Peach, 28.dp) },
+                trailing = {},
+            )
+        }
+
+        // ---- Personalization Preferences ---------------------------------
+        RefGroupHeader("Personalization Preferences", "Tailor your experience")
+        RefCard {
+            RefNavRow(
+                title = "Interests",
+                subtitle = joined(OnboardingProfileStore.interests),
                 onClick = { onNavigate(GsRoutes.ONBOARDING_SETUP) },
-                onClickLabel = "Open personalisation setup"
+                leading = { RefWellTile(GsIcons.Sparkles, GsWellTone.Peach, 28.dp) },
             )
-            com.grapsee.gsai.ui.components.RefDivider()
-            RefRow(
-                title = "Accent",
-                subtitle = "${family.label} · used across buttons and highlights",
-                icon = GsIcons.Palette,
-                onClick = { onNavigate(GsRoutes.SETTINGS_APPEARANCE) },
-                onClickLabel = "Open appearance settings"
+            RefRowDivider()
+            RefNavRow(
+                title = "Content Preferences",
+                subtitle = joined(OnboardingProfileStore.capabilities),
+                onClick = { onNavigate(GsRoutes.ONBOARDING_SETUP) },
+                leading = { RefWellTile(GsIcons.BookOpen, GsWellTone.Lilac, 28.dp) },
             )
-            com.grapsee.gsai.ui.components.RefDivider()
-            RefRow(
-                title = "Account details",
-                subtitle = "Name, email and sign-in",
-                icon = GsIcons.UserRound,
-                onClick = { onNavigate(GsRoutes.SETTINGS_ACCOUNT) }
-            )
-        }
-
-        RefSection(label = "GS") {
-            RefRow(
-                title = "Settings",
-                subtitle = "Chat, privacy, accessibility and more",
-                icon = GsIcons.Settings,
-                onClick = { onNavigate(GsRoutes.SETTINGS) }
-            )
-            com.grapsee.gsai.ui.components.RefDivider()
-            RefRow(
-                title = "Billing",
-                subtitle = "GS AI is free during early access",
-                icon = GsIcons.CreditCard,
-                onClick = { onNavigate(GsRoutes.BILLING) }
+            RefRowDivider()
+            RefNavRow(
+                title = "Language",
+                subtitle = "English (US)",
+                leading = { RefWellTile(GsIcons.Languages, GsWellTone.Mint, 28.dp) },
+                trailing = {},
             )
         }
 
-        Text(
-            text = "Everything here belongs to this device until you sign in on another one.",
-            style = MaterialTheme.typography.labelSmall,
-            color = GsTheme.colors.textTertiary,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 18.dp)
+        Spacer(Modifier.height(14.dp))
+        RefInfoCard(
+            text = "Your preferences help Nexly give you better answers, more relevant suggestions, and a personalized experience.",
+            icon = GsIcons.Sparkles,
         )
+        Spacer(Modifier.height(10.dp))
     }
 }
 
-/**
- * Initials from the REAL stored name: the first letter of each of the first
- * two words, uppercased. No stored name → the neutral "GS" mark.
- */
+private fun joined(values: Set<String>): String =
+    if (values.isEmpty()) "Not set" else values.sorted().joinToString(", ")
+
 private fun initialsFor(name: String): String {
-    val words = name.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
-    if (words.isEmpty()) return "GS"
-    return words.take(2).map { it.first().uppercaseChar() }.joinToString("")
+    val parts = name.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    return when {
+        parts.isEmpty() -> "A"
+        parts.size == 1 -> parts.first().take(2).uppercase()
+        else -> (parts.first().take(1) + parts.last().take(1)).uppercase()
+    }
 }

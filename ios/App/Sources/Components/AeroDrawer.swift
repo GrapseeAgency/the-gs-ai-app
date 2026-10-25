@@ -171,27 +171,19 @@ struct AeroDrawer: View {
     /// while the tail is the fall the sheet carries and Android does not. Both
     /// numbers are below DR3's +14 L ceiling, and neither is a shadow or a blur:
     /// this is one `LinearGradient`, written in the same draw.
+    ///
+    /// The DARK profile is the same shape at a fifth of the alpha, and that is a
+    /// measurement rather than a taste: 0.46 white over a 35 L body is +99 L, where
+    /// Android's dark edge measures +20 L and no gate could see the difference —
+    /// the light gate's [4, 14] band is about a 240 L body. `check_drawer_dark.py`
+    /// now measures this edge as K6.
     private var leadingRim: some View {
-        // In dark the tail is a light leak the reference has no frame for: the
-        // sheet is a daylit page. The bar stays, the bloom behind it is halved.
-        let bar = scheme == .dark ? 0.46 : 0.50     // 0..1.25 pt: the lit edge
-        let shoulder = scheme == .dark ? 0.27 : 0.34  // 2 pt
-        let fall = scheme == .dark ? 0.09 : 0.20      // 3 pt
-        let tail = scheme == .dark ? 0.04 : 0.08      // 4.5 pt
-        return LinearGradient(
-            gradient: Gradient(stops: [
-                .init(color: .white.opacity(bar), location: 0.00),
-                .init(color: .white.opacity(bar), location: 0.16),
-                .init(color: .white.opacity(shoulder), location: 0.25),
-                .init(color: .white.opacity(fall), location: 0.38),
-                .init(color: .white.opacity(tail), location: 0.56),
-                .init(color: .white.opacity(0.00), location: 0.81),
-                .init(color: .white.opacity(0.00), location: 1.00),
-            ]),
+        LinearGradient(
+            gradient: Gradient(stops: DrawerRim.stops(dark: scheme == .dark)),
             startPoint: .leading,
             endPoint: .trailing
         )
-        .frame(width: 8)
+        .frame(width: DrawerRim.width)
         .allowsHitTesting(false)
     }
 
@@ -657,6 +649,32 @@ struct AeroDrawer: View {
     }
 }
 
+/// The leading edge's profile in POINTS, so the numbers this file and
+/// `docs/DRAWER_STATUS.md` quote are the numbers it draws: a 1.25 pt bar, a 2 pt
+/// shoulder, a 3 pt fall and a 4.5 pt tail, transparent from 6.5 pt.
+///
+/// The stop positions are divided by the gradient's own width here rather than
+/// written as bare fractions at the call site — that is what let an earlier
+/// version's "1.5 pt" claim drift from the 0.16-of-8 it actually drew.
+///
+/// The dark alphas are the light ones at about a fifth: over a 35 L body the
+/// light bar is +99 L where Android's dark edge is +20 L. K6 in
+/// `check_drawer_dark.py` is the measurement that holds this.
+private enum DrawerRim {
+    /// The widest the gradient ever draws; every stop is a fraction of it.
+    static let width: CGFloat = 8
+
+    static func stops(dark: Bool) -> [Gradient.Stop] {
+        let profile: [(point: CGFloat, alpha: Double)] = dark
+            ? [(0, 0.10), (1.25, 0.10), (2, 0.06), (3, 0.03), (4.5, 0.015), (6.5, 0)]
+            : [(0, 0.50), (1.25, 0.50), (2, 0.34), (3, 0.20), (4.5, 0.08), (6.5, 0)]
+        return profile.map {
+            Gradient.Stop(color: Color.white.opacity($0.alpha),
+                          location: $0.point / width)
+        }
+    }
+}
+
 /// The panel's surface, painted in ONE `Canvas`: the cream body, the bloom the
 /// glass is seen through, and the sheet's warm wash.
 ///
@@ -680,9 +698,10 @@ struct AeroDrawer: View {
 /// Amplitudes are deliberately small — each glow is a 2–3 L lift over the 240 L
 /// body, which is what the sheet's own low-pass shows in this band. A stronger
 /// wash would read as a spotlight rather than as light in glass. In dark the
-/// field is scaled to 12% because the sheet has no dark frame and a warm wash
-/// at full strength turns the panel brown; the fill there is the 4% white lift
-/// this surface has always carried over the dark nav ground.
+/// three glows are scaled to 12 % because the sheet has no dark frame and a
+/// daytime bloom over a 35 L panel reads as a smear; the warm wash below is NOT
+/// scaled — it is the peach the header has always carried in both appearances,
+/// and the dark gate measures the result (panel 28.70 → 34.56 L).
 private struct DrawerPanelSurface: View {
     let dark: Bool
 
@@ -711,7 +730,7 @@ private struct DrawerPanelSurface: View {
             // 2. The bloom. x and radius are fractions of the panel's width, y
             //    of its height; one radial per row, in painterly order.
             let glows: [(r: Double, g: Double, b: Double, a: Double,
-                         x: Double, y: Double, radius: Double)] = [
+                         x: CGFloat, y: CGFloat, radius: CGFloat)] = [
                 // The warm light behind the header — the sheet's brightest part
                 // of the field, and the reason its R−B reads +23 there.
                 (1.0, 0.955, 0.90, 0.55, 0.02, 0.0, 1.05),

@@ -83,6 +83,23 @@ import com.grapsee.gsai.ui.theme.GsTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.Image
+import androidx.compose.runtime.LaunchedEffect
+import com.grapsee.gsai.data.ServiceLocator
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import com.grapsee.gsai.ui.theme.GsFonts
+import com.grapsee.gsai.ui.components.RefSettingsPage
+import com.grapsee.gsai.ui.components.RefGroupHeader
+import com.grapsee.gsai.ui.components.RefWellTile
+import com.grapsee.gsai.ui.components.GsWellTone
+import com.grapsee.gsai.ui.components.RefNavRow
+import com.grapsee.gsai.ui.components.RefRowDivider
+import com.grapsee.gsai.ui.components.RefInlinePill
+import com.grapsee.gsai.ui.components.RefTileStrip
+import com.grapsee.gsai.ui.components.RefStripTile
+import com.grapsee.gsai.ui.components.RefInfoCard
 
 // ---------------------------------------------------------------------------
 // Account
@@ -747,80 +764,278 @@ fun MemorySettingsScreen(
     onNavigate: (String) -> Unit,
 ) {
     val colors = GsTheme.colors
-    val stats by produceState(initialValue = Triple(0, 0, 0)) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                val db = ServiceLocator.db
-                Triple(
-                    db.conversationDao().all().size,
-                    db.messageDao().all().size,
-                    db.savedItemDao().observeAll().let { 0 }
-                )
-            }.getOrDefault(Triple(0, 0, 0))
-        }
+    val scope = rememberCoroutineScope()
+    val dao = ServiceLocator.db.savedItemDao()
+    var items by remember { mutableStateOf<List<com.grapsee.gsai.data.local.SavedItemEntity>>(emptyList()) }
+    var showClearAll by remember { mutableStateOf(false) }
+    var showItems by remember { mutableStateOf(false) }
+    var memoryOn by remember { mutableStateOf(SettingsStore.memory) }
+
+    LaunchedEffect(Unit) {
+        dao.observeAll().collect { items = it }
     }
 
-    RefPage(
-        title = "Personalisation & Memory",
-        subtitle = "What GS keeps, and where it lives.",
-        onBack = onBack
+    RefSettingsPage(
+        title = "Memory Management",
+        subtitle = "Control what Nexly remembers about you",
+        onBack = onBack,
     ) {
-        RefCard(padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RefArtwork(RefArt.Library, size = 88.dp)
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Local memory", style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
-                    Text(
-                        "GS remembers your conversations because they are stored on this device — not because a profile is built about you.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.textSecondary
+        // ---- Nexly remembers -------------------------------------------
+        RefCard {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Box(
+                    Modifier
+                        .size(84.dp)
+                        .clip(RoundedCornerShape(18.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Image(
+                        painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize(),
                     )
+                    Box(
+                        Modifier
+                            .size(46.dp)
+                            .background(Color.White.copy(alpha = 0.30f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            GsIcons.Brain,
+                            contentDescription = null,
+                            tint = Color(0xFF5A50D6),
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(11.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Nexly remembers",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = GsFonts.Product,
+                        color = colors.textPrimary,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "so your conversations feel more personal, helpful, and relevant.",
+                        fontSize = 11.5.sp,
+                        lineHeight = 15.sp,
+                        fontFamily = GsFonts.Product,
+                        color = colors.textTertiary,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Color(0xFFC3DCCB).copy(alpha = 0.60f))
+                                .clickable(role = Role.Button, onClickLabel = "Toggle memory") {
+                                    memoryOn = !memoryOn
+                                    SettingsStore.updateMemory(memoryOn)
+                                }
+                                .padding(horizontal = 9.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                GsIcons.Info,
+                                contentDescription = null,
+                                tint = Color(0xFF177A50),
+                                modifier = Modifier.size(10.dp),
+                            )
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                if (memoryOn) "Memory is ON" else "Memory is OFF",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = GsFonts.Product,
+                                color = Color(0xFF177A50),
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        RefInlinePill(label = "Manage", icon = GsIcons.ChevronRight) { showItems = true }
+                    }
                 }
             }
         }
 
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(top = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            RefStatTile("Conversations", stats.first.toString(), Modifier.weight(1f), GsIcons.MessageCircle)
-            RefStatTile("Messages", stats.second.toString(), Modifier.weight(1f), GsIcons.Layers)
-            RefStatTile("Saved items", stats.third.toString(), Modifier.weight(1f), GsIcons.Bookmark)
-        }
-
-        RefSection(label = "Manage") {
-            RefRow(
-                title = "Saved memories",
-                subtitle = "Saved answers and notes live in the Library",
-                icon = GsIcons.Bookmark,
-                onClick = { onNavigate(GsRoutes.CHATS) }
-            )
-            RefDivider()
-            RefRow(
-                title = "Conversation history",
-                subtitle = "Every chat stored on this device",
-                icon = GsIcons.History,
-                onClick = { onNavigate(GsRoutes.CHATS) }
-            )
-            RefDivider()
-            RefRow(
-                title = "Erase everything",
-                subtitle = "Open Privacy to clear local data",
-                icon = GsIcons.Trash2,
-                onClick = { onNavigate(GsRoutes.SETTINGS_PRIVACY) }
+        // ---- What Nexly remembers --------------------------------------
+        RefGroupHeader("What Nexly remembers", "Based on your past chats")
+        RefCard {
+            RefTileStrip(
+                listOf(
+                    RefStripTile(GsIcons.UserRound, GsWellTone.Lilac, "Personal Info", "Name, interests, preferences"),
+                    RefStripTile(GsIcons.Heart, GsWellTone.Rose, "Likes & Interests", "Hobbies, topics, creative style"),
+                    RefStripTile(GsIcons.ClipboardList, GsWellTone.Blue, "Important Details", "Goals, plans, reminders"),
+                    RefStripTile(GsIcons.Settings, GsWellTone.Mint, "Preferences", "Tone, style, settings"),
+                )
             )
         }
 
-        RefFootnote("No hidden profile is inferred from your chats. Memory here means local storage you can inspect and delete.")
+        // ---- Recent Memories -------------------------------------------
+        RefGroupHeader("Recent Memories")
+        RefCard {
+            if (items.isEmpty()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RefWellTile(GsIcons.Sparkles, GsWellTone.Peach, 28.dp)
+                    Spacer(Modifier.width(11.dp))
+                    Text(
+                        "Nothing saved yet — memories appear here as you save answers and gems from chats.",
+                        fontSize = 11.5.sp,
+                        lineHeight = 15.sp,
+                        fontFamily = GsFonts.Product,
+                        color = colors.textTertiary,
+                    )
+                }
+            } else {
+                val shown = items.take(4)
+                shown.forEachIndexed { index, item ->
+                    RefNavRow(
+                        title = item.title,
+                        subtitle = "\u201C" + item.content.take(48) + "\u2026\u201D",
+                        leading = { RefWellTile(kindGlyph(item.kind), kindTone(item.kind), 28.dp) },
+                        trailing = {
+                            Text(
+                                memoryDate(item.createdAt),
+                                fontSize = 10.5.sp,
+                                fontFamily = GsFonts.Product,
+                                color = colors.textTertiary,
+                            )
+                        },
+                    )
+                    if (index < shown.lastIndex) RefRowDivider()
+                }
+            }
+        }
+
+        // ---- Manage Memory ---------------------------------------------
+        RefGroupHeader("Manage Memory")
+        RefCard {
+            RefNavRow(
+                title = "Edit what Nexly remembers",
+                subtitle = "Remove or update specific memories",
+                onClick = { showItems = true },
+                leading = { RefWellTile(GsIcons.PenLine, GsWellTone.Peach, 28.dp) },
+            )
+            RefRowDivider()
+            RefNavRow(
+                title = "Clear specific memories",
+                subtitle = "Delete individual memories",
+                onClick = { showItems = true },
+                leading = { RefWellTile(GsIcons.Trash2, GsWellTone.Rose, 28.dp) },
+            )
+            RefRowDivider()
+            RefNavRow(
+                title = "Clear all memories",
+                subtitle = "Start fresh with no saved information",
+                onClick = { showClearAll = true },
+                leading = { RefWellTile(GsIcons.Trash2, GsWellTone.Rose, 28.dp) },
+            )
+        }
+
+        Spacer(Modifier.height(14.dp))
+        RefInfoCard(
+            text = "Your privacy matters. You're always in control of what Nexly remembers.",
+            icon = GsIcons.Shield,
+        )
+        Spacer(Modifier.height(10.dp))
+    }
+
+    if (showClearAll) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showClearAll = false },
+            title = { Text("Clear all memories?") },
+            text = { Text("Every saved memory leaves this device. Your conversations stay.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        scope.launch { dao.clear() }
+                        showClearAll = false
+                    },
+                ) { Text("Clear all") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showClearAll = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showItems) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showItems = false },
+            title = { Text("What Nexly remembers") },
+            text = {
+                Column {
+                    if (items.isEmpty()) {
+                        Text("Nothing saved yet.")
+                    } else {
+                        items.take(8).forEach { item ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    item.title,
+                                    fontSize = 12.sp,
+                                    fontFamily = GsFonts.Product,
+                                    color = colors.textPrimary,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Icon(
+                                    GsIcons.Trash2,
+                                    contentDescription = "Delete memory",
+                                    tint = colors.textTertiary,
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .clickable(role = Role.Button, onClickLabel = "Delete memory") {
+                                            scope.launch { dao.delete(item.id) }
+                                        },
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showItems = false }) { Text("Done") }
+            },
+        )
     }
 }
 
-// ---------------------------------------------------------------------------
-// Voice
-// ---------------------------------------------------------------------------
+private fun kindGlyph(kind: String): androidx.compose.ui.graphics.vector.ImageVector = when (kind) {
+    "image" -> GsIcons.Palette
+    "draft" -> GsIcons.FileText
+    else -> GsIcons.MessageCircle
+}
+
+private fun kindTone(kind: String): GsWellTone = when (kind) {
+    "image" -> GsWellTone.Rose
+    "draft" -> GsWellTone.Blue
+    else -> GsWellTone.Lilac
+}
+
+private fun memoryDate(iso: String): String = runCatching {
+    val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX", java.util.Locale.US)
+    val date = parser.parse(iso) ?: return ""
+    java.text.SimpleDateFormat("MMM d", java.util.Locale.US).format(date)
+}.getOrDefault("")
 
 @Composable
 fun VoiceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
