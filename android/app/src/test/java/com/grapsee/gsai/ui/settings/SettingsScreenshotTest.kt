@@ -17,7 +17,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * The three Settings screens on the JVM — the evidence compared against
- * docs/reference/settings/*.png. One class, one Gradle invocation: each
+ * the mocks under docs/reference/settings. One class, one Gradle invocation: each
  * separate `--tests` invocation pays ~60-90s of fixed Robolectric boot.
  */
 @RunWith(RobolectricTestRunner::class)
