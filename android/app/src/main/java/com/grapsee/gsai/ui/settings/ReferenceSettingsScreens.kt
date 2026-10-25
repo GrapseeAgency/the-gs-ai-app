@@ -57,6 +57,7 @@ import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelStore
 import com.grapsee.gsai.data.notifications.ReplyNotifier
 import com.grapsee.gsai.di.ServiceLocator
+import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsLinks
 import com.grapsee.gsai.ui.components.RefAccentRow
 import com.grapsee.gsai.ui.components.RefArt
@@ -781,7 +782,7 @@ fun MemorySettingsScreen(
         onBack = onBack,
     ) {
         // ---- Nexly remembers -------------------------------------------
-        RefCard {
+        RefCard(role = GsGlassRole.CardLight) {
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -868,7 +869,7 @@ fun MemorySettingsScreen(
 
         // ---- What Nexly remembers --------------------------------------
         RefGroupHeader("What Nexly remembers", "Based on your past chats")
-        RefCard {
+        RefCard(role = GsGlassRole.CardLight) {
             RefTileStrip(
                 listOf(
                     RefStripTile(GsIcons.UserRound, GsWellTone.Lilac, "Personal Info", "Name, interests, preferences"),
@@ -881,7 +882,7 @@ fun MemorySettingsScreen(
 
         // ---- Recent Memories -------------------------------------------
         RefGroupHeader("Recent Memories")
-        RefCard {
+        RefCard(role = GsGlassRole.CardLight) {
             if (items.isEmpty()) {
                 Row(
                     Modifier
@@ -922,7 +923,7 @@ fun MemorySettingsScreen(
 
         // ---- Manage Memory ---------------------------------------------
         RefGroupHeader("Manage Memory")
-        RefCard {
+        RefCard(role = GsGlassRole.CardLight) {
             RefNavRow(
                 title = "Edit what Nexly remembers",
                 subtitle = "Remove or update specific memories",

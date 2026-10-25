@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.AccountStore
+import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefAvatar
 import com.grapsee.gsai.ui.components.RefCard
@@ -79,7 +80,7 @@ fun SettingsHubScreen(
         onBack = onBack,
     ) {
         // ---- Identity card ------------------------------------------------
-        RefCard {
+        RefCard(role = GsGlassRole.CardLight) {
             Box(Modifier.fillMaxWidth()) {
                 // The mock's blossom bleed: the shipped lotus photograph,
                 // faded into the card's right edge (no new raster minted).
@@ -181,7 +182,7 @@ fun SettingsHubScreen(
 
         // ---- Upgrade card -------------------------------------------------
         Spacer(Modifier.height(12.dp))
-        RefCard {
+        RefCard(role = GsGlassRole.CardLight) {
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -218,7 +219,7 @@ fun SettingsHubScreen(
 
         // ---- Personalization ---------------------------------------------
         RefGroupHeader("Personalization", "Make Nexly feel like you")
-        RefCard {
+        RefCard(role = GsGlassRole.CardLight) {
             RefNavRow(
                 title = "Profile & Preferences",
                 subtitle = "Your name, interests and style",
@@ -250,7 +251,7 @@ fun SettingsHubScreen(
 
         // ---- Privacy & Data ----------------------------------------------
         RefGroupHeader("Privacy & Data", "Your data, your control")
-        RefCard {
+        RefCard(role = GsGlassRole.CardLight) {
             RefNavRow(
                 title = "Privacy Settings",
                 subtitle = "Manage your data and activity",
@@ -275,7 +276,7 @@ fun SettingsHubScreen(
 
         // ---- App Settings -------------------------------------------------
         RefGroupHeader("App Settings", "Fine-tune your experience")
-        RefCard {
+        RefCard(role = GsGlassRole.CardLight) {
             RefNavRow(
                 title = "Notifications",
                 subtitle = "Stay updated with important alerts",
@@ -300,7 +301,7 @@ fun SettingsHubScreen(
 
         // ---- Log Out ------------------------------------------------------
         Spacer(Modifier.height(12.dp))
-        RefCard {
+        RefCard(role = GsGlassRole.CardLight) {
             RefNavRow(
                 title = "Log Out",
                 subtitle = "Sign out from your account",

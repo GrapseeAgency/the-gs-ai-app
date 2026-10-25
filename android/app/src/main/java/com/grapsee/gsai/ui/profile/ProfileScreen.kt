@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.data.OnboardingProfileStore
+import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefAvatar
 import com.grapsee.gsai.ui.components.RefCard
@@ -70,7 +71,7 @@ fun ProfileScreen(
         onBack = { onBack?.invoke() },
     ) {
         // ---- Identity card with the lotus bleed --------------------------
-        RefCard {
+        RefCard(role = GsGlassRole.CardLight) {
             Box(Modifier.fillMaxWidth()) {
                 Image(
                     painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
@@ -144,7 +145,7 @@ fun ProfileScreen(
 
         // ---- Profile ------------------------------------------------------
         RefGroupHeader("Profile", "Your basic information")
-        RefCard {
+        RefCard(role = GsGlassRole.CardLight) {
             RefNavRow(
                 title = "Name",
                 subtitle = name.ifBlank { "Not set" },
@@ -176,7 +177,7 @@ fun ProfileScreen(
 
         // ---- Response Style ----------------------------------------------
         RefGroupHeader("Response Style", "How Nexly communicates with you")
-        RefCard {
+        RefCard(role = GsGlassRole.CardLight) {
             RefNavRow(
                 title = "Tone",
                 subtitle = OnboardingProfileStore.personality,
@@ -194,7 +195,7 @@ fun ProfileScreen(
 
         // ---- Personalization Preferences ---------------------------------
         RefGroupHeader("Personalization Preferences", "Tailor your experience")
-        RefCard {
+        RefCard(role = GsGlassRole.CardLight) {
             RefNavRow(
                 title = "Interests",
                 subtitle = joined(OnboardingProfileStore.interests),
