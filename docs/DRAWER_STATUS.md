@@ -62,23 +62,24 @@ byte-identical in 40197395473, 40200334070 and 40201927842 — sha256
 `0d0970b7b3dce5fd3a5656ed3d9fa7b511d6bd0c4ff6c1f7dfa55b3a1e2bedbf` — so the
 platform that did not change is a control, not a second variable.
 
-The instrument is the one `check_drawer_render.py` uses: panel mean and std over
-the panel rectangle, body = median of `BLANK_BAND`, the leading rim = median of
-the leftmost 1.5 pt minus the body, HF p90 = derivative p90 inside `BLANK_BAND`.
+The instrument is the one `check_drawer_render.py` uses: panel mean, std and the
+leading rim (median of the leftmost 1.5 pt minus the body) are read from the PNG
+by one script; body, rim peak (`rim_delta`), HF p90 and column spread are the
+gate's own printed values — from each run's log, and from `--derive` for the
+sheet.
 
-| | panel mean | std | body | rim @1.5 pt | rim peak | HF p90 |
-|---|---|---|---|---|---|---|
-| reference sheet | 233.5 | 28.5 | 239.5 | +1.3 | +9.6 | 1.00 |
-| Android | 231.2 | 26.5 | 235.5 | +6.5 | +7.7 | 1.79 |
-| iOS before | 236.7 | 26.7 | 240.9 | **+4.5** | +7.7 | 2.72 |
-| iOS after | 236.8 | 26.7 | 241.0 | **+7.0** | +7.2 | 1.07 |
+| | panel mean | std | body | rim @1.5 pt | rim peak | HF p90 | column spread |
+|---|---|---|---|---|---|---|---|
+| reference sheet | 233.5 | 28.5 | 239.5 | +1.3 | +9.6 | 1.00 | 2.86 |
+| Android | 231.2 | 26.5 | 235.5 | +6.5 | +7.65 | 1.79 | 1.00 |
+| iOS before | 236.7 | 26.7 | 240.9 | **+4.5** | +7.66 | 2.72 | 0.79 |
+| iOS after | 236.8 | 26.7 | 241.0 | **+7.0** | +7.15 | 1.07 | 1.86 |
 
 iOS's rim is 0.5 L from Android's at 1.5 pt — it was 2.0 L below — and 0.5 L at
-the peak. On the gate's own probe (`rim_delta`, the brightest column median in
-the rim band) the two platforms read **7.15** and **7.65**, both inside
-[4, 14]. The sheet's +1.3 in that column is not a weak rim: its frame edge is
-the device bezel (−19.3 L), and its lit line sits 2.3 pt inside the panel, which
-is why its peak is the strongest of the four.
+the peak. Both platforms are inside [4, 14]. The sheet's +1.3 in the 1.5 pt
+column is not a weak rim: its frame edge is the device bezel (−19.3 L), and its
+lit line sits 2.3 pt inside the panel, which is why its peak is the strongest of
+the four.
 
 Column medians across rows 20–90 %, delta from each panel's own body:
 
@@ -119,10 +120,10 @@ The body colour was NOT retuned to move a number. iOS renders
 (250.8, 238.7, 229.8) on the final capture and the sheet's own margin measures
 (251.0, 237.2, 232.0) — 1.4 L apart in luma, on a band of [231, 244] — and it
 rendered (250.7, 238.6, 229.1) before. What was missing was structure, not hue:
-the text-free margin's column median varied 0.5 L where the sheet's varies
-2.9 L. It is 1.86 L now, from the field the surface carries: a warm glow behind
-the header, a blush down the leading edge, a cool veil under the footer, at the
-sheet's own 2–3 L amplitude.
+the text-free margin's column median varied **0.79 L** where the sheet's varies
+**2.86 L**. It is 1.86 L now, from the field the surface carries: a warm glow
+behind the header, a blush down the leading edge, a cool veil under the footer,
+at the sheet's own 2–3 L amplitude.
 
 Dark is unchanged in construction and improves in measurement: panel 28.70 →
 **34.56 L** (Android 41.90), separation from the strip 7.21 → **12.14 L**
