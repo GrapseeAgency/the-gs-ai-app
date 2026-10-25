@@ -52,60 +52,78 @@ the top inset is 0 at 5% height, and an arc fit for the bottom.
 
 The iOS panel measured weaker than Android's and weaker than the sheet, and the
 report canvas was still showing 24 Oct captures. Both were settled on fresh
-pixels from the same commit.
+pixels — the "before" pair from one commit, the "after" pair from the commit
+that changed the surface.
 
 Captures, all at 393 × 852: `home-renders-ios` from ios.yml run **40200332103**
-and `home-renders` from android-app run **40200334070**, both dispatched on
-`main` at **7897bdd4** (the "before"); `home-renders-ios` from ios.yml run
-**40202990869** at **98e0f565** (the "after"). Android's capture is
-byte-identical in 40197395473, 40200334070 and 40201927842 — sha256
+and `home-renders` from android-app run **40200334070**, both on `main` at
+**7897bdd4** (the "before"); `home-renders-ios` from ios.yml run **40202990869**
+at **98e0f565** (the "after"). Android's capture is byte-identical in
+40197395473, 40200334070 and 40201927842 — sha256
 `0d0970b7b3dce5fd3a5656ed3d9fa7b511d6bd0c4ff6c1f7dfa55b3a1e2bedbf` — so the
 platform that did not change is a control, not a second variable.
 
-The instrument is the one `check_drawer_render.py` uses: panel mean, std and the
-leading rim (median of the leftmost 1.5 pt minus the body) are read from the PNG
-by one script; body, rim peak (`rim_delta`), HF p90 and column spread are the
-gate's own printed values — from each run's log, and from `--derive` for the
-sheet.
+**Every number in the table below is printed by the gates themselves**, on those
+captures: `check_drawer_render.py` prints `panel_mean`, `panel_std`, `rim_1p5_pt`
+and the 13-column rim profile alongside the gated `rim_delta`, HF p90 and column
+spread, and `--derive` prints the same for the sheet. The first three are
+derived-and-printed, not gated, and the note above that file's `BANDS` says why:
+the sheet's own rim over its first 1.5 pt is +1.3 L because its frame edge is the
+device bezel, so a band around the renders would fail the reference picture, and
+a band wide enough to hold both would pass anything. There is no scratch
+instrument behind any number here.
 
 | | panel mean | std | body | rim @1.5 pt | rim peak | HF p90 | column spread |
 |---|---|---|---|---|---|---|---|
-| reference sheet | 233.5 | 28.5 | 239.5 | +1.3 | +9.6 | 1.00 | 2.86 |
-| Android | 231.2 | 26.5 | 235.5 | +6.5 | +7.65 | 1.79 | 1.00 |
-| iOS before | 236.7 | 26.7 | 240.9 | **+4.5** | +7.66 | 2.72 | 0.79 |
-| iOS after | 236.8 | 26.7 | 241.0 | **+7.0** | +7.15 | 1.07 | 1.86 |
+| reference sheet | 233.5 | 28.5 | 239.5 | +1.3 | +9.6 | 1.00 | 2.9 |
+| Android | 231.2 | 26.5 | 235.48 | +6.51 | 7.65 | 1.79 | 1.00 |
+| iOS before | 236.8 | 26.5 | 240.91 | **+4.50** | 7.66 | 2.72 | 0.79 |
+| iOS after | 236.9 | 26.5 | 240.98 | **+7.01** | 7.15 | 1.07 | 1.86 |
 
-iOS's rim is 0.5 L from Android's at 1.5 pt — it was 2.0 L below — and 0.5 L at
+iOS's rim is 0.50 L from Android's at 1.5 pt — it was 2.0 L below — and 0.50 L at
 the peak. Both platforms are inside [4, 14]. The sheet's +1.3 in the 1.5 pt
-column is not a weak rim: its frame edge is the device bezel (−19.3 L), and its
+column is not a weak rim: its frame edge is the device bezel (−19.2 L), and its
 lit line sits 2.3 pt inside the panel, which is why its peak is the strongest of
 the four.
 
-Column medians across rows 20–90 %, delta from each panel's own body:
+Column medians across rows 20–90 %, delta from each panel's own body — the
+`rim profile` line the gate prints, first 13 columns:
 
 | px from the edge | 0 | 1 | 2 | 3 | 4 | 6 | 9 | 12 |
 |---|---|---|---|---|---|---|---|---|
-| sheet (1.71 px/pt) | −19.3 | +4.5 | +4.6 | +5.1 | +9.5 | +2.7 | +0.6 | +0.1 |
-| Android (3 px/pt) | +7.6 | +7.7 | +7.6 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
-| iOS before | +7.2 | +4.7 | +3.9 | +2.9 | +0.5 | 0.0 | 0.0 | 0.0 |
-| iOS after | +6.9 | +6.8 | +7.0 | +6.8 | +6.5 | +4.4 | +2.4 | +1.4 |
+| sheet (1.71 px/pt) | −19.2 | +4.6 | +4.6 | +5.2 | +9.6 | +2.8 | +0.7 | +0.1 |
+| Android (3 px/pt) | +7.5 | +7.7 | +7.5 | 0.0 | −0.1 | −0.1 | 0.0 | −0.1 |
+| iOS before | +7.7 | +5.2 | +4.4 | +3.4 | +1.0 | +0.5 | +0.3 | +0.4 |
+| iOS after | +7.0 | +6.9 | +7.2 | +6.9 | +6.7 | +4.5 | +2.5 | +1.6 |
 
-iOS had the right peak and the wrong profile: a 1.5 pt ramp from +7.2 to 0, so
-half its nominal width was unlit — a hairline where the sheet has a bar. It is a
-1.25 pt bar at +7.0 L with the sheet's 5 pt tail now, one `LinearGradient` with
-explicit stops. In effective white alpha over each panel's own body that is
-0.50 here, **0.39** on Android (7.6 L over 235.5) and **0.29** on the sheet at
-its frame edge (4.5 L over 239.5).
+iOS had the right peak and the wrong profile: a 1.5 pt ramp from +7.7 at the
+frame edge to +1.0 by 1.33 pt, so half its nominal width was unlit — a hairline
+where the sheet has a bar. It is a 1.25 pt bar at +7.0 L with the sheet's 5 pt
+tail now, one `LinearGradient` whose stops are written as points divided by its
+width. In effective white alpha over each panel's own body that is 0.50 here,
+**0.39** on Android (7.6 L over 235.5) and **0.29** on the sheet at its frame
+edge (4.5 L over 239.5).
 
 ### Why it is painted, and why it is ONE pass
 
 **A `Material` cannot be the fix, and neither can a blur.** `drawHierarchy(in:
 afterScreenUpdates:)` — the only way a UI test can capture a window — does not
 run the compositor's backdrop pass, so a material panel is captured as its flat
-fallback tint and the gate scores a surface the device never draws. Structure
-rule 4 forbids a draw-time blur and rule 13 a per-frame shadow. Every cue is
-therefore painted, which is also how Android's `GlassFrostedPanel` works: frost,
-veil, fill and rim, all drawn.
+fallback tint and the gate scores a surface the device never draws. The
+draw-time-blur rule (rule 4 of `check_drawer_structure.py`, which is written
+against the Android drawer's `Modifier.blur`) and rule 7 (the iOS per-frame
+shadow) both point the same way. Every cue is therefore painted, which is also
+how Android's `GlassFrostedPanel` works: frost, veil, fill and rim, all drawn.
+
+**The ground is opaque, and that is a decision with a measurement.** The brief
+asks for "no opaque sidebar"; a genuinely translucent panel would show Home's
+bento cards through it, and DR3's HF ceiling of 3.0 L exists to forbid exactly
+that ghosting — the sheet's own interior measures 1.0 L, so its backdrop is
+diffused, and a live blur to produce that is the one thing rule 4 forbids. The
+panel is therefore an opaque ground with a painted bloom over it: the sheet's
+translucency is reproduced as the *field*, not as a window. If a future iOS
+build gains a compliant way to diffuse the backdrop (an offscreen pass that the
+capture can see and the drag does not pay for), this is the line to revisit.
 
 **One `Canvas`, not five stacked gradients.** The first attempt at the bloom
 stacked three SwiftUI `RadialGradient`s. SwiftUI dithers each gradient layer
@@ -125,9 +143,16 @@ the text-free margin's column median varied **0.79 L** where the sheet's varies
 behind the header, a blush down the leading edge, a cool veil under the footer,
 at the sheet's own 2–3 L amplitude.
 
-Dark is unchanged in construction and improves in measurement: panel 28.70 →
-**34.56 L** (Android 41.90), separation from the strip 7.21 → **12.14 L**
-(Android 17.14), copy contrast 212.0 L, 0.04 % blown, hero R−B 22.1.
+Dark gains the same painted bloom, scaled to 12 %, and its own measurement: the
+panel went 28.70 → **34.56 L** (Android 41.90) and its separation from the strip
+7.21 → **12.14 L** (Android 17.14), copy contrast 212.0 L, 0.04 % blown, hero
+R−B 22.1 — all from run 40202990869's `check_drawer_dark.py`. The dark EDGE is a
+separate story and a defect this pass shipped: the light profile reused at
+strength measured **+99.22 L** over the 34.56 L body where Android's is **+20.00**
+over 41.90 — a 1.25 pt white bar is a lamp on a dark panel, and no gate could see
+it. It is now the same shape at a fifth of the alpha, and `check_drawer_dark.py`
+grew K6 (`rim_delta` in [4, 40]) so it cannot regress unwatched: the new check
+fails the shipped capture at 99.22 and passes Android at 20.00.
 
 ## What is gated where — and why the split
 
@@ -154,7 +179,8 @@ stronger claim made falsely.
   insets, the recent pitch, four titles with four timestamps, no mid-footer ink,
   and the hero gradient's R−B drop. Exit 2 when a measurement is impossible.
 - `scripts/check_drawer_dark.py` — dark panel, glass still present over it, copy
-  contrast, no blown highlight, hero warmth.
+  contrast, no blown highlight, hero warmth, and the leading edge (K6: the light
+  gate's rim probe, re-based for a 35 L body — lit, and not a lamp).
 - `scripts/check_drawer_structure.py` — 17 rules (lazy list, no eager scroll, no
   draw-time blur, no per-frame shadow, no store read from `body`, no infinite
   animation), each with a counter-example it must reject, run with `--self-test`.

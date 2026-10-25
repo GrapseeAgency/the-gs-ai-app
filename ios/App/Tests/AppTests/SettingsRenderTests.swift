@@ -5,7 +5,7 @@ import UIKit
 
 /**
  * The three Settings screens rendered on the simulator — the PNGs are the
- * evidence, compared against docs/reference/settings/*.png. Same windowed
+ * evidence, compared against the three mocks under docs/reference/settings. Same windowed
  * drawHierarchy channel as the Explore/Home harnesses.
  */
 @MainActor
