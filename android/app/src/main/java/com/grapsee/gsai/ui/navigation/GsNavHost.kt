@@ -299,6 +299,14 @@ fun GsNavHost(
                 onBack = back,
                 onNavigate = open,
                 onLocalAiRequested = { askLocalConsent = true },
+                // The mock's Log Out card is real: same SessionStore exit the
+                // Account page uses, back to AUTH with the stack cleared.
+                onLogout = {
+                    SessionStore.signOut(context)
+                    navController.navigate(GsRoutes.AUTH) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
             )
         }
 

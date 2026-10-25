@@ -5,6 +5,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import com.grapsee.gsai.data.SettingsStore
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -369,5 +377,94 @@ fun RefInfoCard(text: String, modifier: Modifier = Modifier, icon: ImageVector? 
             fontFamily = GsFonts.Product,
             color = colors.textTertiary,
         )
+    }
+}
+
+/**
+ * The settings scaffold: pearl backdrop (light) or the ambient bloom (dark),
+ * the mock's back well + title block, and a scrolling content column inset
+ * 22dp — the measured card inset (settings-geometry.json, 0.0554 W).
+ *
+ * Deliberately NOT RefPage: RefPage's back affordance is a bare chevron and
+ * its inset is 16dp; both differ from the mocks, and RefPage is composed by
+ * ten other screens that must not move.
+ */
+@Composable
+fun RefSettingsPage(
+    title: String,
+    subtitle: String? = null,
+    onBack: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val colors = GsTheme.colors
+    val isDark = LocalGsIsDark.current
+    Box(Modifier.fillMaxSize()) {
+        if (!isDark && SettingsStore.backgroundStyle != "Solid") {
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(com.grapsee.gsai.R.drawable.gs_home_backdrop),
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+        }
+        Column(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .size(36.dp)
+                        .gsGlass(GsGlassRole.FloatingControl, CircleShape)
+                        .clickable(role = Role.Button, onClickLabel = "Back", onClick = onBack),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        com.grapsee.gsai.ui.icons.GsIcons.ChevronLeft,
+                        contentDescription = null,
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(17.dp),
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = GsFonts.Product,
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    if (!subtitle.isNullOrBlank()) {
+                        Text(
+                            text = subtitle,
+                            fontSize = 12.sp,
+                            fontFamily = GsFonts.Product,
+                            color = colors.textTertiary,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 22.dp)
+                    .padding(bottom = 26.dp),
+                content = content,
+            )
+        }
     }
 }
