@@ -12,6 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +69,7 @@ import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsFonts
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.LocalGsIsDark
+import kotlinx.coroutines.launch
 import kotlin.math.min
 
 /**
@@ -233,26 +237,61 @@ object ExploreCatalog {
     )
 
     data class Collection(
+        val id: String,
         val title: String,
         val subtitle: String,
         val category: ExploreCategory,
     )
 
     val collections = listOf(
-        Collection("Design & Visuals", "For creators & dreamers", ExploreCategory.Creativity),
-        Collection("Work & Productivity", "Work smarter, not harder", ExploreCategory.Productivity),
-        Collection("Learning & Growth", "Build new skills", ExploreCategory.Learning),
+        Collection("design", "Design & Visuals", "For creators & dreamers", ExploreCategory.Creativity),
+        Collection("work", "Work & Productivity", "Work smarter, not harder", ExploreCategory.Productivity),
+        Collection("learning", "Learning & Growth", "Build new skills", ExploreCategory.Learning),
     )
 
-    /** The featured journey card (the reference's Weekend in Kyoto). */
-    val featured = ExploreTool(
-        id = "kyoto-weekend",
-        title = "Weekend in Kyoto",
-        subtitle = "A creative journey through Japan's timeless beauty",
-        icon = "sparkles",
-        tone = ExploreTone(ExploreTones.ApricotBg, ExploreTones.ApricotFg),
-        category = ExploreCategory.Lifestyle,
-        prompt = "Plan a creative weekend in Kyoto. Ask my pace and interests, then give me one day per page: morning temple light, one craft workshop, one quiet meal, and one place locals actually go.",
+    /**
+     * One page of the Featured carousel — a journey card plus the authored
+     * art panel it bleeds through. Every page seeds a real conversation;
+     * the carousel is content, not chrome.
+     */
+    data class FeaturedJourney(
+        val id: String,
+        val title: String,
+        val subtitle: String,
+        val icon: String,
+        val tone: ExploreTone,
+        val artRes: Int,
+        val prompt: String,
+    )
+
+    val featuredJourneys = listOf(
+        FeaturedJourney(
+            id = "kyoto-weekend",
+            title = "Weekend in Kyoto",
+            subtitle = "A creative journey through Japan's timeless beauty",
+            icon = "sparkles",
+            tone = ExploreTone(ExploreTones.ApricotBg, ExploreTones.ApricotFg),
+            artRes = com.grapsee.gsai.R.drawable.gs_explore_kyoto,
+            prompt = "Plan a creative weekend in Kyoto. Ask my pace and interests, then give me one day per page: morning temple light, one craft workshop, one quiet meal, and one place locals actually go.",
+        ),
+        FeaturedJourney(
+            id = "studio-bloom",
+            title = "Studio Bloom",
+            subtitle = "A ten-minute creative warm-up, guided",
+            icon = "brush",
+            tone = ExploreTone(ExploreTones.PinkBg, ExploreTones.PinkFg),
+            artRes = com.grapsee.gsai.R.drawable.gs_explore_col_design,
+            prompt = "Take me through a quick creative warm-up. Ask my mood, then give me three image prompts, a matching palette, and one small exercise I can finish in ten minutes.",
+        ),
+        FeaturedJourney(
+            id = "lotus-lesson",
+            title = "The Lotus Lesson",
+            subtitle = "One new skill, twenty quiet minutes",
+            icon = "school",
+            tone = ExploreTone(ExploreTones.GreenBg, ExploreTones.GreenFg),
+            artRes = com.grapsee.gsai.R.drawable.gs_explore_col_learning,
+            prompt = "Teach me one new thing today. Ask what I keep postponing, then turn it into a twenty-minute first lesson with one small win at the end.",
+        ),
     )
 
     fun byCategory(category: ExploreCategory): List<ExploreTool> =
@@ -784,11 +823,11 @@ fun ExploreScreen(
 
                 Spacer(Modifier.height(16.dp))
 
-                // FEATURED — the Kyoto journey
+                // FEATURED — the journey carousel (the mock's Kyoto card first)
                 SectionHeader("Featured", inkHeader, inkMuted)
                 Spacer(Modifier.height(10.dp))
-                ExploreFeaturedCard(inkStrong, inkBody, inkMuted) {
-                    onOpenChat(ExploreCatalog.featured.prompt, false)
+                ExploreFeaturedCarousel(inkStrong, inkBody, inkMuted) { prompt ->
+                    onOpenChat(prompt, false)
                 }
             }
             Spacer(Modifier.height(14.dp))
@@ -864,9 +903,9 @@ private fun ExploreCollectionCard(
                 .fillMaxWidth()
                 .height(72.dp),
         ) {
-            val art = when (collection.subtitle) {
-                "Work smarter, not harder" -> com.grapsee.gsai.R.drawable.gs_explore_col_work
-                "Build new skills" -> com.grapsee.gsai.R.drawable.gs_explore_col_learning
+            val art = when (collection.id) {
+                "work" -> com.grapsee.gsai.R.drawable.gs_explore_col_work
+                "learning" -> com.grapsee.gsai.R.drawable.gs_explore_col_learning
                 else -> com.grapsee.gsai.R.drawable.gs_explore_col_design
             }
             Image(
@@ -915,9 +954,72 @@ private fun ExploreCollectionCard(
 }
 
 @Composable
-private fun ExploreFeaturedCard(
+private fun ExploreFeaturedCarousel(
     inkStrong: Color,
     inkBody: Color,
+    inkMuted: Color,
+    onOpenChat: (String) -> Unit,
+) {
+    val pager = rememberPagerState(pageCount = { ExploreCatalog.featuredJourneys.size })
+    val pagerScope = rememberCoroutineScope()
+    Box(Modifier.fillMaxWidth()) {
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth()) { page ->
+            val journey = ExploreCatalog.featuredJourneys[page]
+            ExploreFeaturedCard(journey, inkStrong, inkMuted) {
+                onOpenChat(journey.prompt)
+            }
+        }
+        // the mock's next control: a glass bubble just inside the card's
+        // right edge. The reference paints no page dots, so there are none.
+        Box(
+            Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 8.dp)
+                .size(30.dp)
+                .shadow(
+                    elevation = 6.dp,
+                    shape = CircleShape,
+                    ambientColor = Color(0x2EE29C7C),
+                    spotColor = Color(0x4DE29C7C),
+                )
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.White.copy(alpha = 0.75f),
+                        1f to ExploreTones.PeachPale.copy(alpha = 0.55f),
+                    ),
+                    CircleShape,
+                )
+                .border(
+                    1.dp,
+                    Brush.verticalGradient(
+                        0f to Color.White.copy(alpha = 0.85f),
+                        1f to Color.White.copy(alpha = 0.35f),
+                    ),
+                    CircleShape,
+                )
+                .clickable(role = Role.Button, onClickLabel = "Next featured journey") {
+                    pagerScope.launch {
+                        pager.animateScrollToPage(
+                            (pager.currentPage + 1) % ExploreCatalog.featuredJourneys.size,
+                        )
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                GsIcons.ChevronRight,
+                contentDescription = null,
+                tint = inkBody,
+                modifier = Modifier.size(13.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExploreFeaturedCard(
+    journey: ExploreCatalog.FeaturedJourney,
+    inkStrong: Color,
     inkMuted: Color,
     onOpen: () -> Unit,
 ) {
@@ -925,9 +1027,9 @@ private fun ExploreFeaturedCard(
         Modifier
             .fillMaxWidth()
             .exploreGlass(shape = RoundedCornerShape(18.dp), elevation = 10.dp)
-            .clickable(role = Role.Button, onClickLabel = ExploreCatalog.featured.title) { onOpen() },
+            .clickable(role = Role.Button, onClickLabel = journey.title) { onOpen() },
     ) {
-        // the authored Kyoto scene fills the card's right side under a veil
+        // the authored scene fills the card's right side under a veil
         Box(
             Modifier
                 .align(Alignment.CenterEnd)
@@ -935,7 +1037,7 @@ private fun ExploreFeaturedCard(
                 .width(150.dp),
         ) {
             Image(
-                painter = painterResource(com.grapsee.gsai.R.drawable.gs_explore_kyoto),
+                painter = painterResource(journey.artRes),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
@@ -967,8 +1069,8 @@ private fun ExploreFeaturedCard(
                     )
                     .background(
                         Brush.verticalGradient(
-                            0f to lerp(ExploreCatalog.featured.tone.bg, Color.White, 0.45f),
-                            1f to ExploreCatalog.featured.tone.bg,
+                            0f to lerp(journey.tone.bg, Color.White, 0.45f),
+                            1f to journey.tone.bg,
                         ),
                         CircleShape,
                     )
@@ -983,16 +1085,16 @@ private fun ExploreFeaturedCard(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    GsIcons.Sparkles,
+                    exploreIcon(journey.icon),
                     contentDescription = null,
-                    tint = ExploreCatalog.featured.tone.fg,
+                    tint = journey.tone.fg,
                     modifier = Modifier.size(15.dp),
                 )
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    ExploreCatalog.featured.title,
+                    journey.title,
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = GsFonts.Product,
@@ -1000,7 +1102,7 @@ private fun ExploreFeaturedCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    ExploreCatalog.featured.subtitle,
+                    journey.subtitle,
                     fontSize = 10.5.sp,
                     lineHeight = 14.sp,
                     fontFamily = GsFonts.Product,
@@ -1009,20 +1111,8 @@ private fun ExploreFeaturedCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Spacer(Modifier.width(8.dp))
-            Box(
-                Modifier
-                    .size(26.dp)
-                    .background(Color.White.copy(alpha = 0.55f), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    GsIcons.ChevronRight,
-                    contentDescription = null,
-                    tint = inkBody,
-                    modifier = Modifier.size(13.dp),
-                )
-            }
+            // clearance for the carousel's edge bubble
+            Spacer(Modifier.width(38.dp))
         }
     }
 }

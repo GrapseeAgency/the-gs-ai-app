@@ -108,25 +108,55 @@ enum ExploreCatalog {
         ),    ]
 
     struct Collection: Identifiable, Hashable {
-        let id = UUID()
+        let id: String
         let title: String
         let subtitle: String
         let category: ExploreCategory
     }
 
     static let collections: [Collection] = [
-        Collection(title: "Design & Visuals", subtitle: "For creators & dreamers", category: .creativity),
-        Collection(title: "Work & Productivity", subtitle: "Work smarter, not harder", category: .productivity),
-        Collection(title: "Learning & Growth", subtitle: "Build new skills", category: .learning),
+        Collection(id: "design", title: "Design & Visuals", subtitle: "For creators & dreamers", category: .creativity),
+        Collection(id: "work", title: "Work & Productivity", subtitle: "Work smarter, not harder", category: .productivity),
+        Collection(id: "learning", title: "Learning & Growth", subtitle: "Build new skills", category: .learning),
     ]
 
-    static let featured = ExploreTool(
-        id: "kyoto-weekend", title: "Weekend in Kyoto",
-        subtitle: "A creative journey through Japan's timeless beauty",
-        glyph: "sparkles", bg: ExplorePalette.apricotBg, fg: ExplorePalette.apricotFg,
-        category: .lifestyle,
-        prompt: "Plan a creative weekend in Kyoto. Ask my pace and interests, then give me one day per page: morning temple light, one craft workshop, one quiet meal, and one place locals actually go."
-    )
+    /// One page of the Featured carousel — a journey card plus the
+    /// authored art panel it bleeds through. Every page seeds a real
+    /// conversation; the carousel is content, not chrome.
+    struct FeaturedJourney: Identifiable, Hashable {
+        let id: String
+        let title: String
+        let subtitle: String
+        let glyph: String
+        let bg: Color
+        let fg: Color
+        let art: String
+        let prompt: String
+    }
+
+    static let featuredJourneys: [FeaturedJourney] = [
+        FeaturedJourney(
+            id: "kyoto-weekend", title: "Weekend in Kyoto",
+            subtitle: "A creative journey through Japan's timeless beauty",
+            glyph: "sparkles", bg: ExplorePalette.apricotBg, fg: ExplorePalette.apricotFg,
+            art: "GSExploreKyoto",
+            prompt: "Plan a creative weekend in Kyoto. Ask my pace and interests, then give me one day per page: morning temple light, one craft workshop, one quiet meal, and one place locals actually go."
+        ),
+        FeaturedJourney(
+            id: "studio-bloom", title: "Studio Bloom",
+            subtitle: "A ten-minute creative warm-up, guided",
+            glyph: "brush", bg: ExplorePalette.pinkBg, fg: ExplorePalette.pinkFg,
+            art: "GSExploreColDesign",
+            prompt: "Take me through a quick creative warm-up. Ask my mood, then give me three image prompts, a matching palette, and one small exercise I can finish in ten minutes."
+        ),
+        FeaturedJourney(
+            id: "lotus-lesson", title: "The Lotus Lesson",
+            subtitle: "One new skill, twenty quiet minutes",
+            glyph: "school", bg: ExplorePalette.greenBg, fg: ExplorePalette.greenFg,
+            art: "GSExploreColLearning",
+            prompt: "Teach me one new thing today. Ask what I keep postponing, then turn it into a twenty-minute first lesson with one small win at the end."
+        ),
+    ]
 
     static func byCategory(_ category: ExploreCategory) -> [ExploreTool] {
         category == .all ? tools : tools.filter { $0.category == category }
@@ -392,6 +422,7 @@ struct ExploreView: View {
 
     @State private var query = ""
     @State private var searchOpen = false
+    @State private var featuredPage = 0
 
     init(
         onOpenChat: @escaping (AeroRoute) -> Void,
@@ -655,50 +686,87 @@ struct ExploreView: View {
     }
 
     private var featuredSection: some View {
-        Button {
-            onOpenChat(.chatPrefill(ExploreCatalog.featured.prompt))
-        } label: {
-            ZStack(alignment: .trailing) {
-                Image("GSExploreKyoto")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 150)
-                    .clipped()
-                    .overlay(
-                        LinearGradient(
-                            stops: [
-                                .init(color: Color(red: 0.984, green: 0.929, blue: 0.906).opacity(0.88), location: 0),
-                                .init(color: Color(red: 0.984, green: 0.929, blue: 0.906).opacity(0.18), location: 0.55),
-                                .init(color: .clear, location: 1),
-                            ],
-                            startPoint: .leading, endPoint: .trailing
-                        )
-                    )
-                    .allowsHitTesting(false)
-                HStack(spacing: 10) {
-                    NexlyGlyph(name: ExploreCatalog.featured.glyph, size: 15, color: ExploreCatalog.featured.fg)
-                        .modifier(IconCircleStyle(bg: ExploreCatalog.featured.bg, diameter: 34))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(ExploreCatalog.featured.title)
-                            .font(Aero.bodyMedium().weight(.semibold))
-                            .foregroundStyle(Aero.text)
-                        Text(ExploreCatalog.featured.subtitle)
-                            .font(Aero.caption())
-                            .foregroundStyle(Aero.textMuted)
-                            .lineLimit(2)
-                    }
-                    Spacer()
-                    Circle()
-                        .fill(.white.opacity(0.55))
-                        .frame(width: 26, height: 26)
-                        .overlay(NexlyGlyph(name: "chevron-right", size: 13, color: Aero.text))
-                }
-                .padding(10)
+        TabView(selection: $featuredPage) {
+            ForEach(Array(ExploreCatalog.featuredJourneys.enumerated()), id: \.element.id) { index, journey in
+                featuredCard(journey)
+                    .tag(index)
             }
-            .modifier(ExploreGlass(corner: 18, elevation: 10))
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(ExploreCatalog.featured.title): \(ExploreCatalog.featured.subtitle)")
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .frame(height: 66)
+    }
+
+    /// One carousel page: the card opens its chat, the bubble advances the
+    /// pager — the mock's next control, a glass bubble just inside the
+    /// card's right edge. The reference paints no page dots, so there are none.
+    private func featuredCard(_ journey: ExploreCatalog.FeaturedJourney) -> some View {
+        featuredCardFace(journey)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onOpenChat(.chatPrefill(journey.prompt))
+            }
+            .overlay(alignment: .trailing) {
+                Button {
+                    withAnimation {
+                        featuredPage = (featuredPage + 1) % ExploreCatalog.featuredJourneys.count
+                    }
+                } label: {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.white.opacity(0.75), ExplorePalette.peachPale.opacity(0.55)],
+                                startPoint: .top, endPoint: .bottom
+                            )
+                        )
+                        .frame(width: 30, height: 30)
+                        .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1))
+                        .overlay(NexlyGlyph(name: "chevron-right", size: 13, color: Aero.text))
+                        .shadow(color: ExplorePalette.peach.opacity(0.30), radius: 6, x: 0, y: 3)
+                        .padding(.trailing, 8)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Next featured journey")
+            }
+    }
+
+    private func featuredCardFace(_ journey: ExploreCatalog.FeaturedJourney) -> some View {
+        ZStack(alignment: .trailing) {
+            Image(journey.art)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 150)
+                .clipped()
+                .overlay(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color(red: 0.984, green: 0.929, blue: 0.906).opacity(0.88), location: 0),
+                            .init(color: Color(red: 0.984, green: 0.929, blue: 0.906).opacity(0.18), location: 0.55),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                )
+                .allowsHitTesting(false)
+            HStack(spacing: 10) {
+                NexlyGlyph(name: journey.glyph, size: 15, color: journey.fg)
+                    .modifier(IconCircleStyle(bg: journey.bg, diameter: 34))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(journey.title)
+                        .font(Aero.bodyMedium().weight(.semibold))
+                        .foregroundStyle(Aero.text)
+                    Text(journey.subtitle)
+                        .font(Aero.caption())
+                        .foregroundStyle(Aero.textMuted)
+                        .lineLimit(2)
+                }
+                Spacer()
+            }
+            .padding(10)
+        }
+        .modifier(ExploreGlass(corner: 18, elevation: 10))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(journey.title): \(journey.subtitle)")
     }
 
     private var resultsSection: some View {
@@ -800,10 +868,10 @@ struct ExploreView: View {
 
     @ViewBuilder
     private func collectionArt(_ collection: ExploreCatalog.Collection) -> some View {
-        switch collection.subtitle {
-        case "Work smarter, not harder":
+        switch collection.id {
+        case "work":
             Image("GSExploreColWork").resizable().scaledToFill()
-        case "Build new skills":
+        case "learning":
             Image("GSExploreColLearning").resizable().scaledToFill()
         default:
             Image("GSExploreColDesign").resizable().scaledToFill()
