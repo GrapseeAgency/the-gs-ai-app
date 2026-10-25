@@ -508,3 +508,27 @@ assertions unchanged; deadline 360 s (120 s quiet + ~135 s worst-case
 generation), inside the scheme's 600 s per-test allowance. The race the
 sleep exists for is named here and in the commit message: the post-send
 generation freeze vs XCUITest's 93 s query ladder.
+
+### DONE — two consecutive greens on the final commit
+
+The freeze-window fix is `e0f071f6`. Two consecutive ios-native runs on
+exactly that commit, both fully green:
+
+- **40189506741** — `GsChatUiTests.testSendHelloRendersARealAssistantReply`
+  passed (202.796 s), `MenuChromeTests.testEveryMenuPutsItsGlyphInTheLeadingSlot`
+  passed (114.838 s);
+- **40189511869** — `GsChatUiTests…` passed (179.303 s),
+  `MenuChromeTests…` passed (127.610 s).
+
+Both runs print the honest diagnostics this work added:
+`GsChatUiTests: reply bubble = hello! how can i assist you today?` (the
+model's real answer — not the canned fallback, not the echoed prompt, not a
+timestamp) and `chat-header-menu/Chat options … w=13.3 inset=33.3 band=60x26`
+(the true unclipped glyph on iOS 26.4's icon column).
+
+The other gates on commits containing `e0f071f6`:
+ios.yml green (`5935b3bc` run 40189574571, `363b7949` run 40191152876),
+android-app.yml green (`5935b3bc` run 40189574642, `04ae8e94` run
+40192753418). The four local gates (icon catalogue 1611/5466, drawer
+structure 17 rules, drawer type parity, iOS static gates) pass on the same
+tree.
