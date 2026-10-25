@@ -760,7 +760,7 @@ struct ExploreView: View {
                         bg: tool.filledTile ? tool.fg : tool.bg,
                         diameter: 34,
                         solidTile: tool.filledTile,
-                        playGlyph: tool.icon == "player-play"
+                        playGlyph: tool.glyph == "player-play"
                     ))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(tool.title)
@@ -1028,7 +1028,7 @@ struct DiscoverView: View {
                         bg: tool.filledTile ? tool.fg : tool.bg,
                         diameter: 36,
                         solidTile: tool.filledTile,
-                        playGlyph: tool.icon == "player-play"
+                        playGlyph: tool.glyph == "player-play"
                     ))
                 Text(tool.title)
                     .font(Aero.bodyMedium().weight(.semibold))
@@ -1068,7 +1068,7 @@ struct DiscoverView: View {
                                     bg: tool.filledTile ? tool.fg : tool.bg,
                                     diameter: 34,
                                     solidTile: tool.filledTile,
-                                    playGlyph: tool.icon == "player-play"
+                                    playGlyph: tool.glyph == "player-play"
                                 ))
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(tool.title)
@@ -1112,7 +1112,7 @@ struct DiscoverView: View {
                                         bg: tool.filledTile ? tool.fg : tool.bg,
                                         diameter: 34,
                                         solidTile: tool.filledTile,
-                                        playGlyph: tool.icon == "player-play"
+                                        playGlyph: tool.glyph == "player-play"
                                     ))
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(tool.title)
