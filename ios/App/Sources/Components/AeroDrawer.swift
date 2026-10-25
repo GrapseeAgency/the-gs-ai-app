@@ -702,6 +702,13 @@ private enum DrawerRim {
 /// daytime bloom over a 35 L panel reads as a smear; the warm wash below is NOT
 /// scaled — it is the peach the header has always carried in both appearances,
 /// and the dark gate measures the result (panel 28.70 → 34.56 L).
+///
+/// INPUTS MUST STAY `dark` AND THE PROPOSED SIZE. The panel lives inside the
+/// subtree whose `.offset` follows the finger, so anything this struct read from
+/// gesture state would make a full-panel Core Graphics raster (≈2.1 MPix, five
+/// fills) run per touch sample. With one `Bool` as its only input, SwiftUI's
+/// structural comparison short-circuits it and the drag stays a compositing
+/// transform — the same profile the three gradient layers had.
 private struct DrawerPanelSurface: View {
     let dark: Bool
 

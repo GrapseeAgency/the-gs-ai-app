@@ -113,8 +113,8 @@ fun RefGroupHeader(
 fun RefWellTile(
     icon: ImageVector,
     tone: GsWellTone,
-    modifier: Modifier = Modifier,
     size: Dp = 40.dp,
+    modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
