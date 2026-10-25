@@ -16,7 +16,7 @@ final class ExploreRenderTests: XCTestCase {
 
     func testExplorePageRenders() async throws {
         try await capturePage(
-            view: { ExploreView(onOpenChat: { _ in }, onOpenDiscover: {}) },
+            view: { ExploreView(onOpenChat: { _ in }, onOpenDiscover: {}, onOpenHome: {}, onOpenSettings: {}) },
             prefix: "nexly-explore-ios",
             targets: [(393, 852, "393x852"), (411, 914, "411x914"), (360, 780, "360x780"), (393, 1400, "393x1400")]
         )

@@ -39,28 +39,28 @@ class NexlyExploreScreenshotTest {
     @Config(sdk = [34], qualifiers = "w393dp-h1400dp-xxhdpi")
     fun exploreFullPageAtReferenceHeight() =
         shoot("build/screenshots/nexly-explore-full-393x1400.png") {
-            ExploreScreen(onOpenChat = { _, _ -> }, onOpenDiscover = {}, onBack = {})
+            ExploreScreen(onOpenChat = { _, _ -> }, onOpenDiscover = {}, onBack = {}, onOpenSettings = {})
         }
 
     @Test
     @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
     fun exploreAtSheetSize() =
         shoot("build/screenshots/nexly-explore-393x852.png") {
-            ExploreScreen(onOpenChat = { _, _ -> }, onOpenDiscover = {}, onBack = {})
+            ExploreScreen(onOpenChat = { _, _ -> }, onOpenDiscover = {}, onBack = {}, onOpenSettings = {})
         }
 
     @Test
     @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
     fun exploreAtPixel6() =
         shoot("build/screenshots/nexly-explore-411x914.png") {
-            ExploreScreen(onOpenChat = { _, _ -> }, onOpenDiscover = {}, onBack = {})
+            ExploreScreen(onOpenChat = { _, _ -> }, onOpenDiscover = {}, onBack = {}, onOpenSettings = {})
         }
 
     @Test
     @Config(sdk = [34], qualifiers = "w360dp-h780dp-xxhdpi")
     fun exploreAtCompact() =
         shoot("build/screenshots/nexly-explore-360x780.png") {
-            ExploreScreen(onOpenChat = { _, _ -> }, onOpenDiscover = {}, onBack = {})
+            ExploreScreen(onOpenChat = { _, _ -> }, onOpenDiscover = {}, onBack = {}, onOpenSettings = {})
         }
 
     @Test

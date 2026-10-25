@@ -10,9 +10,12 @@ import SwiftUI
 /// purpose — Apple vibrancy moves every pixel under it (see
 /// Theme/GlassMaterial.swift; the same law the Home dock obeys).
 struct ExploreDock: View {
-    var onOpenHome: () -> Void = {}
+    // Required, not defaulted: a dock button that silently no-ops is the
+    // dead-control class this repo keeps stamping out. ExploreView passes
+    // the real routes; only the pill's scroll-to-top may take a no-op.
+    var onOpenHome: () -> Void
     var onScrollToTop: () -> Void = {}
-    var onOpenSettings: () -> Void = {}
+    var onOpenSettings: () -> Void
 
     /// The pill's ink is fixed deep brown in both mocks and on Home's
     /// Generate pill — the peach capsule never inverts with the scheme.
@@ -67,7 +70,7 @@ struct ExploreDock: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Explore. Current tab. Scrolls to top.")
+        .accessibilityLabel("Explore. Scrolls to top.")
     }
 
     private func dockCircle(glyph: String, label: String, action: @escaping () -> Void) -> some View {

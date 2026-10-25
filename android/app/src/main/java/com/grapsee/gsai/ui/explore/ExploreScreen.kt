@@ -527,7 +527,7 @@ private fun ExploreDock(
                 )
                 .clickable(
                     role = Role.Button,
-                    onClickLabel = "Explore, current tab. Scrolls to top",
+                    onClickLabel = "Explore. Scrolls to top.",
                 ) { onScrollToTop() }
                 .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -734,7 +734,7 @@ private fun SectionHeader(
         Spacer(Modifier.weight(1f))
         if (onSeeAll != null) {
             Row(
-                Modifier.clickable(role = Role.Button, onClickLabel = "See All") { onSeeAll() },
+                Modifier.clickable(role = Role.Button, onClickLabel = label) { onSeeAll() },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -776,7 +776,9 @@ fun ExploreScreen(
     onOpenChat: (prompt: String, autoSend: Boolean) -> Unit,
     onOpenDiscover: () -> Unit,
     onBack: () -> Unit = {},
-    onOpenSettings: () -> Unit = {},
+    // Required, not defaulted: a forgotten wire would compile green and ship
+    // a dead dock Settings button. The render harness passes an explicit no-op.
+    onOpenSettings: () -> Unit,
     /** Render-harness entry points: the real states, driven from outside. */
     initialSearchOpen: Boolean = false,
 ) {

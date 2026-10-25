@@ -247,6 +247,19 @@ enum ExplorePalette {
     static let inkHeader = Color(red: 0.169, green: 0.173, blue: 0.216)
     static let inkBody = Color(red: 0.290, green: 0.294, blue: 0.333)
     static let inkMuted = Color(red: 0.553, green: 0.553, blue: 0.584)
+
+    /// The page's glass fill in ONE place — ExploreGlass and the shape-only
+    /// call sites (the inactive chips) both draw from it, so the dark
+    /// alphas Android's exploreGlass carries cannot drift on one of them.
+    static func glassFill(dark: Bool) -> LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 1.0, green: 0.980, blue: 0.965).opacity(dark ? 0.85 : 0.90),
+                Color(red: 0.988, green: 0.929, blue: 0.898).opacity(dark ? 0.74 : 0.79),
+            ],
+            startPoint: .topLeading, endPoint: .bottomTrailing
+        )
+    }
 }
 
 /// The page bloom behind both Explore and Discover. The authored bubble
@@ -290,15 +303,7 @@ private struct ExploreGlass: ViewModifier {
             )
             .background(
                 RoundedRectangle(cornerRadius: corner)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 1.0, green: 0.980, blue: 0.965).opacity(dark ? 0.85 : 0.90),
-                                Color(red: 0.988, green: 0.929, blue: 0.898).opacity(dark ? 0.74 : 0.79),
-                            ],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(ExplorePalette.glassFill(dark: dark))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: corner)
@@ -390,18 +395,30 @@ private extension ExplorePalette {
     }
 }
 
-/// The tile icon for a catalog entry. The Nexly font set carries no
-/// waveform, so that id draws the shared GsIcons path — the same vector
-/// Android's exploreIcon map resolves "waveform" to. Catalog ids stay
-/// the kebab names shared across the two platforms.
+/// The tile icon for a catalog entry, by kebab id. Two ids have no codepoint
+/// in the Nexly font set and draw the shared vector instead — the same
+/// vectors Android's exploreIcon map resolves them to: "waveform" →
+/// audioWaveform, "school" → graduationCap (the mock paints a mortarboard,
+/// not a schoolhouse). "player-play" draws NOTHING: the filled rounded
+/// triangle is IconCircleStyle's overlay, and leaving the outline glyph under
+/// it ghosts a stroke around the fill — Android is mutually exclusive the
+/// same way. Catalog ids stay the kebab names shared across the platforms.
 @ViewBuilder
-private func exploreToolGlyph(_ tool: ExploreTool, size: CGFloat) -> some View {
-    let tint = tool.filledTile ? Color.white : tool.fg
-    if tool.glyph == "waveform" {
+private func exploreGlyph(name: String, size: CGFloat, tint: Color) -> some View {
+    switch name {
+    case "waveform":
         GsIconView(GsIcons.audioWaveform, size: size, color: tint)
-    } else {
-        NexlyGlyph(name: tool.glyph, size: size, color: tint)
+    case "school":
+        GsIconView(GsIcons.graduationCap, size: size, color: tint)
+    case "player-play":
+        Color.clear.frame(width: size, height: size)
+    default:
+        NexlyGlyph(name: name, size: size, color: tint)
     }
+}
+
+private func exploreToolGlyph(_ tool: ExploreTool, size: CGFloat) -> some View {
+    exploreGlyph(name: tool.glyph, size: size, tint: tool.filledTile ? .white : tool.fg)
 }
 
 /// The "Ask me anything…" bar from the reference: a real field with a real send.
@@ -518,8 +535,10 @@ struct ExploreView: View {
     init(
         onOpenChat: @escaping (AeroRoute) -> Void,
         onOpenDiscover: @escaping () -> Void = {},
-        onOpenHome: @escaping () -> Void = {},
-        onOpenSettings: @escaping () -> Void = {},
+        // Required, not defaulted: a forgotten wire here would compile green
+        // and ship a dead dock control. The render harness passes explicit no-ops.
+        onOpenHome: @escaping () -> Void,
+        onOpenSettings: @escaping () -> Void,
         initialSearchOpen: Bool = false
     ) {
         self.onOpenChat = onOpenChat
@@ -804,41 +823,53 @@ struct ExploreView: View {
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
-        .frame(height: 66)
+        // 72pt is the tallest page at the default scale (2-line subtitle:
+        // 20 padding + 17 title + 2 + 32 caption) — the old fixed 66 clipped
+        // the flagship Kyoto card. scaledLength keeps the slot honest under
+        // Dynamic Type, where the card grows with it.
+        .frame(height: Aero.scaledLength(72, relativeTo: .body))
     }
 
-    /// One carousel page: the card opens its chat, the bubble advances the
-    /// pager — the mock's next control, a glass bubble just inside the
-    /// card's right edge. The reference paints no page dots, so there are none.
+    /// One carousel page: a real Button (the review caught the tap-gesture
+    /// rewrite stripping the card's button role from VoiceOver and the
+    /// XCUITest tree), with the mock's glass bubble — which advances the
+    /// pager — overlaid OUTSIDE it. The bubble's hit shape is the 30pt
+    /// circle; the 8pt edge gap belongs to the card again.
     private func featuredCard(_ journey: ExploreCatalog.FeaturedJourney) -> some View {
-        featuredCardFace(journey)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                onOpenChat(.chatPrefill(journey.prompt))
-            }
-            .overlay(alignment: .trailing) {
-                Button {
-                    withAnimation {
-                        featuredPage = (featuredPage + 1) % ExploreCatalog.featuredJourneys.count
-                    }
-                } label: {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.white.opacity(0.75), ExplorePalette.peachPale.opacity(0.55)],
-                                startPoint: .top, endPoint: .bottom
-                            )
-                        )
-                        .frame(width: 30, height: 30)
-                        .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1))
-                        .overlay(NexlyGlyph(name: "chevron-right", size: 13, color: Aero.text))
-                        .shadow(color: ExplorePalette.peach.opacity(0.30), radius: 6, x: 0, y: 3)
-                        .padding(.trailing, 8)
-                        .contentShape(Circle())
+        Button {
+            onOpenChat(.chatPrefill(journey.prompt))
+        } label: {
+            featuredCardFace(journey)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(journey.title): \(journey.subtitle)")
+        .overlay(alignment: .trailing) {
+            Button {
+                withAnimation {
+                    featuredPage = (featuredPage + 1) % ExploreCatalog.featuredJourneys.count
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Next featured journey")
+            } label: {
+                featuredNextBubble
+                    .contentShape(Circle())
             }
+            .buttonStyle(.plain)
+            .padding(.trailing, 8)
+            .accessibilityLabel("Next featured journey")
+        }
+    }
+
+    private var featuredNextBubble: some View {
+        Circle()
+            .fill(
+                LinearGradient(
+                    colors: [.white.opacity(0.75), ExplorePalette.peachPale.opacity(0.55)],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
+            .frame(width: 30, height: 30)
+            .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1))
+            .overlay(NexlyGlyph(name: "chevron-right", size: 13, color: Aero.text))
+            .shadow(color: ExplorePalette.peach.opacity(0.30), radius: 6, x: 0, y: 3)
     }
 
     private func featuredCardFace(_ journey: ExploreCatalog.FeaturedJourney) -> some View {
@@ -860,7 +891,7 @@ struct ExploreView: View {
                 )
                 .allowsHitTesting(false)
             HStack(spacing: 10) {
-                NexlyGlyph(name: journey.glyph, size: 15, color: journey.fg)
+                exploreGlyph(name: journey.glyph, size: 15, tint: journey.fg)
                     .modifier(IconCircleStyle(bg: journey.bg, diameter: 34))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(journey.title)
@@ -875,9 +906,8 @@ struct ExploreView: View {
             }
             .padding(10)
         }
+        .frame(maxWidth: .infinity, minHeight: Aero.scaledLength(72, relativeTo: .body))
         .modifier(ExploreGlass(corner: 18, elevation: 10))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(journey.title): \(journey.subtitle)")
     }
 
     private var resultsSection: some View {
@@ -980,6 +1010,7 @@ struct DiscoverView: View {
     var initialQuery: String = ""
     var initialSearchOpen: Bool = false
 
+    @Environment(\.colorScheme) private var scheme
     @State private var query: String
     @State private var searchOpen: Bool
     @State private var category: ExploreCategory = .all
@@ -1162,23 +1193,13 @@ struct DiscoverView: View {
                                     } else {
                                         // The mock's inactive chips are translucent
                                         // glass the page shows through, not opaque
-                                        // white — the same fill/rim/shadow recipe
-                                        // ExploreGlass paints, drawn on the shape
-                                        // itself. (First attempt wrapped a bare
-                                        // Capsule() in ExploreGlass: a shape-as-view
-                                        // defaults to black ON TOP of its own glass
-                                        // background, and the first CI render said
-                                        // so in pitch black.)
+                                        // white — the shared glassFill (dark-aware,
+                                        // Android's numbers) on the shape itself.
+                                        // (A bare Capsule() wrapped in ExploreGlass
+                                        // renders black: a shape-as-view's default
+                                        // fill sits ON TOP of its own background.)
                                         Capsule()
-                                            .fill(
-                                                LinearGradient(
-                                                    colors: [
-                                                        Color(red: 1.0, green: 0.980, blue: 0.965).opacity(0.90),
-                                                        Color(red: 0.988, green: 0.929, blue: 0.898).opacity(0.79),
-                                                    ],
-                                                    startPoint: .topLeading, endPoint: .bottomTrailing
-                                                )
-                                            )
+                                            .fill(ExplorePalette.glassFill(dark: scheme == .dark))
                                             .overlay(Capsule().strokeBorder(.white.opacity(0.60), lineWidth: 1))
                                             .shadow(color: Color(red: 0.886, green: 0.612, blue: 0.486).opacity(0.33), radius: 5, x: 0, y: 3)
                                     }
