@@ -1,0 +1,18 @@
+{
+  "source": "user reference mock, 2026-10-25",
+  "sourceSize": [
+    1024,
+    1536
+  ],
+  "screenRectPx": [
+    186,
+    18,
+    836,
+    1492
+  ],
+  "cropSize": [
+    650,
+    1474
+  ],
+  "note": "normalized probe rects for the explore pixel gate are expressed in crop space (x/650, y/1474)"
+}
