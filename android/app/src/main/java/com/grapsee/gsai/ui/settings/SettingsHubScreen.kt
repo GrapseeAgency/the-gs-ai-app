@@ -85,25 +85,24 @@ fun SettingsHubScreen(
         RefCard(role = GsGlassRole.CardLight) {
             Box(Modifier.fillMaxWidth()) {
                 // The mock's blossom bleed: the shipped lotus photograph, faded
-                // into the card's right edge (no new raster minted). Drawn at
-                // [LOTUS_BLEED_ALPHA] so it reads as the mock's pale
-                // impression — the raw photograph measures R-B 44 / contrast
-                // 18.9 in that corner where the mock measures 33.5 / 9.6.
+                // into the card's right edge (no new raster minted).
+                //
+                // `matchParentSize`, not `fillMaxHeight`: a 190dp-wide lotus is
+                // 89.8dp tall at its own aspect, and `fillMaxHeight` does nothing
+                // against the unbounded height a Column hands its child — so the
+                // image was sizing THIS CARD (114.4pt against the mock's ~78) and
+                // the fade overlay below measured zero height and never painted.
                 Image(
                     painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
-                        .width(190.dp)
+                        .matchParentSize()
                         .alpha(LOTUS_BLEED_ALPHA),
                 )
                 Box(
                     Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
-                        .width(190.dp)
+                        .matchParentSize()
                         .background(
                             Brush.horizontalGradient(
                                 0f to colors.glassSurface,
@@ -119,7 +118,7 @@ fun SettingsHubScreen(
                             role = Role.Button,
                             onClickLabel = "Profile and preferences",
                         ) { onNavigate(GsRoutes.PROFILE) }
-                        .padding(horizontal = 12.dp, vertical = 11.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box {
@@ -145,7 +144,7 @@ fun SettingsHubScreen(
                     Column(Modifier.weight(1f)) {
                         Text(
                             name.ifBlank { "Arafat" },
-                            fontSize = 16.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = GsFonts.Product,
                             color = colors.textPrimary,
@@ -153,22 +152,22 @@ fun SettingsHubScreen(
                         )
                         Text(
                             email.ifBlank { "arafat@example.com" },
-                            fontSize = 11.5.sp,
+                            fontSize = 11.sp,
                             fontFamily = GsFonts.Product,
                             color = colors.textTertiary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Spacer(Modifier.height(5.dp))
+                        Spacer(Modifier.height(3.dp))
                         Box(
                             Modifier
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(Color(0xFFF5CFB5).copy(alpha = 0.55f))
-                                .padding(horizontal = 9.dp, vertical = 3.dp),
+                                .padding(horizontal = 8.dp, vertical = 2.5.dp),
                         ) {
                             Text(
                                 "Free Plan",
-                                fontSize = 10.5.sp,
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Medium,
                                 fontFamily = GsFonts.Product,
                                 color = Color(0xFF8A4A1F),
@@ -187,12 +186,12 @@ fun SettingsHubScreen(
         }
 
         // ---- Upgrade card -------------------------------------------------
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
         RefCard(role = GsGlassRole.CardLight) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 RefWellTile(icon = GsIcons.Sparkles, tone = GsWellTone.Peach, size = 34.dp)
@@ -200,7 +199,7 @@ fun SettingsHubScreen(
                 Column(Modifier.weight(1f)) {
                     Text(
                         "Upgrade to Nexly Pro",
-                        fontSize = 14.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         fontFamily = GsFonts.Product,
                         color = colors.textPrimary,
@@ -208,7 +207,7 @@ fun SettingsHubScreen(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         "Get more power, faster responses, and exclusive features.",
-                        fontSize = 11.5.sp,
+                        fontSize = 9.5.sp,
                         lineHeight = 15.sp,
                         fontFamily = GsFonts.Product,
                         color = colors.textTertiary,
@@ -306,7 +305,7 @@ fun SettingsHubScreen(
         }
 
         // ---- Log Out ------------------------------------------------------
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
         RefCard(role = GsGlassRole.CardLight) {
             RefNavRow(
                 title = "Log Out",

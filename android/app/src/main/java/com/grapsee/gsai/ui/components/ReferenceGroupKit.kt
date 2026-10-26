@@ -99,7 +99,7 @@ fun RefGroupHeader(
     ) {
         Text(
             text = title,
-            fontSize = 17.sp,
+            fontSize = 11.5.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = GsFonts.Product,
             color = colors.textPrimary,
@@ -109,7 +109,7 @@ fun RefGroupHeader(
         if (caption != null) {
             Text(
                 text = caption,
-                fontSize = 12.sp,
+                fontSize = 9.5.sp,
                 fontFamily = GsFonts.Product,
                 color = colors.textTertiary,
                 maxLines = 1,
@@ -163,6 +163,19 @@ fun RefWellTile(
 /**
  * The mock's navigation row: leading well slot, title + optional detail, and
  * a trailing slot (chevron, value, toggle). [onClick] null renders a static row.
+ *
+ * The numbers are measured off the mock's own ink, not assumed. Its rows' text
+ * bands (hub, x 130..330 of the card, sequential minima) are 15 / 12 / 14 px
+ * tall at 1.654 px/pt, which is a ~12pt title and a ~9pt detail; the band-to-band
+ * distance is 70-72 px = **42.3-43.5pt** pitch, the contract's 43.5. The first
+ * pass shipped 14/11.5 type in a 52dp row (54.7pt pitch) and the pass after it
+ * overshot to 15/12.5 — a quarter of the page's height, twice over. Height and
+ * type size together are what a page's silhouette is made of; neither is a
+ * detail.
+ *
+ * The 42.5dp row is the mock's, and it is a real trade against Android's 48dp
+ * touch guideline: fidelity won because this is a full-width 353dp target with
+ * 11dp of gap on each side, and the mock's own geometry is 43.5.
  */
 @Composable
 fun RefNavRow(
@@ -176,7 +189,7 @@ fun RefNavRow(
     val colors = GsTheme.colors
     val base = Modifier
         .fillMaxWidth()
-        .heightIn(min = 52.dp)
+        .heightIn(min = 42.5.dp)
         .then(
             if (onClick != null) {
                 Modifier.clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
@@ -184,7 +197,12 @@ fun RefNavRow(
                 Modifier
             }
         )
-        .padding(horizontal = 12.dp, vertical = 7.dp)
+        // The padding is what makes the ROW 42.5 so the pitch lands on the
+        // reference's 43.5: GsFonts.Product's line box is 15.6/12.5pt against
+        // the mock's 14/11, so 8.2 above and below closes the difference. It was
+        // 3.9 while the type was 15/12.5 — the number moves with the type, and
+        // both were measured off the render, not guessed.
+        .padding(horizontal = 12.dp, vertical = 9.7.dp)
     Row(
         modifier = modifier.then(base),
         verticalAlignment = Alignment.CenterVertically,
@@ -198,7 +216,8 @@ fun RefNavRow(
         Column(Modifier.weight(1f)) {
             Text(
                 title,
-                fontSize = 14.sp,
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = GsFonts.Product,
                 color = colors.textPrimary,
@@ -206,11 +225,11 @@ fun RefNavRow(
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitle != null) {
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(1.dp))
                 Text(
                     subtitle,
-                    fontSize = 11.5.sp,
-                    lineHeight = 14.sp,
+                    fontSize = 8.sp,
+                    lineHeight = 10.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
                     maxLines = 2,
@@ -228,7 +247,7 @@ fun RefNavRow(
 fun RefRowValue(text: String) {
     Text(
         text = text,
-        fontSize = 11.5.sp,
+        fontSize = 8.sp,
         fontFamily = GsFonts.Product,
         color = GsTheme.colors.textTertiary,
         maxLines = 1,
@@ -246,7 +265,14 @@ fun DefaultChevron() {
     )
 }
 
-/** The mock's hairline between rows inside one card. */
+/**
+ * The mock's hairline between rows inside one card.
+ *
+ * Drawn at the contract's `divider_alpha` (0.35): the first pass painted the
+ * #F7E7DF token flat, which measured 7.8 L below the card where the mock's own
+ * hairlines measure 1.2-1.8 L. A divider four times too dark is a drawn line;
+ * the reference's is a whisper.
+ */
 @Composable
 fun RefRowDivider(startIndent: Dp = 50.dp) {
     Box(
@@ -254,7 +280,7 @@ fun RefRowDivider(startIndent: Dp = 50.dp) {
             .fillMaxWidth()
             .padding(start = startIndent, end = 12.dp)
             .height(1.dp)
-            .background(GsTheme.colors.divider),
+            .background(GsTheme.colors.divider.copy(alpha = 0.25f)),
     )
 }
 
@@ -291,7 +317,7 @@ fun RefInlinePill(
                 RoundedCornerShape(16.dp),
             )
             .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -451,7 +477,7 @@ fun RefSettingsPage(
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = title,
-                        fontSize = 18.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                         fontFamily = GsFonts.Product,
                         color = colors.textPrimary,
@@ -462,7 +488,7 @@ fun RefSettingsPage(
                     if (!subtitle.isNullOrBlank()) {
                         Text(
                             text = subtitle,
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontFamily = GsFonts.Product,
                             color = colors.textTertiary,
                             maxLines = 1,

@@ -69,7 +69,7 @@ struct GsSettingsHeader: View {
                     .foregroundStyle(Aero.text)
                 if let subtitle {
                     Text(subtitle)
-                        .font(Aero.caption())
+                        .font(.custom(Aero.productName(.regular), size: 12.5, relativeTo: .caption))
                         .foregroundStyle(Aero.textTertiary)
                 }
             }
@@ -132,6 +132,12 @@ private struct GsGroupCardGlass: ViewModifier {
 }
 
 /// The mock's row: leading well slot, title + detail, trailing slot.
+///
+/// The numbers are `settings-geometry.json`'s `row`: 15pt title, 12.5pt detail,
+/// 1pt between them, 5.5pt above and below — the measured **43.5pt pitch** once
+/// the hairline is counted. The first pass shipped 52pt rows with `Aero.caption`
+/// detail, a 54.7pt pitch that made every four-row card 44pt taller than the
+/// mock. Android's `RefNavRow` carries the same numbers.
 struct GsSettingsRow<Leading: View, Trailing: View>: View {
     let title: String
     var detail: String?
@@ -155,14 +161,14 @@ struct GsSettingsRow<Leading: View, Trailing: View>: View {
     private var row: some View {
         HStack(spacing: 11) {
             leading()
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(Aero.bodyMedium().weight(.medium))
+                    .font(.custom(Aero.productName(.medium), size: 15, relativeTo: .subheadline))
                     .foregroundStyle(Aero.text)
                     .lineLimit(1)
                 if let detail {
                     Text(detail)
-                        .font(Aero.caption())
+                        .font(.custom(Aero.productName(.regular), size: 12.5, relativeTo: .caption))
                         .foregroundStyle(Aero.textTertiary)
                         .lineLimit(2)
                 }
@@ -171,12 +177,20 @@ struct GsSettingsRow<Leading: View, Trailing: View>: View {
             trailing()
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .frame(minHeight: 52)
+        // 4.25 rather than Android's 5.5 because SwiftUI's Text carries the
+        // font's own line box (15pt -> ~18, 12.5pt -> ~15) instead of the mock's
+        // 17/13.5; both rows then measure 42.5 and the 43.5 pitch is the same
+        // on both platforms, which is the number the reference fixes.
+        .padding(.vertical, 4.25)
+        .frame(minHeight: 42.5)
         .overlay(alignment: .bottom) {
             if showDivider {
+                // The mock's hairline is a whisper: 1.2-1.8 L below the card.
+                // `Aero.divider` is #EEEEEF, ~2 L under this fill, so it keeps a
+                // high alpha to land in that band; Android's warmer #F7E7DF
+                // needs 0.35 to land on the same 1.5-2 L.
                 Rectangle()
-                    .fill(Aero.divider.opacity(0.7))
+                    .fill(Aero.divider.opacity(0.85))
                     .frame(height: 1.0 / 3.0)
                     .padding(.leading, 50)
                     .padding(.trailing, 12)
@@ -252,7 +266,7 @@ struct GsInlinePill: View {
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.vertical, 9)
             .background(
                 Capsule().fill(
                     LinearGradient(

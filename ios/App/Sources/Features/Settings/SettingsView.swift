@@ -239,22 +239,25 @@ struct SettingsView: View {
                     .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1))
                     .offset(x: 3, y: 3)
             }
+            // The mock's identity type: 15 / 12.5 with a 10pt plan pill, which is
+            // what makes the card 54-of-avatar tall rather than the column's own
+            // 63. Android's hub card carries the same numbers.
             VStack(alignment: .leading, spacing: 1) {
                 Text(account.displayName.isEmpty ? "Arafat" : account.displayName)
-                    .font(Aero.bodyMedium().weight(.semibold))
+                    .font(.custom(Aero.productName(.semibold), size: 15, relativeTo: .subheadline))
                     .foregroundStyle(Aero.text)
                     .lineLimit(1)
                 Text(account.email.isEmpty ? "arafat@example.com" : account.email)
-                    .font(Aero.caption())
+                    .font(.custom(Aero.productName(.regular), size: 12.5, relativeTo: .caption))
                     .foregroundStyle(Aero.textTertiary)
                     .lineLimit(1)
                 Text("Free Plan")
-                    .font(.custom(Aero.productName(.medium), size: 10.5, relativeTo: .caption2))
+                    .font(.custom(Aero.productName(.medium), size: 10, relativeTo: .caption2))
                     .foregroundStyle(Color(red: 0.541, green: 0.290, blue: 0.122))
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 3)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2.5)
                     .background(Capsule().fill(Color(red: 0.961, green: 0.812, blue: 0.710).opacity(0.55)))
-                    .padding(.top, 3)
+                    .padding(.top, 2)
             }
             Spacer(minLength: 6)
             chevron

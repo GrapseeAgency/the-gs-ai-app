@@ -80,9 +80,7 @@ fun ProfileScreen(
                     contentDescription = null,
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
-                        .width(190.dp)
+                        .matchParentSize()
                         .alpha(LOTUS_BLEED_ALPHA),
                 )
                 Row(
@@ -113,7 +111,7 @@ fun ProfileScreen(
                     Column(Modifier.weight(1f)) {
                         Text(
                             name.ifBlank { "Arafat" },
-                            fontSize = 16.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = GsFonts.Product,
                             color = colors.textPrimary,
@@ -127,15 +125,15 @@ fun ProfileScreen(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Spacer(Modifier.height(5.dp))
+                        Spacer(Modifier.height(3.dp))
                         Box(
                             Modifier
                                 .background(color = androidx.compose.ui.graphics.Color(0xFFF5CFB5).copy(alpha = 0.55f), shape = RoundedCornerShape(999.dp))
-                                .padding(horizontal = 9.dp, vertical = 3.dp),
+                                .padding(horizontal = 8.dp, vertical = 2.5.dp),
                         ) {
                             Text(
                                 "Free Plan",
-                                fontSize = 10.5.sp,
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Medium,
                                 fontFamily = GsFonts.Product,
                                 color = androidx.compose.ui.graphics.Color(0xFF8A4A1F),
