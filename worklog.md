@@ -5270,3 +5270,13 @@ Work Log:
 
 Stage Summary:
 - Explore page reference parity landed commit-by-commit; CI renders are the review surface. Next: promote Explore from existence-gated to pixel-gated (explore probe set in check_home_render.py).
+
+---
+Task ID: build-0.86.3-settings-drawer
+Agent: main
+Task: Pull the 435-commit update (nexly, home, explore, drawer, settings), build, publish.
+
+Work Log:
+- Pulled main to f5b6bfa4 (435 commits / 420 files since 0.81.17; 353 since the v0.86.2 tag). Android compile clean, no repair needed this time.
+- v0.86.2 was already released on 21 Oct, so the new code ships as 0.86.3 / versionCode 126.
+- APK gates: com.grapsee.gsai, 4 ABIs, libgs_ffi.so x4, cert b1ffd75d…8b1a483.
