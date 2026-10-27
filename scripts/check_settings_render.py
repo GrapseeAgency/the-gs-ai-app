@@ -126,6 +126,13 @@ PITCH_BLOCKS = False
 PITCH_MIN_ROWS = 3                # fewer and the pitch is not measurable
 BAND_MIN_PT = 3.5                 # shorter ink is a hairline, not a line of type
 ROW_CLUSTER_GAP_PT = 15.0         # title->subtitle is INSIDE a row; rows are 43.5
+# The same threshold, per engine. SwiftUI's Text carries a taller line box than
+# Compose's, so on the iOS captures the ROW->ROW ink gap is 13.3pt while the
+# title->detail gap is 7.4pt: the Android-tuned 15 merges two rows into one band
+# and anchor_edge then rejects a rim that is measurably present (the hub card's
+# top edge sits at 261.0pt with +17.5 L over its neighbours, and at gap 10 that
+# anchor reads 4 rows — the card's real row count). Android keeps 15, unchanged.
+ROW_CLUSTER_GAP_PT_IOS = 10.0
 ANCHOR_RIM_MIN_LEVEL = 245.0      # a lit edge, not any bright row
 # Type is 25 L under its own window's median on pearl glass. A fixed cap cannot
 # work: the card fill itself sits at 236-245 L depending on the photograph under
@@ -164,7 +171,13 @@ SCREENS = {
         # the rim this probe needs sits near 200-215pt and page_rims() does not
         # see it there. Recording 479.0 would grade the wrong card and report the
         # (correct) peach pill as glass — measured, then reverted.
-        "rim_y": {"android": 339.0, "ios": None},
+        # ios: 261.0 is MEASURED, not derived. --derive returns 479.0 because it
+        # takes the brightest rim on the page that carries plausible rows, and the
+        # Privacy card is 0.9 L brighter than this one. Two independent checks say
+        # 261.0 is the card this probe describes: the top edge there is +17.5 L over
+        # its neighbours, and the mock's peach Upgrade pill (y 168-192, R-B 107 vs
+        # the mock's ~113) falls inside this anchor's cta_dy window (137..207).
+        "rim_y": {"android": 339.0, "ios": 261.0},
         "rim_search": 24.0,
         "rim_span_x": (70.0, 330.0),
         "pitch_dx": (62.0, 345.0),
@@ -333,11 +346,17 @@ def row_tops(bands, gap_pt=ROW_CLUSTER_GAP_PT):
     return rows
 
 
-def rows_of(gray, probe, edge_pt, scale):
+def rows_of(gray, probe, edge_pt, scale, gap_pt=None):
     """The rows of type inside the anchored card."""
     dx0, dx1 = probe["pitch_dx"]
     p0, p1 = probe["pitch_dy"]
-    return row_tops(ink_bands(gray, (dx0, dx1, edge_pt + p0, edge_pt + p1), scale))
+    return row_tops(ink_bands(gray, (dx0, dx1, edge_pt + p0, edge_pt + p1), scale),
+                    ROW_CLUSTER_GAP_PT if gap_pt is None else gap_pt)
+
+
+def cluster_gap(platform):
+    """The row-clustering gap for a rendering engine (see ROW_CLUSTER_GAP_PT_IOS)."""
+    return ROW_CLUSTER_GAP_PT_IOS if platform == "ios" else ROW_CLUSTER_GAP_PT
 
 
 def page_rims(gray, span_x, scale, delta=3.0, win_pt=40.0):
@@ -391,7 +410,7 @@ def anchor_edge(gray, probe, scale, platform="android", edge_pt=None, span=None)
     cands = [(pt, v) for pt, v in page_rims(gray, probe["rim_span_x"], scale)
              if expect - half <= pt <= expect + half]
     if edge_pt is not None:
-        rows = rows_of(gray, probe, edge_pt, scale)
+        rows = rows_of(gray, probe, edge_pt, scale, cluster_gap(platform))
         if len(rows) >= PITCH_MIN_ROWS:
             # The frozen anchor has no rim left to find (the self-test buried it),
             # so read the level at that exact row instead of searching for it —
@@ -400,12 +419,16 @@ def anchor_edge(gray, probe, scale, platform="android", edge_pt=None, span=None)
             row = max(0, min(gray.shape[0] - 1, int(round(edge_pt * scale))))
             level = float(gray[row, x0:x1].mean())
             return (edge_pt, level, rows), None
+        # Keeping this veto: on the iOS doctored frame the flattened card leaves
+        # only 2 ink rows, and relaxing it made the self-test PASS on a frame with
+        # its rim buried and its pill desaturated — a vacuous gate. A stated
+        # inability to self-verify is honest; a green that cannot fail is not.
         return None, (f"the frozen anchor {edge_pt:.1f}pt holds {len(rows)} row(s); "
                       f"{PITCH_MIN_ROWS} are needed to measure a rhythm")
     for pt, v in sorted(cands, key=lambda c: -c[1]):
         if v < ANCHOR_RIM_MIN_LEVEL:
             continue
-        rows = rows_of(gray, probe, pt, scale)
+        rows = rows_of(gray, probe, pt, scale, cluster_gap(platform))
         if len(rows) >= PITCH_MIN_ROWS:
             return (pt, v, rows), None
     detail = ", ".join(f"{pt:.1f}pt@{v:.1f}" for pt, v in cands[:5]) or "none"
@@ -644,7 +667,7 @@ def derive_one(a, gray, bd, name, probe, scale, pt_w, pt_h, platform):
     for pt, v in page_rims(gray, probe["rim_span_x"], scale):
         if v < ANCHOR_RIM_MIN_LEVEL:
             continue
-        rows = rows_of(gray, probe, pt, scale)
+        rows = rows_of(gray, probe, pt, scale, cluster_gap(platform))
         pitch = pitch_of(rows)
         if pitch is None or not (lo <= pitch <= hi):
             continue
@@ -756,7 +779,7 @@ def mock_advisory(a, gray, bd, probe, scale, pt_w, pt_h, mock_path, geo, platfor
             return
         print(f"mock advisory: table is stale ({why}); using the derived edge "
               f"{rec['rim_y']}pt")
-        r_rows = rows_of(gray, probe, rec["rim_y"], scale)
+        r_rows = rows_of(gray, probe, rec["rim_y"], scale, cluster_gap(platform))
     else:
         r_rows = found[2]
     dx0, dx1 = probe["pitch_dx"]
