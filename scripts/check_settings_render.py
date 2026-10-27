@@ -157,7 +157,7 @@ SCREENS = {
     # residual can SEE the fill.
     "hub": {
         "about": "the Personalization group card",
-        "rim_y": {"android": 339.0, "ios": None},
+        "rim_y": {"android": 339.0, "ios": 479.0},
         "rim_search": 24.0,
         "rim_span_x": (70.0, 330.0),
         "pitch_dx": (62.0, 345.0),
@@ -170,7 +170,7 @@ SCREENS = {
     # The Profile card's last row, same reason.
     "profile": {
         "about": "the Profile group card",
-        "rim_y": {"android": 250.0, "ios": None},
+        "rim_y": {"android": 250.0, "ios": 429.0},
         "rim_search": 24.0,
         "rim_span_x": (70.0, 330.0),
         "pitch_dx": (62.0, 345.0),
@@ -184,7 +184,7 @@ SCREENS = {
     # not identifiable here and the rim, the pill and the rhythm carry it.
     "memory": {
         "about": "the Manage Memory group card",
-        "rim_y": {"android": 501.0, "ios": None},
+        "rim_y": {"android": 501.0, "ios": 359.7},
         "rim_search": 24.0,
         "rim_span_x": (70.0, 330.0),
         "pitch_dx": (62.0, 345.0),

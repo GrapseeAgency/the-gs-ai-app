@@ -407,6 +407,7 @@ jobs:
                 || { echo "::error::$PNG was not produced — nothing to measure"; exit 1; }
               python3 scripts/check_settings_render.py \
                 --render "$PNG" --screen "$screen" --label "ios-$screen-$w" \
+                --platform ios \
                 --backdrop "ios/App/Assets.xcassets/GSHomeBackdrop.imageset/gs-home-backdrop.png"
             done
           done
@@ -418,6 +419,7 @@ jobs:
             stem=${pair##*:}
             python3 scripts/check_settings_render.py \
               --render "$DIR/$stem-393x852.png" --screen "$screen" --self-test \
+              --platform ios \
               --backdrop "ios/App/Assets.xcassets/GSHomeBackdrop.imageset/gs-home-backdrop.png"
           done
 
