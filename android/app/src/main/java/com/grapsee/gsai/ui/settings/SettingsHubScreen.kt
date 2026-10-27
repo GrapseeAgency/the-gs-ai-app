@@ -282,6 +282,19 @@ fun SettingsHubScreen(
         // ---- App Settings -------------------------------------------------
         RefGroupHeader("App Settings", "Fine-tune your experience")
         RefCard(role = GsGlassRole.CardLight) {
+            // GsRoutes.SETTINGS_AI has been registered in GsNavHost since the
+            // reference screens landed, but NOTHING navigated to it: the model /
+            // reasoning screen the reference set includes was unreachable, which is
+            // why the capture suite could never photograph it. The row lives in the
+            // last group so every card the settings pixel gate anchors on (profile,
+            // Personalization, Privacy) keeps its measured y.
+            RefNavRow(
+                title = "AI Intelligence",
+                subtitle = "Model, reasoning effort and preferences",
+                onClick = { onNavigate(GsRoutes.SETTINGS_AI) },
+                leading = { RefWellTile(GsIcons.Sparkles, GsWellTone.Peach, 28.dp) },
+            )
+            RefRowDivider()
             RefNavRow(
                 title = "Notifications",
                 subtitle = "Stay updated with important alerts",
