@@ -299,7 +299,11 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
             SystemClock.sleep(2_000)
             shot("41-rich-reply-rendered")
             // 5b. The reference chat options sheet, opened from the top bar.
-            if (tapDesc("Conversation options")) {
+            // The top bar's sheet is announced as "Conversation actions"
+            // (ChatScreen.kt); the old "Conversation options" finder matched
+            // nothing, which is why this screen only ever produced
+            // 25-chat-options-MISSING-TRIGGER.
+            if (tapDesc("Conversation actions")) {
                 SystemClock.sleep(1_200)
                 shot("25-chat-options")
                 device.pressBack()
@@ -354,7 +358,12 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
         // 5. Attach + mode sheet: on this app the composer's attach control
         // opens ONE sheet carrying both the attachment tiles and the mode
         // picker, so one shot is the honest evidence for both screens.
-        if (tapDesc("Attach")) {
+        //
+        // The control is announced as "Nexly tools and attachments"
+        // (ChatScreen.kt), not "Attach": tapDesc is a case-SENSITIVE
+        // descContains, so the old finder could never match and this screen
+        // never had a capture — it produced 21-attach-mode-sheet-MISSING-TRIGGER.
+        if (tapDesc("tools and attachments")) {
             SystemClock.sleep(1_200)
             shot("21-attach-mode-sheet")
             shot("22-attach-sheet")
@@ -408,6 +417,15 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
         assertTrue(
             "screenshot capture is not evidence-bearing: $shotOk ok frame(s), $shotFailed failed",
             shotOk >= 8 && shotFailed == 0
+        )
+        // A frame named MISSING-* is a picture of the WRONG surface: the finder
+        // never reached the control the reference screen shows. Counting it as a
+        // capture is how seven design-pass screens sat "green" with no evidence.
+        // The audit fails here instead, and names every screen it could not reach.
+        val missing = dir.list()?.filter { it.contains("MISSING") }.orEmpty().sorted()
+        assertTrue(
+            "the audit could not reach ${missing.size} screen(s): ${missing.joinToString()}",
+            missing.isEmpty()
         )
     }
 }
