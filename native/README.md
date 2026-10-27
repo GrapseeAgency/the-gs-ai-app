@@ -27,7 +27,15 @@ native/
 - Memory: strings returned to callers are `malloc`'d and freed with
   `gs_free_string` / `free`.
 
-## Plugin registry
+## Backend/provider boundary
+
+This engine is the heavy **local** execution layer. It owns device-side agent
+loops, context shaping, tool dispatch, and swappable local inference backends.
+The Next.js/Bun backend remains responsible for remote provider HTTP, secret
+resolution, catalog synchronization, durable queueing, and public GS AI API
+translation. Do not pass provider keys into the C++ process, and do not treat
+`gs_registry_select()` as a replacement for the backend capability router.
+
 Backends register a `gs_plugin_entry_t { backend_id, priority, serves, create }`.
 `gs_registry_select(primitive)` returns the highest-priority plugin serving the
 primitive. Priority today: cactus 100 > llamacpp 50 > mock 10. Swapping the

@@ -1,4 +1,4 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# See https://help.github.com/articles/ignoring-files for more about ignoring files.
 
 # dependencies
 node_modules
@@ -126,7 +126,6 @@ native/prebuilts/
 
 # Python bytecode from the lints in .github/scripts/. Not a build output to ship,
 # and it appeared because the lints import each other while being run locally.
-__pycache__/
 *.pyc
 
 # ------------------------------------------------------------------ binaries
@@ -167,3 +166,7 @@ fonts/
 # local probe database (DATABASE_URL=file:dev.db)
 dev.db
 dev.db-journal
+
+# provider catalog cache (runtime state, never in git)
+/data/.provider-catalog.json
+/data/.provider-catalog.json.*.tmp

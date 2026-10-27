@@ -26,13 +26,32 @@ import { db } from '@/lib/db'
 import { appendEvent } from '@/lib/turn-events'
 import { publishEnd } from '@/lib/stream-broker'
 import { produceRun } from '@/lib/turn-producer'
+import { loadKeyPool } from '@/lib/keypool'
+import { freeOnlyEnabled, queuedRunIsDue } from '@/lib/capacity-policy'
+import { ensureProviderCatalogSync } from '@/lib/provider-catalog-store'
+import { hasEligibleDirectFreeCatalogRoute } from '@/lib/catalog-router'
 
 const WORKER_CONCURRENCY = Number(process.env.GS_WORKER_CONCURRENCY ?? 3)
 const TICK_MS = 1_000
 const RECOVERY_INTERVAL_MS = 15_000
 const MAX_ATTEMPTS = 3
+const CAPACITY_CACHE_MS = 2_000
 
 const loopState = globalThis as unknown as { __gsWorkerLoop?: { active: number; timer: NodeJS.Timeout; recoveryTimer: NodeJS.Timeout } }
+let freeCapacityCache: { checkedAt: number; available: boolean } | null = null
+
+/** Free capacity is a queue gate, not a reason to claim a paid route. */
+async function freeCapacityAvailable(): Promise<boolean> {
+  if (!freeOnlyEnabled()) return true
+  const now = Date.now()
+  if (freeCapacityCache && now - freeCapacityCache.checkedAt < CAPACITY_CACHE_MS) {
+    return freeCapacityCache.available
+  }
+  const pool = await loadKeyPool()
+  const available = pool.keys.length > 0 || hasEligibleDirectFreeCatalogRoute()
+  freeCapacityCache = { checkedAt: now, available }
+  return available
+}
 
 /** Drain queued runs — one tick of the worker pool. */
 async function tick(): Promise<void> {
@@ -40,12 +59,19 @@ async function tick(): Promise<void> {
   if (!loop) return
   if (loop.active >= WORKER_CONCURRENCY) return
   try {
+    const now = new Date()
     const candidates = await db.turnRun.findMany({
       where: { status: 'queued' },
       orderBy: { createdAt: 'asc' },
-      take: Math.max(1, WORKER_CONCURRENCY - loop.active),
+      take: Math.max(4, (WORKER_CONCURRENCY - loop.active) * 4),
     })
-    for (const candidate of candidates) {
+    const due = candidates.filter((candidate) => queuedRunIsDue(candidate.updatedAt, candidate.attempts, now.getTime()))
+    if (due.length === 0) return
+    if (!(await freeCapacityAvailable())) {
+      console.log(`GS-WORKER-PAUSED reason=free_capacity_unavailable queued=${due.length}`)
+      return
+    }
+    for (const candidate of due) {
       if (loop.active >= WORKER_CONCURRENCY) break
       loop.active++
       console.log(`GS-WORKER claim run=${candidate.id} attempts=${candidate.attempts} active=${loop.active}`)
@@ -106,6 +132,7 @@ async function recoverStuckJobs(): Promise<void> {
  */
 export function ensureWorkerLoop(): void {
   if (loopState.__gsWorkerLoop) return
+  ensureProviderCatalogSync()
   loopState.__gsWorkerLoop = { active: 0, timer: null as unknown as NodeJS.Timeout, recoveryTimer: null as unknown as NodeJS.Timeout }
   loopState.__gsWorkerLoop.timer = setInterval(() => void tick(), TICK_MS)
   loopState.__gsWorkerLoop.recoveryTimer = setInterval(() => void recoverStuckJobs(), RECOVERY_INTERVAL_MS)

@@ -165,6 +165,20 @@ export async function finishRun(
   })
 }
 
+/** Return a claimed run to the queue after transient free-capacity exhaustion. */
+export async function requeueRun(runId: string, reason: string): Promise<void> {
+  await db.turnRun.update({
+    where: { id: runId },
+    data: {
+      status: 'queued',
+      finalStatus: null,
+      error: reason.slice(0, 1000),
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    },
+  })
+}
+
 /** Re-bind the run to a FRESH stream id (resumption window). */
 export async function rebindStream(runId: string, streamId: string): Promise<void> {
   await db.turnRun.update({ where: { id: runId }, data: { streamId } })

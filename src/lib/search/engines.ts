@@ -17,6 +17,7 @@
  * Same contract, same fallback behaviour, no paid API anywhere (§36).
  */
 
+import { freeOnlyEnabled } from '@/lib/capacity-policy'
 import type { RawResult, SearchEngineId, TimeRange } from './types'
 import { crossScript, searxLanguage, tokensOf } from './tokens'
 
@@ -359,6 +360,9 @@ export const zaiWebSearch: EngineAdapter = {
   id: 'z-ai',
   kind: 'general',
   run: async (q) => {
+    // The primary SDK search path is not part of the free-only provider
+    // contract. Public/no-key search engines remain eligible fallbacks.
+    if (freeOnlyEnabled()) throw new Error('z-ai search disabled by free-only policy')
     const ZAI = (await import('z-ai-web-dev-sdk')).default
     const zai = await ZAI.create()
     const raw = (await zai.functions.invoke('web_search', {

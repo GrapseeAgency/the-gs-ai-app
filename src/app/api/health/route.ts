@@ -3,6 +3,8 @@ import { backgroundRunsEnabled } from '@/lib/turn-producer'
 import { completeChat } from '@/lib/ai'
 import { loadKeyPool } from '@/lib/keypool'
 import { orHealthProbe } from '@/lib/openrouter'
+import { ensureProviderCatalogSync, getProviderCatalogCache } from '@/lib/provider-catalog-store'
+import { selectCatalogFastRoutes } from '@/lib/catalog-router'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,6 +59,34 @@ async function probePrimary(): Promise<PrimaryProbe> {
   }
 }
 
+/**
+ * Aggregate catalog counts only — no provider or model identities, and never a
+ * throw: a catalog hiccup must not turn a serving origin into a 500.
+ */
+function catalogSummary(): Record<string, unknown> | null {
+  try {
+    ensureProviderCatalogSync()
+    const catalog = getProviderCatalogCache()
+    if (catalog === null) return null
+    const models = Object.values(catalog.providers ?? {}).flatMap((providerModels) => providerModels ?? [])
+    const autoTextCandidates = selectCatalogFastRoutes({
+      route: 'TEXT_SIMPLE',
+      hasImages: false,
+      hasDocuments: false,
+      estimatedInputChars: 1_000,
+    })
+    return {
+      modelCount: models.length,
+      freeModelCount: models.filter((model) => model.freePolicy === 'free').length,
+      candidateModelCount: models.filter((model) => model.isCandidate).length,
+      autoTextCandidateCount: autoTextCandidates.length,
+      syncedAt: catalog.syncedAt ?? null,
+    }
+  } catch (e) {
+    return { error: (e instanceof Error ? e.message : String(e)).slice(0, 200) }
+  }
+}
+
 export async function GET() {
   const now = Date.now()
   if (cache && now - cache.at < (cache.ok ? HEALTH_CACHE_OK_MS : HEALTH_CACHE_FAIL_MS)) {
@@ -102,6 +132,9 @@ export async function GET() {
       },
       ...(primary !== null ? { primary } : {}),
     },
+    // Catalog synchronization is metadata-only, non-blocking, and exposes only
+    // aggregate counts here. Provider/model identities remain server-private.
+    catalog: catalogSummary(),
     checkedAt: new Date(now).toISOString(),
   }
   cache = { at: now, ok: upstreamAlive, body }

@@ -30,6 +30,7 @@
 import { consumeSseStream, type ChatMessageInput } from '@/lib/ai'
 import { loadKeyPool } from '@/lib/keypool'
 import { OPENROUTER_MODELS } from '@/lib/models'
+import { FreeCapacityUnavailableError } from '@/lib/capacity-policy'
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
 
@@ -197,8 +198,13 @@ export async function orCompleteChat(
   reasoning?: OrReasoningConfig
 ): Promise<{ text: string; model: string | null }> {
   const keys = (await loadKeyPool()).keys
-  if (keys.length === 0) throw new Error('GS Free is offline: the OpenRouter key pool is empty (env, key file and db vault are all empty after the platform wipes). Re-provision keys to restore free-tier models.')
+  if (keys.length === 0) {
+    throw new FreeCapacityUnavailableError(
+      'GS Free is waiting: the OpenRouter key pool is empty. Re-provision keys to restore free-tier models.'
+    )
+  }
   let lastError = 'OpenRouter unavailable'
+  let sawCapacityFailure = false
 
   for (let mi = 0; mi < models.length; mi++) {
     const model = models[mi]
@@ -227,6 +233,7 @@ export async function orCompleteChat(
             // empty message and a 502 to the client).
           } else if (shouldRotate(response.status)) {
             if (response.status === 401 || response.status === 402 || response.status === 429) coolKey(key, lastError)
+            if (response.status !== 401) sawCapacityFailure = true
             console.log(`OR-ROTATE model=${model} status=${response.status} key=***${key.slice(-4)}`)
             continue
           } else {
@@ -260,6 +267,9 @@ export async function orCompleteChat(
       }
     }
   }
+  if (sawCapacityFailure) {
+    throw new FreeCapacityUnavailableError(`OpenRouter free capacity is exhausted: ${lastError}`)
+  }
   throw new Error(`OpenRouter ${models.join(' | ')}: ${lastError}`)
 }
 
@@ -276,8 +286,13 @@ export async function orStreamChat(
   onReasoning?: (t: string) => void
 ): Promise<string> {
   const keys = (await loadKeyPool()).keys
-  if (keys.length === 0) throw new Error('GS Free is offline: the OpenRouter key pool is empty (env, key file and db vault are all empty after the platform wipes). Re-provision keys to restore free-tier models.')
+  if (keys.length === 0) {
+    throw new FreeCapacityUnavailableError(
+      'GS Free is waiting: the OpenRouter key pool is empty. Re-provision keys to restore free-tier models.'
+    )
+  }
   let lastError = 'OpenRouter unavailable'
+  let sawCapacityFailure = false
 
   for (let mi = 0; mi < models.length; mi++) {
     const model = models[mi]
@@ -303,6 +318,7 @@ export async function orStreamChat(
             // bogus "OpenRouter <model>: " 502).
           } else if (shouldRotate(response.status)) {
             if (response.status === 401 || response.status === 402 || response.status === 429) coolKey(key, lastError)
+            if (response.status !== 401) sawCapacityFailure = true
             console.log(`OR-ROTATE model=${model} status=${response.status} key=***${key.slice(-4)}`)
             continue
           } else {
@@ -336,6 +352,9 @@ export async function orStreamChat(
         if (i < keys.length - 1) await sleep(300)
       }
     }
+  }
+  if (sawCapacityFailure) {
+    throw new FreeCapacityUnavailableError(`OpenRouter free capacity is exhausted: ${lastError}`)
   }
   throw new Error(`OpenRouter ${models.join(' | ')}: ${lastError}`)
 }

@@ -16,8 +16,9 @@
  *   runId    — billing/correlation identifier. Reused across HITL interrupt
  *              + resumption; passed down through the turn executor.
  *
- * Rollback: BACKGROUND_RUNS_ENABLED (default false). Flag OFF → this
- * endpoint 404s and the legacy inline SSE path serves every turn unchanged.
+ * Rollback: BACKGROUND_RUNS_ENABLED=0 opts back into the legacy inline path.
+ * The durable queue is enabled by default so free-capacity waits survive
+ * request disconnects and process restarts.
  */
 
 import { NextRequest, NextResponse } from 'next/server'

@@ -17,6 +17,7 @@
 
 import { completeChat, zaiThrottleActive } from '@/lib/ai'
 import { orCompleteChat } from '@/lib/openrouter'
+import { freeOnlyEnabled } from '@/lib/capacity-policy'
 import { OPENROUTER_MODELS } from '@/lib/models'
 import { isBareWeatherRegister } from '@/lib/capability'
 import {
@@ -277,7 +278,7 @@ async function llmPlan(userText: string, historyText: string, fallbackQuery: str
   // 1) primary provider, fast default model (omit `model` = provider default).
   // The throttle circuit breaker skips this attempt entirely while the
   // account-level 429 window is open — no doomed retries on the hot path.
-  if (!zaiThrottleActive()) {
+  if (!freeOnlyEnabled() && !zaiThrottleActive()) {
     try {
       const raw = await Promise.race([
         completeChat(messages),
