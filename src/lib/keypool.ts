@@ -39,7 +39,21 @@ export function parseKeys(raw: string): string[] {
 }
 
 function readEnv(): string[] {
-  return parseKeys(process.env.OPENROUTER_API_KEYS ?? '')
+  const found = new Set<string>()
+  const add = (raw: string | undefined): void => {
+    for (const key of parseKeys(raw ?? '')) found.add(key)
+  }
+  add(process.env.OPENROUTER_API_KEYS)
+  add(process.env.OPENROUTER_API_KEY)
+  // Deployments provision keys as OPENROUTER_API_KEY, _SECONDARY, _FOURTH,
+  // _1, _2, ... Reading only the plural name left the pool empty and every
+  // vendor passthrough 502'd even though valid keys were present in the env.
+  for (const [name, raw] of Object.entries(process.env)) {
+    if (!/^OPENROUTER_API_KEY_/.test(name)) continue
+    if (!/^OPENROUTER_API_KEY_(?:\d+|[A-Z_]+)$/.test(name)) continue
+    add(raw)
+  }
+  return [...found]
 }
 
 function readSecretsFile(): string[] {

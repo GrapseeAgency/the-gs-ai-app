@@ -11,24 +11,16 @@
  *     injected. The harness's own instructions are passed through verbatim.
  *
  * Model resolution (`model` field):
- *   gs-ai              → production synthesis flagship  (z-ai, glm-4.6,
- *                        thinking disabled, temperature 0.2 — the exact
- *                        completeChatWithMeta synthesis defaults)
- *   gs-ai-flash        → production flash tier          (z-ai, glm-4.5-flash,
- *                        thinking disabled)
- *   gs-ai-thinking     → production thinking tier       (z-ai, glm-4.6,
- *                        thinking enabled, reasoning_effort=high)
+ *   gs-ai              → GS AI provider router, generator role
+ *   gs-ai-flash        → GS AI provider router, cheap role
+ *   gs-ai-thinking     → GS AI provider router, planner role
  *   <vendor/model>     → OpenRouter passthrough (e.g. openai/gpt-5.5),
  *                        routed through the existing orCompleteChat key-pool
  *                        chain so competitor probes use the same accounting
  *                        as production free-tier traffic.
  *
- * NOTE ON PUBLISHED BASELINES: external comms refer to the GS AI flagship as
- * "GLM-5.2"; the serving catalogue in this repo maps the synthesis tiers to
- * glm-4.6 (src/lib/models.ts PROVIDER_MODELS). The shim never renames the
- * provider: the `model` field of every response carries the SERVING model id
- * returned by the upstream provider meta, so scorecards always show what
- * actually answered.
+ * The `model` field of every response carries the provider and concrete model
+ * that actually answered, so scorecards always show the serving distribution.
  *
  * Optional auth: if env GS_BENCH_API_KEY is set, requests must present
  * `Authorization: Bearer <key>`. Unset (current state) = open, same trust
@@ -38,7 +30,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { completeChatWithMeta, zaiThrottleActive } from '@/lib/ai'
 import { orCompleteChat } from '@/lib/openrouter'
-import { OPENROUTER_MODELS } from '@/lib/models'
+import {
+  GsAllProvidersUnavailableError,
+  runGsProviderChat,
+} from '@/lib/gs-provider-router'
 import { parseScaffoldModel, runScaffoldCompletion } from '@/lib/bench/scaffold'
 
 export const runtime = 'nodejs'
@@ -93,7 +88,10 @@ function toInternalMessages(messages: OpenAiMessage[] | undefined):
 
 type ResolvedModel =
   | {
-      backend: 'zai'
+      backend: 'gs-ai'
+      role: 'generator' | 'cheap' | 'planner'
+      // The GS AI tiers stay pinned to the product's own primary provider; the
+      // free chain is the fallback, never the definition of the tier.
       providerModel: string | null
       thinking: { mode: 'flash' | 'thinking'; effort?: string } | null
     }
@@ -104,9 +102,11 @@ type ResolvedModel =
  * (that is the production router entry) — the shim pins explicit targets so a
  * future routing change can never silently invalidate a benchmark run.
  */
-export function resolveShimModel(
-  model: string | undefined
-): (ResolvedModel & { profile: 'baseline' | 'aci' | 'verification' | 'context' | 'router' }) | null {
+type ResolvedShimModel = ResolvedModel & {
+  profile: 'baseline' | 'aci' | 'verification' | 'context' | 'router'
+}
+
+export function resolveShimModel(model: string | undefined): ResolvedShimModel | null {
   // BENCH SCAFFOLD — `gs-ai@<profile>` selects a scaffold variant; the bare id
   // (and `@baseline`) keeps the byte-identical raw-synthesis path so every
   // historical run remains comparable (rule 2: same model, only scaffold moves).
@@ -118,20 +118,45 @@ export function resolveShimModel(
   return resolved ? { ...resolved, profile } : null
 }
 
-function resolveShimBaseModel(m: string): Omit<ResolvedModel, 'profile'> | null {
-  switch (m) {
+/**
+ * OpenAI-compatible clients do not all send a namespaced model id. litellm,
+ * for example, strips its own `openai/` prefix and posts the bare `gpt-4o-mini`.
+ * Rejecting those 404s the whole request, so a bare id in the OpenAI namespace
+ * is mapped back to its explicit vendor form and served as a documented vendor
+ * passthrough. The GS AI tiers are unaffected — they are matched first, and a
+ * scaffold profile still pins the generator to gs-ai.
+ */
+const BARE_OPENAI_MODEL = /^(?:gpt-|chatgpt|o[1-9](?:-|$)|text-|davinci|babbage|ada)/
+
+function resolveShimBaseModel(m: string): ResolvedModel | null {
+  const normalized = m.replace(/^openai-api\/openai\//, '').replace(/^openai\//, '')
+  switch (normalized) {
     case 'gs-ai':
-      return { backend: 'zai', providerModel: 'glm-4.6', thinking: { mode: 'flash' } }
+      return {
+        backend: 'gs-ai',
+        role: 'generator',
+        providerModel: 'glm-4.6',
+        thinking: { mode: 'flash' },
+      }
     case 'gs-ai-flash':
-      return { backend: 'zai', providerModel: 'glm-4.5-flash', thinking: { mode: 'flash' } }
+      return {
+        backend: 'gs-ai',
+        role: 'cheap',
+        providerModel: 'glm-4.5-flash',
+        thinking: { mode: 'flash' },
+      }
     case 'gs-ai-thinking':
       return {
-        backend: 'zai',
+        backend: 'gs-ai',
+        role: 'planner',
         providerModel: 'glm-4.6',
         thinking: { mode: 'thinking', effort: 'high' },
       }
     default:
       if (m.includes('/')) return { backend: 'openrouter', models: [m] }
+      if (BARE_OPENAI_MODEL.test(normalized)) {
+        return { backend: 'openrouter', models: [`openai/${normalized}`] }
+      }
       return null
   }
 }
@@ -171,7 +196,7 @@ export async function POST(req: NextRequest) {
     )
   }
   const profile = profileOf(body.model)
-  if (profile !== 'baseline' && resolved.backend !== 'zai') {
+  if (profile !== 'baseline' && resolved.backend !== 'gs-ai') {
     // The scaffold levers pin the generator to the gs-ai tier by design (rule 2).
     // A vendor passthrough with a profile would silently measure a different
     // generator — refuse instead (rule 5: no silent substitutions).
@@ -210,12 +235,12 @@ export async function POST(req: NextRequest) {
         scaffold_latency_ms: outcome.latencyMs,
         notes: outcome.notes.slice(0, 12),
       }
-    } else if (resolved.backend === 'zai') {
+    } else if (resolved.backend === 'gs-ai') {
       // RUN 37769190819 postmortem: sustained tau2 load trips the z-ai account
       // throttle; the shim surfaced the breaker error as a hard 502, which
       // tau2 recorded as 113 infra errors and an empty result dir. The
-      // production turn path already falls back to the gs-free OpenRouter
-      // chain; the shim now does the same and says so in its log line.
+      // production turn path already falls back to the free chain; the shim
+      // now does the same and says so in its log line.
       try {
         const meta = await completeChatWithMeta(parsed.messages, resolved.providerModel, resolved.thinking)
         text = meta.text
@@ -224,11 +249,18 @@ export async function POST(req: NextRequest) {
         const msg = e instanceof Error ? e.message : String(e)
         if (!zaiThrottleActive() && !/throttled|circuit open|429/i.test(msg)) throw e
         console.log(
-          `BENCH-SHIM zai throttled (circuit open) — falling back to gs-free OpenRouter chain requested=${body.model ?? 'gs-ai'}`
+          `BENCH-SHIM zai throttled (circuit open) — falling back to the GS free provider chain requested=${body.model ?? 'gs-ai'}`
         )
-        const meta = await orCompleteChat(parsed.messages, OPENROUTER_MODELS['gs-free'], null)
-        text = meta.text
-        servedModel = meta.model
+        // The fallback is the free chain router, not one OpenRouter model: it
+        // walks every configured free provider and reports the id it served,
+        // so a substitution stays visible in the run log (rule 5).
+        const result = await runGsProviderChat(parsed.messages, {
+          role: resolved.role,
+          temperature: body.temperature ?? 0.2,
+          maxTokens: body.max_tokens,
+        })
+        text = result.text
+        servedModel = result.servedModel
       }
     } else {
       const meta = await orCompleteChat(parsed.messages, resolved.models, null)
@@ -279,6 +311,19 @@ export async function POST(req: NextRequest) {
     console.error(
       `BENCH-SHIM-ERROR kind=chat_completions requested=${body.model ?? 'gs-ai'} profile=${profile}: ${message.slice(0, 300)}`
     )
+    if (e instanceof GsAllProvidersUnavailableError) {
+      return NextResponse.json(
+        {
+          error: {
+            message,
+            type: 'all_providers_unavailable',
+            code: e.code,
+            providers: e.attempts,
+          },
+        },
+        { status: 503, headers: { 'x-gs-bench': 'openai-shim' } }
+      )
+    }
     return openAiError(502, 'upstream_error', message.slice(0, 500))
   }
 }
