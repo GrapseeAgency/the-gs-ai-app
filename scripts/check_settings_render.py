@@ -157,7 +157,14 @@ SCREENS = {
     # residual can SEE the fill.
     "hub": {
         "about": "the Personalization group card",
-        "rim_y": {"android": 339.0, "ios": 479.0},
+        # ios: NOT recorded. --derive on the 393x852 capture reports 479.0, but a
+        # direct sweep of the CTA probe column puts the mock's peach pill at
+        # y 168-192pt (R-B p90 = 107, the mock reads ~113), which is 287pt above
+        # the row that 479.0 names. So 479.0 is the Privacy card, not this one:
+        # the rim this probe needs sits near 200-215pt and page_rims() does not
+        # see it there. Recording 479.0 would grade the wrong card and report the
+        # (correct) peach pill as glass — measured, then reverted.
+        "rim_y": {"android": 339.0, "ios": None},
         "rim_search": 24.0,
         "rim_span_x": (70.0, 330.0),
         "pitch_dx": (62.0, 345.0),
@@ -170,7 +177,7 @@ SCREENS = {
     # The Profile card's last row, same reason.
     "profile": {
         "about": "the Profile group card",
-        "rim_y": {"android": 250.0, "ios": 429.0},
+        "rim_y": {"android": 250.0, "ios": 429.0},  # ios: two widths agree within 0.3pt
         "rim_search": 24.0,
         "rim_span_x": (70.0, 330.0),
         "pitch_dx": (62.0, 345.0),
@@ -184,7 +191,9 @@ SCREENS = {
     # not identifiable here and the rim, the pill and the rhythm carry it.
     "memory": {
         "about": "the Manage Memory group card",
-        "rim_y": {"android": 501.0, "ios": 359.7},
+        # ios: NOT recorded — 359.7 fails to re-derive at 360x780 (rc=2), so it is
+        # not a stable anchor on this screen yet.
+        "rim_y": {"android": 501.0, "ios": None},
         "rim_search": 24.0,
         "rim_span_x": (70.0, 330.0),
         "pitch_dx": (62.0, 345.0),
