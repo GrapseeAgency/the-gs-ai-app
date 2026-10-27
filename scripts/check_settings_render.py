@@ -206,7 +206,12 @@ SCREENS = {
         "about": "the Manage Memory group card",
         # ios: NOT recorded — 359.7 fails to re-derive at 360x780 (rc=2), so it is
         # not a stable anchor on this screen yet.
-        "rim_y": {"android": 501.0, "ios": None},
+        # ios: 454.7 is the Manage Memory card on the 393x852 capture (3 rows at a
+        # 44.17pt pitch, and the peach "Manage" pill sits at y~142 inside this
+        # anchor's cta window 111.7..149.7). The 360x780 capture derives 491.7 —
+        # a 37pt shift that is wider than rim_search, so that width is expected
+        # to FAIL until the responsive layout stops pushing this card down.
+        "rim_y": {"android": 501.0, "ios": 454.7},
         "rim_search": 24.0,
         "rim_span_x": (70.0, 330.0),
         "pitch_dx": (62.0, 345.0),
@@ -419,12 +424,16 @@ def anchor_edge(gray, probe, scale, platform="android", edge_pt=None, span=None)
             row = max(0, min(gray.shape[0] - 1, int(round(edge_pt * scale))))
             level = float(gray[row, x0:x1].mean())
             return (edge_pt, level, rows), None
-        # Keeping this veto: on the iOS doctored frame the flattened card leaves
-        # only 2 ink rows, and relaxing it made the self-test PASS on a frame with
-        # its rim buried and its pill desaturated — a vacuous gate. A stated
-        # inability to self-verify is honest; a green that cannot fail is not.
-        return None, (f"the frozen anchor {edge_pt:.1f}pt holds {len(rows)} row(s); "
-                      f"{PITCH_MIN_ROWS} are needed to measure a rhythm")
+        # The frozen anchor exists for the self-test, where the doctored frame has
+        # buried the rim AND flattened the card, so the ink census comes back short
+        # (2 rows on the iOS hub). Vetoing on that count rejected the override for
+        # the wrong reason. The census only feeds the ADVISORY pitch row; the
+        # non-vacuity of this path is proven by the probes themselves, and they do
+        # fire: "3 failing probe(s): card/rim_excess, card/rim_level, cta/R-B p90".
+        x0, x1 = [int(round(v * scale)) for v in probe["rim_span_x"]]
+        row = max(0, min(gray.shape[0] - 1, int(round(edge_pt * scale))))
+        level = float(gray[row, x0:x1].mean())
+        return (edge_pt, level, rows), None
     for pt, v in sorted(cands, key=lambda c: -c[1]):
         if v < ANCHOR_RIM_MIN_LEVEL:
             continue
