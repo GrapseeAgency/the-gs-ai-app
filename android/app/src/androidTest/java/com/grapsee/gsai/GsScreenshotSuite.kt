@@ -403,7 +403,10 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
                 SystemClock.sleep(1_500)
                 shot("30-settings")
                 // 7. AI Intelligence (reference tile layout) and the model page.
-                if (tapText("AI Model")) {
+                // The settings hub names this row "AI Intelligence"
+                // (ReferenceSettingsScreens.kt:639); the old "AI Model" finder
+                // matched nothing, so 31 was the last screen with no capture.
+                if (tapText("AI Intelligence")) {
                     SystemClock.sleep(1_500)
                     shot("31-ai-intelligence")
                     if (tapText("View model details")) {
