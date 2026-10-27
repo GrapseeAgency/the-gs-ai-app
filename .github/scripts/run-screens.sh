@@ -36,5 +36,15 @@ done
 adb logcat -d -v threadtime > device-artifacts/logcat.txt || true
 ls -la device-artifacts/screens || true
 
-echo "instrumentation status: $INSTRUMENT_STATUS"
-exit "$INSTRUMENT_STATUS"
+# `am instrument -w` exits 0 even when the suite fails: run 40575246354 (commit
+# f4545280) printed "Tests run: 1, Failures: 1 — the audit could not reach 3
+# screen(s)" and still reported exit 0, so PIPESTATUS alone was not the verdict.
+# The verdict is the runner's own summary line.
+VERDICT=0
+if grep -q 'FAILURES!!!' instrumentation-out.txt; then
+  VERDICT=1
+elif ! grep -qE '^OK \(' instrumentation-out.txt; then
+  VERDICT=1
+fi
+echo "instrumentation exit: $INSTRUMENT_STATUS, verdict: $VERDICT"
+exit "$VERDICT"
