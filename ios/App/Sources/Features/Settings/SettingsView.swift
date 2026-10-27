@@ -157,10 +157,17 @@ struct SettingsView: View {
                         Text("Upgrade to Nexly Pro")
                             .font(Aero.bodyMedium().weight(.semibold))
                             .foregroundStyle(Aero.text)
+                        // The mock's caption is 12.5pt (settings-geometry.json),
+                        // the same size as a row's detail. `Aero.caption()` is 13pt,
+                        // and at 13 the line box pushed this sentence onto a third
+                        // line that lineLimit(2) then cut to "exclusive…" — the
+                        // shipped render lost the last two words of the mock's own
+                        // copy. fixedSize keeps the second line from being clipped.
                         Text("Get more power, faster responses, and exclusive features.")
-                            .font(Aero.caption())
+                            .font(.custom(Aero.productName(.regular), size: 12.5, relativeTo: .caption))
                             .foregroundStyle(Aero.textTertiary)
                             .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 8)
                     GsInlinePill(label: "Upgrade", trailingGlyph: "arrow-right") {
