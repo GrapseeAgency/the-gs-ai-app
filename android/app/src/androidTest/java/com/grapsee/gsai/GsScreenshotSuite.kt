@@ -6,6 +6,7 @@ import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import com.grapsee.gsai.data.SessionStore
@@ -166,6 +167,24 @@ class GsScreenshotSuite {
             device.waitForIdle(1_200)
         }
         return device.wait(Until.hasObject(By.descContains("Open menu")), 3_000)
+    }
+
+    /**
+     * Find visible-or-below-the-fold text by scrolling the page, then tap it.
+     *
+     * "AI Intelligence" is the fourth settings group, so on a 393x852 device it
+     * sits under the fold: a plain find returned null and the screen stayed
+     * uncaptured even after the label was corrected.
+     */
+    private fun scrollAndTapText(text: String, tries: Int = 4): Boolean {
+        if (tapText(text, timeout = 1_500)) return true
+        repeat(tries) {
+            val list = device.findObject(By.scrollable(true)) ?: return false
+            runCatching { list.scroll(Direction.DOWN, 0.6f) }
+            device.waitForIdle(800)
+            if (tapText(text, timeout = 1_500)) return true
+        }
+        return false
     }
 
     private fun findComposerInput(): androidx.test.uiautomator.UiObject2? {
@@ -406,7 +425,7 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
                 // The settings hub names this row "AI Intelligence"
                 // (ReferenceSettingsScreens.kt:639); the old "AI Model" finder
                 // matched nothing, so 31 was the last screen with no capture.
-                if (tapText("AI Intelligence")) {
+                if (scrollAndTapText("AI Intelligence")) {
                     SystemClock.sleep(1_500)
                     shot("31-ai-intelligence")
                     if (tapText("View model details")) {
