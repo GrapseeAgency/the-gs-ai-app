@@ -8,10 +8,18 @@ set -euo pipefail
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 adb logcat -c
+# Collect the verdict AND keep the frames. `| tee ... || true` used to swallow
+# the instrumentation failure, so a run whose own suite asserted "the audit could
+# not reach 3 screen(s)" still reported SUCCESS and the artifact shipped with
+# MISSING-* frames in it. Capture PIPESTATUS, do every copy tolerantly, and only
+# then exit with the suite's status.
+set +e
 adb shell am instrument -w \
   -e class com.grapsee.gsai.GsScreenshotSuite \
   com.grapsee.gsai.test/androidx.test.runner.AndroidJUnitRunner \
-  | tee instrumentation-out.txt || true
+  | tee instrumentation-out.txt
+INSTRUMENT_STATUS=${PIPESTATUS[0]}
+set -e
 # Screenshots live in the INSTRUMENTATION package's INTERNAL files dir
 # (scoped storage: the test package's external dirs proved unreliable and the
 # app's Android/data is not adb-readable). run-as works because the test APK
@@ -27,3 +35,6 @@ for f in $SHOTS; do
 done
 adb logcat -d -v threadtime > device-artifacts/logcat.txt || true
 ls -la device-artifacts/screens || true
+
+echo "instrumentation status: $INSTRUMENT_STATUS"
+exit "$INSTRUMENT_STATUS"
