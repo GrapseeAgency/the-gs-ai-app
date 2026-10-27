@@ -1246,7 +1246,16 @@ fun ChatScreen(
                 }
             },
             menuIcon = if (atWorkspaceRoot && menuAction != null) GsIcons.Menu else GsIcons.ChevronLeft,
-            menuLabel = if (atWorkspaceRoot && menuAction != null) "Open menu" else "Back",
+            // Labelled for what the tap DOES. Inside a conversation this control opens
+            // the conversation-options sheet, not the drawer and not "back" — the old
+            // constant "Back" announced a navigation that never happened, which is both
+            // an accessibility defect and the reason the reference options sheet could
+            // never be reached from a finder.
+            menuLabel = when {
+                atWorkspaceRoot && menuAction != null -> "Open menu"
+                activeConversationId != null -> "Conversation actions"
+                else -> "Back"
+            },
             onMenu = {
                 if (atWorkspaceRoot && menuAction != null) menuAction()
                 else if (activeConversationId != null) chatMenuOpen = true

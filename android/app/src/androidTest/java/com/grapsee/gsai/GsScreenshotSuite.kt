@@ -152,6 +152,22 @@ class GsScreenshotSuite {
         return runCatching { node.click(); device.waitForIdle(2_000); true }.getOrDefault(false)
     }
 
+    /**
+     * Back out until the workspace menu is reachable.
+     *
+     * The scenarios run back to back, and an extra `pressBack` — after a sheet
+     * that never opened — exits to the launcher. That is exactly how the
+     * Settings chain reported MISSING-MORE: there was no drawer left to open.
+     */
+    private fun ensureHome(steps: Int = 3): Boolean {
+        repeat(steps) {
+            if (device.wait(Until.hasObject(By.descContains("Open menu")), 1_500)) return true
+            device.pressBack()
+            device.waitForIdle(1_200)
+        }
+        return device.wait(Until.hasObject(By.descContains("Open menu")), 3_000)
+    }
+
     private fun findComposerInput(): androidx.test.uiautomator.UiObject2? {
         val direct = device.findObject(By.clazz(android.widget.EditText::class.java))
         if (direct != null) return direct
@@ -274,8 +290,11 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
         }
 
         // 3c. Chats multi-select (reference row-2 screen): long-press a row,
-        // read the contextual count, then leave with system back.
-        if (tapDesc("Open menu") && tapText("Explore")) {
+        // read the contextual count, then leave with system back. The drawer IS
+        // the recent-chats list (DrawerRows carries onLongClickLabel
+        // "Conversation actions"), so tapping "Explore" first navigated to a
+        // different surface entirely — which is why the row was never found.
+        if (tapDesc("Open menu")) {
             SystemClock.sleep(1_500)
             val row = device.wait(Until.findObject(By.textContains("Design pass sample")), 8_000)
             if (row != null) {
@@ -287,8 +306,9 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
             } else {
                 shot("24-multi-select-MISSING-ROW")
             }
-            device.pressBack()
-            device.waitForIdle(1_500)
+            // Close the drawer, then make sure we are back on the workspace.
+            device.click(device.displayWidth - 60, device.displayHeight / 2)
+            ensureHome()
         } else {
             shot("24-multi-select-MISSING-NAV")
         }
@@ -376,7 +396,7 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
         // 6. Settings: the drawer footer's account row opens the account
         // sheet (design phase 2 reduced the More sheet away; Settings lives
         // one level in behind the pinned bottom identity row).
-        if (tapDesc("Open menu") && tapDesc("Account options")) {
+        if (ensureHome() && tapDesc("Open menu") && tapDesc("Account options")) {
             if (device.wait(Until.hasObject(By.textContains("Settings")), 10_000) &&
                 tapText("Settings")
             ) {
