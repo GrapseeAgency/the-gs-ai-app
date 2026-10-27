@@ -3,7 +3,7 @@ import { backgroundRunsEnabled } from '@/lib/turn-producer'
 import { completeChat } from '@/lib/ai'
 import { loadKeyPool } from '@/lib/keypool'
 import { orHealthProbe } from '@/lib/openrouter'
-import { ensureProviderCatalogSync, getProviderCatalogCache } from '@/lib/provider-catalog-store'
+import { getProviderCatalogCache } from '@/lib/provider-catalog-store'
 import { selectCatalogFastRoutes } from '@/lib/catalog-router'
 
 export const dynamic = 'force-dynamic'
@@ -62,12 +62,16 @@ async function probePrimary(): Promise<PrimaryProbe> {
 /**
  * Aggregate catalog counts only — no provider or model identities, and never a
  * throw: a catalog hiccup must not turn a serving origin into a 500.
+ *
+ * Deliberately read-only. This endpoint's contract is one cheap upstream call
+ * per layer behind a 15s cache; kicking off the catalog sync here would fan out
+ * to every provider and install a refresh timer on the first poll of every
+ * process, which is work a monitor must not be able to trigger.
  */
-function catalogSummary(): Record<string, unknown> | null {
+function catalogSummary(): Record<string, unknown> {
   try {
-    ensureProviderCatalogSync()
     const catalog = getProviderCatalogCache()
-    if (catalog === null) return null
+    if (catalog === null) return { status: 'not-synced' }
     const models = Object.values(catalog.providers ?? {}).flatMap((providerModels) => providerModels ?? [])
     const autoTextCandidates = selectCatalogFastRoutes({
       route: 'TEXT_SIMPLE',
@@ -76,14 +80,17 @@ function catalogSummary(): Record<string, unknown> | null {
       estimatedInputChars: 1_000,
     })
     return {
+      status: 'synced',
       modelCount: models.length,
       freeModelCount: models.filter((model) => model.freePolicy === 'free').length,
       candidateModelCount: models.filter((model) => model.isCandidate).length,
       autoTextCandidateCount: autoTextCandidates.length,
       syncedAt: catalog.syncedAt ?? null,
     }
-  } catch (e) {
-    return { error: (e instanceof Error ? e.message : String(e)).slice(0, 200) }
+  } catch {
+    // A boolean, not the message: this endpoint promises aggregate counts, and
+    // an upstream error string can name a provider or a model.
+    return { status: 'error' }
   }
 }
 

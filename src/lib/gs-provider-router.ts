@@ -8,6 +8,8 @@
  * providers are skipped for subsequent calls.
  */
 
+import { loadKeyPool } from '@/lib/keypool'
+
 export type GsProviderId =
   | 'google'
   | 'groq'
@@ -347,7 +349,13 @@ function safeMessage(value: unknown, fallback: string): string {
 function providerKeys(config: ProviderConfig, env: NodeJS.ProcessEnv): string[] {
   const found = new Set<string>()
   for (const [name, raw] of Object.entries(env)) {
-    const matches = config.keyPrefixes.some((prefix) => name === prefix || name.startsWith(`${prefix}_`))
+    // `${prefix}S` is the documented PLURAL spelling (OPENROUTER_API_KEYS) and
+    // the name the durable key pool itself uses. Matching only the singular and
+    // `prefix_*` made the router report missing_key while a full pool sat in the
+    // environment.
+    const matches = config.keyPrefixes.some(
+      (prefix) => name === prefix || name === `${prefix}S` || name.startsWith(`${prefix}_`)
+    )
     if (!matches || typeof raw !== 'string') continue
     for (const item of raw.split(/[\n,]/)) {
       const key = item.trim()
@@ -689,7 +697,20 @@ export async function runGsProviderChat(
   messages: GsMessage[],
   options: RouterOptions = {},
 ): Promise<GsProviderChatResult> {
-  const env = options.env ?? process.env
+  const env: NodeJS.ProcessEnv = { ...(options.env ?? process.env) }
+  // The OpenRouter keys are the one set that may live entirely outside the
+  // environment: loadKeyPool() reads .secrets, the SQLite vault and the
+  // out-of-project copy. Without this the free chain answered 503 `missing_key`
+  // on a deployment whose keys were present in a later layer.
+  const openRouterConfig = PROVIDER_CONFIGS.find((config) => config.id === 'openrouter')
+  if (openRouterConfig && providerKeys(openRouterConfig, env).length === 0) {
+    try {
+      const pool = await loadKeyPool()
+      if (pool.keys.length > 0) env.OPENROUTER_API_KEYS = pool.keys.join(',')
+    } catch {
+      // A missing vault must not fail the turn; the probe reports missing_key.
+    }
+  }
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis)
   const role = options.role ?? 'generator'
   const budget = Math.max(1, options.maxTokens ?? DEFAULT_MAX_TOKENS)

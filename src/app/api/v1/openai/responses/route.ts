@@ -19,7 +19,7 @@ import {
   GsAllProvidersUnavailableError,
   runGsProviderChat,
 } from '@/lib/gs-provider-router'
-import { authOkShim, flattenContentShim } from '../shared'
+import { authOkShim, flattenContentShim, servedWithProvider, shimMaxTokens } from '../shared'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -109,9 +109,14 @@ export async function POST(req: NextRequest) {
           ? ({ mode: 'thinking', effort: 'high' } as const)
           : ({ mode: 'flash' } as const)
       try {
-        const meta = await completeChatWithMeta(messages, providerModel, thinking)
+        const meta = await completeChatWithMeta(
+          messages,
+          providerModel,
+          thinking,
+          body.temperature ?? 0.2
+        )
         text = meta.text
-        servedModel = meta.model
+        servedModel = servedWithProvider('zai', meta.model)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         if (!zaiThrottleActive() && !/throttled|circuit open|429/i.test(msg)) throw e
@@ -121,7 +126,8 @@ export async function POST(req: NextRequest) {
         const result = await runGsProviderChat(messages, {
           role: resolved.role,
           temperature: body.temperature ?? 0.2,
-          maxTokens: body.max_output_tokens,
+          maxTokens: shimMaxTokens(body.max_output_tokens),
+          exhaustionBudgetMs: 15_000,
         })
         text = result.text
         servedModel = result.servedModel
@@ -140,7 +146,7 @@ export async function POST(req: NextRequest) {
       object: 'response',
       created_at: created,
       status: 'completed',
-      model: servedModel ?? body.model ?? 'gs-ai',
+      model: servedModel ?? 'unknown',
       output: [
         {
           type: 'message',

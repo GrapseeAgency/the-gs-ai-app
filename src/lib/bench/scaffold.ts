@@ -194,7 +194,14 @@ async function callModel(
     // every configured free provider (Google → Groq → Kilo → Cerebras →
     // OpenRouter → …) and returns the id it actually served, so a substitution
     // stays visible in every harvest (rule 5).
-    const result = await runGsProviderChat(messages, { role: role.role, temperature })
+    const result = await runGsProviderChat(messages, {
+      role: role.role,
+      temperature,
+      // A scaffold sample calls this up to six times inside a 300s route. The
+      // router's default two-minute exhaustion budget would let one sample eat
+      // the whole route and be harvested as a timeout, not a model result.
+      exhaustionBudgetMs: 15_000,
+    })
     return { text: result.text, model: result.servedModel }
   }
 }

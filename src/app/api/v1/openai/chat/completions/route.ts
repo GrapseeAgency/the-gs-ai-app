@@ -35,6 +35,7 @@ import {
   runGsProviderChat,
 } from '@/lib/gs-provider-router'
 import { parseScaffoldModel, runScaffoldCompletion } from '@/lib/bench/scaffold'
+import { servedWithProvider, shimMaxTokens } from '@/app/api/v1/openai/shared'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -242,9 +243,17 @@ export async function POST(req: NextRequest) {
       // production turn path already falls back to the free chain; the shim
       // now does the same and says so in its log line.
       try {
-        const meta = await completeChatWithMeta(parsed.messages, resolved.providerModel, resolved.thinking)
+        const meta = await completeChatWithMeta(
+          parsed.messages,
+          resolved.providerModel,
+          resolved.thinking,
+          // The harness's sampling temperature must reach whichever layer
+          // answers. Dropping it here sampled the primary at 0.2 while the
+          // fallback below honoured the caller — one request, two regimes.
+          body.temperature ?? 0.2
+        )
         text = meta.text
-        servedModel = meta.model
+        servedModel = servedWithProvider('zai', meta.model)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         if (!zaiThrottleActive() && !/throttled|circuit open|429/i.test(msg)) throw e
@@ -257,7 +266,9 @@ export async function POST(req: NextRequest) {
         const result = await runGsProviderChat(parsed.messages, {
           role: resolved.role,
           temperature: body.temperature ?? 0.2,
-          maxTokens: body.max_tokens,
+          maxTokens: shimMaxTokens(body.max_tokens),
+          // Bounded so the fallback ladder cannot outlive the 300s route.
+          exhaustionBudgetMs: 15_000,
         })
         text = result.text
         servedModel = result.servedModel
@@ -281,8 +292,9 @@ export async function POST(req: NextRequest) {
       id,
       object: 'chat.completion',
       created,
-      model: servedModel ?? body.model ?? 'gs-ai',
-      system_fingerprint: profile === 'baseline' ? 'gs-bench-shim-v1' : `gs-bench-shim-v1;profile=${profile}`,
+      model: servedModel ?? 'unknown',
+      system_fingerprint:
+        profile === 'baseline' ? 'gs-bench-shim-v2' : `gs-bench-shim-v2;profile=${profile}`,
       choices: [
         {
           index: 0,

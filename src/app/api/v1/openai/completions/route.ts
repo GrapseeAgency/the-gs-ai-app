@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { completeChatWithMeta, zaiThrottleActive } from '@/lib/ai'
 import { orCompleteChat } from '@/lib/openrouter'
+import { authOkShim, servedWithProvider, shimMaxTokens } from '../shared'
 import {
   GsAllProvidersUnavailableError,
   runGsProviderChat,
@@ -50,6 +51,12 @@ function normalizePrompt(p: string | string[] | undefined): string[] {
 }
 
 export async function POST(req: NextRequest) {
+  // Same bench auth as the other two shim routes. This one now bills the paid
+  // primary provider, so leaving it open let an unauthenticated caller spend
+  // the product's allocation.
+  if (!authOkShim(req)) {
+    return openAiError(401, 'invalid_api_key', 'Missing or invalid bearer key (GS_BENCH_API_KEY).')
+  }
   let body: CompletionsBody
   try {
     body = (await req.json()) as CompletionsBody
@@ -110,9 +117,14 @@ export async function POST(req: NextRequest) {
             ? ({ mode: 'thinking', effort: 'high' } as const)
             : ({ mode: 'flash' } as const)
         try {
-          const meta = await completeChatWithMeta(messages, providerModel, thinking)
+          const meta = await completeChatWithMeta(
+            messages,
+            providerModel,
+            thinking,
+            body.temperature ?? 0.2
+          )
           text = meta.text
-          servedModel = meta.model
+          servedModel = servedWithProvider('zai', meta.model)
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
           if (!zaiThrottleActive() && !/throttled|circuit open|429/i.test(msg)) throw e
@@ -122,7 +134,8 @@ export async function POST(req: NextRequest) {
           const result = await runGsProviderChat(messages, {
             role: normalized === 'gs-ai-flash' ? 'cheap' : normalized === 'gs-ai-thinking' ? 'planner' : 'generator',
             temperature: body.temperature ?? 0.2,
-            maxTokens: body.max_tokens,
+            maxTokens: shimMaxTokens(body.max_tokens),
+            exhaustionBudgetMs: 15_000,
           })
           text = result.text
           servedModel = result.servedModel
@@ -139,7 +152,7 @@ export async function POST(req: NextRequest) {
         id: `cmpl-gs-${Date.now().toString(36)}`,
         object: 'text_completion',
         created: Math.floor(Date.now() / 1000),
-        model: servedModel ?? model,
+        model: servedModel ?? 'unknown',
         choices,
         usage: {
           prompt_tokens: Math.ceil(prompts.join('').length / 4),

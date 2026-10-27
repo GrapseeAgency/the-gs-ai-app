@@ -1480,12 +1480,6 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     modelMessages: ChatMessageInput[] | VisionChatMessage[],
     onDelta?: (d: string) => void
   ): Promise<string> => {
-    // Free-only is a hard spend guard. The durable queue waits for capacity.
-    if (freeOnlyEnabled() && !openRouterModels && catalogFastRoutes.length === 0) {
-      throw new FreeCapacityUnavailableError(
-        'No free provider route is currently eligible for this turn.'
-      )
-    }
     // TASK 3 — the vision endpoint is used only when images actually ride the
     // request. An OCR-fallback turn (allImagesFailed, OCR text present) is a
     // TEXT turn end to end: text-shaped messages, text model, flash speed.
@@ -1495,6 +1489,18 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         : (await completeVisionChat(modelMessages as VisionChatMessage[])).text
     }
     const msgs = modelMessages as ChatMessageInput[]
+    // Free-only is a hard spend guard. The durable queue waits for capacity.
+    //
+    // It sits BELOW the vision return on purpose. VISION is excluded from free
+    // routing (see forceFreeEligible above), so on an image turn both
+    // `openRouterModels` and `catalogFastRoutes` are empty by construction —
+    // evaluating this guard first made it throw for every image, turning the
+    // vision endpoint and the OCR-fallback below into unreachable code.
+    if (freeOnlyEnabled() && !openRouterModels && catalogFastRoutes.length === 0) {
+      throw new FreeCapacityUnavailableError(
+        'No free provider route is currently eligible for this turn.'
+      )
+    }
     // FLASH MODE (Phase 2) — the resolved thinking decision rides EVERY text
     // call path, including provider fallbacks. The effective zai model is the
     // remap target when a forced-thinking model was remapped for Flash.
@@ -2080,6 +2086,24 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
   } catch (e) {
     const raw = String(e instanceof Error ? e.message : e)
     gsCapLog('error', null, { error: raw })
+    if (isFreeCapacityUnavailableError(e)) {
+      // Capacity exhaustion is a QUEUE condition, not a terminal failure. The
+      // document contract says "the durable queue waits for capacity", and
+      // turn-producer only calls requeueRun + emits RunQueued when this flag is
+      // set. Without it the guard's own promise was false: the run went straight
+      // to finishRun('failed') and the answer was lost.
+      result.finalStatus = 'error'
+      result.errorRaw = raw
+      result.retryable = true
+      result.errorResponse = {
+        status: 429,
+        code: 'free_capacity_unavailable',
+        message:
+          'GS AI is at free capacity right now — this answer is queued and will resume automatically.',
+      }
+      if (push) push('error', result.errorResponse.message)
+      return result
+    }
     const message = useVision ? visionErrorMessage(raw) : userFacingTurnError(raw)
     if (push) push('error', message)
     result.finalStatus = 'error'
