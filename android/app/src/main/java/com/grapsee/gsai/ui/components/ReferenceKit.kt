@@ -47,6 +47,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -1081,6 +1083,7 @@ fun RefTextField(
     isPassword: Boolean = false,
     leadingIcon: ImageVector? = null,
     enabled: Boolean = true,
+    focusRequester: FocusRequester? = null,
 ) {
     val colors = GsTheme.colors
     var revealed by remember { mutableStateOf(false) }
@@ -1098,7 +1101,12 @@ fun RefTextField(
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (focusRequester != null) Modifier.focusRequester(focusRequester)
+                    else Modifier
+                ),
             enabled = enabled,
             shape = shape,
             singleLine = singleLine,

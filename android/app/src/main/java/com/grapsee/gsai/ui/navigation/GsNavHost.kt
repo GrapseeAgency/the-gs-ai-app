@@ -412,9 +412,8 @@ fun GsNavHost(
                 onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) },
                 onOpenArchive = { open(GsRoutes.CHAT_ARCHIVE) },
                 onOpenSaved = { open(GsRoutes.SETTINGS_MEMORY) },
-                // The export writer lives on the Privacy page; sending the user
-                // there is a real destination, unlike a dead tile.
-                onExport = { open(GsRoutes.SETTINGS_PRIVACY) },
+                onViewAllChats = { open(GsRoutes.CHATS) },
+                onNewChat = { open(GsRoutes.chat(null)) },
             )
         }
 

@@ -40,10 +40,23 @@ data class ConversationEntity(
  * [ConversationDao.observeActiveWithPreview] resolves both in one query so
  * the row subtitle is a REAL last-message preview, not a timestamp label.
  * @param lastMessage null when the conversation has no turns yet.
+ * @param hasFiles true when any message carries an attachment; the Recent
+ *   Chats glyph and the "Has files" facet read this instead of guessing.
  */
 data class ConversationPreviewRow(
     @Embedded val conversation: ConversationEntity,
-    val lastMessage: String?
+    val lastMessage: String?,
+    val hasFiles: Boolean
+)
+
+/**
+ * The totals card's two numbers, from one aggregate query. Deliberately NOT
+ * derived from a preview list: counting that list would run the correlated
+ * last-message subquery for every conversation just to produce a count.
+ */
+data class ConversationTotals(
+    val activeCount: Int,
+    val lastActiveAt: String?
 )
 
 @Entity(
@@ -117,22 +130,52 @@ interface ConversationDao {
     fun observeActive(): Flow<List<ConversationEntity>>
 
     /**
-     * Inbox view WITH the real last message per conversation. The scalar
-     * subquery resolves the newest turn's content — the list row can show
-     * what was actually said last instead of a "Last message ·" label
-     * glued to a timestamp (which claimed a preview it never had).
+     * Inbox view WITH the real last message and a real has-attachments flag
+     * per conversation. Both are scalar subqueries so the list stays one
+     * query; nothing is guessed from the title.
      */
     @Query(
         "SELECT c.*, (" +
             "SELECT m.content FROM messages m " +
             "WHERE m.conversationId = c.id " +
             "ORDER BY m.createdAt DESC LIMIT 1" +
-            ") AS lastMessage " +
+            ") AS lastMessage, " +
+            "EXISTS(SELECT 1 FROM messages f WHERE f.conversationId = c.id " +
+            "AND f.attachments NOT IN ('', '[]', 'none')) AS hasFiles " +
             "FROM conversations c " +
             "WHERE c.archived = 0 " +
             "ORDER BY c.pinned DESC, c.updatedAt DESC"
     )
     fun observeActiveWithPreview(): Flow<List<ConversationPreviewRow>>
+
+    /** The archived twin of [observeActiveWithPreview], for the Archived facet. */
+    @Query(
+        "SELECT c.*, (" +
+            "SELECT m.content FROM messages m " +
+            "WHERE m.conversationId = c.id " +
+            "ORDER BY m.createdAt DESC LIMIT 1" +
+            ") AS lastMessage, " +
+            "EXISTS(SELECT 1 FROM messages f WHERE f.conversationId = c.id " +
+            "AND f.attachments NOT IN ('', '[]', 'none')) AS hasFiles " +
+            "FROM conversations c " +
+            "WHERE c.archived = 1 " +
+            "ORDER BY c.pinned DESC, c.updatedAt DESC"
+    )
+    fun observeArchivedWithPreview(): Flow<List<ConversationPreviewRow>>
+
+    /** The totals card: one aggregate row, no per-conversation subquery. */
+    @Query(
+        "SELECT COUNT(*) AS activeCount, MAX(updatedAt) AS lastActiveAt " +
+            "FROM conversations WHERE archived = 0"
+    )
+    fun observeTotals(): Flow<ConversationTotals>
+
+    /** Whether any turn in this conversation carries an attachment. */
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM messages WHERE conversationId = :id " +
+            "AND attachments NOT IN ('', '[]', 'none'))"
+    )
+    suspend fun hasFiles(id: String): Boolean
 
     @Query("SELECT * FROM conversations WHERE archived = 1 ORDER BY updatedAt DESC")
     fun observeArchived(): Flow<List<ConversationEntity>>

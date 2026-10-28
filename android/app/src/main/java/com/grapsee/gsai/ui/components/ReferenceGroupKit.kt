@@ -83,12 +83,15 @@ enum class GsWellTone(val wash: Color, val ink: Color) {
     Mint(Color(0xFFDDF3E6), Color(0xFF177A50)),
 }
 
-/** Section title with the mock's right-aligned whisper caption. */
+/** Section title with the mock's right-aligned whisper caption, and an
+ *  optional real link ("View all") after it. The null path emits exactly the
+ *  layout every existing screen already uses. */
 @Composable
 fun RefGroupHeader(
     title: String,
     caption: String? = null,
     modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val colors = GsTheme.colors
     Row(
@@ -114,6 +117,10 @@ fun RefGroupHeader(
                 color = colors.textTertiary,
                 maxLines = 1,
             )
+        }
+        if (trailing != null) {
+            Spacer(Modifier.width(10.dp))
+            trailing()
         }
     }
 }
@@ -395,7 +402,12 @@ fun RefTileStrip(tiles: List<RefStripTile>, modifier: Modifier = Modifier) {
 
 /** The quiet info card that closes Profile & Preferences and Memory. */
 @Composable
-fun RefInfoCard(text: String, modifier: Modifier = Modifier, icon: ImageVector? = null) {
+fun RefInfoCard(
+    text: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    title: String? = null,
+) {
     val colors = GsTheme.colors
     Row(
         modifier = modifier
@@ -410,13 +422,25 @@ fun RefInfoCard(text: String, modifier: Modifier = Modifier, icon: ImageVector? 
             Icon(icon, contentDescription = null, tint = colors.accentStrong, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(10.dp))
         }
-        Text(
-            text,
-            fontSize = 11.5.sp,
-            lineHeight = 15.sp,
-            fontFamily = GsFonts.Product,
-            color = colors.textTertiary,
-        )
+        Column {
+            if (title != null) {
+                Text(
+                    title,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = GsFonts.Product,
+                    color = colors.textPrimary,
+                )
+                Spacer(Modifier.height(2.dp))
+            }
+            Text(
+                text,
+                fontSize = 11.5.sp,
+                lineHeight = 15.sp,
+                fontFamily = GsFonts.Product,
+                color = colors.textTertiary,
+            )
+        }
     }
 }
 

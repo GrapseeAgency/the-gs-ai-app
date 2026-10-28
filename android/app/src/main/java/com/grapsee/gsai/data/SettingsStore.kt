@@ -176,7 +176,11 @@ object SettingsStore {
      *  (`src/lib/model-capabilities.ts:515-521`), so **Minimal and Light are the
      *  same mode today**: the tile remembers which one was tapped, the server
      *  cannot yet tell them apart. Widening this is a backend change, not a UI
-     *  one. */
+     *  one.
+     *
+     *  The timings printed on the tiles ("~ 1–2 seconds" … "~ 10–30 seconds")
+     *  are the owner's copy from the reference art, NOT measurements of this
+     *  build. They are a label on the choice, not a promise. */
     fun wireModeForEffort(effort: String): String = when (effort) {
         "minimal", "light" -> "flash"
         "high" -> "thinking"

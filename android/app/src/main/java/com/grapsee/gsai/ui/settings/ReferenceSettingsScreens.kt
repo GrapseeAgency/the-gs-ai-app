@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -49,6 +48,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -100,6 +101,7 @@ import com.grapsee.gsai.ui.components.RefSettingsPage
 import com.grapsee.gsai.ui.components.RefGroupHeader
 import com.grapsee.gsai.ui.components.RefWellTile
 import com.grapsee.gsai.ui.components.GsWellTone
+import com.grapsee.gsai.ui.components.LOTUS_BLEED_ALPHA
 import com.grapsee.gsai.ui.components.RefNavRow
 import com.grapsee.gsai.ui.components.RefRowDivider
 import com.grapsee.gsai.ui.components.RefInlinePill
@@ -448,30 +450,35 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
         onBack = onBack,
     ) {
         RefCard(role = GsGlassRole.CardLight) {
-            // The mock bleeds a pearlescent photograph into the card's right
-            // edge. This is the shipped Pearl art (the reference's own hero
-            // illustration) at 55 %, clipped by the card — no stranger's
-            // photograph is invented to fill it.
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(22.dp))
-            ) {
-                RefArtwork(
-                    art = RefArt.Pearl,
-                    size = 112.dp,
+            // The mock's blossom bleed, using the same shipped lotus photograph
+            // and recipe as the Settings hub — no new raster is minted.
+            Box(Modifier.fillMaxWidth()) {
+                Image(
+                    painter = painterResource(com.grapsee.gsai.R.drawable.gs_home_lotus_new),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .offset(x = 18.dp)
-                        .alpha(0.55f),
+                        .matchParentSize()
+                        .alpha(LOTUS_BLEED_ALPHA),
+                )
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.horizontalGradient(
+                                0f to colors.glassSurface,
+                                0.45f to colors.glassSurface.copy(alpha = 0.55f),
+                                1f to Color.Transparent,
+                            )
+                        ),
                 )
                 Row(
                     Modifier
-                        .fillMaxWidth(0.84f)
+                        .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    RefArtwork(RefArt.Privacy, size = 62.dp)
+                    RefWellTile(GsIcons.Shield, GsWellTone.Peach, 56.dp)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
@@ -585,6 +592,7 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
         }
 
         RefInfoCard(
+            title = "We respect your privacy",
             text = "Your data is private to this app, never sold, and only used to improve your experience.",
             icon = GsIcons.Lock,
         )
@@ -608,6 +616,10 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
                                 db.conversationDao().clear()
                             }
                         }
+                        // "Delete Your Account" closes the identity too; leaving
+                        // a signed-in shell with no data is the half-done version
+                        // of what the row promises.
+                        SessionStore.signOut(context)
                         Toast.makeText(context, "Local data cleared", Toast.LENGTH_SHORT).show()
                     }
                 }) { Text("Clear everything") }
@@ -734,6 +746,7 @@ fun AiIntelligenceScreen(
     val colors = GsTheme.colors
     val installed = ModelStore.installedPath != null
     val local = SettingsStore.preferLocal
+    var confirmReset by remember { mutableStateOf(false) }
 
     RefPage(
         title = "Model Selection & Reasoning Effort",
@@ -784,13 +797,9 @@ fun AiIntelligenceScreen(
         }
 
         // The radios persist a preference, but the backend ignores a
-        // client-chosen model (conversations/[id]/route.ts:20). Saying so here is
-        // cheaper than letting the tick imply routing it cannot control.
-        RefInfoCard(
-            text = "One model is currently served. This preference is kept for when routing supports per-model choice.",
-            icon = GsIcons.Info,
-        )
-        Spacer(Modifier.height(10.dp))
+        // client-chosen model (conversations/[id]/route.ts:20). One line keeps
+        // the tick from implying routing it cannot control.
+        RefFootnote("One model is currently served; this preference is kept for when routing supports per-model choice.")
 
         // ---- Reasoning Effort ---------------------------------------------
         // The mock draws FOUR ACROSS with a radio under each. Order, copy and
@@ -806,26 +815,30 @@ fun AiIntelligenceScreen(
                     .padding(horizontal = 8.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                REASONING_EFFORTS.forEach { effort ->
+                REASONING_EFFORTS.forEachIndexed { index, effort ->
+                    if (index > 0) {
+                        // The mock separates the four tiles with hairlines, not
+                        // just gaps.
+                        Box(
+                            Modifier
+                                .width(1.dp)
+                                .fillMaxHeight()
+                                .background(colors.glassBorder)
+                        )
+                    }
                     ReasoningTile(
                         title = effort.label,
                         description = effort.description,
                         timing = effort.timing,
                         icon = effort.icon,
                         tone = effort.tone,
-                        selected = SettingsStore.reasoningEffort == effort.id,
+                        isSelected = SettingsStore.reasoningEffort == effort.id,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                         onClick = { SettingsStore.updateReasoningEffort(effort.id) },
                     )
                 }
             }
         }
-
-        RefInfoCard(
-            text = "Higher reasoning effort helps Nexly provide more thoughtful, detailed and accurate responses — especially for complex questions.",
-            icon = GsIcons.Sparkles,
-        )
-        Spacer(Modifier.height(10.dp))
 
         // ---- Model Preferences -------------------------------------------
         RefGroupHeader("Model Preferences", "Customize your experience")
@@ -850,8 +863,36 @@ fun AiIntelligenceScreen(
                 onCheckedChange = { SettingsStore.updateRememberChoices(it) },
             )
             RefRowDivider()
-            ResetToDefaultRow()
+            ResetToDefaultRow { confirmReset = true }
         }
+
+        // The mock's closing card, in its own position after Model Preferences.
+        RefCard(role = GsGlassRole.CardLight) {
+            Row(
+                Modifier.fillMaxWidth().padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RefArtwork(RefArt.Success, size = 46.dp)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Smarter choices. Better conversations.",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = GsFonts.Product,
+                        color = colors.textPrimary,
+                    )
+                    Text(
+                        "The right model + the right thinking = the best Nexly experience.",
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp,
+                        fontFamily = GsFonts.Product,
+                        color = colors.textTertiary,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
 
         RefCard(padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -928,6 +969,25 @@ fun AiIntelligenceScreen(
 
         RefFootnote("On-device generation is slower and uses battery. It is the honest choice when the network is gone, not a silent replacement for the cloud model.")
     }
+
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text("Reset to Nexly's recommended settings?") },
+            text = { Text("The model returns to Nexly Pro, reasoning effort to Standard, and \"Remember my choices\" turns back on.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmReset = false
+                    SettingsStore.updatePreferredModel(MODEL_PRO)
+                    SettingsStore.updateRememberChoices(true)
+                    SettingsStore.updateReasoningEffort("standard")
+                }) { Text("Reset") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReset = false }) { Text("Cancel") }
+            },
+        )
+    }
 }
 
 private const val MODEL_PRO = "pro"
@@ -971,7 +1031,7 @@ private fun ReasoningTile(
     timing: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     tone: GsWellTone,
-    selected: Boolean,
+    isSelected: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -980,20 +1040,23 @@ private fun ReasoningTile(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
             .background(
-                if (selected) colors.accentSoft else colors.glassSurface.copy(alpha = 0.45f),
+                if (isSelected) colors.accentSoft else colors.glassSurface.copy(alpha = 0.45f),
                 RoundedCornerShape(16.dp),
             )
             // The mock outlines the chosen tile as well as tinting it; the
             // fill alone vanished against the card on the first capture.
             .then(
-                if (selected) {
+                if (isSelected) {
                     Modifier.border(1.5.dp, colors.accent.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
                 } else {
                     Modifier
                 }
             )
             .clickable(role = Role.RadioButton, onClickLabel = title, onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 10.dp),
+            // The radio state is announced, not only painted; a screen reader
+            // must be able to tell which of the four is chosen.
+            .semantics { selected = isSelected }
+            .padding(horizontal = 2.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         RefWellTile(icon, tone, 26.dp)
@@ -1008,14 +1071,14 @@ private fun ReasoningTile(
         )
         Text(
             description,
-            fontSize = 10.sp,
-            lineHeight = 13.sp,
+            fontSize = 8.sp,
+            lineHeight = 10.5.sp,
             fontFamily = GsFonts.Product,
             color = colors.textTertiary,
             textAlign = TextAlign.Center,
-            // Four across leaves ~78dp of text; the mock's longest description
-            // takes three lines at this size, so a 3-line cap elided "reasoning".
-            maxLines = 4,
+            // The mock's tiles carry a 2-line description; the smaller size
+            // and 2dp side padding are what keep the whole copy inside them.
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
         // Equal-height tiles put every timing line and radio on one baseline,
@@ -1036,31 +1099,27 @@ private fun ReasoningTile(
                 .size(16.dp)
                 .border(
                     1.5.dp,
-                    if (selected) colors.accent else colors.textTertiary.copy(alpha = 0.30f),
+                    if (isSelected) colors.accent else colors.textTertiary.copy(alpha = 0.30f),
                     CircleShape,
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            if (selected) {
+            if (isSelected) {
                 Box(Modifier.size(7.dp).background(colors.accent, CircleShape))
             }
         }
     }
 }
 
-/** "Reset to default" — a real reset, not a navigation to another page. */
+/** "Reset to default" — a real reset behind the repo's confirm-dialog pattern. */
 @Composable
-private fun ResetToDefaultRow() {
+private fun ResetToDefaultRow(onClick: () -> Unit) {
     RefRow(
         title = "Reset to default",
         subtitle = "Go back to Nexly's recommended settings.",
         icon = GsIcons.RotateCcw,
         onClickLabel = "Reset to default",
-        onClick = {
-            SettingsStore.updatePreferredModel(MODEL_PRO)
-            SettingsStore.updateRememberChoices(true)
-            SettingsStore.updateReasoningEffort("standard")
-        },
+        onClick = onClick,
     )
 }
 

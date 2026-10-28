@@ -52,35 +52,25 @@ back. They are corrections, not omissions:
   Data Retention** are static rows with no chevron. There is no ad profile, no
   integration, no stored search log and no retention setting behind them.
 - **Privacy — Delete Your Account** keeps the mock's title but its subtitle says
-  what it erases (everything this app stores on this device). There is no server
-  account to delete.
-- **Chat History — the four topic chips** (Chats / Research / Ideas / Planning)
-  are KEYWORD-derived from the conversation title. The schema has no facet
-  column, so the buckets are approximate by construction.
-- **Chat History — "More" is not drawn.** The mock puts a sixth chip beside the
-  five topics; there is no sixth topic to open, and a chip that filters nothing
-  is a dead control. The row still scrolls when the five do not fit.
-- **Chat History — the mock's filter button is not drawn.** It would have to
-  back two filters (this week, has files) that no control currently exposes;
-  the topic chips are the only filters the page has.
+  what it erases (everything this app stores on this device), and confirming it
+  also signs the session out. There is no server account to delete.
+- **Chat History — the topic chips are KEYWORD-derived** from the conversation
+  title through the shipped `drawerTopic()` classifier (the same one the drawer
+  uses). The schema has no facet column, so the buckets are approximate by
+  construction; `Chats` is the classifier's general-chat bucket, which is what
+  makes it different from `All`.
 - **Chat History — "Saved items"** replaces the mock's "Saved Conversations":
   the app has saved *items*, and that is where the row goes.
-- **Chat History — no per-row "…" menu.** The mock draws one on every recent
-  row. Rename, pin, archive and delete all exist in the store, but the cabinet
-  for them is Manage History; drawing a menu here without a confirmed action
-  set would be a dead control.
-- **A vertical ratio is not the mock's.** The mock canvas is 0.441 aspect and
-  fits all three model groups in one frame; a 393×852 device is far shorter, so
-  Model Preferences sits below the fold and the page scrolls. Only the mock's
-  horizontal ratios and its type scale were taken.
-- **Privacy — the hero art is the shipped Pearl illustration.** The mock bleeds
-  a pearlescent photograph into the hero's right edge; the same role is filled
-  by `RefArt.Pearl` at 55 %, clipped by the card. No unshipped photograph is
-  invented for it.
+- **Chat History — the totals are ACTIVE conversations.** An archived chat is
+  counted on the archived facet, not in the mock's headline total.
 - **Model Selection — Auto-select model** is the mock's OFF switch, disabled,
   because the backend always chooses the model.
 - **Model Selection — the model radios** persist a preference, but the backend
   ignores a client-chosen model (`src/app/api/v1/conversations/[id]/route.ts:20`).
+- **Model Selection — the page continues below the mock's closing card.** Model
+  source, View model details, Rendering and the on-device footnote are kept so
+  `SETTINGS_MODEL` is not orphaned. The mock's own three groups (AI Model,
+  Reasoning Effort, Model Preferences) fit one 393×852 view; the extras scroll.
 
 ## Acceptance
 
@@ -89,63 +79,68 @@ is: rendered in CI, anchored on a measured rim, and compared against the mock's
 own numbers with a self-test proving the gate can fail. A screenshot that merely
 exists is not evidence of parity.
 
-## Where each screen stands (2026-10-28, final pass)
+## Where each screen stands (2026-10-28, second pass)
 
-All three are **built on Android**. The first device capture (run 40650433868)
-exposed three rendering defects; `3f4c2266` fixed them. The next pass fixed what
-pixels could not show — the model radio held a local `remember`, the topic chips
-filtered nothing, and every recent row repeated one filler line — and the final
-capture (run 40659388170, label `final4`) is the evidence: 17 frames, no
-`MISSING`, and `26-chat-history-search` / `31-ai-intelligence` /
-`33-privacy-data-controls` read as described below.
+All three are **built on Android**. `ReferenceRowInteractionTest` is the
+always-on proof (9 JVM tests: hub → privacy → chat routes, model persistence,
+reset confirmation, remember switch, four effort round-trips, and Model
+Preferences visible without scrolling). The device captures are the pixel
+evidence; the first capture (40650433868) and the final one (40659388170) are
+named where they changed a decision.
 
-**`model-selection.png` — built, JVM-verified and captured (final4).**
+**`model-selection.png` — built.**
 
 - AI Model: the mock's four rows, both sentences of copy and the Recommended
-  chip; each model keeps its mock tone (Pro peach, Advanced lilac, Code mint,
-  Creative rose); the chosen model is a check in a soft well, as drawn.
-- Reasoning Effort: four across with the mock's order, copy, timings, radios
-  and tone-coded wells; the selected tile carries the mock's accent outline.
-  The older three-tile Fast/Thinking/Auto control is deleted.
-- Model Preferences: real switches. Auto-select is OFF and disabled (the
-  backend chooses the model); Remember my choices writes
-  `SettingsStore.rememberChoices`; Reset to default writes pro / on / standard.
+  chip; each model keeps its mock tone; the chosen model is a check in a soft
+  well, as drawn.
+- Reasoning Effort: four across in one card with hairline column dividers, the
+  mock's order, copy, timings, radios (hollow rings, accent ring + dot when
+  selected) and the accent outline on the chosen tile. Each description is the
+  mock's two lines; the radio announces `selected` semantics. The older
+  three-tile Fast/Thinking/Auto control is deleted.
+- Model Preferences: real switches. Auto-select is OFF and disabled; Remember
+  my choices writes `SettingsStore.rememberChoices`; Reset to default opens the
+  repo's confirm dialog, then writes pro / on / standard.
 - The model radio writes `SettingsStore.preferredModel` (it used to be a local
-  `remember`, so the tick reset every visit). `ModelSelectionInteractionTest`
-  presses all four effort tiles, both switches and Reset on the JVM.
+  `remember`, so the tick reset every visit), and the mock's closing card
+  ("Smarter choices. Better conversations.") is present.
 
-**`privacy-data-controls.png` — built and captured; chevrons removed from static rows.**
+**`privacy-data-controls.png` — built.**
 
 The capture showed Personalization & Ads, Third-Party Integrations, Search
 History and Data Retention still drawing a chevron; `RefNavRow`'s default
 trailing IS a chevron, and `onClick = null` only removed the click. They now
 pass `trailing = {}`. Chat History opens the search page for real. The hero
-carries the mock's right-edge pearlescent bleed, drawn from the shipped
-`RefArt.Pearl`.
+uses the same shipped lotus photograph and `LOTUS_BLEED_ALPHA` recipe as the
+Settings hub, and the footer card carries the mock's title above the honest
+body copy.
 
-**`chat-history-search.png` — built and captured; the first capture's defects fixed.**
+**`chat-history-search.png` — built.**
 
-- The six-chip row clipped "More" at the right edge; the row scrolls now, and
-  "More" itself is gone — there is no sixth topic behind it.
-- The field is one placeholder ("Search your conversations…") with no label
-  above it, as drawn; the label was what pushed the chips toward the fold.
-- The topic chips now filter both the recent list and the search hits
-  (keyword-derived; the schema has no topic column). Before this, tapping one
-  only repainted the chip.
-- Recent rows show the real last message from
-  `conversationDao.observeActiveWithPreview()`, with markdown flattened, not
-  the same "Tap to reopen this conversation" line on every row.
-- The totals caption wraps instead of eliding to "Your chat history with Ne…".
+- Six chips, as drawn. `More` opens a sheet with the two real facets the store
+  can answer: Archived conversations (an archived preview flow) and Has files
+  (an EXISTS over message attachments). The round filter button beside the
+  field opens the same sheet.
+- The topic chips filter both the recent list and the search hits through
+  `drawerTopic()`; classification runs once per title on `Dispatchers.Default`,
+  is cached process-wide, and filters inside `derivedStateOf`.
+- Totals come from `ConversationDao.observeTotals()` — `COUNT(*)` + `MAX` over
+  active conversations — not from the preview list's size.
+- Recent Chats: ≤7 rows from the preview flow, real last-message preview
+  (markdown flattened), pinned → Star/Mint, has files → Paperclip/Blue, else
+  MessageCircle/Lilac, a real ⋮ opening `ConversationActionsSheet`, and a
+  "View all" link to `CHATS`.
+- Quick Actions: Search Chats focuses the field, Manage History → `CHAT_ARCHIVE`,
+  Saved items → `SETTINGS_MEMORY`, Export Chat History writes the JSON export
+  through `DataExport`. The footer CTA starts a new conversation.
 
 **iOS has no counterpart for any of the three.**
 
 ## Resume order
 
-1. Capture the three screens again (`android-screens`, label `final`) and read
-   `26`, `31`, `33`; the JVM test covers behaviour, not pixels.
-2. Port all three to iOS.
-3. Only then gate each screen; a screen that is still being laid out has nothing
-   stable to anchor a rim on.
+1. Port the three screens to iOS.
+2. Gate each screen the way the Settings trio is gated (measured rim +
+   self-test), once their layout is frozen.
 
 ## Instrument notes worth keeping
 

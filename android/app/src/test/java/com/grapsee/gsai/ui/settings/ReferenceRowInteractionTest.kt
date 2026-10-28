@@ -1,6 +1,7 @@
 package com.grapsee.gsai.ui.settings
 
 import android.content.Context
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -24,14 +25,13 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Every control on the two rebuilt screens, pressed, and the preference or
- * route it produced.
+ * Every control the three reference screens promise, pressed, and the
+ * preference or route it produced.
  *
  * SettingsModelSelectionTest proves the STORE round-trips. This proves the
- * SCREEN is actually wired to it: before it, the model radio held a local
- * `remember`, so the tick jumped back to Pro on every visit while the store
- * test stayed green. A preference test that never presses the control cannot
- * catch that.
+ * SCREENS are wired to it: before this file, the model radio held a local
+ * `remember` (the tick reset every visit while the store test stayed green),
+ * and the hub/privacy/quick-action routes were a claim about source code.
  *
  * Runs in the JVM unit suite (android-app.yml), so it gates every push without
  * a device.
@@ -39,7 +39,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
-class ModelSelectionInteractionTest {
+class ReferenceRowInteractionTest {
 
     @get:Rule val compose = createComposeRule()
 
@@ -116,8 +116,6 @@ class ModelSelectionInteractionTest {
         renderModelScreen()
 
         compose.onNodeWithText("Remember my choices").performScrollTo()
-        // The mock draws it ON; the shipped default is ON and the switch is a
-        // toggleable, not a painted pill.
         compose.onNodeWithText("Remember my choices").assertIsOn()
         compose.onNodeWithText("Remember my choices").performClick()
         compose.waitForIdle()
@@ -147,13 +145,15 @@ class ModelSelectionInteractionTest {
     }
 
     @Test
-    fun resetRestoresTheRecommendedDefaults() {
+    fun resetAsksFirstThenRestoresTheRecommendedDefaults() {
         SettingsStore.updatePreferredModel("creative")
         SettingsStore.updateRememberChoices(false)
         SettingsStore.updateReasoningEffort("high")
         renderModelScreen()
 
         compose.onNodeWithText("Reset to default").performScrollTo().performClick()
+        // The row opens the repo's confirm dialog; the reset is the confirmation.
+        compose.onNodeWithText("Reset").performClick()
         compose.waitForIdle()
 
         assertEquals("pro", SettingsStore.preferredModel)
@@ -172,6 +172,19 @@ class ModelSelectionInteractionTest {
     }
 
     @Test
+    fun thePrivacyHubRowOpensPrivacyControls() {
+        var route: String? = null
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                SettingsHubScreen(onBack = {}, onNavigate = { route = it })
+            }
+        }
+
+        compose.onNodeWithText("Privacy Settings").performScrollTo().performClick()
+        assertEquals(GsRoutes.SETTINGS_PRIVACY, route)
+    }
+
+    @Test
     fun theChatHistoryRowOpensTheSearchPage() {
         val routes = mutableListOf<String>()
         compose.setContent {
@@ -182,5 +195,17 @@ class ModelSelectionInteractionTest {
 
         compose.onNodeWithText("Chat History").performScrollTo().performClick()
         assertEquals(listOf(GsRoutes.CHAT_SEARCH), routes)
+    }
+
+    /**
+     * The spec's cheap gate on "Model Preferences is in one view": the third
+     * group's header must be visible at 393x852 WITHOUT scrolling. If a future
+     * change grows the model list or the effort tiles, this fails here rather
+     * than being discovered in a capture.
+     */
+    @Test
+    fun modelPreferencesIsInOneViewAtSheetSize() {
+        renderModelScreen()
+        compose.onNodeWithText("Model Preferences").assertIsDisplayed()
     }
 }
