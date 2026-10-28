@@ -428,7 +428,10 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
                 if (scrollAndTapText("AI Intelligence")) {
                     SystemClock.sleep(1_500)
                     shot("31-ai-intelligence")
-                    if (tapText("View model details")) {
+                    // The new AI Model / Reasoning Effort / Model Preferences
+                    // groups push "View model details" below the fold, so this finder
+                    // scrolls like the one above it.
+                    if (scrollAndTapText("View model details")) {
                         SystemClock.sleep(1_500)
                         shot("32-model-details")
                         device.pressBack()
