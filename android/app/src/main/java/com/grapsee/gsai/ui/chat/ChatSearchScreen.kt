@@ -301,7 +301,7 @@ fun ChatSearchScreen(
 
         Row(
             Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             historyChips.forEach { label ->
                 if (label == "More") {
@@ -309,12 +309,14 @@ fun ChatSearchScreen(
                         text = label,
                         selected = archivedOnly || filesOnly,
                         onClick = { facetsOpen = true },
+                        compact = true,
                     )
                 } else {
                     RefChip(
                         text = label,
                         selected = chip == label,
                         onClick = { chip = if (chip == label) "All" else label },
+                        compact = true,
                     )
                 }
             }

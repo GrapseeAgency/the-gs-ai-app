@@ -367,6 +367,9 @@ fun RefChip(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    // The Chat History mock fits six chips on one 393pt row; the reference
+    // default is too wide for that, and other screens must not move.
+    compact: Boolean = false,
 ) {
     val colors = GsTheme.colors
     Row(
@@ -385,7 +388,7 @@ fun RefChip(
                 onClickLabel = text,
                 onClick = onClick
             )
-            .padding(horizontal = 14.dp, vertical = 9.dp),
+            .padding(horizontal = if (compact) 9.dp else 14.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
