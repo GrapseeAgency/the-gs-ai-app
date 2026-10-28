@@ -45,6 +45,7 @@ import com.grapsee.gsai.ui.notifications.NotificationsScreen
 import com.grapsee.gsai.ui.profile.ProfileScreen
 import com.grapsee.gsai.ui.settings.AboutSettingsScreen
 import com.grapsee.gsai.ui.settings.AccessibilitySettingsScreen
+import com.grapsee.gsai.ui.notifications.NotificationsInboxScreen
 import com.grapsee.gsai.ui.settings.AccountSecurityScreen
 import com.grapsee.gsai.ui.settings.AiIntelligenceScreen
 import com.grapsee.gsai.ui.settings.AppearanceSettingsScreen
@@ -379,7 +380,7 @@ fun GsNavHost(
             SubscriptionUsageScreen(onBack = back, onNavigate = open)
         }
         composable(GsRoutes.NOTIFICATIONS) {
-            NotificationsScreen(
+            NotificationsInboxScreen(
                 onBack = back,
                 onNavigate = { navController.navigate(it) }
             )

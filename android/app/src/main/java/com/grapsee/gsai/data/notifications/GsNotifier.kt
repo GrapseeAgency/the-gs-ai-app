@@ -237,10 +237,14 @@ object GsNotifier {
             .setAutoCancel(pending != null)
             .apply { pending?.let { setContentIntent(it) } }
             .build()
-        return runCatching {
+        val delivered = runCatching {
             NotificationManagerCompat.from(context).notify(notificationId, notification)
             true
         }.getOrDefault(false)
+        // Only a notice the OS actually accepted becomes an inbox row, so the
+        // inbox can never show something the shade refused.
+        if (delivered) NoticeInbox.record(context, kind, title, text)
+        return delivered
     }
 
     /** Convenience for the one route every notice so far targets. */
