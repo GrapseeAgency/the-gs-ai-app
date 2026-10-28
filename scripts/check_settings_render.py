@@ -197,7 +197,7 @@ SCREENS = {
         "pitch_dx": (62.0, 345.0),
         "pitch_dy": (4.0, 200.0),
         "card_dx": (26.0, 368.0),
-        "card_dy": (180.0, 216.0),
+        "card_dy": (90.0, 150.0),
         "cta_dx": None,              # this mock paints no peach pill
         "cta_dy": None,
     },
