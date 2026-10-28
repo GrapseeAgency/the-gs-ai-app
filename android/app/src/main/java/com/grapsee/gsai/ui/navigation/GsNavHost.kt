@@ -45,7 +45,7 @@ import com.grapsee.gsai.ui.notifications.NotificationsScreen
 import com.grapsee.gsai.ui.profile.ProfileScreen
 import com.grapsee.gsai.ui.settings.AboutSettingsScreen
 import com.grapsee.gsai.ui.settings.AccessibilitySettingsScreen
-import com.grapsee.gsai.ui.settings.AccountSettingsScreen
+import com.grapsee.gsai.ui.settings.AccountSecurityScreen
 import com.grapsee.gsai.ui.settings.AiIntelligenceScreen
 import com.grapsee.gsai.ui.settings.AppearanceSettingsScreen
 import com.grapsee.gsai.ui.settings.ChatSettingsScreen
@@ -315,14 +315,9 @@ fun GsNavHost(
         // gesture. SETTINGS_PLAN deliberately reuses Billing — one purchase
         // surface, reached from two places.
         composable(GsRoutes.SETTINGS_ACCOUNT) {
-            AccountSettingsScreen(
+            AccountSecurityScreen(
                 onBack = back,
-                onLogout = {
-                    SessionStore.signOut(context)
-                    navController.navigate(GsRoutes.AUTH) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                }
+                onNavigate = open,
             )
         }
         composable(GsRoutes.SETTINGS_CHAT) {

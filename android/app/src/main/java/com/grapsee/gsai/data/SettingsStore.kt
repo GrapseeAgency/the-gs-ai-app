@@ -71,6 +71,14 @@ object SettingsStore {
     var quietHoursEnabled by mutableStateOf(false); private set
     var quietStartMinute by mutableStateOf(22 * 60); private set
     var quietEndMinute by mutableStateOf(7 * 60); private set
+    /** Biometric Login. Read by the app-lock gate in GsNavHost, which refuses
+     *  to show the shell until BiometricPrompt succeeds — a lock that nothing
+     *  checks would be the dead switch this file's contract forbids. */
+    var biometricUnlock by mutableStateOf(false); private set
+    /** When the last successful biometric check happened, epoch millis; 0 when
+     *  there has never been one. The Account & Security closing card reports
+     *  this instead of an invented "Today, 9:12 AM". */
+    var lastSecurityCheckMillis by mutableStateOf(0L); private set
     /** Memory: whether Nexly keeps and surfaces saved memories. iOS twin:
      *  SettingsStore.memory. The Memory Management mock's "Memory is ON" pill
      *  reads and writes this; default ON because the app already remembers. */
@@ -123,6 +131,8 @@ object SettingsStore {
         quietHoursEnabled = p.bool(K.quietHoursEnabled, quietHoursEnabled)
         quietStartMinute = p.integer(K.quietStartMinute, quietStartMinute)
         quietEndMinute = p.integer(K.quietEndMinute, quietEndMinute)
+        biometricUnlock = p.bool(K.biometricUnlock, biometricUnlock)
+        lastSecurityCheckMillis = p.long(K.lastSecurityCheckMillis, lastSecurityCheckMillis)
         memory = p.bool(K.memory, memory)
         fontScale = p.flt(K.fontScale, fontScale)
         highContrast = p.bool(K.highContrast, highContrast)
@@ -146,6 +156,9 @@ object SettingsStore {
     private fun SharedPreferences.integer(key: String, fallback: Int): Int =
         runCatching { getInt(key, fallback) }.getOrDefault(fallback)
 
+    private fun SharedPreferences.long(key: String, fallback: Long): Long =
+        runCatching { getLong(key, fallback) }.getOrDefault(fallback)
+
     private object K {
         const val themeMode = "settings.themeMode"
         const val accentId = "settings.accentId"
@@ -162,6 +175,8 @@ object SettingsStore {
         const val quietHoursEnabled = "settings.quietHours.enabled"
         const val quietStartMinute = "settings.quietHours.start"
         const val quietEndMinute = "settings.quietHours.end"
+        const val biometricUnlock = "settings.biometricUnlock"
+        const val lastSecurityCheckMillis = "settings.lastSecurityCheck"
         const val memory = "settings.memory"
         const val fontScale = "settings.fontScale"
         const val highContrast = "settings.highContrast"
@@ -187,6 +202,10 @@ object SettingsStore {
 
     private fun put(key: String, value: Int) {
         prefs?.edit()?.putInt(key, value)?.apply()
+    }
+
+    private fun put(key: String, value: Long) {
+        prefs?.edit()?.putLong(key, value)?.apply()
     }
 
     /**
@@ -301,6 +320,13 @@ object SettingsStore {
     fun updateQuietWindow(startMinute: Int, endMinute: Int) {
         quietStartMinute = startMinute; put(K.quietStartMinute, startMinute)
         quietEndMinute = endMinute; put(K.quietEndMinute, endMinute)
+    }
+
+    /** The app-lock gate reads [biometricUnlock]; nothing else may write it. */
+    fun updateBiometricUnlock(v: Boolean) { biometricUnlock = v; put(K.biometricUnlock, v) }
+
+    fun updateLastSecurityCheck(millis: Long) {
+        lastSecurityCheckMillis = millis; put(K.lastSecurityCheckMillis, millis)
     }
     fun updateMemory(v: Boolean) { memory = v; put(K.memory, v) }
     // Accessibility

@@ -31,6 +31,15 @@ class GSApplication : Application() {
         // Remembered settings hydrate before any composable reads a switch.
         runCatching { SettingsStore.init(this) }
             .onFailure { Log.e("GSStartup", "SettingsStore init failed", it) }
+        // The plan and its cycle live on from launch to launch; the screens
+        // read it, so it must be hydrated before any UI touches it.
+        runCatching { com.grapsee.gsai.data.PlanStore.init(this) }
+            .onFailure { Log.e("GSStartup", "PlanStore init failed", it) }
+        // Create the notification channels up front rather than on the first
+        // successful post: the Settings screen deep-links into the OS channel
+        // list, and a quiet-hours/DND refusal would leave that list empty.
+        runCatching { com.grapsee.gsai.data.notifications.GsNotifier.ensureChannels(this) }
+            .onFailure { Log.e("GSStartup", "notifier channels failed", it) }
         // The wizard's answers are read by Home, the chat empty state and the
         // local responder; hydrate before any of them compose.
         runCatching { OnboardingProfileStore.init(this) }
