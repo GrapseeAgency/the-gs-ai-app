@@ -133,6 +133,7 @@ ROW_CLUSTER_GAP_PT = 15.0         # title->subtitle is INSIDE a row; rows are 43
 # top edge sits at 261.0pt with +17.5 L over its neighbours, and at gap 10 that
 # anchor reads 4 rows — the card's real row count). Android keeps 15, unchanged.
 ROW_CLUSTER_GAP_PT_IOS = 10.0
+CARD_INSET_RATIO = 0.0554
 ANCHOR_RIM_MIN_LEVEL = 245.0      # a lit edge, not any bright row
 # Type is 25 L under its own window's median on pearl glass. A fixed cap cannot
 # work: the card fill itself sits at 236-245 L depending on the photograph under
@@ -458,9 +459,12 @@ def pitch_of(rows):
 # the shared prober
 
 
-def card_box(probe, rim_pt):
-    return (probe["card_dx"][0], probe["card_dx"][1],
-            rim_pt + probe["card_dy"][0], rim_pt + probe["card_dy"][1])
+def card_box(probe, rim_pt, pt_w=None):
+    x0, x1 = probe["card_dx"]
+    if pt_w is not None:
+        inset = CARD_INSET_RATIO * pt_w
+        x0, x1 = max(x0, inset), min(x1, pt_w - inset)
+    return (x0, x1, rim_pt + probe["card_dy"][0], rim_pt + probe["card_dy"][1])
 
 
 def cta_box(probe, rim_pt):
@@ -481,7 +485,7 @@ def measure(a, gray, bd, probe, scale, pt_w, pt_h, bands, edge=None,
     edge_pt, level, rows = found
     expect = expected_rim(probe, platform)
 
-    box = card_box(probe, edge_pt)
+    box = card_box(probe, edge_pt, pt_w)
     card_win = window(a, box, scale)
     if card_win.size == 0:
         fail("a probe window falls outside the render")
@@ -547,7 +551,7 @@ def doctor_self_test(a, gray, bd, probe, scale, pt_w, pt_h, bands, path,
     h, w, _ = doctored.shape
 
     # 1. glass -> ground: the card with no fill at all.
-    box = card_box(probe, edge_pt)
+    box = card_box(probe, edge_pt, pt_w)
     cx0, cx1, cy0, cy1 = px(box, scale)
     doctored[cy0:cy1, cx0:cx1] = ground(bd, box, pt_w, pt_h).mean(axis=(0, 1))
 
