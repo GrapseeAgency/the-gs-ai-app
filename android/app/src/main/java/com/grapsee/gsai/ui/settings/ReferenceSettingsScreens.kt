@@ -495,6 +495,8 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
                 // destination that does not exist.
                 subtitle = "No ad profile is built from your activity",
                 onClick = null,
+                // No chevron: a static row must not promise a page.
+                trailing = {},
                 leading = { RefWellTile(GsIcons.UserRound, GsWellTone.Mint, 28.dp) },
             )
             RefRowDivider()
@@ -502,6 +504,8 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
                 title = "Third-Party Integrations",
                 subtitle = "No services are connected",
                 onClick = null,
+                // No chevron: a static row must not promise a page.
+                trailing = {},
                 leading = { RefWellTile(GsIcons.Paperclip, GsWellTone.Blue, 28.dp) },
             )
         }
@@ -520,6 +524,8 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
                 title = "Search History",
                 subtitle = "Searches are not recorded",
                 onClick = null,
+                // No chevron: a static row must not promise a page.
+                trailing = {},
                 leading = { RefWellTile(GsIcons.Search, GsWellTone.Lilac, 28.dp) },
             )
             RefRowDivider()
@@ -527,6 +533,8 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
                 title = "Data Retention",
                 subtitle = "Kept on this device until you delete it",
                 onClick = null,
+                // No chevron: a static row must not promise a page.
+                trailing = {},
                 leading = { RefWellTile(GsIcons.Clock, GsWellTone.Rose, 28.dp) },
             )
         }
@@ -748,6 +756,15 @@ fun AiIntelligenceScreen(
             )
         }
 
+        // The radios persist a preference, but the backend ignores a
+        // client-chosen model (conversations/[id]/route.ts:20). Saying so here is
+        // cheaper than letting the tick imply routing it cannot control.
+        RefInfoCard(
+            text = "One model is currently served. This preference is kept for when routing supports per-model choice.",
+            icon = GsIcons.Info,
+        )
+        Spacer(Modifier.height(10.dp))
+
         // ---- Reasoning Effort ---------------------------------------------
         // The mock draws FOUR ACROSS with a radio under each. Order, copy and
         // timings are its own; the selection is SettingsStore.reasoningEffort,
@@ -850,44 +867,6 @@ fun AiIntelligenceScreen(
                     modifier = Modifier.weight(1f)
                 )
             }
-        }
-
-        RefSection(label = "Reasoning effort") {
-            Row(
-                Modifier.padding(12.dp).fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                RefChoiceTile(
-                    title = "Fast",
-                    subtitle = "Immediate, concise replies",
-                    selected = mode == "flash",
-                    onClick = { SettingsStore.setChatMode(null, "flash") },
-                    icon = GsIcons.Zap,
-                    modifier = Modifier.weight(1f)
-                )
-                RefChoiceTile(
-                    title = "Thinking",
-                    subtitle = "Spends longer on hard problems",
-                    selected = mode == "thinking",
-                    onClick = { SettingsStore.setChatMode(null, "thinking") },
-                    icon = GsIcons.Brain,
-                    modifier = Modifier.weight(1f)
-                )
-                RefChoiceTile(
-                    title = "Auto",
-                    subtitle = "Chooses per question",
-                    selected = mode == "auto",
-                    onClick = { SettingsStore.setChatMode(null, "auto") },
-                    icon = GsIcons.Split,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Text(
-                "This is the same switch the chat header exposes — changing it here changes the next reply.",
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.textTertiary,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 12.dp)
-            )
         }
 
         if (onOpenModelDetails != null) {

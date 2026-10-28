@@ -1,6 +1,7 @@
 package com.grapsee.gsai.ui.chat
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberScrollState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -165,7 +167,13 @@ fun ChatSearchScreen(
         // labels are the mock's; the four topic chips are KEYWORD-derived from
         // the title (there is no topic column in the schema) — approximate by
         // construction, and recorded as such in the reference README.
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Six chips do not fit a 393pt row: the mock draws them all, so the row
+        // scrolls rather than clipping "More" off the right edge (measured in
+        // capture 26-chat-history-search before this change).
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             historyChips.forEach { chip ->
                 RefChip(
                     text = chip,
