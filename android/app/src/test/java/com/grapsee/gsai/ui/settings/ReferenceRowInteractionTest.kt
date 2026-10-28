@@ -102,6 +102,25 @@ class ReferenceRowInteractionTest {
     }
 
     @Test
+    fun everyEffortTileRoundTripsThroughTheWireMode() {
+        // Light / Standard / High survive the round trip. Minimal cannot: the
+        // wire has three modes and it shares `flash` with Light, so the
+        // collapse is asserted rather than pretended away.
+        for (effort in listOf("light", "standard", "high")) {
+            assertEquals(
+                "effort $effort did not survive the round trip",
+                effort,
+                SettingsStore.effortForMode(SettingsStore.wireModeForEffort(effort)),
+            )
+        }
+        assertEquals(
+            "minimal must collapse onto light until the wire gains a fourth mode",
+            "light",
+            SettingsStore.effortForMode(SettingsStore.wireModeForEffort("minimal")),
+        )
+    }
+
+    @Test
     fun theModelRadioPersistsMostRecentTap() {
         renderModelScreen()
 

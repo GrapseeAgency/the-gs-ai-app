@@ -5298,3 +5298,23 @@ Work Log:
 Stage Summary:
 - All three screens are built on Android, exercised on the JVM and captured on device; iOS has no counterpart for any of them.
 - Remaining: port the three to iOS, then gate each screen the way the Settings trio is gated (measured rim + self-test), since these pages have no pixel gate yet.
+
+---
+Task ID: three-reference-screens-spec
+Agent: Qoder (main)
+Task: Operator: implement /home/arafat/.config/Qoder/SharedClientCache/cache/plans/three-reference-screens-android_task-571.md literally. The previous pass had documented away several explicit requirements; this pass removed the deltas.
+
+Work Log:
+- Audited the built screens against the spec line by line. The "accepted deltas" were not accepted by the spec: filter button absent, More chip deleted, custom keyword classifier instead of drawerTopic(), totals from the preview list, no View all, no row menu, Search Chats/Export/CTA inert, privacy hero art not the lotus recipe, no signOut, no reset confirmation, no closing card, no hairline dividers, no selected semantics, no 2-line tiles, no in-one-view gate.
+- Chat History: added ConversationTotals + observeTotals() (COUNT(*) + MAX over archived=0), hasFiles column on the preview rows (EXISTS over attachment JSON), observeArchivedWithPreview(), and hasFiles(id) for title hits. Six chips with a real More sheet (Archived, Has files) and the round filter button; all four topic chips run through drawerTopic(), classified once per title on Dispatchers.Default, cached process-wide, held in a MutableStateFlow<Map<id, DrawerTopic>> and filtered in derivedStateOf. Recent rows: Star/Mint pinned, Paperclip/Blue has-files, real ⋮ -> ConversationActionsSheet, View all -> CHATS. Quick Actions: focus the field (focusRequester threaded through RefTextField), Manage History -> CHAT_ARCHIVE, Saved items -> SETTINGS_MEMORY, Export writes DataExport; footer CTA -> chat(null).
+- Privacy: hero now uses gs_home_lotus_new at LOTUS_BLEED_ALPHA plus RefWellTile(Shield, Peach), as the hub does; footer title restored; Delete Your Account also calls SessionStore.signOut.
+- Model: hairline dividers between the four tiles, 2-line descriptions at 8sp (the copy fits), selected semantics, confirm dialog before Reset, the mock's closing card, and one honesty footnote instead of two info cards — which puts Model Preferences in one 393x852 view. Model rows lost 3dp vertical padding each.
+- Kit extensions are all defaulted: RefGroupHeader trailing, RefInfoCard title, RefTextField focusRequester, RefChip compact/softSelected/trailingChevron. No existing call site changes behaviour.
+- Readers for the three SettingsStore keys (the file's honesty contract): preferredModel -> AiIntelligenceScreen's four model rows; reasoningEffort -> AiIntelligenceScreen's four effort tiles (and updateReasoningEffort -> setChatMode); rememberChoices -> SettingsStore.setChatMode, which suppresses the new-chat default when OFF.
+- Tests: ReferenceRowInteractionTest (renamed) now has 10 tests — hub -> SETTINGS_PRIVACY, privacy -> CHAT_SEARCH, model persistence, every effort tile in the store, the effort round-trip (Minimal asserted to collapse), remember switch, disabled auto-select, reset confirmation, View model details, and Model Preferences displayed without scrolling. Full unit suite 342 tests, 0 failures.
+- Captures: android-screens 40665498908 (spec1) and 40668066043 (spec2) green, 17 frames, no MISSING; android-app 40665505292 and 40668073001 green. spec2 is 392f035a; the only later commit is the extra round-trip test. The emulator viewport is 393x698dp, so the spec's 393x852 in-one-view gate is a JVM assertion and the third group is legitimately below the fold on that device.
+- A test-isolation bug was found and fixed on the way: SettingsStore.init falls back to the CURRENT field, so clearing prefs did not reset the model keys between tests; both settings test classes now write the three defaults explicitly. The first JVM model render had shipped an Advanced/High selection into the picture because of it.
+
+Stage Summary:
+- Every explicit step of the task-571 spec is implemented and evidenced: store keys, Privacy rewrite, Chat History promotion (DAO totals + drawerTopic + facets + menus + CTA), Model finish, capture steps 26/33, the ReferenceRowInteractionTest cases, and the README rewrite.
+- Remaining beyond this spec: iOS port and pixel gating, as the spec's own rejected-alternatives section defers them.
