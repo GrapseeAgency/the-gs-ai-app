@@ -338,7 +338,7 @@ fun GsNavHost(
             NotificationSettingsScreen(onBack = back)
         }
         composable(GsRoutes.SETTINGS_PRIVACY) {
-            PrivacySettingsScreen(onBack = back)
+            PrivacySettingsScreen(onBack = back, onNavigate = open)
         }
         composable(GsRoutes.SETTINGS_AI) {
             AiIntelligenceScreen(
@@ -409,7 +409,12 @@ fun GsNavHost(
         composable(GsRoutes.CHAT_SEARCH) {
             ChatSearchScreen(
                 onBack = back,
-                onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) }
+                onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) },
+                onOpenArchive = { open(GsRoutes.CHAT_ARCHIVE) },
+                onOpenSaved = { open(GsRoutes.SETTINGS_MEMORY) },
+                // The export writer lives on the Privacy page; sending the user
+                // there is a real destination, unlike a dead tile.
+                onExport = { open(GsRoutes.SETTINGS_PRIVACY) },
             )
         }
 

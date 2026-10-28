@@ -416,7 +416,7 @@ fun NotificationSettingsScreen(onBack: () -> Unit) {
 // ---------------------------------------------------------------------------
 
 @Composable
-fun PrivacySettingsScreen(onBack: () -> Unit) {
+fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
     val context = LocalContext.current
     val colors = GsTheme.colors
     val scope = rememberCoroutineScope()
@@ -434,66 +434,134 @@ fun PrivacySettingsScreen(onBack: () -> Unit) {
         }
     }
 
-    RefPage(
-        title = "Privacy & Security",
-        subtitle = "Your data, your device, your call.",
-        onBack = onBack
+    // docs/reference/pending/privacy-data-controls.png — the mock's chrome is
+    // the settings scaffold (22dp inset, well-style back), not RefPage, and its
+    // four groups are this page's own, not the hub's Privacy & Data card.
+    RefSettingsPage(
+        title = "Privacy & Data Controls",
+        subtitle = "Your data, your control",
+        onBack = onBack,
     ) {
-        RefCard(padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RefArtwork(RefArt.Privacy, size = 82.dp)
-                Spacer(Modifier.width(10.dp))
+        RefCard(role = GsGlassRole.CardLight) {
+            Row(
+                Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RefArtwork(RefArt.Privacy, size = 62.dp)
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Local first", style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
                     Text(
-                        "Conversations, drafts and files live in this app's private storage. Export or erase them at any time.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.textSecondary
+                        "Your privacy matters",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = GsFonts.Product,
+                        color = colors.textPrimary,
+                    )
+                    Text(
+                        "Nexly is designed with your privacy in mind. You're always in control of your data, conversations, and personal information.",
+                        fontSize = 12.5.sp,
+                        lineHeight = 16.sp,
+                        fontFamily = GsFonts.Product,
+                        color = colors.textTertiary,
                     )
                 }
             }
         }
 
-        RefSection(label = "What we collect") {
-            RefValueRow(title = "Account information", value = "Local", icon = GsIcons.UserRound)
-            RefDivider()
-            RefValueRow(title = "Conversations", value = "On device", icon = GsIcons.MessageCircle)
-            RefDivider()
-            RefValueRow(title = "Attachments", value = "App storage", icon = GsIcons.Paperclip)
-            RefDivider()
-            RefValueRow(title = "Analytics", value = "None", icon = GsIcons.Gauge)
+        // ---- Data & Permissions ------------------------------------------
+        RefGroupHeader("Data & Permissions", "Manage what Nexly can access")
+        RefCard(role = GsGlassRole.CardLight) {
+            RefNavRow(
+                title = "App Permissions",
+                // The manifest grants only these two; naming camera or location
+                // would be copy the build cannot back.
+                subtitle = "Microphone and notifications — nothing else is granted",
+                onClick = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(
+                                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", context.packageName, null),
+                            )
+                        )
+                    }
+                },
+                leading = { RefWellTile(GsIcons.Camera, GsWellTone.Lilac, 28.dp) },
+            )
+            RefRowDivider()
+            RefNavRow(
+                title = "Personalization & Ads",
+                // No ad profile and no ad SDK: a chevron here would promise a
+                // destination that does not exist.
+                subtitle = "No ad profile is built from your activity",
+                onClick = null,
+                leading = { RefWellTile(GsIcons.UserRound, GsWellTone.Mint, 28.dp) },
+            )
+            RefRowDivider()
+            RefNavRow(
+                title = "Third-Party Integrations",
+                subtitle = "No services are connected",
+                onClick = null,
+                leading = { RefWellTile(GsIcons.Paperclip, GsWellTone.Blue, 28.dp) },
+            )
         }
 
-        RefSection(label = "Your controls") {
-            RefRow(
-                title = "Export my data",
-                subtitle = "Write every conversation and saved item to a JSON file",
-                icon = GsIcons.FileText,
-                onClick = { export.launch("gs-ai-export.json") }
+        // ---- Conversation & Activity -------------------------------------
+        RefGroupHeader("Conversation & Activity", "Control your chat data")
+        RefCard(role = GsGlassRole.CardLight) {
+            RefNavRow(
+                title = "Chat History",
+                subtitle = "View, search, and manage your conversations",
+                onClick = { onNavigate(GsRoutes.CHAT_SEARCH) },
+                leading = { RefWellTile(GsIcons.MessageCircle, GsWellTone.Peach, 28.dp) },
             )
-            RefDivider()
-            RefRow(
-                title = "Clear local data",
-                subtitle = "Remove chats, messages and library saves from this device",
-                icon = GsIcons.Trash2,
-                onClick = { confirmClear = true }
+            RefRowDivider()
+            RefNavRow(
+                title = "Search History",
+                subtitle = "Searches are not recorded",
+                onClick = null,
+                leading = { RefWellTile(GsIcons.Search, GsWellTone.Lilac, 28.dp) },
             )
-            RefDivider()
-            RefRow(
-                title = "On-device AI",
-                subtitle = if (SettingsStore.preferLocal) "Preferred when a model is installed" else "Cloud provider by default",
-                icon = GsIcons.Cpu,
-                onClick = { }
+            RefRowDivider()
+            RefNavRow(
+                title = "Data Retention",
+                subtitle = "Kept on this device until you delete it",
+                onClick = null,
+                leading = { RefWellTile(GsIcons.Clock, GsWellTone.Rose, 28.dp) },
             )
         }
 
-        RefFootnote("Clearing local data cannot be undone. Anything already delivered to the cloud provider is governed by that provider's retention policy.")
+        // ---- Export & Deletion -------------------------------------------
+        RefGroupHeader("Export & Deletion", "Download or delete your data")
+        RefCard(role = GsGlassRole.CardLight) {
+            RefNavRow(
+                title = "Export Your Data",
+                subtitle = "Download a copy of your information",
+                onClick = { export.launch("gs-ai-export.json") },
+                leading = { RefWellTile(GsIcons.Download, GsWellTone.Blue, 28.dp) },
+            )
+            RefRowDivider()
+            RefNavRow(
+                title = "Delete Your Account",
+                // There is no server account to delete; the honest verb is what
+                // this actually erases.
+                subtitle = "Permanently remove everything this app stores on this device",
+                onClick = { confirmClear = true },
+                leading = { RefWellTile(GsIcons.Trash2, GsWellTone.Rose, 28.dp) },
+            )
+        }
+
+        RefInfoCard(
+            text = "Your data is private to this app, never sold, and only used to improve your experience.",
+            icon = GsIcons.Lock,
+        )
+        Spacer(Modifier.height(10.dp))
     }
 
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = { Text("Clear local data?") },
+            title = { Text("Delete your data on this device?") },
             text = { Text("Every conversation, message and library save on this device will be removed. This cannot be undone.") },
             confirmButton = {
                 TextButton(onClick = {

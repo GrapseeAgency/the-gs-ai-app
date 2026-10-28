@@ -11,11 +11,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,16 +30,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.data.local.ftsMatchQuery
 import com.grapsee.gsai.di.ServiceLocator
+import com.grapsee.gsai.ui.components.GsGlassRole
+import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefArt
 import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefChip
 import com.grapsee.gsai.ui.components.RefDivider
 import com.grapsee.gsai.ui.components.RefEmptyState
+import com.grapsee.gsai.ui.components.RefGroupHeader
 import com.grapsee.gsai.ui.components.RefIconTile
+import com.grapsee.gsai.ui.components.RefInfoCard
 import com.grapsee.gsai.ui.components.RefPage
+import com.grapsee.gsai.ui.components.RefRowDivider
+import com.grapsee.gsai.ui.components.RefSettingsPage
 import com.grapsee.gsai.ui.components.RefTextField
+import com.grapsee.gsai.ui.components.RefWellTile
 import com.grapsee.gsai.ui.components.gsConversationTitle
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsTheme
@@ -60,6 +70,43 @@ private data class ChatHit(
  */
 private val searchFilters = listOf("This week", "Has files")
 
+/** The mock's six chips, in its order. */
+private val historyChips = listOf("All", "Chats", "Research", "Ideas", "Planning", "More")
+
+/**
+ * Keyword topic buckets for the four topic chips.
+ *
+ * There is no topic/facet column in `ConversationEntity`, so these labels are a
+ * classification of the title, not stored metadata — the honest approximation is
+ * recorded in docs/reference/pending/README.md.
+ */
+private val chipKeywords: Map<String, List<String>> = mapOf(
+    "Research" to listOf("research", "study", "science", "data", "code", "learn"),
+    "Ideas" to listOf("idea", "design", "brand", "creative", "logo"),
+    "Planning" to listOf("plan", "timeline", "schedule", "trip", "travel", "milestone"),
+)
+
+private fun matchesChip(title: String, chip: String?): Boolean {
+    if (chip == null || chip == "All" || chip == "More") return true
+    val lower = title.lowercase()
+    val keys = chipKeywords[chip] ?: return true
+    return keys.any { lower.contains(it) }
+}
+
+/** "Today, 9:12 AM" / "Sep 16" — real timestamps, never a placeholder. */
+private fun historyMoment(iso: String?): String {
+    if (iso.isNullOrBlank()) return "—"
+    return runCatching {
+        val at = java.time.OffsetDateTime.parse(iso)
+        val now = java.time.OffsetDateTime.now()
+        if (at.toLocalDate() == now.toLocalDate()) {
+            "Today, " + at.format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
+        } else {
+            at.format(java.time.format.DateTimeFormatter.ofPattern("MMM d"))
+        }
+    }.getOrDefault("—")
+}
+
 /**
  * Chat-scoped search over the on-device store — real hits from Room (titles +
  * message bodies), real filters, tap-through into the conversation.
@@ -67,7 +114,10 @@ private val searchFilters = listOf("This week", "Has files")
 @Composable
 fun ChatSearchScreen(
     onBack: () -> Unit,
-    onOpenConversation: (String) -> Unit = {}
+    onOpenConversation: (String) -> Unit = {},
+    onOpenArchive: () -> Unit = {},
+    onOpenSaved: () -> Unit = {},
+    onExport: () -> Unit = {},
 ) {
     var query by remember { mutableStateOf("") }
     var activeFilter by remember { mutableStateOf<String?>(null) }
@@ -95,38 +145,104 @@ fun ChatSearchScreen(
         }
     }
 
-    RefPage(
-        title = "Search",
-        subtitle = "Titles and message text, on this device.",
+    RefSettingsPage(
+        title = "Chat History & Search",
+        subtitle = "Find, revisit, and manage your conversations",
         onBack = onBack
     ) {
         RefTextField(
             value = query,
             onValueChange = { query = it },
-            label = "What are you looking for?",
+            label = "Search your conversations…",
             placeholder = "A word or phrase",
-            leadingIcon = GsIcons.TextSearch,
+            leadingIcon = GsIcons.Search,
             imeAction = ImeAction.Search,
             onDone = { commitSearch() }
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
+
+        // docs/reference/pending/chat-history-search.png draws six chips. The
+        // labels are the mock's; the four topic chips are KEYWORD-derived from
+        // the title (there is no topic column in the schema) — approximate by
+        // construction, and recorded as such in the reference README.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            searchFilters.forEach { filter ->
+            historyChips.forEach { chip ->
                 RefChip(
-                    text = filter,
-                    selected = activeFilter == filter,
-                    onClick = { activeFilter = if (activeFilter == filter) null else filter }
+                    text = chip,
+                    selected = activeFilter == chip,
+                    onClick = {
+                        activeFilter = if (activeFilter == chip) null else chip
+                    }
                 )
             }
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
+
+        // Totals. `observeRecent()` reads the conversations table only (no
+        // message join, no per-row subquery), so both numbers come from one
+        // cheap query rather than a walk of the transcript.
+        val recent by ServiceLocator.db.conversationDao()
+            .observeRecent()
+            .collectAsState(initial = emptyList())
+        RefCard(role = GsGlassRole.CardLight) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
+                HistoryStat(
+                    icon = GsIcons.MessageCircle,
+                    tone = GsWellTone.Peach,
+                    label = "Total Conversations",
+                    value = recent.size.toString(),
+                    caption = "Your chat history with Nexly",
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(10.dp))
+                HistoryStat(
+                    icon = GsIcons.Calendar,
+                    tone = GsWellTone.Peach,
+                    label = "Last Active",
+                    value = historyMoment(recent.firstOrNull()?.updatedAt),
+                    caption = "Most recent conversation",
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        Spacer(Modifier.height(14.dp))
 
         when {
-            term.length < 2 -> RefEmptyState(
-                art = RefArt.Search,
-                title = "Search your chats",
-                message = "Type at least two characters. Every conversation and message on this device is searched."
-            )
+            term.length < 2 -> {
+                RefGroupHeader("Recent Chats", "${recent.size}")
+                if (recent.isEmpty()) {
+                    RefInfoCard(
+                        text = "No conversations yet. Your chats appear here as you start them.",
+                        icon = GsIcons.MessageCircle,
+                    )
+                } else {
+                    RefCard(role = GsGlassRole.CardLight) {
+                        recent.take(7).forEachIndexed { index, conversation ->
+                            if (index > 0) RefRowDivider()
+                            RecentChatRow(conversation) {
+                                onOpenConversation(conversation.id)
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                RefGroupHeader("Quick Actions", null)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HistoryAction(GsIcons.Search, GsWellTone.Peach, "Search Chats", "Find specific topics", Modifier.weight(1f)) { }
+                    HistoryAction(GsIcons.Archive, GsWellTone.Rose, "Manage History", "Delete or archive chats", Modifier.weight(1f)) { onOpenArchive() }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HistoryAction(GsIcons.Bookmark, GsWellTone.Lilac, "Saved items", "View your saved answers", Modifier.weight(1f)) { onOpenSaved() }
+                    HistoryAction(GsIcons.Download, GsWellTone.Blue, "Export Chat History", "Download your data", Modifier.weight(1f)) { onExport() }
+                }
+                Spacer(Modifier.height(14.dp))
+                RefInfoCard(
+                    text = "Start a new conversation — get back to what matters.",
+                    icon = GsIcons.Sparkles,
+                )
+                Spacer(Modifier.height(10.dp))
+            }
             searched && hits.isEmpty() -> RefEmptyState(
                 art = RefArt.Search,
                 title = "No matches",
@@ -272,4 +388,148 @@ private fun snippet(content: String, term: String): String {
     val prefix = if (start > 0) "…" else ""
     val suffix = if (end < clean.length) "…" else ""
     return prefix + clean.substring(start, end).trim() + suffix
+}
+
+// ---------------------------------------------------------------------------
+// The mock's cells — docs/reference/pending/chat-history-search.png
+// ---------------------------------------------------------------------------
+
+/** One half of the totals card: well, label, value, caption. */
+@Composable
+private fun HistoryStat(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tone: GsWellTone,
+    label: String,
+    value: String,
+    caption: String,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        RefWellTile(icon, tone, 28.dp)
+        Spacer(Modifier.width(9.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = GsTheme.colors.textTertiary,
+            )
+            Text(
+                value,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = GsTheme.colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                caption,
+                style = MaterialTheme.typography.labelSmall,
+                color = GsTheme.colors.textTertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** One Quick Action cell: well, title, subtitle. */
+@Composable
+private fun HistoryAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tone: GsWellTone,
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    RefCard(role = GsGlassRole.CardLight, modifier = modifier) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    role = Role.Button,
+                    onClickLabel = title,
+                    onClick = onClick,
+                )
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RefWellTile(icon, tone, 28.dp)
+            Spacer(Modifier.width(9.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                    color = GsTheme.colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = GsTheme.colors.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/** One Recent Chats row: real title, real preview line, real timestamp. */
+@Composable
+private fun RecentChatRow(conversation: ConversationEntity, onClick: () -> Unit) {
+    val title = gsConversationTitle(conversation.title)
+    // Glyph from real signals only — pinned, then archived; there is no topic
+    // column to draw the mock's per-topic icons from.
+    val icon = when {
+        conversation.pinned -> GsIcons.Bookmark
+        conversation.archived -> GsIcons.Archive
+        else -> GsIcons.MessageCircle
+    }
+    val tone = when {
+        conversation.pinned -> GsWellTone.Mint
+        conversation.archived -> GsWellTone.Blue
+        else -> GsWellTone.Lilac
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = title,
+                onClick = onClick,
+            )
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RefWellTile(icon, tone, 28.dp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = GsTheme.colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                "Tap to reopen this conversation",
+                style = MaterialTheme.typography.labelSmall,
+                color = GsTheme.colors.textTertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Text(
+            historyMoment(conversation.updatedAt),
+            style = MaterialTheme.typography.labelSmall,
+            color = GsTheme.colors.textTertiary,
+            maxLines = 1,
+        )
+    }
 }

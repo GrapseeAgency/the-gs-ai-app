@@ -57,6 +57,20 @@ object SettingsStore {
     var screenReaderHints by mutableStateOf(false); private set
     var haptics by mutableStateOf(true); private set
 
+    // ---- Model selection (docs/reference/pending/model-selection.png) ----
+    /** The model radio the reference draws. Persisted because the screen used
+     *  to hold this in a local `remember`, so the tick jumped back to Pro on
+     *  every visit. NOTE: the backend ignores a client-chosen model
+     *  (`src/app/api/v1/conversations/[id]/route.ts:20`), so this is a stored
+     *  preference, not routing. The screen says so in one footnote. */
+    var preferredModel by mutableStateOf("pro"); private set
+    /** The effort tile. Kept separate from [chatMode] on purpose: the wire only
+     *  has three modes, so Minimal and Light would both read `flash` and two
+     *  tiles would light up at once. */
+    var reasoningEffort by mutableStateOf("standard"); private set
+    /** "Remember my choices" — decides whether a new chat keeps the last mode. */
+    var rememberChoices by mutableStateOf(true); private set
+
     /** Call once from GSApplication before any UI reads the store. */
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -81,6 +95,9 @@ object SettingsStore {
         reduceMotion = p.bool(K.reduceMotion, reduceMotion)
         screenReaderHints = p.bool(K.screenReaderHints, screenReaderHints)
         haptics = p.bool(K.haptics, haptics)
+        preferredModel = p.string(K.preferredModel, preferredModel)
+        reasoningEffort = p.string(K.reasoningEffort, reasoningEffort)
+        rememberChoices = p.bool(K.rememberChoices, rememberChoices)
     }
 
     private fun SharedPreferences.bool(key: String, fallback: Boolean): Boolean =
@@ -105,6 +122,9 @@ object SettingsStore {
         const val reduceMotion = "settings.reduceMotion"
         const val screenReaderHints = "settings.screenReaderHints"
         const val haptics = "settings.haptics"
+        const val preferredModel = "settings.preferredModel"
+        const val reasoningEffort = "settings.reasoningEffort"
+        const val rememberChoices = "settings.rememberChoices"
     }
 
     private fun put(key: String, value: Boolean) {
@@ -138,8 +158,51 @@ object SettingsStore {
 
     fun setChatMode(conversationId: String?, mode: String) {
         val key = if (conversationId != null) "mode.$conversationId" else "mode.new"
+        // "Remember my choices" (model-selection reference) governs the NEW-chat
+        // default only. A per-conversation choice belongs to that conversation
+        // and is never suppressed — otherwise reopening a chat would silently
+        // change how it answers.
+        if (conversationId == null && !rememberChoices) {
+            put(key, "flash")
+            return
+        }
         put(key, mode)
     }
+
+    // ---- Model selection -------------------------------------------------
+    /** Effort tile -> wire mode.
+     *
+     *  The wire accepts exactly `flash | thinking | auto`
+     *  (`src/lib/model-capabilities.ts:515-521`), so **Minimal and Light are the
+     *  same mode today**: the tile remembers which one was tapped, the server
+     *  cannot yet tell them apart. Widening this is a backend change, not a UI
+     *  one. */
+    fun wireModeForEffort(effort: String): String = when (effort) {
+        "minimal", "light" -> "flash"
+        "high" -> "thinking"
+        else -> "auto"
+    }
+
+    /** Inverse of [wireModeForEffort], used when a stored mode is all we have.
+     *  `flash` maps to `light` because that is the tier's own name; `minimal`
+     *  can only come back from the tile the user tapped. */
+    fun effortForMode(mode: String): String = when (mode) {
+        "thinking" -> "high"
+        "auto" -> "standard"
+        else -> "light"
+    }
+
+    fun updatePreferredModel(v: String) { preferredModel = v; put(K.preferredModel, v) }
+
+    /** Writes the tile AND the wire mode, so "the chip I tapped" and "what the
+     *  next reply does" never disagree. */
+    fun updateReasoningEffort(v: String) {
+        reasoningEffort = v
+        put(K.reasoningEffort, v)
+        setChatMode(null, wireModeForEffort(v))
+    }
+
+    fun updateRememberChoices(v: Boolean) { rememberChoices = v; put(K.rememberChoices, v) }
 
     // Appearance
     fun updateThemeMode(v: String) { themeMode = v; put(K.themeMode, v) }
