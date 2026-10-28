@@ -202,6 +202,24 @@ interface ConversationDao {
 
 @Dao
 interface MessageDao {
+
+    /**
+     * Real usage meters for Subscription & Usage.
+     *
+     * `createdAt` is an ISO-8601 string, so lexicographic comparison against a
+     * month-start ISO stamp is chronological — which is why the window is
+     * passed in already localised by the caller rather than computed here.
+     */
+    @Query("SELECT COUNT(*) FROM messages WHERE role = 'user' AND createdAt >= :monthStartIso")
+    suspend fun countUserMessagesSince(monthStartIso: String): Int
+
+    /** Turns that actually carried attachments — the Uploads meter. */
+    @Query(
+        "SELECT COUNT(*) FROM messages WHERE attachments != '[]' " +
+            "AND attachments IS NOT NULL AND createdAt >= :monthStartIso"
+    )
+    suspend fun countMessagesWithAttachmentsSince(monthStartIso: String): Int
+
     @Upsert
     suspend fun insertAll(messages: List<MessageEntity>)
 

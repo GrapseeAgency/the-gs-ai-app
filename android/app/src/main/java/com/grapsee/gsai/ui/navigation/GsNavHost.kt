@@ -35,7 +35,7 @@ import com.grapsee.gsai.data.SessionStore
 import com.grapsee.gsai.ui.auth.AuthScreen
 import com.grapsee.gsai.ui.auth.OnboardingScreen
 import com.grapsee.gsai.ui.auth.ReferenceWelcomeScreen
-import com.grapsee.gsai.ui.billing.BillingScreen
+import com.grapsee.gsai.ui.subscription.SubscriptionUsageScreen
 import com.grapsee.gsai.ui.chat.ArchivedChatsScreen
 import com.grapsee.gsai.ui.chat.ChatInfoScreen
 import com.grapsee.gsai.ui.chat.ChatScreen
@@ -376,7 +376,7 @@ fun GsNavHost(
             AboutSettingsScreen(onBack = back)
         }
         composable(GsRoutes.SETTINGS_PLAN) {
-            BillingScreen(onBack = back)
+            SubscriptionUsageScreen(onBack = back, onNavigate = open)
         }
         composable(GsRoutes.NOTIFICATIONS) {
             NotificationsScreen(
@@ -445,7 +445,7 @@ fun GsNavHost(
         }
 
         // Billing
-        composable(GsRoutes.BILLING) { BillingScreen(onBack = back) }
+        composable(GsRoutes.BILLING) { SubscriptionUsageScreen(onBack = back, onNavigate = open) }
 
         composable(
             route = GsRoutes.CHAT,
