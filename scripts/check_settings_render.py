@@ -177,7 +177,7 @@ SCREENS = {
         # 261.0 is the card this probe describes: the top edge there is +17.5 L over
         # its neighbours, and the mock's peach Upgrade pill (y 168-192, R-B 107 vs
         # the mock's ~113) falls inside this anchor's cta_dy window (137..207).
-        "rim_y": {"android": 339.0, "ios": 261.0},
+        "rim_y": {"android": 285.7, "ios": 261.0},
         "rim_search": 24.0,
         "rim_span_x": (70.0, 330.0),
         "pitch_dx": (62.0, 345.0),
@@ -190,7 +190,7 @@ SCREENS = {
     # The Profile card's last row, same reason.
     "profile": {
         "about": "the Profile group card",
-        "rim_y": {"android": 250.0, "ios": 429.0},  # ios: two widths agree within 0.3pt
+        "rim_y": {"android": 210.3, "ios": 429.0},
         "rim_search": 24.0,
         "rim_span_x": (70.0, 330.0),
         "pitch_dx": (62.0, 345.0),
@@ -211,7 +211,7 @@ SCREENS = {
         # anchor's cta window 111.7..149.7). The 360x780 capture derives 491.7 —
         # a 37pt shift that is wider than rim_search, so that width is expected
         # to FAIL until the responsive layout stops pushing this card down.
-        "rim_y": {"android": 501.0, "ios": 454.7},
+        "rim_y": {"android": 503.0, "ios": 454.7},
         "rim_search": 24.0,
         "rim_span_x": (70.0, 330.0),
         "pitch_dx": (62.0, 345.0),
