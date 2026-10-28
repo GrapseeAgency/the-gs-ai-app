@@ -634,12 +634,116 @@ fun AiIntelligenceScreen(
     val installed = ModelStore.installedPath != null
     val mode = SettingsStore.chatMode(null)
     val local = SettingsStore.preferLocal
+    var selectedModel by remember { mutableStateOf(MODEL_PRO) }
 
     RefPage(
-        title = "AI Intelligence",
-        subtitle = "Configure how Nexly thinks, responds and helps you.",
+        title = "Model Selection & Reasoning Effort",
+        subtitle = "Choose the best model and how deeply Nexly thinks.",
         onBack = onBack
     ) {
+        // ---- AI Model -----------------------------------------------------
+        // docs/reference/pending/model-selection.png. The four rows, their copy
+        // and the Recommended chip come from that mock verbatim.
+        RefGroupHeader("AI Model", "Different models for different needs")
+        RefCard(role = GsGlassRole.CardLight) {
+            ModelChoiceRow(
+                title = "Nexly Pro",
+                subtitle = "Best balance of speed, intelligence and creativity.\nGreat for most everyday tasks.",
+                icon = GsIcons.Sparkles,
+                selected = selectedModel == MODEL_PRO,
+                badge = "Recommended",
+                onClick = { selectedModel = MODEL_PRO },
+            )
+            RefRowDivider()
+            ModelChoiceRow(
+                title = "Nexly Advanced",
+                subtitle = "Deep reasoning, complex problem solving and analysis.\nIdeal for research, coding and detailed tasks.",
+                icon = GsIcons.Sparkle,
+                selected = selectedModel == MODEL_ADVANCED,
+                onClick = { selectedModel = MODEL_ADVANCED },
+            )
+            RefRowDivider()
+            ModelChoiceRow(
+                title = "Nexly Code",
+                subtitle = "Specialized for programming and technical tasks.\nGreat for developers and code-related work.",
+                icon = GsIcons.Code,
+                selected = selectedModel == MODEL_CODE,
+                onClick = { selectedModel = MODEL_CODE },
+            )
+            RefRowDivider()
+            ModelChoiceRow(
+                title = "Nexly Creative",
+                subtitle = "Focused on imagination, visuals and creative content.\nBest for design, writing and artistic tasks.",
+                icon = GsIcons.Palette,
+                selected = selectedModel == MODEL_CREATIVE,
+                onClick = { selectedModel = MODEL_CREATIVE },
+            )
+        }
+
+        // ---- Reasoning Effort ---------------------------------------------
+        RefGroupHeader("Reasoning Effort", "Control how much Nexly thinks")
+        RefCard(role = GsGlassRole.CardLight) {
+            RefRow(
+                title = "Standard",
+                subtitle = "Best for most tasks and questions.  ~5–10 seconds",
+                icon = GsIcons.Sparkles,
+                onClick = { SettingsStore.setChatMode(null, "auto") },
+                onClickLabel = "Standard reasoning effort",
+            )
+            RefRowDivider()
+            RefRow(
+                title = "High",
+                subtitle = "Deeper analysis and detailed reasoning.  ~10–30 seconds",
+                icon = GsIcons.Brain,
+                onClick = { SettingsStore.setChatMode(null, "thinking") },
+                onClickLabel = "High reasoning effort",
+            )
+            RefRowDivider()
+            RefRow(
+                title = "Light",
+                subtitle = "Balanced speed and depth.  ~2–5 seconds",
+                icon = GsIcons.Zap,
+                onClick = { SettingsStore.setChatMode(null, "flash") },
+                onClickLabel = "Light reasoning effort",
+            )
+            RefRowDivider()
+            RefRow(
+                title = "Minimal",
+                subtitle = "Quick answers for simple questions.  ~1–2 seconds",
+                icon = GsIcons.Zap,
+                onClick = { SettingsStore.setChatMode(null, "flash") },
+                onClickLabel = "Minimal reasoning effort",
+            )
+        }
+
+        // ---- Model Preferences -------------------------------------------
+        RefGroupHeader("Model Preferences", "Customize your experience")
+        RefCard(role = GsGlassRole.CardLight) {
+            RefRow(
+                title = "Auto-select model",
+                subtitle = "Let Nexly choose the best model for each task.",
+                icon = GsIcons.Settings,
+                onClick = { },
+                onClickLabel = "Auto-select model",
+            )
+            RefRowDivider()
+            RefRow(
+                title = "Remember my choices",
+                subtitle = "Keep using your preferred model and reasoning effort.",
+                icon = GsIcons.SlidersHorizontal,
+                onClick = { },
+                onClickLabel = "Remember my choices",
+            )
+            RefRowDivider()
+            RefRow(
+                title = "Reset to default",
+                subtitle = "Go back to Nexly's recommended settings.",
+                icon = GsIcons.RotateCcw,
+                onClick = { onOpenModelDetails?.invoke() },
+                onClickLabel = "Reset to default",
+            )
+        }
+
         RefCard(padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RefArtwork(RefArt.Bloom, size = 92.dp)
@@ -753,6 +857,55 @@ fun AiIntelligenceScreen(
 
         RefFootnote("On-device generation is slower and uses battery. It is the honest choice when the network is gone, not a silent replacement for the cloud model.")
     }
+}
+
+private const val MODEL_PRO = "pro"
+private const val MODEL_ADVANCED = "advanced"
+private const val MODEL_CODE = "code"
+private const val MODEL_CREATIVE = "creative"
+
+/**
+ * One row of the mock's AI Model list: well, title (+ optional chip) and its two
+ * detail lines, with the selection ring on the right.
+ *
+ * The copy and the Recommended chip are the mock's own
+ * (docs/reference/pending/model-selection.png).
+ */
+@Composable
+private fun ModelChoiceRow(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    badge: String? = null,
+) {
+    val colors = GsTheme.colors
+    RefRow(
+        title = title,
+        subtitle = subtitle,
+        icon = icon,
+        onClick = onClick,
+        onClickLabel = title,
+        trailing = {
+            if (badge != null) {
+                Text(
+                    badge,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.accent,
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+            Spacer(
+                Modifier
+                    .size(20.dp)
+                    .background(
+                        if (selected) colors.accent else colors.glassBorder,
+                        CircleShape,
+                    )
+            )
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------
