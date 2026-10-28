@@ -32,11 +32,15 @@ class SettingsScreenshotTest {
     fun onlyOnRequest() {
         assumeTrue(System.getProperty("gs.screenshots") == "true")
         // The interaction suite shares the JVM; a switch left ON/OFF by it must
-        // not colour a capture. Reset to the shipped defaults explicitly.
+        // not colour a capture. `init` falls back to the CURRENT field, so the
+        // model keys are also written back explicitly.
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         ctx.getSharedPreferences("gs_settings", Context.MODE_PRIVATE)
             .edit().clear().commit()
         SettingsStore.init(ctx)
+        SettingsStore.updateRememberChoices(true)
+        SettingsStore.updatePreferredModel("pro")
+        SettingsStore.updateReasoningEffort("standard")
     }
 
     private fun shoot(path: String, content: @Composable () -> Unit) {

@@ -370,15 +370,30 @@ fun RefChip(
     // The Chat History mock fits six chips on one 393pt row; the reference
     // default is too wide for that, and other screens must not move.
     compact: Boolean = false,
+    // The mock's selected chip is a soft peach wash with accent text, not the
+    // full-strength pill used elsewhere. Kept opt-in for the same reason.
+    softSelected: Boolean = false,
+    trailingChevron: Boolean = false,
 ) {
     val colors = GsTheme.colors
+    val lit = selected && softSelected
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(if (selected) colors.accent else colors.glassSurface.copy(alpha = 0.62f))
+            .background(
+                when {
+                    lit -> colors.accentSoft
+                    selected -> colors.accent
+                    else -> colors.glassSurface.copy(alpha = 0.62f)
+                }
+            )
             .border(
                 1.dp,
-                if (selected) colors.accent else colors.glassBorder,
+                when {
+                    lit -> colors.accent.copy(alpha = 0.35f)
+                    selected -> colors.accent
+                    else -> colors.glassBorder
+                },
                 RoundedCornerShape(999.dp)
             )
             .clickable(
@@ -392,7 +407,7 @@ fun RefChip(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        if (selected) {
+        if (selected && !softSelected) {
             Icon(
                 GsIcons.Check,
                 contentDescription = null,
@@ -403,9 +418,21 @@ fun RefChip(
         Text(
             text = text,
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
-            color = if (selected) colors.onAccent else colors.textPrimary,
+            color = when {
+                lit -> colors.accent
+                selected -> colors.onAccent
+                else -> colors.textPrimary
+            },
             maxLines = 1
         )
+        if (trailingChevron) {
+            Icon(
+                GsIcons.ChevronDown,
+                contentDescription = null,
+                tint = if (selected) colors.accent else colors.textTertiary,
+                modifier = Modifier.size(12.dp)
+            )
+        }
     }
 }
 

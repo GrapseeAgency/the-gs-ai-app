@@ -45,9 +45,9 @@ class ReferenceRowInteractionTest {
 
     /**
      * Robolectric gives each test a fresh Application, but SettingsStore is a
-     * static object hydrated once from prefs. Clearing the file AND
-     * re-running init puts every field back to its shipped default, so one
-     * test's "High / Creative / remember off" cannot leak into the next.
+     * static object hydrated once from prefs. `init` uses the CURRENT field as
+     * its fallback, so clearing prefs alone is not a reset — the three keys
+     * this suite touches are written back explicitly.
      */
     @Before
     fun resetStore() {
@@ -55,6 +55,9 @@ class ReferenceRowInteractionTest {
         ctx.getSharedPreferences("gs_settings", Context.MODE_PRIVATE)
             .edit().clear().commit()
         SettingsStore.init(ctx)
+        SettingsStore.updateRememberChoices(true)
+        SettingsStore.updatePreferredModel("pro")
+        SettingsStore.updateReasoningEffort("standard")
     }
 
     private fun renderModelScreen(

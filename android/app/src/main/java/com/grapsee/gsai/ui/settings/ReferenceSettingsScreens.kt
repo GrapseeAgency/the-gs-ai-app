@@ -1056,11 +1056,11 @@ private fun ReasoningTile(
             // The radio state is announced, not only painted; a screen reader
             // must be able to tell which of the four is chosen.
             .semantics { selected = isSelected }
-            .padding(horizontal = 2.dp, vertical = 10.dp),
+            .padding(horizontal = 2.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         RefWellTile(icon, tone, 26.dp)
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(4.dp))
         Text(
             title,
             fontSize = 12.5.sp,
@@ -1085,7 +1085,7 @@ private fun ReasoningTile(
         // the way the mock draws them; without the weighted spacer the High
         // tile (four description lines) pushed its radio below the other three.
         Spacer(Modifier.weight(1f))
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             timing,
             fontSize = 9.sp,
@@ -1150,7 +1150,7 @@ private fun ModelChoiceRow(
         Modifier
             .fillMaxWidth()
             .clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 11.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RefWellTile(icon, tone, 28.dp)

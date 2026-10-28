@@ -310,6 +310,8 @@ fun ChatSearchScreen(
                         selected = archivedOnly || filesOnly,
                         onClick = { facetsOpen = true },
                         compact = true,
+                        softSelected = true,
+                        trailingChevron = true,
                     )
                 } else {
                     RefChip(
@@ -317,6 +319,7 @@ fun ChatSearchScreen(
                         selected = chip == label,
                         onClick = { chip = if (chip == label) "All" else label },
                         compact = true,
+                        softSelected = true,
                     )
                 }
             }
