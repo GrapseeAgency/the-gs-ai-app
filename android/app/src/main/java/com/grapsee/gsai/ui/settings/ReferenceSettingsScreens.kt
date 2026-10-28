@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -708,13 +709,11 @@ fun AiIntelligenceScreen(
 ) {
     val colors = GsTheme.colors
     val installed = ModelStore.installedPath != null
-    val mode = SettingsStore.chatMode(null)
     val local = SettingsStore.preferLocal
-    var selectedModel by remember { mutableStateOf(MODEL_PRO) }
 
     RefPage(
         title = "Model Selection & Reasoning Effort",
-        subtitle = "Choose the best model and how deeply Nexly thinks.",
+        subtitle = "Choose the best model and how deeply Nexly thinks",
         onBack = onBack
     ) {
         // ---- AI Model -----------------------------------------------------
@@ -726,33 +725,37 @@ fun AiIntelligenceScreen(
                 title = "Nexly Pro",
                 subtitle = "Best balance of speed, intelligence and creativity. Great for most everyday tasks.",
                 icon = GsIcons.Sparkles,
-                selected = selectedModel == MODEL_PRO,
+                tone = GsWellTone.Peach,
+                selected = SettingsStore.preferredModel == MODEL_PRO,
                 badge = "Recommended",
-                onClick = { selectedModel = MODEL_PRO },
+                onClick = { SettingsStore.updatePreferredModel(MODEL_PRO) },
             )
             RefRowDivider()
             ModelChoiceRow(
                 title = "Nexly Advanced",
                 subtitle = "Deep reasoning, complex problem solving and analysis. Ideal for research, coding and detailed tasks.",
                 icon = GsIcons.Sparkle,
-                selected = selectedModel == MODEL_ADVANCED,
-                onClick = { selectedModel = MODEL_ADVANCED },
+                tone = GsWellTone.Lilac,
+                selected = SettingsStore.preferredModel == MODEL_ADVANCED,
+                onClick = { SettingsStore.updatePreferredModel(MODEL_ADVANCED) },
             )
             RefRowDivider()
             ModelChoiceRow(
                 title = "Nexly Code",
                 subtitle = "Specialized for programming and technical tasks. Great for developers and code-related work.",
                 icon = GsIcons.Code,
-                selected = selectedModel == MODEL_CODE,
-                onClick = { selectedModel = MODEL_CODE },
+                tone = GsWellTone.Mint,
+                selected = SettingsStore.preferredModel == MODEL_CODE,
+                onClick = { SettingsStore.updatePreferredModel(MODEL_CODE) },
             )
             RefRowDivider()
             ModelChoiceRow(
                 title = "Nexly Creative",
                 subtitle = "Focused on imagination, visuals and creative content. Best for design, writing and artistic tasks.",
                 icon = GsIcons.Palette,
-                selected = selectedModel == MODEL_CREATIVE,
-                onClick = { selectedModel = MODEL_CREATIVE },
+                tone = GsWellTone.Rose,
+                selected = SettingsStore.preferredModel == MODEL_CREATIVE,
+                onClick = { SettingsStore.updatePreferredModel(MODEL_CREATIVE) },
             )
         }
 
@@ -784,6 +787,7 @@ fun AiIntelligenceScreen(
                         description = effort.description,
                         timing = effort.timing,
                         icon = effort.icon,
+                        tone = effort.tone,
                         selected = SettingsStore.reasoningEffort == effort.id,
                         modifier = Modifier.weight(1f),
                         onClick = { SettingsStore.updateReasoningEffort(effort.id) },
@@ -918,13 +922,14 @@ private data class ReasoningEffort(
     val description: String,
     val timing: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val tone: GsWellTone,
 )
 
 private val REASONING_EFFORTS = listOf(
-    ReasoningEffort("minimal", "Minimal", "Quick answers for simple questions.", "~ 1–2 seconds", GsIcons.Zap),
-    ReasoningEffort("light", "Light", "Balanced speed and depth.", "~ 2–5 seconds", GsIcons.Zap),
-    ReasoningEffort("standard", "Standard", "Best for most tasks and questions.", "~ 5–10 seconds", GsIcons.Sparkles),
-    ReasoningEffort("high", "High", "Deeper analysis and detailed reasoning.", "~ 10–30 seconds", GsIcons.Brain),
+    ReasoningEffort("minimal", "Minimal", "Quick answers for simple questions.", "~ 1–2 seconds", GsIcons.Zap, GsWellTone.Peach),
+    ReasoningEffort("light", "Light", "Balanced speed and depth.", "~ 2–5 seconds", GsIcons.Leaf, GsWellTone.Mint),
+    ReasoningEffort("standard", "Standard", "Best for most tasks and questions.", "~ 5–10 seconds", GsIcons.Sparkles, GsWellTone.Peach),
+    ReasoningEffort("high", "High", "Deeper analysis and detailed reasoning.", "~ 10–30 seconds", GsIcons.Brain, GsWellTone.Lilac),
 )
 
 /**
@@ -940,6 +945,7 @@ private fun ReasoningTile(
     description: String,
     timing: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tone: GsWellTone,
     selected: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
@@ -952,11 +958,20 @@ private fun ReasoningTile(
                 if (selected) colors.accentSoft else colors.glassSurface.copy(alpha = 0.45f),
                 RoundedCornerShape(16.dp),
             )
+            // The mock outlines the chosen tile as well as tinting it; the
+            // fill alone vanished against the card on the first capture.
+            .then(
+                if (selected) {
+                    Modifier.border(1.5.dp, colors.accent, RoundedCornerShape(16.dp))
+                } else {
+                    Modifier
+                }
+            )
             .clickable(role = Role.RadioButton, onClickLabel = title, onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        RefWellTile(icon, GsWellTone.Peach, 26.dp)
+        RefWellTile(icon, tone, 26.dp)
         Spacer(Modifier.height(6.dp))
         Text(
             title,
@@ -1029,6 +1044,7 @@ private fun ModelChoiceRow(
     title: String,
     subtitle: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tone: GsWellTone,
     selected: Boolean,
     onClick: () -> Unit,
     badge: String? = null,
@@ -1046,7 +1062,7 @@ private fun ModelChoiceRow(
             .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RefWellTile(icon, GsWellTone.Peach, 28.dp)
+        RefWellTile(icon, tone, 28.dp)
         Spacer(Modifier.width(11.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1082,20 +1098,31 @@ private fun ModelChoiceRow(
             )
         }
         Spacer(Modifier.width(8.dp))
+        // The mock marks the chosen MODEL with a check in a soft well; the
+        // four-across effort tiles keep radios. Both are drawn, so the two
+        // selection idioms are not interchangeable.
         Box(
             Modifier
-                .size(20.dp)
+                .size(24.dp)
                 .background(
-                    if (selected) colors.accent else colors.textTertiary.copy(alpha = 0.30f),
+                    if (selected) colors.accentSoft else Color.Transparent,
                     CircleShape,
+                )
+                .then(
+                    if (selected) {
+                        Modifier
+                    } else {
+                        Modifier.border(1.5.dp, colors.textTertiary.copy(alpha = 0.30f), CircleShape)
+                    }
                 ),
             contentAlignment = Alignment.Center,
         ) {
             if (selected) {
-                Box(
-                    Modifier
-                        .size(8.dp)
-                        .background(colors.surface, CircleShape)
+                Icon(
+                    GsIcons.Check,
+                    contentDescription = null,
+                    tint = colors.accent,
+                    modifier = Modifier.size(14.dp),
                 )
             }
         }

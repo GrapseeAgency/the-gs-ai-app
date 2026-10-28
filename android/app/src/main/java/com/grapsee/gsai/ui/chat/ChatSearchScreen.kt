@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,7 +24,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberScrollState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,13 +67,11 @@ private data class ChatHit(
 )
 
 /**
- * The filters that are REAL. "Model" was deleted because nothing read it;
- * "This week" and "Has files" change the query for real.
+ * The five chips the build can honour. The mock also draws "More"; there is no
+ * sixth topic behind it, so it is not drawn — a chip that filters nothing is
+ * the dead-control class this repo keeps deleting.
  */
-private val searchFilters = listOf("This week", "Has files")
-
-/** The mock's six chips, in its order. */
-private val historyChips = listOf("All", "Chats", "Research", "Ideas", "Planning", "More")
+private val historyChips = listOf("All", "Chats", "Research", "Ideas", "Planning")
 
 /**
  * Keyword topic buckets for the four topic chips.
@@ -89,7 +87,7 @@ private val chipKeywords: Map<String, List<String>> = mapOf(
 )
 
 private fun matchesChip(title: String, chip: String?): Boolean {
-    if (chip == null || chip == "All" || chip == "More") return true
+    if (chip == null || chip == "All") return true
     val lower = title.lowercase()
     val keys = chipKeywords[chip] ?: return true
     return keys.any { lower.contains(it) }
@@ -122,30 +120,34 @@ fun ChatSearchScreen(
     onExport: () -> Unit = {},
 ) {
     var query by remember { mutableStateOf("") }
-    var activeFilter by remember { mutableStateOf<String?>(null) }
+    var topic by remember { mutableStateOf<String?>(null) }
     var hits by remember { mutableStateOf<List<ChatHit>>(emptyList()) }
     var searched by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val term = query.trim()
-    LaunchedEffect(term, activeFilter) {
+    LaunchedEffect(term) {
         if (term.length < 2) {
             hits = emptyList()
             searched = false
             return@LaunchedEffect
         }
         delay(220)
-        hits = searchChats(term, activeFilter)
+        hits = searchChats(term)
         searched = true
     }
 
     fun commitSearch() {
         if (term.length < 2) return
         scope.launch {
-            hits = searchChats(term, activeFilter)
+            hits = searchChats(term)
             searched = true
         }
     }
+
+    // The chip narrows the visible hits as well as the list below, so tapping
+    // one changes what is on screen instead of only repainting the chip.
+    val visibleHits = hits.filter { matchesChip(it.title, topic) }
 
     RefSettingsPage(
         title = "Chat History & Search",
@@ -164,12 +166,13 @@ fun ChatSearchScreen(
         Spacer(Modifier.height(10.dp))
 
         // docs/reference/pending/chat-history-search.png draws six chips. The
-        // labels are the mock's; the four topic chips are KEYWORD-derived from
-        // the title (there is no topic column in the schema) — approximate by
-        // construction, and recorded as such in the reference README.
-        // Six chips do not fit a 393pt row: the mock draws them all, so the row
-        // scrolls rather than clipping "More" off the right edge (measured in
-        // capture 26-chat-history-search before this change).
+        // labels are the mock's minus "More" (no sixth topic exists); the four
+        // topic chips are KEYWORD-derived from the title (there is no topic
+        // column in the schema) — approximate by construction, and recorded as
+        // such in the reference README.
+        // Five chips still exceed a 393pt row, so the row scrolls rather than
+        // clipping the last chip off the right edge (measured in capture
+        // 26-chat-history-search before this change).
         Row(
             Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -177,20 +180,20 @@ fun ChatSearchScreen(
             historyChips.forEach { chip ->
                 RefChip(
                     text = chip,
-                    selected = activeFilter == chip,
+                    selected = topic == chip,
                     onClick = {
-                        activeFilter = if (activeFilter == chip) null else chip
+                        topic = if (topic == chip) null else chip
                     }
                 )
             }
         }
         Spacer(Modifier.height(14.dp))
 
-        // Totals. `observeRecent()` reads the conversations table only (no
-        // message join, no per-row subquery), so both numbers come from one
-        // cheap query rather than a walk of the transcript.
+        // Totals. `observeActiveWithPreview()` resolves each row's newest
+        // message in the same query, so the count and the previews come from
+        // one read instead of a walk of the transcript.
         val recent by ServiceLocator.db.conversationDao()
-            .observeRecent()
+            .observeActiveWithPreview()
             .collectAsState(initial = emptyList())
         RefCard(role = GsGlassRole.CardLight) {
             Row(Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
@@ -207,7 +210,7 @@ fun ChatSearchScreen(
                     icon = GsIcons.Calendar,
                     tone = GsWellTone.Peach,
                     label = "Last Active",
-                    value = historyMoment(recent.firstOrNull()?.updatedAt),
+                    value = historyMoment(recent.firstOrNull()?.conversation?.updatedAt),
                     caption = "Most recent conversation",
                     modifier = Modifier.weight(1f),
                 )
@@ -223,12 +226,18 @@ fun ChatSearchScreen(
                         text = "No conversations yet. Your chats appear here as you start them.",
                         icon = GsIcons.MessageCircle,
                     )
+                } else if (recent.none { matchesChip(it.conversation.title, topic) }) {
+                    RefInfoCard(
+                        text = "No conversations in \"$topic\" yet. Tap All to see every chat.",
+                        icon = GsIcons.MessageCircle,
+                    )
                 } else {
                     RefCard(role = GsGlassRole.CardLight) {
-                        recent.take(7).forEachIndexed { index, conversation ->
+                        recent.filter { matchesChip(it.conversation.title, topic) }
+                            .take(7).forEachIndexed { index, row ->
                             if (index > 0) RefRowDivider()
-                            RecentChatRow(conversation) {
-                                onOpenConversation(conversation.id)
+                            RecentChatRow(row.conversation, row.lastMessage) {
+                                onOpenConversation(row.conversation.id)
                             }
                         }
                     }
@@ -251,24 +260,24 @@ fun ChatSearchScreen(
                 )
                 Spacer(Modifier.height(10.dp))
             }
-            searched && hits.isEmpty() -> RefEmptyState(
+            searched && visibleHits.isEmpty() -> RefEmptyState(
                 art = RefArt.Search,
                 title = "No matches",
-                message = if (activeFilter != null) {
-                    "Nothing matched \"$term\" with \"$activeFilter\" on. Try another filter or a shorter word."
+                message = if (topic != null) {
+                    "Nothing matched \"$term\" in \"$topic\". Try All or a shorter word."
                 } else {
                     "Nothing matched \"$term\". Try a shorter word or different phrasing."
                 }
             )
             else -> {
                 Text(
-                    text = "${hits.size} result${if (hits.size == 1) "" else "s"}",
+                    text = "${visibleHits.size} result${if (visibleHits.size == 1) "" else "s"}",
                     style = MaterialTheme.typography.labelMedium,
                     color = GsTheme.colors.textTertiary,
                     modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                 )
                 RefCard {
-                    hits.forEachIndexed { index, hit ->
+                    visibleHits.forEachIndexed { index, hit ->
                         if (index > 0) RefDivider()
                         HitRow(hit) { onOpenConversation(hit.conversationId) }
                     }
@@ -328,30 +337,21 @@ private fun HitRow(hit: ChatHit, onClick: () -> Unit) {
 }
 
 /** Room-backed search; any store hiccup quietly reads as "no matches". */
-private suspend fun searchChats(term: String, filter: String?): List<ChatHit> {
+private suspend fun searchChats(term: String): List<ChatHit> {
     return runCatching {
         val db = ServiceLocator.db
-        val withinWeek = filter == "This week"
-        val filesOnly = filter == "Has files"
         val match = ftsMatchQuery(term)
-        val titleHits = if (filesOnly) {
-            emptyList()
-        } else {
-            (
-                if (match != null) db.conversationDao().searchByTitleFts(match)
-                else db.conversationDao().searchByTitle(term)
-                )
-                .filter { !withinWeek || recentInstant(it.updatedAt) }
-                .map { convo ->
-                    ChatHit(convo.id, convo.title, "Chat title match", relativeMoment(convo.updatedAt))
-                }
-        }
+        val titleHits = (
+            if (match != null) db.conversationDao().searchByTitleFts(match)
+            else db.conversationDao().searchByTitle(term)
+            )
+            .map { convo ->
+                ChatHit(convo.id, convo.title, "Chat title match", relativeMoment(convo.updatedAt))
+            }
         val messageHits = (
             if (match != null) db.messageDao().searchContentFts(match)
             else db.messageDao().searchContent(term)
             )
-            .filter { !filesOnly || hasFiles(it.attachments) }
-            .filter { !withinWeek || recentInstant(it.createdAt) }
             .mapNotNull { message ->
                 val convo = db.conversationDao().getById(message.conversationId) ?: return@mapNotNull null
                 ChatHit(
@@ -364,16 +364,6 @@ private suspend fun searchChats(term: String, filter: String?): List<ChatHit> {
         (titleHits + messageHits).distinctBy { it.conversationId }.take(24)
     }.getOrElse { emptyList() }
 }
-
-private fun hasFiles(attachmentsJson: String): Boolean {
-    val t = attachmentsJson.trim()
-    return t.isNotEmpty() && t != "[]" && t != "none"
-}
-
-private fun recentInstant(iso: String): Boolean = runCatching {
-    val then = OffsetDateTime.parse(iso).toInstant()
-    Duration.between(then, Instant.now()).toDays() < 7
-}.getOrDefault(true)
 
 private fun relativeMoment(iso: String): String = runCatching {
     val then = OffsetDateTime.parse(iso).toInstant()
@@ -432,7 +422,9 @@ private fun HistoryStat(
                 caption,
                 style = MaterialTheme.typography.labelSmall,
                 color = GsTheme.colors.textTertiary,
-                maxLines = 1,
+                // The mock's copy is one line, but the real half-card is ~120dp
+                // wide; wrapping keeps every word instead of shipping "Ne…".
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
@@ -485,22 +477,19 @@ private fun HistoryAction(
     }
 }
 
-/** One Recent Chats row: real title, real preview line, real timestamp. */
+/** One Recent Chats row: real title, real last-message preview, real timestamp. */
 @Composable
-private fun RecentChatRow(conversation: ConversationEntity, onClick: () -> Unit) {
+private fun RecentChatRow(
+    conversation: ConversationEntity,
+    lastMessage: String?,
+    onClick: () -> Unit,
+) {
     val title = gsConversationTitle(conversation.title)
-    // Glyph from real signals only — pinned, then archived; there is no topic
-    // column to draw the mock's per-topic icons from.
-    val icon = when {
-        conversation.pinned -> GsIcons.Bookmark
-        conversation.archived -> GsIcons.Archive
-        else -> GsIcons.MessageCircle
-    }
-    val tone = when {
-        conversation.pinned -> GsWellTone.Mint
-        conversation.archived -> GsWellTone.Blue
-        else -> GsWellTone.Lilac
-    }
+    // Glyph from a real signal only — pinned or not. There is no topic column
+    // to draw the mock's per-topic icons from, and the query this list reads
+    // excludes archived chats (they live in Manage History).
+    val icon = if (conversation.pinned) GsIcons.Bookmark else GsIcons.MessageCircle
+    val tone = if (conversation.pinned) GsWellTone.Mint else GsWellTone.Lilac
     Row(
         Modifier
             .fillMaxWidth()
@@ -526,7 +515,10 @@ private fun RecentChatRow(conversation: ConversationEntity, onClick: () -> Unit)
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "Tap to reopen this conversation",
+                // The mock draws the last message here; `observeActiveWithPreview`
+                // supplies it, so the line is what was actually said — not a
+                // repeated instruction invented to fill the row.
+                lastMessage?.trim()?.takeIf { it.isNotEmpty() } ?: "No messages yet",
                 style = MaterialTheme.typography.labelSmall,
                 color = GsTheme.colors.textTertiary,
                 maxLines = 1,

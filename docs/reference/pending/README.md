@@ -57,6 +57,12 @@ back. They are corrections, not omissions:
 - **Chat History — the four topic chips** (Chats / Research / Ideas / Planning)
   are KEYWORD-derived from the conversation title. The schema has no facet
   column, so the buckets are approximate by construction.
+- **Chat History — "More" is not drawn.** The mock puts a sixth chip beside the
+  five topics; there is no sixth topic to open, and a chip that filters nothing
+  is a dead control. The row still scrolls when the five do not fit.
+- **Chat History — the mock's filter button is not drawn.** It would have to
+  back two filters (this week, has files) that no control currently exposes;
+  the topic chips are the only filters the page has.
 - **Chat History — "Saved items"** replaces the mock's "Saved Conversations":
   the app has saved *items*, and that is where the row goes.
 - **Model Selection — Auto-select model** is the mock's OFF switch, disabled,
@@ -71,39 +77,55 @@ is: rendered in CI, anchored on a measured rim, and compared against the mock's
 own numbers with a self-test proving the gate can fail. A screenshot that merely
 exists is not evidence of parity.
 
-## Where each screen stands (2026-10-28, `7d691cc6`)
+## Where each screen stands (2026-10-28, after `3f4c2266`)
 
-**`model-selection.png` — built on Android, verified by capture, not yet parity.**
+All three are **built on Android**. The first device capture (run 40650433868)
+found four defects; `3f4c2266` fixed three of them, and the pass that followed
+wired the model radio to `SettingsStore`, replaced the repeated row filler with
+the real last message, and made the topic chips actually filter.
 
-Verified against run 40644772932's `31-ai-intelligence.png`:
+**`model-selection.png` — built, JVM-verified, awaiting the next capture.**
 
-- all four model rows carry the mock's full copy, both sentences, no ellipsis;
-- "Recommended" sits beside the title on its chip;
-- every row shows a visible ring (selected keeps its inner dot);
-- Reasoning Effort runs in the mock's order: Minimal, Light, Standard, High.
+- AI Model: the mock's four rows, both sentences of copy and the Recommended
+  chip; each model keeps its mock tone (Pro peach, Advanced lilac, Code mint,
+  Creative rose); the chosen model is a check in a soft well, as drawn.
+- Reasoning Effort: four across with the mock's order, copy, timings, radios
+  and tone-coded wells; the selected tile carries the mock's accent outline.
+  The older three-tile Fast/Thinking/Auto control is deleted.
+- Model Preferences: real switches. Auto-select is OFF and disabled (the
+  backend chooses the model); Remember my choices writes
+  `SettingsStore.rememberChoices`; Reset to default writes pro / on / standard.
+- The model radio writes `SettingsStore.preferredModel` (it used to be a local
+  `remember`, so the tick reset every visit). `ModelSelectionInteractionTest`
+  presses all four effort tiles, both switches and Reset on the JVM.
 
-Still different, and the reason this is not parity:
+**`privacy-data-controls.png` — built; chevrons removed from static rows.**
 
-1. Reasoning Effort is a **row list with chevrons**. The mock draws **four across
-   as tiles with radios**. The chevron is also wrong semantically — it promises
-   navigation where the control selects.
-2. Model Preferences is **rows**; the mock draws **switches**.
-3. The rows are taller than the mock's tiles, so Model Preferences falls below the
-   fold where the mock shows it in one view.
-4. iOS has no counterpart at all.
+The capture showed Personalization & Ads, Third-Party Integrations, Search
+History and Data Retention still drawing a chevron; `RefNavRow`'s default
+trailing IS a chevron, and `onClick = null` only removed the click. They now
+pass `trailing = {}`. Chat History opens the search page for real.
 
-**`privacy-data-controls.png`, `chat-history-search.png` — not started.** No
-source exists on either platform; nothing to iterate on until the first build.
+**`chat-history-search.png` — built; the capture's three defects fixed.**
+
+- The six-chip row clipped "More" at the right edge; the row scrolls now, and
+  "More" itself is gone — there is no sixth topic behind it.
+- The topic chips now filter both the recent list and the search hits
+  (keyword-derived; the schema has no topic column). Before this, tapping one
+  only repainted the chip.
+- Recent rows show the real last message from
+  `conversationDao.observeActiveWithPreview()`, not the same
+  "Tap to reopen this conversation" line on every row.
+- The totals caption wraps instead of eliding to "Your chat history with Ne…".
+
+**iOS has no counterpart for any of the three.**
 
 ## Resume order
 
-1. Reasoning Effort → four-across tiles with radios (kills deltas 1 and helps 3).
-2. Model Preferences → switches.
-3. `chat-history-search.png` — full page: search field + filter chips, totals
-   card, Recent Chats, Quick Actions 2×2, new-conversation footer.
-4. `privacy-data-controls.png` — two hero cards + four groups.
-5. Port `model-selection` to iOS.
-6. Only then gate each screen; a screen that is still being laid out has nothing
+1. Capture the three screens again (`android-screens`, label `final`) and read
+   `26`, `31`, `33`; the JVM test covers behaviour, not pixels.
+2. Port all three to iOS.
+3. Only then gate each screen; a screen that is still being laid out has nothing
    stable to anchor a rim on.
 
 ## Instrument notes worth keeping
