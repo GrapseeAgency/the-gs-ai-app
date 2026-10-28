@@ -425,9 +425,9 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
         RefCard(role = GsGlassRole.CardLight) {
             RefNavRow(
                 title = "App Permissions",
-                // The manifest grants only these two; naming camera or location
+                // The manifest grants only these; naming camera or location
                 // would be copy the build cannot back.
-                subtitle = "Microphone and notifications — nothing else is granted",
+                subtitle = "Microphone, notifications and Do-Not-Disturb access",
                 onClick = {
                     runCatching {
                         context.startActivity(

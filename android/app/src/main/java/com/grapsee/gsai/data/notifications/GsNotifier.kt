@@ -126,7 +126,12 @@ object GsNotifier {
         if (!hasPermission(context)) return false
         if (!systemEnabled(context)) return false
         if (SettingsStore.quietHoursEnabled && inQuietHours(System.currentTimeMillis())) return false
-        if (dndActive(context)) return false
+        // Do-Not-Disturb is deliberately NOT checked here. Android applies the
+        // device's DND policy itself — under PRIORITY/IMPORTANT an exempt app
+        // is still meant to come through, and under NONE the notice still
+        // lands in the shade. Suppressing a second time would turn "don't
+        // interrupt me" into "this message never existed", and the dropped
+        // notice is unrecoverable because nothing re-posts it.
         return true
     }
 
@@ -187,8 +192,12 @@ object GsNotifier {
         Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
 
     /**
-     * Posts one notice. Every refusal is a no-op, so callers can fire on the
-     * event without pre-checking the whole gate chain themselves.
+     * Posts one notice and reports whether it actually landed. Every refusal
+     * is a `false` rather than an exception, and callers that hold a one-shot
+     * budget MUST key it off this return value: [LiveUpdater][com.grapsee.gsai.data.liveupdate.LiveUpdater]
+     * announcing a release consumed its "once per version" token even when the
+     * foreground gate dropped the notice, which made the whole Product Updates
+     * path dead for the life of the install.
      */
     fun post(
         context: Context,
@@ -197,11 +206,11 @@ object GsNotifier {
         body: String,
         route: String? = null,
         notificationId: Int = kind.channelId.hashCode(),
-    ) {
+    ): Boolean {
         val text = body.trim()
-        if (title.isBlank() || text.isEmpty()) return
-        if (AppForeground.inForeground) return
-        if (!allows(context, kind)) return
+        if (title.isBlank() || text.isEmpty()) return false
+        if (AppForeground.inForeground) return false
+        if (!allows(context, kind)) return false
         ensureChannels(context)
 
         val pending = route?.let {
@@ -222,12 +231,16 @@ object GsNotifier {
             .setContentTitle(title)
             .setContentText(text.take(160).replace('\n', ' '))
             .setStyle(NotificationCompat.BigTextStyle().bigText(text.take(1000).replace('\n', ' ')))
-            .setAutoCancel(true)
+            // Auto-dismiss only when a tap does something. With no route the
+            // notice has no contentIntent, so autoCancel would mean "tapping
+            // destroys the only copy of this message".
+            .setAutoCancel(pending != null)
             .apply { pending?.let { setContentIntent(it) } }
             .build()
-        runCatching {
+        return runCatching {
             NotificationManagerCompat.from(context).notify(notificationId, notification)
-        }
+            true
+        }.getOrDefault(false)
     }
 
     /** Convenience for the one route every notice so far targets. */

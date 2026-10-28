@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -53,27 +56,55 @@ import com.grapsee.gsai.ui.theme.GsTheme
  *
  * Every group, row, well tone, caption and the closing card are the mock's, in
  * the mock's order. What the mock cannot tell you is which of its switches the
- * app actually obeys, so this file spells that out per row: a switch is drawn
- * only where flipping it changes what the device receives, and the state it
- * shows is read from the system or from a preference `GsNotifier` consults on
- * the way to every `notify()` — never a remembered value nothing reads.
+ * app actually obeys, so the rule here is: a switch is drawn live only where
+ * flipping it changes what the device receives, and the state it shows is read
+ * from the system or from a preference `GsNotifier` consults on the way to
+ * every `notify()` — never a remembered value nothing reads.
  *
- * The two rows whose delivery path does not exist in this build (Email, and
- * In-App until the in-app notice surfaces are gated) are the honest exception
- * and are called out in the footnote rather than being given a live-looking
- * switch.
+ * Two rows are honest exceptions rather than live controls:
+ *  - Email Notifications, drawn disabled and off because this build sends no
+ *    mail at all;
+ *  - the AI Updates / Tips & Suggestions / Account Activity switches, which
+ *    gate a real channel and a real `allows()` check but have no producer yet,
+ *    so there is nothing for them to suppress or release today.
  */
 @Composable
 fun NotificationsAlertsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
 
+    // The OS-owned states are mirrored into snapshot state. `NotificationManager`
+    // is not observable, so reading it inline produced a Switch that could never
+    // recompose: tapping DND on succeeded on the device while the row stayed
+    // off, and every later tap then computed `want == true` again — making the
+    // off path unreachable from this screen.
+    //
+    // They are re-read in the launcher callbacks and after each successful
+    // write, which covers every transition this screen can cause. A change made
+    // elsewhere (the shade, system settings) is picked up on the next visit,
+    // because `remember` re-seeds when the route is re-entered.
+    var dndOn by remember { mutableStateOf(GsNotifier.dndActive(context)) }
+    var systemOn by remember { mutableStateOf(GsNotifier.systemEnabled(context)) }
+
     val permission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted -> SettingsStore.updatePushNotifications(granted) }
+    ) { granted ->
+        SettingsStore.updatePushNotifications(granted)
+        systemOn = GsNotifier.systemEnabled(context)
+    }
 
     val systemNoticeSettings = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { /* the switch re-reads the OS state on the next composition */ }
+    ) {
+        systemOn = GsNotifier.systemEnabled(context)
+    }
+
+    val dndAccessRequest = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        // Coming back from the policy-access screen, try the toggle the user
+        // actually asked for rather than leaving the row where it started.
+        dndOn = GsNotifier.dndActive(context)
+    }
 
     var editQuietHours by remember { mutableStateOf(false) }
 
@@ -158,11 +189,11 @@ fun NotificationsAlertsScreen(onBack: () -> Unit) {
             RefToggleRow(
                 title = "Push Notifications",
                 subtitle = "Receive notifications on your device.",
-                checked = SettingsStore.pushNotifications && GsNotifier.systemEnabled(context),
+                checked = SettingsStore.pushNotifications && systemOn,
                 onCheckedChange = { want ->
                     if (!want) {
                         SettingsStore.updatePushNotifications(false)
-                    } else if (GsNotifier.systemEnabled(context)) {
+                    } else if (systemOn) {
                         setMaster(true)
                     } else {
                         // The OS-level block lives in system settings, not in
@@ -178,14 +209,15 @@ fun NotificationsAlertsScreen(onBack: () -> Unit) {
             )
             RefRowDivider()
             // The one row on this screen with no delivery path behind it: Nexly
-            // sends no email from this build. It reads `false` because that is
-            // the truth — a switch here that looked live would be the exact
+            // sends no email from this build. It is drawn disabled and off — the
+            // truth — rather than as a live-looking switch, which is the exact
             // dead toggle the SettingsStore HONESTY CONTRACT exists to catch.
             RefToggleRow(
                 title = "Email Notifications",
                 subtitle = "Get updates via email.",
                 checked = false,
                 onCheckedChange = {},
+                enabled = false,
                 leading = { RefWellTile(GsIcons.Mail, GsWellTone.Lilac, 40.dp) },
             )
             RefRowDivider()
@@ -204,14 +236,17 @@ fun NotificationsAlertsScreen(onBack: () -> Unit) {
             RefToggleRow(
                 title = "Do Not Disturb",
                 subtitle = "Silence all notifications during selected hours.",
-                // Reads the device's real interruption filter, so it cannot
-                // disagree with what the shade already shows.
-                checked = GsNotifier.dndActive(context),
+                // Reads the device's real interruption filter, mirrored into
+                // snapshot state so the row can actually follow the switch.
+                checked = dndOn,
                 onCheckedChange = { want ->
-                    if (!GsNotifier.setDnd(context, want)) {
-                        runCatching {
-                            context.startActivity(GsNotifier.dndAccessIntent())
-                        }
+                    if (GsNotifier.setDnd(context, want)) {
+                        dndOn = GsNotifier.dndActive(context)
+                    } else {
+                        // Without policy access the filter is not ours to set.
+                        // Ask for it and re-read on the way back rather than
+                        // flipping a switch that would lie about the outcome.
+                        runCatching { dndAccessRequest.launch(GsNotifier.dndAccessIntent()) }
                     }
                 },
                 leading = { RefWellTile(GsIcons.MoonStar, GsWellTone.Lilac, 40.dp) },
@@ -246,9 +281,9 @@ fun NotificationsAlertsScreen(onBack: () -> Unit) {
     if (editQuietHours) {
         QuietHoursDialog(
             onDismiss = { editQuietHours = false },
-            onApply = { start, end ->
-                SettingsStore.updateQuietWindow(start, end)
-                SettingsStore.updateQuietHoursEnabled(true)
+            onApply = { isEnabled, startMinute, endMinute ->
+                SettingsStore.updateQuietWindow(startMinute, endMinute)
+                SettingsStore.updateQuietHoursEnabled(isEnabled)
                 editQuietHours = false
             },
         )
@@ -298,8 +333,13 @@ private fun formatClock(minuteOfDay: Int): String {
 @Composable
 private fun QuietHoursDialog(
     onDismiss: () -> Unit,
-    onApply: (startMinute: Int, endMinute: Int) -> Unit,
+    onApply: (enabled: Boolean, startMinute: Int, endMinute: Int) -> Unit,
 ) {
+    // The enable switch lives in here rather than on the screen: the reference
+    // draws this row as a plain window editor with a chevron. An earlier
+    // revision only ever wrote `true`, so quiet hours could be turned on and
+    // never back off.
+    var enabled by remember { mutableStateOf(SettingsStore.quietHoursEnabled) }
     var start by remember { mutableStateOf(SettingsStore.quietStartMinute) }
     var end by remember { mutableStateOf(SettingsStore.quietEndMinute) }
     val colors = GsTheme.colors
@@ -314,6 +354,25 @@ private fun QuietHoursDialog(
         title = { Text("Quiet Hours") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("Quiet hours", color = colors.textSecondary, fontSize = 13.sp)
+                    Switch(
+                        checked = enabled,
+                        onCheckedChange = { enabled = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = colors.accent,
+                            checkedBorderColor = Color.Transparent,
+                            uncheckedThumbColor = Color.White,
+                            uncheckedTrackColor = colors.border,
+                            uncheckedBorderColor = Color.Transparent,
+                        ),
+                    )
+                }
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -348,7 +407,7 @@ private fun QuietHoursDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onApply(start, end) }) { Text("Save") }
+            TextButton(onClick = { onApply(enabled, start, end) }) { Text("Save") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

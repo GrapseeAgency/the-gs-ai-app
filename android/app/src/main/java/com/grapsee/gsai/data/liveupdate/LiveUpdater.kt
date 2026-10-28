@@ -175,19 +175,23 @@ object LiveUpdater {
                 lastAvailable = available
                 _state.value = available
                 // The real "Product Updates" event: a newer build is published.
-                // Announced once per version, because this check re-runs on a
-                // ten-minute throttle and one release must not become twenty
-                // notices across a long session.
+                // The token is committed only when the notice actually landed —
+                // this check runs from MainActivity's ON_START, i.e. with the
+                // app in the foreground, and GsNotifier refuses foreground
+                // posts. Burning the token on a refused post would silence the
+                // release for the whole install.
                 if (notYetAnnounced) {
-                    announcedVersionCode = manifest.versionCode
-                    appContext?.let { ctx ->
-                        GsNotifier.post(
+                    val ctx = appContext
+                    if (ctx != null && GsNotifier.post(
                             context = ctx,
                             kind = GsNotifier.Kind.PRODUCT,
                             title = "GS ${manifest.versionName} is available",
                             body = manifest.notes?.takeIf { it.isNotBlank() }
-                                ?: "Tap to install the update.",
+                                ?: "Open Your chats to install the update.",
+                            route = com.grapsee.gsai.ui.navigation.GsRoutes.CHATS,
                         )
+                    ) {
+                        announcedVersionCode = manifest.versionCode
                     }
                 }
             }
