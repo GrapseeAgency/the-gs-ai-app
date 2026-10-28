@@ -65,6 +65,14 @@ back. They are corrections, not omissions:
   the topic chips are the only filters the page has.
 - **Chat History — "Saved items"** replaces the mock's "Saved Conversations":
   the app has saved *items*, and that is where the row goes.
+- **A vertical ratio is not the mock's.** The mock canvas is 0.441 aspect and
+  fits all three model groups in one frame; a 393×852 device is far shorter, so
+  Model Preferences sits below the fold and the page scrolls. Only the mock's
+  horizontal ratios and its type scale were taken.
+- **Privacy — the hero art is the shipped Pearl illustration.** The mock bleeds
+  a pearlescent photograph into the hero's right edge; the same role is filled
+  by `RefArt.Pearl` at 55 %, clipped by the card. No unshipped photograph is
+  invented for it.
 - **Model Selection — Auto-select model** is the mock's OFF switch, disabled,
   because the backend always chooses the model.
 - **Model Selection — the model radios** persist a preference, but the backend
@@ -104,7 +112,9 @@ the real last message, and made the topic chips actually filter.
 The capture showed Personalization & Ads, Third-Party Integrations, Search
 History and Data Retention still drawing a chevron; `RefNavRow`'s default
 trailing IS a chevron, and `onClick = null` only removed the click. They now
-pass `trailing = {}`. Chat History opens the search page for real.
+pass `trailing = {}`. Chat History opens the search page for real. The hero
+carries the mock's right-edge pearlescent bleed, drawn from the shipped
+`RefArt.Pearl`.
 
 **`chat-history-search.png` — built; the capture's three defects fixed.**
 

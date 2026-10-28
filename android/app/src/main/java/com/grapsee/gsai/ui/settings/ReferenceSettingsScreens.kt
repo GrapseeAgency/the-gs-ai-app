@@ -15,10 +15,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -40,6 +43,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -444,27 +448,47 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
         onBack = onBack,
     ) {
         RefCard(role = GsGlassRole.CardLight) {
-            Row(
-                Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            // The mock bleeds a pearlescent photograph into the card's right
+            // edge. This is the shipped Pearl art (the reference's own hero
+            // illustration) at 55 %, clipped by the card — no stranger's
+            // photograph is invented to fill it.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(22.dp))
             ) {
-                RefArtwork(RefArt.Privacy, size = 62.dp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "Your privacy matters",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = GsFonts.Product,
-                        color = colors.textPrimary,
-                    )
-                    Text(
-                        "Nexly is designed with your privacy in mind. You're always in control of your data, conversations, and personal information.",
-                        fontSize = 12.5.sp,
-                        lineHeight = 16.sp,
-                        fontFamily = GsFonts.Product,
-                        color = colors.textTertiary,
-                    )
+                RefArtwork(
+                    art = RefArt.Pearl,
+                    size = 112.dp,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .offset(x = 18.dp)
+                        .alpha(0.55f),
+                )
+                Row(
+                    Modifier
+                        .fillMaxWidth(0.84f)
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RefArtwork(RefArt.Privacy, size = 62.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "Your privacy matters",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = GsFonts.Product,
+                            color = colors.textPrimary,
+                        )
+                        Text(
+                            "Nexly is designed with your privacy in mind. You're always in control of your data, conversations, and personal information.",
+                            fontSize = 12.5.sp,
+                            lineHeight = 16.sp,
+                            fontFamily = GsFonts.Product,
+                            color = colors.textTertiary,
+                        )
+                    }
                 }
             }
         }
@@ -778,6 +802,7 @@ fun AiIntelligenceScreen(
             Row(
                 Modifier
                     .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
                     .padding(horizontal = 8.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -789,7 +814,7 @@ fun AiIntelligenceScreen(
                         icon = effort.icon,
                         tone = effort.tone,
                         selected = SettingsStore.reasoningEffort == effort.id,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
                         onClick = { SettingsStore.updateReasoningEffort(effort.id) },
                     )
                 }
@@ -962,7 +987,7 @@ private fun ReasoningTile(
             // fill alone vanished against the card on the first capture.
             .then(
                 if (selected) {
-                    Modifier.border(1.5.dp, colors.accent, RoundedCornerShape(16.dp))
+                    Modifier.border(1.5.dp, colors.accent.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
                 } else {
                     Modifier
                 }
@@ -988,9 +1013,15 @@ private fun ReasoningTile(
             fontFamily = GsFonts.Product,
             color = colors.textTertiary,
             textAlign = TextAlign.Center,
-            maxLines = 3,
+            // Four across leaves ~78dp of text; the mock's longest description
+            // takes three lines at this size, so a 3-line cap elided "reasoning".
+            maxLines = 4,
             overflow = TextOverflow.Ellipsis,
         )
+        // Equal-height tiles put every timing line and radio on one baseline,
+        // the way the mock draws them; without the weighted spacer the High
+        // tile (four description lines) pushed its radio below the other three.
+        Spacer(Modifier.weight(1f))
         Spacer(Modifier.height(4.dp))
         Text(
             timing,
@@ -1003,14 +1034,15 @@ private fun ReasoningTile(
         Box(
             Modifier
                 .size(16.dp)
-                .background(
+                .border(
+                    1.5.dp,
                     if (selected) colors.accent else colors.textTertiary.copy(alpha = 0.30f),
                     CircleShape,
                 ),
             contentAlignment = Alignment.Center,
         ) {
             if (selected) {
-                Box(Modifier.size(6.dp).background(colors.surface, CircleShape))
+                Box(Modifier.size(7.dp).background(colors.accent, CircleShape))
             }
         }
     }

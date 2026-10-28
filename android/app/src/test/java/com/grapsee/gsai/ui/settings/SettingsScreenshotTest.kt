@@ -1,9 +1,12 @@
 package com.grapsee.gsai.ui.settings
 
+import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.profile.ProfileScreen
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
 import org.junit.Assume.assumeTrue
@@ -28,6 +31,12 @@ class SettingsScreenshotTest {
     @Before
     fun onlyOnRequest() {
         assumeTrue(System.getProperty("gs.screenshots") == "true")
+        // The interaction suite shares the JVM; a switch left ON/OFF by it must
+        // not colour a capture. Reset to the shipped defaults explicitly.
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        ctx.getSharedPreferences("gs_settings", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+        SettingsStore.init(ctx)
     }
 
     private fun shoot(path: String, content: @Composable () -> Unit) {
@@ -68,6 +77,25 @@ class SettingsScreenshotTest {
     fun memoryAtSheetSize() =
         shoot("build/screenshots/nexly-memory-393x852.png") {
             MemorySettingsScreen(onBack = {}, onNavigate = {})
+        }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun privacyDataControls() =
+        shoot("build/screenshots/nexly-privacy-393x852.png") {
+            PrivacySettingsScreen(onBack = {}, onNavigate = {})
+        }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun modelSelection() =
+        shoot("build/screenshots/nexly-model-393x852.png") {
+            AiIntelligenceScreen(
+                onBack = {},
+                onLocalAiRequested = {},
+                onTryComponents = {},
+                onOpenModelDetails = {},
+            )
         }
 
     @Test
