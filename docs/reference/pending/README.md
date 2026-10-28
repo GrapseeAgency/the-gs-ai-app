@@ -6,23 +6,23 @@ as "done".
 
 | reference | expected screen | state |
 | --- | --- | --- |
-| `privacy-data-controls.png` | "Privacy & Data Controls" — hero, Data & Permissions, Conversation & Activity, Export & Deletion groups | **absent** |
-| `chat-history-search.png` | "Chat History & Search" — search field + filter chips, totals card, Recent Chats, Quick Actions 2×2, new-conversation footer | **absent** |
-| `model-selection.png` | "Model Selection & Reasoning Effort" — AI Model radio list, Reasoning Effort 4-up, Model Preferences toggles | **absent** |
+| `privacy-data-controls.png` | "Privacy & Data Controls" — hero, Data & Permissions, Conversation & Activity, Export & Deletion groups | **built (Android)** — see deltas below |
+| `chat-history-search.png` | "Chat History & Search" — search field + filter chips, totals card, Recent Chats, Quick Actions 2×2, new-conversation footer | **built (Android)** — see deltas below |
+| `model-selection.png` | "Model Selection & Reasoning Effort" — AI Model radio list, Reasoning Effort 4-up, Model Preferences toggles | **built (Android)** — four-across tiles + real switches |
 
 ## Evidence
 
-A literal search for each screen's own copy returns zero files across
-`android/app/src/main` and `ios/App/Sources`:
+Before this pass a literal search for each screen's own copy returned zero files
+across `android/app/src/main` and `ios/App/Sources` — that is what "absent" meant.
+After it, on Android:
 
 ```
-Privacy & Data Controls                 files: 0
-Chat History & Search                   files: 0
-Model Selection & Reasoning Effort      files: 0
-Reasoning Effort                        files: 0
-Quick Actions                           files: 0
-Export Chat History                     files: 0
+Privacy & Data Controls                 1 file  (PrivacySettingsScreen)
+Chat History & Search                   1 file  (ChatSearchScreen)
+Model Selection & Reasoning Effort      1 file  (AiIntelligenceScreen)
 ```
+
+iOS still returns 0 for all three — Android only, see the resume order.
 
 ## Near misses — do not mistake these for the reference
 
@@ -37,6 +37,32 @@ Export Chat History                     files: 0
   its two hero cards) are not its structure.
 - The drawer's recent-chats list is not "Chat History & Search": the reference
   is a full page with search, chips, totals and a Quick Actions grid.
+
+## Accepted deltas from the mocks (all three screens)
+
+Every one of these is a place where the mock draws something the build cannot
+back. They are corrections, not omissions:
+
+- **Privacy — App Permissions** names the two grants the manifest actually has
+  (microphone, notifications). The mock says "camera, microphone, location";
+  there is no camera or location grant in this build.
+- **Privacy — footer** says "private to this app, never sold". The mock says
+  "encrypted"; Room here is not encrypted, and saying so would be false.
+- **Privacy — Personalization & Ads, Third-Party Integrations, Search History,
+  Data Retention** are static rows with no chevron. There is no ad profile, no
+  integration, no stored search log and no retention setting behind them.
+- **Privacy — Delete Your Account** keeps the mock's title but its subtitle says
+  what it erases (everything this app stores on this device). There is no server
+  account to delete.
+- **Chat History — the four topic chips** (Chats / Research / Ideas / Planning)
+  are KEYWORD-derived from the conversation title. The schema has no facet
+  column, so the buckets are approximate by construction.
+- **Chat History — "Saved items"** replaces the mock's "Saved Conversations":
+  the app has saved *items*, and that is where the row goes.
+- **Model Selection — Auto-select model** is the mock's OFF switch, disabled,
+  because the backend always chooses the model.
+- **Model Selection — the model radios** persist a preference, but the backend
+  ignores a client-chosen model (`src/app/api/v1/conversations/[id]/route.ts:20`).
 
 ## Acceptance
 

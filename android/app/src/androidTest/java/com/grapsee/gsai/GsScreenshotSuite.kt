@@ -299,6 +299,18 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
         if (tapDesc("Open menu")) {
             SystemClock.sleep(1_500)
             shot("20b-drawer")
+            // The drawer's search pill is the live entry point to the rebuilt
+            // Chat History & Search page (docs/reference/pending/chat-history-search.png).
+            if (tapText("Search chats")) {
+                SystemClock.sleep(1_500)
+                shot("26-chat-history-search")
+                device.pressBack()
+                device.waitForIdle(1_200)
+                if (!tapDesc("Open menu")) ensureHome()
+            } else {
+                shot("26-chat-history-search-MISSING-PILL")
+            }
+            if (tapDesc("Open menu")) SystemClock.sleep(1_200)
             // BACK is not the drawer's close affordance on this emulator
             // (back exits to the launcher with the drawer open); the scrim
             // tap is the user's close gesture and the suite uses it too.
@@ -451,6 +463,28 @@ Inline `code` and math ${'$'}a^2 + b^2 = c^2$."""
             }
         } else {
             shot("30-settings-MISSING-MORE")
+        }
+
+        // 8. Privacy & Data Controls (docs/reference/pending/privacy-data-controls.png).
+        // Reached from the hub row that already existed; all three Privacy & Data
+        // rows land on this page.
+        if (ensureHome() && tapDesc("Open menu") && tapDesc("Account options") &&
+            device.wait(Until.hasObject(By.textContains("Settings")), 10_000) &&
+            tapText("Settings")
+        ) {
+            SystemClock.sleep(1_200)
+            if (scrollAndTapText("Privacy Settings")) {
+                SystemClock.sleep(1_500)
+                shot("33-privacy-data-controls")
+                device.pressBack()
+                device.waitForIdle(1_200)
+            } else {
+                shot("33-privacy-data-controls-MISSING-ROW")
+            }
+            device.pressBack()
+            device.waitForIdle(1_200)
+        } else {
+            shot("33-privacy-data-controls-MISSING-NAV")
         }
 
         val dir = shotDir
