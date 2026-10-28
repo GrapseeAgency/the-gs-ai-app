@@ -455,9 +455,8 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
             RefNavRow(
                 title = "Third-Party Integrations",
                 subtitle = "No services are connected",
-                onClick = null,
-                // No chevron: a static row must not promise a page.
-                trailing = {},
+                // Reachable now: the screen states the same truth in full.
+                onClick = { onNavigate(GsRoutes.SETTINGS_INTEGRATIONS) },
                 leading = { RefWellTile(GsIcons.Paperclip, GsWellTone.Blue, 28.dp) },
             )
         }

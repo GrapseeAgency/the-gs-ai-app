@@ -46,6 +46,7 @@ import com.grapsee.gsai.ui.profile.ProfileScreen
 import com.grapsee.gsai.ui.settings.AboutSettingsScreen
 import com.grapsee.gsai.ui.settings.AccessibilitySettingsScreen
 import com.grapsee.gsai.ui.notifications.NotificationsInboxScreen
+import com.grapsee.gsai.ui.integrations.ConnectedAppsScreen
 import com.grapsee.gsai.ui.support.HelpSupportScreen
 import com.grapsee.gsai.ui.settings.AccountSecurityScreen
 import com.grapsee.gsai.ui.settings.AiIntelligenceScreen
@@ -373,6 +374,10 @@ fun GsNavHost(
         }
         composable(GsRoutes.SETTINGS_HELP) {
             HelpSupportScreen(onBack = back, onNavigate = open)
+        }
+
+        composable(GsRoutes.SETTINGS_INTEGRATIONS) {
+            ConnectedAppsScreen(onBack = back)
         }
         composable(GsRoutes.SETTINGS_ABOUT) {
             AboutSettingsScreen(onBack = back)

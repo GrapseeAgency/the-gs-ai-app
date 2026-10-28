@@ -25,6 +25,7 @@ object GsRoutes {
     const val SETTINGS_VOICE = "settings/voice"
     const val SETTINGS_ACCESSIBILITY = "settings/accessibility"
     const val SETTINGS_HELP = "settings/help"
+    const val SETTINGS_INTEGRATIONS = "settings/integrations"
     const val SETTINGS_ABOUT = "settings/about"
     const val SETTINGS_PLAN = "settings/plan"
     const val NOTIFICATIONS = "notifications"
