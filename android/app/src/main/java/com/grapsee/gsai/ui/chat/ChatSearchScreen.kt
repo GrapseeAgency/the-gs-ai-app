@@ -479,18 +479,29 @@ private fun HistoryAction(
 }
 
 /**
- * One line of the last message for a list row: markdown flattened, never a
- * placeholder. A row that opened with "## The first three planets" read like a
- * rendering bug, not a preview.
+ * One line of the last message for a list row: the first PROSE line, markdown
+ * flattened. A row that opened with "## The first three planets" followed by a
+ * table read like a rendering bug, not a preview — so headings are stripped
+ * and table rows are skipped rather than flattened into pipe noise.
  */
-private fun previewLine(raw: String?): String {
+internal fun previewLine(raw: String?): String {
     val text = raw?.trim().orEmpty()
     if (text.isEmpty()) return "No messages yet"
-    return text
-        .replace(Regex("```[A-Za-z0-9]*"), " ")
-        .replace(Regex("(?m)^\\s{0,3}#{1,6}\\s*"), "")
-        .replace(Regex("(?m)^\\s{0,3}[-*+]\\s+"), "")
-        .replace(Regex("[*_`>]"), "")
+    val firstProse = text.lineSequence()
+        .map { line ->
+            line.trim()
+                .replace(Regex("^#{1,6}\\s*"), "")
+                .replace(Regex("^[-*+]\\s+"), "")
+                .replace(Regex("^>\\s*"), "")
+                .replace(Regex("^```[A-Za-z0-9]*$"), "")
+                .trim()
+        }
+        .firstOrNull { line ->
+            line.isNotEmpty() && !line.startsWith("|") && !line.matches(Regex("^[-|: ]+$"))
+        }
+        ?: return "No messages yet"
+    return firstProse
+        .replace(Regex("[*_`|>]"), " ")
         .replace(Regex("\\s+"), " ")
         .trim()
         .take(96)
