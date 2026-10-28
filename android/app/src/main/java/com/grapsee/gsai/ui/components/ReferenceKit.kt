@@ -568,6 +568,7 @@ fun RefToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     enabled: Boolean = true,
+    leading: (@Composable () -> Unit)? = null,
 ) {
     val colors = GsTheme.colors
     Row(
@@ -584,7 +585,9 @@ fun RefToggleRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        if (icon != null) RefIconTile(icon)
+        // A screen that draws the well-style tile passes it here; the null
+        // path keeps the RefIconTile every existing toggle row already renders.
+        if (leading != null) leading() else if (icon != null) RefIconTile(icon)
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,

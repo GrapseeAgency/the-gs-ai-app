@@ -45,7 +45,32 @@ object SettingsStore {
      */
     var preferLocal by mutableStateOf(false); private set
     // Notifications
+    /**
+     * The master switch on Notifications & Alerts. It keeps the key the app has
+     * always used (`settings.pushNotifications`) so no existing writer orients
+     * around an orphan; what changed is that [com.grapsee.gsai.data.notifications.GsNotifier]
+     * now consults it on the way to every `notify()`. Until then the switch
+     * persisted and nothing read it, which is the exact failure this file's
+     * HONESTY CONTRACT exists to catch.
+     */
     var pushNotifications by mutableStateOf(true); private set
+    /** Per-type switches — the mock's five "Notification Types" rows. Each one
+     *  is read by GsNotifier.allows() before a notice of that kind posts. */
+    var noticeMessages by mutableStateOf(true); private set
+    var noticeAiUpdates by mutableStateOf(true); private set
+    var noticeTips by mutableStateOf(true); private set
+    var noticeAccountActivity by mutableStateOf(true); private set
+    var noticeProductUpdates by mutableStateOf(true); private set
+    /** The "In-App Notifications" channel row. Read by the in-app notice
+     *  surfaces (the LiveUpdate card on Your chats) to decide whether to show
+     *  themselves, so it is a live switch rather than a second master. */
+    var noticeInApp by mutableStateOf(true); private set
+    /** Quiet Hours: the window itself is remembered, and GsNotifier suppresses
+     *  live posts inside it. Off by default — a switch that hushes the phone
+     *  without being asked is the wrong default. */
+    var quietHoursEnabled by mutableStateOf(false); private set
+    var quietStartMinute by mutableStateOf(22 * 60); private set
+    var quietEndMinute by mutableStateOf(7 * 60); private set
     /** Memory: whether Nexly keeps and surfaces saved memories. iOS twin:
      *  SettingsStore.memory. The Memory Management mock's "Memory is ON" pill
      *  reads and writes this; default ON because the app already remembers. */
@@ -89,6 +114,15 @@ object SettingsStore {
         // local AI on without asking is the worse failure.
         preferLocal = p.bool(K.preferLocal, preferLocal)
         pushNotifications = p.bool(K.pushNotifications, pushNotifications)
+        noticeMessages = p.bool(K.noticeMessages, noticeMessages)
+        noticeAiUpdates = p.bool(K.noticeAiUpdates, noticeAiUpdates)
+        noticeTips = p.bool(K.noticeTips, noticeTips)
+        noticeAccountActivity = p.bool(K.noticeAccountActivity, noticeAccountActivity)
+        noticeProductUpdates = p.bool(K.noticeProductUpdates, noticeProductUpdates)
+        noticeInApp = p.bool(K.noticeInApp, noticeInApp)
+        quietHoursEnabled = p.bool(K.quietHoursEnabled, quietHoursEnabled)
+        quietStartMinute = p.integer(K.quietStartMinute, quietStartMinute)
+        quietEndMinute = p.integer(K.quietEndMinute, quietEndMinute)
         memory = p.bool(K.memory, memory)
         fontScale = p.flt(K.fontScale, fontScale)
         highContrast = p.bool(K.highContrast, highContrast)
@@ -109,6 +143,9 @@ object SettingsStore {
     private fun SharedPreferences.flt(key: String, fallback: Float): Float =
         runCatching { getFloat(key, fallback) }.getOrDefault(fallback)
 
+    private fun SharedPreferences.integer(key: String, fallback: Int): Int =
+        runCatching { getInt(key, fallback) }.getOrDefault(fallback)
+
     private object K {
         const val themeMode = "settings.themeMode"
         const val accentId = "settings.accentId"
@@ -116,6 +153,15 @@ object SettingsStore {
         const val reduceAnimations = "settings.reduceAnimations"
         const val preferLocal = "settings.preferLocal"
         const val pushNotifications = "settings.pushNotifications"
+        const val noticeMessages = "settings.notice.messages"
+        const val noticeAiUpdates = "settings.notice.aiUpdates"
+        const val noticeTips = "settings.notice.tips"
+        const val noticeAccountActivity = "settings.notice.accountActivity"
+        const val noticeProductUpdates = "settings.notice.productUpdates"
+        const val noticeInApp = "settings.notice.inApp"
+        const val quietHoursEnabled = "settings.quietHours.enabled"
+        const val quietStartMinute = "settings.quietHours.start"
+        const val quietEndMinute = "settings.quietHours.end"
         const val memory = "settings.memory"
         const val fontScale = "settings.fontScale"
         const val highContrast = "settings.highContrast"
@@ -137,6 +183,10 @@ object SettingsStore {
 
     private fun put(key: String, value: Float) {
         prefs?.edit()?.putFloat(key, value)?.apply()
+    }
+
+    private fun put(key: String, value: Int) {
+        prefs?.edit()?.putInt(key, value)?.apply()
     }
 
     /**
@@ -218,6 +268,40 @@ object SettingsStore {
     fun updatePreferLocal(v: Boolean) { preferLocal = v; put(K.preferLocal, v) }
     // Notifications
     fun updatePushNotifications(v: Boolean) { pushNotifications = v; put(K.pushNotifications, v) }
+
+    /** Which per-type switch belongs to a `GsNotifier.Kind` id. The mapping
+     *  lives here rather than on the enum so the store keeps no dependency on
+     *  the notifications package. */
+    fun noticeEnabled(kindId: String): Boolean = when (kindId) {
+        "messages" -> noticeMessages
+        "ai-updates" -> noticeAiUpdates
+        "tips" -> noticeTips
+        "account-activity" -> noticeAccountActivity
+        "product-updates" -> noticeProductUpdates
+        // An id with no row must not silently default to on.
+        else -> false
+    }
+
+    fun updateNoticeEnabled(kindId: String, v: Boolean) {
+        when (kindId) {
+            "messages" -> { noticeMessages = v; put(K.noticeMessages, v) }
+            "ai-updates" -> { noticeAiUpdates = v; put(K.noticeAiUpdates, v) }
+            "tips" -> { noticeTips = v; put(K.noticeTips, v) }
+            "account-activity" -> { noticeAccountActivity = v; put(K.noticeAccountActivity, v) }
+            "product-updates" -> { noticeProductUpdates = v; put(K.noticeProductUpdates, v) }
+        }
+    }
+
+    fun updateNoticeInApp(v: Boolean) { noticeInApp = v; put(K.noticeInApp, v) }
+
+    fun updateQuietHoursEnabled(v: Boolean) {
+        quietHoursEnabled = v; put(K.quietHoursEnabled, v)
+    }
+
+    fun updateQuietWindow(startMinute: Int, endMinute: Int) {
+        quietStartMinute = startMinute; put(K.quietStartMinute, startMinute)
+        quietEndMinute = endMinute; put(K.quietEndMinute, endMinute)
+    }
     fun updateMemory(v: Boolean) { memory = v; put(K.memory, v) }
     // Accessibility
     /** Live stage during a slider drag: memory only, no disk write per frame.

@@ -52,7 +52,7 @@ import com.grapsee.gsai.ui.settings.ChatSettingsScreen
 import com.grapsee.gsai.ui.settings.HelpSettingsScreen
 import com.grapsee.gsai.ui.settings.MemorySettingsScreen
 import com.grapsee.gsai.ui.settings.ModelDetailsScreen
-import com.grapsee.gsai.ui.settings.NotificationSettingsScreen
+import com.grapsee.gsai.ui.settings.NotificationsAlertsScreen
 import com.grapsee.gsai.ui.settings.PrivacySettingsScreen
 import com.grapsee.gsai.ui.settings.SettingsHubScreen
 import com.grapsee.gsai.ui.settings.ThemeCustomisationScreen
@@ -335,7 +335,7 @@ fun GsNavHost(
             ThemeCustomisationScreen(onBack = back)
         }
         composable(GsRoutes.SETTINGS_NOTIFICATIONS) {
-            NotificationSettingsScreen(onBack = back)
+            NotificationsAlertsScreen(onBack = back)
         }
         composable(GsRoutes.SETTINGS_PRIVACY) {
             PrivacySettingsScreen(onBack = back, onNavigate = open)

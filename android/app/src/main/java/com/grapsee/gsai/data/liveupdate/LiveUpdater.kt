@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageInfo
 import androidx.core.content.FileProvider
 import com.grapsee.gsai.BuildConfig
+import com.grapsee.gsai.data.notifications.GsNotifier
 import com.grapsee.gsai.data.remote.GsApiJson
 import com.grapsee.gsai.di.ServiceLocator
 import io.ktor.client.HttpClient
@@ -94,6 +95,8 @@ object LiveUpdater {
     private const val MANIFEST_URL =
         "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/update-manifest.json"
     private const val CHECK_THROTTLE_MS = 10 * 60_000L
+    private const val PREFS_ANNOUNCE = "gs_liveupdate"
+    private const val KEY_ANNOUNCED = "gs.liveupdate.announcedVersionCode"
     private const val AUTO_RETRY_DELAY_MS = 2_500L
 
     /** Every installable Android package starts with the ZIP local-file magic. */
@@ -103,6 +106,20 @@ object LiveUpdater {
     private var lastCheckMs = 0L
     private var downloadedFile: File? = null
     private var lastAvailable: LiveUpdateState.Available? = null
+
+    /**
+     * The version whose availability has already been announced through
+     * [com.grapsee.gsai.data.notifications.GsNotifier]. Persisted, so a
+     * release is announced once per install rather than once per launch.
+     */
+    private var announcedVersionCode: Int
+        get() = announcePrefs()?.getInt(KEY_ANNOUNCED, 0) ?: 0
+        set(value) {
+            announcePrefs()?.edit()?.putInt(KEY_ANNOUNCED, value)?.apply()
+        }
+
+    private fun announcePrefs() =
+        appContext?.getSharedPreferences(PREFS_ANNOUNCE, Context.MODE_PRIVATE)
 
     private val _state = MutableStateFlow<LiveUpdateState>(LiveUpdateState.Idle)
     val state: StateFlow<LiveUpdateState> = _state.asStateFlow()
@@ -154,8 +171,25 @@ object LiveUpdater {
                     apkUrl = manifest.apkUrl,
                     notes = manifest.notes
                 )
+                val notYetAnnounced = manifest.versionCode != announcedVersionCode
                 lastAvailable = available
                 _state.value = available
+                // The real "Product Updates" event: a newer build is published.
+                // Announced once per version, because this check re-runs on a
+                // ten-minute throttle and one release must not become twenty
+                // notices across a long session.
+                if (notYetAnnounced) {
+                    announcedVersionCode = manifest.versionCode
+                    appContext?.let { ctx ->
+                        GsNotifier.post(
+                            context = ctx,
+                            kind = GsNotifier.Kind.PRODUCT,
+                            title = "GS ${manifest.versionName} is available",
+                            body = manifest.notes?.takeIf { it.isNotBlank() }
+                                ?: "Tap to install the update.",
+                        )
+                    }
+                }
             }
         } catch (e: CancellationException) {
             throw e

@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.data.local.ConversationPreviewRow
+import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.liveupdate.LiveUpdateState
 import com.grapsee.gsai.data.liveupdate.LiveUpdater
 import com.grapsee.gsai.di.ServiceLocator
@@ -169,7 +170,11 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
         }
 
         when (val update = liveUpdate) {
-            is LiveUpdateState.Available -> InfoCard(
+            // The inbound notice honours the In-App Notifications switch; the
+            // Downloading/Ready/Failed cards are progress feedback for an
+            // install the user started, so muting notifications must not hide
+            // them mid-action.
+            is LiveUpdateState.Available -> if (SettingsStore.noticeInApp) InfoCard(
                 icon = GsIcons.Download,
                 title = "GS ${update.versionName} is ready",
                 body = "Tap to install the update.",

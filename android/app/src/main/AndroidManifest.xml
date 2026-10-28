@@ -10,6 +10,11 @@
          collected by the Reply notifications switch in Settings, never
          unprompted). Harmless no-op below API 33. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The Do Not Disturb switch on Notifications & Alerts reads and sets the
+         device's real interruption filter. Normal-level, but Android still
+         requires the user to hand over policy access from system settings —
+         the row sends them there rather than faking the state. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Voice press-and-hold on the hero orb (SpeechRecognizer). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />

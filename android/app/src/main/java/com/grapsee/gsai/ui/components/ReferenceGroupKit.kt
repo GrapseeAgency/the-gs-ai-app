@@ -407,6 +407,7 @@ fun RefInfoCard(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     title: String? = null,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val colors = GsTheme.colors
     Row(
@@ -422,7 +423,9 @@ fun RefInfoCard(
             Icon(icon, contentDescription = null, tint = colors.accentStrong, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(10.dp))
         }
-        Column {
+        // Weighted only when a trailing slot competes for the row; otherwise
+        // the Column keeps the exact layout every existing screen uses.
+        Column(if (trailing != null) Modifier.weight(1f) else Modifier) {
             if (title != null) {
                 Text(
                     title,
@@ -440,6 +443,13 @@ fun RefInfoCard(
                 fontFamily = GsFonts.Product,
                 color = colors.textTertiary,
             )
+        }
+        // The notifications/account/subscription mocks bleed a blossom into the
+        // right edge of their closing card. The null path keeps the Column
+        // unweighted for every screen that already uses this card.
+        if (trailing != null) {
+            Spacer(Modifier.width(10.dp))
+            trailing()
         }
     }
 }

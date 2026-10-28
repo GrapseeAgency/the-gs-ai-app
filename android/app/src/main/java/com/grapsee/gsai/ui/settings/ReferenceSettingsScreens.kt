@@ -1,6 +1,5 @@
 package com.grapsee.gsai.ui.settings
 
-import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -61,7 +60,6 @@ import com.grapsee.gsai.data.SessionStore
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelStore
-import com.grapsee.gsai.data.notifications.ReplyNotifier
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsLinks
@@ -73,7 +71,6 @@ import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefDivider
 import com.grapsee.gsai.ui.components.RefFootnote
 import com.grapsee.gsai.ui.components.RefChoiceTile
-import com.grapsee.gsai.ui.components.RefIconTile
 import com.grapsee.gsai.ui.components.RefOptionCard
 import com.grapsee.gsai.ui.components.RefPage
 import com.grapsee.gsai.ui.components.RefPrimaryButton
@@ -337,86 +334,9 @@ fun ThemeCustomisationScreen(onBack: () -> Unit) {
 }
 
 // ---------------------------------------------------------------------------
-// Notifications
+// Notifications — superseded by NotificationsAlertsScreen.kt, which draws the
+// notifications-alerts reference sheet and wires every switch to GsNotifier.
 // ---------------------------------------------------------------------------
-
-@Composable
-fun NotificationSettingsScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
-    val colors = GsTheme.colors
-    val permission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted -> SettingsStore.updatePushNotifications(granted) }
-
-    RefPage(
-        title = "Notifications",
-        subtitle = "Choose what reaches you and how it feels.",
-        onBack = onBack
-    ) {
-        RefCard(
-            padding = androidx.compose.foundation.layout.PaddingValues(18.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RefIconTile(GsIcons.Bell, size = 48.dp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Quiet by default", style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
-                    Text(
-                        "GS only speaks up when a reply finishes while the app is in the background.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.textSecondary
-                    )
-                }
-            }
-        }
-
-        RefSection(label = "Messages") {
-            RefToggleRow(
-                title = "Reply notifications",
-                subtitle = "One notice when a long answer completes",
-                icon = GsIcons.MessageCircle,
-                checked = SettingsStore.pushNotifications,
-                onCheckedChange = { want ->
-                    if (!want) {
-                        SettingsStore.updatePushNotifications(false)
-                    } else if (ReplyNotifier.hasPermission(context)) {
-                        SettingsStore.updatePushNotifications(true)
-                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        permission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                        SettingsStore.updatePushNotifications(true)
-                    }
-                }
-            )
-            RefDivider()
-            RefValueRow(
-                title = "System permission",
-                value = if (ReplyNotifier.hasPermission(context)) "Allowed" else "Not granted",
-                icon = GsIcons.Lock
-            )
-        }
-
-        RefSection(label = "Feedback") {
-            RefToggleRow(
-                title = "Haptic feedback",
-                subtitle = "A soft tick on presses and confirmations",
-                icon = GsIcons.Smartphone,
-                checked = SettingsStore.haptics,
-                onCheckedChange = { SettingsStore.updateHaptics(it) }
-            )
-            RefDivider()
-            RefToggleRow(
-                title = "Respect reduced motion",
-                subtitle = "Hold still when the system asks for less motion",
-                icon = GsIcons.Accessibility,
-                checked = SettingsStore.reduceMotion,
-                onCheckedChange = { SettingsStore.updateReduceMotion(it) }
-            )
-        }
-
-        RefFootnote("Notification permission is owned by Android. The switch reflects what the system will actually deliver, never a promise it cannot keep.")
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Privacy
