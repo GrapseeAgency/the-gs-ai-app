@@ -65,6 +65,10 @@ back. They are corrections, not omissions:
   the topic chips are the only filters the page has.
 - **Chat History — "Saved items"** replaces the mock's "Saved Conversations":
   the app has saved *items*, and that is where the row goes.
+- **Chat History — no per-row "…" menu.** The mock draws one on every recent
+  row. Rename, pin, archive and delete all exist in the store, but the cabinet
+  for them is Manage History; drawing a menu here without a confirmed action
+  set would be a dead control.
 - **A vertical ratio is not the mock's.** The mock canvas is 0.441 aspect and
   fits all three model groups in one frame; a 393×852 device is far shorter, so
   Model Preferences sits below the fold and the page scrolls. Only the mock's
@@ -120,12 +124,14 @@ carries the mock's right-edge pearlescent bleed, drawn from the shipped
 
 - The six-chip row clipped "More" at the right edge; the row scrolls now, and
   "More" itself is gone — there is no sixth topic behind it.
+- The field is one placeholder ("Search your conversations…") with no label
+  above it, as drawn; the label was what pushed the chips toward the fold.
 - The topic chips now filter both the recent list and the search hits
   (keyword-derived; the schema has no topic column). Before this, tapping one
   only repainted the chip.
 - Recent rows show the real last message from
-  `conversationDao.observeActiveWithPreview()`, not the same
-  "Tap to reopen this conversation" line on every row.
+  `conversationDao.observeActiveWithPreview()`, with markdown flattened, not
+  the same "Tap to reopen this conversation" line on every row.
 - The totals caption wraps instead of eliding to "Your chat history with Ne…".
 
 **iOS has no counterpart for any of the three.**

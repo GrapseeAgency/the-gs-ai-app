@@ -1065,7 +1065,10 @@ fun RefFootnote(text: String, modifier: Modifier = Modifier) {
 fun RefTextField(
     value: String,
     onValueChange: (String) -> Unit,
-    label: String,
+    // Nullable because a reference field may carry only a placeholder
+    // (Chat History & Search's field does). An empty label used to still draw
+    // its line plus 6dp of padding.
+    label: String? = null,
     modifier: Modifier = Modifier,
     placeholder: String? = null,
     supporting: String? = null,
@@ -1084,12 +1087,14 @@ fun RefTextField(
     val shape = RoundedCornerShape(16.dp)
     val border = if (error != null) colors.error else colors.glassBorder
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
-            color = colors.textSecondary,
-            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
-        )
+        if (!label.isNullOrBlank()) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                color = colors.textSecondary,
+                modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
+            )
+        }
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,

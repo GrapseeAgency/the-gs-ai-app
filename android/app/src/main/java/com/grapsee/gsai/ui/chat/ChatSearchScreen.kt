@@ -157,8 +157,9 @@ fun ChatSearchScreen(
         RefTextField(
             value = query,
             onValueChange = { query = it },
-            label = "Search your conversations…",
-            placeholder = "A word or phrase",
+            // The mock draws ONE placeholder inside the field, with no label
+            // above it; the label is what pushed the chips to the fold.
+            placeholder = "Search your conversations…",
             leadingIcon = GsIcons.Search,
             imeAction = ImeAction.Search,
             onDone = { commitSearch() }
@@ -250,7 +251,7 @@ fun ChatSearchScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HistoryAction(GsIcons.Bookmark, GsWellTone.Lilac, "Saved items", "View your saved answers", Modifier.weight(1f)) { onOpenSaved() }
+                    HistoryAction(GsIcons.Bookmark, GsWellTone.Lilac, "Saved items", "Your saved answers", Modifier.weight(1f)) { onOpenSaved() }
                     HistoryAction(GsIcons.Download, GsWellTone.Blue, "Export Chat History", "Download your data", Modifier.weight(1f)) { onExport() }
                 }
                 Spacer(Modifier.height(14.dp))
@@ -477,6 +478,24 @@ private fun HistoryAction(
     }
 }
 
+/**
+ * One line of the last message for a list row: markdown flattened, never a
+ * placeholder. A row that opened with "## The first three planets" read like a
+ * rendering bug, not a preview.
+ */
+private fun previewLine(raw: String?): String {
+    val text = raw?.trim().orEmpty()
+    if (text.isEmpty()) return "No messages yet"
+    return text
+        .replace(Regex("```[A-Za-z0-9]*"), " ")
+        .replace(Regex("(?m)^\\s{0,3}#{1,6}\\s*"), "")
+        .replace(Regex("(?m)^\\s{0,3}[-*+]\\s+"), "")
+        .replace(Regex("[*_`>]"), "")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .take(96)
+}
+
 /** One Recent Chats row: real title, real last-message preview, real timestamp. */
 @Composable
 private fun RecentChatRow(
@@ -517,8 +536,9 @@ private fun RecentChatRow(
             Text(
                 // The mock draws the last message here; `observeActiveWithPreview`
                 // supplies it, so the line is what was actually said — not a
-                // repeated instruction invented to fill the row.
-                lastMessage?.trim()?.takeIf { it.isNotEmpty() } ?: "No messages yet",
+                // repeated instruction invented to fill the row. Markdown is
+                // flattened: a heading marker in a preview is not copy.
+                previewLine(lastMessage),
                 style = MaterialTheme.typography.labelSmall,
                 color = GsTheme.colors.textTertiary,
                 maxLines = 1,
