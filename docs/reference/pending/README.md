@@ -89,14 +89,17 @@ is: rendered in CI, anchored on a measured rim, and compared against the mock's
 own numbers with a self-test proving the gate can fail. A screenshot that merely
 exists is not evidence of parity.
 
-## Where each screen stands (2026-10-28, after `3f4c2266`)
+## Where each screen stands (2026-10-28, final pass)
 
 All three are **built on Android**. The first device capture (run 40650433868)
-found four defects; `3f4c2266` fixed three of them, and the pass that followed
-wired the model radio to `SettingsStore`, replaced the repeated row filler with
-the real last message, and made the topic chips actually filter.
+exposed three rendering defects; `3f4c2266` fixed them. The next pass fixed what
+pixels could not show — the model radio held a local `remember`, the topic chips
+filtered nothing, and every recent row repeated one filler line — and the final
+capture (run 40659388170, label `final4`) is the evidence: 17 frames, no
+`MISSING`, and `26-chat-history-search` / `31-ai-intelligence` /
+`33-privacy-data-controls` read as described below.
 
-**`model-selection.png` — built, JVM-verified, awaiting the next capture.**
+**`model-selection.png` — built, JVM-verified and captured (final4).**
 
 - AI Model: the mock's four rows, both sentences of copy and the Recommended
   chip; each model keeps its mock tone (Pro peach, Advanced lilac, Code mint,
@@ -111,7 +114,7 @@ the real last message, and made the topic chips actually filter.
   `remember`, so the tick reset every visit). `ModelSelectionInteractionTest`
   presses all four effort tiles, both switches and Reset on the JVM.
 
-**`privacy-data-controls.png` — built; chevrons removed from static rows.**
+**`privacy-data-controls.png` — built and captured; chevrons removed from static rows.**
 
 The capture showed Personalization & Ads, Third-Party Integrations, Search
 History and Data Retention still drawing a chevron; `RefNavRow`'s default
@@ -120,7 +123,7 @@ pass `trailing = {}`. Chat History opens the search page for real. The hero
 carries the mock's right-edge pearlescent bleed, drawn from the shipped
 `RefArt.Pearl`.
 
-**`chat-history-search.png` — built; the capture's three defects fixed.**
+**`chat-history-search.png` — built and captured; the first capture's defects fixed.**
 
 - The six-chip row clipped "More" at the right edge; the row scrolls now, and
   "More" itself is gone — there is no sixth topic behind it.

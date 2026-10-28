@@ -5280,3 +5280,21 @@ Work Log:
 - Pulled main to f5b6bfa4 (435 commits / 420 files since 0.81.17; 353 since the v0.86.2 tag). Android compile clean, no repair needed this time.
 - v0.86.2 was already released on 21 Oct, so the new code ships as 0.86.3 / versionCode 126.
 - APK gates: com.grapsee.gsai, 4 ABIs, libgs_ffi.so x4, cert b1ffd75d…8b1a483.
+
+---
+Task ID: settings-reference-screens
+Agent: Qoder (main)
+Task: Operator: "continue" — finish the three supplied reference screens on Android (Model Selection, Privacy & Data Controls, Chat History & Search) and prove them.
+
+Work Log:
+- Resumed at 3f4c2266. The first android-screens run (40651704113) never reached the emulator: compileDebugKotlin died on rememberScrollState imported from androidx.compose.runtime. Moved to androidx.compose.foundation; android-app and android-screens are green from 9a03aff3 onward.
+- Model Selection: the radio still held a local remember, so the tick jumped back to Pro on every visit while SettingsModelSelectionTest stayed green (it only tested the store). Rows now read/write SettingsStore.preferredModel, and Reset to default moves the tick. The mock's per-model/per-effort tones, the check-in-a-well model marker and the accent outline on the chosen effort tile are drawn; four-across tiles share one height via IntrinsicSize.Min + weighted spacer, so every timing line and radio sits on one baseline and High no longer elides "reasoning".
+- Privacy: the static rows drew chevrons because RefNavRow's default trailing IS a chevron and onClick = null only removes the click; they pass trailing = {}. The hero carries RefArt.Pearl at 55 %, clipped into the right edge, matching the mock's pearlescent bleed.
+- Chat History: the chip row clipped "More" (fixed by horizontal scroll in 3f4c2266, then More itself removed — no sixth topic). The topic chips filtered nothing; they now filter both the recent list and the hits. Rows read observeActiveWithPreview() and show the real last message (previewLine strips headings/tables/emphasis). The field is ONE placeholder, no label; "Saved items" copy fits without an ellipsis.
+- Evidence: ModelSelectionInteractionTest (Robolectric) presses all four effort tiles, both switches, Reset and both routes — 7 tests, and it fails against the old local-remember radio. ChatPreviewLineTest pins the preview contract. SettingsScreenshotTest now renders Privacy and Model Selection and resets SettingsStore per capture. Full unit suite 339 tests, 0 failures (41 screenshot tests skipped unless -PgsShots).
+- Device captures: 40650433868 (first: 4 defects), 40654828675 (wired batch), 40656630157 (final2: hero + equal tiles), 40657337615 (final3: field + prose previews), 40659388170 (final4: preview stops at the heading). final4 = 17 frames, no MISSING; android-app 40659393551 green.
+- docs/reference/pending/README.md rewritten to the actual state with the accepted deltas (no More chip, no filter button, no per-row menu, vertical fold, keyword topics, Pearl hero art) and the resume order.
+
+Stage Summary:
+- All three screens are built on Android, exercised on the JVM and captured on device; iOS has no counterpart for any of them.
+- Remaining: port the three to iOS, then gate each screen the way the Settings trio is gated (measured rim + self-test), since these pages have no pixel gate yet.
