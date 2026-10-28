@@ -648,7 +648,7 @@ fun AiIntelligenceScreen(
         RefCard(role = GsGlassRole.CardLight) {
             ModelChoiceRow(
                 title = "Nexly Pro",
-                subtitle = "Best balance of speed, intelligence and creativity.\nGreat for most everyday tasks.",
+                subtitle = "Best balance of speed, intelligence and creativity. Great for most everyday tasks.",
                 icon = GsIcons.Sparkles,
                 selected = selectedModel == MODEL_PRO,
                 badge = "Recommended",
@@ -657,7 +657,7 @@ fun AiIntelligenceScreen(
             RefRowDivider()
             ModelChoiceRow(
                 title = "Nexly Advanced",
-                subtitle = "Deep reasoning, complex problem solving and analysis.\nIdeal for research, coding and detailed tasks.",
+                subtitle = "Deep reasoning, complex problem solving and analysis. Ideal for research, coding and detailed tasks.",
                 icon = GsIcons.Sparkle,
                 selected = selectedModel == MODEL_ADVANCED,
                 onClick = { selectedModel = MODEL_ADVANCED },
@@ -665,7 +665,7 @@ fun AiIntelligenceScreen(
             RefRowDivider()
             ModelChoiceRow(
                 title = "Nexly Code",
-                subtitle = "Specialized for programming and technical tasks.\nGreat for developers and code-related work.",
+                subtitle = "Specialized for programming and technical tasks. Great for developers and code-related work.",
                 icon = GsIcons.Code,
                 selected = selectedModel == MODEL_CODE,
                 onClick = { selectedModel = MODEL_CODE },
@@ -673,7 +673,7 @@ fun AiIntelligenceScreen(
             RefRowDivider()
             ModelChoiceRow(
                 title = "Nexly Creative",
-                subtitle = "Focused on imagination, visuals and creative content.\nBest for design, writing and artistic tasks.",
+                subtitle = "Focused on imagination, visuals and creative content. Best for design, writing and artistic tasks.",
                 icon = GsIcons.Palette,
                 selected = selectedModel == MODEL_CREATIVE,
                 onClick = { selectedModel = MODEL_CREATIVE },
@@ -681,8 +681,25 @@ fun AiIntelligenceScreen(
         }
 
         // ---- Reasoning Effort ---------------------------------------------
+        // Order and timings are the mock's: Minimal, Light, Standard, High.
         RefGroupHeader("Reasoning Effort", "Control how much Nexly thinks")
         RefCard(role = GsGlassRole.CardLight) {
+            RefRow(
+                title = "Minimal",
+                subtitle = "Quick answers for simple questions.  ~1–2 seconds",
+                icon = GsIcons.Zap,
+                onClick = { SettingsStore.setChatMode(null, "flash") },
+                onClickLabel = "Minimal reasoning effort",
+            )
+            RefRowDivider()
+            RefRow(
+                title = "Light",
+                subtitle = "Balanced speed and depth.  ~2–5 seconds",
+                icon = GsIcons.Zap,
+                onClick = { SettingsStore.setChatMode(null, "flash") },
+                onClickLabel = "Light reasoning effort",
+            )
+            RefRowDivider()
             RefRow(
                 title = "Standard",
                 subtitle = "Best for most tasks and questions.  ~5–10 seconds",
@@ -697,22 +714,6 @@ fun AiIntelligenceScreen(
                 icon = GsIcons.Brain,
                 onClick = { SettingsStore.setChatMode(null, "thinking") },
                 onClickLabel = "High reasoning effort",
-            )
-            RefRowDivider()
-            RefRow(
-                title = "Light",
-                subtitle = "Balanced speed and depth.  ~2–5 seconds",
-                icon = GsIcons.Zap,
-                onClick = { SettingsStore.setChatMode(null, "flash") },
-                onClickLabel = "Light reasoning effort",
-            )
-            RefRowDivider()
-            RefRow(
-                title = "Minimal",
-                subtitle = "Quick answers for simple questions.  ~1–2 seconds",
-                icon = GsIcons.Zap,
-                onClick = { SettingsStore.setChatMode(null, "flash") },
-                onClickLabel = "Minimal reasoning effort",
             )
         }
 
@@ -881,31 +882,72 @@ private fun ModelChoiceRow(
     badge: String? = null,
 ) {
     val colors = GsTheme.colors
-    RefRow(
-        title = title,
-        subtitle = subtitle,
-        icon = icon,
-        onClick = onClick,
-        onClickLabel = title,
-        trailing = {
-            if (badge != null) {
+    // Built here rather than with RefRow for three reasons the mock insists on:
+    // the Recommended chip sits beside the title (RefRow only takes a String
+    // title), the unselected ring must be visible (glassBorder vanishes against
+    // the card), and the two detail lines must WRAP rather than elide — RefRow's
+    // subtitle is maxLines = 2, which cut the mock's own words to "….".
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RefWellTile(icon, GsWellTone.Peach, 28.dp)
+        Spacer(Modifier.width(11.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    badge,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.accent,
+                    title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = GsFonts.Product,
+                    color = colors.textPrimary,
+                    maxLines = 1,
                 )
-                Spacer(Modifier.width(8.dp))
-            }
-            Spacer(
-                Modifier
-                    .size(20.dp)
-                    .background(
-                        if (selected) colors.accent else colors.glassBorder,
-                        CircleShape,
+                if (badge != null) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        badge,
+                        fontSize = 10.sp,
+                        fontFamily = GsFonts.Product,
+                        color = colors.accent,
+                        modifier = Modifier
+                            .background(colors.accentSoft, RoundedCornerShape(999.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
                     )
+                }
+            }
+            Text(
+                subtitle,
+                fontSize = 12.5.sp,
+                lineHeight = 16.sp,
+                fontFamily = GsFonts.Product,
+                color = colors.textTertiary,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
             )
-        },
-    )
+        }
+        Spacer(Modifier.width(8.dp))
+        Box(
+            Modifier
+                .size(20.dp)
+                .background(
+                    if (selected) colors.accent else colors.textTertiary.copy(alpha = 0.30f),
+                    CircleShape,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) {
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .background(colors.surface, CircleShape)
+                )
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
