@@ -535,6 +535,7 @@ fun RefToggleRow(
     icon: ImageVector? = null,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
 ) {
     val colors = GsTheme.colors
     Row(
@@ -543,6 +544,7 @@ fun RefToggleRow(
             .heightIn(min = 62.dp)
             .toggleable(
                 value = checked,
+                enabled = enabled,
                 role = Role.Switch,
                 onValueChange = onCheckedChange
             )

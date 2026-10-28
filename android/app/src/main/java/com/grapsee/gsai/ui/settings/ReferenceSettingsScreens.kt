@@ -749,68 +749,62 @@ fun AiIntelligenceScreen(
         }
 
         // ---- Reasoning Effort ---------------------------------------------
-        // Order and timings are the mock's: Minimal, Light, Standard, High.
+        // The mock draws FOUR ACROSS with a radio under each. Order, copy and
+        // timings are its own; the selection is SettingsStore.reasoningEffort,
+        // never chatMode (Minimal and Light share the `flash` wire mode, so
+        // deriving from chatMode would light two tiles at once).
         RefGroupHeader("Reasoning Effort", "Control how much Nexly thinks")
         RefCard(role = GsGlassRole.CardLight) {
-            RefRow(
-                title = "Minimal",
-                subtitle = "Quick answers for simple questions.  ~1–2 seconds",
-                icon = GsIcons.Zap,
-                onClick = { SettingsStore.setChatMode(null, "flash") },
-                onClickLabel = "Minimal reasoning effort",
-            )
-            RefRowDivider()
-            RefRow(
-                title = "Light",
-                subtitle = "Balanced speed and depth.  ~2–5 seconds",
-                icon = GsIcons.Zap,
-                onClick = { SettingsStore.setChatMode(null, "flash") },
-                onClickLabel = "Light reasoning effort",
-            )
-            RefRowDivider()
-            RefRow(
-                title = "Standard",
-                subtitle = "Best for most tasks and questions.  ~5–10 seconds",
-                icon = GsIcons.Sparkles,
-                onClick = { SettingsStore.setChatMode(null, "auto") },
-                onClickLabel = "Standard reasoning effort",
-            )
-            RefRowDivider()
-            RefRow(
-                title = "High",
-                subtitle = "Deeper analysis and detailed reasoning.  ~10–30 seconds",
-                icon = GsIcons.Brain,
-                onClick = { SettingsStore.setChatMode(null, "thinking") },
-                onClickLabel = "High reasoning effort",
-            )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                REASONING_EFFORTS.forEach { effort ->
+                    ReasoningTile(
+                        title = effort.label,
+                        description = effort.description,
+                        timing = effort.timing,
+                        icon = effort.icon,
+                        selected = SettingsStore.reasoningEffort == effort.id,
+                        modifier = Modifier.weight(1f),
+                        onClick = { SettingsStore.updateReasoningEffort(effort.id) },
+                    )
+                }
+            }
         }
+
+        RefInfoCard(
+            text = "Higher reasoning effort helps Nexly provide more thoughtful, detailed and accurate responses — especially for complex questions.",
+            icon = GsIcons.Sparkles,
+        )
+        Spacer(Modifier.height(10.dp))
 
         // ---- Model Preferences -------------------------------------------
         RefGroupHeader("Model Preferences", "Customize your experience")
         RefCard(role = GsGlassRole.CardLight) {
-            RefRow(
+            // The mock draws this switch OFF. It is off and DISABLED because the
+            // backend always chooses the model — a tappable switch that changes
+            // nothing is the failure this repo keeps recording.
+            RefToggleRow(
                 title = "Auto-select model",
-                subtitle = "Let Nexly choose the best model for each task.",
+                subtitle = "Nexly always chooses the best model for each task.",
                 icon = GsIcons.Settings,
-                onClick = { },
-                onClickLabel = "Auto-select model",
+                checked = false,
+                onCheckedChange = {},
+                enabled = false,
             )
             RefRowDivider()
-            RefRow(
+            RefToggleRow(
                 title = "Remember my choices",
                 subtitle = "Keep using your preferred model and reasoning effort.",
                 icon = GsIcons.SlidersHorizontal,
-                onClick = { },
-                onClickLabel = "Remember my choices",
+                checked = SettingsStore.rememberChoices,
+                onCheckedChange = { SettingsStore.updateRememberChoices(it) },
             )
             RefRowDivider()
-            RefRow(
-                title = "Reset to default",
-                subtitle = "Go back to Nexly's recommended settings.",
-                icon = GsIcons.RotateCcw,
-                onClick = { onOpenModelDetails?.invoke() },
-                onClickLabel = "Reset to default",
-            )
+            ResetToDefaultRow()
         }
 
         RefCard(padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
@@ -932,6 +926,117 @@ private const val MODEL_PRO = "pro"
 private const val MODEL_ADVANCED = "advanced"
 private const val MODEL_CODE = "code"
 private const val MODEL_CREATIVE = "creative"
+
+/**
+ * The mock's four effort tiles, in its order, with its copy and timings.
+ *
+ * `id` is what [SettingsStore.reasoningEffort] stores; [SettingsStore.wireModeForEffort]
+ * turns it into the only three modes the backend accepts.
+ */
+private data class ReasoningEffort(
+    val id: String,
+    val label: String,
+    val description: String,
+    val timing: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+)
+
+private val REASONING_EFFORTS = listOf(
+    ReasoningEffort("minimal", "Minimal", "Quick answers for simple questions.", "~ 1–2 seconds", GsIcons.Zap),
+    ReasoningEffort("light", "Light", "Balanced speed and depth.", "~ 2–5 seconds", GsIcons.Zap),
+    ReasoningEffort("standard", "Standard", "Best for most tasks and questions.", "~ 5–10 seconds", GsIcons.Sparkles),
+    ReasoningEffort("high", "High", "Deeper analysis and detailed reasoning.", "~ 10–30 seconds", GsIcons.Brain),
+)
+
+/**
+ * One four-across effort tile: well, title, two-line description, timing, radio.
+ *
+ * Built here rather than from RefChoiceTile because that composable has no timing
+ * line and marks selection with a top-right tick where the mock puts a radio at
+ * the bottom.
+ */
+@Composable
+private fun ReasoningTile(
+    title: String,
+    description: String,
+    timing: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val colors = GsTheme.colors
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                if (selected) colors.accentSoft else colors.glassSurface.copy(alpha = 0.45f),
+                RoundedCornerShape(16.dp),
+            )
+            .clickable(role = Role.RadioButton, onClickLabel = title, onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        RefWellTile(icon, GsWellTone.Peach, 26.dp)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            title,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.Medium,
+            fontFamily = GsFonts.Product,
+            color = colors.textPrimary,
+            maxLines = 1,
+        )
+        Text(
+            description,
+            fontSize = 10.sp,
+            lineHeight = 13.sp,
+            fontFamily = GsFonts.Product,
+            color = colors.textTertiary,
+            textAlign = TextAlign.Center,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            timing,
+            fontSize = 9.sp,
+            fontFamily = GsFonts.Product,
+            color = colors.textTertiary,
+            maxLines = 1,
+        )
+        Spacer(Modifier.height(6.dp))
+        Box(
+            Modifier
+                .size(16.dp)
+                .background(
+                    if (selected) colors.accent else colors.textTertiary.copy(alpha = 0.30f),
+                    CircleShape,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) {
+                Box(Modifier.size(6.dp).background(colors.surface, CircleShape))
+            }
+        }
+    }
+}
+
+/** "Reset to default" — a real reset, not a navigation to another page. */
+@Composable
+private fun ResetToDefaultRow() {
+    RefRow(
+        title = "Reset to default",
+        subtitle = "Go back to Nexly's recommended settings.",
+        icon = GsIcons.RotateCcw,
+        onClickLabel = "Reset to default",
+        onClick = {
+            SettingsStore.updatePreferredModel(MODEL_PRO)
+            SettingsStore.updateRememberChoices(true)
+            SettingsStore.updateReasoningEffort("standard")
+        },
+    )
+}
 
 /**
  * One row of the mock's AI Model list: well, title (+ optional chip) and its two
