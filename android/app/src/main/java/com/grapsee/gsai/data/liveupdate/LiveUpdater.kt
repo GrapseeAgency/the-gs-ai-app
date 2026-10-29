@@ -182,16 +182,32 @@ object LiveUpdater {
                 // release for the whole install.
                 if (notYetAnnounced) {
                     val ctx = appContext
-                    if (ctx != null && GsNotifier.post(
+                    if (ctx != null) {
+                        val title = "GS ${manifest.versionName} is available"
+                        val body = manifest.notes?.takeIf { it.isNotBlank() }
+                            ?: "Open Your chats to install the update."
+                        // Two channels, two rules. The INBOX is always told —
+                        // this check runs while the app is in front, and the
+                        // shade refuses foreground posts, so relying on the
+                        // notification alone meant the release was never
+                        // mentioned anywhere. The shade is still attempted for
+                        // the case where the app backgrounded mid-check.
+                        val recorded = GsNotifier.record(
                             context = ctx,
                             kind = GsNotifier.Kind.PRODUCT,
-                            title = "GS ${manifest.versionName} is available",
-                            body = manifest.notes?.takeIf { it.isNotBlank() }
-                                ?: "Open Your chats to install the update.",
+                            title = title,
+                            body = body,
+                        )
+                        GsNotifier.post(
+                            context = ctx,
+                            kind = GsNotifier.Kind.PRODUCT,
+                            title = title,
+                            body = body,
                             route = com.grapsee.gsai.ui.navigation.GsRoutes.CHATS,
                         )
-                    ) {
-                        announcedVersionCode = manifest.versionCode
+                        // The token is spent only once the release was really
+                        // recorded, so a refused pass cannot silence it.
+                        if (recorded) announcedVersionCode = manifest.versionCode
                     }
                 }
             }

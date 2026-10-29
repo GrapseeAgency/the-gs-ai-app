@@ -247,6 +247,32 @@ object GsNotifier {
         return delivered
     }
 
+    /**
+     * Records a notice in the in-app Inbox WITHOUT posting to the shade.
+     *
+     * This exists because the two channels have different rules. The shade
+     * must never interrupt someone who is looking at the app, which is why
+     * [post] refuses while foregrounded. The Inbox has no such rule — it is
+     * the log of what Nexly told you, and "you are looking at the screen" is
+     * not a reason to forget it.
+     *
+     * That distinction is what gives the three in-app kinds (AI Updates, Tips
+     * & Suggestions, Account Activity) a real consumer: their switches gate
+     * this, so flipping one changes what appears in the Inbox. Before, they
+     * gated a channel nothing wrote to.
+     *
+     * Honours the master switch and the per-kind switch. Does not check the OS
+     * permission, because an Inbox row is not an OS notification.
+     */
+    fun record(context: Context, kind: Kind, title: String, body: String): Boolean {
+        val text = body.trim()
+        if (title.isBlank() || text.isEmpty()) return false
+        if (!SettingsStore.pushNotifications) return false
+        if (!SettingsStore.noticeEnabled(kind.kindId)) return false
+        NoticeInbox.record(context, kind, title, text)
+        return true
+    }
+
     /** Convenience for the one route every notice so far targets. */
     fun chatRoute(conversationId: String): String = GsRoutes.chat(conversationId)
 }

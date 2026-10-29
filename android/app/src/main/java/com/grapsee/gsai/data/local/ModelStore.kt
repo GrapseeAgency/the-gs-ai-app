@@ -224,6 +224,19 @@ object ModelStore {
         prefs?.edit()?.putString(K.installedPath, file.absolutePath)?.apply()
         prefs?.edit()?.putString(K.installedModelId, modelId)?.apply()
         loadEngineAsync(file.absolutePath)
+        // The real producer behind "AI Updates": a model actually landed on
+        // this device and is now loadable. It goes to the Inbox rather than the
+        // shade because the download completes while the user is in the app.
+        appContext?.let { ctx ->
+            runCatching {
+                com.grapsee.gsai.data.notifications.GsNotifier.record(
+                    context = ctx,
+                    kind = com.grapsee.gsai.data.notifications.GsNotifier.Kind.AI,
+                    title = "On-device model ready",
+                    body = "$modelId finished downloading and can now answer without the network.",
+                )
+            }
+        }
     }
 
     /** Remove the model and forget it. Consent is untouched. */

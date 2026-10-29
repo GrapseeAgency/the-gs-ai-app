@@ -50,6 +50,18 @@ object SessionStore {
 
     fun activateSession(context: Context) {
         prefs(context).edit().putBoolean(KEY_SESSION_ACTIVE, true).apply()
+        // The real producer behind the "Account Activity" switch: a sign-in is
+        // the account event that actually happens. It goes to the Inbox, not
+        // the shade — telling someone who is mid-sign-in that they signed in
+        // would be noise, and GsNotifier.post refuses foreground anyway.
+        runCatching {
+            com.grapsee.gsai.data.notifications.GsNotifier.record(
+                context = context,
+                kind = com.grapsee.gsai.data.notifications.GsNotifier.Kind.ACTIVITY,
+                title = "Signed in to Nexly",
+                body = "This device is now signed in to your Grapsee account.",
+            )
+        }
     }
 
     fun isOnboarded(context: Context): Boolean =
