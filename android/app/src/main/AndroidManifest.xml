@@ -15,6 +15,10 @@
          requires the user to hand over policy access from system settings —
          the row sends them there rather than faking the state. -->
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <!-- BiometricPrompt.authenticate() throws SecurityException without this
+         normal-level permission; nothing else merges it in because the build
+         uses the framework API, not androidx.biometric. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Voice press-and-hold on the hero orb (SpeechRecognizer). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />

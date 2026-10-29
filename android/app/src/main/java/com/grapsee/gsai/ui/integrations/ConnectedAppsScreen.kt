@@ -193,7 +193,7 @@ fun ConnectedAppsScreen(onBack: () -> Unit) {
                         color = colors.textTertiary,
                     )
                 }
-                RefQuietButton(label = "Coming soon", onClick = {})
+                RefQuietButton(label = "Coming soon", onClick = {}, modifier = Modifier.width(112.dp))
             }
         }
         Spacer(Modifier.height(10.dp))

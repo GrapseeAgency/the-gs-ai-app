@@ -125,7 +125,10 @@ fun HelpSupportScreen(
             putExtra(Intent.EXTRA_SUBJECT, subject)
             putExtra(
                 Intent.EXTRA_TEXT,
-                body + "\n\n—\nPlan: " + PlanStore.planName +
+                // Same truth as every other surface: a plan name is only
+                // reported when an activation was actually recorded.
+                body + "\n\n—\nPlan: " +
+                    (if (PlanStore.active) PlanStore.planName else "Not subscribed") +
                     "\nDevice: ${Build.MANUFACTURER} ${Build.MODEL}" +
                     "\nAndroid: ${Build.VERSION.RELEASE}",
             )
@@ -217,6 +220,9 @@ fun HelpSupportScreen(
                 RefQuietButton(
                     label = "Ask Nexly ›",
                     onClick = { onNavigate(com.grapsee.gsai.ui.navigation.GsRoutes.chat(null)) },
+                    // RefQuietButton bakes in fillMaxWidth(); inside a Row that
+                    // starves the weighted column and the mock's copy vanishes.
+                    modifier = Modifier.width(112.dp),
                 )
             }
         }

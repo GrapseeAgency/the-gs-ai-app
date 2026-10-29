@@ -126,7 +126,7 @@ fun SubscriptionUsageScreen(
                         color = GsTheme.colors.textTertiary,
                     )
                 }
-                RefQuietButton(label = "Manage Plan ›", onClick = { onNavigate(com.grapsee.gsai.ui.navigation.GsRoutes.BILLING) })
+                RefQuietButton(label = "Manage Plan ›", onClick = { onNavigate(com.grapsee.gsai.ui.navigation.GsRoutes.BILLING) }, modifier = Modifier.width(112.dp))
             }
         }
 
@@ -236,7 +236,7 @@ fun SubscriptionUsageScreen(
                         color = GsTheme.colors.textTertiary,
                     )
                 }
-                RefQuietButton(label = "View Plans ›", onClick = { onNavigate(com.grapsee.gsai.ui.navigation.GsRoutes.BILLING) })
+                RefQuietButton(label = "View Plans ›", onClick = { onNavigate(com.grapsee.gsai.ui.navigation.GsRoutes.BILLING) }, modifier = Modifier.width(104.dp))
             }
         }
 

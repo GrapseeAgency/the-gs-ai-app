@@ -6,6 +6,7 @@ import android.hardware.biometrics.BiometricPrompt
 import android.os.Build
 import android.os.CancellationSignal
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,7 +51,7 @@ fun BiometricLockGate(content: @Composable () -> Unit) {
     val context = LocalContext.current
     // Remembered per process: one unlock per launch, not per screen.
     var unlocked by remember { mutableStateOf(!SettingsStore.biometricUnlock) }
-    var prompting by remember { mutableStateOf(false) }
+    var attempt by remember { mutableStateOf(0) }
     val colors = GsTheme.colors
 
     if (unlocked) {
@@ -58,18 +59,27 @@ fun BiometricLockGate(content: @Composable () -> Unit) {
         return
     }
 
-    LaunchedEffect(Unit) {
-        if (!prompting) {
-            prompting = true
-            promptBiometric(
-                context = context,
-                title = "Unlock Nexly",
-                subtitle = "Biometric Login is on",
-            ) {
+    LaunchedEffect(attempt) {
+        // A lock this device cannot satisfy must not be a prison. If the
+        // enrolled biometrics were removed after the switch was armed, the
+        // preference is stale, so it is cleared and the shell opens.
+        if (!canUseBiometrics(context)) {
+            SettingsStore.updateBiometricUnlock(false)
+            unlocked = true
+            return@LaunchedEffect
+        }
+        promptBiometric(
+            context = context,
+            title = "Unlock Nexly",
+            subtitle = "Biometric Login is on",
+            onSuccess = {
                 SettingsStore.updateLastSecurityCheck(System.currentTimeMillis())
                 unlocked = true
-            }
-        }
+            },
+            // Cancel, lockout and hardware errors all land here. Re-arming the
+            // effect lets the user try again instead of stranding them.
+            onError = { if (attempt < 3) attempt++ },
+        )
     }
 
     Box(
@@ -107,13 +117,27 @@ fun BiometricLockGate(content: @Composable () -> Unit) {
             )
             Box(Modifier.height(4.dp))
             Text(
-                "Retry",
+                "Try again",
                 fontSize = 12.5.sp,
                 fontFamily = GsFonts.Product,
                 color = colors.accentStrong,
                 modifier = Modifier
-                    .padding(8.dp)
-                    .then(Modifier),
+                    .clickable { if (attempt < 100) attempt++ }
+                    .padding(8.dp),
+            )
+            // The only escape a locked shell can offer without lying: it turns
+            // the lock off rather than pretending to bypass it.
+            Text(
+                "Turn off app lock",
+                fontSize = 11.sp,
+                fontFamily = GsFonts.Product,
+                color = colors.textTertiary,
+                modifier = Modifier
+                    .clickable {
+                        SettingsStore.updateBiometricUnlock(false)
+                        unlocked = true
+                    }
+                    .padding(8.dp),
             )
         }
     }
@@ -136,6 +160,7 @@ fun promptBiometric(
     title: String,
     subtitle: String,
     onSuccess: () -> Unit,
+    onError: () -> Unit = {},
 ) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
     val executor = ContextCompat.getMainExecutor(context)
@@ -152,6 +177,12 @@ fun promptBiometric(
                 result: BiometricPrompt.AuthenticationResult?,
             ) {
                 onSuccess()
+            }
+
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
+                // Without this override the framework default is a silent
+                // no-op, which left the shell locked with no way forward.
+                onError()
             }
         },
     )

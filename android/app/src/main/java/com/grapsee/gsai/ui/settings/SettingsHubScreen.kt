@@ -309,6 +309,17 @@ fun SettingsHubScreen(
                 leading = { RefWellTile(GsIcons.Smartphone, GsWellTone.Peach, 28.dp) },
             )
             RefRowDivider()
+            // Help & Support was registered as a route with nothing pointing at
+            // it — the same unreachable-screen bug this file's AI Intelligence
+            // row exists to fix. It sits in the last group for the same reason:
+            // every card the settings pixel gate anchors on stays put.
+            RefNavRow(
+                title = "Help & Support",
+                subtitle = "FAQs, troubleshooting and contact",
+                onClick = { onNavigate(GsRoutes.SETTINGS_HELP) },
+                leading = { RefWellTile(GsIcons.CircleHelp, GsWellTone.Peach, 28.dp) },
+            )
+            RefRowDivider()
             RefNavRow(
                 title = "About Nexly",
                 subtitle = "Version, terms and support",

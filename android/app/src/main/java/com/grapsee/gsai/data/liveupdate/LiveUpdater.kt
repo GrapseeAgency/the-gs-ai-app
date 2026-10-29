@@ -192,18 +192,20 @@ object LiveUpdater {
                         // notification alone meant the release was never
                         // mentioned anywhere. The shade is still attempted for
                         // the case where the app backgrounded mid-check.
-                        val recorded = GsNotifier.record(
-                            context = ctx,
-                            kind = GsNotifier.Kind.PRODUCT,
-                            title = title,
-                            body = body,
-                        )
-                        GsNotifier.post(
+                        // post() already records on success, so recording
+                        // first would leave two identical rows for one release.
+                        val posted = GsNotifier.post(
                             context = ctx,
                             kind = GsNotifier.Kind.PRODUCT,
                             title = title,
                             body = body,
                             route = com.grapsee.gsai.ui.navigation.GsRoutes.CHATS,
+                        )
+                        val recorded = posted || GsNotifier.record(
+                            context = ctx,
+                            kind = GsNotifier.Kind.PRODUCT,
+                            title = title,
+                            body = body,
                         )
                         // The token is spent only once the release was really
                         // recorded, so a refused pass cannot silence it.

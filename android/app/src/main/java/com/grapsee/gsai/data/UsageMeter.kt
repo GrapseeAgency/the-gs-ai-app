@@ -40,8 +40,14 @@ data class UsageMeter(
                 set(Calendar.SECOND, 0)
                 set(Calendar.MILLISECOND, 0)
             }
-            val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-            fmt.timeZone = cal.timeZone
+            // MessageEntity.createdAt is written by ChatRepository.nowIso() as
+            // UTC with millis ("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"). Comparing a
+            // naive LOCAL stamp against those strings drops the first hours of
+            // the month (east of UTC) or counts the last hours of the previous
+            // one (west of UTC). The window is the local calendar month, but it
+            // must be EMITTED in the writer's exact shape and zone.
+            val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+            fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
             return fmt.format(cal.time)
         }
 
