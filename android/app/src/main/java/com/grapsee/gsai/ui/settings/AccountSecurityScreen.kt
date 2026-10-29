@@ -112,7 +112,15 @@ fun AccountSecurityScreen(
                 onClick = { onNavigate(GsRoutes.PROFILE) },
                 leading = { RefAvatar(initials = initialsFor(name), size = 48.dp) },
                 trailing = {
-                    RefStatusPill(PlanStore.planName)
+                    // The pill only claims a plan that was actually activated.
+                    // There is no purchase path in this build, so an install
+                    // that has not activated says so instead of advertising a
+                    // subscription nobody bought.
+                    if (PlanStore.active) {
+                        RefStatusPill(PlanStore.planName)
+                    } else {
+                        RefStatusPill("Not subscribed", GsTheme.colors.textSecondary)
+                    }
                 },
             )
         }

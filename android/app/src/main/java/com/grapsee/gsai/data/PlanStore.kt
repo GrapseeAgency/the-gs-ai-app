@@ -37,6 +37,7 @@ object PlanStore {
     private const val PREFS = "gs_plan"
     private const val KEY_PLAN = "gs.plan.id"
     private const val KEY_SINCE = "gs.plan.since"
+    private const val KEY_ACTIVATED = "gs.plan.activated"
 
     /**
      * Monthly allowances for the four meters the sheet draws. These are the
@@ -56,16 +57,43 @@ object PlanStore {
     /** Epoch millis the plan started, or 0 when never recorded. */
     var sinceMillis by mutableStateOf(0L); private set
 
+    /**
+     * Whether a Pro activation has actually been recorded on this install.
+     *
+     * Deliberately separate from [planId], and deliberately FALSE by default.
+     * There is no purchase path in this build, so an install that has not gone
+     * through one is not subscribed — and the screens must not print an
+     * "Active" pill or a next-billing date for a plan nobody bought. That was
+     * the mistake this flag exists to make impossible.
+     */
+    var activated by mutableStateOf(false); private set
+
     fun init(context: Context) {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         planId = p.getString(KEY_PLAN, null) ?: PRO_ID
         sinceMillis = p.getLong(KEY_SINCE, 0L)
-        if (sinceMillis == 0L) {
-            // First sight of this install: the cycle starts now. This is the
-            // only honest origin available — there is no server to ask.
-            sinceMillis = System.currentTimeMillis()
-            p.edit().putLong(KEY_SINCE, sinceMillis).apply()
-        }
+        activated = p.getBoolean(KEY_ACTIVATED, false)
+        // No fabricating a cycle start here. A `sinceMillis` that exists only
+        // because the app was opened is not a subscription, and deriving a
+        // "next billing date" from it invented a renewal date for a plan
+        // nobody bought.
+    }
+
+    /** The only way a plan becomes active. Called from a real activation flow. */
+    fun recordActivation(context: Context, now: Long = System.currentTimeMillis()) {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        planId = PRO_ID
+        sinceMillis = now
+        activated = true
+        p.edit().putString(KEY_PLAN, PRO_ID).putLong(KEY_SINCE, now)
+            .putBoolean(KEY_ACTIVATED, true).apply()
+    }
+
+    fun clearActivation(context: Context) {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        activated = false
+        sinceMillis = 0L
+        p.edit().remove(KEY_ACTIVATED).remove(KEY_SINCE).apply()
     }
 
     val planName: String
@@ -78,8 +106,9 @@ object PlanStore {
     val cycleLabel: String
         get() = "Monthly"
 
+    /** True only when an activation was really recorded. */
     val active: Boolean
-        get() = planId == PRO_ID
+        get() = planId == PRO_ID && activated
 
     /**
      * The next renewal, derived from the real activation stamp by advancing
@@ -88,7 +117,7 @@ object PlanStore {
      * a made-up date.
      */
     fun nextBillingMillis(now: Long = System.currentTimeMillis()): Long {
-        if (sinceMillis <= 0L) return 0L
+        if (!activated || sinceMillis <= 0L) return 0L
         val cal = java.util.Calendar.getInstance().apply { timeInMillis = sinceMillis }
         while (cal.timeInMillis <= now) cal.add(java.util.Calendar.MONTH, 1)
         return cal.timeInMillis

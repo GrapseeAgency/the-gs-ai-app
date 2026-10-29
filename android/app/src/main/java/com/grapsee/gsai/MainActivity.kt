@@ -124,11 +124,16 @@ class MainActivity : ComponentActivity() {
                         // system, not a preference. Home is the exception it
                         // declares out loud, with its own artwork.
                         if (ambient) ReferenceBackdrop()
-                        // The first-run model consent is composed INSIDE the
-                        // nav host, where it can wait for the onboarding gate
-                        // to finish. Hosting it here painted the dialog over
-                        // the welcome pages.
-                        GsNavHost(navController = navController)
+                        // The app lock lives here, above the nav host, so a
+                        // locked install cannot route past it: every
+                        // destination is inside this gate.
+                        com.grapsee.gsai.ui.components.BiometricLockGate {
+                            // The first-run model consent is composed INSIDE the
+                            // nav host, where it can wait for the onboarding gate
+                            // to finish. Hosting it here painted the dialog over
+                            // the welcome pages.
+                            GsNavHost(navController = navController)
+                        }
                     }
                 }
             }
