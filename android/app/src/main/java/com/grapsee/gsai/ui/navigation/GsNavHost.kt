@@ -46,6 +46,7 @@ import com.grapsee.gsai.ui.profile.ProfileScreen
 import com.grapsee.gsai.ui.settings.AboutSettingsScreen
 import com.grapsee.gsai.ui.settings.AccessibilitySettingsScreen
 import com.grapsee.gsai.ui.notifications.NotificationsInboxScreen
+import com.grapsee.gsai.ui.billing.BillingScreen
 import com.grapsee.gsai.ui.integrations.ConnectedAppsScreen
 import com.grapsee.gsai.ui.support.HelpSupportScreen
 import com.grapsee.gsai.ui.settings.AccountSecurityScreen
@@ -452,7 +453,11 @@ fun GsNavHost(
         }
 
         // Billing
-        composable(GsRoutes.BILLING) { SubscriptionUsageScreen(onBack = back, onNavigate = open) }
+        // Billing and Subscription are two different questions: "what is my
+        // plan and usage" versus "how is commerce handled". Pointing both at
+        // SubscriptionUsageScreen made its own Manage Plan / View Plans CTAs
+        // navigate into the page they were already on.
+        composable(GsRoutes.BILLING) { BillingScreen(onBack = back) }
 
         composable(
             route = GsRoutes.CHAT,

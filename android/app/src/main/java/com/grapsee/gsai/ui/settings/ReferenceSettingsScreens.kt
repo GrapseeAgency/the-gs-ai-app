@@ -427,7 +427,7 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
                 title = "App Permissions",
                 // The manifest grants only these; naming camera or location
                 // would be copy the build cannot back.
-                subtitle = "Microphone, notifications and Do-Not-Disturb access",
+                subtitle = "Microphone, notifications, Do-Not-Disturb and biometric unlock",
                 onClick = {
                     runCatching {
                         context.startActivity(

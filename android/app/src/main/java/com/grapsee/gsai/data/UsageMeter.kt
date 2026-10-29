@@ -30,7 +30,8 @@ data class UsageMeter(
         /** The query failed; the screen must not invent numbers. */
         val Unknown = UsageMeter(messages = -1, uploads = -1)
 
-        /** First instant of the current month, local time, as ISO-8601. */
+        /** The local month start, emitted as the UTC instant in the writer's
+         *  exact shape (millis + Z) so string comparison is chronological. */
         fun monthStartIso(now: Long = System.currentTimeMillis()): String {
             val cal = Calendar.getInstance().apply {
                 timeInMillis = now

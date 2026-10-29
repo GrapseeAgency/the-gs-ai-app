@@ -86,7 +86,7 @@ fun AccountSecurityScreen(
     // Framework BiometricPrompt (API 28+). androidx.biometric would need a
     // FragmentActivity and MainActivity is a plain ComponentActivity, so using
     // it here would compile into a switch that can never fire.
-    val biometricCanRun = remember { canUseBiometrics(context) }
+    val biometricCanRun = remember { com.grapsee.gsai.ui.components.canUseBiometrics(context) }
 
     // The session is real: this install's id and the hardware it runs on.
     val deviceLabel = listOf(
@@ -94,10 +94,6 @@ fun AccountSecurityScreen(
         Build.MODEL,
     ).distinct().joinToString(" ")
     val sessionId = remember { SessionStore.stableClientId(context) }
-
-    fun promptBiometric(onSuccess: () -> Unit) {
-        promptBiometric(context, onSuccess)
-    }
 
     RefSettingsPage(
         title = "Account & Security",
@@ -195,13 +191,18 @@ fun AccountSecurityScreen(
                     }
                     // A lock is only real once the user has proved they can
                     // pass it. Enabling it blind would lock them out.
-                    promptBiometric {
-                        SettingsStore.updateBiometricUnlock(true)
-                        biometricChecked = true
-                        val now = System.currentTimeMillis()
-                        SettingsStore.updateLastSecurityCheck(now)
-                        lastCheckMillis = now
-                    }
+                    com.grapsee.gsai.ui.components.promptBiometric(
+                        context = context,
+                        title = "Confirm it's you",
+                        subtitle = "Biometric Login",
+                        onSuccess = {
+                            SettingsStore.updateBiometricUnlock(true)
+                            biometricChecked = true
+                            val now = System.currentTimeMillis()
+                            SettingsStore.updateLastSecurityCheck(now)
+                            lastCheckMillis = now
+                        },
+                    )
                 },
                 leading = { RefWellTile(GsIcons.Fingerprint, GsWellTone.Rose, 28.dp) },
             )

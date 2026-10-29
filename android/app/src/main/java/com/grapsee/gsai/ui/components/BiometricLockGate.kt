@@ -64,7 +64,9 @@ fun BiometricLockGate(content: @Composable () -> Unit) {
         // enrolled biometrics were removed after the switch was armed, the
         // preference is stale, so it is cleared and the shell opens.
         if (!canUseBiometrics(context)) {
-            SettingsStore.updateBiometricUnlock(false)
+            // Open for this launch WITHOUT writing the preference: silently
+            // persisting the downgrade would mean a user who re-secures their
+            // phone never gets their app lock back.
             unlocked = true
             return@LaunchedEffect
         }
@@ -78,7 +80,13 @@ fun BiometricLockGate(content: @Composable () -> Unit) {
             },
             // Cancel, lockout and hardware errors all land here. Re-arming the
             // effect lets the user try again instead of stranding them.
-            onError = { if (attempt < 3) attempt++ },
+            onError = { code ->
+                // A deliberate Cancel (or a torn-down prompt) is not a retry.
+                val userSaidNo = code == BiometricPrompt.ERROR_NEGATIVE_BUTTON ||
+                    code == BiometricPrompt.ERROR_USER_CANCELED ||
+                    code == BiometricPrompt.ERROR_CANCELED
+                if (!userSaidNo && attempt < 3) attempt++
+            },
         )
     }
 
@@ -147,7 +155,19 @@ fun BiometricLockGate(content: @Composable () -> Unit) {
 fun canUseBiometrics(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return false
     val keyguard = context.getSystemService(KeyguardManager::class.java) ?: return false
-    return keyguard.isDeviceSecure
+    if (!keyguard.isDeviceSecure) return false
+    // isDeviceSecure is true for a PIN with NO biometric enrolled, so on its
+    // own it let a sensor-less phone arm a lock it could never pass. Ask the
+    // platform whether it can actually authenticate.
+    val pm = context.packageManager
+    val hasSensor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_FINGERPRINT) ||
+            pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_FACE) ||
+            pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_IRIS)
+    } else {
+        pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_FINGERPRINT)
+    }
+    return hasSensor
 }
 
 /**
@@ -160,7 +180,7 @@ fun promptBiometric(
     title: String,
     subtitle: String,
     onSuccess: () -> Unit,
-    onError: () -> Unit = {},
+    onError: (Int) -> Unit = {},
 ) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
     val executor = ContextCompat.getMainExecutor(context)
@@ -182,7 +202,7 @@ fun promptBiometric(
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
                 // Without this override the framework default is a silent
                 // no-op, which left the shell locked with no way forward.
-                onError()
+                onError(errorCode)
             }
         },
     )
