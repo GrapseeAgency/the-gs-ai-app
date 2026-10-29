@@ -40,9 +40,13 @@ object PlanStore {
     private const val KEY_ACTIVATED = "gs.plan.activated"
 
     /**
-     * Monthly allowances for the four meters the sheet draws. These are the
-     * limits the send path enforces, so they are a promise with teeth rather
-     * than a label: raising one here raises what the app will actually allow.
+     * Monthly allowances for the four meters the sheet draws.
+     *
+     * HONEST STATUS: these are DISPLAYED, not ENFORCED. No code path consults
+     * them, so reaching a limit changes nothing — the send path will keep
+     * sending. An earlier version of this comment claimed "the send path
+     * enforces", which was false. Until enforcement lands at ChatRepository's
+     * send path, the Subscription screen must not imply a cap that bites.
      */
     const val LIMIT_MESSAGES = 1_000
     const val LIMIT_IMAGES = 500
