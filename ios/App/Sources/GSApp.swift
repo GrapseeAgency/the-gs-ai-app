@@ -122,6 +122,17 @@ struct GSApp: App {
             }
             .preferredColorScheme(Self.colorScheme(for: settings.theme))
             .gsDynamicTypeSize(Self.dynamicTypeSize(for: settings.fontScale))
+            // The banner dispatcher's delegate and the once-per-version product
+            // notice. Both are idempotent. Unit tests run INSIDE this app's
+            // process (AppTests is hosted), so a launch-time inbox row would
+            // race the notifier tests that own that store; the UI test launches
+            // the app as its own process and is unaffected.
+            .task {
+                GsBannerDispatcher.shared.configure()
+                if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+                    GsReleaseNotice.announceIfNeeded()
+                }
+            }
         }
     }
 

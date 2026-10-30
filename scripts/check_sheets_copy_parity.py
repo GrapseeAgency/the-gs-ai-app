@@ -31,6 +31,43 @@ import re
 import sys
 
 SCREENS = {
+    "privacy-data-controls": dict(
+        android="android/app/src/main/java/com/grapsee/gsai/ui/settings/ReferenceSettingsScreens.kt",
+        ios="ios/App/Sources/Features/Settings/PrivacyDataControlsView.swift",
+        copy=[
+            "Privacy & Data Controls",
+            "Your data, your control",
+            "Your privacy matters",
+            "Nexly is designed with your privacy in mind. You're always in control of your data, conversations, and personal information.",
+            "Data & Permissions",
+            "Manage what Nexly can access",
+            "App Permissions",
+            "Microphone, notifications, Do-Not-Disturb and biometric unlock",
+            "Personalization & Ads",
+            "No ad profile is built from your activity",
+            "Third-Party Integrations",
+            "No services are connected",
+            "Conversation & Activity",
+            "Control your chat data",
+            "Chat History",
+            "View, search, and manage your conversations",
+            "Search History",
+            "Searches are not recorded",
+            "Data Retention",
+            "Kept on this device until you delete it",
+            "Export & Deletion",
+            "Download or delete your data",
+            "Export Your Data",
+            "Download a copy of your information",
+            "Delete Your Account",
+            "Permanently remove everything this app stores on this device",
+            "We respect your privacy",
+            "Your data is private to this app, never sold, and only used to improve your experience.",
+        ],
+        # No source-order probe here: SwiftUI defines `hero` after `body`, so
+        # literal order is not display order. Android's runtime content test
+        # owns the order; this spec owns the two inventories.
+    ),
     "notifications-alerts": dict(
         android="android/app/src/main/java/com/grapsee/gsai/ui/settings/NotificationsAlertsScreen.kt",
         ios="ios/App/Sources/Features/Notifications/NotificationsAlertsView.swift",
@@ -227,6 +264,101 @@ SCREENS = {
     ),
 }
 
+# The two pending references that were Android-only until this pass. They use
+# the settings kit rather than the owner sheets' denser kit, so they live here
+# as their own entries: the same presence contract, none of the card geometry.
+SCREENS["model-selection"] = dict(
+    android="android/app/src/main/java/com/grapsee/gsai/ui/settings/ReferenceSettingsScreens.kt",
+    ios="ios/App/Sources/Features/Settings/AiIntelligenceView.swift",
+    copy=[
+        "Model Selection & Reasoning Effort",
+        "Choose the best model and how deeply Nexly thinks",
+        "AI Model",
+        "Different models for different needs",
+        "Nexly Pro",
+        "Best balance of speed, intelligence and creativity. Great for most everyday tasks.",
+        "Recommended",
+        "Nexly Advanced",
+        "Deep reasoning, complex problem solving and analysis. Ideal for research, coding and detailed tasks.",
+        "Nexly Code",
+        "Specialized for programming and technical tasks. Great for developers and code-related work.",
+        "Nexly Creative",
+        "Focused on imagination, visuals and creative content. Best for design, writing and artistic tasks.",
+        "Reasoning Effort",
+        "Control how much Nexly thinks",
+        "Minimal",
+        "Quick answers for simple questions.",
+        "~ 1–2 seconds",
+        "Light",
+        "Balanced speed and depth.",
+        "~ 2–5 seconds",
+        "Standard",
+        "Best for most tasks and questions.",
+        "~ 5–10 seconds",
+        "High",
+        "Deeper analysis and detailed reasoning.",
+        "~ 10–30 seconds",
+        "Model Preferences",
+        "Customize your experience",
+        "Auto-select model",
+        "Nexly always chooses the best model for each task.",
+        "Remember my choices",
+        "Keep using your preferred model and reasoning effort.",
+        "Reset to default",
+        "Go back to Nexly's recommended settings.",
+        "Smarter choices. Better conversations.",
+        "The right model + the right thinking = the best Nexly experience.",
+        "GS Intelligence",
+        "One assistant, two engines. The cloud model handles depth; the on-device model keeps working offline.",
+        "Nexly Cloud",
+        "Full-quality answers through the GS backend",
+        "On-device",
+    ],
+    # No source-order probe: Swift puts the model/effort tables above the view
+    # that draws them, so literal order is not display order. Android's
+    # ReferenceRowInteractionTest owns the rendered order and state.
+)
+
+SCREENS["chat-history-search"] = dict(
+    android="android/app/src/main/java/com/grapsee/gsai/ui/chat/ChatSearchScreen.kt",
+    ios="ios/App/Sources/Features/Chats/ChatSearchView.swift",
+    copy=[
+        "Chat History & Search",
+        "Find, revisit, and manage your conversations",
+        "Search your conversations…",
+        "Total Conversations",
+        "Your chat history with Nexly",
+        "Last Active",
+        "Most recent conversation",
+        "Recent Chats",
+        "View all",
+        "No archived chats. Archive a conversation from its ⋮ menu and it waits here.",
+        "No conversations yet. Your chats appear here as you start them.",
+        "No chats match this filter. Try All, or clear the filters.",
+        "Quick Actions",
+        "Search Chats",
+        "Find specific topics",
+        "Manage History",
+        "Delete or archive chats",
+        "Saved items",
+        "Your saved answers",
+        "Export Chat History",
+        "Download your data",
+        "Start a new conversation",
+        "Get back to what matters",
+        "No matches",
+        "Nothing matched",
+        "Try a shorter word or clear the filters.",
+        "Search runs across every conversation on this device. Nothing is sent to a server.",
+        "Filter chats",
+        "Archived conversations",
+        "Only chats you have archived",
+        "Has files",
+        "Only chats with attachments",
+        "Clear filters",
+        "Chat actions",
+    ],
+)
 
 def read(path):
     try:

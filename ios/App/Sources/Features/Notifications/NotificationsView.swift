@@ -11,12 +11,13 @@ private struct GsInboxTab: Identifiable {
 /// Notifications Inbox — docs/reference/pending/notifications-inbox.png.
 ///
 /// The sheet's chips, per-tab counts, Today/Earlier split, unread dots and
-/// "Mark all as read" all read `GsNoticeInbox`, whose writer is
-/// `GsNotifier.record`: it honours the alert switches and records in-app
-/// events, with a sign-in and onboarding completion as its real producers. No
-/// banner dispatcher exists in this build, and nothing is seeded, so an install
-/// with no events is genuinely empty and says "You're all caught up" — the
-/// truth, not a designed state.
+/// "Mark all as read" all read `GsNoticeInbox`, whose writers are
+/// `GsNotifier.post` (a banner the system accepted) and `GsNotifier.record`
+/// (an in-app event: a sign-in, a finished onboarding, a version change).
+/// Both honour the alert switches; `post` additionally honours Quiet Hours,
+/// DND and the foreground gate. No banner dispatcher existed when this page
+/// was first built — it does now, and the row is still written only after the
+/// device actually showed something.
 ///
 /// The Billing chip is always empty because nothing in this build produces a
 /// billing notice: there is no payment processor to take a payment from.

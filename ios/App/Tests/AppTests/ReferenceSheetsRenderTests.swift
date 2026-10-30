@@ -36,6 +36,12 @@ final class ReferenceSheetsRenderTests: XCTestCase {
             prefix: "nexly-inbox-ios")
     }
 
+    func testPrivacyDataControlsRenders() async throws {
+        try await capturePage(
+            view: { PrivacyDataControlsView() },
+            prefix: "nexly-privacy-ios")
+    }
+
     func testAccountSecurityRenders() async throws {
         try await capturePage(
             view: { AccountSecurityView() },
@@ -58,6 +64,21 @@ final class ReferenceSheetsRenderTests: XCTestCase {
         try await capturePage(
             view: { ConnectedAppsView() },
             prefix: "nexly-integrations-ios")
+    }
+
+    /// The last two pending references to reach iOS. Both read the real store —
+    /// an install with no chats renders its honest empty states, and the
+    /// capture is the page as it ships, not a fixture dressed as one.
+    func testModelSelectionRenders() async throws {
+        try await capturePage(
+            view: { AiIntelligenceView() },
+            prefix: "nexly-model-ios")
+    }
+
+    func testChatHistorySearchRenders() async throws {
+        try await capturePage(
+            view: { ChatSearchView() },
+            prefix: "nexly-chat-history-ios")
     }
 
     // MARK: helpers

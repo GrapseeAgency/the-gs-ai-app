@@ -1,15 +1,16 @@
 # Pending references — supplied by the owner, built on both platforms
 
-Nine screens were supplied as reference art. The first three below are built on
-Android only; the six owner sheets at the end are built on **both** platforms
-(2026-10-29). Nothing here is called "captured" until its render gate proves
-parity — see Acceptance.
+Nine screens were supplied as reference art. All nine are built on **both**
+platforms: the six owner sheets crossed on 2026-10-29, Privacy & Data Controls
+followed, and Chat History & Search and Model Selection crossed on 2026-10-30.
+Nothing here is called "captured" until its render gate proves parity — see
+Acceptance.
 
 | reference | expected screen | state |
 | --- | --- | --- |
-| `privacy-data-controls.png` | "Privacy & Data Controls" — hero, Data & Permissions, Conversation & Activity, Export & Deletion groups | **built (Android)** — see deltas below |
-| `chat-history-search.png` | "Chat History & Search" — search field + filter chips, totals card, Recent Chats, Quick Actions 2×2, new-conversation footer | **built (Android)** — see deltas below |
-| `model-selection.png` | "Model Selection & Reasoning Effort" — AI Model radio list, Reasoning Effort 4-up, Model Preferences toggles | **built (Android)** — four-across tiles + real switches |
+| `privacy-data-controls.png` | "Privacy & Data Controls" — hero, Data & Permissions, Conversation & Activity, Export & Deletion groups | **built (both)** — see deltas below |
+| `chat-history-search.png` | "Chat History & Search" — search field + filter chips, totals card, Recent Chats, Quick Actions 2×2, new-conversation footer | **built (both)** — iOS twin rebuilt 2026-10-30 |
+| `model-selection.png` | "Model Selection & Reasoning Effort" — AI Model radio list, Reasoning Effort 4-up, Model Preferences toggles | **built (both)** — four-across tiles + real switches |
 | `notifications-alerts.png` | "Notifications & Alerts" — master switch, 5 types, 3 channels, quiet hours, closing card | **built (both)** |
 | `notifications-inbox.png` | "Notifications" — 5 chips with counts, Today/Earlier, unread dots, caught-up card | **built (both)** |
 | `account-security.png` | "Account & Security" — profile, sign-in methods, authentication, sessions, devices | **built (both)** |
@@ -21,25 +22,25 @@ parity — see Acceptance.
 
 Before this pass a literal search for each screen's own copy returned zero files
 across `android/app/src/main` and `ios/App/Sources` — that is what "absent" meant.
-After it, on Android:
+After it, every screen returns at least one file on both platforms:
 
 ```
-Privacy & Data Controls                 1 file  (PrivacySettingsScreen)
-Chat History & Search                   1 file  (ChatSearchScreen)
-Model Selection & Reasoning Effort      1 file  (AiIntelligenceScreen)
+Chat History & Search    ChatSearchScreen.kt            ChatSearchView.swift
+Model Selection          ReferenceSettingsScreens.kt   AiIntelligenceView.swift
+Privacy & Data Controls  PrivacySettingsScreen         PrivacyDataControlsView.swift
 ```
 
-iOS still returns 0 for the first three — Android only. The six owner sheets
-below return a screen on both platforms.
+The six owner sheets below return a screen on both platforms.
 
 ## Near misses — do not mistake these for the reference
 
-- `AiIntelligenceScreen` (`android/…/settings/ReferenceSettingsScreens.kt:627`,
-  title "AI Intelligence") is a *different* screen from
-  `model-selection.png`: different title, different section set, no Reasoning
-  Effort 4-up, no Model Preferences toggles. It is also the screen that had no
-  navigation entry until the settings hub gained one, so it has never been
-  verified against anything.
+- `AiIntelligenceScreen` used to be a *different* screen from
+  `model-selection.png` — different title, no Reasoning Effort 4-up, no Model
+  Preferences toggles — and the settings hub row that now reaches it was added
+  for that reason. The Android composable was rebuilt to the mock in the earlier
+  Android pass (title, four model rows, four-across effort tiles, three
+  preferences); on 2026-10-30 the iOS view was rebuilt to the same inventory,
+  so the name and the reference now describe one page on both platforms.
 - `PrivacySettingsScreen` is not "Privacy & Data Controls": the reference's four
   groups (Data & Permissions, Conversation & Activity, Export & Deletion, plus
   its two hero cards) are not its structure.
@@ -139,11 +140,24 @@ Evidence:
   per-kind switch, rejects empty copy, and writes `GsNoticeInbox` only then.
   `GsNotifierTests` pins those four cases on the simulator, and the sign-in in
   `GSApp` is its first real producer — so Account Activity is no longer a
-  switch nothing reads. Banner delivery is still absent and is stated as such.
+  switch nothing reads.
+- iOS banner delivery now exists: `GsBannerDispatcher` (UNUserNotificationCenter)
+  asks for permission only from the Push Notifications switch, refuses to post
+  while the app is in front, and `GsNotifier.post` adds Quiet Hours and DND to
+  the same switch gates. The Inbox row is written only after the system accepted
+  the banner, so the log cannot claim a notice the device never showed. A new
+  build version records one Product Updates notice (`GsReleaseNotice`, once per
+  `CFBundleShortVersionString`, token spent only when a row was really written).
+  Foreground/background delivery itself is not observable in CI; the gate-able
+  halves — quiet-hours arithmetic (wrap and boundaries) and the once-per-version
+  token — are pinned in `GsNotifierTests`.
 - iOS reachability: `SheetsUITests` drives the real drawer → Settings → each
-  Settings sheet → Back, the Upgrade pill for the plan, and the account sheet's
-  Notifications row for the inbox. It runs in the `GsChatUITests` bundle; like
-  the iOS card gate, it has not yet been observed on CI.
+  Settings sheet → Back, the Upgrade pill for the plan, Privacy → Chat History,
+  and the account sheet's Notifications row for the inbox. It runs in the
+  `GsChatUITests` bundle. Run 41014412869 was its first CI observation and it
+  failed: the account sheet routed while it was still presented, so the drawer
+  closed and the inbox never mounted. The sheet now dismisses before the route,
+  which fixes all four account rows; the fix's proof is the next green run.
 - Subscription numbers: `UsageMeterTest` pins the local-calendar-month → UTC
   stamp boundary in Asia/Dhaka and UTC, and the unknown-vs-zero contract (`-1`
   renders "—"; zero would falsely claim "none used").
@@ -154,6 +168,10 @@ Evidence:
   applied" notice (skipping the setup records nothing) on both platforms, so
   that switch has a real event behind it. `GsNotifierRecordTest` pins the
   writer's master/kind gates and the empty-copy guard.
+- Privacy & Data Controls now has its iOS page: `PrivacyDataControlsView`
+  renders to `nexly-privacy-ios` in `ReferenceSheetsRenderTests`, its section
+  and row inventory is in the cross-platform copy gate, and `SheetsUITests`
+  opens it from the Settings hub.
 
 ### Accepted deltas — truth over art
 
@@ -285,7 +303,7 @@ uses the same shipped lotus photograph and `LOTUS_BLEED_ALPHA` recipe as the
 Settings hub, and the footer card carries the mock's title above the honest
 body copy.
 
-**`chat-history-search.png` — built.**
+**`chat-history-search.png` — built on both (iOS twin 2026-10-30).**
 
 - Six chips, as drawn. `More` opens a sheet with the two real facets the store
   can answer: Archived conversations (an archived preview flow) and Has files
@@ -303,16 +321,57 @@ body copy.
 - Quick Actions: Search Chats focuses the field, Manage History → `CHAT_ARCHIVE`,
   Saved items → `SETTINGS_MEMORY`, Export Chat History writes the JSON export
   through `DataExport`. The footer CTA starts a new conversation.
+- **iOS** (`ChatSearchView`, rebuilt): same page and inventory. The chips run
+  the same shipped classifier (`DrawerTopic.topic(for:)`), totals are the active
+  conversation count and newest `updatedAt`, the ⋮ is a real `Menu` over the
+  store's pin/rename/archive/delete, Search Chats raises the real field, the
+  facets sheet is the same two switches, and Export writes the same
+  `ExportPayload` JSON through `ActivitySheet`. The empty states say what is
+  true of THIS install rather than borrowing the mock's counts.
 
-**iOS has no counterpart for any of the three.**
+**`model-selection.png` — built on both (iOS twin 2026-10-30).**
+
+The iOS page is the old `AiIntelligenceView` rebuilt to the reference: the four
+model rows with the Recommended chip and check-in-a-well, the four-across effort
+tiles with the mock's radios and timings, the three preferences (Auto-select off
+and disabled, Remember my choices live, Reset behind the repo's confirm dialog),
+the closing card, then the GS Intelligence hero, the model-source pair, the
+on-device details sheet and the battery footnote. The effort tile writes
+`settings.reasoningEffort` AND the `gs.mode.new` wire mode through the same
+`wireModeForEffort` mapping Android uses, so the lit tile and the next reply
+agree; "Remember my choices" still governs only the NEW-chat default.
 
 ## Resume order
 
-1. Port the three screens to iOS (Privacy & Data Controls, Chat History &
-   Search, Model Selection). The six owner sheets already exist on both
-   platforms.
-2. Gate every screen the way the Settings trio is gated (measured rim +
-   self-test), once its layout is frozen.
+1. Observe the next iOS run: the card gate, the Settings trio and the six-screen
+   reachability test all now have their first CI calibration behind them (run
+   41014412869 for the failure, the next run for the fix).
+2. Gate the two newly ported screens the way the Settings trio is gated
+   (measured rim + self-test) once their iOS layout is frozen; today their
+   captures exist and their copy inventory is gated, but their card geometry is
+   not.
+3. Delete or wire the iOS-only dead surfaces: `SearchView` (superseded by
+   `ChatSearchView`), and the unreachable `ResearchView`, `VisionView`,
+   `FoldersView`, `SharedChatsView`, `NexlyChatShell`. Android has no twin for
+   any of them; leaving them in the tree makes the screen inventory look larger
+   than the app.
+
+## Sub-page reachability (2026-10-30)
+
+A route registered in the nav host is not a screen a reader can reach. The
+Android hub had four such destinations — `SETTINGS_CHAT` (Chat &
+Conversations), `SETTINGS_VOICE` (Voice & Speech) and `SETTINGS_ACCESSIBILITY`
+(Accessibility); `SETTINGS_MODEL` was the fourth and is reached from the AI
+page's "View model details" row. All three dead ones now have rows in the hub's
+last group, and `ReferenceSheetsContentTest.theSettingsHubReachesTheFourSettingsSheets`
+clicks each and asserts the route, so the next removal cannot pass silently.
+
+iOS gained the matching **Chat & Conversations** and **Accessibility** rows
+(they previously existed only as sections inside other pages). **Voice &
+Speech** has no iOS twin: iOS's `VoiceView` is the live voice session, not a
+preferences page, and inventing a settings page with no preferences behind it
+would be the dead-control failure this project keeps removing. It is recorded
+here as a platform delta, not built.
 
 ## Instrument notes worth keeping
 

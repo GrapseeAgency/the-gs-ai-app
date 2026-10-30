@@ -1,12 +1,17 @@
 import Foundation
 
-/// The iOS twin of Android's `GsNotifier.record`: the in-app half of a notice.
+/// The iOS twin of Android's `GsNotifier`: one gate for the Inbox row and one
+/// for the banner.
 ///
-/// iOS has no notification dispatcher in this build, so nothing here posts a
-/// banner. What it does is make the Inbox a real log of events this build can
-/// back: a sign-in is an account event, and the Account Activity switch really
-/// gates it. A future dispatcher posts first and records after, exactly as
-/// Android's `GsNotifier.post` does.
+/// `post` is the full path — switches, Quiet Hours, foreground and OS
+/// authorization, then the Inbox row only if the system accepted the banner.
+/// `record` is the in-app half, used when the reader is already looking at the
+/// app (a sign-in, a finished onboarding): it writes the log without
+/// interrupting.
+///
+/// The dispatcher arrived last; before it, `pushNotifications` persisted a
+/// preference nothing delivered, which is exactly the dead toggle the honesty
+/// contract forbids. Both entry points now read it.
 @MainActor
 enum GsNotifier {
 
@@ -30,5 +35,52 @@ enum GsNotifier {
         guard settings.noticeEnabled(kind.rawValue) else { return false }
         GsNoticeInbox.shared.record(kindId: kind.rawValue, title: title, body: text)
         return true
+    }
+
+    /// The full delivery path. Identical switches to `record`, plus the three
+    /// gates that only a banner needs: Quiet Hours, Nexly's own DND preference
+    /// and the foreground / OS-authorization pair inside the dispatcher.
+    ///
+    /// Records only after the system accepted the notification, so the Inbox
+    /// can never claim a banner the device did not show. Returns whether the
+    /// notice landed anywhere.
+    @discardableResult
+    static func post(kind: Kind, title: String, body: String) async -> Bool {
+        let text = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, !text.isEmpty else { return false }
+        let settings = SettingsStore.shared
+        guard settings.pushNotifications else { return false }
+        guard settings.noticeEnabled(kind.rawValue) else { return false }
+        // Quiet Hours and Nexly's DND are interruption gates, not log gates:
+        // they stop the banner, and the caller falls back to `record`.
+        guard !settings.noticeDnd else { return false }
+        guard !inQuietHours() else { return false }
+        let landed = await GsBannerDispatcher.shared.post(title: title, body: text)
+        guard landed else { return false }
+        GsNoticeInbox.shared.record(kindId: kind.rawValue, title: title, body: text)
+        return true
+    }
+
+    /// The mock's Quiet Hours window, stored as minutes-of-day and wrapping
+    /// midnight — the same arithmetic Android's `GsNotifier.inQuietHours` uses,
+    /// so 22:00→07:00 holds every hour from ten until seven and nothing
+    /// between.
+    static func inQuietHours(_ now: Date = Date()) -> Bool {
+        let settings = SettingsStore.shared
+        guard settings.quietHoursEnabled else { return false }
+        return inQuietHours(
+            now,
+            startMinute: settings.quietStartMinute,
+            endMinute: settings.quietEndMinute)
+    }
+
+    /// Pure form, so the boundary cases are testable without mutating the
+    /// store's clock-dependent preferences.
+    static func inQuietHours(_ now: Date, startMinute: Int, endMinute: Int) -> Bool {
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: now)
+        let minute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+        return startMinute <= endMinute
+            ? (minute >= startMinute && minute < endMinute)
+            : (minute >= startMinute || minute < endMinute)
     }
 }

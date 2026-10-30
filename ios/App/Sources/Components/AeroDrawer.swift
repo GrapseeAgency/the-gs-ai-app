@@ -558,11 +558,29 @@ struct AeroDrawer: View {
     private var accountSheetView: some View {
         AeroSheetShell(title: account.displayName.isEmpty ? "Account" : account.displayName) {
             VStack(spacing: Aero.Spacing.s) {
-                sheetRow(title: "Profile", icon: "User", isSelected: activeRoute == .profile) { onRoute(.profile) }
-                sheetRow(title: "Settings", icon: "Settings", isSelected: activeRoute == .settings) { onRoute(.settings) }
-                sheetRow(title: "Notifications", icon: "Bell", isSelected: activeRoute == .notifications) { onRoute(.notifications) }
-                sheetRow(title: "Billing", icon: "CreditCard", isSelected: activeRoute == .billing) { onRoute(.billing) }
+                sheetRow(title: "Profile", icon: "User", isSelected: activeRoute == .profile) { routeFromSheet(.profile) }
+                sheetRow(title: "Settings", icon: "Settings", isSelected: activeRoute == .settings) { routeFromSheet(.settings) }
+                sheetRow(title: "Notifications", icon: "Bell", isSelected: activeRoute == .notifications) { routeFromSheet(.notifications) }
+                sheetRow(title: "Billing", icon: "CreditCard", isSelected: activeRoute == .billing) { routeFromSheet(.billing) }
             }
+        }
+    }
+
+    /// A row inside the account sheet must DISMISS the sheet before the shell
+    /// routes. Routing straight from the row used to push onto a stack that
+    /// was still covered by a modal whose own presenter was unmounting in the
+    /// same transaction: the drawer closed and the destination never mounted.
+    /// Run 41014412869's `SheetsUITests` caught it on the inbox — the filter
+    /// control and the subtitle were both absent after tapping Notifications.
+    /// The sheet's dismissal is short; routing after it lands on a settled
+    /// stack, for all four rows rather than only the one with a test.
+    private func routeFromSheet(_ route: AeroRoute) {
+        accountSheet = false
+        // Captured before the hop: the drawer may be unmounted by the time the
+        // closure runs, and a view struct must not be read across that.
+        let handler = onRoute
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            handler(route)
         }
     }
 

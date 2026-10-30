@@ -12,12 +12,12 @@ import SwiftUI
 ///
 /// Two honest exceptions:
 ///  - Email Notifications, disabled and off: this build sends no mail at all;
-///  - Push Notifications, which persists the preference but cannot deliver a
-///    banner until a notification dispatcher exists on iOS. Its subtitle says
-///    what it controls, not that a banner will arrive today. The in-app kinds
-///    are no longer dead: `GsNotifier.record` reads this master switch and the
-///    per-kind switches before it writes an Inbox row, and a sign-in is the
-///    first real producer.
+///  - Push Notifications, which now has a real dispatcher behind it. Turning it
+///    on asks the OS for alert permission; if the reader declines, the switch
+///    returns to off rather than promising a banner the system will drop.
+///    `GsNotifier.post` reads this master switch, the per-kind switches, Quiet
+///    Hours, DND and the foreground gate before anything is posted, and the
+///    Inbox row is written only after the banner was actually accepted.
 struct NotificationsAlertsView: View {
 
     @ObservedObject private var settings = SettingsStore.shared
@@ -154,6 +154,19 @@ struct NotificationsAlertsView: View {
         .sheet(isPresented: $editQuietHours) {
             QuietHoursSheet()
                 .presentationDetents([.medium])
+        }
+        // The OS permission is requested only here, from the switch itself.
+        // A reader who declines gets the switch back at off: a control that
+        // stays on while the system drops every notice is the lie this page
+        // was rebuilt to remove.
+        .onChange(of: settings.pushNotifications) { on in
+            guard on else { return }
+            Task {
+                let granted = await GsBannerDispatcher.requestAuthorization()
+                if !granted {
+                    settings.pushNotifications = false
+                }
+            }
         }
     }
 

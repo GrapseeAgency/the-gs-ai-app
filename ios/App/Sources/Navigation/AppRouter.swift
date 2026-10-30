@@ -29,6 +29,7 @@ enum AeroRoute: Hashable {
     /// integrations. One case each so the drawer/hub can reach them without a
     /// settings-section detour.
     case notificationsAlerts
+    case privacyDataControls
     case accountSecurity
     case subscriptionUsage
     case helpSupport
@@ -36,6 +37,10 @@ enum AeroRoute: Hashable {
     case voice
     case chatArchive
     case chatSearch
+    /// Model Selection & Reasoning Effort. Its own case so the settings hub
+    /// reaches it in one hop, like Android's `SETTINGS_AI` row — the Chat
+    /// page's "AI Intelligence" link keeps working through its NavigationLink.
+    case modelSelection
     case travelAgent
     case explore
     case discover
@@ -222,6 +227,7 @@ struct AeroDestinations: ViewModifier {
             case .memory: MemoryManagementView()
             case .notifications: NotificationsView()
             case .notificationsAlerts: NotificationsAlertsView()
+            case .privacyDataControls: PrivacyDataControlsView()
             case .accountSecurity: AccountSecurityView()
             case .subscriptionUsage: SubscriptionUsageView()
             case .helpSupport: HelpSupportView()
@@ -229,6 +235,7 @@ struct AeroDestinations: ViewModifier {
             case .voice: VoiceView()
             case .chatArchive: ArchivedChatsView()
             case .chatSearch: ChatSearchView()
+            case .modelSelection: AiIntelligenceView()
             case .travelAgent: TravelAgentView(onBack: { router.path.removeLast() }, onSendToChat: { prompt in router.path.append(.chatPrefill(prompt)) })
             case .explore: ExploreView(
                 onOpenChat: { router.path.append($0) },

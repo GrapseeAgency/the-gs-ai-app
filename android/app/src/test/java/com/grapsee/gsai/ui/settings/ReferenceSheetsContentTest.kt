@@ -255,12 +255,35 @@ class ReferenceSheetsContentTest {
     }
 
     @Test
+    fun privacyDataControlsCarriesItsGroups() {
+        render { PrivacySettingsScreen(onBack = {}, onNavigate = {}) }
+
+        assertPresent(
+            "Privacy & Data Controls", "Your data, your control",
+            "Your privacy matters",
+            "Data & Permissions", "Manage what Nexly can access",
+            "App Permissions", "Personalization & Ads", "Third-Party Integrations",
+            "Conversation & Activity", "Control your chat data",
+            "Chat History", "Search History", "Data Retention",
+            "Export & Deletion", "Download or delete your data",
+            "Export Your Data", "Delete Your Account",
+            "We respect your privacy",
+        )
+    }
+
+    @Test
     fun theSettingsHubReachesTheFourSettingsSheets() {
         val routes = mutableListOf<String>()
         render { SettingsHubScreen(onBack = {}, onNavigate = { routes += it }) }
 
         compose.onNodeWithText("Notifications").performScrollTo().performClick()
         compose.onNodeWithText("Device & Account").performScrollTo().performClick()
+        // These three were registered routes with no entry point until the hub
+        // gained them; the click proves each one is now reachable, not just
+        // composed.
+        compose.onNodeWithText("Chat & Conversations").performScrollTo().performClick()
+        compose.onNodeWithText("Voice & Speech").performScrollTo().performClick()
+        compose.onNodeWithText("Accessibility").performScrollTo().performClick()
         compose.onNodeWithText("Help & Support").performScrollTo().performClick()
         compose.onNodeWithText("View plan").performScrollTo().performClick()
 
@@ -268,6 +291,9 @@ class ReferenceSheetsContentTest {
             listOf(
                 GsRoutes.SETTINGS_NOTIFICATIONS,
                 GsRoutes.SETTINGS_ACCOUNT,
+                GsRoutes.SETTINGS_CHAT,
+                GsRoutes.SETTINGS_VOICE,
+                GsRoutes.SETTINGS_ACCESSIBILITY,
                 GsRoutes.SETTINGS_HELP,
                 GsRoutes.SETTINGS_PLAN,
             ),

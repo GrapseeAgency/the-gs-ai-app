@@ -29,7 +29,9 @@ final class SheetsUITests: XCTestCase {
         }
 
         let sheets: [(row: String, marker: String)] = [
+            ("Privacy Settings", "Your privacy matters"),
             ("Notifications & Alerts", "Notification Types"),
+            ("AI Intelligence", "Model Selection & Reasoning Effort"),
             ("Account & Security", "Sign-in Methods"),
             ("Connected Apps", "Your Connected Apps"),
             ("Help & Support", "Browse by Category"),
@@ -42,6 +44,22 @@ final class SheetsUITests: XCTestCase {
             XCTAssertTrue(
                 app.staticTexts[sheet.marker].waitForExistence(timeout: 15),
                 "\(sheet.row) opened but never showed \"\(sheet.marker)\"")
+            // Chat History & Search is reached from the privacy sheet, not a
+            // hub row. Proof lives inside the privacy visit so the run keeps
+            // its two-launch shape.
+            if sheet.row == "Privacy Settings" {
+                if tapRow(app, prefix: "Chat History") {
+                    XCTAssertTrue(
+                        app.staticTexts["Chat History & Search"].waitForExistence(timeout: 15),
+                        "Chat History opened but never showed its own page")
+                    XCTAssertTrue(
+                        app.staticTexts["Recent Chats"].waitForExistence(timeout: 10),
+                        "Chat History opened without its recent-chats section")
+                    back(app)
+                } else {
+                    XCTFail("the privacy sheet never offered Chat History")
+                }
+            }
             goBack(app)
         }
 
@@ -122,12 +140,17 @@ final class SheetsUITests: XCTestCase {
     }
 
     private func goBack(_ app: XCUIApplication) {
+        back(app)
+        _ = app.staticTexts["Settings"].waitForExistence(timeout: 12)
+    }
+
+    /// One level up, without assuming which page is underneath.
+    private func back(_ app: XCUIApplication) {
         let back = app.buttons["Back"].firstMatch
         if back.waitForExistence(timeout: 8) {
             back.tap()
         } else {
             XCTFail("the sheet offered no Back control")
         }
-        _ = app.staticTexts["Settings"].waitForExistence(timeout: 12)
     }
 }

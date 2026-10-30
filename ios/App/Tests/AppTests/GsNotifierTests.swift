@@ -1,14 +1,15 @@
 import XCTest
 @testable import GSApp
 
-/// The iOS half of the notice path that can be real today: an in-app record
-/// gated by the same master + per-kind switches the Notifications & Alerts
-/// sheet writes.
+/// The iOS notice path: an in-app record gated by the master + per-kind
+/// switches, the release-notice token, and the quiet-hours arithmetic the
+/// banner dispatcher shares with Android.
 ///
-/// No banner is posted — iOS has no dispatcher in this build — but a sign-in
-/// is an account event the app can back, and these tests pin that it reaches
-/// the Inbox only when both switches allow it. A future dispatcher posts first
-/// and records after, exactly as Android's `GsNotifier.post` does.
+/// The dispatcher itself (UNUserNotificationCenter) is not exercised here — a
+/// unit-test host cannot show a banner, and pretending otherwise would make
+/// this suite certify nothing. What is pinned is every gate that decides
+/// whether a banner is even attempted, plus the rule that the Inbox row is
+/// written only after a real delivery or a real in-app event.
 @MainActor
 final class GsNotifierTests: XCTestCase {
 
@@ -85,5 +86,61 @@ final class GsNotifierTests: XCTestCase {
         XCTAssertFalse(GsNotifier.record(kind: .accountActivity, title: "", body: "text"))
         XCTAssertFalse(GsNotifier.record(kind: .accountActivity, title: "title", body: "   "))
         XCTAssertTrue(inbox.entries.isEmpty)
+    }
+
+    /// The mock's window is 22:00 → 07:00 and wraps midnight. Both halves and
+    /// both boundaries have to hold, or quiet hours either never closes or
+    /// never opens.
+    func testQuietHoursWrapAcrossMidnight() {
+        func at(_ hour: Int, _ minute: Int = 0) -> Date {
+            var parts = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+            parts.hour = hour
+            parts.minute = minute
+            return Calendar.current.date(from: parts) ?? Date()
+        }
+        // 22:00 → 07:00
+        XCTAssertFalse(GsNotifier.inQuietHours(at(21, 59), startMinute: 22 * 60, endMinute: 7 * 60))
+        XCTAssertTrue(GsNotifier.inQuietHours(at(22, 0), startMinute: 22 * 60, endMinute: 7 * 60))
+        XCTAssertTrue(GsNotifier.inQuietHours(at(0, 30), startMinute: 22 * 60, endMinute: 7 * 60))
+        XCTAssertTrue(GsNotifier.inQuietHours(at(6, 59), startMinute: 22 * 60, endMinute: 7 * 60))
+        XCTAssertFalse(GsNotifier.inQuietHours(at(7, 0), startMinute: 22 * 60, endMinute: 7 * 60))
+        // A same-day window is the plain interval, not the wrapped one.
+        XCTAssertTrue(GsNotifier.inQuietHours(at(13, 0), startMinute: 12 * 60, endMinute: 14 * 60))
+        XCTAssertFalse(GsNotifier.inQuietHours(at(14, 0), startMinute: 12 * 60, endMinute: 14 * 60))
+    }
+
+    /// The version notice is once per build, and the token is spent only when a
+    /// row was really written: with the master switch off, the next launch must
+    /// still announce it.
+    func testReleaseNoticeSpendsItsTokenOnlyOnceRecorded() async {
+        reset()
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: GsReleaseNotice.versionKey)
+
+        GsReleaseNotice.announceIfNeeded(version: "9.9.9-test")
+        await Task.yield()
+        for _ in 0..<20 where inbox.entries.isEmpty {
+            await Task.yield()
+        }
+        XCTAssertEqual(inbox.entries.count, 1)
+        XCTAssertEqual(inbox.entries.first?.kindId, "product-updates")
+        XCTAssertEqual(defaults.string(forKey: GsReleaseNotice.versionKey), "9.9.9-test")
+
+        // Same version again: no second row.
+        GsReleaseNotice.announceIfNeeded(version: "9.9.9-test")
+        await Task.yield()
+        XCTAssertEqual(inbox.entries.count, 1)
+
+        // Master switch off: a new version writes nothing and keeps its token.
+        settings.pushNotifications = false
+        defaults.removeObject(forKey: GsReleaseNotice.versionKey)
+        GsReleaseNotice.announceIfNeeded(version: "9.9.10-test")
+        await Task.yield()
+        XCTAssertTrue(inbox.entries.isEmpty)
+        XCTAssertNil(defaults.string(forKey: GsReleaseNotice.versionKey))
+
+        settings.pushNotifications = true
+        inbox.removeAllForTesting()
+        defaults.removeObject(forKey: GsReleaseNotice.versionKey)
     }
 }

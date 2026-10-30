@@ -194,7 +194,7 @@ struct SettingsView: View {
             // Privacy & Data.
             GsGroupHeader(title: "Privacy & Data", caption: "Your data, your control")
             GsGroupCard {
-                hubRow("Privacy Settings", "Manage your data and activity", "lock", .peach, .settingsSection(.privacy))
+                hubRow("Privacy Settings", "Manage your data and activity", "lock", .peach, .privacyDataControls)
                 hubDivider
                 hubRow("Data Controls", "Control what you share and store", "shield-check", .peach, .settingsSection(.privacy))
                 hubDivider
@@ -204,6 +204,21 @@ struct SettingsView: View {
             // App Settings.
             GsGroupHeader(title: "App Settings", caption: "Fine-tune your experience")
             GsGroupCard {
+                // Android's hub carries this row for the same reason: the
+                // model / reasoning page was reachable only from Chat's AI
+                // section, so the reference screen had no direct entry. It
+                // lives in the last group so every card the settings pixel
+                // gate anchors on keeps its measured y.
+                hubRow("AI Intelligence", "Model, reasoning effort and preferences", "sparkles", .peach, .modelSelection)
+                hubDivider
+                // Android's hub exposes these two as their own rows; on iOS
+                // they were reachable only from inside other pages (Chat's AI
+                // section, Appearance's accessibility block). Same last group,
+                // same reason: no anchored card moves.
+                hubRow("Chat & Conversations", "How new chats behave", "message-circle", .peach, .settingsSection(.chat))
+                hubDivider
+                hubRow("Accessibility", "Contrast, text size and motion", "eye", .peach, .settingsSection(.accessibility))
+                hubDivider
                 hubRow("Notifications & Alerts", "Choose what you receive", "bell", .peach, .notificationsAlerts)
                 hubDivider
                 hubRow("Account & Security", "Sign-in, app lock and sessions", "device-mobile", .peach, .accountSecurity)
@@ -665,7 +680,7 @@ struct SettingsView: View {
 
 
 /// The export document — the same contract the Android build writes.
-private struct ExportPayload: Encodable {
+struct ExportPayload: Encodable {
     let exportedAt: String
     let conversations: [StoredConversation]
     let messages: [StoredMessage]
@@ -674,7 +689,7 @@ private struct ExportPayload: Encodable {
 
 /// The system share sheet, so "Export data" hands the JSON to Files, Mail,
 /// AirDrop — wherever the reader wants it.
-private struct ActivitySheet: UIViewControllerRepresentable {
+struct ActivitySheet: UIViewControllerRepresentable {
     let items: [Any]
 
     func makeUIViewController(context: Context) -> UIActivityViewController {

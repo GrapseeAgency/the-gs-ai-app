@@ -37,6 +37,14 @@ final class SettingsStore: ObservableObject {
     /// before this existed.
     @Published var preferLocal: Bool { didSet { defaults.set(preferLocal, forKey: K.preferLocal) } }
     @Published var reasoning: String { didSet { defaults.set(reasoning, forKey: K.reasoning) } }
+
+    // Model Selection & Reasoning Effort — docs/reference/pending/
+    // model-selection.png. Keys and defaults mirror Android's SettingsStore
+    // (`settings.preferredModel`, `.reasoningEffort`, `.rememberChoices`), so
+    // a cross-platform export carries one vocabulary.
+    @Published var preferredModel: String { didSet { defaults.set(preferredModel, forKey: K.preferredModel) } }
+    @Published var reasoningEffort: String { didSet { defaults.set(reasoningEffort, forKey: K.reasoningEffort) } }
+    @Published var rememberChoices: Bool { didSet { defaults.set(rememberChoices, forKey: K.rememberChoices) } }
     // Privacy
     @Published var helpImprove: Bool { didSet { defaults.set(helpImprove, forKey: K.helpImprove) } }
     // Security
@@ -77,6 +85,40 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    // MARK: - Model selection
+
+    /// Effort tile -> wire mode. The wire accepts exactly
+    /// `flash | thinking | auto`, so Minimal and Light are the same mode today:
+    /// the tile remembers which one was tapped, the server cannot yet tell them
+    /// apart. Widening this is a backend change, not a UI one.
+    static func wireMode(forEffort effort: String) -> String {
+        switch effort {
+        case "minimal", "light": return "flash"
+        case "high": return "thinking"
+        default: return "auto"
+        }
+    }
+
+    /// Writes the tile AND the new-chat wire mode, so the chip that is lit and
+    /// what the next reply does never disagree. `gs.mode.new` is the key
+    /// ChatViewModel falls back to for a brand-new conversation.
+    ///
+    /// "Remember my choices" governs the NEW-chat default only — the same
+    /// contract Android's store implements — so with it off the default stays
+    /// flash while the tile still remembers what was tapped.
+    func applyReasoningEffort(_ effort: String) {
+        reasoningEffort = effort
+        let wire = rememberChoices ? Self.wireMode(forEffort: effort) : "flash"
+        defaults.set(wire, forKey: "gs.mode.new")
+    }
+
+    /// Back to the mock's recommended pair: Pro, Standard effort, remembering.
+    func resetModelPreferences() {
+        preferredModel = "pro"
+        rememberChoices = true
+        applyReasoningEffort("standard")
+    }
+
     // Language
     @Published var aiLanguage: String { didSet { defaults.set(aiLanguage, forKey: K.aiLanguage) } }
     // Accessibility
@@ -108,6 +150,11 @@ final class SettingsStore: ObservableObject {
         // false, not true. An absent key must mean OFF.
         preferLocal = defaults.object(forKey: K.preferLocal) as? Bool ?? false
         reasoning = defaults.string(forKey: K.reasoning) ?? "Medium"
+        preferredModel = defaults.string(forKey: K.preferredModel) ?? "pro"
+        reasoningEffort = defaults.string(forKey: K.reasoningEffort) ?? "standard"
+        // true, like Android: the tile the reader taps and the default the next
+        // new chat picks are the same choice until they say otherwise.
+        rememberChoices = defaults.object(forKey: K.rememberChoices) as? Bool ?? true
         helpImprove = defaults.object(forKey: K.helpImprove) as? Bool ?? false
         appPasscode = defaults.object(forKey: K.appPasscode) as? Bool ?? false
         // false, not true: a lock is opt-in. Android's store has always
@@ -158,6 +205,9 @@ final class SettingsStore: ObservableObject {
         static let personalisation = "settings.personalisation"
         static let preferLocal = "settings.preferLocal"
         static let reasoning = "settings.reasoning"
+        static let preferredModel = "settings.preferredModel"
+        static let reasoningEffort = "settings.reasoningEffort"
+        static let rememberChoices = "settings.rememberChoices"
         static let helpImprove = "settings.helpImprove"
         static let appPasscode = "settings.appPasscode"
         static let biometricUnlock = "settings.biometricUnlock"

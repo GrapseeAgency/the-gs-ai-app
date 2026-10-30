@@ -84,6 +84,26 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
+      # BEFORE the build, not after it. The sheet and Settings pixel gates are
+      # `if: always()` so their verdict still lands when the suite is red — and
+      # run 41014412869 proved why the install cannot sit later: Test failed
+      # first, the install step was skipped, and both gates died on
+      # `ModuleNotFoundError: numpy` instead of measuring anything. A gate that
+      # only works when nothing has failed yet is not always-on.
+      - name: Set up Python for the render probe
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install render-probe dependencies
+        run: |
+          set -euo pipefail
+          # Pinned. This step feeds the numerics behind a blocking gate
+          # (np.median over a probe window), so an unpinned numpy or Pillow
+          # release could move a measured value and flip both platforms' verdict
+          # with no change on our side.
+          python3 -m pip install --quiet --disable-pip-version-check "numpy==2.1.3" "pillow==11.0.0"
+
       - name: Host toolchain report (before selection)
         run: |
           sw_vers
@@ -265,20 +285,6 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee ios/build/xcodebuild-test.log
 
-      - name: Set up Python for the render probe
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install render-probe dependencies
-        run: |
-          set -euo pipefail
-          # Pinned. This step feeds the numerics behind a blocking gate
-          # (np.median over a probe window), so an unpinned numpy or Pillow
-          # release could move a measured value and flip both platforms' verdict
-          # with no change on our side.
-          python3 -m pip install --quiet --disable-pip-version-check "numpy==2.1.3" "pillow==11.0.0"
-
       - name: Collect the iOS renders into the workspace
         run: |
           set -euo pipefail
@@ -399,8 +405,10 @@ jobs:
           SRC=/tmp/gs-nexly-renders
           DIR=ios/build/nexly-renders
           mkdir -p "$DIR"
-          for name in nexly-alerts-ios nexly-inbox-ios nexly-security-ios \
-                      nexly-subscription-ios nexly-help-ios nexly-integrations-ios; do
+          for name in nexly-privacy-ios nexly-alerts-ios nexly-inbox-ios \
+                      nexly-security-ios nexly-subscription-ios \
+                      nexly-help-ios nexly-integrations-ios \
+                      nexly-model-ios nexly-chat-history-ios; do
             if [ -d "$SRC" ]; then cp "$SRC/$name-393x852.png" "$DIR/" 2>/dev/null || true; fi
             test -s "$DIR/$name-393x852.png" \
               || { echo "::error::$name-393x852.png missing — the owner-sheet render harness did not produce it"; exit 1; }

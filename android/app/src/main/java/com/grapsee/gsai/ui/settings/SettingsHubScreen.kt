@@ -312,6 +312,32 @@ fun SettingsHubScreen(
                 leading = { RefWellTile(GsIcons.Smartphone, GsWellTone.Peach, 28.dp) },
             )
             RefRowDivider()
+            // Three more registered-but-unreachable destinations, the same
+            // defect the AI Intelligence row above exists for: Chat &
+            // Conversations, Voice & Speech and Accessibility had screens and
+            // routes but no way in. They join the last group for the same
+            // reason — no card the pixel gate anchors on moves.
+            RefNavRow(
+                title = "Chat & Conversations",
+                subtitle = "How new chats behave",
+                onClick = { onNavigate(GsRoutes.SETTINGS_CHAT) },
+                leading = { RefWellTile(GsIcons.MessageCircle, GsWellTone.Peach, 28.dp) },
+            )
+            RefRowDivider()
+            RefNavRow(
+                title = "Voice & Speech",
+                subtitle = "Listen, speak and keep your hands free",
+                onClick = { onNavigate(GsRoutes.SETTINGS_VOICE) },
+                leading = { RefWellTile(GsIcons.Mic, GsWellTone.Peach, 28.dp) },
+            )
+            RefRowDivider()
+            RefNavRow(
+                title = "Accessibility",
+                subtitle = "Contrast, text size and motion",
+                onClick = { onNavigate(GsRoutes.SETTINGS_ACCESSIBILITY) },
+                leading = { RefWellTile(GsIcons.Eye, GsWellTone.Peach, 28.dp) },
+            )
+            RefRowDivider()
             // Help & Support was registered as a route with nothing pointing at
             // it — the same unreachable-screen bug this file's AI Intelligence
             // row exists to fix. It sits in the last group for the same reason:
