@@ -74,7 +74,7 @@ fun SettingsHubScreen(
     val colors = GsTheme.colors
     val name = AccountStore.displayName(context)
     val email = AccountStore.email(context)
-    val initials = initialsOf(name.ifBlank { "Arafat" })
+    val initials = initialsOf(name).ifBlank { "GS" }
 
     RefSettingsPage(
         title = "Settings",
@@ -143,7 +143,7 @@ fun SettingsHubScreen(
                     Spacer(Modifier.width(11.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            name.ifBlank { "Arafat" },
+                            name.ifBlank { "Your account" },
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = GsFonts.Product,
@@ -151,7 +151,7 @@ fun SettingsHubScreen(
                             maxLines = 1,
                         )
                         Text(
-                            email.ifBlank { "arafat@example.com" },
+                            email.ifBlank { "No Grapsee address on this device" },
                             fontSize = 11.sp,
                             fontFamily = GsFonts.Product,
                             color = colors.textTertiary,

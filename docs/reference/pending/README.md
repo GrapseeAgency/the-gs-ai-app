@@ -474,8 +474,9 @@ Three surfaces failed that bar and are now closed:
   has `SETTINGS_IDENTITY` (`IdentitySettingsScreen`) reached from Profile, the
   identity card and the Grapsee Mail row; iOS's card opens the same two-field
   editor as a sheet. It writes `AccountStore` and says the address changes this
-  install's identity, not a mailbox. Android's card also stopped inventing
-  "Arafat"/"arafat@example.com" when the store is empty.
+  install's identity, not a mailbox. The same empty-store fallbacks in the
+  Settings hub ("Arafat"/"arafat@example.com") now say "Your account" and
+  "No Grapsee address on this device".
 - **iOS had two privacy pages.** "Privacy Settings" opened the reference page
   while "Data Controls" and "Export / Delete Data" opened a different, older
   settings section — and Connected Apps' permissions link went there too. All

@@ -5510,8 +5510,10 @@ Work Log:
   a pencil badge and chevron but no action. Added SETTINGS_IDENTITY /
   IdentitySettingsScreen (name + email, `AccountStore`, email validation) and
   routed Profile's rows, the identity card and the Grapsee Mail row to it; iOS
-  opens the same editor as a sheet from its Profile card. Android's card also
-  stopped inventing "Arafat"/"arafat@example.com" when the store is empty.
+  opens the same editor as a sheet from its Profile card. Android's card and
+  the Settings hub also stopped inventing "Arafat"/"arafat@example.com" when
+  the store is empty; both now say "Your account" and "No Grapsee address on
+  this device".
 - iOS "Delete account" promised permanent account and data deletion and did
   nothing but a haptic. It now wipes the local corpus and signs out, matching
   Android, and the dialog copy names exactly that. iOS About gained the
