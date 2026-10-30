@@ -44,6 +44,13 @@ final class SettingsStore: ObservableObject {
     @Published var preferredModel: String { didSet { defaults.set(preferredModel, forKey: K.preferredModel) } }
     @Published var reasoningEffort: String { didSet { defaults.set(reasoningEffort, forKey: K.reasoningEffort) } }
     @Published var rememberChoices: Bool { didSet { defaults.set(rememberChoices, forKey: K.rememberChoices) } }
+
+    // Data Export & Account Deletion — the retention controls are read by
+    // DataRetention.purgeExpired, the only consumer. Auto-delete defaults OFF
+    // even though the mock draws it on: deleting old chats on first launch is
+    // not a safe default. The switch shows the stored value.
+    @Published var dataRetentionMonths: Int { didSet { defaults.set(dataRetentionMonths, forKey: K.dataRetentionMonths) } }
+    @Published var autoDeleteInactive: Bool { didSet { defaults.set(autoDeleteInactive, forKey: K.autoDeleteInactive) } }
     // Security
     @Published var biometricUnlock: Bool { didSet { defaults.set(biometricUnlock, forKey: K.biometricUnlock) } }
     /// Epoch millis of the last successful biometric check; 0 when none.
@@ -145,6 +152,8 @@ final class SettingsStore: ObservableObject {
         // true, like Android: the tile the reader taps and the default the next
         // new chat picks are the same choice until they say otherwise.
         rememberChoices = defaults.object(forKey: K.rememberChoices) as? Bool ?? true
+        dataRetentionMonths = defaults.object(forKey: K.dataRetentionMonths) as? Int ?? 12
+        autoDeleteInactive = defaults.object(forKey: K.autoDeleteInactive) as? Bool ?? false
         // false, not true: a lock is opt-in. Android's store has always
         // defaulted off, and an app that arms a biometric prompt before the
         // user asked for one is a lock they never chose.
@@ -191,6 +200,8 @@ final class SettingsStore: ObservableObject {
         static let preferredModel = "settings.preferredModel"
         static let reasoningEffort = "settings.reasoningEffort"
         static let rememberChoices = "settings.rememberChoices"
+        static let dataRetentionMonths = "settings.retention.months"
+        static let autoDeleteInactive = "settings.retention.autoDelete"
         static let biometricUnlock = "settings.biometricUnlock"
         static let lastSecurityCheck = "settings.lastSecurityCheck"
         static let pushNotifications = "settings.pushNotifications"

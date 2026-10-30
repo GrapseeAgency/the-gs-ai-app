@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""check_sheets_render.py — the nine reference pages' measured card gate.
+"""check_sheets_render.py — the ten reference pages' measured card gate.
 
 WHY THIS EXISTS
 ---------------
@@ -185,6 +185,20 @@ SCREENS = {
         rim_window=(40.0, 800.0),
         steps=None,
         note="Read aloud hero, Voice group",
+    ),
+    # Data Export's third group is the rose warning card, whose rim is not the
+    # white 248-255 edge this gate measures. The two white cards (Export and
+    # Retention) are the counted ones; the window ends before Delete so the
+    # rose card cannot be mistaken for a white rim.
+    "data": dict(
+        stem="ref-data-export",
+        rims=2,
+        rim_window=(80.0, 650.0),
+        steps=None,
+        note="Export card, Data Retention card",
+        rims_ios=2,
+        rim_window_ios=(80.0, 600.0),
+        steps_ios=None,
     ),
 }
 

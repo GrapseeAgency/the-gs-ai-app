@@ -312,4 +312,27 @@ class ReferenceSheetsContentTest {
 
         assertEquals(GsRoutes.SETTINGS_INTEGRATIONS, route)
     }
+
+    @Test
+    fun dataExportCarriesItsGroups() {
+        render { DataExportAccountDeletionScreen(onBack = {}) }
+
+        assertPresent(
+            "Data Export & Account Deletion",
+            "Take control of your data. Export what you need or delete your account when you're ready.",
+            "Export Your Data", "Download your information",
+            "Export Conversations", "Personal Data Archive",
+            "Export Format", "Choose your preferred file format for export.",
+            "JSON", "Structured data", "PDF", "Readable document",
+            "CSV", "Spreadsheet format",
+            "Download Complete Archive",
+            "Data Retention", "Control how long we keep your data",
+            "Data Retention Period", "Choose how long to keep conversations you have not opened.",
+            "Auto-Delete Inactive Data", "Clear Chat History",
+            "Delete Your Account", "This action is permanent",
+            "Permanently Delete Account",
+            "I understand that this action is permanent and I want to delete my account.",
+            "Delete Account",
+        )
+    }
 }

@@ -188,6 +188,19 @@ final class SQLiteChatStore: @unchecked Sendable {
         }
     }
 
+    /// Retention: conversations whose last turn is older than the ISO cutoff,
+    /// and the messages that belong to them. Both statements run in the same
+    /// queue block so no reader can observe a conversation without its turns.
+    func deleteConversations(updatedBefore cutoff: String) {
+        queue.sync {
+            deleteRows(
+                "DELETE FROM messages WHERE conversationId IN " +
+                "(SELECT id FROM conversations WHERE updatedAt < ?)",
+                cutoff)
+            deleteRows("DELETE FROM conversations WHERE updatedAt < ?", cutoff)
+        }
+    }
+
     // MARK: - Row reads
 
     func loadConversations() -> [StoredConversation] {

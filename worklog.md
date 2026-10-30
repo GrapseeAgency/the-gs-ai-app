@@ -5553,3 +5553,55 @@ Stage Summary:
   platform difference is background style (Android-only) and the accent system
   iOS does not have — both recorded as capabilities, not missing pages. Both
   workflows are green on the final commit (dc9cb419).
+
+- Data Export & Account Deletion (docs/reference/pending/
+  data-export-account-deletion.png) is now on both platforms. The page keeps the
+  mock's three groups and inventory: Export Your Data (two exports, the JSON/
+  PDF/CSV format tiles, the complete archive), Data Retention (period,
+  auto-delete, clear history) and Delete Your Account (rose warning card,
+  consent checkbox, destructive button). Android is
+  `DataExportAccountDeletionScreen` at `SETTINGS_DATA`; iOS is
+  `DataExportAccountDeletionView` at `.dataExportAccountDeletion`. Privacy &
+  Data Controls now routes its Data Retention, Export Your Data and Delete Your
+  Account rows to the owner page instead of keeping a static retention claim or
+  a second destructive flow.
+- Exports are real. `DataExport` (both platforms) writes JSON, CSV or a
+  paginated PDF for conversations, the personal archive or the complete
+  archive. The JSON/CSV carry the stored attachment records; the PDF lists
+  their names. No mail leaves this build, so the mock's "sent to your email"
+  row is titled "Download Complete Archive", says "saved to a file you choose",
+  and the pill says "Save Archive". The row also says "attachment details",
+  because attachment bytes are not part of the export.
+- Retention is real. `SettingsStore` keeps `settings.retention.months`
+  (default 12) and `settings.retention.autoDelete` (default OFF — the mock
+  draws it on, but deleting a reader's old chats on first launch is not a safe
+  default). `DataRetention.purgeExpired` deletes conversations last touched
+  before the period and their messages; it runs at launch and immediately when
+  the switch or period changes. Clear Chat History removes conversations,
+  messages and staged attachments but keeps Library saves. Delete Account
+  removes the corpus and Library, clears staged files, identity, plan
+  activation and the session on both platforms.
+- Evidence: Android compiles; the full JVM suite is 394 tests, 0 failures,
+  50 skipped (the capture class is skipped without `-PgsShots`), including 13
+  new tests this pass (5 retention, 3 export, 3 interaction, 1 content, 1
+  capture). `ReferenceSheetsContentTest` asserts the page's full copy,
+  `ReferenceRowInteractionTest` proves the format radio group, the auto-delete
+  store write, the consent gate and the privacy hand-off, and
+  `ReferenceSheetsScreenshotTest` writes `ref-data-export.png`. The Android
+  render gate is green on that capture with its self-test, and the copy gate
+  lists the page on both platforms. The capture uses the shipped Lilac accent
+  (the mock's own palette) and restores the default afterwards. iOS
+  `ReferenceSheetsRenderTests` captures `nexly-data-export-ios`; the iOS
+  simulator run and both workflow halves are the remaining observation. The
+  render gate expects two white rims (Export and Retention) and deliberately
+  excludes the rose Delete card.
+
+Stage Summary:
+- The ten-page owner set is built. Data Export & Account Deletion is the last
+  page; it is wired to real JSON/PDF/CSV export, enforced retention, clear
+  history and the full local delete flow on Android and iOS. Privacy & Data
+  Controls now hands its three data actions to that owner page.
+- Android is locally observed: 394 JVM tests green, the new capture passes the
+  card gate and its self-test, and the copy gate covers both platforms. iOS
+  static gates pass. The iOS simulator render and both workflow halves are the
+  next observation for this page; no CI run is claimed for it yet.

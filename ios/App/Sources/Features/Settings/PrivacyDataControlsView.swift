@@ -14,12 +14,8 @@ struct PrivacyDataControlsView: View {
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var router: Router
-    @AppStorage("gs.session.active") private var sessionActive = true
 
-    @State private var confirmDelete = false
     @State private var confirmClear = false
-    @State private var exportURL: URL?
-    @State private var showExport = false
 
     private let lotusAlpha: Double = 0.55
 
@@ -85,13 +81,14 @@ struct PrivacyDataControlsView: View {
                 }
                 GsSettingsRow(
                     title: "Data Retention",
-                    detail: "Kept on this device until you delete it",
+                    // The owner page can now choose a period and auto-delete.
+                    detail: "Choose how long we keep your data",
                     showDivider: false,
-                    action: nil
+                    action: { router.path.append(.dataExportAccountDeletion) }
                 ) {
                     GsWellTile(glyph: "clock", tone: .rose, size: 28)
                 } trailing: {
-                    EmptyView()
+                    chevron
                 }
             }
 
@@ -100,7 +97,7 @@ struct PrivacyDataControlsView: View {
                 GsSettingsRow(
                     title: "Export Your Data",
                     detail: "Download a copy of your information",
-                    action: buildExportFile
+                    action: { router.path.append(.dataExportAccountDeletion) }
                 ) {
                     GsWellTile(glyph: "download", tone: .blue, size: 28)
                 } trailing: {
@@ -119,7 +116,7 @@ struct PrivacyDataControlsView: View {
                     title: "Delete Your Account",
                     detail: "Permanently remove everything this app stores on this device",
                     showDivider: false,
-                    action: { confirmDelete = true }
+                    action: { router.path.append(.dataExportAccountDeletion) }
                 ) {
                     GsWellTile(glyph: "trash", tone: .rose, size: 28)
                 } trailing: {
@@ -142,27 +139,6 @@ struct PrivacyDataControlsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Cached chats, files and drafts on this device will be removed. Your account is untouched.")
-        }
-        .confirmationDialog(
-            "Delete your data on this device?",
-            isPresented: $confirmDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Clear everything", role: .destructive) {
-                ConversationStore.shared.wipeAllContent()
-                GSHaptics.warning()
-                // There is no server account to delete; the honest action is
-                // to close the identity along with the local data.
-                sessionActive = false
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Every conversation, message and library save on this device will be removed. This cannot be undone.")
-        }
-        .sheet(isPresented: $showExport) {
-            if let url = exportURL {
-                ActivitySheet(items: [url])
-            }
         }
     }
 
@@ -231,33 +207,5 @@ struct PrivacyDataControlsView: View {
     private func openAppSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
-    }
-
-    /// The same JSON contract the Settings privacy section writes: the full
-    /// SQLite corpus plus library saves, assembled off the main thread.
-    private func buildExportFile() {
-        let store = ConversationStore.shared
-        let conversations = store.conversations
-        let library = store.savedLibraryItems()
-        let exportedAt = ConversationStore.now()
-        Task {
-            let url: URL? = await Task.detached(priority: .userInitiated) { () -> URL? in
-                let messages = store.exportMessages()
-                let payload = ExportPayload(
-                    exportedAt: exportedAt,
-                    conversations: conversations,
-                    messages: messages,
-                    library: library)
-                guard let data = try? JSONEncoder().encode(payload) else { return nil }
-                let url = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("gs-ai-export.json")
-                do { try data.write(to: url, options: .atomic) } catch { return nil }
-                return url
-            }.value
-            guard let url else { return }
-            exportURL = url
-            GSHaptics.success()
-            showExport = true
-        }
     }
 }

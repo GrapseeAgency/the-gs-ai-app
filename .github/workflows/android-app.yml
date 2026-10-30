@@ -746,7 +746,7 @@ jobs:
         working-directory: android
         run: |
           set -euo pipefail
-          # The nine reference pages under docs/reference/pending, rendered at
+          # The ten reference pages under docs/reference/pending, rendered at
           # the mock's own canvas. The inbox is seeded TEST-ONLY in the suite so
           # its row rhythm can be seen at all; the shipped store starts empty.
           ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest \
@@ -756,7 +756,8 @@ jobs:
           for name in ref-notifications-alerts ref-notifications-inbox \
                       ref-account-security ref-subscription-usage \
                       ref-help-support ref-connected-apps \
-                      ref-model ref-chat-history ref-voice; do
+                      ref-model ref-chat-history ref-voice \
+                      ref-data-export; do
             for attempt in 1 2 3 4 5 6; do
               [ -s "$SHOTS/$name.png" ] && break
               sleep 5
@@ -764,7 +765,7 @@ jobs:
             test -s "$SHOTS/$name.png" \
               || { echo "::error::$name.png was not produced"; exit 1; }
           done
-          echo "rendered the nine reference pages"
+          echo "rendered the ten reference pages"
 
       - name: Measure the reference pages against their card contract
         if: always()
@@ -787,7 +788,8 @@ jobs:
                       connected:ref-connected-apps \
                       model:ref-model \
                       history:ref-chat-history \
-                      voice:ref-voice; do
+                      voice:ref-voice \
+                      data:ref-data-export; do
             screen=${pair%%:*}
             stem=${pair##*:}
             PNG="$SHOTS/$stem.png"
@@ -806,7 +808,8 @@ jobs:
                       connected:ref-connected-apps \
                       model:ref-model \
                       history:ref-chat-history \
-                      voice:ref-voice; do
+                      voice:ref-voice \
+                      data:ref-data-export; do
             screen=${pair%%:*}
             stem=${pair##*:}
             python3 scripts/check_sheets_render.py \

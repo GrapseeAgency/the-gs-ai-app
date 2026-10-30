@@ -29,6 +29,8 @@ enum AeroRoute: Hashable {
     /// settings-section detour.
     case notificationsAlerts
     case privacyDataControls
+    /// The owner of Privacy's Export, Retention and Delete rows.
+    case dataExportAccountDeletion
     case accountSecurity
     case subscriptionUsage
     case helpSupport
@@ -270,6 +272,7 @@ struct AeroDestinations: ViewModifier {
             case .notifications: NotificationsView()
             case .notificationsAlerts: NotificationsAlertsView()
             case .privacyDataControls: PrivacyDataControlsView()
+            case .dataExportAccountDeletion: DataExportAccountDeletionView()
             case .accountSecurity: AccountSecurityView()
             case .subscriptionUsage: SubscriptionUsageView()
             case .helpSupport: HelpSupportView()

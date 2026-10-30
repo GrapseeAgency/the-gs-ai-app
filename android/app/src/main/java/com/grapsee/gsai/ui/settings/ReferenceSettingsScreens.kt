@@ -4,8 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -55,8 +53,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.BuildConfig
 import com.grapsee.gsai.data.AccountStore
-import com.grapsee.gsai.data.DataExport
-import com.grapsee.gsai.data.SessionStore
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelStore
@@ -199,20 +195,6 @@ fun ThemeCustomisationScreen(onBack: () -> Unit) {
 fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {}) {
     val context = LocalContext.current
     val colors = GsTheme.colors
-    val scope = rememberCoroutineScope()
-    var confirmClear by remember { mutableStateOf(false) }
-    val export = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
-        if (uri != null) scope.launch {
-            val ok = DataExport.write(context, uri)
-            Toast.makeText(
-                context,
-                if (ok) "Export written" else "Could not write the export",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    }
 
     // docs/reference/pending/privacy-data-controls.png — the mock's chrome is
     // the settings scaffold (22dp inset, well-style back), not RefPage, and its
@@ -335,10 +317,11 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
             RefRowDivider()
             RefNavRow(
                 title = "Data Retention",
-                subtitle = "Kept on this device until you delete it",
-                onClick = null,
-                // No chevron: a static row must not promise a page.
-                trailing = {},
+                // The owner page can now choose a period and auto-delete; the
+                // hub row points at it instead of stating a policy that no
+                // longer matches what the app does.
+                subtitle = "Choose how long we keep your data",
+                onClick = { onNavigate(GsRoutes.SETTINGS_DATA) },
                 leading = { RefWellTile(GsIcons.Clock, GsWellTone.Rose, 28.dp) },
             )
         }
@@ -349,16 +332,16 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
             RefNavRow(
                 title = "Export Your Data",
                 subtitle = "Download a copy of your information",
-                onClick = { export.launch("gs-ai-export.json") },
+                onClick = { onNavigate(GsRoutes.SETTINGS_DATA) },
                 leading = { RefWellTile(GsIcons.Download, GsWellTone.Blue, 28.dp) },
             )
             RefRowDivider()
             RefNavRow(
                 title = "Delete Your Account",
-                // There is no server account to delete; the honest verb is what
-                // this actually erases.
+                // The detail page owns the destructive flow (its consent gate
+                // and its format choice); this row is the way there.
                 subtitle = "Permanently remove everything this app stores on this device",
-                onClick = { confirmClear = true },
+                onClick = { onNavigate(GsRoutes.SETTINGS_DATA) },
                 leading = { RefWellTile(GsIcons.Trash2, GsWellTone.Rose, 28.dp) },
             )
         }
@@ -369,37 +352,6 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
             icon = GsIcons.Lock,
         )
         Spacer(Modifier.height(10.dp))
-    }
-
-    if (confirmClear) {
-        AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            title = { Text("Delete your data on this device?") },
-            text = { Text("Every conversation, message and library save on this device will be removed. This cannot be undone.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmClear = false
-                    scope.launch {
-                        withContext(Dispatchers.IO) {
-                            runCatching {
-                                val db = ServiceLocator.db
-                                db.messageDao().deleteAll()
-                                db.savedItemDao().clear()
-                                db.conversationDao().clear()
-                            }
-                        }
-                        // "Delete Your Account" closes the identity too; leaving
-                        // a signed-in shell with no data is the half-done version
-                        // of what the row promises.
-                        SessionStore.signOut(context)
-                        Toast.makeText(context, "Local data cleared", Toast.LENGTH_SHORT).show()
-                    }
-                }) { Text("Clear everything") }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmClear = false }) { Text("Cancel") }
-            }
-        )
     }
 }
 

@@ -70,6 +70,11 @@ class ReferenceSheetsScreenshotTest {
         // mock draws instead of inheriting a neighbour test's selection.
         SettingsStore.updatePreferredModel("pro")
         SettingsStore.updateReasoningEffort("standard")
+        // Data Export draws the mock's ON auto-delete switch. The store's safe
+        // default is OFF, so the capture states the chosen state explicitly
+        // instead of inheriting a neighbour test's value.
+        SettingsStore.updateAutoDeleteInactive(true)
+        SettingsStore.updateDataRetentionMonths(12)
         // Chat History reads the real conversation store, so its capture needs
         // the same service graph the app boots; the DB is empty in this
         // harness, which is exactly the page an install with no chats sees.
@@ -154,6 +159,20 @@ class ReferenceSheetsScreenshotTest {
         shoot("build/screenshots/ref-chat-history.png") {
             ChatSearchScreen(onBack = {})
         }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun dataExportAccountDeletion() {
+        // The mock's own palette is lilac, and Lilac is one of the shipped
+        // accents; capture the page under the appearance it was drawn in, then
+        // restore the default so no sibling capture inherits it.
+        val previous = SettingsStore.accentId
+        SettingsStore.updateAccentId("lilac")
+        shoot("build/screenshots/ref-data-export.png") {
+            DataExportAccountDeletionScreen(onBack = {})
+        }
+        SettingsStore.updateAccentId(previous)
+    }
 
     @Test
     @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")

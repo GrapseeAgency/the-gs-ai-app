@@ -198,6 +198,15 @@ interface ConversationDao {
 
     @Query("DELETE FROM conversations")
     suspend fun clear()
+
+    /** Retention: the conversations whose last turn is older than the cutoff.
+     *  The ISO-8601 stamps are fixed-width UTC, so the comparison is
+     *  chronological without parsing every row. */
+    @Query("SELECT id FROM conversations WHERE updatedAt < :cutoff")
+    suspend fun idsUpdatedBefore(cutoff: String): List<String>
+
+    @Query("DELETE FROM conversations WHERE updatedAt < :cutoff")
+    suspend fun deleteUpdatedBefore(cutoff: String): Int
 }
 
 @Dao
@@ -260,6 +269,9 @@ interface MessageDao {
     /** Privacy pass: every message leaves the device. */
     @Query("DELETE FROM messages")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM messages WHERE conversationId IN (:conversationIds)")
+    suspend fun deleteForConversations(conversationIds: List<String>): Int
 
     /** Edge-states pass: chat-scoped search across local message bodies. */
     @Query("SELECT * FROM messages WHERE content LIKE '%' || :query || '%' ORDER BY createdAt DESC LIMIT 20")

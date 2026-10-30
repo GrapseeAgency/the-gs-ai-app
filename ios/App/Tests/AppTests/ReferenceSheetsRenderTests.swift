@@ -42,6 +42,23 @@ final class ReferenceSheetsRenderTests: XCTestCase {
             prefix: "nexly-privacy-ios")
     }
 
+    func testDataExportRenders() async throws {
+        // The mock draws auto-delete ON. The safe default is OFF, so the
+        // capture states the chosen state and restores it afterwards.
+        let settings = SettingsStore.shared
+        let previousAuto = settings.autoDeleteInactive
+        let previousMonths = settings.dataRetentionMonths
+        settings.autoDeleteInactive = true
+        settings.dataRetentionMonths = 12
+        defer {
+            settings.autoDeleteInactive = previousAuto
+            settings.dataRetentionMonths = previousMonths
+        }
+        try await capturePage(
+            view: { DataExportAccountDeletionView() },
+            prefix: "nexly-data-export-ios")
+    }
+
     func testAccountSecurityRenders() async throws {
         try await capturePage(
             view: { AccountSecurityView() },

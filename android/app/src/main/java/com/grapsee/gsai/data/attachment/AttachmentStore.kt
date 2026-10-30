@@ -447,6 +447,19 @@ class AttachmentStore(
         staged
     }
 
+    /**
+     * Privacy wipe: every staged copy, the draft map and its persisted entries
+     * leave the device. Called by Clear Chat History and Delete Account, where
+     * leaving attachment bytes behind would make the copy a half-truth.
+     */
+    fun purgeAllStagedFiles() {
+        boundConversationId = null
+        _drafts.value = emptyList()
+        sources.clear()
+        prefs.edit().clear().apply()
+        runCatching { File(context.filesDir, STAGING_ROOT).deleteRecursively() }
+    }
+
     private fun deleteStagedDir(draft: AttachmentDraft) {
         val path = draft.localPath ?: return
         runCatching {

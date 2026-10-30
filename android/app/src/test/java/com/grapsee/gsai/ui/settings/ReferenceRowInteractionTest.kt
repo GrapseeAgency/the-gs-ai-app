@@ -2,9 +2,12 @@ package com.grapsee.gsai.ui.settings
 
 import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -14,6 +17,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
 import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.billing.BillingScreen
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.profile.ProfileScreen
@@ -63,6 +67,8 @@ class ReferenceRowInteractionTest {
         SettingsStore.updateRememberChoices(true)
         SettingsStore.updatePreferredModel("pro")
         SettingsStore.updateReasoningEffort("standard")
+        SettingsStore.updateAutoDeleteInactive(false)
+        SettingsStore.updateDataRetentionMonths(12)
     }
 
     private fun renderModelScreen(
@@ -311,6 +317,25 @@ class ReferenceRowInteractionTest {
         assertEquals(listOf(GsRoutes.CHAT_SEARCH), routes)
     }
 
+    @Test
+    fun privacyHandsExportRetentionAndDeleteToTheOwnerPage() {
+        val routes = mutableListOf<String>()
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                PrivacySettingsScreen(onBack = {}, onNavigate = { routes += it })
+            }
+        }
+
+        compose.onNodeWithText("Export Your Data").performScrollTo().performClick()
+        compose.onNodeWithText("Delete Your Account").performScrollTo().performClick()
+        compose.onNodeWithText("Data Retention").performScrollTo().performClick()
+
+        assertEquals(
+            listOf(GsRoutes.SETTINGS_DATA, GsRoutes.SETTINGS_DATA, GsRoutes.SETTINGS_DATA),
+            routes,
+        )
+    }
+
     /**
      * The spec's cheap gate on "Model Preferences is in one view": the third
      * group's header must be visible at 393x852 WITHOUT scrolling. If a future
@@ -321,5 +346,49 @@ class ReferenceRowInteractionTest {
     fun modelPreferencesIsInOneViewAtSheetSize() {
         renderModelScreen()
         compose.onNodeWithText("Model Preferences").assertIsDisplayed()
+    }
+
+    @Test
+    fun dataExportFormatIsARadioGroup() {
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                DataExportAccountDeletionScreen(onBack = {})
+            }
+        }
+
+        compose.onNodeWithTag("export-format-json").assertIsSelected()
+        compose.onNodeWithTag("export-format-pdf").performScrollTo().performClick()
+        compose.onNodeWithTag("export-format-pdf").assertIsSelected()
+        compose.onNodeWithTag("export-format-json").assertIsNotSelected()
+    }
+
+    @Test
+    fun dataExportRetentionAndDeleteGateAreLive() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        // The toggle and the period chooser run the real purge, so the service
+        // graph the app boots must exist in this harness too.
+        ServiceLocator.init(ctx)
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                DataExportAccountDeletionScreen(onBack = {})
+            }
+        }
+
+        compose.onNodeWithText("Auto-Delete Inactive Data")
+            .performScrollTo()
+            .performClick()
+        assertTrue(SettingsStore.autoDeleteInactive)
+
+        compose.onNodeWithText("12 months").performScrollTo().performClick()
+        compose.onNodeWithText("24 months").performClick()
+        assertEquals(24, SettingsStore.dataRetentionMonths)
+
+        compose.onNodeWithText("Delete Account")
+            .performScrollTo()
+            .assertIsNotEnabled()
+        compose.onNodeWithText(
+            "I understand that this action is permanent and I want to delete my account."
+        ).performClick()
+        compose.onNodeWithText("Delete Account").assertIsEnabled()
     }
 }

@@ -21,6 +21,9 @@ object GsRoutes {
     const val SETTINGS_LANGUAGE = "settings/language"
     const val SETTINGS_NOTIFICATIONS = "settings/notifications"
     const val SETTINGS_PRIVACY = "settings/privacy"
+    /** Data Export & Account Deletion — the owner of the privacy page's
+     *  Export, Retention and Delete rows. */
+    const val SETTINGS_DATA = "settings/data"
     const val SETTINGS_AI = "settings/ai"
     const val SETTINGS_MODEL = "settings/model"
     const val SETTINGS_MEMORY = "settings/memory"

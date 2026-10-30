@@ -32,6 +32,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.grapsee.gsai.ShortcutBus
 import com.grapsee.gsai.data.SessionStore
+import com.grapsee.gsai.data.DataRetention
 import com.grapsee.gsai.data.notifications.GsNotifier
 import com.grapsee.gsai.ui.auth.AuthScreen
 import com.grapsee.gsai.ui.auth.OnboardingScreen
@@ -51,6 +52,7 @@ import com.grapsee.gsai.ui.integrations.ConnectedAppsScreen
 import com.grapsee.gsai.ui.support.HelpSupportScreen
 import com.grapsee.gsai.ui.settings.AccountSecurityScreen
 import com.grapsee.gsai.ui.settings.AiIntelligenceScreen
+import com.grapsee.gsai.ui.settings.DataExportAccountDeletionScreen
 import com.grapsee.gsai.ui.settings.AppearanceSettingsScreen
 import com.grapsee.gsai.ui.settings.ChatSettingsScreen
 import com.grapsee.gsai.ui.settings.IdentitySettingsScreen
@@ -123,6 +125,14 @@ fun GsNavHost(
         !SessionStore.isSessionActive(context) -> GsRoutes.AUTH
         !SessionStore.isOnboarded(context) -> GsRoutes.ONBOARDING
         else -> GsRoutes.HOME
+    }
+
+    // Retention is a launch-time contract, not a screen-local promise: with
+    // auto-delete on, conversations untouched for longer than the stored
+    // period leave before any list can paint them. Off by default, so this is
+    // a no-op for every install that never asked for it.
+    LaunchedEffect(Unit) {
+        runCatching { DataRetention.purgeExpired() }
     }
 
     // The current destination drives two shell behaviours at once: whether the
@@ -349,6 +359,21 @@ fun GsNavHost(
         }
         composable(GsRoutes.SETTINGS_PRIVACY) {
             PrivacySettingsScreen(onBack = back, onNavigate = open)
+        }
+        composable(GsRoutes.SETTINGS_DATA) {
+            DataExportAccountDeletionScreen(
+                onBack = back,
+                // Delete Account is a shell operation: leaving the page is the
+                // only honest completion once the identity is gone. Same exit
+                // the Settings hub's Log Out uses.
+                onAccountDeleted = {
+                    SessionStore.signOut(context)
+                    com.grapsee.gsai.data.PlanStore.clearActivation(context)
+                    navController.navigate(GsRoutes.AUTH) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+            )
         }
         composable(GsRoutes.SETTINGS_AI) {
             AiIntelligenceScreen(

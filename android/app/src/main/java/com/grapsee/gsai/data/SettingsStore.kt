@@ -104,6 +104,15 @@ object SettingsStore {
     /** "Remember my choices" — decides whether a new chat keeps the last mode. */
     var rememberChoices by mutableStateOf(true); private set
 
+    // ---- Data Export & Account Deletion ----
+    /** How many months of untouched conversations are kept when auto-delete is
+     *  on. Read by [DataRetention.purgeExpired], which is the only consumer. */
+    var dataRetentionMonths by mutableStateOf(12); private set
+    /** Auto-delete of inactive conversations. OFF by default: deleting a
+     *  reader's old chats on first launch is not a safe default, even though
+     *  the reference draws the switch on. The switch shows the stored value. */
+    var autoDeleteInactive by mutableStateOf(false); private set
+
     /** Call once from GSApplication before any UI reads the store. */
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -142,6 +151,8 @@ object SettingsStore {
         preferredModel = p.string(K.preferredModel, preferredModel)
         reasoningEffort = p.string(K.reasoningEffort, reasoningEffort)
         rememberChoices = p.bool(K.rememberChoices, rememberChoices)
+        dataRetentionMonths = p.integer(K.dataRetentionMonths, dataRetentionMonths)
+        autoDeleteInactive = p.bool(K.autoDeleteInactive, autoDeleteInactive)
     }
 
     private fun SharedPreferences.bool(key: String, fallback: Boolean): Boolean =
@@ -186,6 +197,8 @@ object SettingsStore {
         const val preferredModel = "settings.preferredModel"
         const val reasoningEffort = "settings.reasoningEffort"
         const val rememberChoices = "settings.rememberChoices"
+        const val dataRetentionMonths = "settings.retention.months"
+        const val autoDeleteInactive = "settings.retention.autoDelete"
     }
 
     private fun put(key: String, value: Boolean) {
@@ -276,6 +289,17 @@ object SettingsStore {
     }
 
     fun updateRememberChoices(v: Boolean) { rememberChoices = v; put(K.rememberChoices, v) }
+
+    // ---- Data retention --------------------------------------------------
+    fun updateDataRetentionMonths(v: Int) {
+        dataRetentionMonths = v.coerceIn(1, 24)
+        put(K.dataRetentionMonths, dataRetentionMonths)
+    }
+
+    fun updateAutoDeleteInactive(v: Boolean) {
+        autoDeleteInactive = v
+        put(K.autoDeleteInactive, v)
+    }
 
     // Appearance
     fun updateThemeMode(v: String) { themeMode = v; put(K.themeMode, v) }

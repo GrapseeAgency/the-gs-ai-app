@@ -63,6 +63,19 @@ final class SheetsUITests: XCTestCase {
                 } else {
                     XCTFail("the privacy sheet never offered Chat History")
                 }
+                // Data Retention is the privacy sheet's route into the data
+                // owner page. It must open the real page, not a second dialog.
+                if tapRow(app, prefix: "Data Retention") {
+                    XCTAssertTrue(
+                        app.staticTexts["Data Export & Account Deletion"].waitForExistence(timeout: 15),
+                        "Data Retention opened something other than the data page")
+                    XCTAssertTrue(
+                        app.staticTexts["Export Format"].waitForExistence(timeout: 10),
+                        "the data page opened without its format block")
+                    back(app)
+                } else {
+                    XCTFail("the privacy sheet never offered Data Retention")
+                }
             }
             goBack(app)
         }

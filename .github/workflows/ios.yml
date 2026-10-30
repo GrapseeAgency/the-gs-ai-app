@@ -399,7 +399,7 @@ jobs:
         run: |
           set -euo pipefail
           # ReferenceSheetsRenderTests shares the same /tmp channel. These are
-          # the nine pages under docs/reference/pending; the inbox is seeded
+          # the ten pages under docs/reference/pending; the inbox is seeded
           # test-only, exactly as Android's fixture seeds it, and cleared by the
           # test's defer so the next launch starts empty.
           SRC=/tmp/gs-nexly-renders
@@ -409,7 +409,7 @@ jobs:
                       nexly-security-ios nexly-subscription-ios \
                       nexly-help-ios nexly-integrations-ios \
                       nexly-model-ios nexly-chat-history-ios \
-                      nexly-voice-ios nexly-travel-ios; do
+                      nexly-voice-ios nexly-data-export-ios nexly-travel-ios; do
             if [ -d "$SRC" ]; then cp "$SRC/$name-393x852.png" "$DIR/" 2>/dev/null || true; fi
             test -s "$DIR/$name-393x852.png" \
               || { echo "::error::$name-393x852.png missing — the owner-sheet render harness did not produce it"; exit 1; }
@@ -443,7 +443,8 @@ jobs:
                       connected:nexly-integrations-ios \
                       model:nexly-model-ios \
                       history:nexly-chat-history-ios \
-                      voice:nexly-voice-ios; do
+                      voice:nexly-voice-ios \
+                      data:nexly-data-export-ios; do
             screen=${pair%%:*}
             stem=${pair##*:}
             PNG="$DIR/$stem-393x852.png"
@@ -463,7 +464,8 @@ jobs:
                       connected:nexly-integrations-ios \
                       model:nexly-model-ios \
                       history:nexly-chat-history-ios \
-                      voice:nexly-voice-ios; do
+                      voice:nexly-voice-ios \
+                      data:nexly-data-export-ios; do
             screen=${pair%%:*}
             stem=${pair##*:}
             python3 scripts/check_sheets_render.py \

@@ -59,6 +59,10 @@ final class ConversationStore: ObservableObject {
 
     static func now() -> String { timestamp.string(from: Date()) }
 
+    /// The same fixed-width ISO shape as [now], for retention cutoffs. Using
+    /// one formatter keeps lexicographic `updatedAt < cutoff` chronological.
+    static func isoString(_ date: Date) -> String { timestamp.string(from: date) }
+
     private init() {
         // Deep-perf pass 80-b: the full-table bootstrap — both loads plus the
         // one-time legacy JSON import — used to run synchronously on whatever
@@ -308,16 +312,38 @@ final class ConversationStore: ObservableObject {
         sql.deleteConversation(id: id)
     }
 
-    /// Privacy → Clear local data: every conversation, message and library
-    /// save leaves the device for good — SQLite rows, in-memory state and the
-    /// UserDefaults-backed library. Staged attachment copies go with them.
-    /// Assistants and settings stay.
-    func wipeAllContent() {
+    /// Retention: remove every conversation whose last turn is older than the
+    /// ISO cutoff and the messages that belong to it. Returns how many left the
+    /// device so the caller can report a real number instead of a guess.
+    @discardableResult
+    func purgeConversations(updatedBefore cutoff: String) -> Int {
+        let doomed = conversations.filter { $0.updatedAt < cutoff }
+        guard !doomed.isEmpty else { return 0 }
+        let ids = Set(doomed.map(\.id))
+        sql.deleteConversations(updatedBefore: cutoff)
+        conversations.removeAll { ids.contains($0.id) }
+        messages.removeAll { ids.contains($0.conversationId) }
+        for id in ids { lastMessageByConversation[id] = nil }
+        return doomed.count
+    }
+
+    /// Clear Chat History: conversations, messages and staged attachment copies
+    /// leave the device. Library saves, settings and the identity stay — that
+    /// is what makes it different from Delete Account.
+    func clearHistory() {
         sql.deleteAllContent()
         conversations.removeAll()
         messages.removeAll()
         lastMessageByConversation.removeAll()
         AttachmentStore.shared.purgeAllStagedFiles()
+    }
+
+    /// Privacy → Clear local data: every conversation, message and library
+    /// save leaves the device for good — SQLite rows, in-memory state and the
+    /// UserDefaults-backed library. Staged attachment copies go with them.
+    /// Assistants and settings stay.
+    func wipeAllContent() {
+        clearHistory()
         UserDefaults.standard.removeObject(forKey: Self.savedLibraryKey)
     }
 

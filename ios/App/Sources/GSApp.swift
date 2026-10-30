@@ -129,6 +129,11 @@ struct GSApp: App {
             // the app as its own process and is unaffected.
             .task {
                 GsBannerDispatcher.shared.configure()
+                // Retention is a launch contract, not a screen-local promise:
+                // with auto-delete on, old conversations leave before any list
+                // can paint them. Off by default, so this is a no-op for every
+                // install that never asked for it.
+                DataRetention.purgeExpired()
                 if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
                     GsReleaseNotice.announceIfNeeded()
                 }

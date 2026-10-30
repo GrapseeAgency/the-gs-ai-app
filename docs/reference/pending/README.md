@@ -1,10 +1,10 @@
 # Pending references — supplied by the owner, built on both platforms
 
-Nine screens were supplied as reference art. All nine are built on **both**
+Ten screens were supplied as reference art. All ten are built on **both**
 platforms: the six owner sheets crossed on 2026-10-29, Privacy & Data Controls
-followed, and Chat History & Search and Model Selection crossed on 2026-10-30.
-Nothing here is called "captured" until its render gate proves parity — see
-Acceptance.
+followed, Chat History & Search and Model Selection crossed on 2026-10-30, and
+Data Export & Account Deletion crossed on 2026-10-31. Nothing here is called
+"captured" until its render gate proves parity — see Acceptance.
 
 | reference | expected screen | state |
 | --- | --- | --- |
@@ -17,6 +17,7 @@ Acceptance.
 | `subscription-usage.png` | "Subscription & Usage" — plan hero, details, 4 usage meters, billing, upgrade | **built (both)** |
 | `help-support.png` | "Help & Support" — search, quick help, 3×2 categories, popular topics, contact | **built (both)** |
 | `connected-apps.png` | "Connected Apps & Integrations" — hero, 6 providers, 5 available, data card | **built (both)** |
+| `data-export-account-deletion.png` | "Data Export & Account Deletion" — export rows + format picker + archive, retention period/auto-delete/clear, consent-gated delete card | **built (both)** — 2026-10-31 |
 
 ## Evidence
 
@@ -28,6 +29,7 @@ After it, every screen returns at least one file on both platforms:
 Chat History & Search    ChatSearchScreen.kt            ChatSearchView.swift
 Model Selection          ReferenceSettingsScreens.kt   AiIntelligenceView.swift
 Privacy & Data Controls  PrivacySettingsScreen         PrivacyDataControlsView.swift
+Data Export & Deletion   DataExportAccountDeletionScreen.kt  DataExportAccountDeletionView.swift
 ```
 
 The six owner sheets below return a screen on both platforms.
@@ -57,12 +59,13 @@ back. They are corrections, not omissions:
   there is no camera or location grant in this build.
 - **Privacy — footer** says "private to this app, never sold". The mock says
   "encrypted"; Room here is not encrypted, and saying so would be false.
-- **Privacy — Personalization & Ads, Third-Party Integrations, Search History,
-  Data Retention** are static rows with no chevron. There is no ad profile, no
-  integration, no stored search log and no retention setting behind them.
-- **Privacy — Delete Your Account** keeps the mock's title but its subtitle says
-  what it erases (everything this app stores on this device), and confirming it
-  also signs the session out. There is no server account to delete.
+- **Privacy — Personalization & Ads and Search History** are static rows with no
+  chevron: there is no ad profile and no stored search log behind them. Data
+  Retention is no longer static — it opens the Data Export & Account Deletion
+  page that now owns the period and auto-delete controls.
+- **Privacy — Export Your Data and Delete Your Account** keep the mock's rows but
+  now open the owner page, where the format choice and the consent gate live.
+  The destructive flow is the same one the page documents below.
 - **Chat History — the topic chips are KEYWORD-derived** from the conversation
   title through the shipped `drawerTopic()` classifier (the same one the drawer
   uses). The schema has no facet column, so the buckets are approximate by
@@ -80,6 +83,20 @@ back. They are corrections, not omissions:
   source, View model details, Rendering and the on-device footnote are kept so
   `SETTINGS_MODEL` is not orphaned. The mock's own three groups (AI Model,
   Reasoning Effort, Model Preferences) fit one 393×852 view; the extras scroll.
+- **Data Export — no email is sent.** The mock's archive row promises "prepared
+  and sent to your email"; this build has no mail transport. The row is titled
+  "Download Complete Archive", its closing line says the file is saved where
+  the reader chooses, and the pill says "Save Archive".
+- **Data Export — attachment records, not attachment bytes.** JSON/CSV carry the
+  stored attachment records and PDF lists their names; the row says "attachment
+  details" rather than promising files the export does not contain.
+- **Data Export — auto-delete defaults OFF.** The mock draws it on, but deleting
+  a reader's old chats on first launch is not a safe default. The switch shows
+  the stored value, turning it on runs the purge immediately, and the same
+  purge runs at launch.
+- **Data Export — Delete Account names exactly what it erases.** There is no
+  server account; the card says conversations, saved items, files and account
+  details leave this device and the session signs out.
 
 ## The six owner sheets (2026-10-29)
 
@@ -136,13 +153,15 @@ Evidence:
   invented rows behind. `ios.yml` collects each required render, fails on a
   missing one, and runs the same `check_sheets_render.py --platform ios` card
   gate plus its self-test on those captures.
-- The three pages ported after the sheets are in the same harnesses and the same
-  gate: `ref-model`, `ref-chat-history` and `ref-voice` on Android;
-  `nexly-model-ios`, `nexly-chat-history-ios` and `nexly-voice-ios` on iOS. The
-  gate expects 3 cards on Model Selection, 4 on Chat History (the totals card,
-  the two quick-action rows and the new-chat footer) and 2 on Voice & Speech
-  (the Read aloud hero and the Voice group). Chat History is captured with no
-  fixture on either platform — the honest empty page an install with no chats
+- The four pages ported after the sheets are in the same harnesses and the same
+  gate: `ref-model`, `ref-chat-history`, `ref-voice` and `ref-data-export` on
+  Android; `nexly-model-ios`, `nexly-chat-history-ios`, `nexly-voice-ios` and
+  `nexly-data-export-ios` on iOS. The gate expects 3 cards on Model Selection,
+  4 on Chat History (the totals card, the two quick-action rows and the
+  new-chat footer), 2 on Voice & Speech (the Read aloud hero and the Voice
+  group) and 2 on Data Export (Export and Data Retention; the rose Delete card
+  is deliberately outside the white-rim window). Chat History is captured with
+  no fixture on either platform — the honest empty page an install with no chats
   sees — and the search field and chips above its cards are deliberately
   outside the rim window, because those controls are not cards.
 - iOS notice path: `GsNotifier.record` honours the master switch and the
@@ -276,18 +295,21 @@ these corrections.
 
 ## Acceptance
 
-A capture is not evidence until a gate can fail on it. All nine Android
+A capture is not evidence until a gate can fail on it. All ten Android
 reference pages are card-gated (header ink, lit rim, card count) and verified
 locally with the non-vacuity self-test; both platforms' section/row inventory is
-checked from source with its own self-test. The iOS nine run the same gate
+checked from source with its own self-test. The iOS ten run the same gate
 against the simulator captures in `ios.yml`. That gate is now OBSERVED: run
 41027465949 is green end to end — app build, XCTest, the six-screen reachability
 test, all six card gates and their `--self-test` doctoring, the Settings trio,
 and the three new page captures (model, chat history, voice). The gate's iOS
 numbers were calibrated from run 41019419509's real captures (see Instrument
 notes), so iOS pixel parity is now claimed against the same law Android is held
-to. The three ported pages joined that law on 2026-10-30 (3 / 4 / 2 cards on
+to. The three pages ported on 2026-10-30 joined that law (3 / 4 / 2 cards on
 both platforms); their next CI run is the first observation of the extension.
+Data Export joined on 2026-10-31 with 2 white cards on both platforms; its
+Android capture is verified locally, and its first CI run is the observation of
+both halves.
 The gate deliberately does not overlay the mock: the mock's phone panel is
 393×~913 pt while the capture is 393×852, so a pixel diff would be a scaling
 argument. That comparison stays the human review these PNGs are for.
@@ -391,6 +413,14 @@ agree; "Remember my choices" still governs only the NEW-chat default.
    the matching hub promise are removed rather than faked; background style
    stays Android-only and is recorded as a capability. The pass continues
    through the chat, Explore and billing surfaces below the fold.
+5. (done 2026-10-31) The tenth reference, Data Export & Account Deletion, is
+   built on both platforms and owned by Privacy & Data Controls: exports write
+   real JSON/PDF/CSV, the retention period and auto-delete purge real rows at
+   launch and on change, Clear Chat History and Delete Account remove what they
+   name. Android is card-gated and covered by 13 new JVM tests; iOS has the
+   twin view, logic tests and a capture. The remaining step is the one this
+   repo cannot take locally: observing the iOS simulator render and both
+   workflow halves on CI.
 
 ## Sub-page reachability (2026-10-30)
 
@@ -437,7 +467,7 @@ on the system bar or already hide it.
 
 **Screens audit result.** Every `AeroRoute` and every `GsRoutes` constant now
 has a real pusher except `GLASS_SPECIMEN` (documented internal tooling). The
-nine reference screens, Voice & Speech and Travel Agent are reachable on both
+ten reference screens, Voice & Speech and Travel Agent are reachable on both
 platforms; no unreachable view remains in the tree.
 
 **Completeness audit, second pass (2026-10-30).** Reachable is not finished.
