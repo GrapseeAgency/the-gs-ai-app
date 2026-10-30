@@ -78,6 +78,12 @@ final class Router: ObservableObject {
     /// ChatDetailView on it, so the fresh state is a genuinely new surface —
     /// no stale draft, transcript or adopted conversation id survives.
     @Published var workspaceEpoch = 0
+    /// Bumped when a pushed page asks for the drawer. The drawer's state lives
+    /// in RootView, and the destination modifier cannot reach it, so the request
+    /// travels through the router instead of a second source of truth.
+    @Published var drawerRequest = 0
+
+    func requestDrawer() { drawerRequest += 1 }
 
     /// New chat = reset the workspace: the stack returns to the bare root and
     /// the root re-seeds. This is the ONE way a fresh conversation opens —
@@ -217,6 +223,12 @@ struct RootView: View {
                 router.path.append(route)
             }
         }
+        // A pushed page cannot reach this state directly, so the request comes
+        // through the router (NewChatView's header control).
+        .onReceive(router.$drawerRequest.dropFirst()) { _ in
+            drawerEntryOffset = 0
+            withAnimation(Aero.motion(Aero.spring)) { showDrawer = true }
+        }
         .tint(Aero.accent)
     }
 
@@ -278,7 +290,7 @@ struct AeroDestinations: ViewModifier {
                 onOpenConversation: { router.path.append(.chat($0)) },
                 onOpenAllChats: { router.path.append(.chats) },
                 onOpenModels: { router.path.append(.modelPicker) },
-                onOpenMenu: { showDrawer = true },
+                onOpenMenu: { router.requestDrawer() },
                 onOpenExplore: { router.path.append(.explore) })
             case .modelPicker: ModelSelectionView(
                 onBack: { router.path.removeLast() },
