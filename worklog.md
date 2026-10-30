@@ -5467,3 +5467,44 @@ Stage Summary:
   were not on the reference shell or card material, which no existence check
   could see. The next CI run is this extension's first observation; iOS needed
   no code change for the new specs.
+
+---
+Task ID: screen-completeness-audit
+Agent: Qoder (main)
+Task: Continue the operator's audit: every screen and sub-page that exists must
+also be logically finished.
+
+Work Log:
+- CI first: 8e5ce1c7 is green on both workflows (Android 41054195562, iOS
+  41054200139). The nine-page card gate is now OBSERVED, not merely local, and
+  the Android run passed the new captures and their self-tests.
+- Language was the largest "built but unfinished" defect. Android's hub row
+  promised a language choice and opened Appearance, which has none; iOS had App
+  and Voice rows with chevrons but no actions, plus an AI-language chip group
+  writing `aiLanguage`, which no request read. Android gained SETTINGS_LANGUAGE
+  and LanguageSettingsScreen (app language, answer language, the device's real
+  speech language, a row into the system TTS settings); the hub now routes
+  there, and two new JVM tests pin the route and the rows. iOS states the same
+  facts as value rows and the dead `aiLanguage` property/key/load are gone.
+  Both profile pages now say English (UK), the only interface language shipped.
+- Settings sub-pages were still off the reference shell: Appearance, Theme
+  Customisation, Chat & Conversations, Accessibility, About and Model Details
+  used `RefPage` (no backdrop) and the darker default `Card` material. They now
+  use `RefSettingsPage` + `CardLight`, so every settings page sits on the bloom
+  like the sheets. Deleted `NotificationsScreen`, which no route or test
+  referenced (the inbox is `NotificationsInboxScreen`).
+- iOS "Delete account" promised permanent account and data deletion and did
+  nothing but a haptic. It now wipes the local corpus and signs out, matching
+  Android, and the dialog copy names exactly that. iOS About gained the
+  Website/Contact/Privacy rows Android already had.
+- Evidence: Android full suite 378 tests, 0 failures, 49 skipped; the
+  interaction class is 12 tests including both new language cases. Copy parity
+  (10 screens), Kotlin brace/import lints, `swift_structure_gate` and
+  `ios_static_gates` all pass locally.
+
+Stage Summary:
+- The language page and the settings shell sweep close the biggest unfinished
+  surfaces found in this pass. One asymmetry is recorded for the next one: iOS
+  has no accent-family or background-style control, while Android's Appearance
+  and Theme pages do — build it or remove the static accent dot honestly. The
+  audit then continues through chat, Explore and billing.

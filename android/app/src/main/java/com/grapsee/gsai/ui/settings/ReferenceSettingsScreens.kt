@@ -113,7 +113,7 @@ import com.grapsee.gsai.ui.components.RefInfoCard
 @Composable
 fun ThemeCustomisationScreen(onBack: () -> Unit) {
     val colors = GsTheme.colors
-    RefPage(
+    RefSettingsPage(
         title = "Theme Customisation",
         subtitle = "Choose a surface and accent that feels like yours.",
         onBack = onBack
@@ -154,7 +154,7 @@ fun ThemeCustomisationScreen(onBack: () -> Unit) {
             }
         }
 
-        RefSection(label = "Background style") {
+        RefSection(label = "Background style", role = GsGlassRole.CardLight) {
             Column(Modifier.padding(14.dp)) {
                 RefSegmented(
                     listOf("Blurred", "Gradient", "Solid"),
@@ -164,7 +164,7 @@ fun ThemeCustomisationScreen(onBack: () -> Unit) {
             }
         }
 
-        RefSection(label = "Accent") {
+        RefSection(label = "Accent", role = GsGlassRole.CardLight) {
             Column(Modifier.padding(16.dp)) {
                 RefAccentRow(
                     selectedId = SettingsStore.accentId,
@@ -418,12 +418,12 @@ fun ChatSettingsScreen(
     var confirmClear by remember { mutableStateOf(false) }
     val mode = SettingsStore.chatMode(null)
 
-    RefPage(
+    RefSettingsPage(
         title = "Chat & Conversations",
         subtitle = "How new chats behave.",
         onBack = onBack
     ) {
-        RefSection(label = "Response mode") {
+        RefSection(label = "Response mode", role = GsGlassRole.CardLight) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 RefSegmented(
                     options = listOf("Flash", "Thinking", "Auto"),
@@ -442,7 +442,7 @@ fun ChatSettingsScreen(
             }
         }
 
-        RefSection(label = "History") {
+        RefSection(label = "History", role = GsGlassRole.CardLight) {
             RefRow(
                 title = "Search chats",
                 subtitle = "Find a message across every conversation",
@@ -465,7 +465,7 @@ fun ChatSettingsScreen(
             )
         }
 
-        RefSection(label = "Data") {
+        RefSection(label = "Data", role = GsGlassRole.CardLight) {
             RefRow(
                 title = "Export conversations",
                 subtitle = "Download a JSON copy",
@@ -1333,12 +1333,12 @@ fun VoiceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
 fun AccessibilitySettingsScreen(onBack: () -> Unit) {
     val colors = GsTheme.colors
     val scale = SettingsStore.fontScale
-    RefPage(
+    RefSettingsPage(
         title = "Accessibility",
         subtitle = "Make GS comfortable for the way you read and move.",
         onBack = onBack
     ) {
-        RefSection(label = "Visual") {
+        RefSection(label = "Visual", role = GsGlassRole.CardLight) {
             RefToggleRow(
                 title = "High contrast",
                 subtitle = "Stronger ink, borders and focus rings",
@@ -1379,7 +1379,7 @@ fun AccessibilitySettingsScreen(onBack: () -> Unit) {
             )
         }
 
-        RefSection(label = "Motion") {
+        RefSection(label = "Motion", role = GsGlassRole.CardLight) {
             RefToggleRow(
                 title = "Reduce motion",
                 subtitle = "Hold decorative movement still",
@@ -1406,6 +1406,76 @@ fun AccessibilitySettingsScreen(onBack: () -> Unit) {
         }
 
         RefFootnote("Every option here changes the running app immediately. If the system asks for reduced motion, GS honours it even when the switch is off.")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Language
+// ---------------------------------------------------------------------------
+
+/**
+ * Language is a real page, not a relabelled Appearance. The app ships one
+ * interface language, answers follow the language the reader writes in (the
+ * server prompt already says so), and the voice is the device's synthesizer —
+ * so the rows state those facts, and the one thing the reader can change here
+ * opens the system's own speech settings.
+ */
+@Composable
+fun LanguageSettingsScreen(
+    onBack: () -> Unit,
+    /** Injectable so the JVM suite can prove the row is wired without a device. */
+    onOpenSpeechSettings: (() -> Unit)? = null,
+) {
+    val context = LocalContext.current
+    val deviceLanguage = java.util.Locale.getDefault().toLanguageTag()
+
+    RefSettingsPage(
+        title = "Language",
+        subtitle = "What GS speaks, and what it listens for.",
+        onBack = onBack
+    ) {
+        RefSection(label = "Interface", role = GsGlassRole.CardLight) {
+            RefValueRow("App language", "English (UK)", GsIcons.Globe)
+        }
+        RefFootnote(
+            "The interface ships in English (UK). More languages arrive only " +
+                "once the copy is translated, not before."
+        )
+
+        RefSection(label = "Replies", role = GsGlassRole.CardLight) {
+            RefValueRow("Answer language", "Match my message", GsIcons.MessageCircle)
+        }
+        RefFootnote(
+            "GS answers in the language you write in, so a mixed conversation " +
+                "stays readable."
+        )
+
+        RefSection(label = "Voice", role = GsGlassRole.CardLight) {
+            RefValueRow("Device language", deviceLanguage, GsIcons.AudioLines)
+            RefDivider()
+            RefRow(
+                title = "Speech settings",
+                subtitle = "Open the system text-to-speech settings",
+                icon = GsIcons.Sliders,
+                onClick = {
+                    val open = onOpenSpeechSettings ?: {
+                        runCatching {
+                            context.startActivity(Intent("com.android.settings.TTS_SETTINGS"))
+                        }.onFailure {
+                            runCatching {
+                                context.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS))
+                            }
+                        }
+                        Unit
+                    }
+                    open()
+                }
+            )
+        }
+        RefFootnote(
+            "The voice is the device's own synthesizer. Its language and accent " +
+                "are set in the system, not in GS."
+        )
     }
 }
 
@@ -1515,7 +1585,7 @@ fun AboutSettingsScreen(onBack: () -> Unit) {
     val colors = GsTheme.colors
     var showLicenses by remember { mutableStateOf(false) }
 
-    RefPage(
+    RefSettingsPage(
         title = "About GS AI",
         subtitle = "The product, the build and the credits.",
         onBack = onBack
@@ -1536,7 +1606,7 @@ fun AboutSettingsScreen(onBack: () -> Unit) {
             RefStatusPill("Version ${BuildConfig.VERSION_NAME}")
         }
 
-        RefSection(label = "Product") {
+        RefSection(label = "Product", role = GsGlassRole.CardLight) {
             RefValueRow("Version", BuildConfig.VERSION_NAME, GsIcons.Info)
             RefDivider()
             RefValueRow("Build", BuildConfig.VERSION_CODE.toString(), GsIcons.Code)
@@ -1560,7 +1630,7 @@ fun AboutSettingsScreen(onBack: () -> Unit) {
             )
         }
 
-        RefSection(label = "Legal") {
+        RefSection(label = "Legal", role = GsGlassRole.CardLight) {
             RefRow(
                 title = "Open-source licences",
                 subtitle = "Poppins, Kotlin, Compose, llama.cpp and more",

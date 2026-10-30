@@ -207,6 +207,43 @@ class ReferenceRowInteractionTest {
     }
 
     @Test
+    fun theLanguageHubRowOpensItsOwnPage() {
+        var route: String? = null
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                SettingsHubScreen(onBack = {}, onNavigate = { route = it })
+            }
+        }
+
+        compose.onNodeWithText("Language").performScrollTo().performClick()
+        assertEquals(
+            "the hub's Language row must not reroute to Appearance any more",
+            GsRoutes.SETTINGS_LANGUAGE,
+            route,
+        )
+    }
+
+    @Test
+    fun theLanguagePageStatesWhatIsRealAndOpensSpeechSettings() {
+        var speechSettingsOpened = 0
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                LanguageSettingsScreen(
+                    onBack = {},
+                    onOpenSpeechSettings = { speechSettingsOpened += 1 },
+                )
+            }
+        }
+
+        compose.onNodeWithText("App language").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("English (UK)").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Answer language").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Match my message").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Speech settings").performScrollTo().performClick()
+        assertEquals("the speech row must reach the system settings", 1, speechSettingsOpened)
+    }
+
+    @Test
     fun theChatHistoryRowOpensTheSearchPage() {
         val routes = mutableListOf<String>()
         compose.setContent {

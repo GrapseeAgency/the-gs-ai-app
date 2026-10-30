@@ -119,8 +119,6 @@ final class SettingsStore: ObservableObject {
         applyReasoningEffort("standard")
     }
 
-    // Language
-    @Published var aiLanguage: String { didSet { defaults.set(aiLanguage, forKey: K.aiLanguage) } }
     // Accessibility
     @Published var fontScale: Double { didSet { defaults.set(fontScale, forKey: K.fontScale); propagateFlags() } }
     @Published var highContrast: Bool { didSet { defaults.set(highContrast, forKey: K.highContrast); propagateFlags() } }
@@ -176,7 +174,6 @@ final class SettingsStore: ObservableObject {
         quietHoursEnabled = defaults.object(forKey: K.quietHoursEnabled) as? Bool ?? false
         quietStartMinute = defaults.object(forKey: K.quietStartMinute) as? Int ?? 22 * 60
         quietEndMinute = defaults.object(forKey: K.quietEndMinute) as? Int ?? 7 * 60
-        aiLanguage = defaults.string(forKey: K.aiLanguage) ?? "EN"
         fontScale = defaults.object(forKey: K.fontScale) as? Double ?? 1.0
         highContrast = defaults.object(forKey: K.highContrast) as? Bool ?? false
         reduceMotion = defaults.object(forKey: K.reduceMotion) as? Bool ?? false
@@ -226,7 +223,6 @@ final class SettingsStore: ObservableObject {
         static let quietHoursEnabled = "settings.quietHours.enabled"
         static let quietStartMinute = "settings.quietHours.start"
         static let quietEndMinute = "settings.quietHours.end"
-        static let aiLanguage = "settings.aiLanguage"
         static let fontScale = "settings.fontScale"
         static let highContrast = "settings.highContrast"
         static let reduceMotion = "settings.reduceMotion"

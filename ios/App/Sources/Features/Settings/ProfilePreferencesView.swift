@@ -46,7 +46,7 @@ struct ProfilePreferencesView: View {
                 divider
                 staticRow("Content Preferences", joined(onboarding.capabilities), glyph: "book-2", tone: .lilac)
                 divider
-                staticRow("Language", "English (US)", glyph: "language", tone: .mint, trailingChevron: false, isLast: true)
+                staticRow("Language", "English (UK)", glyph: "language", tone: .mint, trailingChevron: false, isLast: true)
             }
 
             Spacer().frame(height: 14)

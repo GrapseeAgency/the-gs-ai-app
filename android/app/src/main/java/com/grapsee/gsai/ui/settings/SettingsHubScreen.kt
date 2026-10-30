@@ -252,7 +252,7 @@ fun SettingsHubScreen(
             RefNavRow(
                 title = "Language",
                 subtitle = "Choose your preferred language",
-                onClick = { onNavigate(GsRoutes.SETTINGS_APPEARANCE) },
+                onClick = { onNavigate(GsRoutes.SETTINGS_LANGUAGE) },
                 leading = { RefWellTile(GsIcons.Globe, GsWellTone.Peach, 28.dp) },
             )
         }

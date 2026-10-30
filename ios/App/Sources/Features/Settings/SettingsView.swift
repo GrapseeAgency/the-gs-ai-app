@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 /// Settings — the reference hub, plus the nine detail pages its rows reach.
 ///
@@ -60,16 +61,21 @@ struct SettingsView: View {
             Text("Cached chats, files and drafts on this device will be removed. Your account is untouched.")
         }
         .confirmationDialog(
-            "Delete account?",
+            "Delete your data on this device?",
             isPresented: $showDeleteAccount,
             titleVisibility: .visible
         ) {
-            Button("Delete account", role: .destructive) {
+            Button("Clear everything", role: .destructive) {
+                // Android's twin does exactly these two things: wipe the local
+                // corpus, then close the identity. The old copy promised a
+                // server-side account deletion this build cannot perform.
+                ConversationStore.shared.wipeAllContent()
                 GSHaptics.warning()
+                sessionActive = false
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This permanently removes your account and all synced data. This cannot be undone.")
+            Text("Every conversation, message and library save on this device will be removed, and you will be signed out. This cannot be undone.")
         }
         .confirmationDialog(
             "Log out of Nexly?",
@@ -546,42 +552,26 @@ struct SettingsView: View {
 
     // MARK: Language
 
+    /// Every row here states something true. The interface ships in one
+    /// language, answers already follow the language the reader writes in
+    /// (the server prompt says so), and the voice belongs to the system
+    /// synthesizer — so the previous App/Voice chevrons had nowhere to go and
+    /// the AI-language chips stored a preference nothing read. Both are gone.
     private var languageSection: some View {
         section("Language") {
-            AeroListRow(
-                title: "App language",
-                subtitle: "English (UK)",
-                leading: { leadingIcon("globe") },
-                trailing: {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Aero.textMuted)
-                }
-            )
-            VStack(alignment: .leading, spacing: Aero.Spacing.xs) {
-                Text("AI language")
-                    .font(Aero.body())
-                    .foregroundStyle(Aero.text)
-                HStack(spacing: Aero.Spacing.s) {
-                    ForEach(["EN", "中文", "हिन्दी", "العربية"], id: \.self) { option in
-                        AeroChip(text: option, selected: settings.aiLanguage == option) {
-                            GSHaptics.select()
-                            settings.aiLanguage = option
-                        }
-                    }
-                }
-            }
-            AeroListRow(
-                title: "Voice language",
-                subtitle: "English (UK)",
-                leading: { leadingIcon("waveform") },
-                trailing: {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Aero.textMuted)
-                }
-            )
+            valueRow("App language", value: "English (UK)")
+            valueRow("Answer language", value: "Match my message")
+            valueRow("Device language", value: Self.speechLanguage)
+            Text("The interface ships in English (UK). GS answers in the language you write in; the voice is the system synthesizer, changed in iOS Settings.")
+                .font(Aero.caption())
+                .foregroundStyle(Aero.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    /// The synthesizer this build actually speaks through, e.g. "en-US".
+    private static var speechLanguage: String {
+        AVSpeechSynthesisVoice.currentLanguageCode()
     }
 
     // MARK: Accessibility
@@ -617,13 +607,21 @@ struct SettingsView: View {
 
     // MARK: About
 
-    /// Version + build only (Phase 2 honesty fix): the "Automatic via GS
-    /// LiveUpdate" row is gone — LiveUpdate is an Android-only distribution
-    /// mechanism and iOS does not have it.
+    /// Version + build, then the same real destinations Android's About page
+    /// carries. The earlier page stopped at the two version rows, which made
+    /// Android the only platform with a way to reach the privacy policy.
     private var aboutSection: some View {
         section("About") {
             valueRow("Version", value: appVersion)
             valueRow("Build", value: buildNumber)
+        }
+        section("Links") {
+            linkRow("Website", detail: "grapsee.agency", glyph: "globe",
+                    url: "https://grapsee.agency")
+            linkRow("Contact", detail: "contact@grapsee.agency", glyph: "envelope",
+                    url: "mailto:contact@grapsee.agency")
+            linkRow("Privacy policy", detail: "How the app handles your data", glyph: "lock",
+                    url: "https://grapsee.agency/privacy")
         }
     }
 
@@ -634,6 +632,28 @@ struct SettingsView: View {
 
     private var buildNumber: String {
         (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "1"
+    }
+
+    private func linkRow(
+        _ title: String,
+        detail: String,
+        glyph: String,
+        url: String
+    ) -> some View {
+        AeroListRow(
+            title: title,
+            subtitle: detail,
+            leading: { leadingIcon(glyph) },
+            trailing: {
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Aero.textMuted)
+            },
+            action: {
+                guard let link = URL(string: url) else { return }
+                UIApplication.shared.open(link)
+            }
+        )
     }
 
     private func valueRow(_ title: String, value: String) -> some View {

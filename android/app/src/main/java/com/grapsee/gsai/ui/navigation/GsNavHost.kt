@@ -42,7 +42,6 @@ import com.grapsee.gsai.ui.chat.ChatInfoScreen
 import com.grapsee.gsai.ui.chat.ChatScreen
 import com.grapsee.gsai.ui.chat.ChatSearchScreen
 import com.grapsee.gsai.ui.chat.ChatsScreen
-import com.grapsee.gsai.ui.notifications.NotificationsScreen
 import com.grapsee.gsai.ui.profile.ProfileScreen
 import com.grapsee.gsai.ui.settings.AboutSettingsScreen
 import com.grapsee.gsai.ui.settings.AccessibilitySettingsScreen
@@ -54,7 +53,7 @@ import com.grapsee.gsai.ui.settings.AccountSecurityScreen
 import com.grapsee.gsai.ui.settings.AiIntelligenceScreen
 import com.grapsee.gsai.ui.settings.AppearanceSettingsScreen
 import com.grapsee.gsai.ui.settings.ChatSettingsScreen
-import com.grapsee.gsai.ui.settings.HelpSettingsScreen
+import com.grapsee.gsai.ui.settings.LanguageSettingsScreen
 import com.grapsee.gsai.ui.settings.MemorySettingsScreen
 import com.grapsee.gsai.ui.settings.ModelDetailsScreen
 import com.grapsee.gsai.ui.settings.NotificationsAlertsScreen
@@ -337,6 +336,9 @@ fun GsNavHost(
         }
         composable(GsRoutes.SETTINGS_THEME) {
             ThemeCustomisationScreen(onBack = back)
+        }
+        composable(GsRoutes.SETTINGS_LANGUAGE) {
+            LanguageSettingsScreen(onBack = back)
         }
         composable(GsRoutes.SETTINGS_NOTIFICATIONS) {
             NotificationsAlertsScreen(onBack = back)

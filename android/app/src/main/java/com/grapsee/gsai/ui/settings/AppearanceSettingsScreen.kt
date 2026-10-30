@@ -32,13 +32,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.RefAccentRow
 import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefFootnote
-import com.grapsee.gsai.ui.components.RefPage
 import com.grapsee.gsai.ui.components.RefRow
 import com.grapsee.gsai.ui.components.RefSection
 import com.grapsee.gsai.ui.components.RefSegmented
+import com.grapsee.gsai.ui.components.RefSettingsPage
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsTheme
@@ -56,14 +57,14 @@ fun AppearanceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
     val accent = SettingsStore.accentId
     val scale = SettingsStore.fontScale
 
-    RefPage(
+    RefSettingsPage(
         title = "Appearance",
         subtitle = "Theme, display and style.",
         onBack = onBack
     ) {
         // Live sample: the type is read from the real theme, so changing the
         // slider below visibly rescales this sentence.
-        RefCard(padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
+        RefCard(role = GsGlassRole.CardLight, padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier
@@ -90,7 +91,7 @@ fun AppearanceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
             }
         }
 
-        RefSection(label = "Theme") {
+        RefSection(label = "Theme", role = GsGlassRole.CardLight) {
             Row(
                 Modifier.padding(14.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -120,7 +121,7 @@ fun AppearanceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
         }
 
         RefSectionLabelText("Accent colour")
-        RefCard(padding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+        RefCard(role = GsGlassRole.CardLight, padding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
             RefAccentRow(
                 selectedId = accent,
                 onSelect = { SettingsStore.updateAccentId(it) }
@@ -134,7 +135,7 @@ fun AppearanceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
         }
 
         RefSectionLabelText("Text size")
-        RefCard(padding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+        RefCard(role = GsGlassRole.CardLight, padding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Aa", style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
                 Slider(
@@ -170,7 +171,7 @@ fun AppearanceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
             }
         }
 
-        RefSection(label = "Background") {
+        RefSection(label = "Background", role = GsGlassRole.CardLight) {
             Column(Modifier.padding(14.dp)) {
                 RefSegmented(
                     options = listOf("Blurred", "Gradient", "Solid"),

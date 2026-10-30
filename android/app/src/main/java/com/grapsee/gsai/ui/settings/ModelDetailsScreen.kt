@@ -23,15 +23,16 @@ import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelStore
+import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.RefArt
 import com.grapsee.gsai.ui.components.RefArtwork
 import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefDivider
 import com.grapsee.gsai.ui.components.RefFootnote
-import com.grapsee.gsai.ui.components.RefPage
 import com.grapsee.gsai.ui.components.RefPrimaryButton
 import com.grapsee.gsai.ui.components.RefRow
 import com.grapsee.gsai.ui.components.RefSection
+import com.grapsee.gsai.ui.components.RefSettingsPage
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsTheme
 
@@ -53,13 +54,13 @@ fun ModelDetailsScreen(
     val installed = ModelStore.installedPath != null
     val local = SettingsStore.preferLocal
 
-    RefPage(
+    RefSettingsPage(
         title = "Model Details",
         subtitle = "What runs on this phone, and what it can do.",
         onBack = onBack
     ) {
         if (model == null) {
-            RefCard(padding = PaddingValues(18.dp)) {
+            RefCard(role = GsGlassRole.CardLight, padding = PaddingValues(18.dp)) {
                 Text(
                     "This phone is below the on-device threshold",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
@@ -74,7 +75,7 @@ fun ModelDetailsScreen(
             }
         } else {
             // Identity: the same bloom the rest of the app uses, never a badge.
-            RefCard(padding = PaddingValues(18.dp)) {
+            RefCard(role = GsGlassRole.CardLight, padding = PaddingValues(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RefArtwork(RefArt.Bloom, size = 92.dp)
                     Spacer(Modifier.width(8.dp))
@@ -107,7 +108,7 @@ fun ModelDetailsScreen(
                 }
             }
 
-            RefSection(label = "Key capabilities") {
+            RefSection(label = "Key capabilities", role = GsGlassRole.CardLight) {
                 CapabilityRow(GsIcons.WifiOff, "Works with the network off")
                 RefDivider()
                 CapabilityRow(GsIcons.Lock, "Prompts never leave this phone")
@@ -117,7 +118,7 @@ fun ModelDetailsScreen(
                 CapabilityRow(GsIcons.LayoutGrid, "Renders the same widget vocabulary as cloud answers")
             }
 
-            RefSection(label = "This chat") {
+            RefSection(label = "This chat", role = GsGlassRole.CardLight) {
                 RefRow(
                     title = "Engine",
                     subtitle = if (local) "On-device is selected" else "Cloud is selected",

@@ -213,7 +213,7 @@ fun ProfileScreen(
             RefRowDivider()
             RefNavRow(
                 title = "Language",
-                subtitle = "English (US)",
+                subtitle = "English (UK)",
                 leading = { RefWellTile(GsIcons.Languages, GsWellTone.Mint, 28.dp) },
                 trailing = {},
             )

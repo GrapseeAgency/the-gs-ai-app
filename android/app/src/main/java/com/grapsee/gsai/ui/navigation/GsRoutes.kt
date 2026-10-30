@@ -17,6 +17,7 @@ object GsRoutes {
     const val SETTINGS_CHAT = "settings/chat"
     const val SETTINGS_APPEARANCE = "settings/appearance"
     const val SETTINGS_THEME = "settings/theme"
+    const val SETTINGS_LANGUAGE = "settings/language"
     const val SETTINGS_NOTIFICATIONS = "settings/notifications"
     const val SETTINGS_PRIVACY = "settings/privacy"
     const val SETTINGS_AI = "settings/ai"

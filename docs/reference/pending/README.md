@@ -384,6 +384,11 @@ agree; "Remember my choices" still governs only the NEW-chat default.
    screen: it is now the trip planner's destination in Explore and Discover on
    both platforms, with `ExploreReachabilityTest` (Android) and a UI test
    (iOS) pinning the rule that every OTHER tool still seeds the composer.
+4. (done 2026-10-30) The completeness pass closed Language, the settings
+   sub-page shell/material sweep, iOS's inert delete-account and its missing
+   About links. The next sub-page decision is iOS accent/background
+   customisation (see the audit above); after that the pass continues through
+   the chat, Explore and billing surfaces.
 
 ## Sub-page reachability (2026-10-30)
 
@@ -432,6 +437,32 @@ on the system bar or already hide it.
 has a real pusher except `GLASS_SPECIMEN` (documented internal tooling). The
 nine reference screens, Voice & Speech and Travel Agent are reachable on both
 platforms; no unreachable view remains in the tree.
+
+**Completeness audit, second pass (2026-10-30).** Reachable is not finished.
+Three surfaces failed that bar and are now closed:
+
+- **Language.** Android's hub row said "Choose your preferred language" and
+  opened Appearance, which has no language control; iOS had App/Voice rows with
+  chevrons that went nowhere and an AI-language chip group writing a preference
+  no request reads. Android now has a real `SETTINGS_LANGUAGE` page — the app
+  language, the answer language, the device's actual speech language, and a row
+  into the system TTS settings — and both JVM tests pin the route and the rows.
+  iOS states the same facts as value rows, the dead `aiLanguage` state is gone,
+  and both profiles now say "English (UK)", the one interface language shipped.
+- **Settings sub-pages were off the reference shell.** Appearance, Theme
+  Customisation, Chat & Conversations, Accessibility, About and Model Details
+  were still `RefPage` (no backdrop) and drew the darker default `Card`
+  material, unlike every sheet and the three ported pages. They now use
+  `RefSettingsPage` + `CardLight`. The unrouted `NotificationsScreen` (the inbox
+  is `NotificationsInboxScreen`) is deleted.
+- **iOS "Delete account" was inert.** The confirmation promised permanent
+  account and data deletion and performed a haptic. It now wipes the local
+  corpus and signs out — what Android's row already did — and the copy says so.
+  iOS About also gained the Website/Contact/Privacy links Android already had.
+
+One asymmetry remains open and is the next sub-page decision: iOS has no
+accent-family or background-style control (Android's Appearance and Theme pages
+do), and its Appearance section shows a static accent dot.
 
 ## Instrument notes worth keeping
 
