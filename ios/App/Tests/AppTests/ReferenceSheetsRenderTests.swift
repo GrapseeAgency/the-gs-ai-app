@@ -109,12 +109,42 @@ final class ReferenceSheetsRenderTests: XCTestCase {
     /// a neighbour test's choice; the pre-chat capture is the honest empty
     /// recent list an install with no chats sees.
     func testNewChatRenders() async throws {
+        // The mock draws four recent rows; the shipped store starts empty. The
+        // fixture seeds the same four titles and previews Android's capture
+        // seeds, and removes them in `defer` so no later launch sees them.
+        let seeded = seedRecentChats()
+        defer { seeded.forEach { ConversationStore.shared.delete(id: $0) } }
         try await capturePage(
             view: { NewChatView(
                 onStartChat: { _, _ in }, onOpenConversation: { _ in },
                 onOpenAllChats: {}, onOpenModels: {}, onOpenMenu: {},
                 onOpenExplore: {}) },
             prefix: "nexly-new-chat-ios")
+    }
+
+    /// Four conversations at the mock's ages, with the mock's previews.
+    private func seedRecentChats() -> [String] {
+        let store = ConversationStore.shared
+        let rows: [(String, String, Double)] = [
+            ("Website Design Ideas", "Here are some modern and clean design directions for your landing page.", 2),
+            ("Study Plan for Next Month", "Here's a personalized study plan based on your goals and the time you have.", 4),
+            ("Travel Itinerary - Japan", "A 10-day itinerary for Tokyo and Kyoto with a calm pace and one day trip.", 24),
+            ("Code Review Help", "Let's go through your code and improve its structure and naming together.", 48),
+        ]
+        let now = Date()
+        var ids: [String] = []
+        for (index, row) in rows.enumerated() {
+            let id = "render-recent-\(index)"
+            let stamp = ConversationStore.isoString(now.addingTimeInterval(-row.2 * 3600))
+            store.upsert(StoredConversation(
+                id: id, title: row.0, modelId: nil, pinned: false, archived: false,
+                createdAt: stamp, updatedAt: stamp))
+            store.append(StoredMessage(
+                id: "render-msg-\(index)", conversationId: id, role: "assistant",
+                content: row.1, createdAt: stamp))
+            ids.append(id)
+        }
+        return ids
     }
 
     func testModelPickerRenders() async throws {
