@@ -473,7 +473,12 @@ fun GsNavHost(
         // plan and usage" versus "how is commerce handled". Pointing both at
         // SubscriptionUsageScreen made its own Manage Plan / View Plans CTAs
         // navigate into the page they were already on.
-        composable(GsRoutes.BILLING) { BillingScreen(onBack = back) }
+        composable(GsRoutes.BILLING) {
+            BillingScreen(
+                onBack = back,
+                onOpenSubscription = { open(GsRoutes.SETTINGS_PLAN) },
+            )
+        }
 
         composable(
             route = GsRoutes.CHAT,

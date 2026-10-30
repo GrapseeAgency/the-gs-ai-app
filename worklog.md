@@ -5488,19 +5488,30 @@ Work Log:
   facts as value rows and the dead `aiLanguage` property/key/load are gone.
   Both profile pages now say English (UK), the only interface language shipped.
 - Settings sub-pages were still off the reference shell: Appearance, Theme
-  Customisation, Chat & Conversations, Accessibility, About and Model Details
-  used `RefPage` (no backdrop) and the darker default `Card` material. They now
-  use `RefSettingsPage` + `CardLight`, so every settings page sits on the bloom
-  like the sheets. Deleted `NotificationsScreen`, which no route or test
-  referenced (the inbox is `NotificationsInboxScreen`).
+  Customisation, Chat & Conversations, Accessibility, About, Billing and Model
+  Details used `RefPage` (no backdrop) and the darker default `Card` material.
+  They now use `RefSettingsPage` + `CardLight`, so every settings page sits on
+  the bloom like the sheets. Deleted `NotificationsScreen` and
+  `HelpSettingsScreen`, neither of which any route or test referenced (the inbox
+  is `NotificationsInboxScreen`; the help route is `HelpSupportScreen`).
+- Billing's footnote named Subscription & Usage but the page had no way there;
+  the footer button now opens SETTINGS_PLAN, the page is on the reference
+  shell, and a JVM test presses it. iOS already had the button.
 - iOS "Delete account" promised permanent account and data deletion and did
   nothing but a haptic. It now wipes the local corpus and signs out, matching
   Android, and the dialog copy names exactly that. iOS About gained the
   Website/Contact/Privacy rows Android already had.
-- Evidence: Android full suite 378 tests, 0 failures, 49 skipped; the
-  interaction class is 12 tests including both new language cases. Copy parity
-  (10 screens), Kotlin brace/import lints, `swift_structure_gate` and
-  `ios_static_gates` all pass locally.
+- iOS's Appearance page carried a static accent swatch that read as a control
+  and a hub promise ("Theme, accent color, and display") the platform cannot
+  keep — iOS has no accent-family system. Both are removed; the row now says
+  "Theme and display". Background style remains Android-only and is documented
+  as a platform capability, not a missing page.
+- Evidence: Android full suite 379 tests, 0 failures, 49 skipped; the
+  interaction class is 13 tests including the two new language cases and the
+  Billing CTA. Copy parity (10 screens), Kotlin brace/import lints,
+  `swift_structure_gate` and `ios_static_gates` all pass locally. The iOS run on
+  f1ab4a42 caught one Swift compile error (a two-section `aboutSection` needs
+  `@ViewBuilder`), fixed before this entry.
 
 Stage Summary:
 - The language page and the settings shell sweep close the biggest unfinished

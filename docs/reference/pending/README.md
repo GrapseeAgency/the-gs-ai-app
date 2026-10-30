@@ -386,9 +386,11 @@ agree; "Remember my choices" still governs only the NEW-chat default.
    (iOS) pinning the rule that every OTHER tool still seeds the composer.
 4. (done 2026-10-30) The completeness pass closed Language, the settings
    sub-page shell/material sweep, iOS's inert delete-account and its missing
-   About links. The next sub-page decision is iOS accent/background
-   customisation (see the audit above); after that the pass continues through
-   the chat, Explore and billing surfaces.
+   About links, and Billing's missing way into Subscription & Usage. iOS's
+   static accent swatch and the matching hub promise are removed rather than
+   faked; background style stays Android-only and is recorded as a capability.
+   The pass continues through the chat, Explore and billing surfaces below the
+   fold.
 
 ## Sub-page reachability (2026-10-30)
 
@@ -450,19 +452,25 @@ Three surfaces failed that bar and are now closed:
   iOS states the same facts as value rows, the dead `aiLanguage` state is gone,
   and both profiles now say "English (UK)", the one interface language shipped.
 - **Settings sub-pages were off the reference shell.** Appearance, Theme
-  Customisation, Chat & Conversations, Accessibility, About and Model Details
-  were still `RefPage` (no backdrop) and drew the darker default `Card`
+  Customisation, Chat & Conversations, Accessibility, About, Billing and Model
+  Details were still `RefPage` (no backdrop) and drew the darker default `Card`
   material, unlike every sheet and the three ported pages. They now use
-  `RefSettingsPage` + `CardLight`. The unrouted `NotificationsScreen` (the inbox
-  is `NotificationsInboxScreen`) is deleted.
+  `RefSettingsPage` + `CardLight`. Two never-routed duplicates are deleted:
+  `NotificationsScreen` (the inbox is `NotificationsInboxScreen`) and
+  `HelpSettingsScreen` (the route is the mock-based `HelpSupportScreen`).
+- **Billing pointed at a page it could not open.** Android's footnote named
+  Subscription & Usage while the page's only button went Back. The footer now
+  opens `SETTINGS_PLAN` — the single primary act, as on iOS — and a JVM test
+  presses it.
 - **iOS "Delete account" was inert.** The confirmation promised permanent
   account and data deletion and performed a haptic. It now wipes the local
   corpus and signs out — what Android's row already did — and the copy says so.
   iOS About also gained the Website/Contact/Privacy links Android already had.
 
-One asymmetry remains open and is the next sub-page decision: iOS has no
-accent-family or background-style control (Android's Appearance and Theme pages
-do), and its Appearance section shows a static accent dot.
+The last asymmetry is honest rather than fake: iOS has no accent-family system,
+so its static accent swatch and the hub's "accent color" promise are removed
+(the row says "Theme and display"), while Android keeps both controls.
+Background style remains an Android-only capability, recorded as such.
 
 ## Instrument notes worth keeping
 

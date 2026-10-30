@@ -192,7 +192,7 @@ struct SettingsView: View {
                 hubDivider
                 hubRow("Memory", "Let Nexly remember what matters", "brain", .peach, .memory)
                 hubDivider
-                hubRow("Appearance", "Theme, accent color, and display", "palette", .peach, .settingsSection(.appearance))
+                hubRow("Appearance", "Theme and display", "palette", .peach, .settingsSection(.appearance))
                 hubDivider
                 hubRow("Language", "Choose your preferred language", "language", .peach, .settingsSection(.language), divider: false)
             }
@@ -402,6 +402,9 @@ struct SettingsView: View {
 
     // MARK: Appearance
 
+    /// Theme + motion only. The static accent swatch that used to sit here read
+    /// as a control but changed nothing; iOS has no accent-family system, so
+    /// the row and the hub's "accent color" promise are both gone.
     private var appearanceSection: some View {
         section("Appearance") {
             HStack(spacing: Aero.Spacing.s) {
@@ -411,15 +414,6 @@ struct SettingsView: View {
                         settings.theme = option
                     }
                 }
-                Spacer()
-            }
-            HStack(spacing: Aero.Spacing.s) {
-                Circle()
-                    .fill(Aero.accent)
-                    .frame(width: 18, height: 18)
-                Text("Accent")
-                    .font(Aero.caption())
-                    .foregroundStyle(Aero.textMuted)
                 Spacer()
             }
             toggleRow("Reduce animations", isOn: $settings.reduceAnimations)
@@ -610,6 +604,7 @@ struct SettingsView: View {
     /// Version + build, then the same real destinations Android's About page
     /// carries. The earlier page stopped at the two version rows, which made
     /// Android the only platform with a way to reach the privacy policy.
+    @ViewBuilder
     private var aboutSection: some View {
         section("About") {
             valueRow("Version", value: appVersion)

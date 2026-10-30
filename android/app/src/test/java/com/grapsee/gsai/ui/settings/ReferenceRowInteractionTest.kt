@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.ui.billing.BillingScreen
 import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
 import org.junit.Assert.assertEquals
@@ -241,6 +242,20 @@ class ReferenceRowInteractionTest {
         compose.onNodeWithText("Match my message").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Speech settings").performScrollTo().performClick()
         assertEquals("the speech row must reach the system settings", 1, speechSettingsOpened)
+    }
+
+    @Test
+    fun billingOffersTheSubscriptionPage() {
+        var opened = 0
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                BillingScreen(onBack = {}, onOpenSubscription = { opened += 1 })
+            }
+        }
+
+        // The footnote names Subscription & Usage; the page must offer it.
+        compose.onNodeWithText("Subscription & Usage").performScrollTo().performClick()
+        assertEquals(1, opened)
     }
 
     @Test

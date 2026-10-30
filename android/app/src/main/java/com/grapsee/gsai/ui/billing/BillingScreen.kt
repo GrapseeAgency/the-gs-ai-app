@@ -10,16 +10,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.PlanStore
+import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.RefArt
 import com.grapsee.gsai.ui.components.RefArtwork
 import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefDivider
 import com.grapsee.gsai.ui.components.RefFootnote
-import com.grapsee.gsai.ui.components.RefPage
 import com.grapsee.gsai.ui.components.RefPrimaryButton
 import com.grapsee.gsai.ui.components.RefSection
+import com.grapsee.gsai.ui.components.RefSettingsPage
 import com.grapsee.gsai.ui.components.RefStatusPill
 import com.grapsee.gsai.ui.components.RefValueRow
+import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsTheme
 
 /**
@@ -34,13 +36,16 @@ import com.grapsee.gsai.ui.theme.GsTheme
  * renewal can exist. The rows keep their slots and say exactly that.
  */
 @Composable
-fun BillingScreen(onBack: () -> Unit) {
-    RefPage(
+fun BillingScreen(
+    onBack: () -> Unit,
+    onOpenSubscription: () -> Unit = {},
+) {
+    RefSettingsPage(
         title = "Billing",
         subtitle = "Your plan and payment details.",
         onBack = onBack
     ) {
-        RefCard(padding = PaddingValues(22.dp)) {
+        RefCard(role = GsGlassRole.CardLight, padding = PaddingValues(22.dp)) {
             RefArtwork(
                 art = RefArt.Success,
                 size = 96.dp,
@@ -65,7 +70,7 @@ fun BillingScreen(onBack: () -> Unit) {
             }
         }
 
-        RefSection(label = "Plan") {
+        RefSection(label = "Plan", role = GsGlassRole.CardLight) {
             RefValueRow("Current plan", PlanStore.planName)
             RefDivider()
             RefValueRow("Billing cycle", PlanStore.cycleLabel)
@@ -89,6 +94,12 @@ fun BillingScreen(onBack: () -> Unit) {
 
         RefFootnote("Subscription & Usage shows the plan, this month's real usage and the same $12.99 price. Nothing is charged silently.")
         Spacer(Modifier.height(10.dp))
-        RefPrimaryButton(label = "Back to settings", onClick = onBack)
+        // One primary act, as on iOS: the header already carries Back, so the
+        // page's button is the way INTO this month's usage, not a second exit.
+        RefPrimaryButton(
+            label = "Subscription & Usage",
+            onClick = onOpenSubscription,
+            icon = GsIcons.CreditCard
+        )
     }
 }

@@ -412,7 +412,7 @@ enum SettingsSectionID: String, Hashable, CaseIterable {
 
     var subtitle: String {
         switch self {
-        case .appearance: return "Theme, accent color, and display"
+        case .appearance: return "Theme and display"
         case .chat: return "How new chats behave"
         case .ai: return "Model and intelligence"
         case .privacy: return "Manage your data and activity"
