@@ -113,6 +113,13 @@ final class SheetsUITests: XCTestCase {
             object: notifications)
         XCTAssertEqual(XCTWaiter().wait(for: [hittable], timeout: 8), .completed)
         Thread.sleep(forTimeInterval: 0.8)
+        // Keep a frame of the menu as it stands right before the tap: the
+        // failure mode this test is chasing is a tap landing outside the row,
+        // and only the pixels say where the row actually is.
+        let beforeTap = XCTAttachment(screenshot: app.screenshot())
+        beforeTap.name = "account-menu-before-tap"
+        beforeTap.lifetime = .keepAlways
+        add(beforeTap)
         notifications.tap()
         XCTAssertTrue(
             app.buttons["Filter notifications"].waitForExistence(timeout: 15),

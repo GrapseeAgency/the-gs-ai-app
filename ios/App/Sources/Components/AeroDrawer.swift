@@ -650,27 +650,31 @@ struct AccountSheetView: View {
 
     private func row(_ title: String, icon: String, route: AeroRoute) -> some View {
         let isSelected = activeRoute == route
-        return Button {
+        return HStack(spacing: 12) {
+            GsIconView(DrawerTopic.paths(named: icon), size: 16,
+                       color: isSelected ? Aero.accent : Aero.text.opacity(0.8))
+                .frame(width: 28)
+            Text(title)
+                .font(Aero.specFont(DrawerMetrics.rowTitle))
+                .foregroundColor(isSelected ? Aero.accent : Aero.text)
+            Spacer(minLength: 0)
+            GsIconView(GsIcons.chevronRight, size: DrawerMetrics.chevron, color: DrawerMetrics.labelInk)
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16)
+            .fill(isSelected ? Aero.accent.opacity(0.12) : Color.clear))
+        // A plain Button in this overlay did not receive the tap on the
+        // simulator; a tap gesture on the row's own full-width shape does, and
+        // it also makes the whole 52 pt row the target rather than its text.
+        .contentShape(Rectangle())
+        .onTapGesture {
             GSHaptics.tap()
             onRoute(route)
-        } label: {
-            HStack(spacing: 12) {
-                GsIconView(DrawerTopic.paths(named: icon), size: 16,
-                           color: isSelected ? Aero.accent : Aero.text.opacity(0.8))
-                    .frame(width: 28)
-                Text(title)
-                    .font(Aero.specFont(DrawerMetrics.rowTitle))
-                    .foregroundColor(isSelected ? Aero.accent : Aero.text)
-                Spacer(minLength: 0)
-                GsIconView(GsIcons.chevronRight, size: DrawerMetrics.chevron, color: DrawerMetrics.labelInk)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 52)
-            .background(RoundedRectangle(cornerRadius: 16)
-                .fill(isSelected ? Aero.accent.opacity(0.12) : Color.clear))
         }
-        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
+        .accessibilityAddTraits(.isButton)
     }
 }
 

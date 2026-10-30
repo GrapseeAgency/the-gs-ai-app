@@ -175,16 +175,16 @@ struct RootView: View {
                             withAnimation(Aero.motion(Aero.spring)) { showAccount = false }
                         }
                     AccountSheetView(activeRoute: router.path.last) { route in
-                        withAnimation(Aero.motion(Aero.spring)) { showAccount = false }
-                        // One hop so the overlay starts leaving before the
-                        // drawer closes and the destination is pushed.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                            withAnimation(Aero.motion(Aero.spring)) { showDrawer = false }
-                            if case .chat(nil) = route {
-                                router.resetWorkspace()
-                            } else {
-                                router.path.append(route)
-                            }
+                        // Close the menu and the drawer, then route — in one
+                        // transaction, no animation and no deferred hop. A
+                        // deferred write is one more thing that can be lost;
+                        // the destination is the point of the tap.
+                        showAccount = false
+                        showDrawer = false
+                        if case .chat(nil) = route {
+                            router.resetWorkspace()
+                        } else {
+                            router.path.append(route)
                         }
                     }
                     .padding(.horizontal, 8)
