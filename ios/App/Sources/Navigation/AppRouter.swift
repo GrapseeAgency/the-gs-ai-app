@@ -41,6 +41,8 @@ enum AeroRoute: Hashable {
     /// reaches it in one hop, like Android's `SETTINGS_AI` row — the Chat
     /// page's "AI Intelligence" link keeps working through its NavigationLink.
     case modelSelection
+    /// Voice & Speech — the iOS twin of Android's `SETTINGS_VOICE` page.
+    case voiceSettings
     case travelAgent
     case explore
     case discover
@@ -143,8 +145,8 @@ struct RootView: View {
                         }
                     },
                     onClose: { withAnimation(Aero.motion(Aero.spring)) { showDrawer = false } },
-                    onAccount: { showAccount = true },
-                    activeRoute: router.path.last
+                    activeRoute: router.path.last,
+                    onAccount: { showAccount = true }
                 )
                 // The sheet's panel runs to the screen edge, and its own footer
                 // keeps the 30 pt clearance the capture measures. Without this the
@@ -254,6 +256,7 @@ struct AeroDestinations: ViewModifier {
             case .chatArchive: ArchivedChatsView()
             case .chatSearch: ChatSearchView()
             case .modelSelection: AiIntelligenceView()
+            case .voiceSettings: VoiceSpeechView()
             case .travelAgent: TravelAgentView(onBack: { router.path.removeLast() }, onSendToChat: { prompt in router.path.append(.chatPrefill(prompt)) })
             case .explore: ExploreView(
                 onOpenChat: { router.path.append($0) },

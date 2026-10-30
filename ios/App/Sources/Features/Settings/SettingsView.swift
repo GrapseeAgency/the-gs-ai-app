@@ -219,6 +219,8 @@ struct SettingsView: View {
                 hubDivider
                 hubRow("Accessibility", "Contrast, text size and motion", "eye", .peach, .settingsSection(.accessibility))
                 hubDivider
+                hubRow("Voice & Speech", "Listen, speak and keep your hands free", "microphone", .peach, .voiceSettings)
+                hubDivider
                 hubRow("Notifications & Alerts", "Choose what you receive", "bell", .peach, .notificationsAlerts)
                 hubDivider
                 hubRow("Account & Security", "Sign-in, app lock and sessions", "device-mobile", .peach, .accountSecurity)

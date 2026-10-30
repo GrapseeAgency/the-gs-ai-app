@@ -370,12 +370,13 @@ page's "View model details" row. All three dead ones now have rows in the hub's
 last group, and `ReferenceSheetsContentTest.theSettingsHubReachesTheFourSettingsSheets`
 clicks each and asserts the route, so the next removal cannot pass silently.
 
-iOS gained the matching **Chat & Conversations** and **Accessibility** rows
-(they previously existed only as sections inside other pages). **Voice &
-Speech** has no iOS twin: iOS's `VoiceView` is the live voice session, not a
-preferences page, and inventing a settings page with no preferences behind it
-would be the dead-control failure this project keeps removing. It is recorded
-here as a platform delta, not built.
+iOS gained the matching **Chat & Conversations**, **Accessibility** and
+**Voice & Speech** rows. The last one is a real page (`VoiceSpeechView`), not a
+stub: voice mode is the live session, the engine label names the system
+synthesizer the app actually uses, the haptic switch is the same
+`settings.haptics` the rest of the app reads, and the footnote says where the
+audio goes (nowhere). Its inventory is in the cross-platform copy gate like the
+other pages.
 
 ## Instrument notes worth keeping
 

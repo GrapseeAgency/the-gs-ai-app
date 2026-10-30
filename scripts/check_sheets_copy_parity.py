@@ -359,6 +359,25 @@ SCREENS["chat-history-search"] = dict(
         "Chat actions",
     ],
 )
+SCREENS["voice-speech"] = dict(
+    android="android/app/src/main/java/com/grapsee/gsai/ui/settings/ReferenceSettingsScreens.kt",
+    ios="ios/App/Sources/Features/Settings/VoiceSpeechView.swift",
+    copy=[
+        "Voice & Speech",
+        "Listen, speak, and keep your hands free.",
+        "Read aloud",
+        "Answers can be spoken with your device's speech engine. Voice mode listens when you tap the mic.",
+        "Voice",
+        "Open voice mode",
+        "Speak a question instead of typing it",
+        "Speech engine",
+        "Device default",
+        "Haptic confirmation",
+        "A tick when dictation starts and stops",
+        "Speech is synthesized locally on this device. Audio is not uploaded to GS.",
+    ],
+)
+
 
 def read(path):
     try:

@@ -81,6 +81,12 @@ final class ReferenceSheetsRenderTests: XCTestCase {
             prefix: "nexly-chat-history-ios")
     }
 
+    func testVoiceSpeechRenders() async throws {
+        try await capturePage(
+            view: { VoiceSpeechView() },
+            prefix: "nexly-voice-ios")
+    }
+
     // MARK: helpers
 
     /// 18:00 today, so a capture at any hour sees the same Today/Earlier split.

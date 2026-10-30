@@ -5378,3 +5378,16 @@ Work Log:
 
 Stage Summary:
 - The next iOS run has real evidence behind every gate it will execute: the card gate is calibrated to the iOS kit with non-vacuity still proven, the notifier test asserts the actual contract, and the inbox path is owned by the shell. Remaining known gaps: the iOS-only dead surfaces (documented for removal), Voice & Speech has no iOS settings twin (documented delta), and the two new screens' card geometry is not yet gated like the Settings trio.
+
+---
+Task ID: ios-voice-settings
+Agent: Qoder (main)
+Task: Close the last reachable-page gap the audit found between the platforms.
+
+Work Log:
+- `VoiceSpeechView` (iOS) is the twin of Android's `VoiceSettingsScreen`: the Read aloud hero, Open voice mode (pushes the real `.voice` session), the Speech engine value (Device default, the synthesizer actually used), and Haptic confirmation bound to the same `settings.haptics` every other surface reads. The footnote says the audio never leaves the device. It is reachable from Settings → Voice & Speech, and its inventory is the tenth entry in the cross-platform copy gate (Android's footnote now says "on this device", not "by Android", so the two sides can carry one string).
+- Run 41022674751 caught a memberwise-init ordering error in RootView (`activeRoute` must precede `onAccount`, matching the stored-property order); fixed before the next dispatch.
+- It renders to nexly-voice-ios and ios.yml fails on a missing capture.
+
+Stage Summary:
+- Every settings page either platform exposes is now reachable from that platform's hub, every page's copy is gated across platforms (10 screens), and the iOS renders cover the three newly ported pages. The only remaining audit item is the dead iOS-only surfaces documented in docs/reference/pending/README.md.

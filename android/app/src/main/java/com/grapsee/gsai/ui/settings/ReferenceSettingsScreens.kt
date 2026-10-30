@@ -1468,7 +1468,7 @@ fun VoiceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
             )
         }
 
-        RefFootnote("Speech is synthesized locally by Android. Audio is not uploaded to GS.")
+        RefFootnote("Speech is synthesized locally on this device. Audio is not uploaded to GS.")
     }
 }
 
