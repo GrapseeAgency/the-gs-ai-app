@@ -5616,3 +5616,37 @@ Stage Summary:
   on both workflows as well: android-app 41130975311 and iOS 41130979651. Every
   owner mock in `Reference pictures./` now has a built page, a capture and an
   observed gate; the only untracked path is the owner's source folder itself.
+
+---
+Task ID: prechat-and-model-picker
+Agent: Qoder (main)
+Task: Operator supplied two more references — the pre-chat interface and a
+redesigned Model Selection — and asked for design and logic accuracy.
+
+Work Log:
+- Landed both mocks beside the other references and measured them at the sheet
+  ruler (1.545 px/pt on this canvas): `home-new-chat.png` and
+  `model-selection-v2.png`.
+- Android `NewChatScreen` (route `new-chat`) is the pre-chat page: companion
+  header, bloom hero (RefArt.Bloom), title + subtitle, the composer with four
+  accessory controls and a send that is inert until there is text, the six
+  2-column tool chips (five prompts + More), Recent Chats with four real rows
+  (topic icon/tone from the shipped drawer classifier) and the Explore AI Models
+  entry. Home's New Chat pill and the drawer's new-chat action open it.
+- Android `ModelSelectionScreen` (route `model-picker`) is the reference's
+  picker: All/Text/Vision/Code tabs filtering by declared capability, four
+  model cards with Recommended pill, tags and a filled radio, Reasoning Effort
+  segments, Auto Select and Continue.
+- The two controls now share one tested rule (`ModelRouter`): picking a model
+  writes the model AND moves the effort to its default; Auto Select ON takes the
+  picked model's own effort per message (image → Vision, code signal → Code,
+  long → Pro, else the preference), OFF leaves the reader's effort in charge.
+  This is what makes "Auto Select ON + Medium lit" in the mock a coherent state
+  rather than two stored values nothing reads.
+- iOS twins: `NewChatView` and `ModelSelectionView` at `.newChat` /
+  `.modelPicker`; `SettingsStore.autoSelectModel` + `applyPreferredModel`.
+- Evidence so far: Android compiles; 14 new JVM tests pass (7 ModelRouterTest,
+  7 NewChatAndModelPickerTest); both captures render at 393×852; the new pages
+  pass the card gate and its self-test on Android (new-chat: 2 composer rims,
+  model-picker: 4 card rims); copy parity covers 13 inventories on both
+  platforms; swift_structure_gate and ios_static_gates pass.

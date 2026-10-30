@@ -103,6 +103,11 @@ object SettingsStore {
     var reasoningEffort by mutableStateOf("standard"); private set
     /** "Remember my choices" — decides whether a new chat keeps the last mode. */
     var rememberChoices by mutableStateOf(true); private set
+    /** "Auto Select Model" — the Model Selection reference draws it ON. When it
+     *  is on, the send path takes the model's own default effort
+     *  ([ModelRouter.modeForMessage]); when it is off, the effort control is the
+     *  authority. Either way a control the reader sees has a reader. */
+    var autoSelectModel by mutableStateOf(true); private set
 
     // ---- Data Export & Account Deletion ----
     /** How many months of untouched conversations are kept when auto-delete is
@@ -151,6 +156,7 @@ object SettingsStore {
         preferredModel = p.string(K.preferredModel, preferredModel)
         reasoningEffort = p.string(K.reasoningEffort, reasoningEffort)
         rememberChoices = p.bool(K.rememberChoices, rememberChoices)
+        autoSelectModel = p.bool(K.autoSelectModel, autoSelectModel)
         dataRetentionMonths = p.integer(K.dataRetentionMonths, dataRetentionMonths)
         autoDeleteInactive = p.bool(K.autoDeleteInactive, autoDeleteInactive)
     }
@@ -197,6 +203,7 @@ object SettingsStore {
         const val preferredModel = "settings.preferredModel"
         const val reasoningEffort = "settings.reasoningEffort"
         const val rememberChoices = "settings.rememberChoices"
+        const val autoSelectModel = "settings.autoSelectModel"
         const val dataRetentionMonths = "settings.retention.months"
         const val autoDeleteInactive = "settings.retention.autoDelete"
     }
@@ -278,7 +285,21 @@ object SettingsStore {
         else -> "light"
     }
 
-    fun updatePreferredModel(v: String) { preferredModel = v; put(K.preferredModel, v) }
+    /**
+     * Stores the model. When the id is one of the picker's four
+     * ([GsModel]), the effort chip also moves to that model's default, so the
+     * tap is visible immediately instead of storing a label nothing acts on.
+     *
+     * An id the picker does not define is stored verbatim: the Settings AI page
+     * has its own four-model vocabulary, and coercing it to `pro` silently
+     * discarded that page's choice.
+     */
+    fun updatePreferredModel(v: String) {
+        val model = GsModel.entries.firstOrNull { it.id == v }
+        preferredModel = v
+        put(K.preferredModel, v)
+        if (model != null) updateReasoningEffort(model.defaultEffort)
+    }
 
     /** Writes the tile AND the wire mode, so "the chip I tapped" and "what the
      *  next reply does" never disagree. */
@@ -289,6 +310,8 @@ object SettingsStore {
     }
 
     fun updateRememberChoices(v: Boolean) { rememberChoices = v; put(K.rememberChoices, v) }
+
+    fun updateAutoSelectModel(v: Boolean) { autoSelectModel = v; put(K.autoSelectModel, v) }
 
     // ---- Data retention --------------------------------------------------
     fun updateDataRetentionMonths(v: Int) {

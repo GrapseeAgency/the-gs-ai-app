@@ -16,6 +16,7 @@ import com.grapsee.gsai.ui.notifications.NotificationsInboxScreen
 import com.grapsee.gsai.ui.subscription.SubscriptionUsageScreen
 import com.grapsee.gsai.ui.support.HelpSupportScreen
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
+import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assume.assumeTrue
@@ -94,9 +95,96 @@ class ReferenceSheetsScreenshotTest {
         seedInbox(ctx, fixedNow)
     }
 
+    /**
+     * The pre-chat mock draws four recent rows. The shipped store starts empty,
+     * so the capture seeds the same four conversations the mock names, at the
+     * same ages — TEST-ONLY, and the rows are deleted before the next capture
+     * group runs because each test starts from an empty corpus.
+     */
+    private fun seedRecentChats(now: Long) {
+        val db = ServiceLocator.db
+        runBlocking {
+            db.messageDao().deleteAll()
+            db.conversationDao().clear()
+            val rows = listOf(
+                Triple("Website Design Ideas", "Here are some modern and clean design directions for your landing page.", 2L),
+                Triple("Study Plan for Next Month", "Here's a personalized study plan based on your goals and the time you have.", 4L),
+                Triple("Travel Itinerary - Japan", "A 10-day itinerary for Tokyo and Kyoto with a calm pace and one day trip.", 24L),
+                Triple("Code Review Help", "Let's go through your code and improve its structure and naming together.", 48L),
+            )
+            rows.forEachIndexed { index, (title, preview, hoursAgo) ->
+                val at = now - hoursAgo * 3_600_000L
+                val iso = java.time.Instant.ofEpochMilli(at).toString()
+                val id = "recent-$index"
+                db.conversationDao().upsert(
+                    com.grapsee.gsai.data.local.ConversationEntity(
+                        id = id,
+                        title = title,
+                        modelId = null,
+                        pinned = false,
+                        archived = false,
+                        updatedAt = iso,
+                        createdAt = iso,
+                    )
+                )
+                db.messageDao().upsert(
+                    com.grapsee.gsai.data.local.MessageEntity(
+                        id = "msg-$id",
+                        conversationId = id,
+                        role = "assistant",
+                        content = preview,
+                        createdAt = iso,
+                    )
+                )
+            }
+        }
+    }
+
     private fun shoot(path: String, content: @Composable () -> Unit) {
         compose.setContent { TheGsAiTheme(darkTheme = false) { content() } }
         compose.onRoot().captureRoboImage(path)
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun newChat() {
+        seedRecentChats(fixedNow)
+        // Both new pages are drawn in the owner's lilac; capture them in that
+        // accent so the comparison is with the artwork, then restore.
+        val previous = SettingsStore.accentId
+        SettingsStore.updateAccentId("lilac")
+        shoot("build/screenshots/ref-new-chat.png") {
+            com.grapsee.gsai.ui.home.NewChatScreen(
+                onStartChat = { _, _ -> },
+                onOpenConversation = {},
+                onOpenAllChats = {},
+                onOpenModels = {},
+                onOpenMenu = {},
+                onOpenExplore = {},
+                now = fixedNow,
+            )
+        }
+        SettingsStore.updateAccentId(previous)
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun modelPicker() {
+        val previous = SettingsStore.accentId
+        SettingsStore.updateAccentId("lilac")
+        shoot("build/screenshots/ref-model-picker.png") {
+            com.grapsee.gsai.ui.settings.ModelSelectionScreen(
+                onBack = {},
+                onContinue = {},
+                preferred = "pro",
+                effort = "standard",
+                autoSelect = true,
+                onPreferred = {},
+                onEffort = {},
+                onAutoSelect = {},
+            )
+        }
+        SettingsStore.updateAccentId(previous)
     }
 
     @Test

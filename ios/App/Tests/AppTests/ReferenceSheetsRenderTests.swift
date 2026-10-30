@@ -104,6 +104,34 @@ final class ReferenceSheetsRenderTests: XCTestCase {
             prefix: "nexly-voice-ios")
     }
 
+    /// The pre-chat page and the model picker. The picker's fixture states the
+    /// same pair the mock draws (Pro, Medium) because the shared store may hold
+    /// a neighbour test's choice; the pre-chat capture is the honest empty
+    /// recent list an install with no chats sees.
+    func testNewChatRenders() async throws {
+        try await capturePage(
+            view: { NewChatView(
+                onStartChat: { _, _ in }, onOpenConversation: { _ in },
+                onOpenAllChats: {}, onOpenModels: {}, onOpenMenu: {},
+                onOpenExplore: {}) },
+            prefix: "nexly-new-chat-ios")
+    }
+
+    func testModelPickerRenders() async throws {
+        let settings = SettingsStore.shared
+        let previousModel = settings.preferredModel
+        let previousEffort = settings.reasoningEffort
+        settings.preferredModel = "pro"
+        settings.reasoningEffort = "standard"
+        defer {
+            settings.preferredModel = previousModel
+            settings.reasoningEffort = previousEffort
+        }
+        try await capturePage(
+            view: { ModelSelectionView(onBack: {}, onContinue: {}) },
+            prefix: "nexly-model-picker-ios")
+    }
+
     /// Travel Agent is reachable from the trip planner now; its capture is the
     /// visual half of that wiring (the UI test drives the tap).
     func testTravelAgentRenders() async throws {

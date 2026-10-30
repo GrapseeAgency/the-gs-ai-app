@@ -44,6 +44,11 @@ final class SettingsStore: ObservableObject {
     @Published var preferredModel: String { didSet { defaults.set(preferredModel, forKey: K.preferredModel) } }
     @Published var reasoningEffort: String { didSet { defaults.set(reasoningEffort, forKey: K.reasoningEffort) } }
     @Published var rememberChoices: Bool { didSet { defaults.set(rememberChoices, forKey: K.rememberChoices) } }
+    /// "Auto Select Model" — the Model Selection reference draws it ON. When it
+    /// is on, the send path takes the picked model's own default effort
+    /// (`ModelRouter.modeForMessage`); when off, the effort control is the
+    /// authority. Either way a control the reader sees has a reader.
+    @Published var autoSelectModel: Bool { didSet { defaults.set(autoSelectModel, forKey: K.autoSelectModel) } }
 
     // Data Export & Account Deletion — the retention controls are read by
     // DataRetention.purgeExpired, the only consumer. Auto-delete defaults OFF
@@ -112,10 +117,20 @@ final class SettingsStore: ObservableObject {
         defaults.set(wire, forKey: "gs.mode.new")
     }
 
+    /// Picking a model also moves the effort chip to that model's default, so
+    /// the tap is visible immediately instead of storing a label nothing acts
+    /// on — the same rule Android's `updatePreferredModel` implements.
+    func applyPreferredModel(_ id: String) {
+        let model = GsModel.byId(id)
+        preferredModel = model.rawValue
+        applyReasoningEffort(model.defaultEffort)
+    }
+
     /// Back to the mock's recommended pair: Pro, Standard effort, remembering.
     func resetModelPreferences() {
         preferredModel = "pro"
         rememberChoices = true
+        autoSelectModel = true
         applyReasoningEffort("standard")
     }
 
@@ -149,6 +164,7 @@ final class SettingsStore: ObservableObject {
         reasoning = defaults.string(forKey: K.reasoning) ?? "Medium"
         preferredModel = defaults.string(forKey: K.preferredModel) ?? "pro"
         reasoningEffort = defaults.string(forKey: K.reasoningEffort) ?? "standard"
+        autoSelectModel = defaults.object(forKey: K.autoSelectModel) as? Bool ?? true
         // true, like Android: the tile the reader taps and the default the next
         // new chat picks are the same choice until they say otherwise.
         rememberChoices = defaults.object(forKey: K.rememberChoices) as? Bool ?? true
@@ -200,6 +216,7 @@ final class SettingsStore: ObservableObject {
         static let preferredModel = "settings.preferredModel"
         static let reasoningEffort = "settings.reasoningEffort"
         static let rememberChoices = "settings.rememberChoices"
+        static let autoSelectModel = "settings.autoSelectModel"
         static let dataRetentionMonths = "settings.retention.months"
         static let autoDeleteInactive = "settings.retention.autoDelete"
         static let biometricUnlock = "settings.biometricUnlock"

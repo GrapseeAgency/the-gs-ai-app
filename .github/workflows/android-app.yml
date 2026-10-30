@@ -757,7 +757,7 @@ jobs:
                       ref-account-security ref-subscription-usage \
                       ref-help-support ref-connected-apps \
                       ref-model ref-chat-history ref-voice \
-                      ref-data-export; do
+                      ref-data-export ref-new-chat ref-model-picker; do
             for attempt in 1 2 3 4 5 6; do
               [ -s "$SHOTS/$name.png" ] && break
               sleep 5
@@ -789,7 +789,9 @@ jobs:
                       model:ref-model \
                       history:ref-chat-history \
                       voice:ref-voice \
-                      data:ref-data-export; do
+                      data:ref-data-export \
+                      new-chat:ref-new-chat \
+                      model-picker:ref-model-picker; do
             screen=${pair%%:*}
             stem=${pair##*:}
             PNG="$SHOTS/$stem.png"
@@ -809,7 +811,9 @@ jobs:
                       model:ref-model \
                       history:ref-chat-history \
                       voice:ref-voice \
-                      data:ref-data-export; do
+                      data:ref-data-export \
+                      new-chat:ref-new-chat \
+                      model-picker:ref-model-picker; do
             screen=${pair%%:*}
             stem=${pair##*:}
             python3 scripts/check_sheets_render.py \

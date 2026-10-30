@@ -200,6 +200,36 @@ SCREENS = {
         rim_window_ios=(80.0, 600.0),
         steps_ios=None,
     ),
+    # The pre-chat page and the model picker. Their headers are taller than a
+    # sheet's (a companion mark above the title / a tab bar under it), so the
+    # title band moves with the screen rather than the shared 9-14pt rule.
+    # Android is gated on the card rims the mock draws; iOS is title-gated
+    # until its first capture derives the same numbers, which is how the six
+    # sheets were calibrated.
+    "new-chat": dict(
+        stem="ref-new-chat",
+        rims=2,
+        rim_window=(330.0, 470.0),
+        steps=None,
+        note="composer card, top and bottom rim",
+        title_top_band=(12.0, 22.0),
+        rims_ios=None,
+        rim_window_ios=(0.0, 1.0),
+        steps_ios=None,
+        title_top_band_ios=(12.0, 40.0),
+    ),
+    "model-picker": dict(
+        stem="ref-model-picker",
+        rims=4,
+        rim_window=(560.0, 720.0),
+        steps=None,
+        note="model cards below the list",
+        title_top_band=(9.0, 14.0),
+        rims_ios=None,
+        rim_window_ios=(0.0, 1.0),
+        steps_ios=None,
+        title_top_band_ios=(9.0, 30.0),
+    ),
 }
 
 
@@ -335,7 +365,11 @@ def check(gray, scale, screen):
     title = measure_title(gray, scale)
     if title is None:
         raise SystemExit(fail(f"{screen}: the page title has no ink band"))
-    top_band = TITLE_TOP_BAND if PLATFORM == "android" else TITLE_TOP_BAND_IOS
+    top_band = (
+        spec_for(screen, "title_top_band")
+        if "title_top_band" in SCREENS[screen] or "title_top_band_ios" in SCREENS[screen]
+        else (TITLE_TOP_BAND if PLATFORM == "android" else TITLE_TOP_BAND_IOS)
+    )
     rows.append(
         (
             "title",
@@ -365,6 +399,12 @@ def check(gray, scale, screen):
                 SUBTITLE_GAP_BAND[0] <= gap <= SUBTITLE_GAP_BAND[1],
             )
         )
+
+    if spec_for(screen, "rims") is None:
+        # Title-only gate: the rim numbers for this page's platform have not
+        # been derived from a capture yet. A None here is declared in the spec,
+        # never a silent skip, and the title probes above still have to pass.
+        return rows, []
 
     offset = header_offset(title)
     window = spec_for(screen, "rim_window")
@@ -499,17 +539,19 @@ def self_test(image, path, screen):
     ):
         failures.append("title shift")
 
-    if doctored_ok(doctor_erase(image, scale, rims), f"{path} (rims erased)"):
+    gated_rims = bool(spec_for(screen, "rims"))
+    if gated_rims and doctored_ok(doctor_erase(image, scale, rims), f"{path} (rims erased)"):
         failures.append("rim erase")
 
-    if spec_for(screen, "steps"):
+    if spec_for(screen, "steps") and gated_rims:
         if doctored_ok(doctor_fuse(image, scale, rims), f"{path} (cards fused)"):
             failures.append("card fusion")
 
     if failures:
         print(f"::error::{screen}: self-test could not make these probes fail: {failures}")
         return 1
-    probes = ["title", "rim"] + (["rhythm"] if spec_for(screen, "steps") else [])
+    probes = ["title"] + (["rim"] if gated_rims else []) + (
+        ["rhythm"] if spec_for(screen, "steps") else [])
     print(
         f"{screen}: self-test ok — {', '.join(probes)} all went red on "
         "doctored copies"

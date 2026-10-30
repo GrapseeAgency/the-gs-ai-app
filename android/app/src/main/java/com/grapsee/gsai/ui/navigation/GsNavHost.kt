@@ -59,6 +59,7 @@ import com.grapsee.gsai.ui.settings.IdentitySettingsScreen
 import com.grapsee.gsai.ui.settings.LanguageSettingsScreen
 import com.grapsee.gsai.ui.settings.MemorySettingsScreen
 import com.grapsee.gsai.ui.settings.ModelDetailsScreen
+import com.grapsee.gsai.ui.settings.ModelSelectionScreen
 import com.grapsee.gsai.ui.settings.NotificationsAlertsScreen
 import com.grapsee.gsai.ui.settings.PrivacySettingsScreen
 import com.grapsee.gsai.ui.settings.SettingsHubScreen
@@ -69,6 +70,7 @@ import com.grapsee.gsai.ui.voice.VoiceScreen
 import com.grapsee.gsai.ui.explore.DiscoverScreen
 import com.grapsee.gsai.ui.explore.ExploreScreen
 import com.grapsee.gsai.ui.home.HomeDashboardScreen
+import com.grapsee.gsai.ui.home.NewChatScreen
 import com.grapsee.gsai.ui.agents.TravelAgentScreen
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.gsHaptic
@@ -273,7 +275,7 @@ fun GsNavHost(
     ) {
         composable(GsRoutes.HOME) {
             HomeDashboardScreen(
-                onNewChat = { navController.navigate(GsRoutes.chat(null)) },
+                onNewChat = { navController.navigate(GsRoutes.NEW_CHAT) },
                 onStartPrompt = { prompt -> navController.navigate(GsRoutes.chat(null, prompt)) },
                 onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) },
                 onOpenDrawer = { scope.launch { drawerState.open() } },
@@ -281,6 +283,29 @@ fun GsNavHost(
                 onOpenAgent = { open(GsRoutes.EXPLORE) },
                 onOpenVoice = { open(GsRoutes.VOICE) },
                 onOpenSettings = { open(GsRoutes.SETTINGS) },
+            )
+        }
+        // The pre-chat page. A conversation begins here: the composer and the
+        // six tool chips both end in `chat(null, prompt)`, and the model entry
+        // opens the picker.
+        composable(GsRoutes.NEW_CHAT) {
+            NewChatScreen(
+                onStartChat = { prompt, autoSend ->
+                    navController.navigate(
+                        GsRoutes.chat(null, prompt.takeIf { it.isNotBlank() }, autoSend)
+                    )
+                },
+                onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) },
+                onOpenAllChats = { open(GsRoutes.CHATS) },
+                onOpenModels = { open(GsRoutes.MODEL_PICKER) },
+                onOpenMenu = { scope.launch { drawerState.open() } },
+                onOpenExplore = { open(GsRoutes.EXPLORE) },
+            )
+        }
+        composable(GsRoutes.MODEL_PICKER) {
+            ModelSelectionScreen(
+                onBack = back,
+                onContinue = { navController.popBackStack() },
             )
         }
         composable(GsRoutes.TRAVEL_AGENT) {

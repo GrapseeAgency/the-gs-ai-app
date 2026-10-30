@@ -378,6 +378,63 @@ SCREENS["voice-speech"] = dict(
     ],
 )
 
+SCREENS["new-chat"] = dict(
+    android="android/app/src/main/java/com/grapsee/gsai/ui/home/NewChatScreen.kt",
+    ios="ios/App/Sources/Features/Home/NewChatView.swift",
+    copy=[
+        "Start a New Chat",
+        "Ask anything, get instant answers,",
+        "or explore something new.",
+        "Type your message...",
+        "Web Search",
+        "Write",
+        "Analyze",
+        "Image",
+        "More",
+        "Recent Chats",
+        "View all",
+        "Explore AI Models",
+        "Choose the right model for your needs.",
+        "Nexly",
+        "Your AI companion.",
+        "Always.",
+    ],
+)
+
+SCREENS["model-picker"] = dict(
+    android="android/app/src/main/java/com/grapsee/gsai/ui/settings/ModelSelectionScreen.kt",
+    ios="ios/App/Sources/Features/Settings/ModelSelectionView.swift",
+    copy=[
+        "Model Selection",
+        "Choose the best model for your needs.",
+        "Available Models",
+        "Recommended",
+        # The four model titles are generated from the GsModel enum on both
+        # platforms, so they live in ModelRouter rather than these files; the
+        # interaction test asserts them on the rendered page instead.
+        "Our most capable model. Great for complex tasks, creative work and deep analysis.",
+        "Fast, efficient and perfect for everyday questions and quick tasks.",
+        "Advanced image understanding and multimodal capabilities.",
+        "Specialized for programming, debugging and technical tasks.",
+        "Best for complex tasks",
+        "Creative",
+        "Balanced",
+        "Efficient",
+        "Everyday",
+        "Multimodal",
+        "Coding",
+        "Debugging",
+        "Technical",
+        "Reasoning Effort",
+        "Control how much time and thought the model spends on its response.",
+        "Minimal",
+        "Medium",
+        "Auto Select Model",
+        "Let Nexly choose the best model for your message.",
+        "Continue",
+    ],
+)
+
 SCREENS["data-export"] = dict(
     android="android/app/src/main/java/com/grapsee/gsai/ui/settings/DataExportAccountDeletionScreen.kt",
     ios="ios/App/Sources/Features/Settings/DataExportAccountDeletionView.swift",

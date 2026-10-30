@@ -5,6 +5,13 @@ import android.net.Uri
 /** AERUO KINETIC — route map. Screens are plain composables; this file owns all routing. */
 object GsRoutes {
     const val HOME = "home"
+    /** "Start a New Chat" — the pre-chat page (home-new-chat.png). It owns the
+     *  composer, the six starting tools, the recent list and the model entry,
+     *  so a conversation begins here rather than on a blank transcript. */
+    const val NEW_CHAT = "new-chat"
+    /** Model Selection (model-selection-v2.png) — the picker the pre-chat page
+     *  opens, distinct from the Settings AI page's model details. */
+    const val MODEL_PICKER = "model-picker"
     const val TRAVEL_AGENT = "travel-agent"
     const val EXPLORE = "explore"
     const val DISCOVER = "discover"

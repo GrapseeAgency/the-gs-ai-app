@@ -38,6 +38,13 @@ enum AeroRoute: Hashable {
     case voice
     case chatArchive
     case chatSearch
+    /// "Start a New Chat" — the pre-chat page (home-new-chat.png). It owns the
+    /// composer, the six starting tools, the recent list and the model entry,
+    /// so a conversation begins here rather than on a blank transcript.
+    case newChat
+    /// Model Selection (model-selection-v2.png) — the picker the pre-chat page
+    /// opens, distinct from the Settings AI page's model details.
+    case modelPicker
     /// Model Selection & Reasoning Effort. Its own case so the settings hub
     /// reaches it in one hop, like Android's `SETTINGS_AI` row — the Chat
     /// page's "AI Intelligence" link keeps working through its NavigationLink.
@@ -112,7 +119,7 @@ struct RootView: View {
                 // suggestions) lives inside this very screen. Keyed on
                 // workspaceEpoch so a reset is a true re-seed.
                 HomeDashboardView(
-                    onNewChat: { router.path.append(.chat(nil)) },
+                    onNewChat: { router.path.append(.newChat) },
                     onOpenDrawer: {
                         drawerEntryOffset = 0
                         withAnimation(Aero.motion(Aero.spring)) { showDrawer = true }
@@ -264,6 +271,18 @@ struct AeroDestinations: ViewModifier {
             switch route {
             case .chat(let id): ChatDetailView(conversationID: id)
             case .chatPrefill(let prompt): ChatDetailView(conversationID: nil, prefill: prompt)
+            case .newChat: NewChatView(
+                onStartChat: { prompt, autoSend in
+                    router.path.append(autoSend ? .chatAutoSend(prompt) : .chatPrefill(prompt))
+                },
+                onOpenConversation: { router.path.append(.chat($0)) },
+                onOpenAllChats: { router.path.append(.chats) },
+                onOpenModels: { router.path.append(.modelPicker) },
+                onOpenMenu: { showDrawer = true },
+                onOpenExplore: { router.path.append(.explore) })
+            case .modelPicker: ModelSelectionView(
+                onBack: { router.path.removeLast() },
+                onContinue: { router.path.removeLast() })
             case .chatAutoSend(let prompt): ChatDetailView(conversationID: nil, prefill: prompt, autoSendPrefill: true)
             case .settings: SettingsView(onRoute: { router.path.append($0) })
             case .settingsSection(let section):

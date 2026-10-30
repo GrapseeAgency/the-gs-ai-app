@@ -1,16 +1,19 @@
 # Pending references — supplied by the owner, built on both platforms
 
-Ten screens were supplied as reference art. All ten are built on **both**
+Twelve screens were supplied as reference art. All twelve are built on **both**
 platforms: the six owner sheets crossed on 2026-10-29, Privacy & Data Controls
-followed, Chat History & Search and Model Selection crossed on 2026-10-30, and
-Data Export & Account Deletion crossed on 2026-10-31. Nothing here is called
-"captured" until its render gate proves parity — see Acceptance.
+followed, Chat History & Search and Model Selection crossed on 2026-10-30, Data
+Export & Account Deletion crossed on 2026-10-31, and the pre-chat page plus the
+redesigned model picker crossed the same day. Nothing here is called "captured"
+until its render gate proves parity — see Acceptance.
 
 | reference | expected screen | state |
 | --- | --- | --- |
 | `privacy-data-controls.png` | "Privacy & Data Controls" — hero, Data & Permissions, Conversation & Activity, Export & Deletion groups | **built (both)** — see deltas below |
 | `chat-history-search.png` | "Chat History & Search" — search field + filter chips, totals card, Recent Chats, Quick Actions 2×2, new-conversation footer | **built (both)** — iOS twin rebuilt 2026-10-30 |
-| `model-selection.png` | "Model Selection & Reasoning Effort" — AI Model radio list, Reasoning Effort 4-up, Model Preferences toggles | **built (both)** — four-across tiles + real switches |
+| `model-selection.png` | "Model Selection & Reasoning Effort" — AI Model radio list, Reasoning Effort 4-up, Model Preferences toggles | **built (both)** — the Settings AI page |
+| `model-selection-v2.png` | "Model Selection" — All/Text/Vision/Code tabs, four model cards with tags and radios, Reasoning Effort segments, Auto Select, Continue | **built (both)** — the picker the pre-chat page opens |
+| `home-new-chat.png` | "Start a New Chat" — companion header, bloom hero, composer, six tool chips, Recent Chats, Explore AI Models | **built (both)** — Android capture verified |
 | `notifications-alerts.png` | "Notifications & Alerts" — master switch, 5 types, 3 channels, quiet hours, closing card | **built (both)** |
 | `notifications-inbox.png` | "Notifications" — 5 chips with counts, Today/Earlier, unread dots, caught-up card | **built (both)** |
 | `account-security.png` | "Account & Security" — profile, sign-in methods, authentication, sessions, devices | **built (both)** |
