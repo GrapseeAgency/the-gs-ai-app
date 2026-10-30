@@ -26,7 +26,6 @@ final class SettingsStore: ObservableObject {
     @Published var autoTitle: Bool { didSet { defaults.set(autoTitle, forKey: K.autoTitle) } }
     // AI
     @Published var memory: Bool { didSet { defaults.set(memory, forKey: K.memory) } }
-    @Published var personalisation: Bool { didSet { defaults.set(personalisation, forKey: K.personalisation) } }
 
     /// Commit 1(b): answer from the on-device engine before the network.
     ///
@@ -45,17 +44,12 @@ final class SettingsStore: ObservableObject {
     @Published var preferredModel: String { didSet { defaults.set(preferredModel, forKey: K.preferredModel) } }
     @Published var reasoningEffort: String { didSet { defaults.set(reasoningEffort, forKey: K.reasoningEffort) } }
     @Published var rememberChoices: Bool { didSet { defaults.set(rememberChoices, forKey: K.rememberChoices) } }
-    // Privacy
     // Security
-    @Published var appPasscode: Bool { didSet { defaults.set(appPasscode, forKey: K.appPasscode) } }
     @Published var biometricUnlock: Bool { didSet { defaults.set(biometricUnlock, forKey: K.biometricUnlock) } }
     /// Epoch millis of the last successful biometric check; 0 when none.
     @Published var lastSecurityCheckMillis: Double { didSet { defaults.set(lastSecurityCheckMillis, forKey: K.lastSecurityCheck) } }
     // Notifications
     @Published var pushNotifications: Bool { didSet { defaults.set(pushNotifications, forKey: K.pushNotifications) } }
-    @Published var taskCompleted: Bool { didSet { defaults.set(taskCompleted, forKey: K.taskCompleted) } }
-    @Published var assistantUpdates: Bool { didSet { defaults.set(assistantUpdates, forKey: K.assistantUpdates) } }
-    @Published var productNews: Bool { didSet { defaults.set(productNews, forKey: K.productNews) } }
     // Notification kinds + quiet hours — the Notifications & Alerts sheet.
     // Persisted now, read by the notice path when it lands; same precedent as
     // the push switch above. Keys mirror Android's so a cross-platform export
@@ -143,7 +137,6 @@ final class SettingsStore: ObservableObject {
         enterToSend = defaults.object(forKey: K.enterToSend) as? Bool ?? true
         autoTitle = defaults.object(forKey: K.autoTitle) as? Bool ?? true
         memory = defaults.object(forKey: K.memory) as? Bool ?? true
-        personalisation = defaults.object(forKey: K.personalisation) as? Bool ?? true
         // false, not true. An absent key must mean OFF.
         preferLocal = defaults.object(forKey: K.preferLocal) as? Bool ?? false
         reasoning = defaults.string(forKey: K.reasoning) ?? "Medium"
@@ -152,16 +145,12 @@ final class SettingsStore: ObservableObject {
         // true, like Android: the tile the reader taps and the default the next
         // new chat picks are the same choice until they say otherwise.
         rememberChoices = defaults.object(forKey: K.rememberChoices) as? Bool ?? true
-        appPasscode = defaults.object(forKey: K.appPasscode) as? Bool ?? false
         // false, not true: a lock is opt-in. Android's store has always
         // defaulted off, and an app that arms a biometric prompt before the
         // user asked for one is a lock they never chose.
         biometricUnlock = defaults.object(forKey: K.biometricUnlock) as? Bool ?? false
         lastSecurityCheckMillis = defaults.double(forKey: K.lastSecurityCheck)
         pushNotifications = defaults.object(forKey: K.pushNotifications) as? Bool ?? true
-        taskCompleted = defaults.object(forKey: K.taskCompleted) as? Bool ?? true
-        assistantUpdates = defaults.object(forKey: K.assistantUpdates) as? Bool ?? true
-        productNews = defaults.object(forKey: K.productNews) as? Bool ?? false
         noticeMessages = defaults.object(forKey: K.noticeMessages) as? Bool ?? true
         noticeAiUpdates = defaults.object(forKey: K.noticeAiUpdates) as? Bool ?? true
         noticeTips = defaults.object(forKey: K.noticeTips) as? Bool ?? true
@@ -197,19 +186,14 @@ final class SettingsStore: ObservableObject {
         static let enterToSend = "settings.enterToSend"
         static let autoTitle = "settings.autoTitle"
         static let memory = "settings.memory"
-        static let personalisation = "settings.personalisation"
         static let preferLocal = "settings.preferLocal"
         static let reasoning = "settings.reasoning"
         static let preferredModel = "settings.preferredModel"
         static let reasoningEffort = "settings.reasoningEffort"
         static let rememberChoices = "settings.rememberChoices"
-        static let appPasscode = "settings.appPasscode"
         static let biometricUnlock = "settings.biometricUnlock"
         static let lastSecurityCheck = "settings.lastSecurityCheck"
         static let pushNotifications = "settings.pushNotifications"
-        static let taskCompleted = "settings.taskCompleted"
-        static let assistantUpdates = "settings.assistantUpdates"
-        static let productNews = "settings.productNews"
         static let noticeMessages = "settings.notice.messages"
         static let noticeAiUpdates = "settings.notice.aiUpdates"
         static let noticeTips = "settings.notice.tips"

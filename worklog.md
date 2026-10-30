@@ -5493,7 +5493,12 @@ Work Log:
   They now use `RefSettingsPage` + `CardLight`, so every settings page sits on
   the bloom like the sheets. Deleted `NotificationsScreen` and
   `HelpSettingsScreen`, neither of which any route or test referenced (the inbox
-  is `NotificationsInboxScreen`; the help route is `HelpSupportScreen`).
+  is `NotificationsInboxScreen`; the help route is `HelpSupportScreen`). The
+  legacy AI/Security/Notifications settings sections had no route left once the
+  hub pointed at the owner sheets, and their unique preferences were write-only
+  (personalisation, appPasscode, taskCompleted, assistantUpdates, productNews),
+  so both the sections and the keys are gone. Memory, preferLocal and
+  biometricUnlock each keep a routed control.
 - Billing's footnote named Subscription & Usage but the page had no way there;
   the footer button now opens SETTINGS_PLAN, the page is on the reference
   shell, and a JVM test presses it. iOS already had the button.

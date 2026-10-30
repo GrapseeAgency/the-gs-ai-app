@@ -309,15 +309,8 @@ struct SettingsView: View {
             accessibilitySection
         case .chat:
             chatSection
-            aiSection
-        case .ai:
-            aiSection
         case .language:
             languageSection
-        case .notifications:
-            notificationsSection
-        case .security:
-            securitySection
         case .accessibility:
             accessibilitySection
         case .about:
@@ -351,75 +344,6 @@ struct SettingsView: View {
         section("Chat") {
             toggleRow("Enter to send", isOn: $settings.enterToSend)
             toggleRow("Auto-title chats", isOn: $settings.autoTitle)
-        }
-    }
-
-    // MARK: AI
-
-    /// The "Reasoning effort" Low/Medium/High chips are DELETED (Phase 2):
-    /// they persisted a value that nothing in the pipeline reads. Memory and
-    /// Personalisation stay — they are honest preferences.
-    private var aiSection: some View {
-        section("AI") {
-            // The reference's AI Intelligence page: model source and reasoning
-            // effort as tiles, both writing the settings the chat already reads.
-            NavigationLink {
-                AiIntelligenceView()
-            } label: {
-                AeroListRow(
-                    title: "AI Intelligence",
-                    subtitle: "Model source and reasoning effort",
-                    leading: {
-                        Image(systemName: "cpu")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Aero.accent)
-                            .frame(width: 34, height: 34)
-                            .background(Circle().fill(Aero.container))
-                    },
-                    trailing: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Aero.textMuted)
-                    })
-            }
-            .buttonStyle(.plain)
-
-            toggleRow("Memory", isOn: $settings.memory)
-            toggleRow("Personalisation", isOn: $settings.personalisation)
-            // Commit 1(b). One row in the existing AI section with the existing
-            // toggleRow: no new screen, no new card, no new token. Default OFF.
-            // The subtitle states the precondition rather than implying local is
-            // always better, because with no model installed this switch would
-            // do nothing at all.
-            // Only offered when the engine is actually reachable. A switch that
-            // silently does nothing is worse than no switch, and "is it
-            // available" is not a question a user can answer from a title.
-            if GsNativeLoader.isAvailable {
-                toggleRow("Prefer on-device AI", isOn: $settings.preferLocal)
-            }
-        }
-    }
-
-    // MARK: Security
-
-    /// Only the REAL controls remain (Phase 2): the fabricated "Two-factor:
-    /// On" and "Trusted devices: 2" values are gone — nothing was measured
-    /// behind them. The passcode toggles persist locally and stay.
-    private var securitySection: some View {
-        section("Security") {
-            toggleRow("App passcode", isOn: $settings.appPasscode)
-            toggleRow("Biometric unlock", isOn: $settings.biometricUnlock)
-        }
-    }
-
-    // MARK: Notifications
-
-    private var notificationsSection: some View {
-        section("Notifications") {
-            toggleRow("Push notifications", isOn: $settings.pushNotifications)
-            toggleRow("Task completed", isOn: $settings.taskCompleted)
-            toggleRow("Assistant updates", isOn: $settings.assistantUpdates)
-            toggleRow("Product news", isOn: $settings.productNews)
         }
     }
 

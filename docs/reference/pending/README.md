@@ -457,7 +457,13 @@ Three surfaces failed that bar and are now closed:
   material, unlike every sheet and the three ported pages. They now use
   `RefSettingsPage` + `CardLight`. Two never-routed duplicates are deleted:
   `NotificationsScreen` (the inbox is `NotificationsInboxScreen`) and
-  `HelpSettingsScreen` (the route is the mock-based `HelpSupportScreen`).
+  `HelpSettingsScreen` (the route is the mock-based `HelpSupportScreen`). The
+  three legacy `SettingsSectionID` pages (AI, Security, Notifications) had no
+  route left once the hub pointed at the owner sheets; their only unique
+  preferences were write-only (personalisation, appPasscode, taskCompleted,
+  assistantUpdates, productNews), so the sections and those keys are gone.
+  Memory, on-device preference and biometric unlock each keep a routed control
+  (Memory page, AI page, Account & Security).
 - **Billing pointed at a page it could not open.** Android's footnote named
   Subscription & Usage while the page's only button went Back. The footer now
   opens `SETTINGS_PLAN` — the single primary act, as on iOS — and a JVM test

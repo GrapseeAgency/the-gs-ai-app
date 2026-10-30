@@ -390,19 +390,17 @@ struct GsSettingsPage<Content: View>: View {
 
 // MARK: - Detail pages
 
-/// Every settings surface the hub's rows reach — the mock's five destinations
-/// plus the surfaces the mock does not name (chat, AI, security,
-/// accessibility), which stay reachable inside their semantic neighbours.
+/// Every settings surface the hub's rows reach: Appearance (which also carries
+/// Accessibility), Chat, Language, Accessibility and About. The six owner sheets
+/// have their own routes; the legacy AI/Security/Notifications sections were
+/// unreachable and are gone.
 enum SettingsSectionID: String, Hashable, CaseIterable {
-    case appearance, chat, ai, security, notifications, language, accessibility, about
+    case appearance, chat, language, accessibility, about
 
     var title: String {
         switch self {
         case .appearance: return "Appearance"
         case .chat: return "Chat"
-        case .ai: return "AI Model"
-        case .security: return "Device & Account"
-        case .notifications: return "Notifications"
         case .language: return "Language"
         case .accessibility: return "Accessibility"
         case .about: return "About Nexly"
@@ -413,9 +411,6 @@ enum SettingsSectionID: String, Hashable, CaseIterable {
         switch self {
         case .appearance: return "Theme and display"
         case .chat: return "How new chats behave"
-        case .ai: return "Model and intelligence"
-        case .security: return "Manage your devices and sessions"
-        case .notifications: return "Stay updated with important alerts"
         case .language: return "Choose your preferred language"
         case .accessibility: return "High contrast, larger text, calmer motion"
         case .about: return "Version, terms and support"
