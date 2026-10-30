@@ -159,36 +159,31 @@ final class SheetsUITests: XCTestCase {
         }
         explore.tap()
 
-        let openSearch = app.buttons["Open search"].firstMatch
-        guard openSearch.waitForExistence(timeout: 15) else {
-            XCTFail("Explore never offered its search control; screen: \(app.debugDescription)")
+        // Explore's own chrome replaces the system bar now; its section
+        // headers open the full Discover page, where the trip planner is a
+        // visible Popular row (no keyboard to push it off-screen).
+        let seeAll = app.buttons["See All"].firstMatch
+        guard seeAll.waitForExistence(timeout: 15) else {
+            XCTFail("Explore never offered its See All control; screen: \(app.debugDescription)")
             return
         }
-        openSearch.tap()
-        // The field carries an explicit accessibility identifier, so the
-        // placeholder is not its query key.
-        let field = app.textFields["explore-search-input"].firstMatch
-        guard field.waitForExistence(timeout: 10) else {
-            XCTFail("Explore's search field never appeared; screen: \(app.debugDescription)")
-            return
-        }
-        field.tap()
-        field.typeText("trip")
+        seeAll.tap()
+        XCTAssertTrue(
+            app.staticTexts["Featured Tools"].waitForExistence(timeout: 15),
+            "the See All control did not open Discover; screen: \(app.debugDescription)")
 
         let trip = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", "Plan a trip")).firstMatch
-        guard trip.waitForExistence(timeout: 15) else {
-            XCTFail("Explore's search never offered Plan a trip; screen: \(app.debugDescription)")
-            return
+        // Popular sits below Featured Tools; walk down to it, and back up if a
+        // fast swipe overshoots.
+        for _ in 0..<6 where !(trip.exists && trip.isHittable) {
+            app.swipeUp()
         }
-        // The keyboard pushes the first result above the viewport (run
-        // 41038903664: y = -6.3), so bring it back into reach before tapping.
-        for _ in 0..<3 where !trip.isHittable {
+        for _ in 0..<4 where !(trip.exists && trip.isHittable) {
             app.swipeDown()
-            Thread.sleep(forTimeInterval: 0.3)
         }
-        guard trip.isHittable else {
-            XCTFail("Plan a trip never became hittable; frame: \(trip.frame); screen: \(app.debugDescription)")
+        guard trip.waitForExistence(timeout: 10), trip.isHittable else {
+            XCTFail("Discover never offered a hittable Plan a trip; screen: \(app.debugDescription)")
             return
         }
         trip.tap()
