@@ -229,13 +229,16 @@ struct AuthFlowView: View {
                     .disabled(email.isEmpty || password.isEmpty)
                     .opacity(email.isEmpty || password.isEmpty ? 0.4 : 1)
 
-                    dividerCaption("or continue with")
-
-                    VStack(spacing: Aero.Spacing.s) {
-                        socialButton("Continue with Google", icon: "safari")
-                        socialButton("Continue with Apple", icon: "apple.logo")
-                        socialButton("Use a passkey", icon: "touchid")
-                    }
+                    // The owner's rule, made visible: only Grapsee Mail signs
+                    // in. The Google / Apple / passkey buttons that used to sit
+                    // here completed the session without an identity provider
+                    // behind them — a claim of OAuth this build does not have.
+                    Text("Grapsee Mail is the only way to sign in — there is no other provider.")
+                        .font(Aero.caption())
+                        .foregroundStyle(Aero.textMuted)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
                 }
             }
         }
@@ -761,31 +764,6 @@ private struct OptionalFocus: ViewModifier {
                 .foregroundStyle(Aero.textMuted)
             Rectangle().fill(Aero.outline).frame(height: 1)
         }
-    }
-
-    private func socialButton(_ title: String, icon: String) -> some View {
-        Button {
-            GSHaptics.tap()
-            // Social sign-in completes the session without collecting any
-            // identity fields, so nothing is persisted here (nothing is
-            // invented) — any stored identity simply survives.
-            onComplete()
-        } label: {
-            HStack(spacing: Aero.Spacing.s) {
-                Image(systemName: icon)
-                    .font(.system(size: 15))
-                    .foregroundStyle(Aero.text)
-                Text(title)
-                    .font(Aero.body())
-                    .foregroundStyle(Aero.text)
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 13)
-            .background(RoundedRectangle(cornerRadius: Aero.Radius.card).fill(Aero.surface))
-            .overlay(RoundedRectangle(cornerRadius: Aero.Radius.card).stroke(Aero.outline, lineWidth: 1))
-        }
-        .buttonStyle(KineticPressStyle())
     }
 
     private func backCircle(_ target: AuthStep) -> some View {

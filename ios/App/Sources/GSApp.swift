@@ -74,7 +74,11 @@ struct GSApp: App {
             Group {
                 if sessionActive {
                     if onboarded {
-                        RootView()
+                        // The real biometric gate: when Account & Security →
+                        // Biometric Login is on, the shell does not render
+                        // until LAContext answers. Off (the default) is a
+                        // pass-through.
+                        GsBiometricGate { RootView() }
                     } else {
                         if showReferenceWelcome {
                             ReferenceWelcomeView(
@@ -84,12 +88,35 @@ struct GSApp: App {
                         } else {
                             OnboardingView {
                                 onboarded = true
+                                // The real producer behind the "Tips &
+                                // Suggestions" switch: onboarding just
+                                // captured the preferences this notice
+                                // describes. Skipping the setup records
+                                // nothing.
+                                Task { @MainActor in
+                                    GsNotifier.record(
+                                        kind: .tips,
+                                        title: "Personalization applied",
+                                        body: "Your preferences have been updated. We'll now tailor responses to your style and interests.")
+                                }
                             }
                         }
                     }
                 } else {
                     AuthFlowView {
                         sessionActive = true
+                        // The real producer behind the "Account Activity"
+                        // switch: a sign-in is the account event that actually
+                        // happens. It goes to the Inbox, not the shade — the
+                        // user is mid-sign-in, and this build posts no banner.
+                        // The explicit main-actor hop keeps this closure legal
+                        // even though `onComplete` is a plain () -> Void.
+                        Task { @MainActor in
+                            GsNotifier.record(
+                                kind: .accountActivity,
+                                title: "Signed in to Nexly",
+                                body: "This device is now signed in to your Grapsee account.")
+                        }
                     }
                 }
             }

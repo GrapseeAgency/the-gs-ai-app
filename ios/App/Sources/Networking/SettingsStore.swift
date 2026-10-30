@@ -42,11 +42,41 @@ final class SettingsStore: ObservableObject {
     // Security
     @Published var appPasscode: Bool { didSet { defaults.set(appPasscode, forKey: K.appPasscode) } }
     @Published var biometricUnlock: Bool { didSet { defaults.set(biometricUnlock, forKey: K.biometricUnlock) } }
+    /// Epoch millis of the last successful biometric check; 0 when none.
+    @Published var lastSecurityCheckMillis: Double { didSet { defaults.set(lastSecurityCheckMillis, forKey: K.lastSecurityCheck) } }
     // Notifications
     @Published var pushNotifications: Bool { didSet { defaults.set(pushNotifications, forKey: K.pushNotifications) } }
     @Published var taskCompleted: Bool { didSet { defaults.set(taskCompleted, forKey: K.taskCompleted) } }
     @Published var assistantUpdates: Bool { didSet { defaults.set(assistantUpdates, forKey: K.assistantUpdates) } }
     @Published var productNews: Bool { didSet { defaults.set(productNews, forKey: K.productNews) } }
+    // Notification kinds + quiet hours — the Notifications & Alerts sheet.
+    // Persisted now, read by the notice path when it lands; same precedent as
+    // the push switch above. Keys mirror Android's so a cross-platform export
+    // carries one vocabulary.
+    @Published var noticeMessages: Bool { didSet { defaults.set(noticeMessages, forKey: K.noticeMessages) } }
+    @Published var noticeAiUpdates: Bool { didSet { defaults.set(noticeAiUpdates, forKey: K.noticeAiUpdates) } }
+    @Published var noticeTips: Bool { didSet { defaults.set(noticeTips, forKey: K.noticeTips) } }
+    @Published var noticeAccountActivity: Bool { didSet { defaults.set(noticeAccountActivity, forKey: K.noticeAccountActivity) } }
+    @Published var noticeProductUpdates: Bool { didSet { defaults.set(noticeProductUpdates, forKey: K.noticeProductUpdates) } }
+    @Published var noticeInApp: Bool { didSet { defaults.set(noticeInApp, forKey: K.noticeInApp) } }
+    @Published var noticeDnd: Bool { didSet { defaults.set(noticeDnd, forKey: K.noticeDnd) } }
+    @Published var quietHoursEnabled: Bool { didSet { defaults.set(quietHoursEnabled, forKey: K.quietHoursEnabled) } }
+    @Published var quietStartMinute: Int { didSet { defaults.set(quietStartMinute, forKey: K.quietStartMinute) } }
+    @Published var quietEndMinute: Int { didSet { defaults.set(quietEndMinute, forKey: K.quietEndMinute) } }
+
+    /// The per-kind gate the notice path reads — the twin of Android's
+    /// `SettingsStore.noticeEnabled`. An id with no row must not default to on.
+    func noticeEnabled(_ kindId: String) -> Bool {
+        switch kindId {
+        case "messages": return noticeMessages
+        case "ai-updates": return noticeAiUpdates
+        case "tips": return noticeTips
+        case "account-activity": return noticeAccountActivity
+        case "product-updates": return noticeProductUpdates
+        default: return false
+        }
+    }
+
     // Language
     @Published var aiLanguage: String { didSet { defaults.set(aiLanguage, forKey: K.aiLanguage) } }
     // Accessibility
@@ -80,11 +110,25 @@ final class SettingsStore: ObservableObject {
         reasoning = defaults.string(forKey: K.reasoning) ?? "Medium"
         helpImprove = defaults.object(forKey: K.helpImprove) as? Bool ?? false
         appPasscode = defaults.object(forKey: K.appPasscode) as? Bool ?? false
-        biometricUnlock = defaults.object(forKey: K.biometricUnlock) as? Bool ?? true
+        // false, not true: a lock is opt-in. Android's store has always
+        // defaulted off, and an app that arms a biometric prompt before the
+        // user asked for one is a lock they never chose.
+        biometricUnlock = defaults.object(forKey: K.biometricUnlock) as? Bool ?? false
+        lastSecurityCheckMillis = defaults.double(forKey: K.lastSecurityCheck)
         pushNotifications = defaults.object(forKey: K.pushNotifications) as? Bool ?? true
         taskCompleted = defaults.object(forKey: K.taskCompleted) as? Bool ?? true
         assistantUpdates = defaults.object(forKey: K.assistantUpdates) as? Bool ?? true
         productNews = defaults.object(forKey: K.productNews) as? Bool ?? false
+        noticeMessages = defaults.object(forKey: K.noticeMessages) as? Bool ?? true
+        noticeAiUpdates = defaults.object(forKey: K.noticeAiUpdates) as? Bool ?? true
+        noticeTips = defaults.object(forKey: K.noticeTips) as? Bool ?? true
+        noticeAccountActivity = defaults.object(forKey: K.noticeAccountActivity) as? Bool ?? true
+        noticeProductUpdates = defaults.object(forKey: K.noticeProductUpdates) as? Bool ?? true
+        noticeInApp = defaults.object(forKey: K.noticeInApp) as? Bool ?? true
+        noticeDnd = defaults.object(forKey: K.noticeDnd) as? Bool ?? false
+        quietHoursEnabled = defaults.object(forKey: K.quietHoursEnabled) as? Bool ?? false
+        quietStartMinute = defaults.object(forKey: K.quietStartMinute) as? Int ?? 22 * 60
+        quietEndMinute = defaults.object(forKey: K.quietEndMinute) as? Int ?? 7 * 60
         aiLanguage = defaults.string(forKey: K.aiLanguage) ?? "EN"
         fontScale = defaults.object(forKey: K.fontScale) as? Double ?? 1.0
         highContrast = defaults.object(forKey: K.highContrast) as? Bool ?? false
@@ -117,10 +161,21 @@ final class SettingsStore: ObservableObject {
         static let helpImprove = "settings.helpImprove"
         static let appPasscode = "settings.appPasscode"
         static let biometricUnlock = "settings.biometricUnlock"
+        static let lastSecurityCheck = "settings.lastSecurityCheck"
         static let pushNotifications = "settings.pushNotifications"
         static let taskCompleted = "settings.taskCompleted"
         static let assistantUpdates = "settings.assistantUpdates"
         static let productNews = "settings.productNews"
+        static let noticeMessages = "settings.notice.messages"
+        static let noticeAiUpdates = "settings.notice.aiUpdates"
+        static let noticeTips = "settings.notice.tips"
+        static let noticeAccountActivity = "settings.notice.accountActivity"
+        static let noticeProductUpdates = "settings.notice.productUpdates"
+        static let noticeInApp = "settings.notice.inApp"
+        static let noticeDnd = "settings.notice.dnd"
+        static let quietHoursEnabled = "settings.quietHours.enabled"
+        static let quietStartMinute = "settings.quietHours.start"
+        static let quietEndMinute = "settings.quietHours.end"
         static let aiLanguage = "settings.aiLanguage"
         static let fontScale = "settings.fontScale"
         static let highContrast = "settings.highContrast"

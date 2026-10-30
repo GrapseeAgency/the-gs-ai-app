@@ -166,7 +166,7 @@ fun SettingsHubScreen(
                                 .padding(horizontal = 8.dp, vertical = 2.5.dp),
                         ) {
                             Text(
-                                "Free Plan",
+                                com.grapsee.gsai.data.PlanStore.planName,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Medium,
                                 fontFamily = GsFonts.Product,
@@ -215,10 +215,13 @@ fun SettingsHubScreen(
                     )
                 }
                 Spacer(Modifier.width(8.dp))
+                // The plan page is the destination the card describes: one
+                // plan, its real price and this month's usage. Billing is
+                // reached from there, not the other way round.
                 RefInlinePill(
-                    label = "Upgrade",
+                    label = "View plan",
                     icon = GsIcons.ArrowRight,
-                ) { onNavigate(GsRoutes.BILLING) }
+                ) { onNavigate(GsRoutes.SETTINGS_PLAN) }
             }
         }
 

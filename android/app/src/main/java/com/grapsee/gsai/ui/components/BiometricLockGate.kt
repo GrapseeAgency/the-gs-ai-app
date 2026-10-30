@@ -82,9 +82,13 @@ fun BiometricLockGate(content: @Composable () -> Unit) {
             // effect lets the user try again instead of stranding them.
             onError = { code ->
                 // A deliberate Cancel (or a torn-down prompt) is not a retry.
-                val userSaidNo = code == BiometricPrompt.ERROR_NEGATIVE_BUTTON ||
-                    code == BiometricPrompt.ERROR_USER_CANCELED ||
-                    code == BiometricPrompt.ERROR_CANCELED
+                // The framework constants are BIOMETRIC_ERROR_*: the plain
+                // ERROR_* names belong to androidx.biometric, which this
+                // build cannot use (MainActivity is not a FragmentActivity).
+                // The negative-button dismissal reports as CANCELED in the
+                // framework API, so those two cover "the user said no".
+                val userSaidNo = code == BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED ||
+                    code == BiometricPrompt.BIOMETRIC_ERROR_CANCELED
                 if (!userSaidNo && attempt < 3) attempt++
             },
         )

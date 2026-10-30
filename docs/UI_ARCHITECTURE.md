@@ -171,8 +171,8 @@ they would read or write. Copying their pixels would produce convincing lies:
 |---|---|
 | Mentions (@you / @project / @health) | No mention graph exists; nothing to list. |
 | Quick actions (simplify / shorter / longer / change tone) | The chat contract has no transform instruction; every tile would be a no-op. |
-| Usage & Limits | Nothing meters tokens, images or uploads. |
-| Subscription ($12.99 / month) | No billing backend, no SKUs, no purchase path. |
+| Usage & Limits | **Now built (both platforms)** as Subscription & Usage. Two meters count real rows (messages, uploads); images and reasoning print "—" because nothing counts them. The four allowances are displayed, not enforced. |
+| Subscription ($12.99 / month) | **Now built (both platforms)** with the owner-confirmed $12.99. No billing backend, no SKU and no purchase path, so the screen says "Not activated", the card is "Not set" and no invoice can exist. |
 | Themes (Aurora / Onyx / Forest palettes) | The token set has light/dark plus six accents; there are no alternate palettes. |
 
 When one of those systems lands, its screen goes in against this table — not
@@ -199,7 +199,12 @@ language and offers the one real action that resolves it.
 | Welcome / onboarding | `auth/ReferenceWelcomeScreen`, `auth/OnboardingScreen` | `Features/Auth/ReferenceWelcomeView` |
 | Auth | `auth/AuthScreen` | `Features/Auth/*` |
 | Voice | `voice/VoiceScreen` | `Features/Voice/VoiceView` |
-| Notifications | `notifications/NotificationsScreen` | `Features/Notifications/NotificationsView` |
+| Notifications & Alerts | `settings/NotificationsAlertsScreen` | `Features/Notifications/NotificationsAlertsView` |
+| Notifications inbox | `notifications/NotificationsInboxScreen` | `Features/Notifications/NotificationsView` |
+| Account & Security | `settings/AccountSecurityScreen` | `Features/Account/AccountSecurityView` |
+| Subscription & Usage | `subscription/SubscriptionUsageScreen` | `Features/Billing/SubscriptionUsageView` |
+| Help & Support | `support/HelpSupportScreen` | `Features/Support/HelpSupportView` |
+| Connected Apps | `integrations/ConnectedAppsScreen` | `Features/Integrations/ConnectedAppsView` |
 | Billing / plan | `billing/BillingScreen` | `Features/Billing/BillingView` |
 | Orb | `orbs/OrbPhase.kt` + `orbs/ThinkingOrb.kt` | `Orbs/OrbPhase.swift` + `Orbs/ThinkingOrbView.swift` |
 | Rendered artifacts | `chat/content/Widget*` (200+ widgets) | `Features/Chats/Content/*` |

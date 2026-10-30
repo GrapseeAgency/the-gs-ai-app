@@ -32,6 +32,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.grapsee.gsai.ShortcutBus
 import com.grapsee.gsai.data.SessionStore
+import com.grapsee.gsai.data.notifications.GsNotifier
 import com.grapsee.gsai.ui.auth.AuthScreen
 import com.grapsee.gsai.ui.auth.OnboardingScreen
 import com.grapsee.gsai.ui.auth.ReferenceWelcomeScreen
@@ -445,6 +446,15 @@ fun GsNavHost(
                 onFinished = {
                     SessionStore.activateSession(context)
                     SessionStore.setOnboarded(context, true)
+                    // The real producer behind the "Tips & Suggestions"
+                    // switch: onboarding just captured the preferences the
+                    // copy talks about. Skipping the setup does not record it.
+                    GsNotifier.record(
+                        context = context,
+                        kind = GsNotifier.Kind.TIPS,
+                        title = "Personalization applied",
+                        body = "Your preferences have been updated. We'll now tailor responses to your style and interests.",
+                    )
                     navController.navigate(GsRoutes.HOME) {
                         popUpTo(0) { inclusive = true }
                     }

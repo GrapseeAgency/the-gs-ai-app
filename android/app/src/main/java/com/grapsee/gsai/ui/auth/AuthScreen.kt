@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.AccountStore
+import com.grapsee.gsai.ui.theme.GsFonts
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.components.RefArt
 import com.grapsee.gsai.ui.components.RefArtwork
@@ -189,12 +190,7 @@ fun AuthScreen(onFinished: () -> Unit) {
                             resetCode(verifyCode)
                             step = AuthStep.VerifyEmail
                         }
-                    },
-                    onSocialSignIn = {
-                        resetCode(verifyCode)
-                        step = AuthStep.VerifyEmail
-                    },
-                    onPasskey = onFinished
+                    }
                 )
                 AuthStep.SignUp -> SignUpStep(
                     name = name,
@@ -467,9 +463,7 @@ private fun SignInStep(
     onRememberChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     onForgotPassword: () -> Unit,
-    onSignIn: () -> Unit,
-    onSocialSignIn: () -> Unit,
-    onPasskey: () -> Unit
+    onSignIn: () -> Unit
 ) {
     val colors = GsTheme.colors
     AuthStepPage(
@@ -521,14 +515,18 @@ private fun SignInStep(
 
         Spacer(Modifier.height(16.dp))
         RefPrimaryButton(label = "Sign in", onClick = onSignIn)
-        Spacer(Modifier.height(22.dp))
-        AuthDividerRow()
-        Spacer(Modifier.height(18.dp))
-        RefQuietRow(icon = GsIcons.Globe, label = "Continue with Google", onClick = onSocialSignIn)
-        Spacer(Modifier.height(9.dp))
-        RefQuietRow(icon = GsIcons.Smartphone, label = "Continue with Apple", onClick = onSocialSignIn)
-        Spacer(Modifier.height(9.dp))
-        RefQuietRow(icon = GsIcons.Fingerprint, label = "Use a passkey", onClick = onPasskey)
+        Spacer(Modifier.height(16.dp))
+        // The owner's rule, made visible: only Grapsee Mail signs in. The
+        // Google / Apple / passkey rows that used to sit here advanced the
+        // flow to email verification without an identity provider behind
+        // them — a claim of OAuth this build does not have.
+        Text(
+            "Grapsee Mail is the only way to sign in — there is no other provider.",
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+            fontFamily = GsFonts.Product,
+            color = colors.textTertiary,
+        )
     }
 }
 

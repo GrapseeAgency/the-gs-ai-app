@@ -14,6 +14,7 @@ struct SettingsView: View {
     @ObservedObject private var settings = SettingsStore.shared
     /// The name/email the reader actually gave (never invented).
     @ObservedObject private var account = AccountStore.shared
+    @ObservedObject private var plan = PlanStore.shared
 
     /// Which detail page to render. Nil renders the hub.
     var detail: SettingsSectionID? = nil
@@ -171,7 +172,7 @@ struct SettingsView: View {
                     }
                     Spacer(minLength: 8)
                     GsInlinePill(label: "Upgrade", trailingGlyph: "arrow-right") {
-                        onRoute?(.billing)
+                        onRoute?(.subscriptionUsage)
                     }
                 }
                 .padding(.horizontal, 12)
@@ -203,9 +204,13 @@ struct SettingsView: View {
             // App Settings.
             GsGroupHeader(title: "App Settings", caption: "Fine-tune your experience")
             GsGroupCard {
-                hubRow("Notifications", "Stay updated with important alerts", "bell", .peach, .settingsSection(.notifications))
+                hubRow("Notifications & Alerts", "Choose what you receive", "bell", .peach, .notificationsAlerts)
                 hubDivider
-                hubRow("Device & Account", "Manage your devices and sessions", "device-mobile", .peach, .settingsSection(.security))
+                hubRow("Account & Security", "Sign-in, app lock and sessions", "device-mobile", .peach, .accountSecurity)
+                hubDivider
+                hubRow("Connected Apps", "Integrations and permissions", "link", .peach, .connectedApps)
+                hubDivider
+                hubRow("Help & Support", "Answers, assistant and contact", "help-circle", .peach, .helpSupport)
                 hubDivider
                 hubRow("About Nexly", "Version, terms and support", "info-circle", .peach, .settingsSection(.about), divider: false)
             }
@@ -236,7 +241,7 @@ struct SettingsView: View {
                     .fill(Aero.raisedSurface)
                     .frame(width: 52, height: 52)
                     .overlay(Circle().strokeBorder(.white.opacity(0.55), lineWidth: 2))
-                Text(initialsFor(account.displayName.isEmpty ? "Arafat" : account.displayName))
+                Text(account.displayName.isEmpty ? "NX" : initialsFor(account.displayName))
                     .font(.custom(Aero.productName(.semibold), size: 17, relativeTo: .headline))
                     .foregroundStyle(Aero.text)
                 Circle()
@@ -250,15 +255,15 @@ struct SettingsView: View {
             // what makes the card 54-of-avatar tall rather than the column's own
             // 63. Android's hub card carries the same numbers.
             VStack(alignment: .leading, spacing: 1) {
-                Text(account.displayName.isEmpty ? "Arafat" : account.displayName)
+                Text(account.displayName.isEmpty ? "Your account" : account.displayName)
                     .font(.custom(Aero.productName(.semibold), size: 15, relativeTo: .subheadline))
                     .foregroundStyle(Aero.text)
                     .lineLimit(1)
-                Text(account.email.isEmpty ? "arafat@example.com" : account.email)
+                Text(account.email.isEmpty ? "Add your Grapsee Mail address" : account.email)
                     .font(.custom(Aero.productName(.regular), size: 12.5, relativeTo: .caption))
                     .foregroundStyle(Aero.textTertiary)
                     .lineLimit(1)
-                Text("Free Plan")
+                Text(plan.planName)
                     .font(.custom(Aero.productName(.medium), size: 10, relativeTo: .caption2))
                     .foregroundStyle(Color(red: 0.541, green: 0.290, blue: 0.122))
                     .padding(.horizontal, 8)

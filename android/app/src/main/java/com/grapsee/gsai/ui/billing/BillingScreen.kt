@@ -1,5 +1,6 @@
 package com.grapsee.gsai.ui.billing
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -8,65 +9,85 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.grapsee.gsai.data.PlanStore
 import com.grapsee.gsai.ui.components.RefArt
 import com.grapsee.gsai.ui.components.RefArtwork
 import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefDivider
 import com.grapsee.gsai.ui.components.RefFootnote
 import com.grapsee.gsai.ui.components.RefPage
+import com.grapsee.gsai.ui.components.RefPrimaryButton
 import com.grapsee.gsai.ui.components.RefSection
 import com.grapsee.gsai.ui.components.RefStatusPill
 import com.grapsee.gsai.ui.components.RefValueRow
 import com.grapsee.gsai.ui.theme.GsTheme
-import com.grapsee.gsai.ui.components.RefPrimaryButton
 
 /**
- * Billing — the honest version.
+ * Billing — the plan, told truthfully.
  *
- * GS AI has no subscription, payment processing or usage metering, so this
- * page states exactly that and shows no invented invoices, credits or plan
- * cards. The free tier is real; when paid plans launch the real billing
- * estate lands here.
+ * This page used to say "Free during early access", which contradicted the
+ * owner's two facts: there is no free tier, and the plan costs $12.99/month.
+ * The price now comes from [PlanStore] so the number cannot drift from the
+ * Subscription & Usage sheet.
+ *
+ * There is still no payment processor in this build, so no card, invoice or
+ * renewal can exist. The rows keep their slots and say exactly that.
  */
 @Composable
 fun BillingScreen(onBack: () -> Unit) {
     RefPage(
         title = "Billing",
-        subtitle = "No plan, no card, nothing to manage.",
+        subtitle = "Your plan and payment details.",
         onBack = onBack
     ) {
-        RefCard(padding = androidx.compose.foundation.layout.PaddingValues(22.dp)) {
+        RefCard(padding = PaddingValues(22.dp)) {
             RefArtwork(
                 art = RefArt.Success,
                 size = 96.dp,
                 modifier = Modifier.padding(bottom = 6.dp)
             )
             Text(
-                text = "Free during early access",
+                text = PlanStore.planName,
                 style = MaterialTheme.typography.headlineSmall,
                 color = GsTheme.colors.textPrimary
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "You don't need a subscription or a payment method to use GS AI. There are no invoices, credits or renewal dates because there is no charge.",
+                text = "One plan, ${PlanStore.priceLabel}. No payment is taken in this build: there is no card, no invoice and no purchase path, so nothing here can charge you silently.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = GsTheme.colors.textSecondary
             )
             Spacer(Modifier.height(14.dp))
-            RefStatusPill("Early access")
+            if (PlanStore.active) {
+                RefStatusPill("Active")
+            } else {
+                RefStatusPill("Not activated", GsTheme.colors.textSecondary)
+            }
         }
 
         RefSection(label = "Plan") {
-            RefValueRow("Current plan", "Free")
+            RefValueRow("Current plan", PlanStore.planName)
             RefDivider()
-            RefValueRow("Payment method", "None on file")
+            RefValueRow("Billing cycle", PlanStore.cycleLabel)
             RefDivider()
-            RefValueRow("Invoices", "None")
+            RefValueRow("Price", PlanStore.priceLabel)
             RefDivider()
-            RefValueRow("Usage metering", "Not enabled")
+            RefValueRow(
+                "Next billing date",
+                if (PlanStore.nextBillingMillis() > 0L) {
+                    java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault())
+                        .format(java.util.Date(PlanStore.nextBillingMillis()))
+                } else {
+                    "—"
+                }
+            )
+            RefDivider()
+            RefValueRow("Payment method", "Not set — no processor in this build")
+            RefDivider()
+            RefValueRow("Invoices", "None can be issued")
         }
 
-        RefFootnote("If paid plans launch, the price, renewal date and invoices will appear on this page. Nothing is charged silently.")
+        RefFootnote("Subscription & Usage shows the plan, this month's real usage and the same $12.99 price. Nothing is charged silently.")
         Spacer(Modifier.height(10.dp))
         RefPrimaryButton(label = "Back to settings", onClick = onBack)
     }

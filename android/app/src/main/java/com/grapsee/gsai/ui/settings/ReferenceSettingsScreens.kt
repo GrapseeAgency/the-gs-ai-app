@@ -172,7 +172,8 @@ fun AccountSettingsScreen(
             RefDivider()
             RefRow(
                 title = "Plan",
-                subtitle = "Free early access",
+                subtitle = com.grapsee.gsai.data.PlanStore.planName +
+                    " · " + com.grapsee.gsai.data.PlanStore.priceLabel,
                 icon = GsIcons.CreditCard,
                 onClick = { }
             )

@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -42,10 +40,11 @@ import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefGroupHeader
 import com.grapsee.gsai.ui.components.RefInfoCard
-import com.grapsee.gsai.ui.components.RefNavRow
 import com.grapsee.gsai.ui.components.RefRowDivider
 import com.grapsee.gsai.ui.components.RefSettingsPage
-import com.grapsee.gsai.ui.components.RefToggleRow
+import com.grapsee.gsai.ui.components.RefSheetRow
+import com.grapsee.gsai.ui.components.RefSheetToggle
+import com.grapsee.gsai.ui.components.RefSwitch
 import com.grapsee.gsai.ui.components.RefWellTile
 import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.theme.GsFonts
@@ -60,6 +59,10 @@ import com.grapsee.gsai.ui.theme.GsTheme
  * flipping it changes what the device receives, and the state it shows is read
  * from the system or from a preference `GsNotifier` consults on the way to
  * every `notify()` — never a remembered value nothing reads.
+ *
+ * Geometry is the sheet's own (see RefSheetKit): 13/9 group headers, 10/8
+ * rows at a 56pt two-line pitch, and the mock's 34×20 switch rather than
+ * Material's 52×32.
  *
  * Two rows are honest exceptions rather than live controls:
  *  - Email Notifications, drawn disabled and off because this build sends no
@@ -129,8 +132,8 @@ fun NotificationsAlertsScreen(onBack: () -> Unit) {
         onBack = onBack,
     ) {
         // ---- Master ------------------------------------------------------
-        RefCard(role = GsGlassRole.CardLight, padding = PaddingValues(14.dp)) {
-            RefToggleRow(
+        RefCard(role = GsGlassRole.CardLight, padding = PaddingValues(2.dp)) {
+            RefSheetToggle(
                 title = "Notifications",
                 subtitle = "Control what you want to be notified about.",
                 checked = SettingsStore.pushNotifications,
@@ -141,7 +144,7 @@ fun NotificationsAlertsScreen(onBack: () -> Unit) {
 
         // ---- Notification Types ------------------------------------------
         RefGroupHeader("Notification Types", "Choose what to receive")
-        RefCard(role = GsGlassRole.CardLight) {
+        RefCard(role = GsGlassRole.CardLight, padding = PaddingValues(vertical = 2.dp)) {
             TypeToggle(
                 kindId = "messages",
                 icon = GsIcons.MessageCircle,
@@ -185,8 +188,8 @@ fun NotificationsAlertsScreen(onBack: () -> Unit) {
 
         // ---- Notification Channels ---------------------------------------
         RefGroupHeader("Notification Channels", "How you want to be notified")
-        RefCard(role = GsGlassRole.CardLight) {
-            RefToggleRow(
+        RefCard(role = GsGlassRole.CardLight, padding = PaddingValues(vertical = 2.dp)) {
+            RefSheetToggle(
                 title = "Push Notifications",
                 subtitle = "Receive notifications on your device.",
                 checked = SettingsStore.pushNotifications && systemOn,
@@ -212,7 +215,7 @@ fun NotificationsAlertsScreen(onBack: () -> Unit) {
             // sends no email from this build. It is drawn disabled and off — the
             // truth — rather than as a live-looking switch, which is the exact
             // dead toggle the SettingsStore HONESTY CONTRACT exists to catch.
-            RefToggleRow(
+            RefSheetToggle(
                 title = "Email Notifications",
                 subtitle = "Get updates via email.",
                 checked = false,
@@ -221,7 +224,7 @@ fun NotificationsAlertsScreen(onBack: () -> Unit) {
                 leading = { RefWellTile(GsIcons.Mail, GsWellTone.Lilac, 40.dp) },
             )
             RefRowDivider()
-            RefToggleRow(
+            RefSheetToggle(
                 title = "In-App Notifications",
                 subtitle = "See notifications within the app.",
                 checked = SettingsStore.noticeInApp,
@@ -232,8 +235,8 @@ fun NotificationsAlertsScreen(onBack: () -> Unit) {
 
         // ---- Quiet Hours -------------------------------------------------
         RefGroupHeader("Quiet Hours", "Pause notifications when you need rest")
-        RefCard(role = GsGlassRole.CardLight) {
-            RefToggleRow(
+        RefCard(role = GsGlassRole.CardLight, padding = PaddingValues(vertical = 2.dp)) {
+            RefSheetToggle(
                 title = "Do Not Disturb",
                 subtitle = "Silence all notifications during selected hours.",
                 // Reads the device's real interruption filter, mirrored into
@@ -252,7 +255,7 @@ fun NotificationsAlertsScreen(onBack: () -> Unit) {
                 leading = { RefWellTile(GsIcons.MoonStar, GsWellTone.Lilac, 40.dp) },
             )
             RefRowDivider()
-            RefNavRow(
+            RefSheetRow(
                 title = "Quiet Hours",
                 subtitle = formatWindow(SettingsStore.quietStartMinute, SettingsStore.quietEndMinute),
                 onClick = { editQuietHours = true },
@@ -300,7 +303,7 @@ private fun TypeToggle(
     title: String,
     subtitle: String,
 ) {
-    RefToggleRow(
+    RefSheetToggle(
         title = title,
         subtitle = subtitle,
         checked = SettingsStore.noticeEnabled(kindId),
@@ -360,18 +363,7 @@ private fun QuietHoursDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text("Quiet hours", color = colors.textSecondary, fontSize = 13.sp)
-                    Switch(
-                        checked = enabled,
-                        onCheckedChange = { enabled = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = colors.accent,
-                            checkedBorderColor = Color.Transparent,
-                            uncheckedThumbColor = Color.White,
-                            uncheckedTrackColor = colors.border,
-                            uncheckedBorderColor = Color.Transparent,
-                        ),
-                    )
+                    RefSwitch(checked = enabled, onCheckedChange = { enabled = it })
                 }
                 Row(
                     Modifier.fillMaxWidth(),

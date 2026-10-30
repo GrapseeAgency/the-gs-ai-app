@@ -79,15 +79,15 @@ struct ProfilePreferencesView: View {
                         .offset(x: 3, y: 3)
                 }
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(account.displayName.isEmpty ? "Arafat" : account.displayName)
+                    Text(account.displayName.isEmpty ? "Your account" : account.displayName)
                         .font(Aero.bodyMedium().weight(.semibold))
                         .foregroundStyle(Aero.text)
                         .lineLimit(1)
-                    Text(account.email.isEmpty ? "arafat@example.com" : account.email)
+                    Text(account.email.isEmpty ? "Add your Grapsee Mail address" : account.email)
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textTertiary)
                         .lineLimit(1)
-                    Text("Free Plan")
+                    Text(PlanStore.shared.planName)
                         .font(.custom(Aero.productName(.medium), size: 10.5, relativeTo: .caption2))
                         .foregroundStyle(Color(red: 0.541, green: 0.290, blue: 0.122))
                         .padding(.horizontal, 9)

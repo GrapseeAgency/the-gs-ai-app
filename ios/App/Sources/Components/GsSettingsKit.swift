@@ -201,7 +201,7 @@ struct GsSettingsRow<Leading: View, Trailing: View>: View {
 
 // MARK: - Wells, pills, strips
 
-enum GsWellTone {
+enum GsWellTone: Hashable {
     case peach, rose, lilac, blue, mint
 
     var wash: Color {

@@ -132,7 +132,7 @@ fun ProfileScreen(
                                 .padding(horizontal = 8.dp, vertical = 2.5.dp),
                         ) {
                             Text(
-                                "Free Plan",
+                                com.grapsee.gsai.data.PlanStore.planName,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Medium,
                                 fontFamily = GsFonts.Product,

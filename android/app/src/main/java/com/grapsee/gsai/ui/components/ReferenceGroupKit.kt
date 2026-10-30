@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -38,6 +40,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -85,24 +88,41 @@ enum class GsWellTone(val wash: Color, val ink: Color) {
 
 /** Section title with the mock's right-aligned whisper caption, and an
  *  optional real link ("View all") after it. The null path emits exactly the
- *  layout every existing screen already uses. */
+ *  layout every existing screen already uses.
+ *
+ *  The type sizes are the six new sheets' own, measured off their ink at
+ *  1.644 px/pt (393pt canvas): "Notification Types" inks 105.2pt wide, which
+ *  is Inter Tight Semibold 13.0 (advance 106.0); "Choose what to receive" inks
+ *  85.8pt = 8.5pt. The earlier 11.5/9.5 was the settings hub's scale, and it
+ *  made every group header on these sheets 12% small. */
 @Composable
 fun RefGroupHeader(
     title: String,
     caption: String? = null,
     modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
+    onCaptionClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val colors = GsTheme.colors
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 4.dp, end = 4.dp, top = 18.dp, bottom = 8.dp),
+            .padding(start = 0.dp, end = 0.dp, top = 18.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (leadingIcon != null) {
+            Icon(
+                leadingIcon,
+                contentDescription = null,
+                tint = colors.accentStrong,
+                modifier = Modifier.size(15.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+        }
         Text(
             text = title,
-            fontSize = 11.5.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = GsFonts.Product,
             color = colors.textPrimary,
@@ -110,13 +130,31 @@ fun RefGroupHeader(
         )
         Spacer(Modifier.weight(1f))
         if (caption != null) {
-            Text(
-                text = caption,
-                fontSize = 9.5.sp,
-                fontFamily = GsFonts.Product,
-                color = colors.textTertiary,
-                maxLines = 1,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = if (onCaptionClick != null) {
+                    Modifier.clickable(role = Role.Button, onClickLabel = caption, onClick = onCaptionClick)
+                } else {
+                    Modifier
+                },
+            ) {
+                Text(
+                    text = caption,
+                    fontSize = 9.sp,
+                    fontFamily = GsFonts.Product,
+                    color = colors.textTertiary,
+                    maxLines = 1,
+                )
+                if (onCaptionClick != null) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        com.grapsee.gsai.ui.icons.GsIcons.ArrowRight,
+                        contentDescription = null,
+                        tint = colors.textTertiary,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
+            }
         }
         if (trailing != null) {
             Spacer(Modifier.width(10.dp))
@@ -468,6 +506,7 @@ fun RefSettingsPage(
     title: String,
     subtitle: String? = null,
     onBack: () -> Unit,
+    headerTrailing: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = GsTheme.colors
@@ -522,23 +561,38 @@ fun RefSettingsPage(
                     if (!subtitle.isNullOrBlank()) {
                         Text(
                             text = subtitle,
-                            fontSize = 11.sp,
+                            fontSize = 10.5.sp,
+                            lineHeight = 13.5.sp,
                             fontFamily = GsFonts.Product,
                             color = colors.textTertiary,
-                            maxLines = 1,
+                            maxLines = 2,
                         )
                     }
                 }
+                if (headerTrailing != null) {
+                    Spacer(Modifier.width(8.dp))
+                    headerTrailing()
+                }
             }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 22.dp)
-                    .padding(bottom = 26.dp),
-                content = content,
-            )
+            // Android's default font padding adds ~1.5sp above and below
+            // every text line, which made a two-line sheet row 62dp against
+            // the mock's measured 56. The six sheets' own kit measures its
+            // line boxes; this removes the platform's extra so both agree.
+            ProvideTextStyle(
+                LocalTextStyle.current.copy(
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 22.dp)
+                        .padding(bottom = 26.dp),
+                    content = content,
+                )
+            }
         }
     }
 }

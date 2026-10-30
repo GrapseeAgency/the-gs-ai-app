@@ -24,6 +24,15 @@ enum AeroRoute: Hashable {
     case search
     case settings
     case notifications
+    /// The six owner sheets (docs/reference/pending): settings alerts, the
+    /// inbox's settings destination, account security, the plan, support and
+    /// integrations. One case each so the drawer/hub can reach them without a
+    /// settings-section detour.
+    case notificationsAlerts
+    case accountSecurity
+    case subscriptionUsage
+    case helpSupport
+    case connectedApps
     case voice
     case chatArchive
     case chatSearch
@@ -137,6 +146,10 @@ struct RootView: View {
             }
         }
         .simultaneousGesture(edgeOpenGesture)
+        .onReceive(NotificationCenter.default.publisher(for: .gsOpenNotificationSettings)) { _ in
+            withAnimation(Aero.motion(Aero.spring)) { showDrawer = false }
+            router.path.append(.notificationsAlerts)
+        }
         .onReceive(quickActions.$pendingRoute) { route in
             guard let route else { return }
             quickActions.consume()
@@ -208,6 +221,11 @@ struct AeroDestinations: ViewModifier {
                 SettingsView(detail: section, onRoute: { router.path.append($0) })
             case .memory: MemoryManagementView()
             case .notifications: NotificationsView()
+            case .notificationsAlerts: NotificationsAlertsView()
+            case .accountSecurity: AccountSecurityView()
+            case .subscriptionUsage: SubscriptionUsageView()
+            case .helpSupport: HelpSupportView()
+            case .connectedApps: ConnectedAppsView()
             case .voice: VoiceView()
             case .chatArchive: ArchivedChatsView()
             case .chatSearch: ChatSearchView()

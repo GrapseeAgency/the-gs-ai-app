@@ -1,14 +1,21 @@
-# Pending references — supplied by the owner, not yet in the app
+# Pending references — supplied by the owner, built on both platforms
 
-Three screens were supplied as reference art. **None of them exists on either
-platform**, so they are listed here rather than in a status doc that could read
-as "done".
+Nine screens were supplied as reference art. The first three below are built on
+Android only; the six owner sheets at the end are built on **both** platforms
+(2026-10-29). Nothing here is called "captured" until its render gate proves
+parity — see Acceptance.
 
 | reference | expected screen | state |
 | --- | --- | --- |
 | `privacy-data-controls.png` | "Privacy & Data Controls" — hero, Data & Permissions, Conversation & Activity, Export & Deletion groups | **built (Android)** — see deltas below |
 | `chat-history-search.png` | "Chat History & Search" — search field + filter chips, totals card, Recent Chats, Quick Actions 2×2, new-conversation footer | **built (Android)** — see deltas below |
 | `model-selection.png` | "Model Selection & Reasoning Effort" — AI Model radio list, Reasoning Effort 4-up, Model Preferences toggles | **built (Android)** — four-across tiles + real switches |
+| `notifications-alerts.png` | "Notifications & Alerts" — master switch, 5 types, 3 channels, quiet hours, closing card | **built (both)** |
+| `notifications-inbox.png` | "Notifications" — 5 chips with counts, Today/Earlier, unread dots, caught-up card | **built (both)** |
+| `account-security.png` | "Account & Security" — profile, sign-in methods, authentication, sessions, devices | **built (both)** |
+| `subscription-usage.png` | "Subscription & Usage" — plan hero, details, 4 usage meters, billing, upgrade | **built (both)** |
+| `help-support.png` | "Help & Support" — search, quick help, 3×2 categories, popular topics, contact | **built (both)** |
+| `connected-apps.png` | "Connected Apps & Integrations" — hero, 6 providers, 5 available, data card | **built (both)** |
 
 ## Evidence
 
@@ -22,7 +29,8 @@ Chat History & Search                   1 file  (ChatSearchScreen)
 Model Selection & Reasoning Effort      1 file  (AiIntelligenceScreen)
 ```
 
-iOS still returns 0 for all three — Android only, see the resume order.
+iOS still returns 0 for the first three — Android only. The six owner sheets
+below return a screen on both platforms.
 
 ## Near misses — do not mistake these for the reference
 
@@ -72,12 +80,174 @@ back. They are corrections, not omissions:
   `SETTINGS_MODEL` is not orphaned. The mock's own three groups (AI Model,
   Reasoning Effort, Model Preferences) fit one 393×852 view; the extras scroll.
 
+## The six owner sheets (2026-10-29)
+
+Source of truth: the six PNGs at the repository root (`Reference pictures./`),
+copied byte-for-byte into this folder under stable kebab-case names so the
+render gates have a baseline. Geometry was measured off their ink at
+1.644 px/pt (a 646px phone panel = 393pt): page title 16, subtitle 10.5, group
+title 13, caption 9, row title 10, detail 8, one-line row pitch 45, two-line
+56, switch 34×20, tag pill 7.
+
+Both platforms compose one shared kit per side (`RefSheetKit.kt` /
+`GsSheetKit.swift`) instead of the settings hub's 15pt rows, which made every
+sheet half again as tall as its mock. The same screen inventory, in the mocks'
+order, exists on both:
+
+| screen | Android | iOS | entry points |
+|---|---|---|---|
+| Notifications & Alerts | `settings/NotificationsAlertsScreen` | `Features/Notifications/NotificationsAlertsView` | Settings → Notifications & Alerts |
+| Notifications Inbox | `notifications/NotificationsInboxScreen` | `Features/Notifications/NotificationsView` | drawer / Profile → Notifications |
+| Account & Security | `settings/AccountSecurityScreen` | `Features/Account/AccountSecurityView` | Settings → Account & Security |
+| Subscription & Usage | `subscription/SubscriptionUsageScreen` | `Features/Billing/SubscriptionUsageView` | Settings upgrade card → View plan |
+| Help & Support | `support/HelpSupportScreen` | `Features/Support/HelpSupportView` | Settings → Help & Support |
+| Connected Apps | `integrations/ConnectedAppsScreen` | `Features/Integrations/ConnectedAppsView` | Settings → Connected Apps; Privacy → Integrations |
+
+Evidence:
+- Android: `ReferenceSheetsScreenshotTest` renders all six at 393×852
+  (`-PgsShots=true`). The captures live in `build/screenshots/ref-*.png`.
+  `ReferenceSheetsContentTest` reads the real Compose semantics tree and asserts
+  every section, row and closing card — in the mock's order — plus the truthful
+  states (`Email Notifications` and `Two-Factor Authentication` disabled,
+  `$19.99`/`Visa`/`Active`/`Connected`/`Limited Access` absent, six
+  `Not Connected` pills) and the entry points (hub → alerts/account/help/plan,
+  privacy → integrations), plus the Help search actually filtering its topics
+  and Manage Plan / Need help resolving to Billing and Help.
+  `NotificationsInboxInteractionTest` is the always-on
+  proof of the reader contract: an out-of-order file still paints newest first,
+  a row tap writes the stored read flag, "Mark all as read" writes every row,
+  and an injected 18:00 clock decides the Today/Earlier split.
+- The Android six are now card-gated by `scripts/check_sheets_render.py` in
+  `android-app.yml`: the page header's ink band, every card's lit rim (level
+  248-255 L, ≥ 6 L over its interior) and the card rhythm — seven inbox cards,
+  six provider cards — with `--self-test` doctoring the header, a rim and (for
+  the two lists) the card gaps and proving each probe goes red. `--derive`
+  reprints the measured rows for recalibration.
+- `scripts/check_sheets_copy_parity.py` runs in both workflows: every section
+  and row title above must appear in both the Android and iOS source, in the
+  mocks' order, and the mock's unbacked values (`$19.99`, `Visa`, `Reset my
+  password`) must not. Its `--self-test` proves the missing-copy, forbidden-copy
+  and order probes can each fail.
+- iOS: `ReferenceSheetsRenderTests` renders the same six at 393×852 through the
+  windowed `drawHierarchy` channel the Settings/Explore harnesses use. Its inbox
+  is seeded with the same six notices as Android's fixture and cleared by the
+  test's `defer`, so the iOS render exercises the row layout without leaving
+  invented rows behind. `ios.yml` collects all six renders, fails on a missing
+  one, and runs the same `check_sheets_render.py --platform ios` card gate plus
+  its self-test on those captures.
+- iOS notice path: `GsNotifier.record` honours the master switch and the
+  per-kind switch, rejects empty copy, and writes `GsNoticeInbox` only then.
+  `GsNotifierTests` pins those four cases on the simulator, and the sign-in in
+  `GSApp` is its first real producer — so Account Activity is no longer a
+  switch nothing reads. Banner delivery is still absent and is stated as such.
+- iOS reachability: `SheetsUITests` drives the real drawer → Settings → each
+  Settings sheet → Back, the Upgrade pill for the plan, and the account sheet's
+  Notifications row for the inbox. It runs in the `GsChatUITests` bundle; like
+  the iOS card gate, it has not yet been observed on CI.
+- Subscription numbers: `UsageMeterTest` pins the local-calendar-month → UTC
+  stamp boundary in Asia/Dhaka and UTC, and the unknown-vs-zero contract (`-1`
+  renders "—"; zero would falsely claim "none used").
+- Alert switches: `SettingsNoticeKindsTest` pins the per-kind gate — every mock
+  kind defaults on, one off leaves the rest on, an unknown id never becomes
+  live, and the master switch round-trips.
+- Tips producer: finishing onboarding records the mock's "Personalization
+  applied" notice (skipping the setup records nothing) on both platforms, so
+  that switch has a real event behind it. `GsNotifierRecordTest` pins the
+  writer's master/kind gates and the empty-copy guard.
+
+### Accepted deltas — truth over art
+
+These are corrections, not omissions. Every row keeps its slot.
+
+- **Price is $12.99/month**, never the mock's $19.99. It is formatted from
+  `PlanStore` on both platforms, and Billing says "Not activated" until an
+  activation is recorded — there is no purchase path, so no install honestly
+  has an "Active" pill or a next-billing date.
+- **Only Grapsee Mail signs in.** Google and Apple keep their slots and say
+  "Not connected" with **no chevron**. "Add another sign-in method" states that
+  Grapsee Mail is the only credential.
+- **No password store, no 2FA server.** Change Password and Two-Factor keep
+  their slots; the 2FA switch is drawn disabled/off, Change Password has no
+  chevron, and both subtitles say why.
+- **Biometric Login is real on both platforms** (`BiometricPrompt` / `LAContext`)
+  and the root shell actually gates on it. Android draws it disabled where the
+  device has no enrolled sensor; iOS prompts before writing the preference.
+- **Sessions are this install.** "Current Session" shows the real device and a
+  persisted client id; the mock's second "Mobile Session" becomes "Other
+  Sessions — No other device is signed in" with no fabricated timestamp.
+- **No payment processor** — Payment Method says "Not set", Billing History says
+  no invoice can be issued, and neither promises a chevron.
+- **No integration adapters** — all eleven providers are "Not Connected". The
+  green "Connected" / blue "Limited Access" pills would have been the most
+  fabricated thing in the app. Every control still resolves: "…" and "+ Connect"
+  open that provider's real status sheet, Learn More explains what a connection
+  requires, Manage Permissions states that nothing is granted.
+- **Email Notifications** is disabled and off: this build sends no mail.
+- **Notifications Inbox** reads only `NoticeInbox` (Android) / `GsNoticeInbox`
+  (iOS). Android writes after a shade post or an in-app record; iOS has no
+  banner dispatcher, so `GsNotifier.record` is the in-app writer for the kinds
+  the switches allow, with a sign-in and onboarding completion as its real
+  producers. An install with no events is genuinely empty and says "You're all
+  caught up"; Billing is always zero.
+- **Help & Support content describes this build.** The mock's password-reset
+  article is replaced by the Grapsee Mail article; Live Chat opens Nexly, the
+  only chat that answers. Search, category filters, "View all" sheets, article
+  sheets and mail intents are all real.
+- **Artwork**: the mock's 3D crystal and mascot are not shipped assets. The
+  sheets use the app's own artwork set (pearl-lotus bleed, Tabler brand marks,
+  robot/headset glyphs) rather than a low-resolution crop of the mock. Brand
+  marks whose identity is a multi-colour lockup stay monochrome.
+
+### Parity corrections, third pass (after the iOS kit)
+
+The first capture pass proved the screens exist. Comparing the six renders with
+the mocks at their own scale found these structural drifts; all are corrected
+on both platforms:
+
+- **The inbox and the provider list are lists of separate cards, not one card
+  with hairlines.** Both mocks draw every notice and every provider as its own
+  20-corner card with a 5pt gap; the grouped card read as a table.
+- **The inbox sorts at the reader.** `NoticeInbox.record` prepends, but the
+  Today/Earlier split must not depend on file order, so both readers sort by
+  `createdAt` descending. The interaction test seeds an out-of-order file and
+  asserts the newer row paints first.
+- **Product updates draw the mock's blue gear**, not a star — the same glyph
+  the settings hub uses for system updates.
+- **The caught-up card's rules flank the title.** They were flexible weights
+  filled with `divider` at 55 %, which vanished into the cream glass; they are
+  now the mock's two 28pt rules at 35 % tertiary, beside the title.
+- **Provider status pills sit under the scope**, as drawn; only Microsoft, whose
+  row also carries "+ Connect", keeps its pill in the trailing slot. The
+  statuses themselves stay "Not Connected" (see the truth table above).
+- **Connected Apps' five Available tiles share one height** and pin their "+"
+  to the card floor; Figma's wrapped "Design & files" had pushed its "+" below
+  the others.
+- **The iOS inbox's category pill is inline beside the title**, not stacked
+  under the timestamp in a fixed 74pt column.
+- **The Account & Security profile hero is the mock's larger identity block**:
+  56pt avatar and 13pt name on both platforms (it was 46pt/10pt, which read as
+  another row rather than the page's subject).
+- **The inbox captures are clock-deterministic.** Both readers take a `now`
+  clock (production: the wall clock; the capture fixtures: a fixed 18:00). A
+  run just after midnight had split 4h/8h/12h into Earlier, leaving only four
+  cards; the card gate caught it and the fixture now cannot move with the hour.
+
+Every kit addition they use is defaulted (`RefSheetRow.extra`,
+`RefSheetTile.pinCorner`, `GsSheetRow.titleTrailing` / `detailTrailing`), so no
+existing call site changes height or structure. The renders were re-taken after
+these corrections.
+
 ## Acceptance
 
-These are not "captured" until they are *gated*, the same way the Settings trio
-is: rendered in CI, anchored on a measured rim, and compared against the mock's
-own numbers with a self-test proving the gate can fail. A screenshot that merely
-exists is not evidence of parity.
+A capture is not evidence until a gate can fail on it. The Android six are
+card-gated (header ink, lit rim, card rhythm) and verified locally with the
+non-vacuity self-test; both platforms' section/row inventory is checked from
+source with its own self-test. The iOS six run the same gate against the
+simulator captures in `ios.yml`, but that gate has not yet been observed on an
+iOS artifact, so iOS pixel parity is not claimed until it does. The gate
+deliberately does not overlay the mock: the mock's phone panel is 393×~913 pt
+while the capture is 393×852, so a pixel diff would be a scaling argument. That
+comparison stays the human review these PNGs are for.
 
 ## Where each screen stands (2026-10-28, second pass)
 
@@ -138,9 +308,11 @@ body copy.
 
 ## Resume order
 
-1. Port the three screens to iOS.
-2. Gate each screen the way the Settings trio is gated (measured rim +
-   self-test), once their layout is frozen.
+1. Port the three screens to iOS (Privacy & Data Controls, Chat History &
+   Search, Model Selection). The six owner sheets already exist on both
+   platforms.
+2. Gate every screen the way the Settings trio is gated (measured rim +
+   self-test), once its layout is frozen.
 
 ## Instrument notes worth keeping
 
