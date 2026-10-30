@@ -5536,10 +5536,20 @@ Work Log:
   locally. The iOS run on f1ab4a42 caught one Swift compile error (a two-section
   `aboutSection` needs `@ViewBuilder`), fixed before this entry; Android on
   4f986350 (privacy consolidation, Billing, accent) is green (41102559575).
+- CI evidence for the whole pass, all green on both workflows: 8e5ce1c7
+  (41054195562 / 41054200139), a2ee6e25 identity (41105167201 / 41105174049),
+  0425ab8a hub identity (41108364578 / 41108370734) and dc9cb419 dead sections
+  (41110720765 / 41110728022). f1ab4a42's iOS red was the one @ViewBuilder
+  compile error, fixed before 4f986350. Final route/pusher audit: Android is
+  clean apart from GLASS_SPECIMEN (internal) and the CHAT_INFO function-route
+  false positive; iOS is clean (the remaining names are comment text or pushes
+  inside AppRouter itself).
 
 Stage Summary:
-- The language page and the settings shell sweep close the biggest unfinished
-  surfaces found in this pass. One asymmetry is recorded for the next one: iOS
-  has no accent-family or background-style control, while Android's Appearance
-  and Theme pages do — build it or remove the static accent dot honestly. The
-  audit then continues through chat, Explore and billing.
+- The pass closed Language, the settings sub-page shell/material sweep, the
+  dead settings sections and write-only preferences, the identity editor and
+  its fabricated fallbacks, iOS's delete-account/privacy/About gaps, and
+  Billing's dead-end CTA. Every routed screen has a real pusher. The remaining
+  platform difference is background style (Android-only) and the accent system
+  iOS does not have — both recorded as capabilities, not missing pages. Both
+  workflows are green on the final commit (dc9cb419).
