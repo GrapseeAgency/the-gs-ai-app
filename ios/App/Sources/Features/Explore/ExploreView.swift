@@ -595,6 +595,10 @@ struct ExploreView: View {
                 }
             }
         }
+        // The page paints its own header and dock; a system bar on top of them
+        // overlapped the header row and swallowed its button taps (run
+        // 41036568342's UI test tapped Open search and nothing happened).
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var header: some View {
@@ -1025,6 +1029,9 @@ struct DiscoverView: View {
     /// The trip planner has its own screen; Discover's Popular list is where
     /// that tile is visible, so this page carries the same rule as Explore.
     let onOpenTravelAgent: () -> Void
+    /// The page hides the system bar (its header is the chrome), so it owns
+    /// its back control.
+    let onBack: () -> Void
 
     var initialQuery: String = ""
     var initialSearchOpen: Bool = false
@@ -1037,11 +1044,13 @@ struct DiscoverView: View {
     init(
         onOpenChat: @escaping (AeroRoute) -> Void,
         onOpenTravelAgent: @escaping () -> Void,
+        onBack: @escaping () -> Void,
         initialQuery: String = "",
         initialSearchOpen: Bool = false
     ) {
         self.onOpenChat = onOpenChat
         self.onOpenTravelAgent = onOpenTravelAgent
+        self.onBack = onBack
         self.initialQuery = initialQuery
         self.initialSearchOpen = initialSearchOpen
         _query = State(initialValue: initialQuery)
@@ -1082,10 +1091,20 @@ struct DiscoverView: View {
                 composer
             }
         }
+        // Same as Explore: this header is the chrome, and the system bar sat
+        // over it. The explicit back control below replaces the bar's.
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var header: some View {
         HStack(spacing: 10) {
+            Button(action: onBack) {
+                NexlyGlyph(name: "chevron-left", size: 16, color: Aero.text)
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(Color.white.opacity(0.55)))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Back")
             Image("GSCompanionOrb")
                 .resizable()
                 .scaledToFill()

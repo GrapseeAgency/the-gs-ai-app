@@ -291,7 +291,8 @@ struct AeroDestinations: ViewModifier {
             )
             case .discover: DiscoverView(
                 onOpenChat: { router.path.append($0) },
-                onOpenTravelAgent: { router.path.append(.travelAgent) })
+                onOpenTravelAgent: { router.path.append(.travelAgent) },
+                onBack: { router.path.removeLast() })
 
             // Section roots (drawer)
             case .chats: ChatsListView()

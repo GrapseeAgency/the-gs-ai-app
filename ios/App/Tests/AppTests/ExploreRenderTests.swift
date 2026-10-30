@@ -24,7 +24,7 @@ final class ExploreRenderTests: XCTestCase {
 
     func testDiscoverPageRenders() async throws {
         try await capturePage(
-            view: { DiscoverView(onOpenChat: { _ in }, onOpenTravelAgent: {}) },
+            view: { DiscoverView(onOpenChat: { _ in }, onOpenTravelAgent: {}, onBack: {}) },
             prefix: "nexly-discover-ios",
             targets: [(393, 852, "393x852"), (393, 1400, "393x1400")]
         )
@@ -32,7 +32,7 @@ final class ExploreRenderTests: XCTestCase {
 
     func testDiscoverSearchStateRenders() async throws {
         try await capturePage(
-            view: { DiscoverView(onOpenChat: { _ in }, onOpenTravelAgent: {}, initialQuery: "study", initialSearchOpen: true) },
+            view: { DiscoverView(onOpenChat: { _ in }, onOpenTravelAgent: {}, onBack: {}, initialQuery: "study", initialSearchOpen: true) },
             prefix: "nexly-explore-ios-search",
             targets: [(393, 852, "393x852")]
         )
