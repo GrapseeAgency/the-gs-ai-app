@@ -5612,3 +5612,7 @@ Stage Summary:
   matches the mock's three groups, format tiles, row order, rose delete card
   and consent gate; its only difference is the accent (iOS has no accent
   family, recorded as a capability).
+- The final HEAD 5cceee4a (docs corrections + the documented empty tap) is green
+  on both workflows as well: android-app 41130975311 and iOS 41130979651. Every
+  owner mock in `Reference pictures./` now has a built page, a capture and an
+  observed gate; the only untracked path is the owner's source folder itself.
