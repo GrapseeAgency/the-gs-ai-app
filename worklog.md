@@ -5391,3 +5391,17 @@ Work Log:
 
 Stage Summary:
 - Every settings page either platform exposes is now reachable from that platform's hub, every page's copy is gated across platforms (10 screens), and the iOS renders cover the three newly ported pages. The only remaining audit item is the dead iOS-only surfaces documented in docs/reference/pending/README.md.
+
+---
+Task ID: ios-parity-and-ci-calibration (green)
+Agent: Qoder (main)
+Task: Close the account-menu reachability red and record the first green iOS run.
+
+Work Log:
+- Run 41025360005's accessibility snapshot localised the inert account menu to the hit target: the row's tappable area was its TEXT (a11y frame 311x15.5), so a tap at the row's centre crossed the transparent middle of the HStack and landed on the scrim — the overlay closed and nothing routed. The rows now build a full-width `contentShape(Rectangle())` with a tap gesture on that shape and an explicit button trait, and the route closes the menu + drawer and pushes in one transaction (the deferred hop is gone).
+- Run 41027465949 (commit 2bad9eb5) is GREEN end to end: Python setup + numpy first, static gates, XcodeGen, GsFfi fetch, build, ALL XCTest, the six-screen SheetsUITests (including Privacy → Chat History and account menu → Notifications inbox), all six owner-sheet card gates + their self-tests on the real iOS captures, the Settings trio gate, and the three new page captures (model, chat history, voice). Every step, 1-44, success.
+- The UI test keeps a pre-tap screenshot attachment now, so a future red carries the pixels; the .xcresult also uploads on failure.
+- Docs updated: Acceptance now claims iOS pixel parity on observed evidence (41027465949), the reachability section records the real root cause, and the instrument notes carry the per-platform gate calibration.
+
+Stage Summary:
+- Both workflows are green on the branch: android-app at d43e433f (hub rows, dead rows, copy gate) and iOS at 2bad9eb5 (all screens, all gates, full UI reachability). Remaining documented work: delete/wire the dead iOS-only surfaces and Android's orphaned AccountSettingsScreen, and card-gate the three new pages' geometry once frozen.

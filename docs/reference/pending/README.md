@@ -161,8 +161,13 @@ Evidence:
   proved the row tap never reached the button at all (the sheet was still open
   and the drawer behind it never closed), so the account menu was inert. The
   account menu is now an IN-APP glass overlay (`AccountSheetView` in
-  `RootView`'s ZStack), like the drawer itself, and every row is a plain
-  SwiftUI button. The next run is the proof.
+  `RootView`'s ZStack), like the drawer itself. Run 41025360005 then showed the
+  real cause of the inert taps: the row's hit area was its TEXT, so a tap at the
+  row's centre crossed the transparent middle of the HStack and landed on the
+  scrim — the sheet closed, nothing routed. The rows now carry a full-width
+  `contentShape` plus a tap gesture on that shape, and the route closes the menu
+  and drawer in one transaction. Run 41027465949 is the proof: the inbox opened
+  in the UI test, and every gate in the job was green.
 - Subscription numbers: `UsageMeterTest` pins the local-calendar-month → UTC
   stamp boundary in Asia/Dhaka and UTC, and the unknown-vs-zero contract (`-1`
   renders "—"; zero would falsely claim "none used").
@@ -266,8 +271,12 @@ A capture is not evidence until a gate can fail on it. The Android six are
 card-gated (header ink, lit rim, card rhythm) and verified locally with the
 non-vacuity self-test; both platforms' section/row inventory is checked from
 source with its own self-test. The iOS six run the same gate against the
-simulator captures in `ios.yml`, but that gate has not yet been observed on an
-iOS artifact, so iOS pixel parity is not claimed until it does. The gate
+simulator captures in `ios.yml`. That gate is now OBSERVED: run 41027465949 is
+green end to end — app build, XCTest, the six-screen reachability test, all six
+card gates and their `--self-test` doctoring, the Settings trio, and the three
+new page captures (model, chat history, voice). The gate's iOS numbers were
+calibrated from run 41019419509's real captures (see Instrument notes), so iOS
+pixel parity is now claimed against the same law Android is held to. The gate
 deliberately does not overlay the mock: the mock's phone panel is 393×~913 pt
 while the capture is 393×852, so a pixel diff would be a scaling argument. That
 comparison stays the human review these PNGs are for.
