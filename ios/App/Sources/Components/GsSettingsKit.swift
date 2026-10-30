@@ -394,14 +394,13 @@ struct GsSettingsPage<Content: View>: View {
 /// plus the surfaces the mock does not name (chat, AI, security,
 /// accessibility), which stay reachable inside their semantic neighbours.
 enum SettingsSectionID: String, Hashable, CaseIterable {
-    case appearance, chat, ai, privacy, security, notifications, language, accessibility, about
+    case appearance, chat, ai, security, notifications, language, accessibility, about
 
     var title: String {
         switch self {
         case .appearance: return "Appearance"
         case .chat: return "Chat"
         case .ai: return "AI Model"
-        case .privacy: return "Privacy Settings"
         case .security: return "Device & Account"
         case .notifications: return "Notifications"
         case .language: return "Language"
@@ -415,7 +414,6 @@ enum SettingsSectionID: String, Hashable, CaseIterable {
         case .appearance: return "Theme and display"
         case .chat: return "How new chats behave"
         case .ai: return "Model and intelligence"
-        case .privacy: return "Manage your data and activity"
         case .security: return "Manage your devices and sessions"
         case .notifications: return "Stay updated with important alerts"
         case .language: return "Choose your preferred language"

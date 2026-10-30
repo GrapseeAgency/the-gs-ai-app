@@ -466,6 +466,14 @@ Three surfaces failed that bar and are now closed:
   account and data deletion and performed a haptic. It now wipes the local
   corpus and signs out — what Android's row already did — and the copy says so.
   iOS About also gained the Website/Contact/Privacy links Android already had.
+- **iOS had two privacy pages.** "Privacy Settings" opened the reference page
+  while "Data Controls" and "Export / Delete Data" opened a different, older
+  settings section — and Connected Apps' permissions link went there too. All
+  three hub rows and the integration link now open Privacy & Data Controls; the
+  one real action unique to the older page (Clear Local Data, without signing
+  out) moved onto it, and the duplicate section, its private export flow, the
+  dead `helpImprove` preference and the `SettingsSectionID.privacy` case are
+  deleted.
 
 The last asymmetry is honest rather than fake: iOS has no accent-family system,
 so its static accent swatch and the hub's "accent color" promise are removed

@@ -29,13 +29,8 @@ struct SettingsView: View {
     /// The same session flag the auth gate reads (GSApp.swift).
     @AppStorage("gs.session.active") private var sessionActive = true
 
-    // Privacy flows (UI-local)
-    @State private var showClearData = false
-    @State private var showDeleteAccount = false
+    // Sign-out is UI-local; the privacy flows live on PrivacyDataControlsView.
     @State private var showSignOut = false
-    // Export flow (UI-local)
-    @State private var exportURL: URL?
-    @State private var showExport = false
 
     var body: some View {
         Group {
@@ -46,36 +41,6 @@ struct SettingsView: View {
             } else {
                 hub
             }
-        }
-        .confirmationDialog(
-            "Clear local data?",
-            isPresented: $showClearData,
-            titleVisibility: .visible
-        ) {
-            Button("Clear local data", role: .destructive) {
-                ConversationStore.shared.wipeAllContent()
-                GSHaptics.warning()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Cached chats, files and drafts on this device will be removed. Your account is untouched.")
-        }
-        .confirmationDialog(
-            "Delete your data on this device?",
-            isPresented: $showDeleteAccount,
-            titleVisibility: .visible
-        ) {
-            Button("Clear everything", role: .destructive) {
-                // Android's twin does exactly these two things: wipe the local
-                // corpus, then close the identity. The old copy promised a
-                // server-side account deletion this build cannot perform.
-                ConversationStore.shared.wipeAllContent()
-                GSHaptics.warning()
-                sessionActive = false
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Every conversation, message and library save on this device will be removed, and you will be signed out. This cannot be undone.")
         }
         .confirmationDialog(
             "Log out of Nexly?",
@@ -89,45 +54,6 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("You can sign back in any time. Your local chats stay on this device.")
-        }
-        .sheet(isPresented: $showExport) {
-            if let url = exportURL {
-                ActivitySheet(items: [url])
-            }
-        }
-    }
-
-    // MARK: Export
-
-    /// Privacy pass: the whole on-device corpus — conversations, the full
-    /// message store, library saves — as one JSON document the reader shares
-    /// anywhere via the system sheet. Encoding hiccups never open the sheet.
-    /// Deep-perf pass 80-b: assembly (full SQL read + corpus encode + file
-    /// write) runs OFF the main thread — with a long history that was a
-    /// multi-hundred-ms UI freeze on tap. The sheet still opens from main.
-    private func buildExportFile() {
-        let store = ConversationStore.shared
-        let conversations = store.conversations
-        let library = store.savedLibraryItems()
-        let exportedAt = ConversationStore.now()
-        Task {
-            let url: URL? = await Task.detached(priority: .userInitiated) { () -> URL? in
-                let messages = store.exportMessages()
-                let payload = ExportPayload(
-                    exportedAt: exportedAt,
-                    conversations: conversations,
-                    messages: messages,
-                    library: library)
-                guard let data = try? JSONEncoder().encode(payload) else { return nil }
-                let url = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("gs-ai-export.json")
-                do { try data.write(to: url, options: .atomic) } catch { return nil }
-                return url
-            }.value
-            guard let url else { return }
-            exportURL = url
-            GSHaptics.success()
-            showExport = true
         }
     }
 
@@ -202,9 +128,9 @@ struct SettingsView: View {
             GsGroupCard {
                 hubRow("Privacy Settings", "Manage your data and activity", "lock", .peach, .privacyDataControls)
                 hubDivider
-                hubRow("Data Controls", "Control what you share and store", "shield-check", .peach, .settingsSection(.privacy))
+                hubRow("Data Controls", "Control what you share and store", "shield-check", .peach, .privacyDataControls)
                 hubDivider
-                hubRow("Export / Delete Data", "Download or remove your data", "database", .peach, .settingsSection(.privacy), divider: false)
+                hubRow("Export / Delete Data", "Download or remove your data", "database", .peach, .privacyDataControls, divider: false)
             }
 
             // App Settings.
@@ -379,9 +305,6 @@ struct SettingsView: View {
         case .appearance:
             appearanceSection
             accessibilitySection
-        case .privacy:
-            privacySection
-            securitySection
         case .chat:
             chatSection
             aiSection
@@ -472,52 +395,6 @@ struct SettingsView: View {
             if GsNativeLoader.isAvailable {
                 toggleRow("Prefer on-device AI", isOn: $settings.preferLocal)
             }
-        }
-    }
-
-    // MARK: Privacy
-
-    private var privacySection: some View {
-        section("Privacy") {
-            AeroListRow(
-                title: "Export data",
-                subtitle: "A JSON copy of your chats, messages and library",
-                leading: { leadingIcon("square.and.arrow.up") },
-                trailing: {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Aero.textMuted)
-                },
-                action: { buildExportFile() }
-            )
-            toggleRow("Help improve GS", isOn: $settings.helpImprove)
-            Button {
-                showClearData = true
-            } label: {
-                HStack(spacing: Aero.Spacing.s) {
-                    Image(systemName: "arrow.counterclockwise")
-                        .font(.system(size: 14))
-                    Text("Clear local data")
-                        .font(Aero.body())
-                    Spacer()
-                }
-                .foregroundStyle(Aero.text)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                // Destructive row sits as a sunken well inside the glass card —
-                // pressed-in, so it reads as an action, not another floating tile.
-                .gsGlass(.sunken, corner: 12)
-            }
-            .buttonStyle(KineticPressStyle())
-            Button {
-                showDeleteAccount = true
-            } label: {
-                Text("Delete account")
-                    .font(Aero.body())
-                    .foregroundStyle(Aero.danger)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(KineticPressStyle())
         }
     }
 

@@ -46,7 +46,6 @@ final class SettingsStore: ObservableObject {
     @Published var reasoningEffort: String { didSet { defaults.set(reasoningEffort, forKey: K.reasoningEffort) } }
     @Published var rememberChoices: Bool { didSet { defaults.set(rememberChoices, forKey: K.rememberChoices) } }
     // Privacy
-    @Published var helpImprove: Bool { didSet { defaults.set(helpImprove, forKey: K.helpImprove) } }
     // Security
     @Published var appPasscode: Bool { didSet { defaults.set(appPasscode, forKey: K.appPasscode) } }
     @Published var biometricUnlock: Bool { didSet { defaults.set(biometricUnlock, forKey: K.biometricUnlock) } }
@@ -153,7 +152,6 @@ final class SettingsStore: ObservableObject {
         // true, like Android: the tile the reader taps and the default the next
         // new chat picks are the same choice until they say otherwise.
         rememberChoices = defaults.object(forKey: K.rememberChoices) as? Bool ?? true
-        helpImprove = defaults.object(forKey: K.helpImprove) as? Bool ?? false
         appPasscode = defaults.object(forKey: K.appPasscode) as? Bool ?? false
         // false, not true: a lock is opt-in. Android's store has always
         // defaulted off, and an app that arms a biometric prompt before the
@@ -205,7 +203,6 @@ final class SettingsStore: ObservableObject {
         static let preferredModel = "settings.preferredModel"
         static let reasoningEffort = "settings.reasoningEffort"
         static let rememberChoices = "settings.rememberChoices"
-        static let helpImprove = "settings.helpImprove"
         static let appPasscode = "settings.appPasscode"
         static let biometricUnlock = "settings.biometricUnlock"
         static let lastSecurityCheck = "settings.lastSecurityCheck"

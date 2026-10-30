@@ -17,6 +17,7 @@ struct PrivacyDataControlsView: View {
     @AppStorage("gs.session.active") private var sessionActive = true
 
     @State private var confirmDelete = false
+    @State private var confirmClear = false
     @State private var exportURL: URL?
     @State private var showExport = false
 
@@ -106,6 +107,15 @@ struct PrivacyDataControlsView: View {
                     chevron
                 }
                 GsSettingsRow(
+                    title: "Clear Local Data",
+                    detail: "Remove chats, files and drafts without signing out",
+                    action: { confirmClear = true }
+                ) {
+                    GsWellTile(glyph: "eraser", tone: .peach, size: 28)
+                } trailing: {
+                    chevron
+                }
+                GsSettingsRow(
                     title: "Delete Your Account",
                     detail: "Permanently remove everything this app stores on this device",
                     showDivider: false,
@@ -119,6 +129,19 @@ struct PrivacyDataControlsView: View {
 
             footer
             Spacer(minLength: 10)
+        }
+        .confirmationDialog(
+            "Clear local data?",
+            isPresented: $confirmClear,
+            titleVisibility: .visible
+        ) {
+            Button("Clear local data", role: .destructive) {
+                ConversationStore.shared.wipeAllContent()
+                GSHaptics.warning()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Cached chats, files and drafts on this device will be removed. Your account is untouched.")
         }
         .confirmationDialog(
             "Delete your data on this device?",

@@ -5497,6 +5497,13 @@ Work Log:
 - Billing's footnote named Subscription & Usage but the page had no way there;
   the footer button now opens SETTINGS_PLAN, the page is on the reference
   shell, and a JVM test presses it. iOS already had the button.
+- iOS had TWO privacy pages: "Privacy Settings" opened the reference page while
+  "Data Controls" and "Export / Delete Data" opened the older settings
+  section, and Connected Apps' permissions link went to the older one too. All
+  three hub rows and the integration link now open Privacy & Data Controls;
+  its one unique real action (Clear Local Data, without sign-out) moved over,
+  and the duplicate section, its private export flow, the dead `helpImprove`
+  preference and `SettingsSectionID.privacy` are deleted.
 - iOS "Delete account" promised permanent account and data deletion and did
   nothing but a haptic. It now wipes the local corpus and signs out, matching
   Android, and the dialog copy names exactly that. iOS About gained the

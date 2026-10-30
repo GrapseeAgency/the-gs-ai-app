@@ -130,7 +130,7 @@ struct ConnectedAppsView: View {
 
             Spacer().frame(height: 14)
             Button {
-                router.path.append(.settingsSection(.privacy))
+                router.path.append(.privacyDataControls)
             } label: {
                 HStack(spacing: 10) {
                     GsWellTile(glyph: "shield-check", tone: .lilac, size: 34)
