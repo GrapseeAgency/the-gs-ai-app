@@ -617,15 +617,16 @@ struct AeroDrawer: View {
 
 /// The account reveal sheet — Profile / Settings / Notifications / Billing.
 ///
-/// Presented by `RootView`, not by the drawer. When the panel owned this modal,
-/// a row's route ran while the sheet's presenter was being torn down in the
-/// same transaction, and SwiftUI dropped the push: the drawer closed and the
-/// inbox never mounted (run 41014412869's `SheetsUITests`). One owner for the
-/// modal, one owner for the route.
+/// Presented as an IN-APP overlay by `RootView`, not as a native `.sheet`.
+/// Two CI runs proved the native presentation wrong here: the row taps never
+/// reached the buttons (the accessibility tree kept the sheet open and the
+/// drawer behind it), so the inbox was unreachable through the account menu.
+/// The app already paints its own drawer and glass sheets; one more overlay
+/// keeps every tap on a plain SwiftUI button and removes the modal/presenter
+/// class of failure entirely.
 struct AccountSheetView: View {
 
     @ObservedObject private var account = AccountStore.shared
-    @Environment(\.dismiss) private var dismiss
 
     /// The route currently on screen, so the matching row paints selected.
     var activeRoute: AeroRoute?
@@ -645,21 +646,13 @@ struct AccountSheetView: View {
                 row("Billing", icon: "CreditCard", route: .billing)
             }
         }
-        .presentationDetents([.medium])
     }
 
-    /// Dismiss first, then route. The push must land on a stack that is no
-    /// longer covered by this sheet; the short hop is the dismissal's own
-    /// duration, not a guess at the navigation's.
     private func row(_ title: String, icon: String, route: AeroRoute) -> some View {
         let isSelected = activeRoute == route
         return Button {
             GSHaptics.tap()
-            dismiss()
-            let handler = onRoute
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                handler(route)
-            }
+            onRoute(route)
         } label: {
             HStack(spacing: 12) {
                 GsIconView(DrawerTopic.paths(named: icon), size: 16,

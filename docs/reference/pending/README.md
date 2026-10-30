@@ -156,12 +156,13 @@ Evidence:
   and the account sheet's Notifications row for the inbox. It runs in the
   `GsChatUITests` bundle. Run 41014412869 was its first CI observation and it
   failed: the account sheet routed while it was still presented, so the drawer
-  closed and the inbox never mounted. The sheet is now owned by the SHELL
-  (`AccountSheetView` presented from `RootView`), not by the drawer, so
-  dismissing it and pushing the destination are independent transactions; the
-  row also waits for the tap to be hittable so a mid-animation tap cannot hit
-  the scrim. Run 41019419509 compiled all of this and failed only the inbox
-  assertion; the next run is the proof.
+  closed and the inbox never mounted. Run 41023143540 showed the next shape of
+  the same problem: with the sheet moved to the shell, the accessibility tree
+  proved the row tap never reached the button at all (the sheet was still open
+  and the drawer behind it never closed), so the account menu was inert. The
+  account menu is now an IN-APP glass overlay (`AccountSheetView` in
+  `RootView`'s ZStack), like the drawer itself, and every row is a plain
+  SwiftUI button. The next run is the proof.
 - Subscription numbers: `UsageMeterTest` pins the local-calendar-month → UTC
   stamp boundary in Asia/Dhaka and UTC, and the unknown-vs-zero contract (`-1`
   renders "—"; zero would falsely claim "none used").
@@ -354,11 +355,14 @@ agree; "Remember my choices" still governs only the NEW-chat default.
    (measured rim + self-test) once their iOS layout is frozen; today their
    captures exist and their copy inventory is gated, but their card geometry is
    not.
-3. Delete or wire the iOS-only dead surfaces: `SearchView` (superseded by
-   `ChatSearchView`), and the unreachable `ResearchView`, `VisionView`,
-   `FoldersView`, `SharedChatsView`, `NexlyChatShell`. Android has no twin for
-   any of them; leaving them in the tree makes the screen inventory look larger
-   than the app.
+3. Delete or wire the dead surfaces: iOS `SearchView` (superseded by
+   `ChatSearchView`), the unreachable `ResearchView`, `VisionView`,
+   `FoldersView`, `SharedChatsView` and `NexlyChatShell`; and Android's
+   `AccountSettingsScreen`, which has no route (ProfileScreen owns identity and
+   the hub's Device & Account row opens AccountSecurityScreen). Its dead Plan
+   row no longer pretends to be a destination, but the composable itself is
+   still orphaned. Android has no twin for the iOS-only files; leaving them in
+   the tree makes the screen inventory look larger than the app.
 
 ## Sub-page reachability (2026-10-30)
 

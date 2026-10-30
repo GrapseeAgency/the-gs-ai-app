@@ -114,6 +114,7 @@ import com.grapsee.gsai.ui.components.RefInfoCard
 fun AccountSettingsScreen(
     onBack: () -> Unit,
     onLogout: () -> Unit,
+    onOpenPlan: () -> Unit,
 ) {
     val context = LocalContext.current
     val colors = GsTheme.colors
@@ -175,7 +176,10 @@ fun AccountSettingsScreen(
                 subtitle = com.grapsee.gsai.data.PlanStore.planName +
                     " · " + com.grapsee.gsai.data.PlanStore.priceLabel,
                 icon = GsIcons.CreditCard,
-                onClick = { }
+                // The row names the plan; it must show the plan. It used to be
+                // `onClick = { }`, which drew a chevron over a no-op.
+                onClickLabel = "View plan",
+                onClick = onOpenPlan
             )
         }
 
@@ -883,7 +887,8 @@ fun AiIntelligenceScreen(
                 title = "Local model contract",
                 subtitle = "On-device answers receive the same widget vocabulary as cloud answers",
                 icon = GsIcons.Code,
-                onClick = { }
+                // Informational: no destination, so no chevron and no press.
+                onClick = null
             )
         }
 

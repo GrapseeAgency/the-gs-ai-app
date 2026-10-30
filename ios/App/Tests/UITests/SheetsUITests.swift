@@ -103,12 +103,16 @@ final class SheetsUITests: XCTestCase {
             XCTFail("the account sheet never offered Notifications")
             return
         }
-        // The sheet slides in; a tap that lands mid-transition can hit the
-        // scrim and dismiss without routing. Wait for the row itself.
+        // The sheet slides in; a tap that lands mid-transition hits the
+        // scrim and only dismisses the sheet — the drawer stays open and no
+        // route fires (run 41023143540's snapshot showed exactly that). The
+        // row reports hittable as soon as it is in the tree, before the
+        // presentation settles, so wait for the transition to finish too.
         let hittable = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "isHittable == true"),
             object: notifications)
         XCTAssertEqual(XCTWaiter().wait(for: [hittable], timeout: 8), .completed)
+        Thread.sleep(forTimeInterval: 0.8)
         notifications.tap()
         XCTAssertTrue(
             app.buttons["Filter notifications"].waitForExistence(timeout: 15),

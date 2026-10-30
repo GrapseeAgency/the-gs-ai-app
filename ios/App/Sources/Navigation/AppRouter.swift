@@ -146,7 +146,7 @@ struct RootView: View {
                     },
                     onClose: { withAnimation(Aero.motion(Aero.spring)) { showDrawer = false } },
                     activeRoute: router.path.last,
-                    onAccount: { showAccount = true }
+                    onAccount: { withAnimation(Aero.motion(Aero.spring)) { showAccount = true } }
                 )
                 // The sheet's panel runs to the screen edge, and its own footer
                 // keeps the 30 pt clearance the capture measures. Without this the
@@ -154,6 +154,44 @@ struct RootView: View {
                 // every render the gate approves.
                 .ignoresSafeArea()
                 .transition(.opacity)
+            }
+
+            // The account menu, drawn as an in-app overlay. A native `.sheet`
+            // here left every row tap inert on the simulator (the sheet stayed
+            // open and the drawer behind it never closed), so the account menu
+            // could not reach the inbox at all. The app already paints its own
+            // drawer; this overlay is the same material and keeps the rows on
+            // plain SwiftUI buttons.
+            if showAccount {
+                ZStack(alignment: .bottom) {
+                    Color.black.opacity(0.30)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            withAnimation(Aero.motion(Aero.spring)) { showAccount = false }
+                        }
+                        .accessibilityLabel("Close account menu")
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction {
+                            withAnimation(Aero.motion(Aero.spring)) { showAccount = false }
+                        }
+                    AccountSheetView(activeRoute: router.path.last) { route in
+                        withAnimation(Aero.motion(Aero.spring)) { showAccount = false }
+                        // One hop so the overlay starts leaving before the
+                        // drawer closes and the destination is pushed.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                            withAnimation(Aero.motion(Aero.spring)) { showDrawer = false }
+                            if case .chat(nil) = route {
+                                router.resetWorkspace()
+                            } else {
+                                router.path.append(route)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 8)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .zIndex(1)
             }
         }
         .simultaneousGesture(edgeOpenGesture)
@@ -169,20 +207,6 @@ struct RootView: View {
                 router.resetWorkspace()
             } else {
                 router.path.append(route)
-            }
-        }
-        // Presented here, above the drawer, so dismissing it and pushing the
-        // chosen destination are two independent transactions. The sheet
-        // dismisses itself first (AccountSheetView), then hands the route up.
-        .sheet(isPresented: $showAccount) {
-            AccountSheetView(activeRoute: router.path.last) { route in
-                showAccount = false
-                withAnimation(Aero.motion(Aero.spring)) { showDrawer = false }
-                if case .chat(nil) = route {
-                    router.resetWorkspace()
-                } else {
-                    router.path.append(route)
-                }
             }
         }
         .tint(Aero.accent)
