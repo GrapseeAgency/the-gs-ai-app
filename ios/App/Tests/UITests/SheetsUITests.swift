@@ -129,6 +129,54 @@ final class SheetsUITests: XCTestCase {
             "the inbox opened without its subtitle; screen: \(app.debugDescription)")
     }
 
+    /// Travel Agent was built but nothing navigated to it on either platform.
+    /// Explore's catalogue now routes the trip planner there; this drives that
+    /// path through the real search field (the tile is a search result, not a
+    /// card on the landing page).
+    func testTravelAgentOpensFromExploreSearch() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active"]
+        app.launch()
+
+        let menu = app.buttons["Open menu"].firstMatch
+        guard menu.waitForExistence(timeout: 30) else {
+            XCTFail("Home never offered its menu")
+            return
+        }
+        menu.tap()
+        let explore = app.buttons["Explore"].firstMatch
+        guard explore.waitForExistence(timeout: 12) else {
+            XCTFail("the drawer never offered Explore")
+            return
+        }
+        explore.tap()
+
+        let openSearch = app.buttons["Open search"].firstMatch
+        guard openSearch.waitForExistence(timeout: 15) else {
+            XCTFail("Explore never offered its search control")
+            return
+        }
+        openSearch.tap()
+        let field = app.textFields["Search tools and abilities"].firstMatch
+        guard field.waitForExistence(timeout: 10) else {
+            XCTFail("Explore's search field never appeared")
+            return
+        }
+        field.tap()
+        field.typeText("trip")
+
+        let trip = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Plan a trip")).firstMatch
+        guard trip.waitForExistence(timeout: 15) else {
+            XCTFail("Explore's search never offered Plan a trip; screen: \(app.debugDescription)")
+            return
+        }
+        trip.tap()
+        XCTAssertTrue(
+            app.staticTexts["Welcome to Travel Agent"].waitForExistence(timeout: 15),
+            "the trip planner opened something other than Travel Agent; screen: \(app.debugDescription)")
+    }
+
     // MARK: helpers
 
     private func openSettings(_ app: XCUIApplication) -> Bool {

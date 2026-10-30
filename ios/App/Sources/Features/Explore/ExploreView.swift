@@ -525,6 +525,9 @@ private struct ExploreSectionHeader: View {
 struct ExploreView: View {
     let onOpenChat: (AeroRoute) -> Void
     let onOpenDiscover: () -> Void
+    /// The trip planner has a real destination of its own (Travel Agent);
+    /// without this the screen was built but unreachable on both platforms.
+    let onOpenTravelAgent: () -> Void
     let onOpenHome: () -> Void
     let onOpenSettings: () -> Void
 
@@ -535,6 +538,7 @@ struct ExploreView: View {
     init(
         onOpenChat: @escaping (AeroRoute) -> Void,
         onOpenDiscover: @escaping () -> Void = {},
+        onOpenTravelAgent: @escaping () -> Void,
         // Required, not defaulted: a forgotten wire here would compile green
         // and ship a dead dock control. The render harness passes explicit no-ops.
         onOpenHome: @escaping () -> Void,
@@ -543,6 +547,7 @@ struct ExploreView: View {
     ) {
         self.onOpenChat = onOpenChat
         self.onOpenDiscover = onOpenDiscover
+        self.onOpenTravelAgent = onOpenTravelAgent
         self.onOpenHome = onOpenHome
         self.onOpenSettings = onOpenSettings
         _searchOpen = State(initialValue: initialSearchOpen)
@@ -736,10 +741,21 @@ struct ExploreView: View {
         }
     }
 
+    /// One place decides what a catalogue tap opens. The trip planner has its
+    /// own screen (Travel Agent) with travel-specific starters; every other
+    /// tool seeds the composer with its prompt. Both platforms use this rule.
+    private func openTool(_ tool: ExploreTool) {
+        if tool.id == "trip-planner" {
+            onOpenTravelAgent()
+        } else {
+            onOpenChat(.chatPrefill(tool.prompt))
+        }
+    }
+
     /// The reference's Popular Tools card: icon LEFT, copy right, arrow low-right.
     private func toolCardHorizontal(_ tool: ExploreTool) -> some View {
         Button {
-            onOpenChat(.chatPrefill(tool.prompt))
+            openTool(tool)
         } label: {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 9) {
@@ -958,7 +974,7 @@ struct ExploreView: View {
 
     private func promptRow(_ tool: ExploreTool) -> some View {
         Button {
-            onOpenChat(.chatPrefill(tool.prompt))
+            openTool(tool)
         } label: {
             HStack(spacing: 10) {
                 exploreToolGlyph(tool, size: 15)
@@ -1006,6 +1022,9 @@ struct ExploreView: View {
 
 struct DiscoverView: View {
     let onOpenChat: (AeroRoute) -> Void
+    /// The trip planner has its own screen; Discover's Popular list is where
+    /// that tile is visible, so this page carries the same rule as Explore.
+    let onOpenTravelAgent: () -> Void
 
     var initialQuery: String = ""
     var initialSearchOpen: Bool = false
@@ -1017,14 +1036,25 @@ struct DiscoverView: View {
 
     init(
         onOpenChat: @escaping (AeroRoute) -> Void,
+        onOpenTravelAgent: @escaping () -> Void,
         initialQuery: String = "",
         initialSearchOpen: Bool = false
     ) {
         self.onOpenChat = onOpenChat
+        self.onOpenTravelAgent = onOpenTravelAgent
         self.initialQuery = initialQuery
         self.initialSearchOpen = initialSearchOpen
         _query = State(initialValue: initialQuery)
         _searchOpen = State(initialValue: initialSearchOpen)
+    }
+
+    /// One place decides what a catalogue tap opens, exactly as Explore does.
+    private func openTool(_ tool: ExploreTool) {
+        if tool.id == "trip-planner" {
+            onOpenTravelAgent()
+        } else {
+            onOpenChat(.chatPrefill(tool.prompt))
+        }
     }
 
     var body: some View {
@@ -1244,7 +1274,7 @@ struct DiscoverView: View {
     /// The reference's Featured Tools card: icon top, copy below, arrow low-right.
     private func toolCardVertical(_ tool: ExploreTool) -> some View {
         Button {
-            onOpenChat(.chatPrefill(tool.prompt))
+            openTool(tool)
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 exploreToolGlyph(tool, size: 15)
@@ -1296,7 +1326,7 @@ struct DiscoverView: View {
             VStack(spacing: 7) {
                 ForEach(rows) { tool in
                     Button {
-                        onOpenChat(.chatPrefill(tool.prompt))
+                        openTool(tool)
                     } label: {
                         HStack(spacing: 10) {
                             exploreToolGlyph(tool, size: 15)
@@ -1340,7 +1370,7 @@ struct DiscoverView: View {
                 VStack(spacing: 7) {
                     ForEach(results) { tool in
                         Button {
-                            onOpenChat(.chatPrefill(tool.prompt))
+                            openTool(tool)
                         } label: {
                             HStack(spacing: 10) {
                                 exploreToolGlyph(tool, size: 15)

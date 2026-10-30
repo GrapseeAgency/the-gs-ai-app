@@ -364,14 +364,15 @@ agree; "Remember my choices" still governs only the NEW-chat default.
    (measured rim + self-test) once their iOS layout is frozen; today their
    captures exist and their copy inventory is gated, but their card geometry is
    not.
-3. Delete or wire the dead surfaces: iOS `SearchView` (superseded by
-   `ChatSearchView`), the unreachable `ResearchView`, `VisionView`,
-   `FoldersView`, `SharedChatsView` and `NexlyChatShell`; and Android's
-   `AccountSettingsScreen`, which has no route (ProfileScreen owns identity and
-   the hub's Device & Account row opens AccountSecurityScreen). Its dead Plan
-   row no longer pretends to be a destination, but the composable itself is
-   still orphaned. Android has no twin for the iOS-only files; leaving them in
-   the tree makes the screen inventory look larger than the app.
+3. The dead surfaces are gone: iOS `SearchView` (superseded by
+   `ChatSearchView`), `ResearchView`, `VisionView`, `FoldersView` and
+   `SharedChatsView`, plus Android's orphaned `AccountSettingsScreen`. The
+   route/case and the `SearchView` destination were removed with them.
+   `NexlyChatShell.swift` is NOT dead — it hosts the live `NexlyComposerBar`
+   and `NexlyBrandHeader` — and stays. Travel Agent was the other unreachable
+   screen: it is now the trip planner's destination in Explore and Discover on
+   both platforms, with `ExploreReachabilityTest` (Android) and a UI test
+   (iOS) pinning the rule that every OTHER tool still seeds the composer.
 
 ## Sub-page reachability (2026-10-30)
 

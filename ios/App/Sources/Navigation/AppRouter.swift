@@ -21,7 +21,6 @@ enum AeroRoute: Hashable {
     /// — seed the draft, never auto-send). This case stays in place for the
     /// routing contract; it currently has no pusher.
     case chatAutoSend(String)
-    case search
     case settings
     case notifications
     /// The six owner sheets (docs/reference/pending): settings alerts, the
@@ -264,7 +263,6 @@ struct AeroDestinations: ViewModifier {
             case .chat(let id): ChatDetailView(conversationID: id)
             case .chatPrefill(let prompt): ChatDetailView(conversationID: nil, prefill: prompt)
             case .chatAutoSend(let prompt): ChatDetailView(conversationID: nil, prefill: prompt, autoSendPrefill: true)
-            case .search: SearchView()
             case .settings: SettingsView(onRoute: { router.path.append($0) })
             case .settingsSection(let section):
                 SettingsView(detail: section, onRoute: { router.path.append($0) })
@@ -285,12 +283,15 @@ struct AeroDestinations: ViewModifier {
             case .explore: ExploreView(
                 onOpenChat: { router.path.append($0) },
                 onOpenDiscover: { router.path.append(.discover) },
+                onOpenTravelAgent: { router.path.append(.travelAgent) },
                 // The dock's Home is a pop to the root surface; Settings is
                 // the same push every other surface uses.
                 onOpenHome: { router.path = [] },
                 onOpenSettings: { router.path.append(.settings) }
             )
-            case .discover: DiscoverView(onOpenChat: { router.path.append($0) })
+            case .discover: DiscoverView(
+                onOpenChat: { router.path.append($0) },
+                onOpenTravelAgent: { router.path.append(.travelAgent) })
 
             // Section roots (drawer)
             case .chats: ChatsListView()

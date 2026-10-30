@@ -775,6 +775,9 @@ private fun exploreIcon(id: String): ImageVector = when (id) {
 fun ExploreScreen(
     onOpenChat: (prompt: String, autoSend: Boolean) -> Unit,
     onOpenDiscover: () -> Unit,
+    /** The trip planner has a screen of its own (Travel Agent); without this
+     *  the screen was built but unreachable on both platforms. */
+    onOpenTravelAgent: () -> Unit,
     onBack: () -> Unit = {},
     // Required, not defaulted: a forgotten wire would compile green and ship
     // a dead dock Settings button. The render harness passes an explicit no-op.
@@ -788,6 +791,13 @@ fun ExploreScreen(
     val inkHeader = if (isDark) colors.textPrimary else ExploreTones.InkHeader
     val inkBody = if (isDark) colors.textSecondary else ExploreTones.InkBody
     val inkMuted = if (isDark) colors.textTertiary else ExploreTones.InkMuted
+
+    // One place decides what a catalogue tap opens. The trip planner has its
+    // own screen; every other tool seeds the composer with its prompt.
+    fun openTool(tool: ExploreTool) {
+        if (tool.id == "trip-planner") onOpenTravelAgent()
+        else onOpenChat(tool.prompt, false)
+    }
 
     var query by rememberSaveable { mutableStateOf("") }
     var searchOpen by rememberSaveable { mutableStateOf(initialSearchOpen) }
@@ -842,7 +852,7 @@ fun ExploreScreen(
                     ExploreEmptySearch(query, inkBody, inkMuted, onAsk = { onOpenChat(query, true) })
                 } else {
                     results.forEach { tool ->
-                        ExplorePromptRow(tool, inkStrong, inkMuted) { onOpenChat(tool.prompt, false) }
+                        ExplorePromptRow(tool, inkStrong, inkMuted) { openTool(tool) }
                         Spacer(Modifier.height(7.dp))
                     }
                 }
@@ -978,7 +988,7 @@ fun ExploreScreen(
                         rowTools.forEach { tool ->
                             Box(Modifier.weight(1f)) {
                                 ExploreToolCardHorizontal(tool, inkStrong, inkMuted) {
-                                    onOpenChat(tool.prompt, false)
+                                    openTool(tool)
                                 }
                             }
                         }
@@ -1310,6 +1320,9 @@ private fun ExploreFeaturedCard(
 @Composable
 fun DiscoverScreen(
     onOpenChat: (prompt: String, autoSend: Boolean) -> Unit,
+    /** The trip planner has its own screen; Discover's Popular list is where
+     *  that tile is visible, so this page carries the same rule. */
+    onOpenTravelAgent: () -> Unit,
     onBack: () -> Unit = {},
     initialQuery: String = "",
     initialSearchOpen: Boolean = false,
@@ -1320,6 +1333,11 @@ fun DiscoverScreen(
     val inkHeader = if (isDark) colors.textPrimary else ExploreTones.InkHeader
     val inkBody = if (isDark) colors.textSecondary else ExploreTones.InkBody
     val inkMuted = if (isDark) colors.textTertiary else ExploreTones.InkMuted
+
+    fun openTool(tool: ExploreTool) {
+        if (tool.id == "trip-planner") onOpenTravelAgent()
+        else onOpenChat(tool.prompt, false)
+    }
 
     var query by rememberSaveable { mutableStateOf(initialQuery) }
     var searchOpen by rememberSaveable { mutableStateOf(initialSearchOpen) }
@@ -1363,7 +1381,7 @@ fun DiscoverScreen(
                     ExploreEmptySearch(query, inkBody, inkMuted, onAsk = { onOpenChat(query, true) })
                 } else {
                     results.forEach { tool ->
-                        ExplorePromptRow(tool, inkStrong, inkMuted) { onOpenChat(tool.prompt, false) }
+                        ExplorePromptRow(tool, inkStrong, inkMuted) { openTool(tool) }
                         Spacer(Modifier.height(7.dp))
                     }
                 }
@@ -1556,7 +1574,7 @@ fun DiscoverScreen(
                     it.id in setOf("study-plan", "logo-maker", "trip-planner", "doc-summary")
                 }.filter { category == ExploreCategory.All || it.category == category }
                 promptRows.forEach { tool ->
-                    ExplorePromptRow(tool, inkStrong, inkMuted) { onOpenChat(tool.prompt, false) }
+                    ExplorePromptRow(tool, inkStrong, inkMuted) { openTool(tool) }
                     Spacer(Modifier.height(7.dp))
                 }
             }

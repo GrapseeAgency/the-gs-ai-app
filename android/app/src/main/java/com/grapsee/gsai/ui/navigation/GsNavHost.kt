@@ -282,6 +282,9 @@ fun GsNavHost(
                     navController.navigate(GsRoutes.chat(null, prompt, autoSend))
                 },
                 onOpenDiscover = { open(GsRoutes.DISCOVER) },
+                // The trip planner has its own screen; Explore is the entry
+                // point that makes it reachable (it was built but unrouted).
+                onOpenTravelAgent = { open(GsRoutes.TRAVEL_AGENT) },
                 onBack = back,
                 // the reference dock's Settings is the same push every
                 // other surface uses; its Home is the plain pop (onBack).
@@ -293,6 +296,7 @@ fun GsNavHost(
                 onOpenChat = { prompt, autoSend ->
                     navController.navigate(GsRoutes.chat(null, prompt, autoSend))
                 },
+                onOpenTravelAgent = { open(GsRoutes.TRAVEL_AGENT) },
                 onBack = back,
             )
         }
