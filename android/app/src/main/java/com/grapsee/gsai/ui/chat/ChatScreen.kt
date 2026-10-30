@@ -1976,6 +1976,10 @@ internal fun UserMessage(
                                         shape = RoundedCornerShape(18.dp)
                                     )
                                     .combinedClickable(
+                                        // A tap does nothing on purpose: the
+                                        // bubble's actions are Copy and Edit in
+                                        // the long-press sheet, and the resting
+                                        // surface carries no action chrome.
                                         onClick = {},
                                         onLongClick = {
                                             if (GsHaptics.enabled()) {

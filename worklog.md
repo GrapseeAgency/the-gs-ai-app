@@ -5603,5 +5603,12 @@ Stage Summary:
   Controls now hands its three data actions to that owner page.
 - Android is locally observed: 394 JVM tests green, the new capture passes the
   card gate and its self-test, and the copy gate covers both platforms. iOS
-  static gates pass. The iOS simulator render and both workflow halves are the
-  next observation for this page; no CI run is claimed for it yet.
+  static gates pass.
+- CI observed the page on 8805e484: android-app 41127425397 is green end to end
+  (the suite, all ten captures, `android-data: pass`, its self-test doctoring
+  and the artifact upload) and iOS 41127431963 is green too (build, XCTest, the
+  reachability test including the new Data Retention hop, all eleven iOS
+  captures and `ios-data: pass` with its self-test). The downloaded iOS capture
+  matches the mock's three groups, format tiles, row order, rose delete card
+  and consent gate; its only difference is the accent (iOS has no accent
+  family, recorded as a capability).

@@ -306,10 +306,11 @@ and the three new page captures (model, chat history, voice). The gate's iOS
 numbers were calibrated from run 41019419509's real captures (see Instrument
 notes), so iOS pixel parity is now claimed against the same law Android is held
 to. The three pages ported on 2026-10-30 joined that law (3 / 4 / 2 cards on
-both platforms); their next CI run is the first observation of the extension.
-Data Export joined on 2026-10-31 with 2 white cards on both platforms; its
-Android capture is verified locally, and its first CI run is the observation of
-both halves.
+both platforms) and were observed on the next run; Data Export joined on
+2026-10-31 with 2 white cards (its rose delete card is deliberately outside the
+rim window) and is observed too: run 41127425397 printed `android-data: pass`
+and run 41127431963 printed `ios-data: pass`, each followed by its own
+`--self-test` doctoring.
 The gate deliberately does not overlay the mock: the mock's phone panel is
 393×~913 pt while the capture is 393×852, so a pixel diff would be a scaling
 argument. That comparison stays the human review these PNGs are for.
@@ -395,8 +396,8 @@ agree; "Remember my choices" still governs only the NEW-chat default.
    test.
 2. (done) The three ported pages are card-gated like the Settings trio: Model
    Selection (3 cards), Chat History (4) and Voice & Speech (2), on both
-   platforms, with the same derived-from-captures numbers and self-test. The
-   next CI run is this extension's first observation.
+   platforms, with the same derived-from-captures numbers and self-test, and
+   observed on the next run.
 3. (done) The dead surfaces are gone: iOS `SearchView` (superseded by
    `ChatSearchView`), `ResearchView`, `VisionView`, `FoldersView` and
    `SharedChatsView`, plus Android's orphaned `AccountSettingsScreen`. The
