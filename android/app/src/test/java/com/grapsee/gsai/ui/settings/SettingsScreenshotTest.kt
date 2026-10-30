@@ -91,18 +91,6 @@ class SettingsScreenshotTest {
         }
 
     @Test
-    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
-    fun modelSelection() =
-        shoot("build/screenshots/nexly-model-393x852.png") {
-            AiIntelligenceScreen(
-                onBack = {},
-                onLocalAiRequested = {},
-                onTryComponents = {},
-                onOpenModelDetails = {},
-            )
-        }
-
-    @Test
     @Config(sdk = [34], qualifiers = "w360dp-h780dp-xxhdpi")
     fun memoryAtCompact() =
         shoot("build/screenshots/nexly-memory-360x780.png") {

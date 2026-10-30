@@ -520,7 +520,7 @@ fun AiIntelligenceScreen(
     val local = SettingsStore.preferLocal
     var confirmReset by remember { mutableStateOf(false) }
 
-    RefPage(
+    RefSettingsPage(
         title = "Model Selection & Reasoning Effort",
         subtitle = "Choose the best model and how deeply Nexly thinks",
         onBack = onBack
@@ -1279,12 +1279,12 @@ private fun memoryDate(iso: String): String = runCatching {
 @Composable
 fun VoiceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
     val colors = GsTheme.colors
-    RefPage(
+    RefSettingsPage(
         title = "Voice & Speech",
         subtitle = "Listen, speak, and keep your hands free.",
         onBack = onBack
     ) {
-        RefCard(padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
+        RefCard(role = GsGlassRole.CardLight, padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 RefArtwork(RefArt.Voice, size = 110.dp)
                 Spacer(Modifier.height(6.dp))
@@ -1298,7 +1298,7 @@ fun VoiceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
             }
         }
 
-        RefSection(label = "Voice") {
+        RefSection(label = "Voice", role = GsGlassRole.CardLight) {
             RefRow(
                 title = "Open voice mode",
                 subtitle = "Speak a question instead of typing it",

@@ -5420,3 +5420,50 @@ Work Log:
 
 Stage Summary:
 - Both CI workflows were green before this round (Android 41031708845 on ca7a21f0, iOS 41027465949 on 2bad9eb5); the audit round is now on CI. Screens: nine references + Voice & Speech + Travel Agent are all reachable on both platforms; dead surfaces are gone; the drawer and account rows are fully tappable; Explore/Discover no longer draw under a system bar.
+
+---
+Task ID: reference-page-card-gate
+Agent: Qoder (main)
+Task: Finish the Resume order's last item: card-gate the three pages ported after
+the owner sheets.
+
+Work Log:
+- `check_sheets_render.py` now covers nine pages. The three ported ones are gated
+  on the cards each page actually draws: Model Selection 3 (AI Model, Reasoning
+  Effort, Model Preferences), Chat History 4 (totals, two quick-action rows,
+  new-chat footer) and Voice & Speech 2 (Read aloud hero, Voice group). Chat
+  History's search field and chips sit outside the rim window on purpose: they
+  are controls, not cards. Counts and windows were derived with `--derive` from
+  run 41043193658's iOS captures and the matching Android renders.
+- Android captures: model moved out of `SettingsScreenshotTest` (where the file
+  it wrote was never uploaded) into `ReferenceSheetsScreenshotTest` as
+  `ref-model`; `ref-chat-history` and `ref-voice` joined it. The history capture
+  runs the real store through `ServiceLocator.init`, so it renders the honest
+  empty page; the inbox fixture remains the only test-only data.
+- The gate found two real Android defects before it could pass. Model and Voice
+  were composed on `RefPage`, which paints no backdrop, while every reference
+  page (and both iOS twins, via `GsSettingsPage`) sits on the bloom — Voice
+  measured ZERO lit rims against the 247 L floor. Voice's cards also used
+  `RefCard`'s default `Card` material (237 L) instead of the reference
+  `CardLight` (253 L). Both pages now use `RefSettingsPage`; Voice's hero and
+  group pass `CardLight`, and `RefSection` gained a defaulted `role` so it can.
+  No existing call site changes behaviour.
+- Workflows: android-app and ios.yml both run the gate and `--self-test` over
+  the nine pages; Android waits for the new renders and uploads them in the
+  existing `ref-*.png` artifact; comments and step names say reference pages,
+  not six owner sheets. Copy parity still reports 10 screens (the nine plus
+  Privacy).
+- Evidence: all nine Android renders pass and all nine self-tests go red on
+  doctored copies; the same is true for run 41043193658's iOS captures under the
+  new specs (model 3, history 4, voice 2 on both sides). Android's screenshot,
+  content and interaction classes pass 29 tests (9 + 10 + 10), the full unit
+  suite is 376 tests, 0 failures, 49 skipped (the screenshot suites are opt-in),
+  and the merge gates are clean locally: copy parity and its self-test, the
+  workflow trigger/var/`set -e` lints, and the Kotlin brace/import lints.
+
+Stage Summary:
+- Every reference page both platforms render is now measured, not merely
+  captured, and the extension paid for itself immediately: two Android pages
+  were not on the reference shell or card material, which no existence check
+  could see. The next CI run is this extension's first observation; iOS needed
+  no code change for the new specs.

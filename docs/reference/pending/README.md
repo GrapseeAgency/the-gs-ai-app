@@ -133,9 +133,18 @@ Evidence:
   windowed `drawHierarchy` channel the Settings/Explore harnesses use. Its inbox
   is seeded with the same six notices as Android's fixture and cleared by the
   test's `defer`, so the iOS render exercises the row layout without leaving
-  invented rows behind. `ios.yml` collects all six renders, fails on a missing
-  one, and runs the same `check_sheets_render.py --platform ios` card gate plus
-  its self-test on those captures.
+  invented rows behind. `ios.yml` collects each required render, fails on a
+  missing one, and runs the same `check_sheets_render.py --platform ios` card
+  gate plus its self-test on those captures.
+- The three pages ported after the sheets are in the same harnesses and the same
+  gate: `ref-model`, `ref-chat-history` and `ref-voice` on Android;
+  `nexly-model-ios`, `nexly-chat-history-ios` and `nexly-voice-ios` on iOS. The
+  gate expects 3 cards on Model Selection, 4 on Chat History (the totals card,
+  the two quick-action rows and the new-chat footer) and 2 on Voice & Speech
+  (the Read aloud hero and the Voice group). Chat History is captured with no
+  fixture on either platform — the honest empty page an install with no chats
+  sees — and the search field and chips above its cards are deliberately
+  outside the rim window, because those controls are not cards.
 - iOS notice path: `GsNotifier.record` honours the master switch and the
   per-kind switch, rejects empty copy, and writes `GsNoticeInbox` only then.
   `GsNotifierTests` pins those four cases on the simulator, and the sign-in in
@@ -267,19 +276,21 @@ these corrections.
 
 ## Acceptance
 
-A capture is not evidence until a gate can fail on it. The Android six are
-card-gated (header ink, lit rim, card rhythm) and verified locally with the
-non-vacuity self-test; both platforms' section/row inventory is checked from
-source with its own self-test. The iOS six run the same gate against the
-simulator captures in `ios.yml`. That gate is now OBSERVED: run 41027465949 is
-green end to end — app build, XCTest, the six-screen reachability test, all six
-card gates and their `--self-test` doctoring, the Settings trio, and the three
-new page captures (model, chat history, voice). The gate's iOS numbers were
-calibrated from run 41019419509's real captures (see Instrument notes), so iOS
-pixel parity is now claimed against the same law Android is held to. The gate
-deliberately does not overlay the mock: the mock's phone panel is 393×~913 pt
-while the capture is 393×852, so a pixel diff would be a scaling argument. That
-comparison stays the human review these PNGs are for.
+A capture is not evidence until a gate can fail on it. All nine Android
+reference pages are card-gated (header ink, lit rim, card count) and verified
+locally with the non-vacuity self-test; both platforms' section/row inventory is
+checked from source with its own self-test. The iOS nine run the same gate
+against the simulator captures in `ios.yml`. That gate is now OBSERVED: run
+41027465949 is green end to end — app build, XCTest, the six-screen reachability
+test, all six card gates and their `--self-test` doctoring, the Settings trio,
+and the three new page captures (model, chat history, voice). The gate's iOS
+numbers were calibrated from run 41019419509's real captures (see Instrument
+notes), so iOS pixel parity is now claimed against the same law Android is held
+to. The three ported pages joined that law on 2026-10-30 (3 / 4 / 2 cards on
+both platforms); their next CI run is the first observation of the extension.
+The gate deliberately does not overlay the mock: the mock's phone panel is
+393×~913 pt while the capture is 393×852, so a pixel diff would be a scaling
+argument. That comparison stays the human review these PNGs are for.
 
 ## Where each screen stands (2026-10-28, second pass)
 
@@ -357,14 +368,14 @@ agree; "Remember my choices" still governs only the NEW-chat default.
 
 ## Resume order
 
-1. Observe the next iOS run: the card gate, the Settings trio and the six-screen
-   reachability test all now have their first CI calibration behind them (run
-   41014412869 for the failure, the next run for the fix).
-2. Gate the two newly ported screens the way the Settings trio is gated
-   (measured rim + self-test) once their iOS layout is frozen; today their
-   captures exist and their copy inventory is gated, but their card geometry is
-   not.
-3. The dead surfaces are gone: iOS `SearchView` (superseded by
+1. (done) The iOS runs are observed: 41027465949 and 41043193658 are green,
+   including the card gate, the Settings trio and the six-screen reachability
+   test.
+2. (done) The three ported pages are card-gated like the Settings trio: Model
+   Selection (3 cards), Chat History (4) and Voice & Speech (2), on both
+   platforms, with the same derived-from-captures numbers and self-test. The
+   next CI run is this extension's first observation.
+3. (done) The dead surfaces are gone: iOS `SearchView` (superseded by
    `ChatSearchView`), `ResearchView`, `VisionView`, `FoldersView` and
    `SharedChatsView`, plus Android's orphaned `AccountSettingsScreen`. The
    route/case and the `SearchView` destination were removed with them.
@@ -409,6 +420,19 @@ the scrim and only closed the drawer. The hero, search pill, destination and
 recent rows now carry `contentShape(Rectangle())`, the fix the account rows had
 already received.
 
+**Explore and Discover drew under the system navigation bar.** Their own header
+(the orb, the title, the search control) sat in the bar's band — the bar's
+BackButton at y 62 over the search button at y 50 — and the bar swallowed the
+search tap. Both pages now hide the system bar because their header IS the
+chrome. Discover gained an explicit back control; Explore keeps its dock's
+Home. Chats, Profile and the pushed sheet pages are unchanged: they either rely
+on the system bar or already hide it.
+
+**Screens audit result.** Every `AeroRoute` and every `GsRoutes` constant now
+has a real pusher except `GLASS_SPECIMEN` (documented internal tooling). The
+nine reference screens, Voice & Speech and Travel Agent are reachable on both
+platforms; no unreachable view remains in the tree.
+
 ## Instrument notes worth keeping
 
 **The iOS card gate was calibrated on its own captures (2026-10-30).** Its
@@ -425,6 +449,17 @@ captures, and the title probe stops at 300 pt. All six pass, all six
 `--self-test` doctoring runs still go red, and the Android renders from the
 same commit still pass unchanged on their own numbers. `--derive` reprints
 every row if a capture legitimately moves.
+
+**The card gate's three-page extension found two real Android defects on its
+first measurement (2026-10-30).** Model Selection and Voice & Speech were
+composed on `RefPage`, which paints no backdrop, while every reference page —
+and both pages' iOS twins, through `GsSettingsPage` — sits on the bloom. Voice
+then measured zero lit rims against the 247 L floor, because its cards also used
+`RefCard`'s default `Card` material (237 L) instead of the reference `CardLight`
+(253 L). Both pages now use `RefSettingsPage`; Voice's hero and group pass
+`CardLight` (and `RefSection` gained a `role` parameter for it). The gate
+measures 3 / 4 / 2 cards on both platforms, and the existence-only captures that
+preceded it had passed both defects.
 
 The Settings gate is green on both platforms (`3dc6e9ff`) *because* several
 instruments were repaired, each found by a failing run: iOS was being graded with

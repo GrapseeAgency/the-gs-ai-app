@@ -224,13 +224,14 @@ fun RefCard(
 fun RefSection(
     label: String? = null,
     modifier: Modifier = Modifier,
+    role: GsGlassRole = GsGlassRole.Card,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         if (!label.isNullOrBlank()) {
             RefSectionLabel(label)
         }
-        RefCard(content = content)
+        RefCard(role = role, content = content)
     }
 }
 

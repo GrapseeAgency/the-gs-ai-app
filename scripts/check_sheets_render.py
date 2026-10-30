@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
-"""check_sheets_render.py — the six owner sheets' measured card gate.
+"""check_sheets_render.py — the nine reference pages' measured card gate.
 
 WHY THIS EXISTS
 ---------------
-The six sheets (docs/reference/pending) were proven by CAPTURES ONLY: a test
-wrote six PNGs and the workflow asserted they existed and were not empty. That
-is existence evidence. It cannot see the drift the third pass actually found:
+The reference pages (docs/reference/pending) were proven by CAPTURES ONLY: a
+test wrote the PNGs and the workflow asserted they existed and were not empty.
+That is existence evidence. It cannot see the drift the third pass found:
 
   * the inbox and the provider list were ONE card with hairlines while both
     mocks draw every row as its own card with a gap;
   * the Available Integrations tiles had five different heights, so their "+"
     marks did not share a baseline;
   * a page could run taller than its mock and still pass.
+
+The six owner sheets are joined by the three pages ported after them — Model
+Selection, Chat History & Search, and Voice & Speech. They are measured by the
+same law: a header at the kit's type size, a lit card rim, and the announced
+card count inside the page's own window. The cards below the search field and
+filter chips are what the gate counts; those controls are not cards.
 
 This gate measures the render the way those defects appear in pixels.
 
@@ -154,6 +160,31 @@ SCREENS = {
         rims_ios=2,
         rim_window_ios=(450.0, 820.0),
         steps_ios=None,
+    ),
+    # The three ported pages measure the same card counts on both platforms
+    # (model 3, history 4, voice 2) and their rims fall in the same windows, so
+    # no `_ios` override is needed today. `--derive` is how a future platform
+    # divergence gets its own ruler, as the six sheets already do.
+    "model": dict(
+        stem="ref-model",
+        rims=3,
+        rim_window=(90.0, 820.0),
+        steps=None,
+        note="AI Model, Reasoning Effort, Model Preferences",
+    ),
+    "history": dict(
+        stem="ref-chat-history",
+        rims=4,
+        rim_window=(140.0, 800.0),
+        steps=None,
+        note="totals card, two quick-action rows, new-chat CTA",
+    ),
+    "voice": dict(
+        stem="ref-voice",
+        rims=2,
+        rim_window=(40.0, 800.0),
+        steps=None,
+        note="Read aloud hero, Voice group",
     ),
 }
 

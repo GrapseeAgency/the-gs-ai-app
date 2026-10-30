@@ -32,7 +32,7 @@ on:
       # in those mocks, so a commit to either has to run this job.
       - "scripts/check_settings_render.py"
       - "docs/reference/settings/**"
-      # The six owner sheets are rendered and gated here; a change to the card
+      # The reference pages are rendered and gated here; a change to the card
       # law, the inventory or the mocks has to run this job.
       - "scripts/check_sheets_render.py"
       - "scripts/check_sheets_copy_parity.py"
@@ -394,12 +394,12 @@ jobs:
             done
           done
 
-      - name: Collect the owner-sheet renders
+      - name: Collect the reference-page renders
         if: always()
         run: |
           set -euo pipefail
           # ReferenceSheetsRenderTests shares the same /tmp channel. These are
-          # the six screens under docs/reference/pending; the inbox is seeded
+          # the nine pages under docs/reference/pending; the inbox is seeded
           # test-only, exactly as Android's fixture seeds it, and cleared by the
           # test's defer so the next launch starts empty.
           SRC=/tmp/gs-nexly-renders
@@ -415,7 +415,7 @@ jobs:
               || { echo "::error::$name-393x852.png missing — the owner-sheet render harness did not produce it"; exit 1; }
           done
 
-      - name: Check the owner sheets' copy inventory on both platforms
+      - name: Check the reference pages' copy inventory on both platforms
         if: always()
         run: |
           set -euo pipefail
@@ -425,14 +425,14 @@ jobs:
           python3 scripts/check_sheets_copy_parity.py
           python3 scripts/check_sheets_copy_parity.py --self-test
 
-      - name: Measure the owner sheets against their card contract
+      - name: Measure the reference pages against their card contract
         if: always()
         run: |
           set -euo pipefail
           # The iOS captures are the same 393x852 canvas as Android's, so the
           # same card law applies: title ink, lit rim, seven inbox cards, six
-          # provider cards. This is the iOS half of
-          # `check_sheets_render.py`; Android runs it against its Roborazzi
+          # provider cards, and each page's own card count. This is the iOS half
+          # of `check_sheets_render.py`; Android runs it against its Roborazzi
           # renders and this step against the windowed simulator captures.
           DIR=ios/build/nexly-renders
           for pair in alerts:nexly-alerts-ios \
@@ -440,7 +440,10 @@ jobs:
                       security:nexly-security-ios \
                       subscription:nexly-subscription-ios \
                       help:nexly-help-ios \
-                      connected:nexly-integrations-ios; do
+                      connected:nexly-integrations-ios \
+                      model:nexly-model-ios \
+                      history:nexly-chat-history-ios \
+                      voice:nexly-voice-ios; do
             screen=${pair%%:*}
             stem=${pair##*:}
             PNG="$DIR/$stem-393x852.png"
@@ -457,7 +460,10 @@ jobs:
                       security:nexly-security-ios \
                       subscription:nexly-subscription-ios \
                       help:nexly-help-ios \
-                      connected:nexly-integrations-ios; do
+                      connected:nexly-integrations-ios \
+                      model:nexly-model-ios \
+                      history:nexly-chat-history-ios \
+                      voice:nexly-voice-ios; do
             screen=${pair%%:*}
             stem=${pair##*:}
             python3 scripts/check_sheets_render.py \

@@ -54,7 +54,7 @@ on:
       # whose numbers it enforces, so a commit to either must run this job.
       - 'scripts/check_settings_render.py'
       - 'docs/reference/settings/**'
-      # The six owner sheets' card gate below blocks on this script and on the
+      # The reference pages' card gate below blocks on this script and on the
       # mocks under docs/reference/pending, so a commit to either runs this job.
       - 'scripts/check_sheets_render.py'
       - 'scripts/check_sheets_copy_parity.py'
@@ -89,7 +89,7 @@ on:
       # whose numbers it enforces, so a commit to either must run this job.
       - 'scripts/check_settings_render.py'
       - 'docs/reference/settings/**'
-      # The six owner sheets' card gate below blocks on this script and on the
+      # The reference pages' card gate below blocks on this script and on the
       # mocks under docs/reference/pending, so a commit to either runs this job.
       - 'scripts/check_sheets_render.py'
       - 'scripts/check_sheets_copy_parity.py'
@@ -741,12 +741,12 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Nexly owner-sheet renders (real Compose tree, JVM)
+      - name: Nexly reference-page renders (real Compose tree, JVM)
         if: always()
         working-directory: android
         run: |
           set -euo pipefail
-          # The six reference sheets under docs/reference/pending, rendered at
+          # The nine reference pages under docs/reference/pending, rendered at
           # the mock's own canvas. The inbox is seeded TEST-ONLY in the suite so
           # its row rhythm can be seen at all; the shipped store starts empty.
           ./gradlew --no-daemon --console=plain --stacktrace :app:testDebugUnitTest \
@@ -755,7 +755,8 @@ jobs:
           SHOTS=app/build/screenshots
           for name in ref-notifications-alerts ref-notifications-inbox \
                       ref-account-security ref-subscription-usage \
-                      ref-help-support ref-connected-apps; do
+                      ref-help-support ref-connected-apps \
+                      ref-model ref-chat-history ref-voice; do
             for attempt in 1 2 3 4 5 6; do
               [ -s "$SHOTS/$name.png" ] && break
               sleep 5
@@ -763,9 +764,9 @@ jobs:
             test -s "$SHOTS/$name.png" \
               || { echo "::error::$name.png was not produced"; exit 1; }
           done
-          echo "rendered the six owner sheets"
+          echo "rendered the nine reference pages"
 
-      - name: Measure the six owner sheets against their card contract
+      - name: Measure the reference pages against their card contract
         if: always()
         run: |
           set -euo pipefail
@@ -773,17 +774,20 @@ jobs:
           # if a section or row the mock draws is missing on either side.
           python3 scripts/check_sheets_copy_parity.py
           python3 scripts/check_sheets_copy_parity.py --self-test
-          # These six captures used to be evidence of EXISTENCE only. This
-          # blocks on the measured header, the lit card rim and the card
-          # rhythm the mocks draw — the inbox's seven cards, the provider
-          # list's six, and each sheet's group-card count.
+          # These captures used to be evidence of EXISTENCE only. This blocks on
+          # the measured header, the lit card rim and the card rhythm the mocks
+          # draw — the inbox's seven cards, the provider list's six, and each
+          # page's own card count.
           SHOTS=android/app/build/screenshots
           for pair in alerts:ref-notifications-alerts \
                       inbox:ref-notifications-inbox \
                       security:ref-account-security \
                       subscription:ref-subscription-usage \
                       help:ref-help-support \
-                      connected:ref-connected-apps; do
+                      connected:ref-connected-apps \
+                      model:ref-model \
+                      history:ref-chat-history \
+                      voice:ref-voice; do
             screen=${pair%%:*}
             stem=${pair##*:}
             PNG="$SHOTS/$stem.png"
@@ -799,14 +803,17 @@ jobs:
                       security:ref-account-security \
                       subscription:ref-subscription-usage \
                       help:ref-help-support \
-                      connected:ref-connected-apps; do
+                      connected:ref-connected-apps \
+                      model:ref-model \
+                      history:ref-chat-history \
+                      voice:ref-voice; do
             screen=${pair%%:*}
             stem=${pair##*:}
             python3 scripts/check_sheets_render.py \
               --render "$SHOTS/$stem.png" --screen "$screen" --self-test
           done
 
-      - name: Upload the owner-sheet renders
+      - name: Upload the reference-page renders
         if: always()
         uses: actions/upload-artifact@v4
         with:

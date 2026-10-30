@@ -9,6 +9,8 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.data.PlanStore
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.di.ServiceLocator
+import com.grapsee.gsai.ui.chat.ChatSearchScreen
 import com.grapsee.gsai.ui.integrations.ConnectedAppsScreen
 import com.grapsee.gsai.ui.notifications.NotificationsInboxScreen
 import com.grapsee.gsai.ui.subscription.SubscriptionUsageScreen
@@ -26,14 +28,20 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The six owner sheets (docs/reference/pending) rendered on the JVM at the
+ * The nine reference pages (docs/reference/pending) rendered on the JVM at the
  * mock's own canvas — 393×852 — so the layout can be compared with the PNGs
  * rather than described. Gated like the settings captures: nothing runs unless
  * `-Dgs.screenshots=true`.
  *
+ * The six owner sheets are joined by the three pages ported after them (model
+ * selection, chat history, voice & speech), so every reference screen is
+ * captured by the same harness and measured by the same card gate.
+ *
  * The inbox fixture is TEST-ONLY: the shipped store starts empty and the screen
  * says so. Seeding it here is how the row geometry (unread dot, category tag,
  * two-line body, 56pt pitch) can be seen at all without shipping invented data.
+ * The chat history has no fixture at all: its capture is the honest empty page
+ * an install with no chats sees.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -57,6 +65,15 @@ class ReferenceSheetsScreenshotTest {
         ctx.getSharedPreferences("gs_notice_inbox", Context.MODE_PRIVATE)
             .edit().clear().commit()
         SettingsStore.init(ctx)
+        // `init` falls back to the CURRENT field when the process already has
+        // the store (these suites share one JVM), so write the model keys the
+        // mock draws instead of inheriting a neighbour test's selection.
+        SettingsStore.updatePreferredModel("pro")
+        SettingsStore.updateReasoningEffort("standard")
+        // Chat History reads the real conversation store, so its capture needs
+        // the same service graph the app boots; the DB is empty in this
+        // harness, which is exactly the page an install with no chats sees.
+        ServiceLocator.init(ctx)
         PlanStore.init(ctx)
         // No install in this harness has been through a purchase path; keep a
         // stale activation on this machine from turning the hero "Active".
@@ -117,6 +134,32 @@ class ReferenceSheetsScreenshotTest {
     fun connectedApps() =
         shoot("build/screenshots/ref-connected-apps.png") {
             ConnectedAppsScreen(onBack = {}, onNavigate = {})
+        }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun modelSelection() =
+        shoot("build/screenshots/ref-model.png") {
+            AiIntelligenceScreen(
+                onBack = {},
+                onLocalAiRequested = {},
+                onTryComponents = {},
+                onOpenModelDetails = {},
+            )
+        }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun chatHistory() =
+        shoot("build/screenshots/ref-chat-history.png") {
+            ChatSearchScreen(onBack = {})
+        }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun voiceSpeech() =
+        shoot("build/screenshots/ref-voice.png") {
+            VoiceSettingsScreen(onBack = {}, onNavigate = {})
         }
 
     private fun seedInbox(ctx: Context, now: Long) {

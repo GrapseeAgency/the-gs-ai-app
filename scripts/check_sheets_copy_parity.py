@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""check_sheets_copy_parity.py — the six owner sheets' copy inventory, on both
+"""check_sheets_copy_parity.py — the reference pages' copy inventory, on both
 platforms.
 
 WHY THIS EXISTS
