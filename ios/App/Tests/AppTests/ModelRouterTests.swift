@@ -5,6 +5,11 @@ import XCTest
 /// Android's `ModelRouterTest`. It is a pure function on purpose: the reference
 /// draws Auto Select ON and Medium lit at once, and this is what makes that
 /// pair mean something instead of two stored values nothing reads.
+///
+/// `@MainActor` because the last test drives `SettingsStore.shared`, whose
+/// published properties are main-actor isolated — the same reason
+/// `GsNotifierTests` carries it.
+@MainActor
 final class ModelRouterTests: XCTestCase {
 
     func testAnImageAlwaysWantsTheVisionModel() {
