@@ -273,6 +273,7 @@ struct AeroDrawer: View {
             .overlay(Capsule().strokeBorder(Color.white.opacity(scheme == .dark ? 0.14 : 0.65),
                                             lineWidth: 1))
             .padding(.horizontal, DrawerMetrics.contentInset)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Search chats")
@@ -313,6 +314,11 @@ struct AeroDrawer: View {
                         startPoint: .leading, endPoint: .trailing))
             )
             .padding(.horizontal, DrawerMetrics.contentInset)
+            // The Spacer between the label and the chevron is not drawn, so
+            // without this the middle of the row was not tappable at all —
+            // the same defect the account rows had (run 41031702968's UI test
+            // tapped the centre of Explore and only closed the drawer).
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("New chat")
@@ -359,6 +365,7 @@ struct AeroDrawer: View {
                           ? Aero.accent.opacity(0.12) : Color.clear)
             )
             .padding(.horizontal, 0)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(destination.label)
@@ -388,6 +395,7 @@ struct AeroDrawer: View {
             .padding(.leading, DrawerMetrics.contentInset)
             .padding(.trailing, DrawerMetrics.chevronInset)
             .frame(minHeight: DrawerMetrics.recentPitch)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(recent.title), \(recent.timestamp)")

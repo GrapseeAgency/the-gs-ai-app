@@ -87,6 +87,14 @@ final class ReferenceSheetsRenderTests: XCTestCase {
             prefix: "nexly-voice-ios")
     }
 
+    /// Travel Agent is reachable from the trip planner now; its capture is the
+    /// visual half of that wiring (the UI test drives the tap).
+    func testTravelAgentRenders() async throws {
+        try await capturePage(
+            view: { TravelAgentView(onBack: {}, onSendToChat: { _ in }) },
+            prefix: "nexly-travel-ios")
+    }
+
     // MARK: helpers
 
     /// 18:00 today, so a capture at any hour sees the same Today/Earlier split.

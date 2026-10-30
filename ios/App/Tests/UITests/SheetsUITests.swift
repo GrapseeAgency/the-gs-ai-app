@@ -144,7 +144,15 @@ final class SheetsUITests: XCTestCase {
             return
         }
         menu.tap()
-        let explore = app.buttons["Explore"].firstMatch
+        // Inside the drawer, not Home's Explore quick action that sits under
+        // it: both are labelled "Explore" and a plain firstMatch can resolve
+        // the covered one.
+        let drawer = app.otherElements["Navigation menu"].firstMatch
+        guard drawer.waitForExistence(timeout: 12) else {
+            XCTFail("the navigation menu never appeared")
+            return
+        }
+        let explore = drawer.buttons["Explore"].firstMatch
         guard explore.waitForExistence(timeout: 12) else {
             XCTFail("the drawer never offered Explore")
             return
@@ -153,7 +161,7 @@ final class SheetsUITests: XCTestCase {
 
         let openSearch = app.buttons["Open search"].firstMatch
         guard openSearch.waitForExistence(timeout: 15) else {
-            XCTFail("Explore never offered its search control")
+            XCTFail("Explore never offered its search control; screen: \(app.debugDescription)")
             return
         }
         openSearch.tap()

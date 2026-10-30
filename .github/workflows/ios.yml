@@ -409,7 +409,7 @@ jobs:
                       nexly-security-ios nexly-subscription-ios \
                       nexly-help-ios nexly-integrations-ios \
                       nexly-model-ios nexly-chat-history-ios \
-                      nexly-voice-ios; do
+                      nexly-voice-ios nexly-travel-ios; do
             if [ -d "$SRC" ]; then cp "$SRC/$name-393x852.png" "$DIR/" 2>/dev/null || true; fi
             test -s "$DIR/$name-393x852.png" \
               || { echo "::error::$name-393x852.png missing — the owner-sheet render harness did not produce it"; exit 1; }
