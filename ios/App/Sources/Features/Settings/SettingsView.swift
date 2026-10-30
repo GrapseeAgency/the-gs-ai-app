@@ -31,6 +31,7 @@ struct SettingsView: View {
 
     // Sign-out is UI-local; the privacy flows live on PrivacyDataControlsView.
     @State private var showSignOut = false
+    @State private var showLicences = false
 
     var body: some View {
         Group {
@@ -55,6 +56,7 @@ struct SettingsView: View {
         } message: {
             Text("You can sign back in any time. Your local chats stay on this device.")
         }
+        .sheet(isPresented: $showLicences) { licencesSheet }
     }
 
     // MARK: Hub — the reference mock
@@ -494,7 +496,52 @@ struct SettingsView: View {
                     url: "mailto:contact@grapsee.agency")
             linkRow("Privacy policy", detail: "How the app handles your data", glyph: "lock",
                     url: "https://grapsee.agency/privacy")
+            AeroListRow(
+                title: "Open-source licences",
+                subtitle: "Poppins, Swift, llama.cpp and more",
+                leading: { leadingIcon("book") },
+                trailing: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Aero.textMuted)
+                },
+                action: { showLicences = true }
+            )
         }
+    }
+
+    /// The same credit list Android shows, naming what this build actually uses.
+    private var licencesSheet: some View {
+        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
+            Text("Open-source licences")
+                .font(Aero.headline())
+                .foregroundStyle(Aero.text)
+            ScrollView {
+                Text("""
+                Poppins — Copyright 2020 The Poppins Project Authors, SIL Open Font License 1.1.
+
+                Swift and SwiftUI — Apache License 2.0 with Runtime Library Exception.
+
+                llama.cpp — MIT License.
+
+                SQLite — public domain.
+
+                Full texts ship in the repository's LICENSES directory.
+                """)
+                .font(Aero.caption())
+                .foregroundStyle(Aero.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            Button("Close") { showLicences = false }
+                .font(Aero.button())
+                .foregroundStyle(Aero.text)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Capsule().fill(Aero.container))
+        }
+        .padding(Aero.Spacing.l)
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
 
     /// Read live from the bundle so the row always names the installed build.

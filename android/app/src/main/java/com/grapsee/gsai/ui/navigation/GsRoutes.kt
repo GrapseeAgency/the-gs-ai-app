@@ -14,6 +14,7 @@ object GsRoutes {
     // Reference settings architecture — each row in the hub is a real
     // destination with its own scaffold, not an accordion that grows the hub.
     const val SETTINGS_ACCOUNT = "settings/account"
+    const val SETTINGS_IDENTITY = "settings/identity"
     const val SETTINGS_CHAT = "settings/chat"
     const val SETTINGS_APPEARANCE = "settings/appearance"
     const val SETTINGS_THEME = "settings/theme"

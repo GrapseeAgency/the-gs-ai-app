@@ -5504,21 +5504,31 @@ Work Log:
   its one unique real action (Clear Local Data, without sign-out) moved over,
   and the duplicate section, its private export flow, the dead `helpImprove`
   preference and `SettingsSectionID.privacy` are deleted.
+- The identity editor did not exist anywhere: Android's Profile Name/Email rows
+  opened Account & Security, whose identity card (and Grapsee Mail row) linked
+  back to Profile — a loop with no field on either end; iOS's Profile card had
+  a pencil badge and chevron but no action. Added SETTINGS_IDENTITY /
+  IdentitySettingsScreen (name + email, `AccountStore`, email validation) and
+  routed Profile's rows, the identity card and the Grapsee Mail row to it; iOS
+  opens the same editor as a sheet from its Profile card. Android's card also
+  stopped inventing "Arafat"/"arafat@example.com" when the store is empty.
 - iOS "Delete account" promised permanent account and data deletion and did
   nothing but a haptic. It now wipes the local corpus and signs out, matching
   Android, and the dialog copy names exactly that. iOS About gained the
-  Website/Contact/Privacy rows Android already had.
+  Website/Contact/Privacy rows Android already had, and the open-source credit
+  list Android shows (Poppins, Swift/SwiftUI, llama.cpp, SQLite).
 - iOS's Appearance page carried a static accent swatch that read as a control
   and a hub promise ("Theme, accent color, and display") the platform cannot
   keep — iOS has no accent-family system. Both are removed; the row now says
   "Theme and display". Background style remains Android-only and is documented
   as a platform capability, not a missing page.
-- Evidence: Android full suite 379 tests, 0 failures, 49 skipped; the
-  interaction class is 13 tests including the two new language cases and the
-  Billing CTA. Copy parity (10 screens), Kotlin brace/import lints,
-  `swift_structure_gate` and `ios_static_gates` all pass locally. The iOS run on
-  f1ab4a42 caught one Swift compile error (a two-section `aboutSection` needs
-  `@ViewBuilder`), fixed before this entry.
+- Evidence: Android full suite 381 tests, 0 failures, 49 skipped; the
+  interaction class is 15 tests including the language pair, the Billing CTA
+  and the identity editor's route + save. Copy parity (10 screens), Kotlin
+  brace/import lints, `swift_structure_gate` and `ios_static_gates` all pass
+  locally. The iOS run on f1ab4a42 caught one Swift compile error (a two-section
+  `aboutSection` needs `@ViewBuilder`), fixed before this entry; Android on
+  4f986350 (privacy consolidation, Billing, accent) is green (41102559575).
 
 Stage Summary:
 - The language page and the settings shell sweep close the biggest unfinished

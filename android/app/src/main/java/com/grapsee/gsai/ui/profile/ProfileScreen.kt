@@ -2,11 +2,11 @@ package com.grapsee.gsai.ui.profile
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -65,7 +65,7 @@ fun ProfileScreen(
     val colors = GsTheme.colors
     val name = AccountStore.displayName(context)
     val email = AccountStore.email(context)
-    val initials = initialsFor(name.ifBlank { "Arafat" })
+    val initials = initialsFor(name).ifBlank { "GS" }
 
     RefSettingsPage(
         title = "Profile & Preferences",
@@ -86,6 +86,9 @@ fun ProfileScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        // The pencil badge was decoration: nothing opened an
+                        // editor. The card is the way into the identity page.
+                        .clickable { onNavigate(GsRoutes.SETTINGS_IDENTITY) }
                         .padding(horizontal = 12.dp, vertical = 11.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -110,7 +113,7 @@ fun ProfileScreen(
                     Spacer(Modifier.width(11.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            name.ifBlank { "Arafat" },
+                            name.ifBlank { "Your account" },
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = GsFonts.Product,
@@ -118,7 +121,7 @@ fun ProfileScreen(
                             maxLines = 1,
                         )
                         Text(
-                            email.ifBlank { "arafat@example.com" },
+                            email.ifBlank { "No Grapsee address on this device" },
                             fontSize = 11.5.sp,
                             fontFamily = GsFonts.Product,
                             color = colors.textTertiary,
@@ -150,14 +153,14 @@ fun ProfileScreen(
             RefNavRow(
                 title = "Name",
                 subtitle = name.ifBlank { "Not set" },
-                onClick = { onNavigate(GsRoutes.SETTINGS_ACCOUNT) },
+                onClick = { onNavigate(GsRoutes.SETTINGS_IDENTITY) },
                 leading = { RefWellTile(GsIcons.UserRound, GsWellTone.Peach, 28.dp) },
             )
             RefRowDivider()
             RefNavRow(
                 title = "Email",
                 subtitle = email.ifBlank { "Not set" },
-                onClick = { onNavigate(GsRoutes.SETTINGS_ACCOUNT) },
+                onClick = { onNavigate(GsRoutes.SETTINGS_IDENTITY) },
                 leading = { RefWellTile(GsIcons.Mail, GsWellTone.Lilac, 28.dp) },
             )
             RefRowDivider()

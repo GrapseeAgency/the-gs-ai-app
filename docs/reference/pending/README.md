@@ -386,11 +386,11 @@ agree; "Remember my choices" still governs only the NEW-chat default.
    (iOS) pinning the rule that every OTHER tool still seeds the composer.
 4. (done 2026-10-30) The completeness pass closed Language, the settings
    sub-page shell/material sweep, iOS's inert delete-account and its missing
-   About links, and Billing's missing way into Subscription & Usage. iOS's
-   static accent swatch and the matching hub promise are removed rather than
-   faked; background style stays Android-only and is recorded as a capability.
-   The pass continues through the chat, Explore and billing surfaces below the
-   fold.
+   About links, Billing's missing way into Subscription & Usage, the identity
+   editor, and iOS's duplicate privacy page. iOS's static accent swatch and
+   the matching hub promise are removed rather than faked; background style
+   stays Android-only and is recorded as a capability. The pass continues
+   through the chat, Explore and billing surfaces below the fold.
 
 ## Sub-page reachability (2026-10-30)
 
@@ -465,7 +465,17 @@ Three surfaces failed that bar and are now closed:
 - **iOS "Delete account" was inert.** The confirmation promised permanent
   account and data deletion and performed a haptic. It now wipes the local
   corpus and signs out — what Android's row already did — and the copy says so.
-  iOS About also gained the Website/Contact/Privacy links Android already had.
+  iOS About also gained the Website/Contact/Privacy links Android already had,
+  plus the open-source credit list Android shows.
+- **The identity editor did not exist.** Android's Profile Name/Email rows
+  opened Account & Security, whose identity card linked back to Profile — a
+  loop with no field anywhere; iOS's Profile card carried a pencil badge and a
+  chevron but opened nothing, and its Name/Email rows were static. Android now
+  has `SETTINGS_IDENTITY` (`IdentitySettingsScreen`) reached from Profile, the
+  identity card and the Grapsee Mail row; iOS's card opens the same two-field
+  editor as a sheet. It writes `AccountStore` and says the address changes this
+  install's identity, not a mailbox. Android's card also stopped inventing
+  "Arafat"/"arafat@example.com" when the store is empty.
 - **iOS had two privacy pages.** "Privacy Settings" opened the reference page
   while "Data Controls" and "Export / Delete Data" opened a different, older
   settings section — and Connected Apps' permissions link went there too. All

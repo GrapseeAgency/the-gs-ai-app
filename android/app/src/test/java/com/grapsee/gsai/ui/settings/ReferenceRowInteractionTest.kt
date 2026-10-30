@@ -6,13 +6,17 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
+import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.billing.BillingScreen
 import com.grapsee.gsai.ui.navigation.GsRoutes
+import com.grapsee.gsai.ui.profile.ProfileScreen
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -242,6 +246,42 @@ class ReferenceRowInteractionTest {
         compose.onNodeWithText("Match my message").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Speech settings").performScrollTo().performClick()
         assertEquals("the speech row must reach the system settings", 1, speechSettingsOpened)
+    }
+
+    @Test
+    fun profileNameOpensTheIdentityEditor() {
+        var route: String? = null
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                ProfileScreen(onNavigate = { route = it }, onBack = {})
+            }
+        }
+
+        compose.onNodeWithText("Name").performScrollTo().performClick()
+        assertEquals(GsRoutes.SETTINGS_IDENTITY, route)
+    }
+
+    @Test
+    fun identityEditorSavesNameAndEmail() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        AccountStore.setDisplayName(ctx, "Old Name")
+        AccountStore.setEmail(ctx, "old@grapsee.com")
+        var back = 0
+
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                IdentitySettingsScreen(onBack = { back += 1 })
+            }
+        }
+
+        compose.onNodeWithTag("identity-name").performTextReplacement("Arafat Khan")
+        compose.onNodeWithTag("identity-email").performTextReplacement("arafat@grapsee.com")
+        compose.onNodeWithText("Save").performScrollTo().performClick()
+        compose.waitForIdle()
+
+        assertEquals("Arafat Khan", AccountStore.displayName(ctx))
+        assertEquals("arafat@grapsee.com", AccountStore.email(ctx))
+        assertEquals("Save must close the editor", 1, back)
     }
 
     @Test

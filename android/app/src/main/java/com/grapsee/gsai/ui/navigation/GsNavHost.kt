@@ -53,6 +53,7 @@ import com.grapsee.gsai.ui.settings.AccountSecurityScreen
 import com.grapsee.gsai.ui.settings.AiIntelligenceScreen
 import com.grapsee.gsai.ui.settings.AppearanceSettingsScreen
 import com.grapsee.gsai.ui.settings.ChatSettingsScreen
+import com.grapsee.gsai.ui.settings.IdentitySettingsScreen
 import com.grapsee.gsai.ui.settings.LanguageSettingsScreen
 import com.grapsee.gsai.ui.settings.MemorySettingsScreen
 import com.grapsee.gsai.ui.settings.ModelDetailsScreen
@@ -327,6 +328,9 @@ fun GsNavHost(
                 onBack = back,
                 onNavigate = open,
             )
+        }
+        composable(GsRoutes.SETTINGS_IDENTITY) {
+            IdentitySettingsScreen(onBack = back)
         }
         composable(GsRoutes.SETTINGS_CHAT) {
             ChatSettingsScreen(onBack = back, onNavigate = open)

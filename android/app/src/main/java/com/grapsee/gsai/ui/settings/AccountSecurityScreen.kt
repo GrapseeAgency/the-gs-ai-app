@@ -178,8 +178,8 @@ fun AccountSecurityScreen(
                 title = "Grapsee Mail",
                 subtitle = email.ifBlank { "Not set" },
                 // The one real credential: the address this install signs in
-                // with. Editing it is the profile editor.
-                onClick = { onNavigate(GsRoutes.PROFILE) },
+                // with. The identity page is its editor.
+                onClick = { onNavigate(GsRoutes.SETTINGS_IDENTITY) },
                 leading = { RefWellTile(GsIcons.Mail, GsWellTone.Lilac, 34.dp) },
                 trailing = {
                     Row(verticalAlignment = Alignment.CenterVertically) {

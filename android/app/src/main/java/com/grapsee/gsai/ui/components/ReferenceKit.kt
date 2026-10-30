@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
@@ -1118,6 +1119,8 @@ fun RefTextField(
     leadingIcon: ImageVector? = null,
     enabled: Boolean = true,
     focusRequester: FocusRequester? = null,
+    /** A handle on the EDITABLE node; the outer column takes [modifier]. */
+    fieldTestTag: String? = null,
 ) {
     val colors = GsTheme.colors
     var revealed by remember { mutableStateOf(false) }
@@ -1139,6 +1142,10 @@ fun RefTextField(
                 .fillMaxWidth()
                 .then(
                     if (focusRequester != null) Modifier.focusRequester(focusRequester)
+                    else Modifier
+                )
+                .then(
+                    if (fieldTestTag != null) Modifier.testTag(fieldTestTag)
                     else Modifier
                 ),
             enabled = enabled,

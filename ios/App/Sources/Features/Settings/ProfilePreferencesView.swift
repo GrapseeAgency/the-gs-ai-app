@@ -13,6 +13,7 @@ struct ProfilePreferencesView: View {
     @ObservedObject private var account = AccountStore.shared
     @ObservedObject private var onboarding = OnboardingProfileStore.shared
     @Environment(\.dismiss) private var dismiss
+    @State private var showIdentityEditor = false
 
     var body: some View {
         GsSettingsPage(
@@ -56,12 +57,16 @@ struct ProfilePreferencesView: View {
             )
             Spacer().frame(height: 10)
         }
+        .sheet(isPresented: $showIdentityEditor) { IdentityEditSheet() }
     }
 
     // MARK: Pieces
 
     private var profileCard: some View {
         GsGroupCard {
+            // The card carried a chevron and a pencil badge but opened
+            // nothing; it is the way into the identity editor now.
+            Button { showIdentityEditor = true } label: {
             HStack(alignment: .center, spacing: 11) {
                 ZStack(alignment: .bottomTrailing) {
                     Circle()
@@ -100,6 +105,10 @@ struct ProfilePreferencesView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 11)
+            .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Edit your details")
         }
     }
 
@@ -163,6 +172,67 @@ struct ProfilePreferencesView: View {
                     .padding(.leading, 50)
                     .padding(.trailing, 12)
             }
+        }
+    }
+}
+
+/// The editor behind Profile's Name/Email rows and Account & Security's
+/// identity card. Before this sheet the two screens pointed at each other for
+/// editing and neither had a field.
+private struct IdentityEditSheet: View {
+
+    @ObservedObject private var account = AccountStore.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var email = ""
+
+    private var emailInvalid: Bool {
+        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && !trimmed.contains("@")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
+            Text("Your details")
+                .font(Aero.headline())
+                .foregroundStyle(Aero.text)
+            TextField("Your name", text: $name)
+                .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+            TextField("you@grapsee.com", text: $email)
+                .textFieldStyle(.roundedBorder)
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            if emailInvalid {
+                Text("Enter an address like you@grapsee.com")
+                    .font(Aero.caption())
+                    .foregroundStyle(Aero.danger)
+            }
+            Text("Saved on this device. This changes what the app shows; it does not create or move a Grapsee Mail account.")
+                .font(Aero.caption())
+                .foregroundStyle(Aero.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .foregroundStyle(Aero.textMuted)
+                Spacer()
+                Button("Save") {
+                    account.setDisplayName(name.trimmingCharacters(in: .whitespacesAndNewlines))
+                    account.setEmail(email.trimmingCharacters(in: .whitespacesAndNewlines))
+                    dismiss()
+                }
+                .font(Aero.button())
+                .disabled(emailInvalid)
+            }
+            Spacer()
+        }
+        .padding(Aero.Spacing.l)
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+        .onAppear {
+            name = account.displayName
+            email = account.email
         }
     }
 }
