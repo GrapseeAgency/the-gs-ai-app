@@ -5405,3 +5405,18 @@ Work Log:
 
 Stage Summary:
 - Both workflows are green on the branch: android-app at d43e433f (hub rows, dead rows, copy gate) and iOS at 2bad9eb5 (all screens, all gates, full UI reachability). Remaining documented work: delete/wire the dead iOS-only surfaces and Android's orphaned AccountSettingsScreen, and card-gate the three new pages' geometry once frozen.
+
+---
+Task ID: screen-inventory-audit
+Agent: Qoder (main)
+Task: Continue the operator's screen/sub-page audit: nothing built may be unreachable, nothing reachable may be a dead control.
+
+Work Log:
+- Full route/pusher audit both platforms. Every AeroRoute and every GsRoutes constant now has a real pusher except GLASS_SPECIMEN (documented internal tooling). Deleted the surfaces that had none and no live component: iOS SearchView (superseded), ResearchView, VisionView, FoldersView, SharedChatsView, and Android's orphaned AccountSettingsScreen; removed AeroRoute.search with its destination. NexlyChatShell.swift was restored after the first pass mistook it for dead: it hosts the live NexlyComposerBar and NexlyBrandHeader.
+- Travel Agent was the one complete screen with a mounted route and NO pusher on either platform. The trip planner now opens it in Explore's search results (both) and Discover's Popular list (both); every other catalogue tool still seeds the composer. Android ExploreReachabilityTest (2 JVM tests) and an iOS SheetsUITests method pin both halves. The now-reachable screen was also made coherent: same four starting points and prompts as Android, four capability rows, the verify-before-you-book footnote, a labelled back control, and no more Gif/Image/Video prompts that sent near-meaningless text.
+- The iOS travel UI test found two more real platform defects, each from an accessibility snapshot: (1) the drawer's destination/recent/hero/search rows put a Spacer between label and chevron with no contentShape, so a centre tap crossed the transparent middle and only closed the drawer; all rows now carry a full-width shape. (2) Explore and Discover painted their own headers UNDER the system navigation bar (bar BackButton at y 62 over the search button at y 50), so the bar swallowed the search tap; both hide the bar now, Discover has an explicit back control, and Explore keeps its dock Home.
+- The test also resolves the search field by its accessibility identifier (explore-search-input) rather than the placeholder, and Explore's row inside the Navigation menu container rather than Home's covered quick action.
+- Everything local stays green: swift_structure_gate, ios_static_gates, copy gate (10 screens), icon catalogue, Android compile + ExploreReachabilityTest + ReferenceSheetsContentTest.
+
+Stage Summary:
+- Both CI workflows were green before this round (Android 41031708845 on ca7a21f0, iOS 41027465949 on 2bad9eb5); the audit round is now on CI. Screens: nine references + Voice & Speech + Travel Agent are all reachable on both platforms; dead surfaces are gone; the drawer and account rows are fully tappable; Explore/Discover no longer draw under a system bar.

@@ -181,6 +181,16 @@ final class SheetsUITests: XCTestCase {
             XCTFail("Explore's search never offered Plan a trip; screen: \(app.debugDescription)")
             return
         }
+        // The keyboard pushes the first result above the viewport (run
+        // 41038903664: y = -6.3), so bring it back into reach before tapping.
+        for _ in 0..<3 where !trip.isHittable {
+            app.swipeDown()
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        guard trip.isHittable else {
+            XCTFail("Plan a trip never became hittable; frame: \(trip.frame); screen: \(app.debugDescription)")
+            return
+        }
         trip.tap()
         XCTAssertTrue(
             app.staticTexts["Welcome to Travel Agent"].waitForExistence(timeout: 15),
