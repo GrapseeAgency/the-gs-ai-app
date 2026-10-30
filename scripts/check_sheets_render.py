@@ -97,6 +97,13 @@ SCREENS = {
         rim_window=(150.0, 720.0),
         steps=(4, 70.0, 78.0),
         note="4 Today + 2 Earlier + closing card",
+        # iOS's kit draws the mock's measured 56 pt two-line row + 5 pt
+        # gap; Android's rows are 70-78 apart. Same law (seven separate
+        # cards at a steady pitch), platform's own ruler. Measured on run
+        # 41019419509's capture: 63.0, 62.3, 62.7, [group header], 62.7, 71.7.
+        rims_ios=7,
+        rim_window_ios=(150.0, 720.0),
+        steps_ios=(4, 62.0, 73.0),
     ),
     "connected": dict(
         stem="ref-connected-apps",
@@ -104,6 +111,10 @@ SCREENS = {
         rim_window=(150.0, 620.0),
         steps=(5, 78.0, 84.0),
         note="six provider cards",
+        # iOS: five uniform 71.3 pt steps on the same capture.
+        rims_ios=6,
+        rim_window_ios=(150.0, 620.0),
+        steps_ios=(5, 69.0, 74.0),
     ),
     "alerts": dict(
         stem="ref-notifications-alerts",
@@ -116,20 +127,50 @@ SCREENS = {
         rims=4,
         rim_window=(40.0, 800.0),
         steps=None,
+        # iOS draws its identity hero as a lit glass card as well as the four
+        # group cards — five rims, all real (54/169/429/634/783 pt).
+        rims_ios=5,
+        rim_window_ios=(40.0, 800.0),
+        steps_ios=None,
     ),
     "subscription": dict(
         stem="ref-subscription-usage",
         rims=3,
         rim_window=(140.0, 790.0),
         steps=None,
+        # iOS's Billing card sits on the page's brightest field and is a real
+        # fourth rim at 741 pt (excess 9.7, just over the floor).
+        rims_ios=4,
+        rim_window_ios=(140.0, 790.0),
+        steps_ios=None,
     ),
     "help": dict(
         stem="ref-help-support",
         rims=2,
         rim_window=(480.0, 800.0),
         steps=None,
+        # iOS's page is taller: Popular Help Topics lands at 470 pt, so the
+        # Android window would miss it and count one card instead of two.
+        rims_ios=2,
+        rim_window_ios=(450.0, 820.0),
+        steps_ios=None,
     ),
 }
+
+
+def spec_for(screen, key):
+    """The platform's own number for one spec key.
+
+    The LAW is shared — every card has a lit rim, the announced count, and a
+    steady cadence where the mock draws equal cards. The RULER is not: the two
+    kits draw different row heights, and iOS's page starts lower. These pairs
+    were derived from real captures (run 41019419509), not guessed; `--derive`
+    reprints them for recalibration.
+    """
+    spec = SCREENS[screen]
+    if PLATFORM == "ios":
+        return spec.get(f"{key}_ios", spec[key])
+    return spec[key]
 
 
 def fail(msg):
@@ -198,7 +239,11 @@ def rim_rows(gray, scale, window):
 
 
 def measure_title(gray, scale):
-    x0, x1 = int(45 * scale), int(380 * scale)
+    # 300 pt, not 380: the inbox's header carries a trailing filter control
+    # whose glyph shares the title's rows. Scanning into that column stretched
+    # the title band from 12.67 to 19.33 pt and made the iOS capture look like
+    # a type-style drift when the control was the only ink below the title.
+    x0, x1 = int(45 * scale), int(300 * scale)
     # iOS's windowed harness may start the page under the simulator's safe
     # area; its header window is taller so the title is still found.
     header_pt = 60.0 if PLATFORM == "android" else 140.0
@@ -277,10 +322,11 @@ def check(gray, scale, screen):
         )
 
     offset = header_offset(title)
+    window = spec_for(screen, "rim_window")
     rims = rim_rows(
         gray,
         scale,
-        (spec["rim_window"][0] + offset, spec["rim_window"][1] + offset),
+        (window[0] + offset, window[1] + offset),
     )
     if not rims:
         raise SystemExit(fail(f"{screen}: no card rim was measurable"))
@@ -308,13 +354,14 @@ def check(gray, scale, screen):
             "rim",
             "count",
             len(rims),
-            (spec["rims"], spec["rims"]),
-            len(rims) == spec["rims"],
+            (spec_for(screen, "rims"), spec_for(screen, "rims")),
+            len(rims) == spec_for(screen, "rims"),
         )
     )
 
-    if spec["steps"]:
-        count, lo, hi = spec["steps"]
+    steps_spec = spec_for(screen, "steps")
+    if steps_spec:
+        count, lo, hi = steps_spec
         ok, steps = cadence(rims, count, lo, hi)
         rows.append(("rhythm", f"steps[{count}x{lo:.0f}-{hi:.0f}]", steps, (lo, hi), ok))
 
@@ -410,14 +457,14 @@ def self_test(image, path, screen):
     if doctored_ok(doctor_erase(image, scale, rims), f"{path} (rims erased)"):
         failures.append("rim erase")
 
-    if SCREENS[screen]["steps"]:
+    if spec_for(screen, "steps"):
         if doctored_ok(doctor_fuse(image, scale, rims), f"{path} (cards fused)"):
             failures.append("card fusion")
 
     if failures:
         print(f"::error::{screen}: self-test could not make these probes fail: {failures}")
         return 1
-    probes = ["title", "rim"] + (["rhythm"] if SCREENS[screen]["steps"] else [])
+    probes = ["title", "rim"] + (["rhythm"] if spec_for(screen, "steps") else [])
     print(
         f"{screen}: self-test ok — {', '.join(probes)} all went red on "
         "doctored copies"

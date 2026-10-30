@@ -28,10 +28,14 @@ final class SheetsUITests: XCTestCase {
             return
         }
 
+        // In the hub's own order. `tapRow` only scrolls DOWN, which is correct
+        // for a list read top-to-bottom — tapping App Settings rows out of
+        // order would leave the next row above the viewport and the helper
+        // would walk away from it.
         let sheets: [(row: String, marker: String)] = [
             ("Privacy Settings", "Your privacy matters"),
-            ("Notifications & Alerts", "Notification Types"),
             ("AI Intelligence", "Model Selection & Reasoning Effort"),
+            ("Notifications & Alerts", "Notification Types"),
             ("Account & Security", "Sign-in Methods"),
             ("Connected Apps", "Your Connected Apps"),
             ("Help & Support", "Browse by Category"),
@@ -99,13 +103,19 @@ final class SheetsUITests: XCTestCase {
             XCTFail("the account sheet never offered Notifications")
             return
         }
+        // The sheet slides in; a tap that lands mid-transition can hit the
+        // scrim and dismiss without routing. Wait for the row itself.
+        let hittable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true"),
+            object: notifications)
+        XCTAssertEqual(XCTWaiter().wait(for: [hittable], timeout: 8), .completed)
         notifications.tap()
         XCTAssertTrue(
             app.buttons["Filter notifications"].waitForExistence(timeout: 15),
-            "the inbox opened without its filter control")
+            "the inbox opened without its filter control; screen: \(app.debugDescription)")
         XCTAssertTrue(
             app.staticTexts["Your updates, alerts and messages"].waitForExistence(timeout: 10),
-            "the inbox opened without its subtitle")
+            "the inbox opened without its subtitle; screen: \(app.debugDescription)")
     }
 
     // MARK: helpers

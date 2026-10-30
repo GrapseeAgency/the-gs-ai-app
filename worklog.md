@@ -5364,3 +5364,17 @@ Work Log:
 
 Stage Summary:
 - All nine owner references now exist on both platforms, the two newly ported screens carry their full copy inventory in the cross-platform gate and produce iOS captures, the iOS inbox is reachable again (sheet-dismiss-before-route), iOS banners have a real dispatcher and a real producer, and the four dead Android settings destinations are now reachable and asserted. Next: observe the next iOS run for the gate/UI-test calibration, then freeze the two new screens' geometry and card-gate them like the Settings trio; the iOS-only dead surfaces (SearchView, ResearchView, VisionView, FoldersView, SharedChatsView, NexlyChatShell) are noted in docs/reference/pending/README.md for deletion or wiring.
+
+---
+Task ID: ios-parity-and-ci-calibration (observed)
+Agent: Qoder (main)
+Task: Read the first observed iOS run and close what it found.
+
+Work Log:
+- Run 41019419509 compiled every new file (the app, both new screens, the dispatcher) — the first compile evidence for `PrivacyDataControlsView` too, which had been untracked. Three failures, each addressed:
+- (1) `GsNotifierTests.testReleaseNoticeSpendsItsTokenOnlyOnceRecorded` asserted an EMPTY inbox after switching the master off, but the first version's row is correctly still there. The claim is now "no second row" (`count == before`), which is the actual contract.
+- (2) `SheetsUITests` still could not open the inbox. The dismiss-then-route attempt inside the drawer was not enough: the drawer owned the sheet, so any route from it happened while its presenter was being removed. The sheet now belongs to the SHELL — `AccountSheetView` (new, in AeroDrawer.swift) is presented from `RootView`, dismisses itself, and hands the route up 0.35 s later; the drawer only calls `onAccount`. The test also waits for the row to be hittable before tapping and prints `app.debugDescription` if the page still fails, so the next red names the screen it actually reached.
+- (3) The iOS sheet card gate failed on its first real artifacts. Downloaded run 41019419509's `nexly-chat-render-ios` and ran the gate locally on all six iOS captures: inbox title 19.33 (the trailing filter glyph shared the probe's column) and cadence 63 vs 70-78; security 5 rims vs 4 (iOS draws the hero as a lit card); subscription 4 vs 3 (the Billing card is real); help 1 vs 2 (Popular Topics at 470 pt, outside Android's window); connected cadence 71.3 vs 78-84. Every one was the ruler, not the page. Fixed: title probe stops at 300 pt; per-platform `rims_ios` / `rim_window_ios` / `steps_ios` derived from the captures; `spec_for(screen, key)` selects them. All six iOS gates pass, all six self-tests still go red, and the Android renders from run 41019457933 still pass unchanged. Also uploaded the .xcresult on failure so a UI-test red carries its accessibility snapshot.
+
+Stage Summary:
+- The next iOS run has real evidence behind every gate it will execute: the card gate is calibrated to the iOS kit with non-vacuity still proven, the notifier test asserts the actual contract, and the inbox path is owned by the shell. Remaining known gaps: the iOS-only dead surfaces (documented for removal), Voice & Speech has no iOS settings twin (documented delta), and the two new screens' card geometry is not yet gated like the Settings trio.

@@ -132,11 +132,14 @@ final class GsNotifierTests: XCTestCase {
         XCTAssertEqual(inbox.entries.count, 1)
 
         // Master switch off: a new version writes nothing and keeps its token.
+        // The first version's row is still in the inbox — the claim is that no
+        // SECOND row appears, not that the log is empty.
+        let before = inbox.entries.count
         settings.pushNotifications = false
         defaults.removeObject(forKey: GsReleaseNotice.versionKey)
         GsReleaseNotice.announceIfNeeded(version: "9.9.10-test")
         await Task.yield()
-        XCTAssertTrue(inbox.entries.isEmpty)
+        XCTAssertEqual(inbox.entries.count, before)
         XCTAssertNil(defaults.string(forKey: GsReleaseNotice.versionKey))
 
         settings.pushNotifications = true

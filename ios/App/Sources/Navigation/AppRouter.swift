@@ -84,6 +84,9 @@ struct RootView: View {
     @StateObject private var router = Router()
     @ObservedObject private var quickActions = QuickActionBus.shared
     @State private var showDrawer = false
+    /// The account sheet belongs to the shell, not the drawer: a route from a
+    /// row must outlive the panel that opened it.
+    @State private var showAccount = false
 
     // Task 85-e I9 — finger-tracked opening. `drawerEntryOffset` is the
     // panel's live offset while a leading-edge swipe pulls the drawer out
@@ -140,6 +143,7 @@ struct RootView: View {
                         }
                     },
                     onClose: { withAnimation(Aero.motion(Aero.spring)) { showDrawer = false } },
+                    onAccount: { showAccount = true },
                     activeRoute: router.path.last
                 )
                 // The sheet's panel runs to the screen edge, and its own footer
@@ -163,6 +167,20 @@ struct RootView: View {
                 router.resetWorkspace()
             } else {
                 router.path.append(route)
+            }
+        }
+        // Presented here, above the drawer, so dismissing it and pushing the
+        // chosen destination are two independent transactions. The sheet
+        // dismisses itself first (AccountSheetView), then hands the route up.
+        .sheet(isPresented: $showAccount) {
+            AccountSheetView(activeRoute: router.path.last) { route in
+                showAccount = false
+                withAnimation(Aero.motion(Aero.spring)) { showDrawer = false }
+                if case .chat(nil) = route {
+                    router.resetWorkspace()
+                } else {
+                    router.path.append(route)
+                }
             }
         }
         .tint(Aero.accent)

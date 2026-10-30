@@ -156,8 +156,12 @@ Evidence:
   and the account sheet's Notifications row for the inbox. It runs in the
   `GsChatUITests` bundle. Run 41014412869 was its first CI observation and it
   failed: the account sheet routed while it was still presented, so the drawer
-  closed and the inbox never mounted. The sheet now dismisses before the route,
-  which fixes all four account rows; the fix's proof is the next green run.
+  closed and the inbox never mounted. The sheet is now owned by the SHELL
+  (`AccountSheetView` presented from `RootView`), not by the drawer, so
+  dismissing it and pushing the destination are independent transactions; the
+  row also waits for the tap to be hittable so a mid-animation tap cannot hit
+  the scrim. Run 41019419509 compiled all of this and failed only the inbox
+  assertion; the next run is the proof.
 - Subscription numbers: `UsageMeterTest` pins the local-calendar-month → UTC
   stamp boundary in Asia/Dhaka and UTC, and the unknown-vs-zero contract (`-1`
   renders "—"; zero would falsely claim "none used").
@@ -374,6 +378,21 @@ would be the dead-control failure this project keeps removing. It is recorded
 here as a platform delta, not built.
 
 ## Instrument notes worth keeping
+
+**The iOS card gate was calibrated on its own captures (2026-10-30).** Its
+first run against real iOS renders (41019419509) failed all five non-alerts
+sheets, and every failure was the ruler, not the page: iOS draws the mock's
+measured 56 pt two-line row + 5 pt gap (inbox 62–73 pt steps, connected 71.3)
+while Android draws 70–84; the security hero is a lit glass card on iOS (5
+rims, not 4); the subscription Billing card is a real fourth rim on the
+brightest field; help's Popular Topics sits at 470 pt, outside Android's
+window; and the inbox's trailing filter glyph stretched the TITLE probe from
+12.67 to 19.33 pt because the probe scanned into that column. The gate now
+carries per-platform rim counts, windows and cadence bands derived from those
+captures, and the title probe stops at 300 pt. All six pass, all six
+`--self-test` doctoring runs still go red, and the Android renders from the
+same commit still pass unchanged on their own numbers. `--derive` reprints
+every row if a capture legitimately moves.
 
 The Settings gate is green on both platforms (`3dc6e9ff`) *because* several
 instruments were repaired, each found by a failing run: iOS was being graded with

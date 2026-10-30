@@ -770,3 +770,15 @@ jobs:
           name: ios-build-logs-${{ github.run_id }}
           path: ios/build/*.log
           if-no-files-found: ignore
+
+      # The .xcresult holds the accessibility snapshot XCUITest takes at a
+      # failure. Without it a UI-test red says "the page did not open" and
+      # nothing about which page DID: run 41019419509's inbox failure took a
+      # second run to localise because only text logs were uploaded.
+      - name: Upload the XCTest result bundle (failure diagnostics)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-xcresult-${{ github.run_id }}
+          path: ios/build/GSApp-tests.xcresult
+          if-no-files-found: ignore

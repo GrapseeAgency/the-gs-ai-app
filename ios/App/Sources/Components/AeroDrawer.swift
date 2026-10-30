@@ -47,7 +47,14 @@ struct AeroDrawer: View {
 
     @State private var renameId: String?
     @State private var renameDraft = ""
-    @State private var accountSheet = false
+
+    /// The account sheet is presented by the SHELL, not by this panel. When
+    /// the drawer owned it, routing from a row happened while the sheet's own
+    /// presenter was being removed in the same transaction, and the push was
+    /// silently dropped (run 41014412869: Notifications closed the drawer and
+    /// never mounted the inbox). One owner for the modal, one owner for the
+    /// route.
+    var onAccount: (() -> Void)? = nil
 
     /// Close-drag tracking (Task 85-e I9): while the finger is down the panel
     /// follows it 1:1 leftward; the state flip only happens on release, and
@@ -113,10 +120,6 @@ struct AeroDrawer: View {
             Button("Cancel", role: .cancel) { renameId = nil }
         } message: {
             Text("Give this conversation a name you'll recognise.")
-        }
-        .sheet(isPresented: $accountSheet) {
-            accountSheetView
-                .presentationDetents([.medium])
         }
     }
 
@@ -490,7 +493,7 @@ struct AeroDrawer: View {
         HStack(spacing: 10) {
             Button {
                 GSHaptics.tap()
-                accountSheet = true
+                onAccount?()
             } label: {
                 HStack(spacing: 10) {
                     ZStack {
@@ -553,36 +556,6 @@ struct AeroDrawer: View {
     /// New chat + Search — the two conversation actions, always first.
     /// The heart of the sidebar — live conversations only. When the store is
     /// empty the panel says so honestly; nothing is invented.
-    // MARK: Account reveal sheet
-
-    private var accountSheetView: some View {
-        AeroSheetShell(title: account.displayName.isEmpty ? "Account" : account.displayName) {
-            VStack(spacing: Aero.Spacing.s) {
-                sheetRow(title: "Profile", icon: "User", isSelected: activeRoute == .profile) { routeFromSheet(.profile) }
-                sheetRow(title: "Settings", icon: "Settings", isSelected: activeRoute == .settings) { routeFromSheet(.settings) }
-                sheetRow(title: "Notifications", icon: "Bell", isSelected: activeRoute == .notifications) { routeFromSheet(.notifications) }
-                sheetRow(title: "Billing", icon: "CreditCard", isSelected: activeRoute == .billing) { routeFromSheet(.billing) }
-            }
-        }
-    }
-
-    /// A row inside the account sheet must DISMISS the sheet before the shell
-    /// routes. Routing straight from the row used to push onto a stack that
-    /// was still covered by a modal whose own presenter was unmounting in the
-    /// same transaction: the drawer closed and the destination never mounted.
-    /// Run 41014412869's `SheetsUITests` caught it on the inbox — the filter
-    /// control and the subtitle were both absent after tapping Notifications.
-    /// The sheet's dismissal is short; routing after it lands on a settled
-    /// stack, for all four rows rather than only the one with a test.
-    private func routeFromSheet(_ route: AeroRoute) {
-        accountSheet = false
-        // Captured before the hop: the drawer may be unmounted by the time the
-        // closure runs, and a view struct must not be read across that.
-        let handler = onRoute
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-            handler(route)
-        }
-    }
 
     // MARK: Finger-tracked dismissal (Task 85-e I9)
 
@@ -640,13 +613,54 @@ struct AeroDrawer: View {
             .map { String($0.prefix(1)).uppercased() }
             .joined()
     }
+}
 
-    /// One row inside the account / More reveal sheets. The route handler in
-    /// RootView closes the drawer itself (which unmounts the sheet with it) —
-    /// so the row only routes.
-    private func sheetRow(title: String, icon: String, isSelected: Bool = false,
-                          action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+/// The account reveal sheet — Profile / Settings / Notifications / Billing.
+///
+/// Presented by `RootView`, not by the drawer. When the panel owned this modal,
+/// a row's route ran while the sheet's presenter was being torn down in the
+/// same transaction, and SwiftUI dropped the push: the drawer closed and the
+/// inbox never mounted (run 41014412869's `SheetsUITests`). One owner for the
+/// modal, one owner for the route.
+struct AccountSheetView: View {
+
+    @ObservedObject private var account = AccountStore.shared
+    @Environment(\.dismiss) private var dismiss
+
+    /// The route currently on screen, so the matching row paints selected.
+    var activeRoute: AeroRoute?
+    let onRoute: (AeroRoute) -> Void
+
+    init(activeRoute: AeroRoute?, onRoute: @escaping (AeroRoute) -> Void) {
+        self.activeRoute = activeRoute
+        self.onRoute = onRoute
+    }
+
+    var body: some View {
+        AeroSheetShell(title: account.displayName.isEmpty ? "Account" : account.displayName) {
+            VStack(spacing: Aero.Spacing.s) {
+                row("Profile", icon: "User", route: .profile)
+                row("Settings", icon: "Settings", route: .settings)
+                row("Notifications", icon: "Bell", route: .notifications)
+                row("Billing", icon: "CreditCard", route: .billing)
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    /// Dismiss first, then route. The push must land on a stack that is no
+    /// longer covered by this sheet; the short hop is the dismissal's own
+    /// duration, not a guess at the navigation's.
+    private func row(_ title: String, icon: String, route: AeroRoute) -> some View {
+        let isSelected = activeRoute == route
+        return Button {
+            GSHaptics.tap()
+            dismiss()
+            let handler = onRoute
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                handler(route)
+            }
+        } label: {
             HStack(spacing: 12) {
                 GsIconView(DrawerTopic.paths(named: icon), size: 16,
                            color: isSelected ? Aero.accent : Aero.text.opacity(0.8))
