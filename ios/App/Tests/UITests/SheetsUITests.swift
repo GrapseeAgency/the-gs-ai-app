@@ -165,9 +165,11 @@ final class SheetsUITests: XCTestCase {
             return
         }
         openSearch.tap()
-        let field = app.textFields["Search tools and abilities"].firstMatch
+        // The field carries an explicit accessibility identifier, so the
+        // placeholder is not its query key.
+        let field = app.textFields["explore-search-input"].firstMatch
         guard field.waitForExistence(timeout: 10) else {
-            XCTFail("Explore's search field never appeared")
+            XCTFail("Explore's search field never appeared; screen: \(app.debugDescription)")
             return
         }
         field.tap()

@@ -392,6 +392,23 @@ synthesizer the app actually uses, the haptic switch is the same
 audio goes (nowhere). Its inventory is in the cross-platform copy gate like the
 other pages.
 
+**Travel Agent** was the same defect in a bigger surface: a complete screen, a
+mounted route, and no pusher on either platform. The trip planner now opens it
+— Explore's search results on both platforms, and Discover's Popular list —
+while every other catalogue tool still seeds the composer.
+`ExploreReachabilityTest` (Android, 2 JVM tests) and `SheetsUITests`' Travel
+Agent test (iOS) pin both halves, and the iOS capture `nexly-travel-ios` is
+collected by the workflow. Its content was also brought up to the screen it
+claims to be: the same four starting points and prompts as Android, the four
+capability rows, and the "verify before you book" footnote replace the leftover
+"Yesterday / Creative / Planning" chips and the Gif/Image/Video prompts.
+
+**The drawer's rows had text-only hit areas** (found by the same UI test): a
+`Spacer` between label and chevron is not drawn, so a tap between them went to
+the scrim and only closed the drawer. The hero, search pill, destination and
+recent rows now carry `contentShape(Rectangle())`, the fix the account rows had
+already received.
+
 ## Instrument notes worth keeping
 
 **The iOS card gate was calibrated on its own captures (2026-10-30).** Its
