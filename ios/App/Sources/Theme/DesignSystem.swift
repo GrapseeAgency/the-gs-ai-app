@@ -157,6 +157,25 @@ enum Aero {
     static let onAccent = dynamic(
         light: .white,
         dark: UIColor(red: 0.039, green: 0.039, blue: 0.039, alpha: 1))    // 0A0A0A
+
+    // ---- Reference-page accent -------------------------------------------------------
+    /// The Dreamy Pastel reference art (docs/reference/pending) is drawn in lilac.
+    /// Android renders those pages in the user's accent family and pins Lilac for
+    /// its captures; iOS has no accent family, so the three reference pages read
+    /// these tokens to render in the artwork's own palette on both platforms.
+    static let refAccent = dynamic(
+        light: UIColor(red: 0.549, green: 0.447, blue: 0.863, alpha: 1),   // 8C72DC
+        dark: UIColor(red: 0.788, green: 0.725, blue: 1.0, alpha: 1))      // C9B9FF
+    static let refAccentStrong = dynamic(
+        light: UIColor(red: 0.455, green: 0.345, blue: 0.780, alpha: 1),   // 7458C7
+        dark: UIColor(red: 0.788, green: 0.725, blue: 1.0, alpha: 1))
+    static let refAccentSoft = dynamic(
+        light: UIColor(red: 0.549, green: 0.447, blue: 0.863, alpha: 0.12),
+        dark: UIColor(red: 0.788, green: 0.725, blue: 1.0, alpha: 0.20))
+    static let onRefAccent = dynamic(light: .white, dark: UIColor(red: 0.039, green: 0.039, blue: 0.039, alpha: 1))
+    static let refAccentPale = dynamic(
+        light: UIColor(red: 0.788, green: 0.725, blue: 1.0, alpha: 1),     // C9B9FF
+        dark: UIColor(red: 0.427, green: 0.365, blue: 0.663, alpha: 1))
     static let success = dynamic(
         light: UIColor(red: 0.180, green: 0.490, blue: 0.325, alpha: 1),   // 2E7D53
         dark: UIColor(red: 0.298, green: 0.765, blue: 0.541, alpha: 1))    // 4CC38A
