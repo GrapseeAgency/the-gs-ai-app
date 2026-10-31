@@ -31,6 +31,26 @@ final class DrawerLogicTests: XCTestCase {
         XCTAssertEqual(Set(icons).count, 4)
     }
 
+    func testThePreChatPagesFourRowsDrawTheMocksPairs() {
+        // docs/reference/pending/home-new-chat.png — the pairs the mock draws,
+        // reached through generalizing rules, never the seeded strings:
+        // a website thread sparkles, a named study plan is structured (code),
+        // a written itinerary flies, and review feedback lights the bulb.
+        XCTAssertEqual(DrawerTopic.iconName(title: "Website Design Ideas", pinned: false), "Sparkles")
+        XCTAssertEqual(DrawerTopic.iconName(title: "Study Plan for Next Month", pinned: false), "Code")
+        XCTAssertEqual(DrawerTopic.iconName(title: "Travel Itinerary - Japan", pinned: false), "Plane")
+        XCTAssertEqual(DrawerTopic.iconName(title: "Code Review Help", pinned: false), "Lightbulb")
+        // …and the rules generalize past the exact titles the mock seeds.
+        XCTAssertEqual(DrawerTopic.iconName(title: "Landing page redesign", pinned: false), "Sparkles")
+        XCTAssertEqual(DrawerTopic.iconName(title: "Revision timetable before exams", pinned: false), "Code")
+        XCTAssertEqual(DrawerTopic.iconName(title: "Two-week Italy itinerary", pinned: false), "Plane")
+        XCTAssertEqual(DrawerTopic.iconName(title: "Review my pull request", pinned: false), "Lightbulb")
+        // …without swallowing the phrases other topics own.
+        XCTAssertEqual(DrawerTopic.iconName(title: "Explain this to me", pinned: false), "GraduationCap")
+        XCTAssertEqual(DrawerTopic.iconName(title: "Weekend in Kyoto", pinned: false), "Sprout")
+        XCTAssertEqual(DrawerTopic.iconName(title: "Prepare for my performance review", pinned: false), "Briefcase")
+    }
+
     func testAPinBeatsTheTopic() {
         XCTAssertEqual(DrawerTopic.iconName(title: "Weekend in Kyoto", pinned: true), "Pin")
     }

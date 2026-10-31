@@ -28,6 +28,27 @@ class DrawerIconTest {
     }
 
     @Test
+    fun thePreChatPagesFourRowsDrawTheMocksPairs() {
+        // docs/reference/pending/home-new-chat.png — the pairs the mock draws,
+        // reached through generalizing rules, never the seeded strings:
+        // a website thread sparkles, a named study plan is structured (code),
+        // a written itinerary flies, and review feedback lights the bulb.
+        assertEquals("Sparkles", drawerIconName("Website Design Ideas", pinned = false))
+        assertEquals("Code", drawerIconName("Study Plan for Next Month", pinned = false))
+        assertEquals("Plane", drawerIconName("Travel Itinerary - Japan", pinned = false))
+        assertEquals("Lightbulb", drawerIconName("Code Review Help", pinned = false))
+        // …and the rules generalize past the exact titles the mock seeds.
+        assertEquals("Sparkles", drawerIconName("Landing page redesign", pinned = false))
+        assertEquals("Code", drawerIconName("Revision timetable before exams", pinned = false))
+        assertEquals("Plane", drawerIconName("Two-week Italy itinerary", pinned = false))
+        assertEquals("Lightbulb", drawerIconName("Review my pull request", pinned = false))
+        // …without swallowing the phrases other topics own.
+        assertEquals("GraduationCap", drawerIconName("Explain this to me", pinned = false))
+        assertEquals("Sprout", drawerIconName("Weekend in Kyoto", pinned = false))
+        assertEquals("Briefcase", drawerIconName("Prepare for my performance review", pinned = false))
+    }
+
+    @Test
     fun theSheetIsFourDistinctGlyphsNow() {
         val icons = listOf(
             "Plan my tomorrow", "Ideas for a brand launch",

@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
@@ -117,7 +118,7 @@ fun NewChatScreen(
             CompanionHeader(onOpenMenu)
             Spacer(Modifier.height(4.dp))
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                RefArtwork(RefArt.Bloom, size = 112.dp, contentDescription = "GS companion")
+                RefArtwork(RefArt.LotusOrb, size = 112.dp, contentDescription = "GS companion")
             }
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 androidx.compose.material3.Text(
@@ -222,12 +223,27 @@ private fun CompanionHeader(onOpenMenu: () -> Unit) {
             .padding(top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Image(
-            painter = androidx.compose.ui.res.painterResource(com.grapsee.gsai.R.drawable.gs_home_avatar),
-            contentDescription = null,
-            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-            modifier = Modifier.size(34.dp),
-        )
+        // The mock's brand mark: a white rounded-square tile carrying the lilac
+        // lotus glyph — not the peach orb the home dashboard still draws.
+        Box(
+            Modifier
+                .size(34.dp)
+                .shadow(
+                    elevation = 4.dp,
+                    shape = RoundedCornerShape(10.dp),
+                    ambientColor = Color(0x1E8065D8),
+                    spotColor = Color(0x298065D8),
+                )
+                .background(Color.White.copy(alpha = 0.94f), RoundedCornerShape(10.dp))
+                .border(1.dp, Color.White, RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            com.grapsee.gsai.ui.chat.content.NexlyGlyph(
+                name = "flower",
+                size = 19.dp,
+                color = colors.accent,
+            )
+        }
         Spacer(Modifier.width(10.dp))
         Column {
             androidx.compose.material3.Text(
@@ -334,11 +350,12 @@ private fun Composer(
                     .clickable(enabled = draft.isNotBlank(), role = Role.Button, onClickLabel = "Send", onClick = onSend),
                 contentAlignment = Alignment.Center,
             ) {
-                androidx.compose.material3.Icon(
-                    GsIcons.ArrowRight,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(16.dp),
+                // The paper plane the chat composer sends with — same glyph,
+                // same verb, one stage earlier.
+                com.grapsee.gsai.ui.chat.content.NexlyGlyph(
+                    name = "send-2",
+                    size = 17.dp,
+                    color = Color.White,
                 )
             }
         }
@@ -379,7 +396,8 @@ private val START_TOOLS = listOf(
     StartTool("Web Search", "Search the web for ", GsIcons.Globe, GsWellTone.Lilac),
     StartTool("Code", "Write code that ", GsIcons.Code, GsWellTone.Blue),
     StartTool("Write", "Help me write ", GsIcons.Pencil, GsWellTone.Peach),
-    StartTool("Analyze", "Analyze this for me: ", GsIcons.ChartBar, GsWellTone.Mint),
+    // Ascending bars, no axes — the chart the mock draws, not a list of lines.
+    StartTool("Analyze", "Analyze this for me: ", GsIcons.ChartNoAxesColumnIncreasing, GsWellTone.Mint),
     StartTool("Image", "Create an image of ", GsIcons.Image, GsWellTone.Rose),
 )
 
@@ -393,7 +411,9 @@ private fun ToolGrid(onMore: () -> Unit, onTool: (String) -> Unit) {
                     ToolChip(tool.label, tool.icon, tool.tone) { onTool(tool.prompt) }
                 }
                 if (pair.size == 1) {
-                    ToolChip("More", GsIcons.Grid, GsWellTone.Lilac, onMore)
+                    // The mock's More tile is a 2×2 four-dot grid (iOS's
+                    // layout-grid); GsIcons.Grid is the 3×3 nine-dot variant.
+                    ToolChip("More", GsIcons.Grid2x2, GsWellTone.Lilac, onMore)
                 }
             }
         }
@@ -553,7 +573,9 @@ private fun ExploreModelsCard(onClick: () -> Unit) {
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = GsFonts.Product,
-                color = colors.textPrimary,
+                // The mock inks this entry in the accent, not the row ink;
+                // Android reads the live accent, which the lilac capture pins.
+                color = colors.accent,
             )
             androidx.compose.material3.Text(
                 "Choose the right model for your needs.",
@@ -590,11 +612,15 @@ private fun topicIcon(row: ConversationPreviewRow) =
 private fun topicTone(row: ConversationPreviewRow): GsWellTone =
     when (com.grapsee.gsai.ui.navigation.drawer.drawerTopic(row.conversation.title)) {
         com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Code -> GsWellTone.Blue
+        com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Planner -> GsWellTone.Blue
         com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Data -> GsWellTone.Mint
         com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Money -> GsWellTone.Mint
+        com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Review -> GsWellTone.Mint
         com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Travel -> GsWellTone.Rose
+        com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Itinerary -> GsWellTone.Rose
         com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Learning,
         com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Science -> GsWellTone.Peach
+        // Website — like every topic without a fixed tone — falls to Lilac.
         else -> GsWellTone.Lilac
     }
 

@@ -85,6 +85,14 @@ enum class RefArt {
 
     /** A lotus in three rings of petals — the reflection card's art. */
     Lotus,
+
+    /**
+     * The pre-chat hero (docs/reference/pending/home-new-chat.png): a pink
+     * lotus inside a translucent glass sphere, a violet crystal rising from
+     * its heart, all of it inside a soft glow. Drawn from the same primitives
+     * as the rest of the set — no new binary assets.
+     */
+    LotusOrb,
 }
 
 @Composable
@@ -124,6 +132,7 @@ fun RefArtwork(
             RefArt.Reflection -> drawReflectionScene(accent, strong, pale)
             RefArt.Pearl -> drawPearlScene()
             RefArt.Lotus -> drawLotusScene(accent, strong, pale)
+            RefArt.LotusOrb -> drawLotusOrbScene()
         }
     }
 }
@@ -1109,6 +1118,174 @@ private fun DrawScope.drawLotusScene(accent: Color, strong: Color, pale: Color) 
         radius = w * 0.085f,
         center = Offset(c.x, c.y - h * 0.02f)
     )
+}
+
+/**
+ * LotusOrb — the pre-chat hero. A pink lotus opens inside a translucent glass
+ * sphere and a violet crystal rises from its heart, all of it wrapped in a soft
+ * glow. The palette is the mock's own (pink/rose petals, #8C72DC→#C9B9FF
+ * crystal), not the theme accent, so the artwork reads identically whatever
+ * accent the reader runs. The sphere is painted as a wash, then the flower and
+ * crystal, then the rim and specular on top — the glass in front is what makes
+ * the flower read as held rather than pasted.
+ */
+private fun DrawScope.drawLotusOrbScene() {
+    val w = size.width
+    val h = size.height
+    val c = Offset(w * 0.50f, h * 0.47f)
+    val r = w * 0.40f
+
+    // Soft glow behind everything.
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(
+                Color(0x59F5D7EA),
+                Color(0x30D8C9FF),
+                Color.Transparent
+            ),
+            center = c,
+            radius = r * 1.55f
+        ),
+        radius = r * 1.55f,
+        center = c
+    )
+    // Glass body: a pale wash, brightest upper-left where the light enters.
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(
+                Color.White.copy(alpha = 0.50f),
+                Color(0x26EFE4FB),
+                Color(0x14E4D9FA),
+                Color.Transparent
+            ),
+            center = Offset(c.x - r * 0.35f, c.y - r * 0.42f),
+            radius = r * 1.5f
+        ),
+        radius = r,
+        center = c
+    )
+    // Inner bubble, upper-left — the second reflection the mock draws.
+    drawArc(
+        color = Color.White.copy(alpha = 0.42f),
+        startAngle = 150f,
+        sweepAngle = 130f,
+        useCenter = false,
+        topLeft = Offset(c.x - r * 0.74f, c.y - r * 0.74f),
+        size = Size(r * 1.48f, r * 1.48f),
+        style = Stroke(width = 1.1.dp.toPx(), cap = StrokeCap.Round)
+    )
+
+    // The lotus: three rings fanning up from one base, pale at the rim and
+    // deeper rose at the heart.
+    val base = Offset(w * 0.50f, h * 0.76f)
+    repeat(5) { i ->
+        drawPetal(
+            center = base,
+            angle = (i - 2) * 26f,
+            length = h * 0.30f - kotlin.math.abs(i - 2) * h * 0.018f,
+            width = w * 0.105f,
+            top = Color(0xFFFEF6F8),
+            bottom = Color(0xFFF7CBD9)
+        )
+    }
+    repeat(5) { i ->
+        drawPetal(
+            center = base,
+            angle = (i - 2) * 19f,
+            length = h * 0.235f - kotlin.math.abs(i - 2) * h * 0.014f,
+            width = w * 0.088f,
+            top = Color(0xFFFBE2EA),
+            bottom = Color(0xFFF2B3C6)
+        )
+    }
+    repeat(3) { i ->
+        drawPetal(
+            center = base,
+            angle = (i - 1) * 14f,
+            length = h * 0.185f,
+            width = w * 0.072f,
+            top = Color(0xFFF5C2D1),
+            bottom = Color(0xFFEA98AF)
+        )
+    }
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(Color.White, Color(0xFFFBE3EA), Color(0xFFF2AEC1)),
+            center = base,
+            radius = w * 0.045f
+        ),
+        radius = w * 0.045f,
+        center = base
+    )
+
+    // The violet crystal rising from the heart: a faceted kite, light entering
+    // from the upper left.
+    val tip = Offset(w * 0.50f, h * 0.30f)
+    val crystal = Path().apply {
+        moveTo(tip.x, tip.y)
+        lineTo(w * 0.575f, h * 0.52f)
+        lineTo(w * 0.50f, h * 0.68f)
+        lineTo(w * 0.425f, h * 0.52f)
+        close()
+    }
+    drawPath(
+        crystal,
+        Brush.linearGradient(
+            listOf(Color(0xFFC9B9FF), Color(0xFF8C72DC)),
+            start = Offset(tip.x - w * 0.06f, tip.y),
+            end = Offset(w * 0.55f, h * 0.68f)
+        )
+    )
+    drawPath(crystal, Color.White.copy(alpha = 0.30f), style = Stroke(width = 0.8.dp.toPx()))
+    // Facet: the vertical ridge that makes it read as cut, not drawn.
+    drawLine(
+        brush = Brush.verticalGradient(
+            listOf(Color.White.copy(alpha = 0.70f), Color.White.copy(alpha = 0.12f)),
+            startY = tip.y,
+            endY = h * 0.68f
+        ),
+        start = tip,
+        end = Offset(w * 0.50f, h * 0.68f),
+        strokeWidth = w * 0.012f,
+        cap = StrokeCap.Round
+    )
+
+    // The glass in front: full rim, brighter where the light leaves, and the
+    // specular the mock carries on its upper-left shoulder.
+    drawCircle(
+        Color.White.copy(alpha = 0.34f),
+        radius = r,
+        center = c,
+        style = Stroke(width = 1.2.dp.toPx())
+    )
+    drawArc(
+        color = Color.White.copy(alpha = 0.85f),
+        startAngle = 148f,
+        sweepAngle = 150f,
+        useCenter = false,
+        topLeft = Offset(c.x - r * 0.965f, c.y - r * 0.965f),
+        size = Size(r * 1.93f, r * 1.93f),
+        style = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
+    )
+    drawArc(
+        color = Color.White.copy(alpha = 0.50f),
+        startAngle = -30f,
+        sweepAngle = 75f,
+        useCenter = false,
+        topLeft = Offset(c.x - r * 0.965f, c.y - r * 0.965f),
+        size = Size(r * 1.93f, r * 1.93f),
+        style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
+    )
+    drawOval(
+        color = Color.White.copy(alpha = 0.78f),
+        topLeft = Offset(c.x - r * 0.62f, c.y - r * 0.78f),
+        size = Size(r * 0.40f, r * 0.17f)
+    )
+    // A quiet star-field: four sparkles the mock scatters around the sphere.
+    drawSparkle(Offset(w * 0.12f, h * 0.30f), w * 0.034f, Color.White.copy(alpha = 0.92f))
+    drawSparkle(Offset(w * 0.88f, h * 0.32f), w * 0.028f, Color(0xFFE7D9FF).copy(alpha = 0.85f))
+    drawSparkle(Offset(w * 0.82f, h * 0.76f), w * 0.020f, Color.White.copy(alpha = 0.72f))
+    drawSparkle(Offset(w * 0.15f, h * 0.72f), w * 0.018f, Color(0xFFF7CBD9).copy(alpha = 0.70f))
 }
 
 /**

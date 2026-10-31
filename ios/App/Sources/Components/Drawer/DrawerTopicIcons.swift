@@ -13,20 +13,24 @@ import SwiftUI
 /// keyword is matched by containment while an ASCII one is matched as a whole word
 /// ("plan" must not match "planet").
 enum DrawerTopic: String, CaseIterable {
-    case science, code, data, money, travel, food, health, learning, work, ideas, design, writing, plan, music, sport, home, shopping, weather, security, legal, media, chat
+    case science, review, code, data, money, itinerary, travel, food, health, planner, learning, work, website, ideas, design, writing, plan, music, sport, home, shopping, weather, security, legal, media, chat
 
     /// The Lucide name, spelled as the generated catalogue spells it.
     var icon: String {
         switch self {
         case .science: return "Atom"
+        case .review: return "Lightbulb"
         case .code: return "Code"
         case .data: return "ChartLine"
         case .money: return "CircleDollarSign"
+        case .itinerary: return "Plane"
         case .travel: return "Sprout"
         case .food: return "Utensils"
         case .health: return "Heart"
+        case .planner: return "Code"
         case .learning: return "GraduationCap"
         case .work: return "Briefcase"
+        case .website: return "Sparkles"
         case .ideas: return "Lightbulb"
         case .design: return "Palette"
         case .writing: return "PenLine"
@@ -51,6 +55,9 @@ enum DrawerTopic: String, CaseIterable {
                     "experiment", "research", "gravity", "relativity", "neuron",
                     "protein", "量子", "物理", "физика", "física",
                     "فيزياء", "भौतिकी"]
+        case .review:
+            return [                    "code review", "pull request", "merge request", "pr review",
+                    "peer review"]
         case .code:
             return [                    "code", "bug", "error", "compile", "refactor",
                     "regex", "api", "kotlin", "swift", "python",
@@ -66,6 +73,8 @@ enum DrawerTopic: String, CaseIterable {
                     "salary", "tax", "finance", "revenue", "invest",
                     "loan", "refund", "予算", "бюджет", "presupuesto",
                     "ميزانية", "बजट"]
+        case .itinerary:
+            return [                    "itinerary", "itineraries"]
         case .travel:
             return [                    "travel", "trip", "flight", "hotel", "itinerary",
                     "kyoto", "paris", "tokyo", "london", "visa",
@@ -81,6 +90,9 @@ enum DrawerTopic: String, CaseIterable {
                     "doctor", "symptom", "health", "medical", "therapy",
                     "injury", "健康", "здоровье", "salud", "صحة",
                     "स्वास्थ्य"]
+        case .planner:
+            return [                    "study plan", "lesson plan", "revision plan", "study schedule",
+                    "revision timetable"]
         case .learning:
             return [                    "learn", "study", "exam", "course", "explain",
                     "teach", "revision", "homework", "lesson", "tutorial",
@@ -91,6 +103,8 @@ enum DrawerTopic: String, CaseIterable {
                     "standup", "report", "interview", "hire", "onboarding",
                     "performance review", "会議", "работа", "trabajo", "travail",
                     "عمل", "काम"]
+        case .website:
+            return [                    "website", "webpage", "web page", "landing page", "web design"]
         case .ideas:
             return [                    "idea", "ideas", "brainstorm", "brand", "launch",
                     "naming", "concept", "creative", "pitch", "tagline",
@@ -201,6 +215,7 @@ enum DrawerTopic: String, CaseIterable {
         case "Code": return GsIcons.code
         case "ChartLine": return GsIcons.chartLine
         case "CircleDollarSign": return GsIcons.circleDollarSign
+        case "Plane": return GsIcons.plane
         case "MapPin": return GsIcons.mapPin
         case "Utensils": return GsIcons.utensils
         case "Heart": return GsIcons.heart

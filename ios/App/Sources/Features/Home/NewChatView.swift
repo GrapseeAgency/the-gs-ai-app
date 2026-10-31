@@ -55,10 +55,9 @@ struct NewChatView: View {
                     header
                     HStack {
                         Spacer()
-                        AnimatedGsIllustration(
-                            imageName: "GSCompanionOrb", size: 112,
-                            breathDuration: 3.0, rotationDegrees: 1.0,
-                            lift: -2, startDelay: 0.1)
+                        BreathingArt(art: .lotusOrb, size: 112,
+                                     breathDuration: 3.0, rotationDegrees: 1.0,
+                                     lift: -2, startDelay: 0.1)
                         Spacer()
                     }
                     .padding(.top, 4)
@@ -92,10 +91,17 @@ struct NewChatView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Image("GSHomeAvatar")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 34, height: 34)
+            // The mock's brand mark: a white rounded-square tile carrying the
+            // lilac lotus glyph — not the peach orb the home dashboard draws.
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.white.opacity(scheme == .dark ? 0.14 : 0.94))
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(.white.opacity(scheme == .dark ? 0.22 : 0.95), lineWidth: 1)
+                NexlyGlyph(name: "flower", size: 19, color: Aero.refAccent)
+            }
+            .frame(width: 34, height: 34)
+            .shadow(color: Aero.refAccent.opacity(0.16), radius: 3, x: 0, y: 2)
             VStack(alignment: .leading, spacing: 0) {
                 Text("Nexly")
                     .font(.custom(Aero.productName(.semibold), size: 17, relativeTo: .headline))
@@ -134,6 +140,9 @@ struct NewChatView: View {
                 TextField("", text: $draft, axis: .vertical)
                     .font(.custom(Aero.productName(.regular), size: 10.5, relativeTo: .caption))
                     .foregroundStyle(Aero.text)
+                    // The caret is accent-tinted by default; this page reads the
+                    // reference's lilac, not the chrome's peach.
+                    .tint(Aero.refAccent)
                     .lineLimit(1...4)
                     .focused($focused)
                     .accessibilityIdentifier("new-chat-input")
@@ -146,8 +155,11 @@ struct NewChatView: View {
                 Spacer(minLength: 0)
                 Button(action: send) {
                     ZStack {
-                        Circle().fill(Aero.accent.opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.35 : 1))
-                        NexlyGlyph(name: "arrow-right", size: 16, color: .white)
+                        // The reference page's lilac, not the chrome's peach.
+                        Circle().fill(Aero.refAccent.opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.35 : 1))
+                        // The paper plane the chat composer sends with — same
+                        // glyph, same verb, one stage earlier.
+                        NexlyGlyph(name: "send-2", size: 17, color: .white)
                     }
                     .frame(width: 38, height: 38)
                 }
@@ -311,7 +323,8 @@ struct NewChatView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Explore AI Models")
                         .font(.custom(Aero.productName(.medium), size: 9.5))
-                        .foregroundStyle(Aero.text)
+                        // The mock inks this entry in the accent, not the row ink.
+                        .foregroundStyle(Aero.refAccent)
                     Text("Choose the right model for your needs.")
                         .font(.custom(Aero.productName(.regular), size: 7.5))
                         .foregroundStyle(Aero.textTertiary)
@@ -323,7 +336,7 @@ struct NewChatView: View {
             .padding(.horizontal, 11)
             .padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 18)
-                .fill((scheme == .dark ? Aero.accentSoft.opacity(0.55) : GsWellTone.lilac.wash.opacity(0.55))))
+                .fill((scheme == .dark ? Aero.refAccentSoft.opacity(0.55) : GsWellTone.lilac.wash.opacity(0.55))))
             .overlay(RoundedRectangle(cornerRadius: 18)
                 .strokeBorder(.white.opacity(scheme == .dark ? 0.12 : 0.62), lineWidth: 1))
         }
@@ -342,14 +355,18 @@ struct NewChatView: View {
         if conversation.pinned { return "bookmark" }
         switch DrawerTopic.topic(for: conversation.title) {
         case .science: return "atom"
+        case .review: return "bulb"
         case .code: return "code"
+        case .planner: return "code"
         case .data: return "chart-bar"
         case .money: return "currency-dollar"
+        case .itinerary: return "plane"
         case .travel: return "plane"
         case .food: return "map"
         case .health: return "heart"
         case .learning: return "book"
         case .work: return "briefcase"
+        case .website: return "sparkles"
         case .ideas: return "bulb"
         case .design: return "palette"
         case .writing: return "pencil"
@@ -368,10 +385,11 @@ struct NewChatView: View {
 
     private func tone(for conversation: StoredConversation) -> GsWellTone {
         switch DrawerTopic.topic(for: conversation.title) {
-        case .code: return .blue
-        case .data, .money: return .mint
-        case .travel: return .rose
+        case .code, .planner: return .blue
+        case .data, .money, .review: return .mint
+        case .travel, .itinerary: return .rose
         case .learning, .science: return .peach
+        // Website — like every topic without a fixed tone — falls to lilac.
         default: return .lilac
         }
     }
@@ -399,6 +417,34 @@ struct NewChatView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "d/M"
         return formatter.string(from: then)
+    }
+}
+
+/// The idle breath and drift `AnimatedGsIllustration` gives the bitmap orbs,
+/// carried by the code-drawn set instead — this page's lotus-orb hero breathes
+/// exactly like its siblings and stays honest to Reduce Motion.
+private struct BreathingArt: View {
+    let art: GsArt
+    let size: CGFloat
+    var breathDuration: Double = 2.4
+    var rotationDegrees: Double = 2.2
+    var lift: CGFloat = -3
+    var startDelay: Double = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isAlive = false
+
+    var body: some View {
+        GsArtwork(art: art, size: size, label: "GS companion")
+            .scaleEffect(reduceMotion ? 1 : (isAlive ? 1.035 : 1))
+            .rotationEffect(.degrees(reduceMotion ? 0 : (isAlive ? rotationDegrees : 0)))
+            .offset(y: reduceMotion ? 0 : (isAlive ? lift : 0))
+            .animation(
+                reduceMotion ? nil : .easeInOut(duration: breathDuration).delay(startDelay).repeatForever(autoreverses: true),
+                value: isAlive)
+            .onAppear {
+                guard !reduceMotion else { return }
+                isAlive = true
+            }
     }
 }
 

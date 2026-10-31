@@ -35,6 +35,13 @@ enum class DrawerTopic(val icon: String, vararg val keywords: String) {
         "protein", "量子", "物理", "физика", "física",
         "فيزياء", "भौतिकी",
     ),
+    // Feedback on written work — "code review", PR threads. Before Code, so the
+    // review beats the subject; "performance review" (Work's phrase) does not
+    // contain any of these, so it still lands on Work.
+    Review(
+        "Lightbulb",
+        "code review", "pull request", "merge request", "pr review", "peer review",
+    ),
     Code(
         "Code",
         "code", "bug", "error", "compile", "refactor",
@@ -55,6 +62,13 @@ enum class DrawerTopic(val icon: String, vararg val keywords: String) {
         "salary", "tax", "finance", "revenue", "invest",
         "loan", "refund", "予算", "бюджет", "presupuesto",
         "ميزانية", "बजट",
+    ),
+    // A written itinerary — trip documentation, not the destination itself.
+    // Before Travel, so "Weekend in Kyoto" still wears the travel sprout while
+    // a titled itinerary wears the plane.
+    Itinerary(
+        "Plane",
+        "itinerary", "itineraries",
     ),
     Travel(
         "Sprout",
@@ -77,6 +91,13 @@ enum class DrawerTopic(val icon: String, vararg val keywords: String) {
         "injury", "健康", "здоровье", "salud", "صحة",
         "स्वास्थ्य",
     ),
+    // A named plan of sessions — a study/lesson/revision plan is a structured,
+    // itemised document, which is the code mark in this vocabulary. Before
+    // Learning, so "study plan" beats the generic "study".
+    Planner(
+        "Code",
+        "study plan", "lesson plan", "revision plan", "study schedule", "revision timetable",
+    ),
     Learning(
         "GraduationCap",
         "learn", "study", "exam", "course", "explain",
@@ -90,6 +111,13 @@ enum class DrawerTopic(val icon: String, vararg val keywords: String) {
         "standup", "report", "interview", "hire", "onboarding",
         "performance review", "会議", "работа", "trabajo", "travail",
         "عمل", "काम",
+    ),
+    // A website/web-page project — the creative-build thread the mock draws as
+    // the sparkle. Before Ideas and Design, so the concrete artifact wins over
+    // the general "ideas"/"design" words it usually travels with.
+    Website(
+        "Sparkles",
+        "website", "webpage", "web page", "landing page", "web design",
     ),
     Ideas(
         "Lightbulb",
@@ -216,6 +244,7 @@ fun drawerIcon(title: String, pinned: Boolean): ImageVector =
         "Code" -> GsIcons.Code
         "ChartLine" -> GsIcons.ChartLine
         "CircleDollarSign" -> GsIcons.CircleDollarSign
+        "Plane" -> GsIcons.Plane
         "MapPin" -> GsIcons.MapPin
         "Utensils" -> GsIcons.Utensils
         "Heart" -> GsIcons.Heart

@@ -9,6 +9,11 @@ enum GsArt {
     case bloom, conversation, search, offline, error, library, voice
     case success, privacy, archive, notifications
     case video, clarity, reflection, lotus
+
+    /// The pre-chat hero (docs/reference/pending/home-new-chat.png): a pink
+    /// lotus inside a translucent glass sphere, a violet crystal rising from
+    /// its heart. Code-drawn like the rest of the set — no new binary assets.
+    case lotusOrb
 }
 
 struct GsArtwork: View {
@@ -52,6 +57,7 @@ enum GsArtDrawing {
         case .clarity: clarity(&ctx, size, accent, strong, pale, ink)
         case .reflection: reflection(&ctx, size, accent, strong, pale)
         case .lotus: lotus(&ctx, size, accent, strong, pale)
+        case .lotusOrb: lotusOrb(&ctx, size)
         }
     }
 
@@ -1032,6 +1038,146 @@ enum GsArtDrawing {
             Gradient(colors: [.white, pale, strong.opacity(0.55)]),
             center: CGPoint(x: w * 0.488, y: c.y - h * 0.05),
             startRadius: 0, endRadius: w * 0.085))
+    }
+
+    /// LotusOrb — the pre-chat hero, mirrored from Android's
+    /// `drawLotusOrbScene`: a pink lotus inside a translucent glass sphere with
+    /// a violet crystal (#8C72DC→#C9B9FF) rising from its heart, wrapped in a
+    /// soft glow. The mock's own palette, not the theme accent, so it reads the
+    /// same whatever accent the reader runs.
+    private static func lotusOrb(
+        _ ctx: inout GraphicsContext,
+        _ size: CGSize
+    ) {
+        let w = size.width
+        let h = size.height
+        let c = CGPoint(x: w * 0.50, y: h * 0.47)
+        let r = w * 0.40
+
+        // Soft glow behind everything.
+        ctx.fill(
+            Path(ellipseIn: CGRect(x: c.x - r * 1.55, y: c.y - r * 1.55,
+                                   width: r * 3.10, height: r * 3.10)),
+            with: .radialGradient(
+                Gradient(colors: [Color(red: 0.961, green: 0.843, blue: 0.918).opacity(0.35),
+                                  Color(red: 0.847, green: 0.788, blue: 1.0).opacity(0.19),
+                                  .clear]),
+                center: c, startRadius: 0, endRadius: r * 1.55))
+        // Glass body: a pale wash, brightest upper-left where the light enters.
+        ctx.fill(
+            Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
+            with: .radialGradient(
+                Gradient(colors: [.white.opacity(0.50),
+                                  Color(red: 0.937, green: 0.894, blue: 0.984).opacity(0.15),
+                                  Color(red: 0.894, green: 0.851, blue: 0.980).opacity(0.08),
+                                  .clear]),
+                center: CGPoint(x: c.x - r * 0.35, y: c.y - r * 0.42),
+                startRadius: 0, endRadius: r * 1.5))
+        // Inner bubble, upper-left — the second reflection the mock draws.
+        var inner = Path()
+        inner.addArc(
+            center: c, radius: r * 0.74,
+            startAngle: .degrees(150), endAngle: .degrees(280), clockwise: false)
+        ctx.stroke(
+            inner,
+            with: .color(.white.opacity(0.42)),
+            style: StrokeStyle(lineWidth: 1.1, lineCap: .round))
+
+        // The lotus: three rings fanning up from one base, pale at the rim and
+        // deeper rose at the heart.
+        let base = CGPoint(x: w * 0.50, y: h * 0.76)
+        for i in 0..<5 {
+            petal(&ctx, center: base, angle: Double(i - 2) * 26,
+                  length: h * 0.30 - CGFloat(abs(i - 2)) * h * 0.018,
+                  width: w * 0.105,
+                  top: Color(red: 0.996, green: 0.965, blue: 0.973),
+                  bottom: Color(red: 0.969, green: 0.796, blue: 0.851))
+        }
+        for i in 0..<5 {
+            petal(&ctx, center: base, angle: Double(i - 2) * 19,
+                  length: h * 0.235 - CGFloat(abs(i - 2)) * h * 0.014,
+                  width: w * 0.088,
+                  top: Color(red: 0.984, green: 0.886, blue: 0.918),
+                  bottom: Color(red: 0.949, green: 0.702, blue: 0.776))
+        }
+        for i in 0..<3 {
+            petal(&ctx, center: base, angle: Double(i - 1) * 14,
+                  length: h * 0.185,
+                  width: w * 0.072,
+                  top: Color(red: 0.961, green: 0.761, blue: 0.820),
+                  bottom: Color(red: 0.918, green: 0.596, blue: 0.686))
+        }
+        ctx.fill(
+            Path(ellipseIn: CGRect(x: base.x - w * 0.045, y: base.y - w * 0.045,
+                                   width: w * 0.09, height: w * 0.09)),
+            with: .radialGradient(
+                Gradient(colors: [.white,
+                                  Color(red: 0.984, green: 0.890, blue: 0.918),
+                                  Color(red: 0.949, green: 0.682, blue: 0.757)]),
+                center: base, startRadius: 0, endRadius: w * 0.045))
+
+        // The violet crystal rising from the heart: a faceted kite, light
+        // entering from the upper left.
+        let tip = CGPoint(x: w * 0.50, y: h * 0.30)
+        var crystal = Path()
+        crystal.move(to: tip)
+        crystal.addLine(to: CGPoint(x: w * 0.575, y: h * 0.52))
+        crystal.addLine(to: CGPoint(x: w * 0.50, y: h * 0.68))
+        crystal.addLine(to: CGPoint(x: w * 0.425, y: h * 0.52))
+        crystal.closeSubpath()
+        ctx.fill(
+            crystal,
+            with: .linearGradient(
+                Gradient(colors: [Color(red: 0.788, green: 0.725, blue: 1.0),   // C9B9FF
+                                  Color(red: 0.549, green: 0.447, blue: 0.863)]), // 8C72DC
+                startPoint: CGPoint(x: tip.x - w * 0.06, y: tip.y),
+                endPoint: CGPoint(x: w * 0.55, y: h * 0.68)))
+        ctx.stroke(crystal, with: .color(.white.opacity(0.30)), lineWidth: 0.8)
+        // Facet: the vertical ridge that makes it read as cut, not drawn.
+        var facet = Path()
+        facet.move(to: tip)
+        facet.addLine(to: CGPoint(x: w * 0.50, y: h * 0.68))
+        ctx.stroke(
+            facet,
+            with: .linearGradient(
+                Gradient(colors: [.white.opacity(0.70), .white.opacity(0.12)]),
+                startPoint: tip, endPoint: CGPoint(x: w * 0.50, y: h * 0.68)),
+            style: StrokeStyle(lineWidth: w * 0.012, lineCap: .round))
+
+        // The glass in front: full rim, brighter where the light leaves, and
+        // the specular the mock carries on its upper-left shoulder.
+        ctx.stroke(
+            Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
+            with: .color(.white.opacity(0.34)), lineWidth: 1.2)
+        var rimLight = Path()
+        rimLight.addArc(
+            center: c, radius: r * 0.965,
+            startAngle: .degrees(148), endAngle: .degrees(298), clockwise: false)
+        ctx.stroke(
+            rimLight,
+            with: .color(.white.opacity(0.85)),
+            style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+        var rimBack = Path()
+        rimBack.addArc(
+            center: c, radius: r * 0.965,
+            startAngle: .degrees(-30), endAngle: .degrees(45), clockwise: false)
+        ctx.stroke(
+            rimBack,
+            with: .color(.white.opacity(0.50)),
+            style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+        ctx.fill(
+            Path(ellipseIn: CGRect(x: c.x - r * 0.62, y: c.y - r * 0.78,
+                                   width: r * 0.40, height: r * 0.17)),
+            with: .color(.white.opacity(0.78)))
+        // A quiet star-field: four sparkles the mock scatters around the sphere.
+        sparkle(&ctx, center: CGPoint(x: w * 0.12, y: h * 0.30), radius: w * 0.034,
+                color: .white.opacity(0.92))
+        sparkle(&ctx, center: CGPoint(x: w * 0.88, y: h * 0.32), radius: w * 0.028,
+                color: Color(red: 0.906, green: 0.851, blue: 1.0).opacity(0.85))
+        sparkle(&ctx, center: CGPoint(x: w * 0.82, y: h * 0.76), radius: w * 0.020,
+                color: .white.opacity(0.72))
+        sparkle(&ctx, center: CGPoint(x: w * 0.15, y: h * 0.72), radius: w * 0.018,
+                color: Color(red: 0.969, green: 0.796, blue: 0.851).opacity(0.70))
     }
 
     private static func reflection(
