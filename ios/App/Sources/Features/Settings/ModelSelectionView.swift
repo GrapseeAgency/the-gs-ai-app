@@ -21,11 +21,14 @@ struct ModelSelectionView: View {
     @ObservedObject private var settings = SettingsStore.shared
     @Environment(\.colorScheme) private var scheme
     @State private var tab = "all"
+    /// Global y of the scroll content's top edge, probed every layout pass
+    /// (see `bottomFillHeight`).
+    @State private var contentTopY: CGFloat = 0
 
     private struct Tab { let id, label, glyph: String }
     private let tabs: [Tab] = [
         Tab(id: "all", label: "All", glyph: "sparkles"),
-        Tab(id: "text", label: "Text", glyph: "message-circle"),
+        Tab(id: "text", label: "Text", glyph: "message-dots"),
         Tab(id: "vision", label: "Vision", glyph: "eye"),
         Tab(id: "code", label: "Code", glyph: "code"),
     ]
@@ -36,22 +39,62 @@ struct ModelSelectionView: View {
     }
 
     var body: some View {
-        GsSettingsPage(
-            title: "Model Selection",
-            subtitle: "Choose the best model for your needs.",
-            onBack: onBack
-        ) {
-            tabBar
-            availableHeader
-            VStack(spacing: 7) {
-                ForEach(shown) { model in
-                    modelCard(model)
+        GeometryReader { page in
+            GsSettingsPage(
+                title: "Model Selection",
+                subtitle: "Choose the best model for your needs.",
+                onBack: onBack,
+                backGlyph: "arrow-left"
+            ) {
+                VStack(spacing: 0) {
+                    tabBar
+                    availableHeader
+                    VStack(spacing: 7) {
+                        ForEach(shown) { model in
+                            modelCard(model)
+                        }
+                    }
+                    reasoningBlock
+                    Spacer(minLength: 0)
+                    continueButton
                 }
+                .frame(minHeight: bottomFillHeight(page), alignment: .top)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: ContentTopKey.self,
+                            value: geo.frame(in: .global).minY)
+                    }
+                )
             }
-            reasoningBlock
-            continueButton
+            .toolbar(.hidden, for: .navigationBar)
         }
-        .toolbar(.hidden, for: .navigationBar)
+        .onPreferenceChange(ContentTopKey.self) { contentTopY = $0 }
+    }
+
+    // MARK: Bottom anchor
+
+    /// The reference ends with Continue just above the home indicator, but the
+    /// shared shell (`GsSettingsPage`) scrolls its content, so on a tall screen
+    /// the spare height collects as a blank band under the button. The content
+    /// VStack therefore fills at least the scroll viewport minus the shell's
+    /// own tail (the 28pt `Spacer(minLength:)` + 2pt top inset, both in
+    /// GsSettingsKit.swift), and the spacer above Continue absorbs the rest.
+    /// When the content is naturally taller — shorter screens, larger type —
+    /// the minimum is inactive and the page scrolls exactly as before. The
+    /// probe reading is only consumed while the content fits, which is also
+    /// the only state where the scroll offset is zero and the reading is exact.
+    private func bottomFillHeight(_ page: GeometryProxy) -> CGFloat {
+        guard contentTopY > 0 else { return 0 }
+        let viewport = page.frame(in: .global).maxY - (contentTopY - 2)
+        return max(0, viewport - 30)
+    }
+
+    private struct ContentTopKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = nextValue()
+        }
     }
 
     // MARK: Tabs
@@ -61,22 +104,30 @@ struct ModelSelectionView: View {
             ForEach(tabs, id: \.id) { item in
                 let active = item.id == tab
                 Button { tab = item.id } label: {
-                    VStack(spacing: 3) {
+                    VStack(spacing: 2) {
                         NexlyGlyph(name: item.glyph, size: 15,
-                                   color: active ? Aero.accent : Aero.textSecondary)
+                                   color: active ? Aero.refAccent : Aero.textSecondary)
+                            .frame(width: 30, height: 30)
+                            .background(
+                                Circle().fill(
+                                    active
+                                        ? Aero.refAccentSoft
+                                        : .white.opacity(scheme == .dark ? 0.12 : 0.55)
+                                )
+                            )
                         Text(item.label)
                             .font(.custom(Aero.productName(active ? .semibold : .regular), size: 8.5))
-                            .foregroundStyle(active ? Aero.text : Aero.textSecondary)
+                            .foregroundStyle(active ? Aero.refAccent : Aero.textSecondary)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 7)
+                    .padding(.vertical, 5)
                     .background(
                         RoundedRectangle(cornerRadius: 15)
-                            .fill(active ? Aero.elevatedSurface.opacity(0.95) : .clear)
+                            .fill(active ? Aero.refAccentSoft : .clear)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 15)
-                            .strokeBorder(active ? Aero.accent.opacity(0.18) : .clear, lineWidth: 1)
+                            .strokeBorder(active ? Aero.refAccent.opacity(0.18) : .clear, lineWidth: 1)
                     )
                 }
                 .buttonStyle(.plain)
@@ -98,10 +149,10 @@ struct ModelSelectionView: View {
                 .accessibilityAddTraits(.isHeader)
             Spacer()
             HStack(spacing: 4) {
-                NexlyGlyph(name: "sparkles", size: 11, color: Aero.accent)
+                NexlyGlyph(name: "sparkles", size: 11, color: Aero.refAccent)
                 Text("Recommended")
                     .font(.custom(Aero.productName(.regular), size: 9))
-                    .foregroundStyle(Aero.textTertiary)
+                    .foregroundStyle(Aero.refAccent)
             }
         }
         .padding(.top, 16)
@@ -123,10 +174,10 @@ struct ModelSelectionView: View {
                         if model == .pro {
                             Text("Recommended")
                                 .font(.custom(Aero.productName(.regular), size: 7.5))
-                                .foregroundStyle(Aero.accent)
+                                .foregroundStyle(Aero.refAccent)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Capsule().fill(Aero.accentSoft))
+                                .background(Capsule().fill(Aero.refAccentSoft))
                         }
                     }
                     Text(model.detail)
@@ -154,14 +205,14 @@ struct ModelSelectionView: View {
                 RoundedRectangle(cornerRadius: 20)
                     .fill(
                         isSelected
-                            ? (scheme == .dark ? Aero.accentSoft.opacity(0.55) : model.tone.wash.opacity(0.55))
+                            ? (scheme == .dark ? Aero.refAccentSoft.opacity(0.55) : model.tone.wash.opacity(0.55))
                             : .white.opacity(scheme == .dark ? 0.07 : 0.40)
                     )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 20)
                     .strokeBorder(
-                        isSelected ? Aero.accent.opacity(0.55) : .white.opacity(scheme == .dark ? 0.10 : 0.55),
+                        isSelected ? Aero.refAccent.opacity(0.55) : .white.opacity(scheme == .dark ? 0.10 : 0.55),
                         lineWidth: isSelected ? 1.2 : 1
                     )
             )
@@ -174,7 +225,7 @@ struct ModelSelectionView: View {
     private func radio(_ isSelected: Bool) -> some View {
         ZStack {
             Circle()
-                .fill(isSelected ? Aero.accent : .clear)
+                .fill(isSelected ? Aero.refAccent : .clear)
             Circle()
                 .strokeBorder(isSelected ? .clear : Aero.textTertiary.opacity(0.45), lineWidth: 1.4)
             if isSelected {
@@ -197,7 +248,7 @@ struct ModelSelectionView: View {
     private var reasoningBlock: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                NexlyGlyph(name: "adjustments", size: 14, color: Aero.textSecondary)
+                NexlyGlyph(name: "brain", size: 14, color: Aero.textSecondary)
                 Text("Reasoning Effort")
                     .font(.custom(Aero.productName(.semibold), size: 13))
                     .foregroundStyle(Aero.text)
@@ -211,7 +262,7 @@ struct ModelSelectionView: View {
             effortSegments.padding(.top, 9)
             GsGroupCard {
                 HStack(spacing: 11) {
-                    GsWellTile(glyph: "sparkles", tone: .lilac, size: 34)
+                    AutoSelectTile(size: 34)
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Auto Select Model")
                             .font(.custom(Aero.productName(.medium), size: 10.5))
@@ -226,12 +277,53 @@ struct ModelSelectionView: View {
                         get: { settings.autoSelectModel },
                         set: { settings.autoSelectModel = $0 }))
                         .labelsHidden()
-                        .tint(Aero.accent)
+                        .tint(Aero.refAccent)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 11)
             }
             .padding(.top, 14)
+        }
+    }
+
+    /// The mock's Auto Select glyph is a single four-point sparkle with a
+    /// small filled dot to its upper left and a small ring at its lower right
+    /// (model-selection-v2, Auto Select tile). No single Tabler glyph composes
+    /// that — the sparkle-family candidates (sparkle, sparkle-2,
+    /// sparkle-highlight, sparkles, sparkles-2, wand) were rendered from
+    /// TablerIcons.ttf and none matches — so the tile composes the three marks
+    /// from primitives inside the same wash circle GsWellTile paints. Offsets
+    /// are measured off the mock: dot −6.0, −3.4pt and ring +5.6, +5.4pt from
+    /// the tile center.
+    private struct AutoSelectTile: View {
+        let size: CGFloat
+
+        private var tone: GsWellTone { .lilac }
+
+        var body: some View {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.55), tone.wash],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                Circle()
+                    .strokeBorder(.white.opacity(0.85), lineWidth: 1)
+                NexlyGlyph(name: "sparkle", size: size * 0.46, color: tone.ink)
+                    .offset(x: -1, y: 0)
+                Circle()
+                    .fill(tone.ink)
+                    .frame(width: 3.2, height: 3.2)
+                    .offset(x: -size * 0.176, y: -size * 0.100)
+                Circle()
+                    .strokeBorder(tone.ink, lineWidth: 1.4)
+                    .frame(width: size * 0.162, height: size * 0.162)
+                    .offset(x: size * 0.165, y: size * 0.159)
+            }
+            .frame(width: size, height: size)
+            .shadow(color: tone.ink.opacity(0.16), radius: 3, x: 0, y: 2)
         }
     }
 
@@ -249,7 +341,7 @@ struct ModelSelectionView: View {
                             Capsule().fill(
                                 active
                                     ? AnyShapeStyle(LinearGradient(
-                                        colors: [Aero.accent.opacity(0.78), Aero.accent],
+                                        colors: [Aero.refAccent.opacity(0.78), Aero.refAccent],
                                         startPoint: .leading, endPoint: .trailing))
                                     : AnyShapeStyle(Color.clear)
                             )
@@ -279,7 +371,7 @@ struct ModelSelectionView: View {
             .padding(.vertical, 13)
             .background(
                 Capsule().fill(LinearGradient(
-                    colors: [Aero.accent.opacity(0.78), Aero.accent],
+                    colors: [Aero.refAccent.opacity(0.78), Aero.refAccent],
                     startPoint: .leading, endPoint: .trailing))
             )
         }

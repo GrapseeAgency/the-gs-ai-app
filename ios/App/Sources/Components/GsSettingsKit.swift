@@ -45,16 +45,20 @@ struct GsSettingsBackdrop: View {
 
 /// Back well + title + subtitle, laid out like the mocks: a 36pt glass circle
 /// at the leading edge, then the title block offset 62pt from that edge.
+/// `backGlyph` defaults to the shell-wide chevron; pages whose reference draws
+/// a full arrow (model-selection-v2) pass "arrow-left" without touching the
+/// other pages' rendering.
 struct GsSettingsHeader: View {
     let title: String
     var subtitle: String?
     var onBack: (() -> Void)?
+    var backGlyph: String = "chevron-left"
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
             if let onBack {
                 Button(action: onBack) {
-                    NexlyGlyph(name: "chevron-left", size: 16, color: Aero.text)
+                    NexlyGlyph(name: backGlyph, size: 16, color: Aero.text)
                         .frame(width: 36, height: 36)
                         .gsGlass(.floatingControl, corner: 18)
                 }
@@ -367,13 +371,14 @@ struct GsSettingsPage<Content: View>: View {
     let title: String
     var subtitle: String?
     var onBack: (() -> Void)?
+    var backGlyph: String = "chevron-left"
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         ZStack {
             GsSettingsBackdrop().allowsHitTesting(false)
             VStack(spacing: 0) {
-                GsSettingsHeader(title: title, subtitle: subtitle, onBack: onBack)
+                GsSettingsHeader(title: title, subtitle: subtitle, onBack: onBack, backGlyph: backGlyph)
                 ScrollView(showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         content()

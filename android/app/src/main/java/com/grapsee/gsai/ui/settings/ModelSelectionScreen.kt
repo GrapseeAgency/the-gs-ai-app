@@ -11,9 +11,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
@@ -119,7 +121,7 @@ private data class ModelTab(val id: String, val label: String, val icon: android
 
 private val MODEL_TABS = listOf(
     ModelTab("all", "All", GsIcons.Sparkles),
-    ModelTab("text", "Text", GsIcons.MessageCircle),
+    ModelTab("text", "Text", GsIcons.MessageCircleMore),
     ModelTab("vision", "Vision", GsIcons.Eye),
     ModelTab("code", "Code", GsIcons.Code),
 )
@@ -127,6 +129,7 @@ private val MODEL_TABS = listOf(
 @Composable
 private fun ModelTabs(selected: String, onSelect: (String) -> Unit) {
     val colors = GsTheme.colors
+    val dark = LocalGsIsDark.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -142,7 +145,7 @@ private fun ModelTabs(selected: String, onSelect: (String) -> Unit) {
                     .weight(1f)
                     .testTag("model-tab-${item.id}")
                     .background(
-                        if (active) colors.elevatedSurface.copy(alpha = 0.95f) else Color.Transparent,
+                        if (active) colors.accentSoft else Color.Transparent,
                         RoundedCornerShape(15.dp),
                     )
                     .then(
@@ -157,16 +160,30 @@ private fun ModelTabs(selected: String, onSelect: (String) -> Unit) {
                         role = Role.Tab,
                         onClick = { onSelect(item.id) },
                     )
-                    .padding(vertical = 7.dp),
+                    .padding(vertical = 5.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                androidx.compose.material3.Icon(
-                    item.icon,
-                    contentDescription = null,
-                    tint = if (active) colors.accentStrong else colors.textSecondary,
-                    modifier = Modifier.size(15.dp),
-                )
-                Spacer(Modifier.height(3.dp))
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .background(
+                            if (active) {
+                                colors.accentSoft
+                            } else {
+                                Color.White.copy(alpha = if (dark) 0.12f else 0.55f)
+                            },
+                            CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.Icon(
+                        item.icon,
+                        contentDescription = null,
+                        tint = if (active) colors.accentStrong else colors.textSecondary,
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
+                Spacer(Modifier.height(2.dp))
                 androidx.compose.material3.Text(
                     item.label,
                     fontSize = 8.5.sp,
@@ -194,7 +211,7 @@ private fun RecommendedCaption() {
             "Recommended",
             fontSize = 9.sp,
             fontFamily = GsFonts.Product,
-            color = colors.textTertiary,
+            color = colors.accent,
         )
     }
 }
@@ -384,7 +401,7 @@ private fun ReasoningBlock(
     val colors = GsTheme.colors
     Row(verticalAlignment = Alignment.CenterVertically) {
         androidx.compose.material3.Icon(
-            GsIcons.Sliders,
+            GsIcons.Brain,
             contentDescription = null,
             tint = colors.textSecondary,
             modifier = Modifier.size(14.dp),
@@ -414,6 +431,61 @@ private fun ReasoningBlock(
         AutoSelectRow(
             checked = autoSelect,
             onCheckedChange = onAutoSelect,
+        )
+    }
+}
+
+/**
+ * The mock's Auto Select glyph: a single four-point sparkle with a small
+ * filled dot to its upper left and a small ring at its lower right
+ * (model-selection-v2, Auto Select tile). No single icon in [GsIcons] composes
+ * that, so the tile draws the three marks in the same wash circle
+ * [RefWellTile] paints. Offsets are measured off the mock: dot −6.0, −3.4dp
+ * and ring +5.6, +5.4dp from the tile center.
+ */
+@Composable
+private fun AutoSelectTile() {
+    val tone = GsWellTone.Lilac
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .shadow(
+                elevation = 5.dp,
+                shape = CircleShape,
+                ambientColor = tone.ink.copy(alpha = 0.12f),
+                spotColor = tone.ink.copy(alpha = 0.20f),
+            )
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.55f),
+                        tone.wash,
+                    )
+                ),
+                CircleShape,
+            )
+            .border(1.dp, Color.White.copy(alpha = 0.85f), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.material3.Icon(
+            GsIcons.Sparkle,
+            contentDescription = null,
+            tint = tone.ink,
+            modifier = Modifier
+                .size(34.dp * 0.46f)
+                .offset(x = (-1).dp),
+        )
+        Box(
+            Modifier
+                .offset(x = (-6).dp, y = (-3.4).dp)
+                .size(3.2.dp)
+                .background(tone.ink, CircleShape),
+        )
+        Box(
+            Modifier
+                .offset(x = 5.6.dp, y = 5.4.dp)
+                .size(5.5.dp)
+                .border(1.4.dp, tone.ink, CircleShape),
         )
     }
 }
@@ -479,7 +551,7 @@ private fun AutoSelectRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) 
             .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RefWellTile(GsIcons.Sparkles, GsWellTone.Lilac, 34.dp)
+        AutoSelectTile()
         Spacer(Modifier.width(11.dp))
         Column(Modifier.weight(1f)) {
             androidx.compose.material3.Text(
