@@ -5663,3 +5663,7 @@ Stage Summary:
   now only moves the effort when the id belongs to the picker's four models. The
   Settings AI page has its own vocabulary ("creative"), and the first version
   coerced it to "pro" — caught by the two existing model-radio tests.
+- Final HEAD 3c680a7c is green on both workflows: android-app 41151992515 and
+  iOS 41151996915, the latter printing `ios-new-chat: pass` and
+  `ios-model-picker: pass` against the derived rim windows rather than the
+  title-only fallback.
