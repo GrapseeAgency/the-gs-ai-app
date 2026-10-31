@@ -202,10 +202,9 @@ SCREENS = {
     ),
     # The pre-chat page and the model picker. Their headers are taller than a
     # sheet's (a companion mark above the title / a tab bar under it), so the
-    # title band moves with the screen rather than the shared 9-14pt rule.
-    # Android is gated on the card rims the mock draws; iOS is title-gated
-    # until its first capture derives the same numbers, which is how the six
-    # sheets were calibrated.
+    # title band moves with the screen rather than the shared 9-14pt rule. Both
+    # platforms gate the card rims the mock draws; the iOS numbers are derived
+    # from run 41149323936's captures, as the six sheets were.
     "new-chat": dict(
         stem="ref-new-chat",
         rims=2,
@@ -213,8 +212,8 @@ SCREENS = {
         steps=None,
         note="composer card, top and bottom rim",
         title_top_band=(12.0, 22.0),
-        rims_ios=None,
-        rim_window_ios=(0.0, 1.0),
+        rims_ios=2,
+        rim_window_ios=(320.0, 400.0),
         steps_ios=None,
         title_top_band_ios=(12.0, 40.0),
     ),
@@ -225,8 +224,8 @@ SCREENS = {
         steps=None,
         note="model cards below the list",
         title_top_band=(9.0, 14.0),
-        rims_ios=None,
-        rim_window_ios=(0.0, 1.0),
+        rims_ios=4,
+        rim_window_ios=(200.0, 520.0),
         steps_ios=None,
         title_top_band_ios=(9.0, 30.0),
     ),

@@ -296,6 +296,41 @@ Every kit addition they use is defaulted (`RefSheetRow.extra`,
 existing call site changes height or structure. The renders were re-taken after
 these corrections.
 
+## The pre-chat page and the model picker (2026-10-31)
+
+Two references arrived together and share one rule.
+
+**`home-new-chat.png` — "Start a New Chat".** Android `NewChatScreen` at
+`new-chat`, iOS `NewChatView` at `.newChat`; Home's New Chat pill and the
+drawer's new-chat action open it. Every element is wired: the composer sends
+what was typed and writes the wire mode first, each tool chip seeds its own
+prompt without sending (the same rule Explore uses — only the trip planner has a
+screen), the four Recent rows are the real active conversations with real
+previews and elapsed times (their icons come from the shipped drawer topic
+classifier, which is why "Code Review Help" draws a code mark), "View all" opens
+Chats, "Explore AI Models" opens the picker, and the header control opens the
+drawer — the page carries no dock, and an app with a drawer cannot ship without
+one way to reach it.
+
+**`model-selection-v2.png` — "Model Selection".** Android `ModelSelectionScreen`
+at `model-picker`, iOS `ModelSelectionView` at `.modelPicker`. The four tabs
+filter by the capability each model declares; a card stores the model and moves
+the effort chip to that model's default; the effort control writes the wire
+mode; Auto Select and Continue are live.
+
+**The rule that makes the pair coherent** (`ModelRouter`, both platforms, tested
+by `ModelRouterTest` + `ModelRouterTests`): with Auto Select ON, the send path
+picks the model per message — image → Vision, code signal → Code, long → Pro,
+otherwise the stored preference — and takes THAT model's default effort; with it
+OFF, the effort control is the authority. The mock draws Auto Select ON with
+Medium lit, which is exactly Pro's default, so the state it pictures is a state
+the code produces.
+
+**Capture fixtures.** Both pages are drawn in the owner's lilac on Android (the
+shipped accent can be set to it), and the pre-chat capture seeds the mock's own
+four conversations on both platforms — TEST-ONLY, removed afterwards — because
+the shipped store starts empty.
+
 ## Acceptance
 
 A capture is not evidence until a gate can fail on it. All ten Android

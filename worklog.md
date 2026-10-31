@@ -5650,3 +5650,16 @@ Work Log:
   pass the card gate and its self-test on Android (new-chat: 2 composer rims,
   model-picker: 4 card rims); copy parity covers 13 inventories on both
   platforms; swift_structure_gate and ios_static_gates pass.
+
+Stage Summary:
+- The pre-chat page and the redesigned model picker are built on both platforms
+  and observed: android-app 41141273236 green (410 JVM tests, 12 captures, both
+  new gates and self-tests) and iOS 41149323936 green (build, XCTest including
+  ModelRouterTests, all 13 captures, ios-new-chat and ios-model-picker pass).
+- The iOS card gate for the two new pages is no longer title-only: its rim
+  numbers were derived from that run's captures (composer 2 rims at 320-400,
+  model cards 4 rims at 200-520) and both self-tests go red on doctored copies.
+- One real product fix fell out of the work: `SettingsStore.updatePreferredModel`
+  now only moves the effort when the id belongs to the picker's four models. The
+  Settings AI page has its own vocabulary ("creative"), and the first version
+  coerced it to "pro" — caught by the two existing model-radio tests.
