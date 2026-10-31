@@ -136,12 +136,15 @@ final class ReferenceSheetsRenderTests: XCTestCase {
         for (index, row) in rows.enumerated() {
             let id = "render-recent-\(index)"
             let stamp = ConversationStore.isoString(now.addingTimeInterval(-row.2 * 3600))
-            store.upsert(StoredConversation(
-                id: id, title: row.0, modelId: nil, pinned: false, archived: false,
-                createdAt: stamp, updatedAt: stamp))
+            // Message first: `append` touches an existing conversation's
+            // `updatedAt` to now, which would make every row read "now". The
+            // conversation is written after it, with the mock's own stamp.
             store.append(StoredMessage(
                 id: "render-msg-\(index)", conversationId: id, role: "assistant",
                 content: row.1, createdAt: stamp))
+            store.upsert(StoredConversation(
+                id: id, title: row.0, modelId: nil, pinned: false, archived: false,
+                createdAt: stamp, updatedAt: stamp))
             ids.append(id)
         }
         return ids
