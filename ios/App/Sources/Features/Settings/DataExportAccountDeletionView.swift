@@ -8,18 +8,51 @@ import SwiftUI
 /// Data Retention (period, auto-delete, clear history) and Delete Your Account
 /// (the warning card with its consent gate).
 ///
-/// HONESTY:
-///  - An export writes a real JSON/PDF/CSV file and hands it to the share
-///    sheet. This build sends no mail, so the archive row says "saved to a file
-///    you choose" and its pill says "Save Archive".
-///  - Attachment RECORDS travel with a chat export; attachment bytes do not,
-///    so the row says "attachment details".
-///  - Auto-delete is OFF by default even though the mock draws it on. Turning
-///    it on runs the purge immediately, and the same purge runs at launch, so
-///    the switch is never a stored value with no reader.
-///  - Clear Chat History removes conversations, messages and staged attachment
-///    copies; Library saves stay. Delete Account removes all of that plus saved
-///    items and signs the session out.
+/// HONESTY — accepted deviations from the reference mock, D1–D7.
+///
+/// The mock is the bar for inventory, order, geometry, tones and glyphs. The
+/// seven entries below are the ONLY places this page intentionally differs
+/// from it, each explicitly accepted as deliberate rather than drifted into.
+/// Any mismatch with the mock not listed here is a defect.
+///
+///  - D1 ACCEPTED — Auto-Delete Inactive Data ships OFF; the mock draws it
+///    on. The switch's setter runs the purge the moment it turns on, and the
+///    same purge runs at launch, so a default-on switch would start deleting
+///    conversations on first launch. The honest default is off, with a real
+///    reader behind the stored value. Changing the default is a product
+///    decision in SettingsStore, not a render fix.
+///  - D2 ACCEPTED — Archive row: the mock says "Download or Request Archive"
+///    / "Export will be prepared and sent to your email." / "Request
+///    Archive"; this build says "Download Complete Archive" / "Saved to a
+///    file you choose on this device. Large exports may take some time." /
+///    "Save Archive". It sends no mail, so it will not promise an email
+///    delivery it cannot perform.
+///  - D3 ACCEPTED — Conversations row: the mock says "and attachments.";
+///    this build says "and attachment details." Attachment RECORDS travel
+///    with a chat export; attachment bytes do not.
+///  - D4 ACCEPTED — Retention row: the mock says "Choose how long to keep
+///    your data after account inactivity or deletion."; this build says
+///    "Choose how long to keep conversations you have not opened." The purge
+///    only ever touches the local conversation corpus, so the mock's wider
+///    noun would promise a sweep the code cannot perform.
+///  - D5 ACCEPTED — Toggle detail: the mock says "Automatically delete data
+///    after the retention period."; this build says "Automatically delete
+///    conversations after the retention period." Same scope reason as D4.
+///  - D6 ACCEPTED — Clear Chat History: the mock says "Permanently remove
+///    all conversations from your account."; this build says "on this
+///    device." There is no server account; conversations live only here.
+///  - D7 ACCEPTED — Delete card: the mock says "This will remove your
+///    account, all data, and access to Nexly. This action cannot be
+///    undone."; this build names the local effect — conversations, saved
+///    items, files and account details, then sign-out — because no server
+///    account exists to delete. The honest scope is the local corpus plus
+///    the local identity.
+///
+///  Mechanics the register rests on: an export writes a real JSON/PDF/CSV
+///  file and hands it to the share sheet; Clear Chat History removes
+///  conversations, messages and staged attachment copies while Library saves
+///  stay; Delete Account removes all of that plus saved items and signs the
+///  session out.
 struct DataExportAccountDeletionView: View {
 
     @Environment(\.dismiss) private var dismiss
@@ -72,7 +105,7 @@ struct DataExportAccountDeletionView: View {
                     detail: "Saved to a file you choose on this device. Large exports may take some time.",
                     action: { export(.complete) }
                 ) {
-                    GsWellTile(glyph: "cloud-download", tone: .mint, size: 34)
+                    archiveTile
                 } trailing: {
                     actionPill("Save Archive")
                 }
@@ -94,7 +127,10 @@ struct DataExportAccountDeletionView: View {
                 GsSheetToggle(
                     title: "Auto-Delete Inactive Data",
                     detail: "Automatically delete conversations after the retention period.",
-                    isOn: autoDeleteBinding
+                    isOn: autoDeleteBinding,
+                    // The reference's lilac ON track (Android draws the same
+                    // accentSoft → accentStrong wash in its pinned palette).
+                    onColors: [Aero.refAccentSoft, Aero.refAccentStrong]
                 ) {
                     GsWellTile(glyph: "trash", tone: .lilac, size: 34)
                 }
@@ -243,9 +279,9 @@ struct DataExportAccountDeletionView: View {
                         .foregroundStyle(Aero.text)
                     Spacer(minLength: 0)
                     if selected {
-                        NexlyGlyph(name: "check", size: 8, color: Aero.onAccent)
+                        NexlyGlyph(name: "check", size: 8, color: Aero.onRefAccent)
                             .frame(width: 13, height: 13)
-                            .background(Circle().fill(Aero.accent))
+                            .background(Circle().fill(Aero.refAccent))
                     }
                 }
                 Text(option.caption)
@@ -268,7 +304,7 @@ struct DataExportAccountDeletionView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
                     .strokeBorder(
-                        selected ? Aero.accent.opacity(0.45) : Color.white.opacity(0.62),
+                        selected ? Aero.refAccent.opacity(0.45) : Color.white.opacity(0.62),
                         lineWidth: 1)
             )
         }
@@ -277,8 +313,12 @@ struct DataExportAccountDeletionView: View {
         .accessibilityLabel("\(option.label), \(option.caption)")
     }
 
+    /// The reference art's lilac, not the product chrome's peach: this page is
+    /// one of the Dreamy Pastel reference pages (docs/reference/pending), so
+    /// every accent-tinted element reads the Aero.refAccent family and the
+    /// Delete card keeps its rose/danger signal.
     private var selectedTileFill: Color {
-        Aero.accentSoft
+        Aero.refAccentSoft
     }
 
     /// The mock's paper pill: content-sized, accent ink, a chevron. Drawn as a
@@ -288,18 +328,41 @@ struct DataExportAccountDeletionView: View {
         HStack(spacing: 3) {
             Text(label)
                 .font(.custom(Aero.productName(.semibold), size: 9.5, relativeTo: .caption2))
-                .foregroundStyle(Aero.accentStrong)
+                .foregroundStyle(Aero.refAccentStrong)
                 .lineLimit(1)
-            NexlyGlyph(name: "chevron-right", size: 10, color: Aero.accentStrong.opacity(0.70))
+            NexlyGlyph(name: "chevron-right", size: 10, color: Aero.refAccentStrong.opacity(0.70))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(Capsule().fill(Aero.accentSoft))
+        .background(Capsule().fill(Aero.refAccentSoft))
         .overlay(Capsule().strokeBorder(.white.opacity(0.85), lineWidth: 1))
     }
 
-    private var deleteCard: some View {
-        VStack(alignment: .leading, spacing: 9) {
+    /// The mock draws the archive row's download as a solid spring-green
+    /// circle with a plain white arrow — the one well on the page that is not
+    /// pale (sampled off the reference art: #7AE9BA → #51E5A4). The
+    /// "download" glyph is in both platforms' Nexly inventories; Kotlin draws
+    /// the same tile.
+    private var archiveTile: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.478, green: 0.914, blue: 0.729),
+                            Color(red: 0.318, green: 0.898, blue: 0.643),
+                        ],
+                        startPoint: .top, endPoint: .bottom))
+            Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1)
+            NexlyGlyph(name: "download", size: 16, color: .white)
+        }
+        .frame(width: 34, height: 34)
+        .shadow(
+            color: Color(red: 0.090, green: 0.478, blue: 0.314).opacity(0.16),
+            radius: 3, x: 0, y: 2)
+    }
+
+    private var deleteCard: some View {        VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 11) {
                 ZStack {
                     Circle()

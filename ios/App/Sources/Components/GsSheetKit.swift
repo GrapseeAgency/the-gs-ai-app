@@ -189,6 +189,10 @@ struct GsSheetGroupHeader: View {
 struct GsSheetSwitch: View {
     @Binding var isOn: Bool
     var enabled: Bool = true
+    /// Page-scoped ON-track gradient. Nil keeps the kit's peach default; the
+    /// Dreamy Pastel reference pages pass their Aero.refAccent family so the
+    /// switch reads the reference art's lilac without retinting other sheets.
+    var onColors: [Color]? = nil
 
     var body: some View {
         Button {
@@ -202,7 +206,7 @@ struct GsSheetSwitch: View {
                     isOn
                         ? AnyShapeStyle(
                             LinearGradient(
-                                colors: [ExplorePalette.peachDeep, ExplorePalette.peach],
+                                colors: onColors ?? [ExplorePalette.peachDeep, ExplorePalette.peach],
                                 startPoint: .leading, endPoint: .trailing))
                         : AnyShapeStyle(Color.white.opacity(0.62))
                 )
@@ -383,6 +387,8 @@ struct GsSheetToggle<Leading: View>: View {
     var detail: String?
     @Binding var isOn: Bool
     var enabled: Bool = true
+    /// Forwarded to `GsSheetSwitch`; nil keeps the kit's peach ON track.
+    var onColors: [Color]? = nil
     @ViewBuilder var leading: () -> Leading
 
     var body: some View {
@@ -402,7 +408,7 @@ struct GsSheetToggle<Leading: View>: View {
                 }
             }
             Spacer(minLength: 8)
-            GsSheetSwitch(isOn: $isOn, enabled: enabled)
+            GsSheetSwitch(isOn: $isOn, enabled: enabled, onColors: onColors)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10.5)

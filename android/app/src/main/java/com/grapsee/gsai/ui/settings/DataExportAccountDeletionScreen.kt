@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
@@ -77,18 +78,50 @@ import kotlinx.coroutines.launch
  * Data Retention (period, auto-delete, clear history) and Delete Your Account
  * (the warning card with its consent gate).
  *
- * HONESTY:
- *  - The export writes a real file in the chosen format. It is NOT emailed:
- *    this build has no mail transport, so the archive row says "saved to a file
- *    you choose" and its pill says "Save Archive".
- *  - Attachment RECORDS travel with a chat export; attachment bytes do not, so
- *    the row says "attachment details".
- *  - Auto-delete is OFF by default even though the mock draws it on. Turning it
- *    on runs the purge immediately, and the same purge runs at launch, so the
- *    switch is never a stored value with no reader.
- *  - Clear Chat History removes conversations, messages and staged attachment
- *    copies; Library saves stay. Delete Account removes all of that plus saved
- *    items and signs the session out.
+ * HONESTY — accepted deviations from the reference mock, D1–D7.
+ *
+ * The mock is the bar for inventory, order, geometry, tones and glyphs. The
+ * seven entries below are the ONLY places this page intentionally differs
+ * from it, each explicitly accepted as deliberate rather than drifted into.
+ * Any mismatch with the mock not listed here is a defect.
+ *
+ *  - D1 ACCEPTED — Auto-Delete Inactive Data ships OFF; the mock draws it
+ *    on. The switch's setter runs the purge the moment it turns on, and the
+ *    same purge runs at launch, so a default-on switch would start deleting
+ *    conversations on first launch. The honest default is off, with a real
+ *    reader behind the stored value. Changing the default is a product
+ *    decision in SettingsStore, not a render fix.
+ *  - D2 ACCEPTED — Archive row: the mock says "Download or Request Archive"
+ *    / "Export will be prepared and sent to your email." / "Request
+ *    Archive"; this build says "Download Complete Archive" / "Saved to a
+ *    file you choose on this device. Large exports may take some time." /
+ *    "Save Archive". It sends no mail, so it will not promise an email
+ *    delivery it cannot perform.
+ *  - D3 ACCEPTED — Conversations row: the mock says "and attachments.";
+ *    this build says "and attachment details." Attachment RECORDS travel
+ *    with a chat export; attachment bytes do not.
+ *  - D4 ACCEPTED — Retention row: the mock says "Choose how long to keep
+ *    your data after account inactivity or deletion."; this build says
+ *    "Choose how long to keep conversations you have not opened." The purge
+ *    only ever touches the local conversation corpus, so the mock's wider
+ *    noun would promise a sweep the code cannot perform.
+ *  - D5 ACCEPTED — Toggle detail: the mock says "Automatically delete data
+ *    after the retention period."; this build says "Automatically delete
+ *    conversations after the retention period." Same scope reason as D4.
+ *  - D6 ACCEPTED — Clear Chat History: the mock says "Permanently remove
+ *    all conversations from your account."; this build says "on this
+ *    device." There is no server account; conversations live only here.
+ *  - D7 ACCEPTED — Delete card: the mock says "This will remove your
+ *    account, all data, and access to Nexly. This action cannot be
+ *    undone."; this build names the local effect — conversations, saved
+ *    items, files and account details, then sign-out — because no server
+ *    account exists to delete. The honest scope is the local corpus plus
+ *    the local identity.
+ *
+ *  Mechanics the register rests on: the export writes a real file in the
+ *  chosen format; Clear Chat History removes conversations, messages and
+ *  staged attachment copies while Library saves stay; Delete Account removes
+ *  all of that plus saved items and signs the session out.
  */
 @Composable
 fun DataExportAccountDeletionScreen(
@@ -213,7 +246,7 @@ fun DataExportAccountDeletionScreen(
                 // reference's "prepared and sent to your email" line.
                 subtitle = "Saved to a file you choose on this device. Large exports may take some time.",
                 onClick = { save(DataExport.Scope.COMPLETE) },
-                leading = { RefWellTile(GsIcons.CloudDownload, GsWellTone.Mint, 34.dp) },
+                leading = { ArchiveTile() },
                 trailing = { RefActionPill("Save Archive") },
             )
         }
@@ -378,6 +411,40 @@ private fun RefActionPill(label: String, modifier: Modifier = Modifier) {
             contentDescription = null,
             tint = colors.accentStrong.copy(alpha = 0.70f),
             modifier = Modifier.size(10.dp),
+        )
+    }
+}
+
+/**
+ * The mock draws the archive row's download as a solid spring-green circle
+ * with a plain white arrow — the one well on the page that is not pale
+ * (sampled off the reference art: #7AE9BA → #51E5A4). The download glyph is
+ * in both platforms' Nexly inventories; iOS draws the same tile.
+ */
+@Composable
+private fun ArchiveTile() {
+    val shadowInk = Color(0xFF177A50)
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .shadow(
+                elevation = 5.dp,
+                shape = CircleShape,
+                ambientColor = shadowInk.copy(alpha = 0.12f),
+                spotColor = shadowInk.copy(alpha = 0.20f),
+            )
+            .background(
+                Brush.verticalGradient(listOf(Color(0xFF7AE9BA), Color(0xFF51E5A4))),
+                CircleShape,
+            )
+            .border(1.dp, Color.White.copy(alpha = 0.85f), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            GsIcons.Download,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(16.dp),
         )
     }
 }
