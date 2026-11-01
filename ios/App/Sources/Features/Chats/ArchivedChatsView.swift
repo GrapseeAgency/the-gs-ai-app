@@ -145,7 +145,7 @@ struct ArchivedChatsView: View {
                 )
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(store.archivedConversations.count) Archived Conversation\(store.archivedConversations.count == 1 ? "" : "s")")
-                    .font(.custom(Aero.productName(.semibold), size: 12, relativeTo: .body))
+                    .font(.custom(Aero.productName(.medium), size: 12, relativeTo: .body))
                     .foregroundStyle(Aero.text)
                 Text("Keep your space tidy. Restore anytime.")
                     .font(.custom(Aero.productName(.regular), size: 9.5, relativeTo: .caption))
@@ -179,7 +179,7 @@ struct ArchivedChatsView: View {
                 )
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.custom(Aero.productName(.semibold), size: 12, relativeTo: .body))
+                    .font(.custom(Aero.productName(.medium), size: 12, relativeTo: .body))
                     .foregroundStyle(Aero.text)
                     .lineLimit(1)
                 Text("Archived  •  \(Self.longDate(from: conversation.updatedAt))")
@@ -193,7 +193,7 @@ struct ArchivedChatsView: View {
                 HStack(spacing: 6) {
                     NexlyGlyph(name: "restore", size: 14, color: Aero.textSecondary)
                     Text("Restore")
-                        .font(.custom(Aero.productName(.semibold), size: 12, relativeTo: .caption))
+                        .font(.custom(Aero.productName(.medium), size: 12, relativeTo: .caption))
                         .foregroundStyle(Aero.refAccentStrong)
                 }
                 .padding(.horizontal, 12)
@@ -231,7 +231,7 @@ struct ArchivedChatsView: View {
                     )
                 VStack(alignment: .leading, spacing: 2) {
                     Text("About Archived Chats")
-                        .font(.custom(Aero.productName(.semibold), size: 12, relativeTo: .body))
+                        .font(.custom(Aero.productName(.medium), size: 12, relativeTo: .body))
                         .foregroundStyle(Aero.text)
                     Text("Archived conversations are hidden from your main chat list, but you can restore them anytime.")
                         .font(.custom(Aero.productName(.regular), size: 9.5, relativeTo: .caption))
@@ -256,7 +256,7 @@ struct ArchivedChatsView: View {
                 HStack(spacing: 8) {
                     NexlyGlyph(name: "trash", size: 16, color: Color(red: 0.894, green: 0.341, blue: 0.420))
                     Text("Clear Archived")
-                        .font(.custom(Aero.productName(.semibold), size: 12, relativeTo: .body))
+                        .font(.custom(Aero.productName(.medium), size: 12, relativeTo: .body))
                         .foregroundStyle(Color(red: 0.894, green: 0.341, blue: 0.420))
                 }
                 Text("Permanently remove all archived conversations.")

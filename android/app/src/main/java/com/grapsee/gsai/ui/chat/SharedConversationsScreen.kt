@@ -151,7 +151,7 @@ fun SharedConversationsScreen(
                 RefIconTile(GsIcons.Users, tint = GsWellTone.Lilac.ink, size = 44.dp)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Share Conversations", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.textPrimary)
+                    Text("Share Conversations", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = colors.textPrimary)
                     Text("Let others view your helpful conversations with Nexly.", style = MaterialTheme.typography.labelMedium, color = colors.textSecondary)
                 }
                 Row(
@@ -177,7 +177,7 @@ fun SharedConversationsScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(sectionTitle, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), color = colors.textPrimary)
+            Text(sectionTitle, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium), color = colors.textPrimary)
             Text("${shares.size} conversation${if (shares.size == 1) "" else "s"}", style = MaterialTheme.typography.labelMedium, color = colors.textTertiary)
         }
 
@@ -192,7 +192,7 @@ fun SharedConversationsScreen(
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "No Shared Conversations Yet",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
                     color = colors.textPrimary,
                 )
                 Text(
@@ -214,7 +214,7 @@ fun SharedConversationsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(GsIcons.Share2, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Share a Conversation", color = Color.White, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                    Text("Share a Conversation", color = Color.White, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
                 }
             }
         } else {
@@ -337,7 +337,7 @@ private fun SharedTab(
         Spacer(Modifier.width(7.dp))
         Text(
             label,
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium),
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (active) FontWeight.Medium else FontWeight.Medium),
             color = if (active) colors.accentStrong else colors.textSecondary,
         )
     }
@@ -370,7 +370,7 @@ private fun SharedRow(
         RefIconTile(sharedGlyph(title), tint = sharedTone(title), size = 44.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 if (people > 0) "Shared ${ChatTime.ago(sharedAt)}  •  With $people ${if (people == 1) "person" else "people"}"
                 else "Shared ${ChatTime.ago(sharedAt)}",
@@ -400,7 +400,7 @@ private fun SharedRow(
                 .padding(horizontal = 14.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("View", style = MaterialTheme.typography.labelLarge, color = Color(0xFF21355E), fontWeight = FontWeight.SemiBold)
+            Text("View", style = MaterialTheme.typography.labelLarge, color = Color(0xFF21355E), fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.width(6.dp))
         Icon(

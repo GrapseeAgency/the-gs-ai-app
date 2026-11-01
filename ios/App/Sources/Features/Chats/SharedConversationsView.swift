@@ -42,7 +42,7 @@ struct SharedConversationsView: View {
             shareCard.padding(.bottom, 6)
             HStack {
                 Text(tab == "others" ? "Shared with Others" : "Shared by You")
-                    .font(.custom(Aero.productName(.semibold), size: 13, relativeTo: .headline))
+                    .font(.custom(Aero.productName(.medium), size: 13, relativeTo: .headline))
                     .foregroundStyle(Aero.text)
                 Spacer()
                 Text("\(shares.entries.count) conversation\(shares.entries.count == 1 ? "" : "s")")
@@ -59,7 +59,7 @@ struct SharedConversationsView: View {
                     .frame(width: 237, height: 156)
                     .accessibilityHidden(true)
                     Text("No Shared Conversations Yet")
-                        .font(.custom(Aero.productName(.semibold), size: 17, relativeTo: .title3))
+                        .font(.custom(Aero.productName(.medium), size: 17, relativeTo: .title3))
                         .foregroundStyle(Aero.text)
                         .padding(.top, 2)
                     Text("Share your conversations to collaborate,\nlearn and discover together.")
@@ -73,7 +73,7 @@ struct SharedConversationsView: View {
                         HStack(spacing: 8) {
                             NexlyGlyph(name: "share-2", size: 16, color: .white)
                             Text("Share a Conversation")
-                                .font(.custom(Aero.productName(.semibold), size: 13, relativeTo: .body))
+                                .font(.custom(Aero.productName(.medium), size: 13, relativeTo: .body))
                                 .foregroundStyle(.white)
                         }
                         .frame(maxWidth: .infinity)
@@ -178,7 +178,7 @@ struct SharedConversationsView: View {
                 )
             VStack(alignment: .leading, spacing: 2) {
                 Text("Share Conversations")
-                    .font(.custom(Aero.productName(.semibold), size: 12, relativeTo: .body))
+                    .font(.custom(Aero.productName(.medium), size: 12, relativeTo: .body))
                     .foregroundStyle(Aero.text)
                 Text("Let others view your helpful conversations with Nexly.")
                     .font(.custom(Aero.productName(.regular), size: 9.5, relativeTo: .caption))
@@ -218,7 +218,7 @@ struct SharedConversationsView: View {
                 )
             VStack(alignment: .leading, spacing: 2) {
                 Text(share.title)
-                    .font(.custom(Aero.productName(.semibold), size: 12, relativeTo: .body))
+                    .font(.custom(Aero.productName(.medium), size: 12, relativeTo: .body))
                     .foregroundStyle(Aero.text)
                     .lineLimit(1)
                 Text(share.people > 0
@@ -246,7 +246,7 @@ struct SharedConversationsView: View {
                 router.path.append(.chat(share.conversationId))
             } label: {
                 Text("View")
-                    .font(.custom(Aero.productName(.semibold), size: 12, relativeTo: .caption))
+                    .font(.custom(Aero.productName(.medium), size: 12, relativeTo: .caption))
                     .foregroundStyle(Aero.refAccentStrong)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)

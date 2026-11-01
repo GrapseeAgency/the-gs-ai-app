@@ -126,7 +126,7 @@ struct ConversationDetailsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
                     Text(title)
-                        .font(.custom(Aero.productName(.semibold), size: 15, relativeTo: .title3))
+                        .font(.custom(Aero.productName(.medium), size: 15, relativeTo: .title3))
                         .foregroundStyle(Aero.text)
                         .lineLimit(1)
                     if conversation?.pinned == true {
@@ -158,7 +158,7 @@ struct ConversationDetailsView: View {
                 )
             VStack(alignment: .leading, spacing: 2) {
                 Text("Pin Conversation")
-                    .font(.custom(Aero.productName(.semibold), size: 12, relativeTo: .body))
+                    .font(.custom(Aero.productName(.medium), size: 12, relativeTo: .body))
                     .foregroundStyle(Aero.text)
                 Text("Keep this chat at the top.")
                     .font(.custom(Aero.productName(.regular), size: 9.5, relativeTo: .caption))
@@ -190,7 +190,7 @@ struct ConversationDetailsView: View {
                 )
             VStack(alignment: .leading, spacing: 2) {
                 Text("About This Conversation")
-                    .font(.custom(Aero.productName(.semibold), size: 12, relativeTo: .body))
+                    .font(.custom(Aero.productName(.medium), size: 12, relativeTo: .body))
                     .foregroundStyle(Aero.text)
                 Text("This conversation may include personal or sensitive information. Manage it responsibly.")
                     .font(.custom(Aero.productName(.regular), size: 9.5, relativeTo: .caption))
@@ -211,7 +211,7 @@ struct ConversationDetailsView: View {
             HStack(spacing: 8) {
                 NexlyGlyph(name: "trash", size: 16, color: .white)
                 Text("Delete Conversation")
-                    .font(.custom(Aero.productName(.semibold), size: 13, relativeTo: .body))
+                    .font(.custom(Aero.productName(.medium), size: 13, relativeTo: .body))
                     .foregroundStyle(.white)
             }
             .frame(maxWidth: .infinity)
@@ -243,7 +243,7 @@ struct ConversationDetailsView: View {
                     )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.custom(Aero.productName(.semibold), size: 12, relativeTo: .body))
+                        .font(.custom(Aero.productName(.medium), size: 12, relativeTo: .body))
                         .foregroundStyle(Aero.text)
                     Text(subtitle)
                         .font(.custom(Aero.productName(.regular), size: 9.5, relativeTo: .caption))

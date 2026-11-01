@@ -64,7 +64,7 @@ struct NewChatView: View {
                     .padding(.top, 4)
                     VStack(spacing: 4) {
                         Text("Start a New Chat")
-                            .font(.custom(Aero.productName(.semibold), size: 22, relativeTo: .title2))
+                            .font(.custom(Aero.productName(.medium), size: 22, relativeTo: .title2))
                             .foregroundStyle(Aero.text)
                         Text("Ask anything, get instant answers,\nor explore something new.")
                             .font(.custom(Aero.productName(.regular), size: 10.5, relativeTo: .caption))
@@ -105,7 +105,7 @@ struct NewChatView: View {
             .shadow(color: Aero.refAccent.opacity(0.16), radius: 3, x: 0, y: 2)
             VStack(alignment: .leading, spacing: 0) {
                 Text("Nexly")
-                    .font(.custom(Aero.productName(.semibold), size: 17, relativeTo: .headline))
+                    .font(.custom(Aero.productName(.medium), size: 17, relativeTo: .headline))
                     .foregroundStyle(Aero.text)
                 Text("Your AI companion.\nAlways.")
                     .font(.custom(Aero.productName(.regular), size: 9.5, relativeTo: .caption2))
@@ -252,7 +252,7 @@ struct NewChatView: View {
     private var recentHeader: some View {
         HStack {
             Text("Recent Chats")
-                .font(.custom(Aero.productName(.semibold), size: 13))
+                .font(.custom(Aero.productName(.medium), size: 13))
                 .foregroundStyle(Aero.text)
                 .accessibilityAddTraits(.isHeader)
             Spacer()

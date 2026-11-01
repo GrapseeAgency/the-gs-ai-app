@@ -139,7 +139,7 @@ fun NewChatScreen(
                 androidx.compose.material3.Text(
                     "Start a New Chat",
                     fontSize = 22.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Medium,
                     fontFamily = GsFonts.Product,
                     color = colors.textPrimary,
                 )
@@ -264,7 +264,7 @@ private fun CompanionHeader(onOpenMenu: () -> Unit) {
             androidx.compose.material3.Text(
                 "Nexly",
                 fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Medium,
                 fontFamily = GsFonts.Product,
                 color = colors.textPrimary,
             )
@@ -485,7 +485,7 @@ private fun RecentHeader(onViewAll: () -> Unit) {
         androidx.compose.material3.Text(
             "Recent Chats",
             fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Medium,
             fontFamily = GsFonts.Product,
             color = colors.textPrimary,
         )

@@ -146,7 +146,7 @@ fun ArchivedChatsScreen(
                     Column {
                         Text(
                             "${archived.size} Archived Conversation${if (archived.size == 1) "" else "s"}",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                             color = colors.textPrimary,
                         )
                         Text(
@@ -200,7 +200,7 @@ fun ArchivedChatsScreen(
                 Column(Modifier.weight(1f)) {
                     Text(
                         "About Archived Chats",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                         color = colors.textPrimary,
                     )
                     Text(
@@ -231,7 +231,7 @@ fun ArchivedChatsScreen(
                     Spacer(Modifier.width(8.dp))
                     Text(
                         "Clear Archived",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                         color = Color(0xFFE4576B),
                     )
                 }
@@ -345,7 +345,7 @@ private fun ArchivedRow(
         Column(Modifier.weight(1f)) {
             Text(
                 title,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                 color = colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -368,7 +368,7 @@ private fun ArchivedRow(
         ) {
             Icon(GsIcons.ArchiveRestore, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
-            Text("Restore", style = MaterialTheme.typography.labelLarge, color = Color(0xFF21355E), fontWeight = FontWeight.SemiBold)
+            Text("Restore", style = MaterialTheme.typography.labelLarge, color = Color(0xFF21355E), fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.width(6.dp))
         Icon(

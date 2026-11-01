@@ -158,7 +158,7 @@ fun ChatInfoScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             title,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
                             color = colors.textPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -208,7 +208,7 @@ fun ChatInfoScreen(
                 RefIconTile(GsIcons.Pin, tint = GsWellTone.Peach.ink)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Pin Conversation", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.textPrimary)
+                    Text("Pin Conversation", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = colors.textPrimary)
                     Text("Keep this chat at the top.", style = MaterialTheme.typography.labelMedium, color = colors.textSecondary)
                 }
                 Switch(
@@ -302,7 +302,7 @@ fun ChatInfoScreen(
                 RefIconTile(GsIcons.Lightbulb, tint = GsWellTone.Lilac.ink, size = 40.dp)
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text("About This Conversation", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.textPrimary)
+                    Text("About This Conversation", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = colors.textPrimary)
                     Text(
                         "This conversation may include personal or sensitive information. Manage it responsibly.",
                         style = MaterialTheme.typography.labelMedium,
@@ -330,7 +330,7 @@ fun ChatInfoScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(GsIcons.Trash2, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Delete Conversation", color = Color.White, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                Text("Delete Conversation", color = Color.White, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -405,7 +405,7 @@ private fun DetailRow(
         RefIconTile(icon, tint = tone.ink)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.textPrimary)
+            Text(title, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = colors.textPrimary)
             Text(subtitle, style = MaterialTheme.typography.labelMedium, color = colors.textSecondary)
         }
         Icon(GsIcons.ChevronRight, contentDescription = null, tint = colors.textTertiary, modifier = Modifier.size(16.dp))
