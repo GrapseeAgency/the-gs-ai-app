@@ -5731,3 +5731,13 @@ crops and their manifest entries are deleted, and the composition was
 pre-checked against the mocks with a scratch render before CI. The artwork
 accounting is back under budget with zero reference-derived bitmaps in the
 app.
+
+Accuracy pass (2026-11-01, final): the three pages' colors were re-sampled
+from the mocks themselves (petals #FED4CE/#FECDE1/#F9B0B5, dome #EABCF9
+tints, shared bubble #F4E1FE/#FEDDEC, lilac petals #F8D2FC/#E1C7FE) and the
+icon/tone pairs now match each page's own mock (code peach, book mint,
+sparkle lilac, plane rose). The shared rows carry the mock's full design —
+"With N people" (singular honoured) and the overlapping pastel person chips
+drawn in code — rendered from the share record's people count, which real
+shares leave at 0 and the capture seeds at the mock's 3/1/2. Both workflows
+green on the final HEAD 33879318: android-app 41325468314, iOS 41325471517.
