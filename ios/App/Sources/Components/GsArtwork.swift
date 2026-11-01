@@ -1341,6 +1341,7 @@ extension GsRefScenes {
                                       .clear]),
                     center: bubbleCenter, startRadius: 0, endRadius: bubbleR * 2.1))
 
+        let fanPivot = CGPoint(x: w * 0.47, y: h * 0.78)
         for (index, angle) in [-95.0, -65, -40, 40, 65, 95].enumerated() {
             drawPetal(&ctx, fanPivot, CGFloat(angle),
                       w * (0.36 - Double(index % 2) * 0.05), 0.5,
