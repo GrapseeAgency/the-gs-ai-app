@@ -223,9 +223,10 @@ final class ReferenceSheetsRenderTests: XCTestCase {
     private func seedDetailsConversation() -> String {
         let store = ConversationStore.shared
         let id = "render-details-0"
-        var components = DateComponents()
-        components.hour = 9; components.minute = 24
-        let today924 = Calendar.current.date(from: components) ?? Date()
+        // bySettingHour keeps TODAY's date — date(from:) with hour/minute
+        // alone fills the missing fields with year 1, which the hero then
+        // honestly printed as "Started Jan 1, 0001".
+        let today924 = Calendar.current.date(bySettingHour: 9, minute: 24, second: 0, of: Date()) ?? Date()
         let first = ConversationStore.isoString(today924)
         let second = ConversationStore.isoString(today924.addingTimeInterval(65))
         store.append(StoredMessage(
