@@ -217,6 +217,13 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
             )
             RefDivider()
             ShelfRow(
+                title = "Shared conversations",
+                subtitle = "What you've shared, and when",
+                icon = GsIcons.Share2,
+                onClick = { onNavigate(GsRoutes.CHAT_SHARED) }
+            )
+            RefDivider()
+            ShelfRow(
                 title = "Search chats",
                 subtitle = "Find a word across every message",
                 icon = GsIcons.TextSearch,

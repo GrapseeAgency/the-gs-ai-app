@@ -473,6 +473,12 @@ fun GsNavHost(
                 onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) }
             )
         }
+        composable(GsRoutes.CHAT_SHARED) {
+            SharedConversationsScreen(
+                onBack = back,
+                onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) }
+            )
+        }
         composable(GsRoutes.CHAT_SEARCH) {
             ChatSearchScreen(
                 onBack = back,
@@ -582,7 +588,8 @@ fun GsNavHost(
         composable(GsRoutes.CHAT_INFO) { entry ->
             ChatInfoScreen(
                 conversationId = entry.arguments?.getString(GsRoutes.ARG_CONVERSATION).orEmpty(),
-                onBack = back
+                onBack = back,
+                onOpenMemory = { navController.navigate(GsRoutes.SETTINGS_MEMORY) }
             )
         }
         }

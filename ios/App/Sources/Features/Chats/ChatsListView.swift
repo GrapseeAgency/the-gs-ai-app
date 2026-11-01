@@ -192,14 +192,16 @@ struct ChatsListView: View {
 
     // MARK: Quick access
 
-    /// Archive only (Phase 2 honesty purge): the Folders and Shared cards
-    /// led to fabricated screens and are gone — their views and routes are
-    /// deleted. Archive is real and stays.
+    /// Archive and Shared are both real: archive holds live ConversationStore
+    /// rows, Shared lists this device's actual share records (the earlier
+    /// fabrication was the routes leading nowhere — the pages now carry the
+    /// real stores).
     private var quickAccess: some View {
         VStack(alignment: .leading, spacing: Aero.Spacing.s) {
             SectionHeader(title: "Quick access")
             HStack(spacing: Aero.Spacing.s) {
                 quickCard("Archived", icon: GsIcons.archive, route: .chatArchive)
+                quickCard("Shared", icon: GsIcons.share, route: .sharedConversations)
             }
         }
     }

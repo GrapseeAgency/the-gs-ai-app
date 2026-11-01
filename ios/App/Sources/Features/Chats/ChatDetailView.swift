@@ -58,7 +58,6 @@ struct ChatDetailView: View {
     @State private var renameDraft = ""
     @State private var showDeleteConfirm = false
     @State private var showClearConfirm = false
-    @State private var showInfo = false
 
     // Read-aloud — on-device speech, silent when the device has no voice.
     @StateObject private var speech = SpeechPlayer()
@@ -170,9 +169,6 @@ struct ChatDetailView: View {
         }
         .sheet(isPresented: $showOptions) {
             conversationOptionsSheet
-        }
-        .sheet(isPresented: $showInfo) {
-            chatInfoSheet
         }
         .onDisappear {
             speech.stop()
@@ -774,9 +770,13 @@ struct ChatDetailView: View {
                     }
                     Button {
                         showOptions = false
-                        openAfterDismiss { showInfo = true }
+                        openAfterDismiss {
+                            if let id = vm.conversationID {
+                                router.path.append(.conversationDetails(id))
+                            }
+                        }
                     } label: {
-                        optionLabel(GsIcons.info, "Chat Details", "View info & stats")
+                        optionLabel(GsIcons.info, "Conversation Details", "Manage this conversation")
                     }
                     ShareLink(item: exportText) {
                         optionLabel(GsIcons.fileText, "Export Chat", "Send the transcript as text")
@@ -833,14 +833,6 @@ struct ChatDetailView: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
-    }
-
-    private var chatInfoSheet: some View {
-        ChatInfoSheet(
-            title: conversationTitle,
-            messages: vm.conversationID.map { conversations.messages(for: $0) } ?? [],
-            mode: vm.chatMode,
-            local: SettingsStore.shared.preferLocal)
     }
 
     /// Leave the chat that was just archived or deleted. At the workspace root
@@ -1711,115 +1703,3 @@ private struct ReasoningTracePanel: View {
 }
 
 // MARK: - Chat Info (reference sheet: "Chat Info")
-
-/// Identity, measured stats, and where the chat lives. Every number is read
-/// from the stored messages — the reference's page, without invented data.
-private struct ChatInfoSheet: View {
-    let title: String
-    let messages: [StoredMessage]
-    let mode: String
-    let local: Bool
-
-    private var span: String {
-        guard messages.count > 1 else { return "—" }
-        let formatter = ISO8601DateFormatter()
-        let stamps = messages.compactMap { formatter.date(from: $0.createdAt) }
-        guard let first = stamps.min(), let last = stamps.max() else { return "—" }
-        let minutes = max(0, Int(last.timeIntervalSince(first) / 60))
-        if minutes < 1 { return "<1m" }
-        if minutes < 60 { return "\(minutes)m" }
-        if minutes < 1440 { return "\(minutes / 60)h \(minutes % 60)m" }
-        return "\(minutes / 1440)d"
-    }
-
-    private var modeLabel: String {
-        switch mode {
-        case "flash": return "Fast"
-        case "thinking": return "Reasoning"
-        default: return "Auto"
-        }
-    }
-
-    private var modeDetail: String {
-        switch mode {
-        case "flash": return "Fast — immediate, concise answers"
-        case "thinking": return "Reasoning — spends longer on hard problems"
-        default: return "Auto — chooses per question"
-        }
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-                Text("Chat Info").font(Aero.headline()).foregroundStyle(Aero.text)
-                Text("Everything this conversation knows about itself.")
-                    .font(Aero.caption()).foregroundStyle(Aero.textMuted)
-
-                AeroCard {
-                    HStack(spacing: 12) {
-                        GsArtwork(art: .bloom, size: 64, label: "Nexly")
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Nexly").font(Aero.label()).foregroundStyle(Aero.text)
-                            Text("AI Companion").font(Aero.caption()).foregroundStyle(Aero.textMuted)
-                            Text(title)
-                                .font(Aero.caption())
-                                .foregroundStyle(Aero.textMuted)
-                                .lineLimit(2)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(16)
-                }
-
-                AeroCard {
-                    HStack {
-                        stat("\(messages.count)", "Messages")
-                        Spacer()
-                        stat(span, "Span")
-                        Spacer()
-                        stat(modeLabel, "Response style")
-                    }
-                    .padding(16)
-                }
-
-                AeroCard {
-                    VStack(alignment: .leading, spacing: 14) {
-                        row(GsIcons.squarePen, "Chat name", title)
-                        Divider().overlay(Aero.outline)
-                        row(GsIcons.cpu, "Model", local ? "On-device engine" : "Nexly Cloud")
-                        Divider().overlay(Aero.outline)
-                        row(GsIcons.brain, "Chat mode", modeDetail)
-                    }
-                    .padding(16)
-                }
-
-                Text("Stats come from the messages stored on this device.")
-                    .font(Aero.caption())
-                    .foregroundStyle(Aero.textMuted)
-            }
-            .padding(Aero.Spacing.m)
-        }
-        .background(Aero.background.ignoresSafeArea())
-        .presentationDetents([.medium, .large])
-    }
-
-    private func stat(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 2) {
-            Text(value).font(Aero.label()).foregroundStyle(Aero.text)
-            Text(label).font(Aero.caption()).foregroundStyle(Aero.textMuted)
-        }
-    }
-
-    private func row(_ icon: GsIconPaths, _ title: String, _ detail: String) -> some View {
-        HStack(spacing: 12) {
-            GsIconView(icon, size: 14, color: Aero.textSecondary)
-                .frame(width: 34, height: 34)
-                .gsGlass(.sunken, corner: 11)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(Aero.label()).foregroundStyle(Aero.text)
-                Text(detail).font(Aero.caption()).foregroundStyle(Aero.textMuted)
-            }
-            Spacer(minLength: 0)
-        }
-    }
-}
