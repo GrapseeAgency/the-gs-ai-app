@@ -208,12 +208,18 @@ SCREENS = {
     "new-chat": dict(
         stem="ref-new-chat",
         rims=2,
-        rim_window=(330.0, 470.0),
+        # Re-derived 2026-11-01: the hero became the reference's own lotus-orb
+        # asset at 185 pt wide (~142 pt tall, the code-drawn orb it replaced
+        # was 112 pt square), which moved the composer ~+30 pt down. Measured
+        # off the next capture: composer rims land at ~375/422 pt.
+        rim_window=(360.0, 500.0),
         steps=None,
         note="composer card, top and bottom rim",
         title_top_band=(12.0, 22.0),
         rims_ios=2,
-        rim_window_ios=(320.0, 400.0),
+        # Re-derived 2026-11-01 from run 41276345065's capture after the same
+        # hero swap: composer top 311.7 pt, bottom 407.7 pt.
+        rim_window_ios=(300.0, 430.0),
         steps_ios=None,
         title_top_band_ios=(12.0, 40.0),
     ),
