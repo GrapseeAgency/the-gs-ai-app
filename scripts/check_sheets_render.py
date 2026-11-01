@@ -517,11 +517,23 @@ def doctor_erase(image, scale, rims):
     x0, x1 = RIM_SPAN
     rim = rims[0]
     y = rim["y"]
-    y0 = int((y - 1.5) * scale)
-    y1 = int((y + 1.5) * scale)
+    # The band has to cover the whole antialiased rim cluster, the interior row
+    # the probe samples below it, AND any fainter line the rim was masking just
+    # above it (a bright row's own excess is measured against the row below, so
+    # erasing that row can reveal a neighbour). The band is therefore painted
+    # with the tone sampled ABOVE it — the gap the card sits in — so no luma
+    # discontinuity survives at either edge of the erase.
+    g = image.convert("RGB")
+    px = g.load()
+    xs = [int(x * scale) for x in range(int(x0), int(x1), 8)]
+    sample_y = max(0, int((y - 12.0) * scale))
+    tones = [px[x, sample_y] for x in xs]
+    fill = tuple(int(sum(c[i] for c in tones) / len(tones)) for i in range(3))
+    y0 = int((y - 10.0) * scale)
+    y1 = int((y + INTERIOR_DY + 3.0) * scale)
     draw.rectangle(
         [int(x0 * scale), y0, int(x1 * scale), y1],
-        fill=(235, 228, 223),
+        fill=fill,
     )
     return canvas
 
