@@ -532,7 +532,7 @@ fun RefSettingsPage(
                         drawRect(
                             Brush.radialGradient(
                                 listOf(
-                                    Color(0xFFFFCCB8).copy(alpha = 0.30f),
+                                    Color(0xFFFFCCB8).copy(alpha = 0.16f),
                                     Color.Transparent,
                                 ),
                                 center = Offset(size.width * 0.86f, size.height * 0.24f),
@@ -542,7 +542,7 @@ fun RefSettingsPage(
                         drawRect(
                             Brush.radialGradient(
                                 listOf(
-                                    Color(0xFFFCBFD6).copy(alpha = 0.22f),
+                                    Color(0xFFFCBFD6).copy(alpha = 0.11f),
                                     Color.Transparent,
                                 ),
                                 center = Offset(size.width * 0.10f, size.height * 0.86f),

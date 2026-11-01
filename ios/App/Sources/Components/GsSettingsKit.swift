@@ -42,11 +42,11 @@ struct GsSettingsBackdrop: View {
                     .resizable()
                     .scaledToFill()
                 RadialGradient(
-                    colors: [Color(red: 1.0, green: 0.80, blue: 0.72).opacity(0.30), .clear],
+                    colors: [Color(red: 1.0, green: 0.80, blue: 0.72).opacity(0.16), .clear],
                     center: UnitPoint(x: 0.86, y: 0.24), startRadius: 0, endRadius: 460
                 )
                 RadialGradient(
-                    colors: [Color(red: 0.99, green: 0.76, blue: 0.84).opacity(0.22), .clear],
+                    colors: [Color(red: 0.99, green: 0.76, blue: 0.84).opacity(0.11), .clear],
                     center: UnitPoint(x: 0.10, y: 0.86), startRadius: 0, endRadius: 420
                 )
             }
