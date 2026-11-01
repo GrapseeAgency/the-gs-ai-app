@@ -233,13 +233,12 @@ SCREENS = {
         steps=None,
         note="the page's four lit lines: Auto Select row, Continue, frame",
         title_top_band=(9.0, 14.0),
-        rims_ios=4,
-        # Re-derived 2026-11-01 from run 41244902926's capture after the same
-        # re-layout: Lite/Vision card tops at 247/337pt, the archive band at
-        # 507pt and the Reasoning tray's strong top rim at 599pt. The Code
-        # card's own hairline no longer clears the lit-rim threshold over the
-        # shifted backdrop, so the tray rim holds the fourth slot.
-        rim_window_ios=(240.0, 606.0),
+        rims_ios=3,
+        # 2026-11-01: the card hairlines were strengthened to the mock's
+        # visible weight; the window gates the three white-rimmed card tops
+        # (Lite/Vision/Code at 337/426/507 pt) and not the Reasoning
+        # furniture below.
+        rim_window_ios=(300.0, 560.0),
         steps_ios=None,
         title_top_band_ios=(9.0, 30.0),
     ),
