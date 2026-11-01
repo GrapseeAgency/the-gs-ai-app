@@ -155,11 +155,11 @@ struct ArchivedChatsView: View {
         .padding(.leading, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(alignment: .trailing) {
-            Image("RefArchivedLotus")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 87)
-                .accessibilityHidden(true)
+            Canvas { context, _ in
+                GsRefScenes.archivedLotus(&context, CGSize(width: 128, height: 87))
+            }
+            .frame(width: 128, height: 87)
+            .accessibilityHidden(true)
         }
         .gsSheetCard()
         .clipped()

@@ -1,7 +1,7 @@
 package com.grapsee.gsai.ui.chat
 
 import android.content.Intent
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,6 +48,7 @@ import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefCard
+import com.grapsee.gsai.ui.components.drawSharedOrbScene
 import com.grapsee.gsai.ui.components.RefIconTile
 import com.grapsee.gsai.ui.components.RefPage
 import com.grapsee.gsai.ui.components.gsConversationTitle
@@ -182,11 +183,9 @@ fun SharedConversationsScreen(
             // The mock's empty state: the reference's own orb art, the honest
             // title, and the action that starts a real share.
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Image(
-                    painter = painterResource(com.grapsee.gsai.R.drawable.ref_shared_orb),
-                    contentDescription = null,
-                    modifier = Modifier.width(237.dp),
-                )
+                Canvas(Modifier.width(237.dp).height(156.dp)) {
+                    drawSharedOrbScene()
+                }
             }
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(

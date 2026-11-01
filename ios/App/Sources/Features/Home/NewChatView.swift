@@ -57,8 +57,7 @@ struct NewChatView: View {
                     header
                     HStack {
                         Spacer()
-                        BreathingArt(width: 185,
-                                     breathDuration: 3.0, rotationDegrees: 1.0,
+                        BreathingArt(breathDuration: 3.0, rotationDegrees: 1.0,
                                      lift: -2, startDelay: 0.1)
                         Spacer()
                     }
@@ -423,12 +422,9 @@ struct NewChatView: View {
 }
 
 /// The idle breath and drift `AnimatedGsIllustration` gives the bitmap orbs,
-/// carried by the page's hero asset instead — the artwork is the reference's
-/// own lotus orb (docs/reference/pending/home-new-chat.png), extracted with a
-/// feathered edge so it sits on the backdrop the way the mock draws it, and it
-/// breathes exactly like its siblings while staying honest to Reduce Motion.
+/// carried by the drawn hero instead — the mock's lotus dome drawn from
+/// primitives, breathing exactly like its siblings and honest to Reduce Motion.
 private struct BreathingArt: View {
-    let width: CGFloat
     var breathDuration: Double = 2.4
     var rotationDegrees: Double = 2.2
     var lift: CGFloat = -3
@@ -437,14 +433,12 @@ private struct BreathingArt: View {
     @State private var isAlive = false
 
     var body: some View {
-        // A literal name: the artwork-accounting scanner reads Image("…")
-        // literals to tie a drawn asset to its manifest entry.
-        Image("RefHeroLotusOrb")
-            .resizable()
-            .scaledToFit()
-            .frame(width: width)
-            .accessibilityLabel("GS companion")
-            .scaleEffect(reduceMotion ? 1 : (isAlive ? 1.035 : 1))
+        Canvas { context, _ in
+            GsRefScenes.lotusOrb(&context, CGSize(width: 185, height: 142))
+        }
+        .frame(width: 185, height: 142)
+        .accessibilityLabel("GS companion")
+        .scaleEffect(reduceMotion ? 1 : (isAlive ? 1.035 : 1))
             .rotationEffect(.degrees(reduceMotion ? 0 : (isAlive ? rotationDegrees : 0)))
             .offset(y: reduceMotion ? 0 : (isAlive ? lift : 0))
             .animation(

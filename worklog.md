@@ -5721,3 +5721,13 @@ Stage Summary:
   order, tones and art; the recorded deltas are the classifier's semantic
   icons versus the mock's arbitrary picks, the absent recipient avatars, and
   the no-email/no-backend copy truths already on the register.
+
+Follow-up (same day): the operator asked, plainly, whether the pages' artwork
+was drawn or cropped from the mocks — three of them were crops. All three are
+now drawn from primitives on both platforms (`ReferenceArtScenes.kt` and
+`GsRefScenes` mirror each other: petal rings around a heart, the faceted
+crystal, the glass dome rims, the share bubble with its orbit and stars), the
+crops and their manifest entries are deleted, and the composition was
+pre-checked against the mocks with a scratch render before CI. The artwork
+accounting is back under budget with zero reference-derived bitmaps in the
+app.

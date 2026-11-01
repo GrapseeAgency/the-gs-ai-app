@@ -55,6 +55,7 @@ import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefArt
 import com.grapsee.gsai.ui.components.RefArtwork
 import com.grapsee.gsai.ui.components.RefCard
+import com.grapsee.gsai.ui.components.drawLotusOrbScene
 import com.grapsee.gsai.ui.components.RefGroupHeader
 import com.grapsee.gsai.ui.components.RefWellTile
 import com.grapsee.gsai.ui.icons.GsIcons
@@ -122,16 +123,16 @@ fun NewChatScreen(
             CompanionHeader(onOpenMenu)
             Spacer(Modifier.height(4.dp))
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                // The reference's own lotus orb (home-new-chat.png), extracted
-                // with a feathered edge so it sits on the backdrop the way the
-                // mock draws it — not a redrawn approximation of it.
-                androidx.compose.foundation.Image(
-                    painter = androidx.compose.ui.res.painterResource(
-                        com.grapsee.gsai.R.drawable.ref_hero_lotus_orb,
-                    ),
-                    contentDescription = "GS companion",
-                    modifier = Modifier.width(185.dp),
-                )
+                // The mock's lotus-in-dome, drawn: dome rims, two petal
+                // rings, the violet crystal and the sparkles, from primitives.
+                androidx.compose.foundation.Canvas(
+                    Modifier
+                        .width(185.dp)
+                        .height(142.dp)
+                        .semantics { contentDescription = "GS companion" },
+                ) {
+                    drawLotusOrbScene()
+                }
             }
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 androidx.compose.material3.Text(

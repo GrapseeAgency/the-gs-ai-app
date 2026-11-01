@@ -51,11 +51,11 @@ struct SharedConversationsView: View {
 
             if shares.entries.isEmpty {
                 VStack(spacing: 0) {
-                    Image("RefSharedOrb")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 237)
-                        .accessibilityHidden(true)
+                    Canvas { context, _ in
+                        GsRefScenes.sharedOrb(&context, CGSize(width: 237, height: 156))
+                    }
+                    .frame(width: 237, height: 156)
+                    .accessibilityHidden(true)
                     Text("No Shared Conversations Yet")
                         .font(.custom(Aero.productName(.semibold), size: 17, relativeTo: .title3))
                         .foregroundStyle(Aero.text)

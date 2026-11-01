@@ -610,9 +610,10 @@ Do not trust a green from this rig without reading which probe produced it.
 **`archived-conversations.png` — "Archived Conversations".** Android
 `ArchivedChatsScreen` at `chats/archived` (Chats → Archive), iOS
 `ArchivedChatsView` at `.chatArchive` (Chats → Archived). The totals card
-carries the reference's own lotus artwork (`ref_archived_lotus`, extracted
-from the mock with a feathered edge — the owner's verdict on code-drawn art
-was "nowhere near close", so the artwork ships as the artwork); the count and
+carries the lotus artwork drawn from primitives (the owner asked for the
+crops to be replaced with real drawing, so `drawArchivedLotusScene` renders
+it — same for the pre-chat hero's `drawLotusOrbScene` and the shared page's
+`drawSharedOrbScene`, mirrored on both platforms); the count and
 the "Archived • <date>" lines are the real Room rows. The rows' topic icons
 come from the shipped classifier, whose picks are semantic — the mock's
 sparkle/code/book assignment is art, and the classifier's is evidence, so they
@@ -627,7 +628,7 @@ platforms: Android `SharedConversationsScreen` at `chats/shared`, iOS
 shelf (Android) and the Quick access card (iOS). The tabs, the Share
 Conversations card with its Learn More dialog, the section header with the
 live count, the rows with View pills and remove-menus, and the empty state
-with the reference's own orb artwork (`ref_shared_orb`) and the Share a
+with the drawn share-orb artwork (`drawSharedOrbScene`) and the Share a
 Conversation action are all built. Sharing is local and real: the share sheet
 hands the transcript to whatever the reader picks, and
 `SharedConversationsStore` records what is true — which conversation, when.
@@ -650,8 +651,9 @@ gradient Delete runs the same gated delete.
 Evidence: android-app 41287753137 and iOS 41287755720 observed every gate
 green — the JVM suite, the new `ref-archived` / `ref-shared` /
 `ref-conversation-details` captures and their title contracts, the copy
-inventory at 16 sheets on both platforms, and the artwork accounting that
-manifests the two new reference artworks. The final HEAD 04963b6a is green on
-both workflows (android-app 41289930597, iOS 41289933136) after the details
+inventory at 16 sheets on both platforms, and the artwork accounting, which
+no longer carries any of the reference crops — all three artworks are drawn
+from primitives on both platforms. The final HEAD 04963b6a was green on both
+workflows (android-app 41289930597, iOS 41289933136) after the details
 fixture's date construction was fixed (the seed had built a date from
 hour/minute alone, which the hero honestly printed as year 1).

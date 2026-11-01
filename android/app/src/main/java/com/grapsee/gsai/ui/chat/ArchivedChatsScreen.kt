@@ -1,6 +1,6 @@
 package com.grapsee.gsai.ui.chat
 
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
+import com.grapsee.gsai.ui.components.drawArchivedLotusScene
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefCard
@@ -127,13 +128,14 @@ fun ArchivedChatsScreen(
         // trailing edge.
         RefCard {
             Box(Modifier.fillMaxWidth().heightIn(min = 79.dp)) {
-                Image(
-                    painter = painterResource(com.grapsee.gsai.R.drawable.ref_archived_lotus),
-                    contentDescription = null,
-                    modifier = Modifier
+                Canvas(
+                    Modifier
                         .align(Alignment.CenterEnd)
+                        .width(128.dp)
                         .height(87.dp),
-                )
+                ) {
+                    drawArchivedLotusScene()
+                }
                 Row(
                     Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 120.dp),
                     verticalAlignment = Alignment.CenterVertically,
