@@ -162,6 +162,13 @@ MANIFEST = [
     Art("gs_travel_agent_orb", "GSTravelAgentOrb", "gs-travel-agent-orb.png",
         (768, 768), (492, 492), 1.0, "travel agent",
         "Same story at 164 pt."),
+    Art("ref_hero_lotus_orb", "RefHeroLotusOrb", "newchat/ref-hero-lotus-orb.png",
+        (640, 490), (555, 425), 1.0, "new chat",
+        "The pre-chat hero: the reference's own lotus orb "
+        "(docs/reference/pending/home-new-chat.png), extracted with a feathered "
+        "alpha edge so it sits on the backdrop the way the mock draws it. Drawn "
+        "185 pt wide (orb core ~127 pt, the mock's ~133 pt), a fixed frame no "
+        "Dynamic Type curve touches."),
     Art("gs_explore_hero", "GSExploreHero", "explore/gs-explore-hero.png",
         (280, 228), (699, 570), 2.5, "explore",
         "The Explore reference's own iridescent bubbles, cropped from the "
