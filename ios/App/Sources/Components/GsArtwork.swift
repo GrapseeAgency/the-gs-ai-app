@@ -1127,7 +1127,7 @@ enum GsArtDrawing {
 /// The Dreamy Pastel conversation pages' scenes — the iOS mirror of Android's
 /// `ReferenceArtScenes.kt`: same petal paths, same washes, same stars, so both
 /// platforms draw one artwork.
-@enum GsRefScenes {}
+enum GsRefScenes {}
 
 extension GsRefScenes {
     static let washWhite = Color.white

@@ -236,29 +236,6 @@ fun DrawScope.drawLotusOrbScene() {
     listOf(-10f, 0f, 10f).forEach { angle ->
         drawPetal(heart, angle, w * 0.085f, 0.5f, Color(0xFFFFE9A8), WashWhite, alpha = 0.98f)
     }
-    val crystalBase = Offset(w * 0.5f, h * 0.58f)
-    val tipTop = Offset(w * 0.5f, h * 0.20f)
-    val halfW = w * 0.085f
-    val leftFace = Path().apply {
-        moveTo(crystalBase.x - halfW, crystalBase.y)
-        cubicTo(crystalBase.x - halfW * 0.8f, crystalBase.y - h * 0.16f, crystalBase.x - halfW * 0.35f, crystalBase.y - h * 0.30f, tipTop.x, tipTop.y)
-        lineTo(crystalBase.x, crystalBase.y + h * 0.015f)
-        close()
-    }
-    val rightFace = Path().apply {
-        moveTo(tipTop.x, tipTop.y)
-        cubicTo(crystalBase.x + halfW * 0.45f, crystalBase.y - h * 0.28f, crystalBase.x + halfW * 0.85f, crystalBase.y - h * 0.14f, crystalBase.x + halfW, crystalBase.y)
-        lineTo(crystalBase.x, crystalBase.y + h * 0.015f)
-        close()
-    }
-    drawPath(leftFace, Brush.verticalGradient(listOf(CrystalLight.copy(alpha = 0.96f), CrystalDeep.copy(alpha = 0.90f)), startY = tipTop.y, endY = crystalBase.y))
-    drawPath(rightFace, Brush.verticalGradient(listOf(Violet.copy(alpha = 0.94f), Color(0xFF6E4BC9).copy(alpha = 0.92f)), startY = tipTop.y, endY = crystalBase.y))
-    drawPath(
-        leftFace,
-        Brush.verticalGradient(listOf(WashWhite.copy(alpha = 0.9f), WashWhite.copy(alpha = 0.15f)), startY = tipTop.y, endY = crystalBase.y),
-        style = Stroke(w * 0.006f),
-    )
-
     // Sparkles — the mock scatters them over the dome.
     drawStar4(Offset(w * 0.16f, h * 0.30f), w * 0.035f, WashWhite, 0.95f)
     drawStar4(Offset(w * 0.845f, h * 0.33f), w * 0.028f, Color(0xFFE7D9FF), 0.85f)
