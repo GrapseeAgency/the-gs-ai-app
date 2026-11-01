@@ -360,15 +360,15 @@ private fun ArchivedRow(
         Row(
             Modifier
                 .clip(RoundedCornerShape(999.dp))
-                .background(colors.accentSoft)
-                .border(1.dp, colors.accent.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+                .background(Color.White.copy(alpha = 0.92f))
+                .border(1.dp, Color.White.copy(alpha = 0.95f), RoundedCornerShape(999.dp))
                 .clickable(role = Role.Button, onClickLabel = "Restore", onClick = onRestore)
                 .padding(horizontal = 12.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(GsIcons.ArchiveRestore, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
-            Text("Restore", style = MaterialTheme.typography.labelLarge, color = colors.accentStrong, fontWeight = FontWeight.SemiBold)
+            Text("Restore", style = MaterialTheme.typography.labelLarge, color = Color(0xFF21355E), fontWeight = FontWeight.SemiBold)
         }
         Spacer(Modifier.width(6.dp))
         Icon(

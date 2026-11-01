@@ -367,7 +367,7 @@ private fun SharedRow(
             .padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RefIconTile(sharedGlyph(title), tint = sharedTone(title), size = 52.dp)
+        RefIconTile(sharedGlyph(title), tint = sharedTone(title), size = 44.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -400,7 +400,7 @@ private fun SharedRow(
                 .padding(horizontal = 14.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("View", style = MaterialTheme.typography.labelLarge, color = colors.accentStrong, fontWeight = FontWeight.SemiBold)
+            Text("View", style = MaterialTheme.typography.labelLarge, color = Color(0xFF21355E), fontWeight = FontWeight.SemiBold)
         }
         Spacer(Modifier.width(6.dp))
         Icon(

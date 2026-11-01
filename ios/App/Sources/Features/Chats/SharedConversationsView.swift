@@ -35,7 +35,8 @@ struct SharedConversationsView: View {
                     .accessibilityLabel("More options")
                 )
             },
-            inkColor: Color(red: 0.129, green: 0.208, blue: 0.369)
+            inkColor: Color(red: 0.129, green: 0.208, blue: 0.369),
+            cleanBackdrop: true
         ) {
             tabs.padding(.bottom, 10)
             shareCard.padding(.bottom, 6)
@@ -210,7 +211,7 @@ struct SharedConversationsView: View {
         return HStack(spacing: 12) {
             // (glyph tile below)
             NexlyGlyph(name: glyph, size: 20, color: tone.ink)
-                .frame(width: 52, height: 52)
+                .frame(width: 44, height: 44)
                 .background(
                     RoundedRectangle(cornerRadius: 15, style: .continuous)
                         .fill(tone.wash)

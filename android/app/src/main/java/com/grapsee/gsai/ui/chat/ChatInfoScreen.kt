@@ -152,7 +152,7 @@ fun ChatInfoScreen(
                 Modifier.padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RefIconTile(GsIcons.MessageSquare, tint = GsWellTone.Lilac.ink, size = 64.dp)
+                RefIconTile(GsIcons.MessageSquare, tint = GsWellTone.Lilac.ink, size = 56.dp)
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

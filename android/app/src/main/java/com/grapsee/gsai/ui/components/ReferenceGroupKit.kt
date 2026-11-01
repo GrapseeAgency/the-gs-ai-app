@@ -511,12 +511,24 @@ fun RefSettingsPage(
     headerTrailing: (@Composable () -> Unit)? = null,
     /** The reference's navy ink; null keeps the theme's. */
     ink: Color? = null,
+    /** The clean warm canvas — no orb imagery behind these pages. */
+    cleanBackdrop: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = GsTheme.colors
     val isDark = LocalGsIsDark.current
     Box(Modifier.fillMaxSize()) {
-        if (!isDark && SettingsStore.backgroundStyle != "Solid") {
+        if (cleanBackdrop && !isDark) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFFFEF5F5), Color(0xFFFEFBFB))
+                        )
+                    )
+            )
+        } else if (!isDark && SettingsStore.backgroundStyle != "Solid") {
             androidx.compose.foundation.Image(
                 painter = androidx.compose.ui.res.painterResource(com.grapsee.gsai.R.drawable.gs_home_backdrop),
                 contentDescription = null,

@@ -34,7 +34,8 @@ struct ArchivedChatsView: View {
                     .accessibilityLabel("More options")
                 )
             },
-            inkColor: Color(red: 0.129, green: 0.208, blue: 0.369)
+            inkColor: Color(red: 0.129, green: 0.208, blue: 0.369),
+            cleanBackdrop: true
         ) {
             totalsCard.padding(.bottom, 10)
 
@@ -171,7 +172,7 @@ struct ArchivedChatsView: View {
         let tone = topicTone(conversation.title)
         return HStack(spacing: 12) {
             NexlyGlyph(name: topicGlyph(conversation), size: 20, color: tone.ink)
-                .frame(width: 52, height: 52)
+                .frame(width: 44, height: 44)
                 .background(
                     RoundedRectangle(cornerRadius: 15, style: .continuous)
                         .fill(tone.wash)
@@ -197,8 +198,8 @@ struct ArchivedChatsView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(Capsule().fill(Aero.refAccentSoft))
-                .overlay(Capsule().strokeBorder(Aero.refAccent.opacity(0.35), lineWidth: 1))
+                .background(Capsule().fill(.white.opacity(0.92)))
+                .overlay(Capsule().strokeBorder(.white.opacity(0.95), lineWidth: 1))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Restore \(title)")

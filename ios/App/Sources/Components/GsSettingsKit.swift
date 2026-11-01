@@ -21,6 +21,8 @@ struct GsSettingsKit {}
 /// must not be edited for reuse.
 struct GsSettingsBackdrop: View {
     @Environment(\.colorScheme) private var scheme
+    /// The conversation pages' clean canvas: warm white, no orb imagery.
+    var clean: Bool = false
 
     var body: some View {
         if scheme == .dark {
@@ -31,6 +33,12 @@ struct GsSettingsBackdrop: View {
                 )
                 PearlBackdrop()
             }
+            .ignoresSafeArea()
+        } else if clean {
+            LinearGradient(
+                colors: [Color(red: 1.0, green: 0.961, blue: 0.961),
+                         Color(red: 0.996, green: 0.984, blue: 0.984)],
+                startPoint: .top, endPoint: .bottom)
             .ignoresSafeArea()
         } else {
             // The mocks' screen interior is warmer than the shared home

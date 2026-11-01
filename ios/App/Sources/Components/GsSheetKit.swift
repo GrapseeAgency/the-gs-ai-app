@@ -65,11 +65,13 @@ struct GsSheetPage<Content: View>: View {
     var headerTrailing: (() -> AnyView)?
     /// The reference's navy ink; nil keeps the theme's.
     var inkColor: Color? = nil
+    /// The clean warm canvas — no orb imagery behind these pages.
+    var cleanBackdrop: Bool = false
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         ZStack {
-            GsSettingsBackdrop().allowsHitTesting(false)
+            GsSettingsBackdrop(clean: cleanBackdrop).allowsHitTesting(false)
             VStack(spacing: 0) {
                 header
                 ScrollView(showsIndicators: false) {
