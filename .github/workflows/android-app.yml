@@ -795,7 +795,7 @@ jobs:
                       model-picker:ref-model-picker \
                       archived:ref-archived \
                       shared:ref-shared \
-                      chat-details:ref-conversation-details; do
+                      conversation-details:ref-conversation-details; do
             screen=${pair%%:*}
             stem=${pair##*:}
             PNG="$SHOTS/$stem.png"
@@ -820,7 +820,7 @@ jobs:
                       model-picker:ref-model-picker \
                       archived:ref-archived \
                       shared:ref-shared \
-                      chat-details:ref-conversation-details; do
+                      conversation-details:ref-conversation-details; do
             screen=${pair%%:*}
             stem=${pair##*:}
             python3 scripts/check_sheets_render.py \

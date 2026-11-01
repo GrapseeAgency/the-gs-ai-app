@@ -451,7 +451,7 @@ jobs:
                       model-picker:nexly-model-picker-ios \
                       archived:nexly-archived-ios \
                       shared:nexly-shared-ios \
-                      chat-details:nexly-conversation-details-ios; do
+                      conversation-details:nexly-conversation-details-ios; do
             screen=${pair%%:*}
             stem=${pair##*:}
             PNG="$DIR/$stem-393x852.png"
@@ -477,7 +477,7 @@ jobs:
                       model-picker:nexly-model-picker-ios \
                       archived:nexly-archived-ios \
                       shared:nexly-shared-ios \
-                      chat-details:nexly-conversation-details-ios; do
+                      conversation-details:nexly-conversation-details-ios; do
             screen=${pair%%:*}
             stem=${pair##*:}
             python3 scripts/check_sheets_render.py \

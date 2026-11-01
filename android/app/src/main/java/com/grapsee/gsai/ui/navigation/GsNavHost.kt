@@ -39,6 +39,7 @@ import com.grapsee.gsai.ui.auth.OnboardingScreen
 import com.grapsee.gsai.ui.auth.ReferenceWelcomeScreen
 import com.grapsee.gsai.ui.subscription.SubscriptionUsageScreen
 import com.grapsee.gsai.ui.chat.ArchivedChatsScreen
+import com.grapsee.gsai.ui.chat.SharedConversationsScreen
 import com.grapsee.gsai.ui.chat.ChatInfoScreen
 import com.grapsee.gsai.ui.chat.ChatScreen
 import com.grapsee.gsai.ui.chat.ChatSearchScreen
