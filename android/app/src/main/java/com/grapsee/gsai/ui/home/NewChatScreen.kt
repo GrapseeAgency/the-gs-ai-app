@@ -118,7 +118,16 @@ fun NewChatScreen(
             CompanionHeader(onOpenMenu)
             Spacer(Modifier.height(4.dp))
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                RefArtwork(RefArt.LotusOrb, size = 112.dp, contentDescription = "GS companion")
+                // The reference's own lotus orb (home-new-chat.png), extracted
+                // with a feathered edge so it sits on the backdrop the way the
+                // mock draws it — not a redrawn approximation of it.
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(
+                        com.grapsee.gsai.R.drawable.ref_hero_lotus_orb,
+                    ),
+                    contentDescription = "GS companion",
+                    modifier = Modifier.width(185.dp),
+                )
             }
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 androidx.compose.material3.Text(
