@@ -226,9 +226,9 @@ struct SharedConversationsView: View {
                     .foregroundStyle(Aero.textSecondary)
                 if share.people > 0 {
                     HStack(spacing: 3) {
+                        let chipTones: [GsWellTone] = [.lilac, .peach, .mint]
                         ForEach(0..<min(share.people, 3), id: \.self) { index in
-                            avatarChip(GsWellTone.allCases[index % GsWellTone.allCases.count],
-                                       diameter: 18)
+                            avatarChip(chipTones[index % chipTones.count], diameter: 18)
                         }
                         if share.people > 3 {
                             Text("+\(share.people - 3)")
