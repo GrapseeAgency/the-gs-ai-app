@@ -51,7 +51,7 @@ struct ConversationDetailsView: View {
         ) {
             heroCard.padding(.bottom, 8)
 
-            GsSheetGroupHeader(title: "Conversation Actions", caption: "Quick actions for this chat")
+            GsSheetGroupHeader("Conversation Actions", caption: "Quick actions for this chat")
             VStack(spacing: 0) {
                 actionRow(glyph: "pencil", tone: .lilac, title: "Rename Conversation", subtitle: "Give this chat a new name.") {
                     renameDraft = title
@@ -78,7 +78,7 @@ struct ConversationDetailsView: View {
             }
             .gsSheetCard()
 
-            GsSheetGroupHeader(title: "Memory & Context", caption: "Manage related memory")
+            GsSheetGroupHeader("Memory & Context", caption: "Manage related memory")
             VStack(spacing: 0) {
                 actionRow(glyph: "brain", tone: .lilac, title: "Manage Memory", subtitle: "View or clear memories used in this chat.") {
                     router.path.append(.memory)
@@ -231,7 +231,7 @@ struct ConversationDetailsView: View {
     }
 
     private func actionRow(glyph: String, tone: GsWellTone, title: String, subtitle: String,
-                           onTap: @escaping () -> Unit) -> some View {
+                           onTap: @escaping () -> Void) -> some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
                 NexlyGlyph(name: glyph, size: 20, color: tone.ink)
