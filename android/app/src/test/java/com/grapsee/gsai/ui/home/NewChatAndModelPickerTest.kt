@@ -165,6 +165,30 @@ class NewChatAndModelPickerTest {
     }
 
     @Test
+    fun theAttachAccessoriesOpenTheChatsAttachFlow() {
+        // The mock's paperclip and image accessories must open the chat's real
+        // attach flow — never seed an empty room (the audit's "mislabeled
+        // control" finding, fixed on both platforms).
+        var attaches = 0
+        val sent = mutableListOf<Pair<String, Boolean>>()
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                NewChatScreen(
+                    onStartChat = { prompt, autoSend -> sent += prompt to autoSend },
+                    onAttach = { attaches += 1 },
+                    onOpenConversation = {}, onOpenAllChats = {},
+                    onOpenModels = {}, onOpenMenu = {}, onOpenExplore = {},
+                )
+            }
+        }
+
+        compose.onNodeWithContentDescription("Attach a file").performClick()
+        compose.onNodeWithContentDescription("Attach an image").performClick()
+        assertEquals(2, attaches)
+        assertEquals(emptyList<Pair<String, Boolean>>(), sent)
+    }
+
+    @Test
     fun theModelEntryAndTheMenuAreLive() {
         var models = 0
         var menu = 0

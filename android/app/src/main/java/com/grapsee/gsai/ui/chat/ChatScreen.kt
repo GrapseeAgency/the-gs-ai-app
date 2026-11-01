@@ -376,6 +376,8 @@ fun ChatScreen(
     onOpenDrawer: (() -> Unit)? = null,
     // Reset to a fresh workspace (nav-owned: pops to a single chat/new).
     onNewChat: (() -> Unit)? = null,
+    // The pre-chat page's attach buttons land here with the sheet already up.
+    openWithAttachments: Boolean = false,
     // Voice press-and-hold hands its transcript to the composer through this.
     prefillPrompt: String? = null,
     // Typed-elsewhere prompts (Voice handoff / launcher shortcut): dispatched
@@ -421,7 +423,7 @@ fun ChatScreen(
     var searchActiveIndex by remember { mutableStateOf(0) }
     val clipboard = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
-    var attachSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var attachSheetOpen by rememberSaveable { mutableStateOf(openWithAttachments) }
     // Conversation options (reference sheet 4/5): Rename / Archive / Delete for
     // the ACTIVE thread. Only meaningful once the conversation exists.
     var chatMenuOpen by rememberSaveable { mutableStateOf(false) }

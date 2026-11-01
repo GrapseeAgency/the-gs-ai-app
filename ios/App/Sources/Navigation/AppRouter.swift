@@ -18,9 +18,12 @@ enum AeroRoute: Hashable {
     /// Phase 2 routing contract (Android twin: `chat(null, prompt, autoSend)`):
     /// opens a NEW chat and immediately sends the prompt on appear. PHASE 5
     /// note: Voice's "Send to chat" now uses .chatPrefill (§10 harmonization
-    /// — seed the draft, never auto-send). This case stays in place for the
-    /// routing contract; it currently has no pusher.
+    /// — seed the draft, never auto-send). The pre-chat page's send button is
+    /// this case's pusher.
     case chatAutoSend(String)
+    /// The pre-chat page's paperclip/image accessories (Android twin:
+    /// `chat(null, attach = true)`): a NEW chat with its real attach sheet up.
+    case chatAttach
     case settings
     case notifications
     /// The six owner sheets (docs/reference/pending): settings alerts, the
@@ -287,6 +290,7 @@ struct AeroDestinations: ViewModifier {
                 onStartChat: { prompt, autoSend in
                     router.path.append(autoSend ? .chatAutoSend(prompt) : .chatPrefill(prompt))
                 },
+                onAttach: { router.path.append(.chatAttach) },
                 onOpenConversation: { router.path.append(.chat($0)) },
                 onOpenAllChats: { router.path.append(.chats) },
                 onOpenModels: { router.path.append(.modelPicker) },
@@ -296,6 +300,7 @@ struct AeroDestinations: ViewModifier {
                 onBack: { router.path.removeLast() },
                 onContinue: { router.path.removeLast() })
             case .chatAutoSend(let prompt): ChatDetailView(conversationID: nil, prefill: prompt, autoSendPrefill: true)
+            case .chatAttach: ChatDetailView(conversationID: nil, opensWithAttachments: true)
             case .settings: SettingsView(onRoute: { router.path.append($0) })
             case .settingsSection(let section):
                 SettingsView(detail: section, onRoute: { router.path.append($0) })

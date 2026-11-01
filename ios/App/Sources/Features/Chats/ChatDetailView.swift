@@ -88,12 +88,16 @@ struct ChatDetailView: View {
     var onNewChat: (() -> Void)? = nil
 
     init(conversationID: String?, prefill: String? = nil, autoSendPrefill: Bool = false,
+         opensWithAttachments: Bool = false,
          isWorkspaceRoot: Bool = false,
          onOpenDrawer: (() -> Void)? = nil,
          onNewChat: (() -> Void)? = nil) {
         _vm = StateObject(wrappedValue: ChatViewModel(conversationID: conversationID))
         self.prefill = prefill
         self.autoSendPrefill = autoSendPrefill
+        // The pre-chat page's attach buttons land here with the real attach
+        // sheet (camera, photos, files) already up — never a bare room.
+        _showingAttachments = State(initialValue: opensWithAttachments)
         self.isWorkspaceRoot = isWorkspaceRoot
         self.onOpenDrawer = onOpenDrawer
         self.onNewChat = onNewChat

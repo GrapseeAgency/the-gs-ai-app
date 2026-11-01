@@ -37,6 +37,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -85,6 +87,8 @@ import java.util.Calendar
 @Composable
 fun NewChatScreen(
     onStartChat: (prompt: String, autoSend: Boolean) -> Unit,
+    // The composer's paperclip/image accessories: open the chat's attach flow.
+    onAttach: () -> Unit = {},
     onOpenConversation: (String) -> Unit,
     onOpenAllChats: () -> Unit,
     onOpenModels: () -> Unit,
@@ -158,8 +162,8 @@ fun NewChatScreen(
                         draft = ""
                     }
                 },
-                onAttach = { onStartChat("", false) },
-                onImage = { onStartChat("", false) },
+                onAttach = onAttach,
+                onImage = onAttach,
                 onCreate = onOpenExplore,
                 onMore = onOpenExplore,
             )
@@ -378,6 +382,9 @@ private fun ComposerButton(icon: androidx.compose.ui.graphics.vector.ImageVector
         Modifier
             .size(32.dp)
             .gsGlassCircle()
+            // Icon-only control: the label is the node's content description,
+            // for TalkBack and for the interaction tests alike.
+            .semantics { contentDescription = label }
             .clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

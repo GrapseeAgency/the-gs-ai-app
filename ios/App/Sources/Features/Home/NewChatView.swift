@@ -19,6 +19,8 @@ import SwiftUI
 struct NewChatView: View {
 
     var onStartChat: (String, Bool) -> Void
+    /// The composer's paperclip/image accessories: open the chat's attach flow.
+    var onAttach: () -> Void = {}
     var onOpenConversation: (String) -> Void
     var onOpenAllChats: () -> Void
     var onOpenModels: () -> Void
@@ -55,7 +57,7 @@ struct NewChatView: View {
                     header
                     HStack {
                         Spacer()
-                        BreathingArt(name: "ref_hero_lotus_orb", width: 185,
+                        BreathingArt(width: 185,
                                      breathDuration: 3.0, rotationDegrees: 1.0,
                                      lift: -2, startDelay: 0.1)
                         Spacer()
@@ -148,8 +150,8 @@ struct NewChatView: View {
                     .accessibilityIdentifier("new-chat-input")
             }
             HStack(spacing: 8) {
-                composerButton("paperclip", "Attach a file") { onStartChat("", false) }
-                composerButton("photo", "Attach an image") { onStartChat("", false) }
+                composerButton("paperclip", "Attach a file") { onAttach() }
+                composerButton("photo", "Attach an image") { onAttach() }
                 composerButton("sparkles", "Create", action: onOpenExplore)
                 composerButton("dots", "More", action: onOpenExplore)
                 Spacer(minLength: 0)
@@ -426,7 +428,6 @@ struct NewChatView: View {
 /// feathered edge so it sits on the backdrop the way the mock draws it, and it
 /// breathes exactly like its siblings while staying honest to Reduce Motion.
 private struct BreathingArt: View {
-    let name: String
     let width: CGFloat
     var breathDuration: Double = 2.4
     var rotationDegrees: Double = 2.2
@@ -436,7 +437,9 @@ private struct BreathingArt: View {
     @State private var isAlive = false
 
     var body: some View {
-        Image(name)
+        // A literal name: the artwork-accounting scanner reads Image("…")
+        // literals to tie a drawn asset to its manifest entry.
+        Image("RefHeroLotusOrb")
             .resizable()
             .scaledToFit()
             .frame(width: width)

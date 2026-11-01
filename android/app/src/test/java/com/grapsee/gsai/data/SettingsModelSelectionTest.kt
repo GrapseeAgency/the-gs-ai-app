@@ -66,6 +66,27 @@ class SettingsModelSelectionTest {
         assertEquals("pro", SettingsStore.preferredModel)
     }
 
+    /**
+     * Picking a card on the picker is not a silent write: the effort chip
+     * follows the model's own default (iOS pins the same rule in
+     * ModelRouterTests). This is the Android twin.
+     */
+    @Test
+    fun `picking a model moves the effort to its default`() {
+        val before = SettingsStore.reasoningEffort
+        try {
+            SettingsStore.updatePreferredModel("lite")
+            assertEquals("lite", SettingsStore.preferredModel)
+            assertEquals(
+                GsModel.byId("lite").defaultEffort,
+                SettingsStore.reasoningEffort,
+            )
+        } finally {
+            SettingsStore.updatePreferredModel("pro")
+            SettingsStore.updateReasoningEffort(before)
+        }
+    }
+
     @Test
     fun `remember my choices is a real preference, not a drawn switch`() {
         SettingsStore.updateRememberChoices(false)

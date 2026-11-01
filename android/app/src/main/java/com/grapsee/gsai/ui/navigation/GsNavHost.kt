@@ -295,6 +295,9 @@ fun GsNavHost(
                         GsRoutes.chat(null, prompt.takeIf { it.isNotBlank() }, autoSend)
                     )
                 },
+                // The mock's paperclip and image accessories open the chat's
+                // real attach flow (camera, photos, files) — never a bare room.
+                onAttach = { navController.navigate(GsRoutes.chat(null, attach = true)) },
                 onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) },
                 onOpenAllChats = { open(GsRoutes.CHATS) },
                 onOpenModels = { open(GsRoutes.MODEL_PICKER) },
@@ -545,12 +548,16 @@ fun GsNavHost(
                 },
                 navArgument(GsRoutes.ARG_SEND) {
                     type = NavType.BoolType; defaultValue = false
+                },
+                navArgument(GsRoutes.ARG_ATTACH) {
+                    type = NavType.BoolType; defaultValue = false
                 }
             )
         ) { entry ->
             val id = entry.arguments?.getString(GsRoutes.ARG_CONVERSATION)
             val prompt = entry.arguments?.getString(GsRoutes.ARG_PROMPT).orEmpty()
             val autoSend = entry.arguments?.getBoolean(GsRoutes.ARG_SEND) ?: false
+            val openWithAttachments = entry.arguments?.getBoolean(GsRoutes.ARG_ATTACH) ?: false
             // The workspace root (the start destination, nothing beneath it)
             // shows the drawer menu in the header instead of a back arrow.
             val atWorkspaceRoot = navController.previousBackStackEntry == null
@@ -558,6 +565,7 @@ fun GsNavHost(
                 conversationId = if (id == "new") null else id,
                 prefillPrompt = prompt.takeIf { it.isNotBlank() },
                 autoSendInitialPrompt = autoSend,
+                openWithAttachments = openWithAttachments,
                 atWorkspaceRoot = atWorkspaceRoot,
                 onOpenDrawer = {
                     // The menu reveal gets the platform's light list tick.

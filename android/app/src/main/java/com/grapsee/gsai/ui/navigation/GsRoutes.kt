@@ -62,6 +62,7 @@ object GsRoutes {
     const val ARG_CONVERSATION = "conversationId"
     const val ARG_PROMPT = "prompt"
     const val ARG_SEND = "send"
+    const val ARG_ATTACH = "attach"
 
     /** Reference "Chat Details" — info and stats for one conversation. */
     const val CHAT_INFO = "chat-info/{conversationId}"
@@ -77,11 +78,19 @@ object GsRoutes {
      * the same screen the transcript renders in. There is no separate Home
      * launcher and no separate "New chat" page.
      */
-    fun chat(conversationId: String?, prompt: String? = null, autoSend: Boolean = false): String {
+    fun chat(
+        conversationId: String?,
+        prompt: String? = null,
+        autoSend: Boolean = false,
+        // The pre-chat page's paperclip/image buttons: open the chat with its
+        // real attach sheet up (camera, photos, files), not an empty room.
+        attach: Boolean = false,
+    ): String {
         val base = "chat/${conversationId ?: "new"}"
         val params = mutableListOf<String>()
         if (!prompt.isNullOrBlank()) params += "prompt=${Uri.encode(prompt)}"
         if (autoSend) params += "send=1"
+        if (attach) params += "attach=1"
         return if (params.isEmpty()) base else "$base?${params.joinToString("&")}"
     }
 
