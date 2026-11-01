@@ -74,7 +74,11 @@ HOME_BUDGET_MB = 9.0
 # iOS total sat ON the old ceiling — a blocking gate with 0.0 MB of slack is a
 # coin flip, not a budget. 16.0 carries the real load plus ~2 MB of headroom;
 # the number that moved is this comment's responsibility.
-ALL_BUDGET_MB = 16.0
+# Raised 16.0 -> 18.0 (2026-11-01): the conversation-management pages ship two
+# reference artworks (the archived card's lotus 0.46 MB, the shared page's orb
+# 1.52 MB decoded) — single-instance pages, both accounted for in their manifest
+# entries.
+ALL_BUDGET_MB = 18.0
 
 # Dead art that predates this script, named so it cannot grow. Unreferenced
 # drawables are stripped from the release APK by `isShrinkResources = true`, so
@@ -169,6 +173,16 @@ MANIFEST = [
         "alpha edge so it sits on the backdrop the way the mock draws it. Drawn "
         "185 pt wide (orb core ~127 pt, the mock's ~133 pt), a fixed frame no "
         "Dynamic Type curve touches."),
+    Art("ref_archived_lotus", "RefArchivedLotus", "archive/ref-archived-lotus.png",
+        (410, 280), (384, 261), 1.0, "archived conversations",
+        "The archived totals card's lotus, the reference's own art "
+        "(docs/reference/pending/archived-conversations.png) with a feathered "
+        "edge; drawn ~128x87 pt bleeding off the card's trailing edge."),
+    Art("ref_shared_orb", "RefSharedOrb", "shared/ref-shared-orb.png",
+        (760, 500), (711, 468), 1.0, "shared conversations",
+        "The shared page's empty-state orb, the reference's own art "
+        "(docs/reference/pending/shared-conversations.png) with a feathered "
+        "edge; drawn ~237x156 pt above the empty title."),
     Art("gs_explore_hero", "GSExploreHero", "explore/gs-explore-hero.png",
         (280, 228), (699, 570), 2.5, "explore",
         "The Explore reference's own iridescent bubbles, cropped from the "
