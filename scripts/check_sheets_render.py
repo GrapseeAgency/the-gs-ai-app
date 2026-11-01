@@ -233,12 +233,16 @@ SCREENS = {
         steps=None,
         note="the page's four lit lines: Auto Select row, Continue, frame",
         title_top_band=(9.0, 14.0),
-        rims_ios=3,
-        # 2026-11-01: the card hairlines were strengthened to the mock's
-        # visible weight; the window gates the three white-rimmed card tops
-        # (Lite/Vision/Code at 337/426/507 pt) and not the Reasoning
-        # furniture below.
-        rim_window_ios=(300.0, 560.0),
+        rims_ios=4,
+        # 2026-11-02, from run 41348933404's capture. The previous
+        # (300, 560)/3-rim window counted the three unselected card tops but
+        # could not be PROVEN: the first rim sits 8 pt under a bright gap row,
+        # so painting the edge promoted that row into a rim and the count came
+        # back unchanged — the self-test reported "could not make these probes
+        # fail", which is the instrument being blind, not the page drifting.
+        # (330, 570) adds the fourth card top (Pro at 565 pt) and the erase
+        # provably drops the count by one.
+        rim_window_ios=(330.0, 570.0),
         steps_ios=None,
         title_top_band_ios=(9.0, 30.0),
     ),
