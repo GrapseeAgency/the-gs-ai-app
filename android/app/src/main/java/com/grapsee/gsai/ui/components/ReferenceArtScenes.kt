@@ -28,16 +28,17 @@ import kotlin.math.sin
  */
 
 private val WashWhite = Color(0xFFFFFFFF)
-private val PetalPeach = Color(0xFFFFDCC8)
-private val PetalBlush = Color(0xFFFFC9DC)
-private val PetalRose = Color(0xFFF7AFC8)
+// Sampled from the mocks themselves (see the worklog's palette pass).
+private val PetalPeach = Color(0xFFFED4CE)
+private val PetalBlush = Color(0xFFFECDE1)
+private val PetalRose = Color(0xFFF9B0B5)
 private val PetalLavender = Color(0xFFE3D4FB)
-private val PetalLilac = Color(0xFFCDB4F2)
-private val CrystalLight = Color(0xFFC9ADF6)
-private val CrystalDeep = Color(0xFF8F6BE0)
-private val Violet = Color(0xFF8C72DC)
-private val TintPink = Color(0x33FFD9EC)
-private val TintLavender = Color(0x2EDECDF7)
+private val PetalLilac = Color(0xFFF8D2FC)
+private val CrystalLight = Color(0xFFF4EBFC)
+private val CrystalDeep = Color(0xFFC9ADF6)
+private val Violet = Color(0xFFB9A0EE)
+private val TintPink = Color(0x40FBEEEE)
+private val TintLavender = Color(0x46EABCF9)
 
 /** A pointed oval petal: two cubic curves meeting at a soft tip, drawn
  *  upward from the origin, then rotated. [widthFraction] widens the belly. */

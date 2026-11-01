@@ -1131,14 +1131,15 @@ enum GsRefScenes {}
 
 extension GsRefScenes {
     static let washWhite = Color.white
-    static let petalPeach = Color(red: 1.0, green: 0.863, blue: 0.784)
-    static let petalBlush = Color(red: 1.0, green: 0.788, blue: 0.863)
-    static let petalRose = Color(red: 0.969, green: 0.686, blue: 0.784)
+    // Sampled from the mocks themselves.
+    static let petalPeach = Color(red: 0.996, green: 0.831, blue: 0.808)
+    static let petalBlush = Color(red: 0.996, green: 0.804, blue: 0.882)
+    static let petalRose = Color(red: 0.976, green: 0.690, blue: 0.710)
     static let petalLavender = Color(red: 0.890, green: 0.831, blue: 0.984)
-    static let petalLilac = Color(red: 0.804, green: 0.706, blue: 0.949)
-    static let crystalLight = Color(red: 0.788, green: 0.678, blue: 0.965)
-    static let crystalDeep = Color(red: 0.561, green: 0.420, blue: 0.878)
-    static let violet = Color(red: 0.549, green: 0.447, blue: 0.863)
+    static let petalLilac = Color(red: 0.973, green: 0.824, blue: 0.988)
+    static let crystalLight = Color(red: 0.957, green: 0.922, blue: 0.988)
+    static let crystalDeep = Color(red: 0.788, green: 0.678, blue: 0.965)
+    static let violet = Color(red: 0.725, green: 0.627, blue: 0.933)
 
     static func petalPath(_ length: CGFloat, _ widthFraction: CGFloat) -> Path {
         let w = length * widthFraction

@@ -201,20 +201,20 @@ final class ReferenceSheetsRenderTests: XCTestCase {
     /// The shared mock's three records at its ages.
     private func seedSharedRecords() -> [String] {
         let store = SharedConversationsStore.shared
-        let rows: [(String, Double)] = [
-            ("AI Tools for Productivity", 2),
-            ("Web Development Guide", 24),
-            ("Study Plan for Exams", 48),
+        let rows: [(String, Double, Int)] = [
+            ("AI Tools for Productivity", 2, 3),
+            ("Web Development Guide", 24, 1),
+            ("Study Plan for Exams", 48, 2),
         ]
         let now = Date()
-        var ids: [String] = []
         for row in rows {
             store.record(
                 conversationId: "render-shared-\(row.0.hashValue.magnitude)",
                 title: row.0,
-                at: now.addingTimeInterval(-row.1 * 3600))
+                at: now.addingTimeInterval(-row.1 * 3600),
+                people: row.2)
         }
-        ids = store.entries.map { $0.id }
+        let ids = store.entries.map { $0.id }
         return ids
     }
 

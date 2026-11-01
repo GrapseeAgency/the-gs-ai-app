@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Dp
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -222,6 +223,7 @@ fun SharedConversationsScreen(
                     SharedRow(
                         title = share.title,
                         sharedAt = share.sharedAt,
+                        people = share.people,
                         onOpen = { onOpenConversation(share.conversationId) },
                         onShare = {
                             SharedConversationsStore.record(context, share.conversationId, share.title)
@@ -344,6 +346,7 @@ private fun SharedTab(
 private fun SharedRow(
     title: String,
     sharedAt: Long,
+    people: Int,
     onOpen: () -> Unit,
     onShare: () -> Unit,
     onRemove: () -> Unit,
@@ -363,11 +366,29 @@ private fun SharedRow(
             .padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RefIconTile(drawerIcon(title, pinned = false), tint = sharedTone(title), size = 44.dp)
+        RefIconTile(sharedGlyph(title), tint = sharedTone(title), size = 44.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("Shared ${ChatTime.ago(sharedAt)}", style = MaterialTheme.typography.labelMedium, color = colors.textSecondary)
+            Text(
+                if (people > 0) "Shared ${ChatTime.ago(sharedAt)}  •  With $people people"
+                else "Shared ${ChatTime.ago(sharedAt)}",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.textSecondary,
+            )
+            if (people > 0) {
+                Spacer(Modifier.height(4.dp))
+                Row {
+                    repeat(people.coerceAtMost(3)) { index ->
+                        AvatarChip(GsWellTone.entries[index % GsWellTone.entries.size], 18.dp)
+                        if (index < people.coerceAtMost(3) - 1) Spacer(Modifier.width(3.dp))
+                    }
+                    if (people > 3) {
+                        Spacer(Modifier.width(3.dp))
+                        Text("+${people - 3}", style = MaterialTheme.typography.labelSmall, color = colors.textTertiary)
+                    }
+                }
+            }
         }
         Row(
             Modifier
@@ -401,12 +422,39 @@ private fun shareIntent(title: String): android.content.Intent =
         putExtra(android.content.Intent.EXTRA_TEXT, "Shared from Nexly: \"$title\"")
     }
 
+/** The mock's glyph for a row: code for code+review+plan, book for study. */
+private fun sharedGlyph(title: String): androidx.compose.ui.graphics.vector.ImageVector =
+    when (com.grapsee.gsai.ui.navigation.drawer.drawerTopic(title)) {
+        com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Planner,
+        com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Learning -> GsIcons.Book
+        com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Travel,
+        com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Itinerary -> GsIcons.Plane
+        else -> GsIcons.Sparkles
+    }
+
 /** The mock's row tones: creative lilac, code peach, study mint. */
 private fun sharedTone(title: String): Color = when (com.grapsee.gsai.ui.navigation.drawer.drawerTopic(title)) {
-    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Code -> GsWellTone.Peach.ink
-    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Planner,
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Code,
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Review,
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Planner -> GsWellTone.Peach.ink
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Learning,
     com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Data,
-    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Money,
-    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Review -> GsWellTone.Mint.ink
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Money -> GsWellTone.Mint.ink
     else -> GsWellTone.Lilac.ink
+}
+
+/** The mock's overlapping people chips: pastel glass circles with the person
+ *  glyph — drawn, like everything else on the page. */
+@Composable
+private fun AvatarChip(tone: GsWellTone, size: Dp) {
+    val colors = GsTheme.colors
+    Box(
+        Modifier
+            .size(size)
+            .border(1.dp, Color.White, androidx.compose.foundation.shape.CircleShape)
+            .background(tone.wash, androidx.compose.foundation.shape.CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(GsIcons.User, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(size * 0.55f))
+    }
 }

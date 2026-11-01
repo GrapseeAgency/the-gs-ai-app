@@ -20,6 +20,7 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assume.assumeTrue
+class Quadruple(val a: Any, val b: Any, val c: Any, val d: Int)
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -358,13 +359,13 @@ class ReferenceSheetsScreenshotTest {
     private fun seedSharedRecords(ctx: Context) {
         val now = System.currentTimeMillis()
         listOf(
-            Triple("AI Tools for Productivity", 2L, "ai-tools"),
-            Triple("Web Development Guide", 24L, "web-dev"),
-            Triple("Study Plan for Exams", 48L, "study-plan"),
-        ).forEach { (title, hoursAgo, key) ->
+            Quadruple("AI Tools for Productivity", 2L, "ai-tools", 3),
+            Quadruple("Web Development Guide", 24L, "web-dev", 1),
+            Quadruple("Study Plan for Exams", 48L, "study-plan", 2),
+        ).forEach { q ->
             com.grapsee.gsai.data.SharedConversationsStore.record(
-                ctx, conversationId = "render-shared-$key", title = title,
-                at = now - hoursAgo * 3_600_000L,
+                ctx, conversationId = "render-shared-${q.c}", title = q.a as String,
+                at = now - (q.b as Long) * 3_600_000L, people = q.d,
             )
         }
     }

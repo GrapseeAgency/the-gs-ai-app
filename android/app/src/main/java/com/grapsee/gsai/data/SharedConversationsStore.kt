@@ -27,6 +27,8 @@ object SharedConversationsStore {
         val title: String,
         /** Epoch millis — rendered with the shared relative-time formatter. */
         val sharedAt: Long,
+        /** Recipient count; 0 when the share sheet cannot know (no backend). */
+        val people: Int = 0,
     )
 
     private const val PREFS = "gs_shared_conversations"
@@ -48,6 +50,7 @@ object SharedConversationsStore {
                         conversationId = o.getString("conversationId"),
                         title = o.getString("title"),
                         sharedAt = o.getLong("sharedAt"),
+                        people = o.optInt("people", 0),
                     )
                 )
             }
@@ -56,9 +59,15 @@ object SharedConversationsStore {
     }
 
     /** Records one share and persists the outbox. Newest first. */
-    fun record(context: Context, conversationId: String, title: String, at: Long = System.currentTimeMillis()) {
+    fun record(
+        context: Context,
+        conversationId: String,
+        title: String,
+        at: Long = System.currentTimeMillis(),
+        people: Int = 0,
+    ) {
         entries.removeAll { it.conversationId == conversationId }
-        entries.add(0, Share(id = "share-$at", conversationId = conversationId, title = title, sharedAt = at))
+        entries.add(0, Share(id = "share-$at", conversationId = conversationId, title = title, sharedAt = at, people = people))
         persist(context)
     }
 
@@ -78,6 +87,7 @@ object SharedConversationsStore {
                     put("conversationId", s.conversationId)
                     put("title", s.title)
                     put("sharedAt", s.sharedAt)
+                    put("people", s.people)
                 }
             )
         }

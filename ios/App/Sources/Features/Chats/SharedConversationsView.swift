@@ -207,6 +207,7 @@ struct SharedConversationsView: View {
         let glyph = topicGlyph(share.title)
         let tone = topicTone(share.title)
         return HStack(spacing: 12) {
+            // (glyph tile below)
             NexlyGlyph(name: glyph, size: 20, color: tone.ink)
                 .frame(width: 44, height: 44)
                 .background(
@@ -218,9 +219,25 @@ struct SharedConversationsView: View {
                     .font(.custom(Aero.productName(.semibold), size: 12, relativeTo: .body))
                     .foregroundStyle(Aero.text)
                     .lineLimit(1)
-                Text("Shared \(Self.relative(from: share.sharedAt))")
+                Text(share.people > 0
+                     ? "Shared \(Self.relative(from: share.sharedAt))  •  With \(share.people) people"
+                     : "Shared \(Self.relative(from: share.sharedAt))")
                     .font(.custom(Aero.productName(.regular), size: 9.5, relativeTo: .caption))
                     .foregroundStyle(Aero.textSecondary)
+                if share.people > 0 {
+                    HStack(spacing: 3) {
+                        ForEach(0..<min(share.people, 3), id: \.self) { index in
+                            avatarChip(GsWellTone.allCases[index % GsWellTone.allCases.count],
+                                       diameter: 18)
+                        }
+                        if share.people > 3 {
+                            Text("+\(share.people - 3)")
+                                .font(.custom(Aero.productName(.regular), size: 9, relativeTo: .caption2))
+                                .foregroundStyle(Aero.textTertiary)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
             }
             Spacer(minLength: 6)
             Button {
@@ -261,24 +278,32 @@ struct SharedConversationsView: View {
             .first?.present(activity, animated: true)
     }
 
-    // MARK: Topic mapping — the shipped classifier, the pre-chat page's map.
+    // MARK: Topic mapping — the mock's own pairs.
 
     private func topicGlyph(_ title: String) -> String {
         switch DrawerTopic.topic(for: title) {
-        case .code, .planner: return "code"
-        case .data, .money, .review: return "chart-bar"
+        case .planner, .learning: return "book"
         case .travel, .itinerary: return "plane"
-        case .learning, .science: return "book"
+        case .code, .review: return "code"
         default: return "sparkles"
         }
     }
 
     private func topicTone(_ title: String) -> GsWellTone {
         switch DrawerTopic.topic(for: title) {
-        case .code, .planner: return .peach
-        case .data, .money, .review: return .mint
+        case .code, .review, .planner: return .peach
+        case .learning, .data, .money: return .mint
         default: return .lilac
         }
+    }
+
+    /// The mock's overlapping people chips: pastel glass circles with the
+    /// person glyph — drawn, like everything else on the page.
+    private func avatarChip(_ tone: GsWellTone, diameter: CGFloat) -> some View {
+        NexlyGlyph(name: "user", size: 9, color: Aero.textSecondary)
+            .frame(width: diameter, height: diameter)
+            .background(Circle().fill(tone.wash))
+            .overlay(Circle().strokeBorder(.white, lineWidth: 1))
     }
 
     static func relative(from date: Date) -> String {

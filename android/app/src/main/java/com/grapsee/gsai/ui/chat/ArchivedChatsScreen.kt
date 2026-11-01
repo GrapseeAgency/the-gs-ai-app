@@ -339,7 +339,7 @@ private fun ArchivedRow(
             .padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RefIconTile(drawerIcon(entity.title, entity.pinned), tint = archivedTone(entity.title), size = 44.dp)
+        RefIconTile(archivedGlyph(entity.title, entity.pinned), tint = archivedTone(entity.title), size = 44.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -382,20 +382,32 @@ private fun ArchivedRow(
     }
 }
 
-/** The mock's row tones: creative lilac, code peach, study mint. */
-private fun archivedTone(title: String): Color = when (drawerTopicTone(title)) {
-    "blue" -> GsWellTone.Peach.ink
-    "mint" -> GsWellTone.Mint.ink
-    else -> GsWellTone.Lilac.ink
-}
+/** The archived mock's glyph for a row: code for code+review, book for study. */
+private fun archivedGlyph(title: String, pinned: Boolean): androidx.compose.ui.graphics.vector.ImageVector =
+    when {
+        pinned -> GsIcons.Pin
+        com.grapsee.gsai.ui.navigation.drawer.drawerTopic(title) ==
+            com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Planner -> GsIcons.Book
+        com.grapsee.gsai.ui.navigation.drawer.drawerTopic(title) ==
+            com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Travel ||
+            com.grapsee.gsai.ui.navigation.drawer.drawerTopic(title) ==
+            com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Itinerary -> GsIcons.Plane
+        com.grapsee.gsai.ui.navigation.drawer.drawerTopic(title) ==
+            com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Code ||
+            com.grapsee.gsai.ui.navigation.drawer.drawerTopic(title) ==
+            com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Review -> GsIcons.Code
+        else -> GsIcons.Sparkles
+    }
 
-private fun drawerTopicTone(title: String): String = when (com.grapsee.gsai.ui.navigation.drawer.drawerTopic(title)) {
-    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Code -> "blue"
-    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Planner,
+/** The archived mock's row tones: creative lilac, code peach, study mint. */
+private fun archivedTone(title: String): Color = when (com.grapsee.gsai.ui.navigation.drawer.drawerTopic(title)) {
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Code,
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Review,
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Planner -> GsWellTone.Peach.ink
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Learning,
     com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Data,
-    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Money,
-    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Review -> "mint"
-    else -> "lilac"
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Money -> GsWellTone.Mint.ink
+    else -> GsWellTone.Lilac.ink
 }
 
 

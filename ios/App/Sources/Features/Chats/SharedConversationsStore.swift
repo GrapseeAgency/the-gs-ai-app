@@ -16,6 +16,8 @@ final class SharedConversationsStore: ObservableObject {
         let conversationId: String
         let title: String
         let sharedAt: Date
+        /// Recipient count; 0 when the share sheet cannot know (no backend).
+        var people: Int = 0
     }
 
     @Published private(set) var entries: [Share] = []
@@ -30,9 +32,9 @@ final class SharedConversationsStore: ObservableObject {
         }
     }
 
-    func record(conversationId: String, title: String, at: Date = Date()) {
+    func record(conversationId: String, title: String, at: Date = Date(), people: Int = 0) {
         entries.removeAll { $0.conversationId == conversationId }
-        entries.insert(Share(id: "share-\(at.timeIntervalSince1970)", conversationId: conversationId, title: title, sharedAt: at), at: 0)
+        entries.insert(Share(id: "share-\(at.timeIntervalSince1970)", conversationId: conversationId, title: title, sharedAt: at, people: people), at: 0)
         persist()
     }
 
