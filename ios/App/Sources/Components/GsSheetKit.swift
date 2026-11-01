@@ -63,6 +63,8 @@ struct GsSheetPage<Content: View>: View {
     var subtitle: String?
     var onBack: (() -> Void)?
     var headerTrailing: (() -> AnyView)?
+    /// The reference's navy ink; nil keeps the theme's.
+    var inkColor: Color? = nil
     @ViewBuilder var content: () -> Content
 
     var body: some View {

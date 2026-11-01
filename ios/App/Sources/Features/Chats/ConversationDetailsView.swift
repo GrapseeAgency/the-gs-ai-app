@@ -34,6 +34,7 @@ struct ConversationDetailsView: View {
             title: "Conversation Details",
             subtitle: "Manage your conversation.",
             onBack: { dismiss() },
+            inkColor: Color(red: 0.129, green: 0.208, blue: 0.369),
             headerTrailing: {
                 AnyView(
                     Button {

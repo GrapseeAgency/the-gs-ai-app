@@ -141,7 +141,7 @@ fun ArchivedChatsScreen(
                     Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 120.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    RefIconTile(GsIcons.Archive, tint = GsWellTone.Lilac.ink, size = 52.dp)
+                    RefIconTile(GsIcons.Archive, tint = Color.White, size = 52.dp, filled = Color(0xFF8C63F9))
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text(

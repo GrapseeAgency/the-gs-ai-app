@@ -276,6 +276,8 @@ fun RefIconTile(
     modifier: Modifier = Modifier,
     tint: Color = GsTheme.colors.accentStrong,
     size: Dp = 40.dp,
+    /** Solid pastel fill with a white glyph — the mock's tile language. */
+    filled: Color? = null,
 ) {
     val colors = GsTheme.colors
     Box(
@@ -283,11 +285,12 @@ fun RefIconTile(
             .size(size)
             .clip(RoundedCornerShape(13.dp))
             .background(
+                if (filled != null) Brush.verticalGradient(listOf(filled, filled)) else
                 Brush.verticalGradient(
                     listOf(Color.White.copy(alpha = 0.72f), colors.accentSoft)
                 )
             )
-            .border(1.dp, colors.glassBorder, RoundedCornerShape(13.dp)),
+            .border(1.dp, if (filled != null) Color.White.copy(alpha = 0.8f) else colors.glassBorder, RoundedCornerShape(13.dp)),
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size * 0.55f))

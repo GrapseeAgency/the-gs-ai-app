@@ -22,6 +22,7 @@ struct SharedConversationsView: View {
             title: "Shared Conversations",
             subtitle: "View and manage conversations you've shared.",
             onBack: { dismiss() },
+            inkColor: Color(red: 0.129, green: 0.208, blue: 0.369),
             headerTrailing: {
                 AnyView(
                     Button {
