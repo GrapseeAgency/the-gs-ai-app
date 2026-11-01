@@ -41,7 +41,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.grapsee.gsai.R
 import com.grapsee.gsai.data.SharedConversationsStore
 import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.di.ServiceLocator
@@ -182,7 +181,7 @@ fun SharedConversationsScreen(
             // title, and the action that starts a real share.
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Image(
-                    painter = painterResource(R.drawable.ref_shared_orb),
+                    painter = painterResource(com.grapsee.gsai.R.drawable.ref_shared_orb),
                     contentDescription = null,
                     modifier = Modifier.width(237.dp),
                 )

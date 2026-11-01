@@ -149,7 +149,7 @@ struct SharedConversationsView: View {
         .gsSheetCard()
     }
 
-    private func sharedTab(_ label: String, glyph: String, active: Bool, onTap: @escaping () -> Unit) -> some View {
+    private func sharedTab(_ label: String, glyph: String, active: Bool, onTap: @escaping () -> Void) -> some View {
         Button(action: onTap) {
             HStack(spacing: 7) {
                 NexlyGlyph(name: glyph, size: 15, color: active ? Aero.refAccentStrong : Aero.textSecondary)

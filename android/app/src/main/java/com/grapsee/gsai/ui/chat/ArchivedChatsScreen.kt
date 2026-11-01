@@ -40,7 +40,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.grapsee.gsai.R
 import com.grapsee.gsai.data.local.ConversationEntity
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
@@ -128,7 +127,7 @@ fun ArchivedChatsScreen(
         RefCard {
             Box(Modifier.fillMaxWidth().heightIn(min = 79.dp)) {
                 Image(
-                    painter = painterResource(R.drawable.ref_archived_lotus),
+                    painter = painterResource(com.grapsee.gsai.R.drawable.ref_archived_lotus),
                     contentDescription = null,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)

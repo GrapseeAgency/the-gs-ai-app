@@ -11,7 +11,7 @@ import SwiftUI
 final class SharedConversationsStore: ObservableObject {
     static let shared = SharedConversationsStore()
 
-    struct Share: Identifiable, Equatable {
+    struct Share: Identifiable, Equatable, Codable {
         let id: String
         let conversationId: String
         let title: String
