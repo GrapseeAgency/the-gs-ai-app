@@ -150,6 +150,96 @@ final class ReferenceSheetsRenderTests: XCTestCase {
         return ids
     }
 
+    /// The three conversation-management pages. The archived capture seeds
+    /// the mock's three rows at the mock's own dates, the shared capture the
+    /// mock's three records at its ages (the shipped store starts empty — the
+    /// fixtures are TEST-ONLY and removed in `defer`), and the details capture
+    /// the mock's one conversation ("Project Inspiration", today, 9:24 AM).
+    func testArchivedRenders() async throws {
+        let seeded = seedArchivedChats()
+        defer { seeded.forEach { ConversationStore.shared.delete(id: $0) } }
+        try await capturePage(
+            view: { ArchivedChatsView() },
+            prefix: "nexly-archived-ios")
+    }
+
+    func testSharedRenders() async throws {
+        let seeded = seedSharedRecords()
+        defer { seeded.forEach { SharedConversationsStore.shared.remove(id: $0) } }
+        try await capturePage(
+            view: { SharedConversationsView() },
+            prefix: "nexly-shared-ios")
+    }
+
+    func testConversationDetailsRenders() async throws {
+        let id = seedDetailsConversation()
+        defer { ConversationStore.shared.delete(id: id) }
+        try await capturePage(
+            view: { ConversationDetailsView(conversationID: id) },
+            prefix: "nexly-conversation-details-ios")
+    }
+
+    /// The archived mock's three rows, with its own dates.
+    private func seedArchivedChats() -> [String] {
+        let store = ConversationStore.shared
+        let rows: [(String, String)] = [
+            ("Project Aurora", "2025-04-14T09:00:00Z"),
+            ("Code Review Guide", "2025-03-28T11:00:00Z"),
+            ("Study Plan 2025", "2025-03-15T15:00:00Z"),
+        ]
+        var ids: [String] = []
+        for (index, row) in rows.enumerated() {
+            let id = "render-archived-\(index)"
+            store.upsert(StoredConversation(
+                id: id, title: row.0, modelId: nil, pinned: false, archived: true,
+                createdAt: row.1, updatedAt: row.1))
+            ids.append(id)
+        }
+        return ids
+    }
+
+    /// The shared mock's three records at its ages.
+    private func seedSharedRecords() -> [String] {
+        let store = SharedConversationsStore.shared
+        let rows: [(String, Double)] = [
+            ("AI Tools for Productivity", 2),
+            ("Web Development Guide", 24),
+            ("Study Plan for Exams", 48),
+        ]
+        let now = Date()
+        var ids: [String] = []
+        for row in rows {
+            store.record(
+                conversationId: "render-shared-\(row.0.hashValue.magnitude)",
+                title: row.0,
+                at: now.addingTimeInterval(-row.1 * 3600))
+        }
+        ids = store.entries.map { $0.id }
+        return ids
+    }
+
+    /// The details mock's hero: "Project Inspiration", today 9:24 AM, two
+    /// messages about a minute apart.
+    private func seedDetailsConversation() -> String {
+        let store = ConversationStore.shared
+        let id = "render-details-0"
+        var components = DateComponents()
+        components.hour = 9; components.minute = 24
+        let today924 = Calendar.current.date(from: components) ?? Date()
+        let first = ConversationStore.isoString(today924)
+        let second = ConversationStore.isoString(today924.addingTimeInterval(65))
+        store.append(StoredMessage(
+            id: "render-details-msg-0", conversationId: id, role: "user",
+            content: "I need fresh ideas for the landing page hero.", createdAt: first))
+        store.append(StoredMessage(
+            id: "render-details-msg-1", conversationId: id, role: "assistant",
+            content: "Here are three directions worth exploring.", createdAt: second))
+        store.upsert(StoredConversation(
+            id: id, title: "Project Inspiration", modelId: nil, pinned: true, archived: false,
+            createdAt: first, updatedAt: second))
+        return id
+    }
+
     func testModelPickerRenders() async throws {
         let settings = SettingsStore.shared
         let previousModel = settings.preferredModel

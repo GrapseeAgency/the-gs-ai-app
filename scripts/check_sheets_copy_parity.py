@@ -435,6 +435,67 @@ SCREENS["model-picker"] = dict(
     ],
 )
 
+SCREENS["archived"] = dict(
+    android="android/app/src/main/java/com/grapsee/gsai/ui/chat/ArchivedChatsScreen.kt",
+    ios="ios/App/Sources/Features/Chats/ArchivedChatsView.swift",
+    copy=[
+        "Archived Conversations",
+        "View and restore your archived chats.",
+        "Keep your space tidy. Restore anytime.",
+        "Restore",
+        "About Archived Chats",
+        "Archived conversations are hidden from your main chat list, but you can restore them anytime.",
+        "Clear Archived",
+        "Permanently remove all archived conversations.",
+    ],
+)
+
+SCREENS["shared"] = dict(
+    android="android/app/src/main/java/com/grapsee/gsai/ui/chat/SharedConversationsScreen.kt",
+    ios="ios/App/Sources/Features/Chats/SharedConversationsView.swift",
+    copy=[
+        "Shared Conversations",
+        "View and manage conversations you've shared.",
+        "Shared with Others",
+        "Shared by You",
+        "Share Conversations",
+        "Let others view your helpful conversations with Nexly.",
+        "Learn More",
+        "No Shared Conversations Yet",
+        "learn and discover together.",
+        "Share a Conversation",
+    ],
+)
+
+SCREENS["conversation-details"] = dict(
+    android="android/app/src/main/java/com/grapsee/gsai/ui/chat/ChatInfoScreen.kt",
+    ios="ios/App/Sources/Features/Chats/ConversationDetailsView.swift",
+    copy=[
+        "Conversation Details",
+        "Manage your conversation.",
+        "Conversation Actions",
+        "Quick actions for this chat",
+        "Rename Conversation",
+        "Give this chat a new name.",
+        "Pin Conversation",
+        "Keep this chat at the top.",
+        "Archive Conversation",
+        "Move this chat to archive.",
+        "Share Conversation",
+        "Share this chat link.",
+        "Export Conversation",
+        "Download this chat as a file.",
+        "Delete Conversation",
+        "Remove this chat from your history.",
+        "Memory & Context",
+        "Manage related memory",
+        "Manage Memory",
+        "View or clear memories used in this chat.",
+        "About This Conversation",
+        "This conversation may include personal or sensitive information. Manage it responsibly.",
+    ],
+)
+
 SCREENS["data-export"] = dict(
     android="android/app/src/main/java/com/grapsee/gsai/ui/settings/DataExportAccountDeletionScreen.kt",
     ios="ios/App/Sources/Features/Settings/DataExportAccountDeletionView.swift",
