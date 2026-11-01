@@ -115,7 +115,7 @@ fun ArchivedChatsScreen(
             Box(
                 Modifier
                     .size(36.dp)
-                    .gsKebabCircle()
+                    .gsGlass(GsGlassRole.FloatingControl, CircleShape)
                     .clickable(role = Role.Button, onClickLabel = "More options") { menuOpen = true },
                 contentAlignment = Alignment.Center,
             ) {
@@ -396,8 +396,6 @@ private fun drawerTopicTone(title: String): String = when (com.grapsee.gsai.ui.n
     else -> "lilac"
 }
 
-private fun Modifier.gsKebabCircle(): Modifier =
-    this.gsGlass(GsGlassRole.FloatingControl, CircleShape)
 
 /** Shared relative-time formatter for chat rows (kept tiny, no external deps). */
 object ChatTime {
@@ -427,6 +425,20 @@ object ChatTime {
             else -> java.time.Instant.ofEpochMilli(millis).toString().take(10)
         }
     }
+
+    /** "9:24 AM" — the export line's stamp. */
+    fun stamp(iso: String): String = runCatching {
+        java.time.OffsetDateTime.parse(iso).format(
+            java.time.format.DateTimeFormatter.ofPattern("h:mm a")
+        )
+    }.getOrElse { "" }
+
+    /** "Apr 14, 2025, 9:24 AM" — the details hero's started line. */
+    fun longDateTime(iso: String?): String = runCatching {
+        java.time.OffsetDateTime.parse(iso).format(
+            java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy, h:mm a")
+        )
+    }.getOrElse { "earlier" }
 
     /** "Apr 14, 2025" — the mock's date shape, from the row's real timestamp. */
     fun longDate(iso: String): String = runCatching {

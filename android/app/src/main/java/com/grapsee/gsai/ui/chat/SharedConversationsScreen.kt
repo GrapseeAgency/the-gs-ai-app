@@ -1,5 +1,6 @@
 package com.grapsee.gsai.ui.chat
 
+import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -55,6 +56,7 @@ import com.grapsee.gsai.ui.icons.GsIcons
 import com.grapsee.gsai.ui.navigation.drawer.drawerIcon
 import com.grapsee.gsai.ui.theme.GsTheme
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -401,8 +403,11 @@ private fun shareIntent(title: String): android.content.Intent =
     }
 
 /** The mock's row tones: creative lilac, code peach, study mint. */
-private fun sharedTone(title: String): Color = when (drawerTopicTone(title)) {
-    "blue" -> GsWellTone.Peach.ink
-    "mint" -> GsWellTone.Mint.ink
+private fun sharedTone(title: String): Color = when (com.grapsee.gsai.ui.navigation.drawer.drawerTopic(title)) {
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Code -> GsWellTone.Peach.ink
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Planner,
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Data,
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Money,
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Review -> GsWellTone.Mint.ink
     else -> GsWellTone.Lilac.ink
 }

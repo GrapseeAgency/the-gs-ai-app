@@ -205,14 +205,15 @@ SCREENS = {
     # not identifiable here and the rim, the pill and the rhythm carry it.
     "memory": {
         "about": "the Manage Memory group card",
-        # ios: NOT recorded — 359.7 fails to re-derive at 360x780 (rc=2), so it is
-        # not a stable anchor on this screen yet.
         # ios: 454.7 is the Manage Memory card on the 393x852 capture (3 rows at a
         # 44.17pt pitch, and the peach "Manage" pill sits at y~142 inside this
-        # anchor's cta window 111.7..149.7). The 360x780 capture derives 491.7 —
-        # a 37pt shift that is wider than rim_search, so that width is expected
-        # to FAIL until the responsive layout stops pushing this card down.
+        # anchor's cta window 111.7..149.7). At 360x780 the narrower page
+        # re-wraps the Recent Memories line and the card lands at 491.7 — the
+        # width-keyed override below is derived from run 41281135312's capture
+        # after the honesty purge removed the card's fourth row (commit the
+        # table WITH the layout change, never after it).
         "rim_y": {"android": 503.0, "ios": 454.7},
+        "rim_y_by_width": {"360x780": {"ios": 491.7}},
         "rim_search": 24.0,
         "rim_span_x": (70.0, 330.0),
         "pitch_dx": (62.0, 345.0),
@@ -390,13 +391,24 @@ def page_rims(gray, span_x, scale, delta=3.0, win_pt=40.0):
     return peaks
 
 
-def expected_rim(probe, platform):
-    """The table's expected edge for this platform; None means never measured."""
+def expected_rim(probe, platform, width_key=None):
+    """The table's expected edge for this platform; None means never measured.
+
+    `rim_y_by_width` carries the overrides a responsive layout earns: a page
+    that re-wraps at 360pt moves its cards, and the anchor has to follow the
+    render actually being measured, not the 393pt one.
+    """
+    if width_key:
+        override = probe.get("rim_y_by_width", {}).get(width_key)
+        if override is not None:
+            value = override.get(platform)
+            if value is not None:
+                return value
     value = probe["rim_y"]
     return value.get(platform) if isinstance(value, dict) else value
 
 
-def anchor_edge(gray, probe, scale, platform="android", edge_pt=None, span=None):
+def anchor_edge(gray, probe, scale, platform="android", edge_pt=None, span=None, width_key=None):
     """The card's lit top edge — or (None, why) rather than a measurement of
     something that is not the card.
 
@@ -408,7 +420,7 @@ def anchor_edge(gray, probe, scale, platform="android", edge_pt=None, span=None)
     freezes the anchor, which the self-test needs because a doctored capture has no
     rim left to find.
     """
-    expect = edge_pt if edge_pt is not None else expected_rim(probe, platform)
+    expect = edge_pt if edge_pt is not None else expected_rim(probe, platform, width_key=width_key)
     if expect is None:
         return None, (f"no {platform} rim_y is recorded for {probe['about']}; "
                       f"run --derive on a {platform} render and commit its value")
@@ -478,12 +490,13 @@ def measure(a, gray, bd, probe, scale, pt_w, pt_h, bands, edge=None,
             platform="android"):
     """Every screen runs the same measurements off the same anchored edge."""
     rows_out = []
-    found, why = anchor_edge(gray, probe, scale, platform=platform, edge_pt=edge)
+    found, why = anchor_edge(gray, probe, scale, platform=platform, edge_pt=edge,
+                             width_key=f"{pt_w}x{pt_h}")
     if found is None:
         fail(why + ". The layout moved — re-derive the table with --derive and "
                        "commit it WITH the layout change, never after it.")
     edge_pt, level, rows = found
-    expect = expected_rim(probe, platform)
+    expect = expected_rim(probe, platform, width_key=f"{pt_w}x{pt_h}")
 
     box = card_box(probe, edge_pt, pt_w)
     card_win = window(a, box, scale)
@@ -559,7 +572,7 @@ def doctor_self_test(a, gray, bd, probe, scale, pt_w, pt_h, bands, path,
     #    or a render whose edge drifted would keep a bright row and the
     #    self-test would cry wolf at a capture that is fine.
     sx0, sx1 = [int(round(v * scale)) for v in probe["rim_span_x"]]
-    expect = expected_rim(probe, platform)
+    expect = expected_rim(probe, platform, width_key=f"{pt_w}x{pt_h}")
     lo = max(0, int(round((expect - probe["rim_search"]) * scale)))
     hi = min(h, int(round((expect + probe["rim_search"]) * scale)))
     fill = float(np.median(window(a, box, scale).mean(axis=2)))
@@ -909,7 +922,8 @@ def main() -> int:
     # One reporter for "this is not the card": measure() would exit inside fail()
     # with no context, and a stale table is the one failure a reader can fix in a
     # second, given the derived record.
-    found, why = anchor_edge(gray, probe, scale, platform=args.platform)
+    found, why = anchor_edge(gray, probe, scale, platform=args.platform,
+                             width_key=f"{pt_w}x{pt_h}")
     if found is None:
         print(f"ERROR: {why}")
         print(f"\n# this screen's derive record — {repro}")

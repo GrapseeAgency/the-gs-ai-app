@@ -138,7 +138,7 @@ struct ModelSelectionView: View {
         }
         .padding(4)
         .background(RoundedRectangle(cornerRadius: 18).fill(.white.opacity(scheme == .dark ? 0.10 : 0.42)))
-        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(scheme == .dark ? 0.14 : 0.65), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(scheme == .dark ? 0.22 : 0.92), lineWidth: 1.2))
     }
 
     private var availableHeader: some View {
