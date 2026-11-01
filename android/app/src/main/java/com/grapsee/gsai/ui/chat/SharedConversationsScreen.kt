@@ -108,6 +108,7 @@ fun SharedConversationsScreen(
         title = "Shared Conversations",
         subtitle = "View and manage conversations you've shared.",
         onBack = onBack,
+        ink = Color(0xFF21355E),
         actions = {
             Box(
                 Modifier

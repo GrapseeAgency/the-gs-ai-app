@@ -111,6 +111,7 @@ fun ArchivedChatsScreen(
         title = "Archived Conversations",
         subtitle = "View and restore your archived chats.",
         onBack = onBack,
+        ink = Color(0xFF21355E),
         actions = {
             // The mock's kebab: the two whole-page actions, both real.
             Box(

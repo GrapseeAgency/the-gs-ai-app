@@ -113,6 +113,8 @@ fun RefPage(
     largeTitle: Boolean = false,
     leading: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
+    /** The reference's navy ink; null keeps the theme's. */
+    ink: Color? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val colors = GsTheme.colors
@@ -141,7 +143,7 @@ fun RefPage(
                 Text(
                     text = title,
                     style = if (largeTitle) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineSmall,
-                    color = colors.textPrimary,
+                    color = ink ?: colors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.semantics { heading() }

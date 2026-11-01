@@ -509,6 +509,8 @@ fun RefSettingsPage(
     subtitle: String? = null,
     onBack: () -> Unit,
     headerTrailing: (@Composable () -> Unit)? = null,
+    /** The reference's navy ink; null keeps the theme's. */
+    ink: Color? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = GsTheme.colors

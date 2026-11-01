@@ -126,6 +126,7 @@ fun ChatInfoScreen(
         title = "Conversation Details",
         subtitle = "Manage your conversation.",
         onBack = onBack,
+        ink = Color(0xFF21355E),
         headerTrailing = {
             // The mock's kebab opens the same action set the rows carry.
             Box(
