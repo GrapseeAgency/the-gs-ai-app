@@ -249,7 +249,10 @@ fun DrawScope.drawLotusOrbScene() {
 fun DrawScope.drawArchivedLotusScene() {
     val w = size.width
     val h = size.height
-    val heart = Offset(w * 0.78f, h * 0.94f)
+    // The heart sits just below the canvas: the petals rise INTO the visible
+    // strip the way the mock's lotus climbs the card's trailing edge. Petal
+    // angles near 0 point up; negatives lean left.
+    val heart = Offset(w * 0.72f, h * 1.04f)
 
     drawCircle(
         Brush.radialGradient(
@@ -262,27 +265,27 @@ fun DrawScope.drawArchivedLotusScene() {
     )
 
     // Back layer: broad lavender petals leaning left.
-    listOf(196f, 172f, 150f, 128f).forEachIndexed { index, angle ->
+    listOf(-115f, -95f, -75f, -55f).forEachIndexed { index, angle ->
         drawPetal(
-            heart, angle, w * (0.52f - index * 0.03f), 0.46f,
+            heart, angle, w * (0.62f - index * 0.04f), 0.46f,
             PetalLavender, WashWhite, alpha = 0.88f,
         )
     }
     // Mid layer: lilac petals filling the left flank.
-    listOf(160f, 138f).forEach { angle ->
-        drawPetal(heart, angle, w * 0.42f, 0.42f, PetalLilac, WashWhite, alpha = 0.9f)
+    listOf(-85f, -65f).forEach { angle ->
+        drawPetal(heart, angle, w * 0.55f, 0.42f, PetalLilac, WashWhite, alpha = 0.9f)
     }
     // Front layer: the peach-pink heart of the flower.
-    listOf(120f, 100f, 82f, 64f).forEachIndexed { index, angle ->
+    listOf(-50f, -32f, -14f, 4f).forEachIndexed { index, angle ->
         drawPetal(
-            heart, angle, w * (0.40f - index * 0.02f), 0.38f,
+            heart, angle, w * (0.52f - index * 0.03f), 0.38f,
             if (index % 2 == 0) PetalPeach else PetalBlush, WashWhite, alpha = 0.95f,
         )
     }
-    listOf(92f, 76f).forEach { angle ->
-        drawPetal(heart, angle, w * 0.24f, 0.4f, PetalRose, WashWhite, alpha = 0.95f)
+    listOf(-24f, -8f).forEach { angle ->
+        drawPetal(heart, angle, w * 0.30f, 0.4f, PetalRose, WashWhite, alpha = 0.95f)
     }
-    drawStar4(Offset(w * 0.22f, h * 0.20f), w * 0.035f, WashWhite, 0.9f)
+    drawStar4(Offset(w * 0.20f, h * 0.22f), w * 0.035f, WashWhite, 0.9f)
 }
 
 /** The shared page's empty state: a glass bubble carrying the share glyph,
@@ -303,19 +306,19 @@ fun DrawScope.drawSharedOrbScene() {
         center = bubbleCenter,
     )
 
-    // Glass petals cupping the bubble from both sides — the mock's left
-    // cluster tips toward 8-10 o'clock, its right toward 2-4 o'clock, and the
-    // pivot hides behind the bubble's base.
+    // Glass petals cupping the bubble from both sides — the mock's clusters
+    // rise outward-upward from behind the bubble's base (tips toward 10-11
+    // and 1-2 o'clock), and the pivot hides behind the bubble.
     val fanPivot = Offset(w * 0.47f, h * 0.78f)
-    listOf(-150f, -115f, -85f, 85f, 115f, 150f).forEachIndexed { index, angle ->
+    listOf(-95f, -65f, -40f, 40f, 65f, 95f).forEachIndexed { index, angle ->
         drawPetal(
-            fanPivot, angle, w * (0.34f - (index % 2) * 0.05f), 0.5f,
+            fanPivot, angle, w * (0.36f - (index % 2) * 0.05f), 0.5f,
             if (index % 2 == 0) PetalLavender else PetalBlush,
             WashWhite, alpha = 0.85f,
         )
     }
-    listOf(-60f, 0f, 60f).forEach { angle ->
-        drawPetal(fanPivot, angle, w * 0.24f, 0.46f, PetalPeach, WashWhite, alpha = 0.9f)
+    listOf(-20f, 20f).forEach { angle ->
+        drawPetal(fanPivot, angle, w * 0.26f, 0.46f, PetalPeach, WashWhite, alpha = 0.9f)
     }
 
     // The bubble.

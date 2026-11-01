@@ -1303,27 +1303,29 @@ extension GsRefScenes {
 
     static func archivedLotus(_ ctx: inout GraphicsContext, _ size: CGSize) {
         let w = size.width, h = size.height
-        let heart = CGPoint(x: w * 0.78, y: h * 0.94)
+        // The heart sits just below the canvas: the petals rise INTO the
+        // visible strip, mirroring Android's angles.
+        let heart = CGPoint(x: w * 0.72, y: h * 1.04)
         ctx.fill(Path(ellipseIn: CGRect(x: w * 0.55 - w * 0.75, y: h * 0.45 - w * 0.75,
                                         width: w * 1.5, height: w * 1.5)),
                  with: .radialGradient(
                     Gradient(colors: [Color(red: 1, green: 0.851, blue: 0.925).opacity(0.20), .clear]),
                     center: CGPoint(x: w * 0.55, y: h * 0.45), startRadius: 0, endRadius: w * 0.75))
-        for (index, angle) in [196.0, 172, 150, 128].enumerated() {
-            drawPetal(&ctx, heart, CGFloat(angle), w * (0.52 - Double(index) * 0.03), 0.46,
+        for (index, angle) in [-115.0, -95, -75, -55].enumerated() {
+            drawPetal(&ctx, heart, CGFloat(angle), w * (0.62 - Double(index) * 0.04), 0.46,
                       petalLavender, .white, 0.88)
         }
-        for angle in [160.0, 138] {
-            drawPetal(&ctx, heart, CGFloat(angle), w * 0.42, 0.42, petalLilac, .white, 0.9)
+        for angle in [-85.0, -65] {
+            drawPetal(&ctx, heart, CGFloat(angle), w * 0.55, 0.42, petalLilac, .white, 0.9)
         }
-        for (index, angle) in [120.0, 100, 82, 64].enumerated() {
-            drawPetal(&ctx, heart, CGFloat(angle), w * (0.40 - Double(index) * 0.02), 0.38,
+        for (index, angle) in [-50.0, -32, -14, 4].enumerated() {
+            drawPetal(&ctx, heart, CGFloat(angle), w * (0.52 - Double(index) * 0.03), 0.38,
                       index % 2 == 0 ? petalPeach : petalBlush, .white, 0.95)
         }
-        for angle in [92.0, 76] {
-            drawPetal(&ctx, heart, CGFloat(angle), w * 0.24, 0.4, petalRose, .white, 0.95)
+        for angle in [-24.0, -8] {
+            drawPetal(&ctx, heart, CGFloat(angle), w * 0.30, 0.4, petalRose, .white, 0.95)
         }
-        drawStar4(&ctx, CGPoint(x: w * 0.22, y: h * 0.20), w * 0.035, .white, 0.9)
+        drawStar4(&ctx, CGPoint(x: w * 0.20, y: h * 0.22), w * 0.035, .white, 0.9)
     }
 
     static func sharedOrb(_ ctx: inout GraphicsContext, _ size: CGSize) {
@@ -1339,14 +1341,13 @@ extension GsRefScenes {
                                       .clear]),
                     center: bubbleCenter, startRadius: 0, endRadius: bubbleR * 2.1))
 
-        let fanPivot = CGPoint(x: w * 0.47, y: h * 0.78)
-        for (index, angle) in [-150.0, -115, -85, 85, 115, 150].enumerated() {
+        for (index, angle) in [-95.0, -65, -40, 40, 65, 95].enumerated() {
             drawPetal(&ctx, fanPivot, CGFloat(angle),
-                      w * (0.34 - Double(index % 2) * 0.05), 0.5,
+                      w * (0.36 - Double(index % 2) * 0.05), 0.5,
                       index % 2 == 0 ? petalLavender : petalBlush, .white, 0.85)
         }
-        for angle in [-60.0, 0, 60] {
-            drawPetal(&ctx, fanPivot, CGFloat(angle), w * 0.24, 0.46, petalPeach, .white, 0.9)
+        for angle in [-20.0, 20] {
+            drawPetal(&ctx, fanPivot, CGFloat(angle), w * 0.26, 0.46, petalPeach, .white, 0.9)
         }
 
         ctx.fill(Path(ellipseIn: CGRect(x: bubbleCenter.x - bubbleR, y: bubbleCenter.y - bubbleR,
