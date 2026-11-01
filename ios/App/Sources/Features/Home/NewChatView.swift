@@ -162,7 +162,7 @@ struct NewChatView: View {
                         // glyph, same verb, one stage earlier.
                         NexlyGlyph(name: "send-2", size: 17, color: .white)
                     }
-                    .frame(width: 38, height: 38)
+                    .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -433,10 +433,11 @@ private struct BreathingArt: View {
     @State private var isAlive = false
 
     var body: some View {
-        Canvas { context, _ in
-            GsRefScenes.lotusOrb(&context, CGSize(width: 185, height: 142))
+        Canvas { context, size in
+            GsRefScenes.lotusOrb(&context, size)
         }
-        .frame(width: 185, height: 142)
+        .frame(width: UIScreen.main.bounds.width * 0.47,
+               height: UIScreen.main.bounds.width * 0.36)
         .accessibilityLabel("GS companion")
         .scaleEffect(reduceMotion ? 1 : (isAlive ? 1.035 : 1))
             .rotationEffect(.degrees(reduceMotion ? 0 : (isAlive ? rotationDegrees : 0)))

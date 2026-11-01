@@ -209,9 +209,9 @@ struct SharedConversationsView: View {
         return HStack(spacing: 12) {
             // (glyph tile below)
             NexlyGlyph(name: glyph, size: 20, color: tone.ink)
-                .frame(width: 44, height: 44)
+                .frame(width: 52, height: 52)
                 .background(
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
                         .fill(tone.wash)
                 )
             VStack(alignment: .leading, spacing: 2) {
@@ -244,8 +244,8 @@ struct SharedConversationsView: View {
                 router.path.append(.chat(share.conversationId))
             } label: {
                 Text("View")
-                    .font(.custom(Aero.productName(.medium), size: 10.5, relativeTo: .caption))
-                    .foregroundStyle(Aero.text)
+                    .font(.custom(Aero.productName(.semibold), size: 12, relativeTo: .caption))
+                    .foregroundStyle(Aero.refAccentStrong)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
                     .background(Capsule().fill(Color.white.opacity(0.72)))

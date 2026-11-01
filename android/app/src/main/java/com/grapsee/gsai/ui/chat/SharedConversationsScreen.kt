@@ -355,7 +355,7 @@ private fun SharedRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 74.dp)
+            .heightIn(min = 86.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -366,7 +366,7 @@ private fun SharedRow(
             .padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RefIconTile(sharedGlyph(title), tint = sharedTone(title), size = 44.dp)
+        RefIconTile(sharedGlyph(title), tint = sharedTone(title), size = 52.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -393,13 +393,13 @@ private fun SharedRow(
         Row(
             Modifier
                 .clip(RoundedCornerShape(999.dp))
-                .background(Color.White.copy(alpha = 0.72f))
-                .border(1.dp, colors.glassBorder, RoundedCornerShape(999.dp))
+                .background(colors.accentSoft)
+                .border(1.dp, colors.accent.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
                 .clickable(role = Role.Button, onClickLabel = "View", onClick = onOpen)
                 .padding(horizontal = 14.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("View", style = MaterialTheme.typography.labelMedium, color = colors.textPrimary)
+            Text("View", style = MaterialTheme.typography.labelLarge, color = colors.accentStrong, fontWeight = FontWeight.SemiBold)
         }
         Spacer(Modifier.width(6.dp))
         Icon(

@@ -125,10 +125,11 @@ fun NewChatScreen(
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 // The mock's lotus-in-dome, drawn: dome rims, two petal
                 // rings, the violet crystal and the sparkles, from primitives.
+                val screenW = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
                 androidx.compose.foundation.Canvas(
                     Modifier
-                        .width(185.dp)
-                        .height(142.dp)
+                        .width((screenW * 0.47f).dp)
+                        .height((screenW * 0.36f).dp)
                         .semantics { contentDescription = "GS companion" },
                 ) {
                     drawLotusOrbScene()
@@ -322,7 +323,7 @@ private fun Composer(
             if (draft.isEmpty()) {
                 androidx.compose.material3.Text(
                     "Type your message...",
-                    fontSize = 10.5.sp,
+                    fontSize = 13.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
                 )
@@ -355,7 +356,7 @@ private fun Composer(
             Spacer(Modifier.weight(1f))
             Box(
                 Modifier
-                    .size(38.dp)
+                    .size(44.dp)
                     .testTag("new-chat-send")
                     .background(
                         if (draft.isBlank()) colors.accent.copy(alpha = 0.35f) else colors.accent,
@@ -381,7 +382,7 @@ private fun ComposerButton(icon: androidx.compose.ui.graphics.vector.ImageVector
     val colors = GsTheme.colors
     Box(
         Modifier
-            .size(32.dp)
+            .size(38.dp)
             .gsGlassCircle()
             // Icon-only control: the label is the node's content description,
             // for TalkBack and for the interaction tests alike.

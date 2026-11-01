@@ -170,9 +170,9 @@ struct ArchivedChatsView: View {
         let tone = topicTone(conversation.title)
         return HStack(spacing: 12) {
             NexlyGlyph(name: topicGlyph(conversation), size: 20, color: tone.ink)
-                .frame(width: 44, height: 44)
+                .frame(width: 52, height: 52)
                 .background(
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
                         .fill(tone.wash)
                 )
             VStack(alignment: .leading, spacing: 2) {
@@ -191,13 +191,13 @@ struct ArchivedChatsView: View {
                 HStack(spacing: 6) {
                     NexlyGlyph(name: "restore", size: 14, color: Aero.textSecondary)
                     Text("Restore")
-                        .font(.custom(Aero.productName(.medium), size: 10.5, relativeTo: .caption))
-                        .foregroundStyle(Aero.text)
+                        .font(.custom(Aero.productName(.semibold), size: 12, relativeTo: .caption))
+                        .foregroundStyle(Aero.refAccentStrong)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(Capsule().fill(Color.white.opacity(0.72)))
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.85), lineWidth: 1))
+                .background(Capsule().fill(Aero.refAccentSoft))
+                .overlay(Capsule().strokeBorder(Aero.refAccent.opacity(0.35), lineWidth: 1))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Restore \(title)")
