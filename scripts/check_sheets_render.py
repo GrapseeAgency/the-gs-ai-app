@@ -220,12 +220,20 @@ SCREENS = {
     "model-picker": dict(
         stem="ref-model-picker",
         rims=4,
-        rim_window=(560.0, 720.0),
+        # Re-derived 2026-11-01 from run 41244899821's capture after the
+        # mock-required re-layout (tab icon wells, bottom-anchored Continue)
+        # moved the page's four lit lines ~10pt down: 593/659/704/720pt.
+        rim_window=(560.0, 730.0),
         steps=None,
-        note="model cards below the list",
+        note="the page's four lit lines: Auto Select row, Continue, frame",
         title_top_band=(9.0, 14.0),
         rims_ios=4,
-        rim_window_ios=(200.0, 520.0),
+        # Re-derived 2026-11-01 from run 41244902926's capture after the same
+        # re-layout: Lite/Vision card tops at 247/337pt, the archive band at
+        # 507pt and the Reasoning tray's strong top rim at 599pt. The Code
+        # card's own hairline no longer clears the lit-rim threshold over the
+        # shifted backdrop, so the tray rim holds the fourth slot.
+        rim_window_ios=(240.0, 606.0),
         steps_ios=None,
         title_top_band_ios=(9.0, 30.0),
     ),
