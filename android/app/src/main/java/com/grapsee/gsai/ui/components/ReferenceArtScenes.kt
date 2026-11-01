@@ -18,13 +18,11 @@ import kotlin.math.sin
  *
  *  - [drawLotusOrbScene] — the pre-chat hero: a lotus inside a glass dome,
  *    a violet crystal rising from its heart.
- *  - [drawArchivedLotusScene] — the archived totals card's close-up lotus.
- *  - [drawSharedOrbScene] — the shared page's empty state: a share glyph
- *    inside a glass bubble resting on glass petals, one orbit ring.
+ *  - [drawLotusOrbScene] — the pre-chat hero.
  *
- * Shared vocabulary: [petal] (a pointed oval around a pivot), [star4] (the
- * four-point sparkle), and the glass washes — radial white-to-tint fills with
- * bright rim arcs, never flat colour.
+ * Shared vocabulary: pointed-oval petals around a pivot, four-point
+ * sparkles, and the glass washes — radial white-to-tint fills with bright
+ * rim arcs, never flat colour.
  */
 
 private val WashWhite = Color(0xFFFFFFFF)
