@@ -33,7 +33,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -518,6 +520,36 @@ fun RefSettingsPage(
                 contentDescription = null,
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
+            )
+            // The mocks' screen interior is warmer than the shared home
+            // backdrop: a peach light enters at the upper right and a rose
+            // one breathes at the lower left. Two radial glows over the same
+            // bitmap carry that without touching Home's own backdrop.
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .drawBehind {
+                        drawRect(
+                            Brush.radialGradient(
+                                listOf(
+                                    Color(0xFFFFCCB8).copy(alpha = 0.30f),
+                                    Color.Transparent,
+                                ),
+                                center = Offset(size.width * 0.86f, size.height * 0.24f),
+                                radius = size.width * 1.2f,
+                            )
+                        )
+                        drawRect(
+                            Brush.radialGradient(
+                                listOf(
+                                    Color(0xFFFCBFD6).copy(alpha = 0.22f),
+                                    Color.Transparent,
+                                ),
+                                center = Offset(size.width * 0.10f, size.height * 0.86f),
+                                radius = size.width * 1.1f,
+                            )
+                        )
+                    }
             )
         }
         Column(

@@ -33,10 +33,24 @@ struct GsSettingsBackdrop: View {
             }
             .ignoresSafeArea()
         } else {
-            Image("GSHomeBackdrop")
-                .resizable()
-                .scaledToFill()
-                .ignoresSafeArea()
+            // The mocks' screen interior is warmer than the shared home
+            // backdrop: a peach light enters at the upper right and a rose
+            // one breathes at the lower left. Two radial glows over the same
+            // bitmap carry that without touching Home's own backdrop.
+            ZStack {
+                Image("GSHomeBackdrop")
+                    .resizable()
+                    .scaledToFill()
+                RadialGradient(
+                    colors: [Color(red: 1.0, green: 0.80, blue: 0.72).opacity(0.30), .clear],
+                    center: UnitPoint(x: 0.86, y: 0.24), startRadius: 0, endRadius: 460
+                )
+                RadialGradient(
+                    colors: [Color(red: 0.99, green: 0.76, blue: 0.84).opacity(0.22), .clear],
+                    center: UnitPoint(x: 0.10, y: 0.86), startRadius: 0, endRadius: 420
+                )
+            }
+            .ignoresSafeArea()
         }
     }
 }
