@@ -21,7 +21,6 @@ struct ArchivedChatsView: View {
             title: "Archived Conversations",
             subtitle: "View and restore your archived chats.",
             onBack: { dismiss() },
-            inkColor: Color(red: 0.129, green: 0.208, blue: 0.369),
             headerTrailing: {
                 AnyView(
                     Button {
@@ -34,7 +33,8 @@ struct ArchivedChatsView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("More options")
                 )
-            }
+            },
+            inkColor: Color(red: 0.129, green: 0.208, blue: 0.369)
         ) {
             totalsCard.padding(.bottom, 10)
 
