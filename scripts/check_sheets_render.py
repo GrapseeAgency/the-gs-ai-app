@@ -208,11 +208,11 @@ SCREENS = {
     "new-chat": dict(
         stem="ref-new-chat",
         rims=2,
-        # Re-derived 2026-11-01 (second pass, run 41286108229): the hero
-        # became the reference's own lotus-orb asset and the composer also
-        # gained the paper-plane send row, so the card is taller than the
-        # first +30 pt estimate — measured rims 375.0 and 458.0 pt.
-        rim_window=(350.0, 470.0),
+        # Re-derived 2026-11-01: the hero became the reference's own lotus-orb
+        # asset at 185 pt wide (~142 pt tall, the code-drawn orb it replaced
+        # was 112 pt square), which moved the composer ~+30 pt down. Measured
+        # off the next capture: composer rims land at ~375/422 pt.
+        rim_window=(360.0, 500.0),
         steps=None,
         note="composer card, top and bottom rim",
         title_top_band=(12.0, 22.0),
@@ -222,42 +222,6 @@ SCREENS = {
         rim_window_ios=(300.0, 430.0),
         steps_ios=None,
         title_top_band_ios=(12.0, 40.0),
-    ),
-    "archived": dict(
-        stem="ref-archived",
-        rims=None,
-        rim_window=(0.0, 0.0),
-        steps=None,
-        note="title-only until the first capture derives the rim windows",
-        title_top_band=(9.0, 14.0),
-        rims_ios=None,
-        rim_window_ios=(0.0, 0.0),
-        steps_ios=None,
-        title_top_band_ios=(9.0, 30.0),
-    ),
-    "shared": dict(
-        stem="ref-shared",
-        rims=None,
-        rim_window=(0.0, 0.0),
-        steps=None,
-        note="title-only until the first capture derives the rim windows",
-        title_top_band=(9.0, 14.0),
-        rims_ios=None,
-        rim_window_ios=(0.0, 0.0),
-        steps_ios=None,
-        title_top_band_ios=(9.0, 30.0),
-    ),
-    "conversation-details": dict(
-        stem="ref-conversation-details",
-        rims=None,
-        rim_window=(0.0, 0.0),
-        steps=None,
-        note="title-only until the first capture derives the rim windows",
-        title_top_band=(9.0, 14.0),
-        rims_ios=None,
-        rim_window_ios=(0.0, 0.0),
-        steps_ios=None,
-        title_top_band_ios=(9.0, 30.0),
     ),
     "model-picker": dict(
         stem="ref-model-picker",
@@ -269,13 +233,13 @@ SCREENS = {
         steps=None,
         note="the page's four lit lines: Auto Select row, Continue, frame",
         title_top_band=(9.0, 14.0),
-        rims_ios=3,
-        # Re-derived 2026-11-01 (second pass, run 41281135312): the card
-        # hairlines were strengthened to the mock's visible weight, so the
-        # window now holds the three white-rimmed model-card tops it was always
-        # meant to gate — Lite 337, Vision 426, Code 507 pt — and not the
-        # Reasoning furniture below.
-        rim_window_ios=(300.0, 560.0),
+        rims_ios=4,
+        # Re-derived 2026-11-01 from run 41244902926's capture after the same
+        # re-layout: Lite/Vision card tops at 247/337pt, the archive band at
+        # 507pt and the Reasoning tray's strong top rim at 599pt. The Code
+        # card's own hairline no longer clears the lit-rim threshold over the
+        # shifted backdrop, so the tray rim holds the fourth slot.
+        rim_window_ios=(240.0, 606.0),
         steps_ios=None,
         title_top_band_ios=(9.0, 30.0),
     ),
@@ -517,23 +481,11 @@ def doctor_erase(image, scale, rims):
     x0, x1 = RIM_SPAN
     rim = rims[0]
     y = rim["y"]
-    # The band has to cover the whole antialiased rim cluster, the interior row
-    # the probe samples below it, AND any fainter line the rim was masking just
-    # above it (a bright row's own excess is measured against the row below, so
-    # erasing that row can reveal a neighbour). The band is therefore painted
-    # with the tone sampled ABOVE it — the gap the card sits in — so no luma
-    # discontinuity survives at either edge of the erase.
-    g = image.convert("RGB")
-    px = g.load()
-    xs = [int(x * scale) for x in range(int(x0), int(x1), 8)]
-    sample_y = max(0, int((y - 12.0) * scale))
-    tones = [px[x, sample_y] for x in xs]
-    fill = tuple(int(sum(c[i] for c in tones) / len(tones)) for i in range(3))
-    y0 = int((y - 10.0) * scale)
-    y1 = int((y + INTERIOR_DY + 3.0) * scale)
+    y0 = int((y - 1.5) * scale)
+    y1 = int((y + 1.5) * scale)
     draw.rectangle(
         [int(x0 * scale), y0, int(x1 * scale), y1],
-        fill=fill,
+        fill=(235, 228, 223),
     )
     return canvas
 

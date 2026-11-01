@@ -39,7 +39,6 @@ import com.grapsee.gsai.ui.auth.OnboardingScreen
 import com.grapsee.gsai.ui.auth.ReferenceWelcomeScreen
 import com.grapsee.gsai.ui.subscription.SubscriptionUsageScreen
 import com.grapsee.gsai.ui.chat.ArchivedChatsScreen
-import com.grapsee.gsai.ui.chat.SharedConversationsScreen
 import com.grapsee.gsai.ui.chat.ChatInfoScreen
 import com.grapsee.gsai.ui.chat.ChatScreen
 import com.grapsee.gsai.ui.chat.ChatSearchScreen
@@ -474,12 +473,6 @@ fun GsNavHost(
                 onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) }
             )
         }
-        composable(GsRoutes.CHAT_SHARED) {
-            SharedConversationsScreen(
-                onBack = back,
-                onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) }
-            )
-        }
         composable(GsRoutes.CHAT_SEARCH) {
             ChatSearchScreen(
                 onBack = back,
@@ -589,8 +582,7 @@ fun GsNavHost(
         composable(GsRoutes.CHAT_INFO) { entry ->
             ChatInfoScreen(
                 conversationId = entry.arguments?.getString(GsRoutes.ARG_CONVERSATION).orEmpty(),
-                onBack = back,
-                onOpenMemory = { navController.navigate(GsRoutes.SETTINGS_MEMORY) }
+                onBack = back
             )
         }
         }

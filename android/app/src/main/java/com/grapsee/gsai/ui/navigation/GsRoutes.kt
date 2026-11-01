@@ -48,7 +48,6 @@ object GsRoutes {
     // PHASE 2: the fabricated Folders/Shared destinations are gone — Archive
     // (real) remains the only chats hub quick-link.
     const val CHAT_ARCHIVE = "chats/archived"
-    const val CHAT_SHARED = "chats/shared"
     const val CHAT_SEARCH = "chats/search"
 
     // Session — first launch walks Auth → Onboarding before the command centre.

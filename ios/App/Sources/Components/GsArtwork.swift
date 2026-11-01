@@ -9,10 +9,7 @@ enum GsArt {
     case bloom, conversation, search, offline, error, library, voice
     case success, privacy, archive, notifications
     case video, clarity, reflection, lotus
-    /// The Dreamy Pastel conversation pages' artworks, drawn from the same
-    /// primitives as the rest of the set — the lotus dome (pre-chat hero),
-    /// the card's close-up lotus, and the shared page's share bubble.
-    case lotusOrb, archivedLotus, sharedOrb
+    case lotusOrb
 }
 
 struct GsArtwork: View {
@@ -57,8 +54,6 @@ enum GsArtDrawing {
         case .reflection: reflection(&ctx, size, accent, strong, pale)
         case .lotus: lotus(&ctx, size, accent, strong, pale)
         case .lotusOrb: GsRefScenes.lotusOrb(&ctx, size)
-        case .archivedLotus: GsRefScenes.archivedLotus(&ctx, size)
-        case .sharedOrb: GsRefScenes.sharedOrb(&ctx, size)
         }
     }
 
@@ -1313,117 +1308,5 @@ extension GsRefScenes {
         drawStar4(&ctx, CGPoint(x: w * 0.135, y: h * 0.70), w * 0.018,
                   Color(red: 1, green: 0.827, blue: 0.898), 0.70)
         drawStar4(&ctx, CGPoint(x: w * 0.70, y: h * 0.16), w * 0.016, .white, 0.8)
-    }
-
-    static func archivedLotus(_ ctx: inout GraphicsContext, _ size: CGSize) {
-        let w = size.width, h = size.height
-        // The heart sits just below the canvas: the petals rise INTO the
-        // visible strip, mirroring Android's angles.
-        let heart = CGPoint(x: w * 0.72, y: h * 1.04)
-        ctx.fill(Path(ellipseIn: CGRect(x: w * 0.55 - w * 0.75, y: h * 0.45 - w * 0.75,
-                                        width: w * 1.5, height: w * 1.5)),
-                 with: .radialGradient(
-                    Gradient(colors: [Color(red: 1, green: 0.851, blue: 0.925).opacity(0.20), .clear]),
-                    center: CGPoint(x: w * 0.55, y: h * 0.45), startRadius: 0, endRadius: w * 0.75))
-        for (index, angle) in [-115.0, -95, -75, -55].enumerated() {
-            drawPetal(&ctx, heart, CGFloat(angle), w * (0.62 - Double(index) * 0.04), 0.46,
-                      petalLavender, .white, 0.88)
-        }
-        for angle in [-85.0, -65] {
-            drawPetal(&ctx, heart, CGFloat(angle), w * 0.55, 0.42, petalLilac, .white, 0.9)
-        }
-        for (index, angle) in [-50.0, -32, -14, 4].enumerated() {
-            drawPetal(&ctx, heart, CGFloat(angle), w * (0.52 - Double(index) * 0.03), 0.38,
-                      index % 2 == 0 ? petalPeach : petalBlush, .white, 0.95)
-        }
-        for angle in [-24.0, -8] {
-            drawPetal(&ctx, heart, CGFloat(angle), w * 0.30, 0.4, petalRose, .white, 0.95)
-        }
-        drawStar4(&ctx, CGPoint(x: w * 0.20, y: h * 0.22), w * 0.035, .white, 0.9)
-    }
-
-    static func sharedOrb(_ ctx: inout GraphicsContext, _ size: CGSize) {
-        let w = size.width, h = size.height
-        let bubbleCenter = CGPoint(x: w * 0.46, y: h * 0.44)
-        let bubbleR = w * 0.26
-
-        ctx.fill(Path(ellipseIn: CGRect(x: bubbleCenter.x - bubbleR * 2.1, y: bubbleCenter.y - bubbleR * 2.1,
-                                        width: bubbleR * 4.2, height: bubbleR * 4.2)),
-                 with: .radialGradient(
-                    Gradient(colors: [Color(red: 0.871, green: 0.808, blue: 0.969).opacity(0.18),
-                                      Color(red: 1, green: 0.851, blue: 0.925).opacity(0.20),
-                                      .clear]),
-                    center: bubbleCenter, startRadius: 0, endRadius: bubbleR * 2.1))
-
-        let fanPivot = CGPoint(x: w * 0.47, y: h * 0.78)
-        for (index, angle) in [-95.0, -65, -40, 40, 65, 95].enumerated() {
-            drawPetal(&ctx, fanPivot, CGFloat(angle),
-                      w * (0.36 - Double(index % 2) * 0.05), 0.5,
-                      index % 2 == 0 ? petalLavender : petalBlush, .white, 0.85)
-        }
-        for angle in [-20.0, 20] {
-            drawPetal(&ctx, fanPivot, CGFloat(angle), w * 0.26, 0.46, petalPeach, .white, 0.9)
-        }
-
-        ctx.fill(Path(ellipseIn: CGRect(x: bubbleCenter.x - bubbleR, y: bubbleCenter.y - bubbleR,
-                                        width: bubbleR * 2, height: bubbleR * 2)),
-                 with: .radialGradient(
-                    Gradient(colors: [.white.opacity(0.62),
-                                      Color(red: 0.953, green: 0.902, blue: 0.984).opacity(0.34),
-                                      Color(red: 0.910, green: 0.851, blue: 0.980).opacity(0.20),
-                                      Color(red: 1, green: 0.902, blue: 0.945).opacity(0.30)]),
-                    center: CGPoint(x: bubbleCenter.x - bubbleR * 0.25, y: bubbleCenter.y - bubbleR * 0.3),
-                    startRadius: 0, endRadius: bubbleR * 1.5))
-        glassRing(&ctx, bubbleCenter, bubbleR * 0.99, w * 0.014, .white, 0.95, 0.45)
-        let bubbleRect = CGRect(x: bubbleCenter.x - bubbleR, y: bubbleCenter.y - bubbleR,
-                                width: bubbleR * 2, height: bubbleR * 2)
-        ctx.stroke(Path(ellipseIn: bubbleRect), with: .linearGradient(
-            Gradient(colors: [.white.opacity(0.95), .clear]),
-            startPoint: CGPoint(x: bubbleCenter.x - bubbleR, y: bubbleCenter.y),
-            endPoint: CGPoint(x: bubbleCenter.x + bubbleR * 0.2, y: bubbleCenter.y)),
-            style: StrokeStyle(lineWidth: w * 0.020))
-        glassRing(&ctx,
-                  CGPoint(x: bubbleCenter.x - bubbleR * 0.08, y: bubbleCenter.y - bubbleR * 0.06),
-                  bubbleR * 0.82, w * 0.006,
-                  Color(red: 0.941, green: 0.776, blue: 0.886), 0.55, 0.15)
-
-        let glyph = Color(red: 0.561, green: 0.455, blue: 0.886)
-        let nodeTop = CGPoint(x: bubbleCenter.x + bubbleR * 0.42, y: bubbleCenter.y - bubbleR * 0.42)
-        let nodeLeft = CGPoint(x: bubbleCenter.x - bubbleR * 0.38, y: bubbleCenter.y + bubbleR * 0.05)
-        let nodeBottom = CGPoint(x: bubbleCenter.x + bubbleR * 0.34, y: bubbleCenter.y + bubbleR * 0.58)
-        let strokeW = w * 0.016
-        var spokeTop = Path()
-        spokeTop.move(to: nodeLeft)
-        spokeTop.addLine(to: nodeTop)
-        ctx.stroke(spokeTop, with: .color(glyph.opacity(0.95)),
-                   style: StrokeStyle(lineWidth: strokeW))
-        var spokeBottom = Path()
-        spokeBottom.move(to: nodeLeft)
-        spokeBottom.addLine(to: nodeBottom)
-        ctx.stroke(spokeBottom, with: .color(glyph.opacity(0.95)),
-                   style: StrokeStyle(lineWidth: strokeW))
-        for node in [nodeTop, nodeLeft, nodeBottom] {
-            let r = bubbleR * 0.14
-            ctx.fill(Path(ellipseIn: CGRect(x: node.x - r, y: node.y - r, width: r * 2, height: r * 2)),
-                     with: .color(.white))
-            ctx.stroke(Path(ellipseIn: CGRect(x: node.x - r, y: node.y - r, width: r * 2, height: r * 2)),
-                       with: .color(glyph), style: StrokeStyle(lineWidth: w * 0.013))
-        }
-
-        let orbit = CGPoint(x: w * 0.47, y: h * 0.47)
-        let orbitRect = CGRect(x: orbit.x - w * 0.40, y: orbit.y - h * 0.155,
-                               width: w * 0.80, height: h * 0.31)
-        ctx.stroke(Path(ellipseIn: orbitRect), with: .linearGradient(
-            Gradient(colors: [.clear, .white.opacity(0.8), .clear]),
-            startPoint: CGPoint(x: orbitRect.minX, y: orbitRect.midY),
-            endPoint: CGPoint(x: orbitRect.maxX, y: orbitRect.midY)),
-            style: StrokeStyle(lineWidth: w * 0.005))
-
-        drawStar4(&ctx, CGPoint(x: w * 0.13, y: h * 0.30), w * 0.030,
-                  Color(red: 0.718, green: 0.608, blue: 0.918), 0.95)
-        drawStar4(&ctx, CGPoint(x: w * 0.72, y: h * 0.10), w * 0.026,
-                  Color(red: 0.953, green: 0.851, blue: 0.557), 0.95)
-        drawStar4(&ctx, CGPoint(x: w * 0.86, y: h * 0.52), w * 0.022, .white, 0.9)
-        drawStar4(&ctx, CGPoint(x: w * 0.24, y: h * 0.72), w * 0.016, .white, 0.8)
     }
 }
