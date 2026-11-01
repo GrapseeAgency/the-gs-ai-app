@@ -402,8 +402,9 @@ private fun archivedGlyph(title: String, pinned: Boolean): androidx.compose.ui.g
 /** The archived mock's row tones: creative lilac, code peach, study mint. */
 private fun archivedTone(title: String): Color = when (com.grapsee.gsai.ui.navigation.drawer.drawerTopic(title)) {
     com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Code,
-    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Review,
-    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Planner -> GsWellTone.Peach.ink
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Review -> GsWellTone.Peach.ink
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Planner,
+    com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Learning -> GsWellTone.Mint.ink
     com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Learning,
     com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Data,
     com.grapsee.gsai.ui.navigation.drawer.DrawerTopic.Money -> GsWellTone.Mint.ink

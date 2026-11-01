@@ -371,7 +371,7 @@ private fun SharedRow(
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                if (people > 0) "Shared ${ChatTime.ago(sharedAt)}  •  With $people people"
+                if (people > 0) "Shared ${ChatTime.ago(sharedAt)}  •  With $people ${if (people == 1) "person" else "people"}"
                 else "Shared ${ChatTime.ago(sharedAt)}",
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.textSecondary,

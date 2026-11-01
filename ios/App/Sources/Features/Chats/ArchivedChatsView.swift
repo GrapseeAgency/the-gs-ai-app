@@ -319,18 +319,18 @@ struct ArchivedChatsView: View {
     private func topicGlyph(_ conversation: StoredConversation) -> String {
         if conversation.pinned { return "pin" }
         switch DrawerTopic.topic(for: conversation.title) {
-        case .code, .planner: return "code"
-        case .data, .money, .review: return "chart-bar"
+        case .planner, .learning: return "book"
         case .travel, .itinerary: return "plane"
-        case .learning, .science: return "book"
+        case .code, .review: return "code"
+        case .data, .money: return "chart-bar"
         default: return "sparkles"
         }
     }
 
     private func topicTone(_ title: String) -> GsWellTone {
         switch DrawerTopic.topic(for: title) {
-        case .code, .planner: return .peach
-        case .data, .money, .review: return .mint
+        case .code, .review, .planner: return .peach
+        case .learning, .data, .money: return .mint
         default: return .lilac
         }
     }

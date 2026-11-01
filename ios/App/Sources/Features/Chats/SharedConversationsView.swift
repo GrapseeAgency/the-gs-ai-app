@@ -220,7 +220,7 @@ struct SharedConversationsView: View {
                     .foregroundStyle(Aero.text)
                     .lineLimit(1)
                 Text(share.people > 0
-                     ? "Shared \(Self.relative(from: share.sharedAt))  •  With \(share.people) people"
+                     ? "Shared \(Self.relative(from: share.sharedAt))  •  With \(share.people) \(share.people == 1 ? "person" : "people")"
                      : "Shared \(Self.relative(from: share.sharedAt))")
                     .font(.custom(Aero.productName(.regular), size: 9.5, relativeTo: .caption))
                     .foregroundStyle(Aero.textSecondary)
