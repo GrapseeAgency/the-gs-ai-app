@@ -20,7 +20,6 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assume.assumeTrue
-class Quadruple(val a: Any, val b: Any, val c: Any, val d: Int)
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -439,3 +438,6 @@ class ReferenceSheetsScreenshotTest {
             .edit().putString("gs.notice.inbox.entries", arr.toString()).commit()
     }
 }
+
+/** One seeded shared row: title, age hours, key, recipient count. */
+private class Quadruple(val a: Any, val b: Any, val c: Any, val d: Int)
