@@ -22,7 +22,6 @@ struct SharedConversationsView: View {
             title: "Shared Conversations",
             subtitle: "View and manage conversations you've shared.",
             onBack: { dismiss() },
-            inkColor: Color(red: 0.129, green: 0.208, blue: 0.369),
             headerTrailing: {
                 AnyView(
                     Button {
@@ -35,7 +34,8 @@ struct SharedConversationsView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("More options")
                 )
-            }
+            },
+            inkColor: Color(red: 0.129, green: 0.208, blue: 0.369)
         ) {
             tabs.padding(.bottom, 10)
             shareCard.padding(.bottom, 6)
