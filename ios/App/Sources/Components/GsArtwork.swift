@@ -1376,9 +1376,15 @@ extension GsRefScenes {
         let nodeLeft = CGPoint(x: bubbleCenter.x - bubbleR * 0.38, y: bubbleCenter.y + bubbleR * 0.05)
         let nodeBottom = CGPoint(x: bubbleCenter.x + bubbleR * 0.34, y: bubbleCenter.y + bubbleR * 0.58)
         let strokeW = w * 0.016
-        ctx.stroke(Path([nodeLeft, nodeTop]), with: .color(glyph.opacity(0.95)),
+        var spokeTop = Path()
+        spokeTop.move(to: nodeLeft)
+        spokeTop.addLine(to: nodeTop)
+        ctx.stroke(spokeTop, with: .color(glyph.opacity(0.95)),
                    style: StrokeStyle(lineWidth: strokeW))
-        ctx.stroke(Path([nodeLeft, nodeBottom]), with: .color(glyph.opacity(0.95)),
+        var spokeBottom = Path()
+        spokeBottom.move(to: nodeLeft)
+        spokeBottom.addLine(to: nodeBottom)
+        ctx.stroke(spokeBottom, with: .color(glyph.opacity(0.95)),
                    style: StrokeStyle(lineWidth: strokeW))
         for node in [nodeTop, nodeLeft, nodeBottom] {
             let r = bubbleR * 0.14
@@ -1393,8 +1399,8 @@ extension GsRefScenes {
                                width: w * 0.80, height: h * 0.31)
         ctx.stroke(Path(ellipseIn: orbitRect), with: .linearGradient(
             Gradient(colors: [.clear, .white.opacity(0.8), .clear]),
-            startPoint: CGPoint(x: orbitRect.minX, y: orbit.midY),
-            endPoint: CGPoint(x: orbitRect.maxX, y: orbit.midY)),
+            startPoint: CGPoint(x: orbitRect.minX, y: orbitRect.midY),
+            endPoint: CGPoint(x: orbitRect.maxX, y: orbitRect.midY)),
             style: StrokeStyle(lineWidth: w * 0.005))
 
         drawStar4(&ctx, CGPoint(x: w * 0.13, y: h * 0.30), w * 0.030,
