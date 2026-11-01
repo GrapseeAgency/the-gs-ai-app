@@ -162,6 +162,19 @@ fun DrawScope.drawLotusOrbScene() {
     glassRing(domeCenter, domeR * 0.985f, w * 0.012f, topAlpha = 0.95f, bottomAlpha = 0.22f)
     glassRing(domeCenter, domeR * 0.885f, w * 0.008f, tint = Color(0xFFF6CCE4), topAlpha = 0.75f, bottomAlpha = 0.18f)
     glassRing(domeCenter, domeR * 0.80f, w * 0.005f, tint = Color(0xFFC9E4F8), topAlpha = 0.45f, bottomAlpha = 0.10f)
+    // The mock's iridescence: thin pink / peach / cyan passes riding the dome.
+    drawArc(Brush.horizontalGradient(listOf(Color.Transparent, Color(0xFFF9B8D8).copy(alpha = 0.55f), Color.Transparent)),
+        startAngle = -60f, sweepAngle = 55f, useCenter = false,
+        topLeft = Offset(domeCenter.x - domeR * 0.885f, domeCenter.y - domeR * 0.885f),
+        size = Size(domeR * 1.77f, domeR * 1.77f), style = Stroke(w * 0.006f))
+    drawArc(Brush.horizontalGradient(listOf(Color.Transparent, Color(0xFFB8DCF9).copy(alpha = 0.45f), Color.Transparent)),
+        startAngle = 120f, sweepAngle = 50f, useCenter = false,
+        topLeft = Offset(domeCenter.x - domeR * 0.885f, domeCenter.y - domeR * 0.885f),
+        size = Size(domeR * 1.77f, domeR * 1.77f), style = Stroke(w * 0.005f))
+    drawArc(Brush.horizontalGradient(listOf(Color.Transparent, Color(0xFFFDDBD0).copy(alpha = 0.5f), Color.Transparent)),
+        startAngle = 30f, sweepAngle = 45f, useCenter = false,
+        topLeft = Offset(domeCenter.x - domeR * 0.80f, domeCenter.y - domeR * 0.80f),
+        size = Size(domeR * 1.6f, domeR * 1.6f), style = Stroke(w * 0.005f))
 
     // Inner sphere carrying the flower.
     val innerCenter = Offset(w * 0.5f, h * 0.66f)
@@ -193,7 +206,7 @@ fun DrawScope.drawLotusOrbScene() {
     // 4-5 and 7-8 o'clock like the mock's, a mid ring, and the violet crystal
     // rising from BEHIND the inner petals, then the white-gold bud.
     val heart = Offset(w * 0.5f, h * 0.74f)
-    val outerLen = w * 0.30f
+    val outerLen = w * 0.33f
     val outerAngles = listOf(-150f, -120f, -90f, -60f, -30f, 0f, 30f, 60f, 90f, 120f, 150f)
     outerAngles.forEachIndexed { index, angle ->
         val tip = if (index % 2 == 0) PetalRose else PetalPeach
@@ -207,8 +220,8 @@ fun DrawScope.drawLotusOrbScene() {
     // The violet crystal rises between the mid and inner rings, so the
     // flower's own petals fold over its base the way the mock draws it.
     val crystalBase = Offset(w * 0.5f, h * 0.60f)
-    val tipTop = Offset(w * 0.5f, h * 0.26f)
-    val halfW = w * 0.10f
+    val tipTop = Offset(w * 0.5f, h * 0.28f)
+    val halfW = w * 0.07f
     val leftFace = Path().apply {
         moveTo(crystalBase.x - halfW, crystalBase.y)
         cubicTo(crystalBase.x - halfW * 0.8f, crystalBase.y - h * 0.14f, crystalBase.x - halfW * 0.35f, crystalBase.y - h * 0.24f, tipTop.x, tipTop.y)

@@ -1233,6 +1233,19 @@ extension GsRefScenes {
                   Color(red: 0.965, green: 0.800, blue: 0.894), 0.75, 0.18)
         glassRing(&ctx, domeCenter, domeR * 0.80, w * 0.005,
                   Color(red: 0.788, green: 0.894, blue: 0.973), 0.45, 0.10)
+        // The mock's iridescence: thin pink / peach / cyan passes on the dome.
+        let domeRect = CGRect(x: domeCenter.x - domeR * 0.885, y: domeCenter.y - domeR * 0.885,
+                              width: domeR * 1.77, height: domeR * 1.77)
+        ctx.stroke(Path(ellipseIn: domeRect), with: .linearGradient(
+            Gradient(colors: [.clear, Color(red: 0.976, green: 0.722, blue: 0.847).opacity(0.55), .clear]),
+            startPoint: CGPoint(x: domeCenter.x - domeR, y: domeCenter.y - domeR * 0.7),
+            endPoint: CGPoint(x: domeCenter.x + domeR, y: domeCenter.y - domeR * 0.7)),
+            style: StrokeStyle(lineWidth: w * 0.006))
+        ctx.stroke(Path(ellipseIn: domeRect), with: .linearGradient(
+            Gradient(colors: [.clear, Color(red: 0.722, green: 0.863, blue: 0.976).opacity(0.45), .clear]),
+            startPoint: CGPoint(x: domeCenter.x + domeR * 0.6, y: domeCenter.y),
+            endPoint: CGPoint(x: domeCenter.x - domeR * 0.6, y: domeCenter.y)),
+            style: StrokeStyle(lineWidth: w * 0.005))
 
         let innerCenter = CGPoint(x: w * 0.5, y: h * 0.66)
         let innerR = w * 0.27
@@ -1250,7 +1263,7 @@ extension GsRefScenes {
         let heart = CGPoint(x: w * 0.5, y: h * 0.74)
         let outerAngles: [CGFloat] = [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150]
         for (index, angle) in outerAngles.enumerated() {
-            drawPetal(&ctx, heart, angle, w * 0.30, 0.40,
+            drawPetal(&ctx, heart, angle, w * 0.33, 0.40,
                       index % 2 == 0 ? petalRose : petalPeach, .white, 0.82)
         }
         for angle in [-120.0, -80, -40, 0, 40, 80, 120] {
@@ -1258,8 +1271,8 @@ extension GsRefScenes {
         }
 
         let crystalBase = CGPoint(x: w * 0.5, y: h * 0.60)
-        let tipTop = CGPoint(x: w * 0.5, y: h * 0.26)
-        let halfW = w * 0.10
+        let tipTop = CGPoint(x: w * 0.5, y: h * 0.28)
+        let halfW = w * 0.07
         var leftFace = Path()
         leftFace.move(to: CGPoint(x: crystalBase.x - halfW, y: crystalBase.y))
         leftFace.addCurve(to: tipTop,
