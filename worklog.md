@@ -5741,3 +5741,25 @@ sparkle lilac, plane rose). The shared rows carry the mock's full design —
 drawn in code — rendered from the share record's people count, which real
 shares leave at 0 and the capture seeds at the mock's 3/1/2. Both workflows
 green on the final HEAD 33879318: android-app 41325468314, iOS 41325471517.
+
+---
+Task ID: main-sync
+Agent: Qoder (main)
+Task: Operator: make sure main carries everything, then stop.
+
+Work Log:
+- The tip was not green when the round started: iOS run 41348933404 failed at
+  `model-picker: self-test could not make these probes fail: ['rim erase']`.
+  That was the instrument, not the page. The iOS window counted three card tops
+  whose first sits 8 pt under a bright gap row, so painting the edge promoted
+  that row into the rim the probe reads next and the count came back unchanged —
+  a count probe that cannot be made to fall is the vacuous-gate defect this repo
+  already guards against, one layer up. Widening the erase band was tried first
+  and rejected: it broke Android's new-chat self-test for the same reason, so
+  the doctor stays as deep as the probe and the window moved instead.
+- (330, 570) counts four card tops and the erase provably drops the count by
+  one. Verified against that run's own capture before pushing: all twelve iOS
+  pages pass their gate and their self-test.
+- Both workflows green at becaf57c: android-app 41352991899 and iOS
+  41352943695, the latter printing `ios-model-picker: pass` and
+  `model-picker: self-test ok — title, rim all went red on doctored copies`.
