@@ -5667,3 +5667,57 @@ Stage Summary:
   iOS 41151996915, the latter printing `ios-new-chat: pass` and
   `ios-model-picker: pass` against the derived rim windows rather than the
   title-only fallback.
+
+---
+Task ID: three-conversation-pages
+Agent: ZCode (main)
+Task: Operator supplied the last three references — Archived Conversations,
+Shared Conversations and Conversation Details — and demanded 100% design
+accuracy ("not a slightest mistake") plus working logic, verified on GitHub
+Actions.
+
+Work Log:
+- Built both platforms' pages by hand: Android `ArchivedChatsScreen` rebuilt,
+  `ChatInfoScreen` rebuilt into the details page, `SharedConversationsScreen`
+  new with `SharedConversationsStore`; iOS `ArchivedChatsView` rebuilt,
+  `ConversationDetailsView` new (the ChatInfoSheet deleted — the page replaces
+  it), `SharedConversationsView` + store new, routes and entries wired
+  (Chats shelf / Quick access; the chat's options menu pushes the details
+  page). The archived lotus and the shared orb ship as the reference's own
+  artwork through `prepare_home_art.py` (owner's directive after rejecting the
+  code-drawn approximations); the hero had already moved to the same pipeline.
+  The mock's "With N people" avatar rows are not shipped — there are no
+  recipients on this build, and the pages record only what a share actually
+  knows (which conversation, when), the same truth-over-art line the register
+  has always held.
+- Every control is a real operation: restore/unarchive, restore-all, the
+  confirm-gated clear/delete (row, page and thread scopes), rename, the pin
+  switch, archive, the real system share sheet + the shared record, the real
+  transcript export (file picker on Android, shareable file on iOS), the
+  memory route, both tabs, the conversation picker behind Share a
+  Conversation. Copy parity now pins all three pages at 16 sheets; the new
+  captures joined both workflows' gate lists with title contracts (rims=None
+  is declared, never a silent skip).
+- CI taught six rounds: the artwork-accounting gate caught the unmanifested
+  assets (the pipeline now carries them with authored sources and identical
+  bytes); the import lint caught `import ...R`; the Xcode build caught two
+  `Unit`-for-`Void` typos and a missing Codable; the render gates caught the
+  hero's real height moving the composer (re-derived 375/458pt), the picker's
+  borderline hairlines (the cards' rims strengthened to the mock's visible
+  weight, and the gate anchors the three card tops), and the memory page's
+  width-dependent card position (the settings gate learned width-keyed
+  anchors: 454.7pt at 393, 491.7pt at 360). The self-test's rim-erase doctor
+  was rewritten to paint the page tone over the whole rim neighborhood after
+  it left a masked second hairline alive on the picker.
+- The captures then caught the fixture bug a reviewer would have missed: the
+  details seed built its date from hour/minute alone and the hero honestly
+  printed "Started Jan 1, 0001".
+
+Stage Summary:
+- All three references are built on both platforms and observed: android-app
+  41289930597 and iOS 41289933136 green end to end on the final HEAD
+  04963b6a (the suite, all captures, the copy inventory at 16 sheets, and the
+  artwork accounting). The side-by-side against the mocks matches inventory,
+  order, tones and art; the recorded deltas are the classifier's semantic
+  icons versus the mock's arbitrary picks, the absent recipient avatars, and
+  the no-email/no-backend copy truths already on the register.

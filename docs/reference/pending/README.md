@@ -21,6 +21,9 @@ until its render gate proves parity — see Acceptance.
 | `help-support.png` | "Help & Support" — search, quick help, 3×2 categories, popular topics, contact | **built (both)** |
 | `connected-apps.png` | "Connected Apps & Integrations" — hero, 6 providers, 5 available, data card | **built (both)** |
 | `data-export-account-deletion.png` | "Data Export & Account Deletion" — export rows + format picker + archive, retention period/auto-delete/clear, consent-gated delete card | **built (both)** — 2026-10-31 |
+| `archived-conversations.png` | "Archived Conversations" — totals card with lotus art, archived rows with Restore pills, About card, Clear Archived | **built (both)** — 2026-11-01 |
+| `shared-conversations.png` | "Shared Conversations" — two tabs, Share Conversations card, section header + rows, orb empty state, Share a Conversation | **built (both)** — 2026-11-01 |
+| `conversation-details.png` | "Conversation Details" — hero with pin mark, six action rows, Memory & Context, About card, gradient delete | **built (both)** — 2026-11-01 |
 
 ## Evidence
 
@@ -602,3 +605,53 @@ screenshot suite discarded its own verdict twice (`|| true`, then a zero exit fr
 `am instrument`), and a probe reported `OK` while being provably unable to fail.
 Do not trust a green from this rig without reading which probe produced it.
 
+## The three conversation-management pages (2026-11-01)
+
+**`archived-conversations.png` — "Archived Conversations".** Android
+`ArchivedChatsScreen` at `chats/archived` (Chats → Archive), iOS
+`ArchivedChatsView` at `.chatArchive` (Chats → Archived). The totals card
+carries the reference's own lotus artwork (`ref_archived_lotus`, extracted
+from the mock with a feathered edge — the owner's verdict on code-drawn art
+was "nowhere near close", so the artwork ships as the artwork); the count and
+the "Archived • <date>" lines are the real Room rows. The rows' topic icons
+come from the shipped classifier, whose picks are semantic — the mock's
+sparkle/code/book assignment is art, and the classifier's is evidence, so they
+diverge where the mock's pick was arbitrary. Restore is the real unarchive;
+the kebab carries rename/pin/unarchive/delete; About opens the long-form
+dialog; Clear Archived is the confirm-gated delete of every archived row, and
+the kebab's Restore all / Clear archived do the same at page scope.
+
+**`shared-conversations.png` — "Shared Conversations".** New on both
+platforms: Android `SharedConversationsScreen` at `chats/shared`, iOS
+`SharedConversationsView` at `.sharedConversations`; entered from the Chats
+shelf (Android) and the Quick access card (iOS). The tabs, the Share
+Conversations card with its Learn More dialog, the section header with the
+live count, the rows with View pills and remove-menus, and the empty state
+with the reference's own orb artwork (`ref_shared_orb`) and the Share a
+Conversation action are all built. Sharing is local and real: the share sheet
+hands the transcript to whatever the reader picks, and
+`SharedConversationsStore` records what is true — which conversation, when.
+The mock's "With N people" and avatar chips describe recipients no install
+has; the rows carry only what the device knows, and both tabs read the same
+outbox because without recipients the two views coincide. The capture seeds
+the mock's three records TEST-ONLY, the same contract as the inbox fixture.
+
+**`conversation-details.png` — "Conversation Details".** Android
+`ChatInfoScreen` rebuilt at `chat-info/{id}`; iOS's info sheet is deleted and
+`ConversationDetailsView` at `.conversationDetails(id)` replaces it, pushed
+from the chat's options menu. The hero carries the real title, pin mark,
+started time, message count and span; the six action rows are the real
+operations — rename (dialog), the pin switch (store + API sync), archive,
+share (system sheet + the shared record), export (a real transcript file via
+the file picker on Android and a shareable file on iOS), delete (confirm-gated,
+removes the thread); Memory & Context routes to the memory page; the closing
+gradient Delete runs the same gated delete.
+
+Evidence: android-app 41287753137 and iOS 41287755720 observed every gate
+green — the JVM suite, the new `ref-archived` / `ref-shared` /
+`ref-conversation-details` captures and their title contracts, the copy
+inventory at 16 sheets on both platforms, and the artwork accounting that
+manifests the two new reference artworks. The final HEAD 04963b6a is green on
+both workflows (android-app 41289930597, iOS 41289933136) after the details
+fixture's date construction was fixed (the seed had built a date from
+hour/minute alone, which the hero honestly printed as year 1).
