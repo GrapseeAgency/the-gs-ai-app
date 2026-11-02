@@ -376,6 +376,12 @@ fun ChatScreen(
     onOpenDrawer: (() -> Unit)? = null,
     // Reset to a fresh workspace (nav-owned: pops to a single chat/new).
     onNewChat: (() -> Unit)? = null,
+    /**
+     * An empty conversation is not a landing page. The dark bloom hero that
+     * used to live here duplicated "Start a New Chat", so the host now sends
+     * the reader to that one page instead of painting a second one.
+     */
+    onEmptyChat: (() -> Unit)? = null,
     // The pre-chat page's attach buttons land here with the sheet already up.
     openWithAttachments: Boolean = false,
     // Voice press-and-hold hands its transcript to the composer through this.
@@ -1430,18 +1436,19 @@ fun ChatScreen(
 
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 if (messages.isEmpty()) {
-                    // PHASE 3 empty state, uiverse pass — part of the chat
-                    // surface, not a separate landing composition: a quiet
-                    // greeting, one 3D-press New chat primary, one capability
-                    // showcase card, and space. The block steps aside the
-                    // moment the reader types; the first real turn replaces
-                    // the whole block with the transcript. Same screen
-                    // throughout — no navigation hop.
-                    WorkspaceEmptyState(
-                        draftText = { draft },
-                        onNewChat = newChatAction,
-                        onSuggestion = { prompt -> dispatch(prompt, echoUser = true) }
-                    )
+                    // No second hero. A chat with nothing in it belongs on the
+                    // pre-chat page, which owns the composer, the tool chips and
+                    // the recent list; this screen only draws once there is a
+                    // transcript. The redirect is skipped when this turn was
+                    // opened WITH something (a prompt, an attachment, an
+                    // auto-send), because those land here to be delivered.
+                    LaunchedEffect(conversationId, prefillPrompt, autoSendInitialPrompt, openWithAttachments) {
+                        val arrivedWithWork = !prefillPrompt.isNullOrBlank() ||
+                            autoSendInitialPrompt || openWithAttachments
+                        if (conversationId == null && !arrivedWithWork) {
+                            onEmptyChat?.invoke()
+                        }
+                    }
                 } else {
                     LazyColumn(
                         state = listState,
@@ -3314,152 +3321,6 @@ private fun BubbleAction(icon: ImageVector, label: String, onClick: () -> Unit) 
  * a second abstract three-dot indicator was saying the same thing twice.)
  */
 
-// --- workspace empty state ---------------------------------------------------
-
-/**
- * design-3-b empty-state recomposition. The fresh workspace photographs as ONE
- * centered identity column, vertically centered in the available space with
- * 24dp side padding: the 72dp GS monogram circle leads (solid primary fill,
- * onPrimary "GS" at 28sp bold), then the 24sp weight-600 greeting "What can I
- * do for you?" (sans, never the serif display tier), an 8dp gap, the 3D-press
- * New chat primary (uiverse marcelodolza stupid-vampirebat-24, unchanged from
- * design-2-b), a 16dp gap, and the ONE capability showcase card (uiverse
- * Ashon-G big-chipmunk-8, unchanged). The former breathing orb identity mark
- * is gone from this surface. The block yields to the transcript on the first
- * turn; while the reader types, the actions step aside (existing draft-aware
- * behavior) and the monogram + greeting hold the floor.
- */
-@Composable
-private fun WorkspaceEmptyState(
-    // perf-smooth-3 (emulator 15 -- composer typing): the draft arrived as a raw
-    // String read at the SCREEN scope, so every keystroke on the empty chat
-    // invalidated the entire ChatScreen body (transcript branch decision, top
-    // bar, composer, sheet conditionals) instead of just the text that depends
-    // on it. A deferred read moves the state read down into the one line that
-    // uses it; the screen no longer subscribes to keystrokes.
-    draftText: () -> String,
-    onNewChat: (() -> Unit)?,
-    onSuggestion: (String) -> Unit = {}
-) {
-    val colors = GsTheme.colors
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        // The companion, hand-drawn from the same primitives as onboarding —
-        // not a bitmap, and not a second visual language. The halo is what
-        // makes it sit IN the bloom instead of on top of it.
-        Box(contentAlignment = Alignment.Center) {
-            Box(
-                Modifier
-                    .size(196.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            listOf(colors.aurora.first().copy(alpha = 0.45f), Color.Transparent)
-                        )
-                    )
-            )
-            RefArtwork(RefArt.Bloom, size = 132.dp, contentDescription = "GS companion")
-        }
-        Spacer(Modifier.height(14.dp))
-        Text(
-            text = "GS",
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.2.sp
-            ),
-            color = colors.accentStrong
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "What should we make of today?",
-            style = MaterialTheme.typography.displaySmall,
-            color = colors.textPrimary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.semantics { heading() }
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Ask for an answer, a plan, or something you can touch.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.textSecondary,
-            textAlign = TextAlign.Center
-        )
-        // perf-smooth-5: the draft read is confined to its own composable.
-        EmptyStateActions(
-            draftText = draftText,
-            onSuggestion = onSuggestion
-        )
-    }
-}
-
-/**
- * The four doors into an empty chat are chosen from the setup answers by
- * [chatSuggestionsFor]; see ChatSuggestions.kt for the pool and the ranking.
- */
-@Composable
-private fun EmptyStateActions(draftText: () -> String, onSuggestion: (String) -> Unit) {
-    if (!draftText().isBlank()) return
-    val suggestions = remember(OnboardingProfileStore.capabilities, OnboardingProfileStore.interests) {
-        chatSuggestionsFor(OnboardingProfileStore.capabilities, OnboardingProfileStore.interests)
-    }
-    Spacer(Modifier.height(24.dp))
-    Column(
-        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(9.dp)
-    ) {
-        suggestions.chunked(2).forEach { row ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(9.dp)
-            ) {
-                row.forEach { suggestion ->
-                    SuggestionCard(
-                        suggestion = suggestion,
-                        onClick = { onSuggestion(suggestion.prompt) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun SuggestionCard(
-    suggestion: ChatSuggestion,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val colors = GsTheme.colors
-    Column(
-        modifier = modifier
-            .heightIn(min = 96.dp)
-            .gsGlass(GsGlassRole.Card, RoundedCornerShape(20.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                role = Role.Button,
-                onClickLabel = suggestion.label,
-                onClick = onClick
-            )
-            .padding(14.dp)
-    ) {
-        RefIconTile(suggestion.icon, size = 34.dp)
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = suggestion.label,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-            color = colors.textPrimary
-        )
-    }
-}
 
 /**
  * uiverse marcelodolza stupid-vampirebat-24, materialized monochrome: the

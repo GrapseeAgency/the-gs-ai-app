@@ -5774,3 +5774,15 @@ Work Log:
 - Privacy: Search History is now a real local log (SettingsStore.searchHistory, JSON in prefs, cap 50, dedupe, record on submit) with a screen to list/remove/clear; Personalization & Ads opens an honest disclosure page; App Permissions is a live page (mic, notifications, DND, biometric) that refreshes on resume and routes to the right system screen. Camera/location still not requested.
 - Chat History: totals now count archived too, caption breaks into active/archived.
 - Android 413/413 unit tests; compile clean. versionCode 127 / 0.86.4.
+
+---
+Task ID: remove-dark-empty-0.86.5
+Agent: main
+Task: Delete the dark "What should we make of today?" chat landing — the owner says it duplicates the pre-chat page.
+
+Work Log:
+- The dark page was ChatScreen's WorkspaceEmptyState (bloom orb, GS label, four suggestion cards), painted whenever a chat had no messages.
+- Deleted WorkspaceEmptyState, EmptyStateActions and SuggestionCard (~150 lines). ChatScreen now takes onEmptyChat: an empty conversation opened with no prompt/attachment/auto-send hands over to the pre-chat page (NEW_CHAT) instead of drawing a second hero. Arrivals that DO carry work are untouched.
+- iOS never had this page (no such string in the Swift tree), so nothing to remove there.
+- Android 413/413, compile clean. versionCode 128 / 0.86.5.
+- Heavenly glass pass: the pre-chat page's tool chips, recent rows and circular controls were flat white tints (0.42/0.46 alpha + hairline). They now use the measured `gsGlass` material (CardLight / FloatingControl), so they carry the lit rim and interior luminance fall the reference draws. iOS NewChatView had the same two flat tints and got the same swap to `.gsGlass(.cardLight, corner:)`.

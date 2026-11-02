@@ -51,6 +51,7 @@ import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.local.ConversationPreviewRow
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsGlassRole
+import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefArt
 import com.grapsee.gsai.ui.components.RefArtwork
@@ -295,9 +296,11 @@ private fun CompanionHeader(onOpenMenu: () -> Unit) {
     }
 }
 
+@Composable
 private fun Modifier.gsGlassCircle(): Modifier = this
-    .background(Color.White.copy(alpha = 0.50f), CircleShape)
-    .border(1.dp, Color.White.copy(alpha = 0.75f), CircleShape)
+    // The measured material, not a white tint: the lit rim and the interior
+    // luminance fall are what make a 36dp control read as glass at this size.
+    .gsGlass(GsGlassRole.FloatingControl, CircleShape)
 
 // ---------------------------------------------------------------------------
 // Composer
@@ -450,8 +453,9 @@ private fun RowScope.ToolChip(
         modifier = Modifier
             .weight(1f)
             .heightIn(min = 40.dp)
-            .background(Color.White.copy(alpha = 0.42f), RoundedCornerShape(16.dp))
-            .border(1.dp, Color.White.copy(alpha = 0.62f), RoundedCornerShape(16.dp))
+            // Same glass as the reference's chips: CardLight carries the sheet's
+            // measured 45% fill, lit rim and top-to-bottom fall.
+            .gsGlass(GsGlassRole.CardLight, RoundedCornerShape(16.dp))
             .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
             .padding(horizontal = 9.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -518,8 +522,7 @@ private fun RecentRow(row: ConversationPreviewRow, now: Long, onClick: () -> Uni
         modifier = Modifier
             .fillMaxWidth()
             .testTag("recent-row-${row.conversation.id}")
-            .background(Color.White.copy(alpha = 0.46f), RoundedCornerShape(18.dp))
-            .border(1.dp, Color.White.copy(alpha = 0.62f), RoundedCornerShape(18.dp))
+            .gsGlass(GsGlassRole.CardLight, RoundedCornerShape(18.dp))
             .clickable(role = Role.Button, onClickLabel = row.conversation.title, onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -588,6 +588,14 @@ fun GsNavHost(
                     scope.launch { drawerState.open() }
                 },
                 onNewChat = { newChat() },
+                // A chat opened with nothing in it hands over to the pre-chat
+                // page instead of drawing the old dark hero a second time.
+                onEmptyChat = {
+                    navController.navigate(GsRoutes.NEW_CHAT) {
+                        popUpTo(GsRoutes.CHAT) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
                 onBack = back,
                 onNavigateVoice = { navController.navigate(GsRoutes.VOICE) },
                 onOpenChatDetails = { chatId -> navController.navigate(GsRoutes.chatInfo(chatId)) }

@@ -239,9 +239,10 @@ struct NewChatView: View {
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16).fill(.white.opacity(scheme == .dark ? 0.08 : 0.42)))
-            .overlay(RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(.white.opacity(scheme == .dark ? 0.12 : 0.62), lineWidth: 1))
+            // The measured material, not a white tint: same glass as the
+            // composer above, so a chip carries the lit rim and the interior
+            // luminance fall the reference draws.
+            .gsGlass(.cardLight, corner: 16)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
@@ -306,9 +307,7 @@ struct NewChatView: View {
                         }
                         .padding(.horizontal, 11)
                         .padding(.vertical, 5)
-                        .background(RoundedRectangle(cornerRadius: 18).fill(.white.opacity(scheme == .dark ? 0.08 : 0.46)))
-                        .overlay(RoundedRectangle(cornerRadius: 18)
-                            .strokeBorder(.white.opacity(scheme == .dark ? 0.12 : 0.62), lineWidth: 1))
+                        .gsGlass(.cardLight, corner: 18)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("recent-row-\(conversation.id)")
