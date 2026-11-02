@@ -166,7 +166,7 @@ async function main() {
   if (!report.clarifyFollowUp) {
     throw new Error('CLARIFY FOLLOW-UP TURN DID NOT RUN')
   }
-  if (report.freshSourceCount < 1) {
+  if ((report.freshSourceCount as number) < 1) {
     throw new Error('FRESH QUESTION DID NOT RETURN SOURCES')
   }
   const progressText = (progress.content ?? '').toLowerCase()

@@ -56,6 +56,9 @@ data class ConversationPreviewRow(
  */
 data class ConversationTotals(
     val activeCount: Int,
+    /** Archived chats are still the reader's history, so the headline total
+     *  counts them and the caption breaks the number down. */
+    val archivedCount: Int,
     val lastActiveAt: String?
 )
 
@@ -165,8 +168,10 @@ interface ConversationDao {
 
     /** The totals card: one aggregate row, no per-conversation subquery. */
     @Query(
-        "SELECT COUNT(*) AS activeCount, MAX(updatedAt) AS lastActiveAt " +
-            "FROM conversations WHERE archived = 0"
+        "SELECT COALESCE(SUM(CASE WHEN archived = 0 THEN 1 ELSE 0 END), 0) AS activeCount, " +
+            "COALESCE(SUM(CASE WHEN archived = 1 THEN 1 ELSE 0 END), 0) AS archivedCount, " +
+            "MAX(updatedAt) AS lastActiveAt " +
+            "FROM conversations"
     )
     fun observeTotals(): Flow<ConversationTotals>
 

@@ -231,6 +231,9 @@ fun ChatSearchScreen(
 
     fun commitSearch() {
         if (term.length < 2) return
+        // The Privacy sheet's Search History row lists exactly these — the log
+        // is written at submit, not on every keystroke of the debounce.
+        com.grapsee.gsai.data.SettingsStore.recordSearch(term)
         scope.launch {
             hits = searchChats(term)
             searched = true
@@ -240,7 +243,7 @@ fun ChatSearchScreen(
     // Totals come from one aggregate query, NOT from the preview list's size.
     val totalsFlow = remember { dao.observeTotals() }
     val totals by totalsFlow
-        .collectAsState(initial = ConversationTotals(0, null))
+        .collectAsState(initial = ConversationTotals(0, 0, null))
 
     // The list follows the Archived facet; Has files is filtered below.
     val recentFlow = remember(archivedOnly) {
@@ -332,8 +335,8 @@ fun ChatSearchScreen(
                     icon = GsIcons.MessageCircle,
                     tone = GsWellTone.Peach,
                     label = "Total Conversations",
-                    value = totals.activeCount.toString(),
-                    caption = "Your chat history with Nexly",
+                    value = (totals.activeCount + totals.archivedCount).toString(),
+                    caption = "${totals.activeCount} active · ${totals.archivedCount} archived",
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(10.dp))

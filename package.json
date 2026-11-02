@@ -96,6 +96,7 @@
   "devDependencies": {
     "@tabler/icons": "^3.49.0",
     "@tailwindcss/postcss": "^4",
+    "@types/bun": "^1.4.4",
     "@types/leaflet": "^1.9.22",
     "@types/react": "^19",
     "@types/react-dom": "^19",

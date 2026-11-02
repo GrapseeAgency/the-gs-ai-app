@@ -46,6 +46,9 @@ import com.grapsee.gsai.ui.chat.ChatsScreen
 import com.grapsee.gsai.ui.profile.ProfileScreen
 import com.grapsee.gsai.ui.settings.AboutSettingsScreen
 import com.grapsee.gsai.ui.settings.AccessibilitySettingsScreen
+import com.grapsee.gsai.ui.settings.AppPermissionsScreen
+import com.grapsee.gsai.ui.settings.PersonalizationScreen
+import com.grapsee.gsai.ui.settings.SearchHistoryScreen
 import com.grapsee.gsai.ui.notifications.NotificationsInboxScreen
 import com.grapsee.gsai.ui.billing.BillingScreen
 import com.grapsee.gsai.ui.integrations.ConnectedAppsScreen
@@ -387,6 +390,18 @@ fun GsNavHost(
         }
         composable(GsRoutes.SETTINGS_PRIVACY) {
             PrivacySettingsScreen(onBack = back, onNavigate = open)
+        }
+        composable(GsRoutes.SETTINGS_SEARCH_HISTORY) {
+            SearchHistoryScreen(
+                onBack = back,
+                onRunSearch = { open(GsRoutes.CHAT_SEARCH) },
+            )
+        }
+        composable(GsRoutes.SETTINGS_PERSONALIZATION) {
+            PersonalizationScreen(onBack = back)
+        }
+        composable(GsRoutes.SETTINGS_PERMISSIONS) {
+            AppPermissionsScreen(onBack = back)
         }
         composable(GsRoutes.SETTINGS_DATA) {
             DataExportAccountDeletionScreen(

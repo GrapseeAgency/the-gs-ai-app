@@ -834,6 +834,9 @@ const githubRelease: EngineAdapter = {
               title: `${fullName} ${rel.tag_name}`,
               snippet: `Latest release: ${rel.tag_name}${rel.name ? ` (${rel.name})` : ''}${rel.published_at ? `, published ${rel.published_at}` : ''}. Official GitHub release.`,
               domain: 'github.com',
+              publishedDate: rel.published_at ?? null,
+              rank: 1,
+              engine: 'github-release',
             },
           ]
         }

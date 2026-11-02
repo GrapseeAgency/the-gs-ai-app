@@ -116,6 +116,7 @@ import {
   isDocumentAttachment,
   DOCUMENT_ONLY_DEFAULT,
   DOC_HISTORY_TURNS,
+  type DocumentFailure,
 } from '@/lib/document'
 import {
   prepareVisionImage,
@@ -213,6 +214,11 @@ export type Prep = {
   content: string
   userMessage: { id: string }
   conversation: { id: string; assistantId: string | null; title: string }
+  /**
+   * Set when THIS turn named the conversation. `prepareTurn` has no transport,
+   * so it cannot announce the title; `runTurn` emits it once the stream exists.
+   */
+  autoTitle: string | null
   baseSystemPrompt: string
   history: {
     id: string
@@ -237,7 +243,7 @@ export type Prep = {
    * when the image bytes cannot reach the vision model (allImagesFailed).
    */
   ocrFallbackText: string | null
-  docContext: { block: string | null; failures: { displayName?: string }[]; readableCount: number }
+  docContext: { block: string | null; failures: DocumentFailure[]; readableCount: number }
   allDocsFailed: boolean
   webGate: { trigger: 'explicit' | 'recency' | null }
   previousClarifyOptions: ClarifyOption[] | null
@@ -432,12 +438,12 @@ export async function prepareTurn(
       : null
   if (autoTitle) {
     await db.conversation.update({ where: { id }, data: { title: autoTitle } })
-    // Told to the clients as it happens. Without this the stream finishes with
-    // the conversation still called "New chat" client-side until something else
-    // happens to refetch the list — the drawer row and the Chats card disagree
-    // with the server, and the row's icon (chosen from the headline's topic) is
-    // chosen from a title that no longer exists.
-    emit?.('conversation', { type: 'title', id, title: autoTitle })
+    // Announced by runTurn, not here: prepareTurn runs before a transport
+    // exists, so `emit` is not in scope. Without the event the stream finishes
+    // with the conversation still called "New chat" client-side until something
+    // else refetches the list — the drawer row and the Chats card disagree with
+    // the server, and the row's icon is chosen from a title that no longer
+    // exists.
   }
 
   // The model's memory has a cutoff; the app has a clock. Without this line a
@@ -681,9 +687,12 @@ export async function prepareTurn(
       // the update, so this used to hand the rest of the turn a stale "New chat".
       title: autoTitle ?? conversation.title,
     },
+    autoTitle,
     baseSystemPrompt,
     history,
-    historyRowText,
+    // Prisma's history row carries the full attachment columns; the prep
+    // contract deliberately exposes only the three the row text needs.
+    historyRowText: historyRowText as Prep['historyRowText'],
     attachmentsProvided,
     attachmentIds: args.attachmentIds,
     claimedAttachments,
@@ -759,12 +768,15 @@ export async function prepareTurn(
       .reverse()
       .flatMap((m) =>
         m.sources.map((s) => ({
+          ordinal: s.ordinal,
+          id: s.id,
           title: s.title,
           url: s.url,
           domain: s.domain,
           snippet: s.snippet,
           query: s.query,
           publishedDate: s.publishedDate,
+          retrievedAt: s.retrievedAt.toISOString(),
         }))
       )
     includeHistoryEvidence = shouldInjectHistoryEvidence(content, historyWebSources.length > 0)
@@ -1736,6 +1748,13 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         }
       }
     : null
+
+  // The headline was written during prepareTurn, before this transport
+  // existed. Announce it here, at the head of the stream, so the drawer row and
+  // the Chats card never disagree with the server about the title.
+  if (prep.autoTitle && push) {
+    push('conversation', JSON.stringify({ type: 'title', id: prep.conversationId, title: prep.autoTitle }))
+  }
 
   // DURABLE EXECUTION — every model call, tool call, and side effect is
   // appended to the log BEFORE and AFTER it happens (run-scoped only; the

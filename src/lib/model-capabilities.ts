@@ -290,7 +290,10 @@ export function remapToFlashCapable(providerModel: string): string | null {
  */
 export const REGISTER_SUBCAP_REQUIREMENT = 0.7
 
-function subs(all: Partial<CapabilitySubs>): CapabilitySubs {
+/** Nested partial: a caller names only the cells it measured, the helper fills the rest. */
+type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] }
+
+function subs(all: DeepPartial<CapabilitySubs>): CapabilitySubs {
   return {
     register: { casual: 'UNMEASURED', sarcasm: 'UNMEASURED', emotional: 'UNMEASURED', teasing: 'UNMEASURED', banter: 'UNMEASURED', ...(all.register ?? {}) },
     reasoning: { arithmetic: 'UNMEASURED', logic: 'UNMEASURED', multiStep: 'UNMEASURED', counterfactual: 'UNMEASURED', ...(all.reasoning ?? {}) },
@@ -478,7 +481,7 @@ export function measuredScore(profile: ModelProfile, cap: CapabilityTag): number
 
 /** The numeric sub-capability score, or null when that cell is UNMEASURED. */
 export function subScore(profile: ModelProfile, cap: CapabilityTag, sub: string): number | null {
-  const cell = (profile.capabilities as Record<string, Record<string, SubMeasured>>)[cap]?.[sub]
+  const cell = (profile.capabilities as unknown as Record<string, Record<string, SubMeasured>>)[cap]?.[sub]
   return typeof cell === 'number' ? cell : null
 }
 

@@ -5763,3 +5763,14 @@ Work Log:
 - Both workflows green at becaf57c: android-app 41352991899 and iOS
   41352943695, the latter printing `ios-model-picker: pass` and
   `model-picker: self-test ok — title, rim all went red on doctored copies`.
+
+---
+Task ID: delta-close-0.86.4
+Agent: main
+Task: Close the accepted deltas in docs/reference/pending/README.md with real capability, and fix the backend typecheck.
+
+Work Log:
+- Backend: npx tsc --noEmit 24 -> 0. Real bugs: prepareTurn called emit?.() from a scope where emit did not exist (every auto-titled first turn would throw); db.planProgress needed prisma generate; model-capabilities subs() took Partial<CapabilitySubs> (nested fields stayed required) -> DeepPartial; github-release results were missing RawResult's publishedDate/rank/engine; turn-executor's history/doc/WebSource types were narrower than Prisma's rows. @types/bun added for bun:test; examples/ and the /tmp-dependent routing-diff script excluded.
+- Privacy: Search History is now a real local log (SettingsStore.searchHistory, JSON in prefs, cap 50, dedupe, record on submit) with a screen to list/remove/clear; Personalization & Ads opens an honest disclosure page; App Permissions is a live page (mic, notifications, DND, biometric) that refreshes on resume and routes to the right system screen. Camera/location still not requested.
+- Chat History: totals now count archived too, caption breaks into active/archived.
+- Android 413/413 unit tests; compile clean. versionCode 127 / 0.86.4.

@@ -177,10 +177,10 @@ function collectDeterminism(totalJudgedTrialsByCase: Record<string, number>): {
     }
   }
   if (recs.length === 0) return null
-  const valid = recs.filter((r) => r.agree === 0 || r.agree === 1)
+  const valid = recs.filter((r) => r.agree === false || r.agree === true)
   const judgeErrors = recs.length - valid.length
-  const agree = valid.filter((r) => r.agree === 1).length
-  const flips = valid.filter((r) => r.agree === 0).map((r) => ({ caseId: r.caseId, trial: r.trial, original: r.original, rerun: r.rerun }))
+  const agree = valid.filter((r) => r.agree === true).length
+  const flips = valid.filter((r) => r.agree === false).map((r) => ({ caseId: r.caseId, trial: r.trial, original: r.original, rerun: r.rerun }))
   const deterministic = flips.length === 0
   const perCaseValid = new Map<string, number>()
   for (const r of valid) perCaseValid.set(r.caseId, (perCaseValid.get(r.caseId) ?? 0) + 1)

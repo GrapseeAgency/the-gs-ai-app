@@ -263,27 +263,16 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
                 // The manifest grants only these; naming camera or location
                 // would be copy the build cannot back.
                 subtitle = "Microphone, notifications, Do-Not-Disturb and biometric unlock",
-                onClick = {
-                    runCatching {
-                        context.startActivity(
-                            Intent(
-                                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                Uri.fromParts("package", context.packageName, null),
-                            )
-                        )
-                    }
-                },
+                onClick = { onNavigate(GsRoutes.SETTINGS_PERMISSIONS) },
                 leading = { RefWellTile(GsIcons.Camera, GsWellTone.Lilac, 28.dp) },
             )
             RefRowDivider()
             RefNavRow(
                 title = "Personalization & Ads",
-                // No ad profile and no ad SDK: a chevron here would promise a
-                // destination that does not exist.
                 subtitle = "No ad profile is built from your activity",
-                onClick = null,
-                // No chevron: a static row must not promise a page.
-                trailing = {},
+                // A real destination: the page states exactly what shapes an
+                // answer and what is never collected.
+                onClick = { onNavigate(GsRoutes.SETTINGS_PERSONALIZATION) },
                 leading = { RefWellTile(GsIcons.UserRound, GsWellTone.Mint, 28.dp) },
             )
             RefRowDivider()
@@ -308,10 +297,12 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
             RefRowDivider()
             RefNavRow(
                 title = "Search History",
-                subtitle = "Searches are not recorded",
-                onClick = null,
-                // No chevron: a static row must not promise a page.
-                trailing = {},
+                subtitle = if (SettingsStore.searchHistory.isEmpty()) {
+                    "No searches recorded yet"
+                } else {
+                    "${SettingsStore.searchHistory.size} recent ${if (SettingsStore.searchHistory.size == 1) "search" else "searches"}"
+                },
+                onClick = { onNavigate(GsRoutes.SETTINGS_SEARCH_HISTORY) },
                 leading = { RefWellTile(GsIcons.Search, GsWellTone.Lilac, 28.dp) },
             )
             RefRowDivider()

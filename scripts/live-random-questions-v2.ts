@@ -121,7 +121,7 @@ async function main() {
         `- conversation: ${id}\n`
     )
     console.log(
-      `${q.id}: clarify=${row.clarify} sources=${sources} (expected search: ${q.expectSearch}) chars=${row.answerChars}`
+      `${q.id}: clarify=${clarify} sources=${sources} (expected search: ${q.expectSearch}) chars=${row.answerChars}`
     )
   }
   fs.writeFileSync(

@@ -203,7 +203,7 @@ async function main(): Promise<void> {
     const since = Date.now() - lastAt
     if (lastAt > 0 && since < PACING_MS) await new Promise((r) => setTimeout(r, PACING_MS - since))
     lastAt = Date.now()
-    const src = readLast(srcFile(u.caseId, u.trial)) as AnswerRow
+    const src = readLast(srcFile(u.caseId, u.trial)) as unknown as AnswerRow
     const meta = caseById.get(u.caseId)
     let outRow: Record<string, unknown>
     try {

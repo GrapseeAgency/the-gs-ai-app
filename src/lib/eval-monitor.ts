@@ -302,7 +302,7 @@ export async function runMonitorPass(opts: MonitorPassOptions): Promise<MonitorP
     for (const row of sampled) {
       const um = await withRetry(() => userStmt.get(row.messageId, 'user') as { content: string } | undefined)
       const prompt = um?.content ?? ''
-      const hadSources = priorSources.get(row.conversationId) ?? (await withRetry(() => (msgStmt.get(row.conversationId, row.messageId) as { n: number } | undefined)?.n > 0)) ?? false
+      const hadSources = priorSources.get(row.conversationId) ?? ((await withRetry(() => (msgStmt.get(row.conversationId, row.messageId) as { n: number } | undefined)?.n ?? 0)) > 0)
       priorSources.set(row.conversationId, hadSources || row.sourceCount > 0)
       const bucket = resolveBucket(prompt, hadSources)
       verdicts.push(gradeTurn(bucket, row, hadSources))

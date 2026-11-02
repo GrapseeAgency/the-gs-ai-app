@@ -60,15 +60,22 @@ The six owner sheets below return a screen on both platforms.
 Every one of these is a place where the mock draws something the build cannot
 back. They are corrections, not omissions:
 
-- **Privacy — App Permissions** names the two grants the manifest actually has
-  (microphone, notifications). The mock says "camera, microphone, location";
-  there is no camera or location grant in this build.
+- **Privacy — App Permissions** is now a real page (0.86.4): microphone,
+  notifications, Do-Not-Disturb access and biometric enrolment, each with its
+  LIVE state and a route to the system screen that changes it, refreshed on
+  resume. The mock's "camera, location" is still not requested — neither is in
+  the manifest and no feature uses them; the page says so in its own group.
 - **Privacy — footer** says "private to this app, never sold". The mock says
   "encrypted"; Room here is not encrypted, and saying so would be false.
-- **Privacy — Personalization & Ads and Search History** are static rows with no
-  chevron: there is no ad profile and no stored search log behind them. Data
-  Retention is no longer static — it opens the Data Export & Account Deletion
-  page that now owns the period and auto-delete controls.
+- **Privacy — Personalization & Ads** now opens a disclosure page: what shapes
+  an answer (current chat, saved memory) and what is never collected (no ad
+  SDK, no profile). It is a statement page, not a fake toggle — there is still
+  no ad system to switch off.
+- **Privacy — Search History** now opens a real log (0.86.4). Queries submitted
+  from Chat History & Search are stored locally (newest first, capped at 50,
+  de-duplicated), listed with their age, individually removable, clearable in
+  one action, and never uploaded. The row's subtitle reports the real count.
+  Data Retention keeps opening the Data Export & Account Deletion page.
 - **Privacy — Export Your Data and Delete Your Account** keep the mock's rows but
   now open the owner page, where the format choice and the consent gate live.
   The destructive flow is the same one the page documents below.
@@ -79,8 +86,9 @@ back. They are corrections, not omissions:
   makes it different from `All`.
 - **Chat History — "Saved items"** replaces the mock's "Saved Conversations":
   the app has saved *items*, and that is where the row goes.
-- **Chat History — the totals are ACTIVE conversations.** An archived chat is
-  counted on the archived facet, not in the mock's headline total.
+- **Chat History — the totals now include archived conversations** (0.86.4):
+  the headline counts every chat the reader owns, and the caption breaks it
+  into "N active · M archived" so neither number hides the other.
 - **Model Selection — Auto-select model** is the mock's OFF switch, disabled,
   because the backend always chooses the model.
 - **Model Selection — the model radios** persist a preference, but the backend

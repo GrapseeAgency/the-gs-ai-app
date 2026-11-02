@@ -118,6 +118,18 @@ object SettingsStore {
      *  the reference draws the switch on. The switch shows the stored value. */
     var autoDeleteInactive by mutableStateOf(false); private set
 
+    /**
+     * The real log behind Privacy → Search History: every query actually
+     * submitted from Chat History & Search, newest first, capped at 50.
+     *
+     * This is what turns that row from a statement into a destination — the
+     * screen lists these entries, deletes one, or clears the lot. Nothing
+     * leaves the device; the log is local because the search itself is.
+     */
+    var searchHistory by mutableStateOf<List<SearchEntry>>(emptyList()); private set
+
+    data class SearchEntry(val query: String, val atMillis: Long)
+
     /** Call once from GSApplication before any UI reads the store. */
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -159,6 +171,7 @@ object SettingsStore {
         autoSelectModel = p.bool(K.autoSelectModel, autoSelectModel)
         dataRetentionMonths = p.integer(K.dataRetentionMonths, dataRetentionMonths)
         autoDeleteInactive = p.bool(K.autoDeleteInactive, autoDeleteInactive)
+        searchHistory = decodeSearchHistory(p.string(K.searchHistory, ""))
     }
 
     private fun SharedPreferences.bool(key: String, fallback: Boolean): Boolean =
@@ -206,6 +219,7 @@ object SettingsStore {
         const val autoSelectModel = "settings.autoSelectModel"
         const val dataRetentionMonths = "settings.retention.months"
         const val autoDeleteInactive = "settings.retention.autoDelete"
+        const val searchHistory = "settings.searchHistory"
     }
 
     private fun put(key: String, value: Boolean) {
@@ -385,4 +399,46 @@ object SettingsStore {
     fun updateReduceMotion(v: Boolean) { reduceMotion = v; put(K.reduceMotion, v) }
     fun updateScreenReaderHints(v: Boolean) { screenReaderHints = v; put(K.screenReaderHints, v) }
     fun updateHaptics(v: Boolean) { haptics = v; put(K.haptics, v) }
+
+    // ---- Search history ----------------------------------------------------
+    /** Record one submitted query. Repeating a query moves it to the top
+     *  instead of duplicating it; the log never grows past 50. */
+    fun recordSearch(raw: String) {
+        val q = raw.trim()
+        if (q.length < 2) return
+        val next = (listOf(SearchEntry(q, System.currentTimeMillis())) +
+            searchHistory.filterNot { it.query.equals(q, ignoreCase = true) })
+            .take(50)
+        searchHistory = next
+        put(K.searchHistory, encodeSearchHistory(next))
+    }
+
+    fun removeSearch(query: String) {
+        val next = searchHistory.filterNot { it.query == query }
+        searchHistory = next
+        put(K.searchHistory, encodeSearchHistory(next))
+    }
+
+    fun clearSearchHistory() {
+        searchHistory = emptyList()
+        put(K.searchHistory, "")
+    }
+
+    private fun encodeSearchHistory(rows: List<SearchEntry>): String = runCatching {
+        org.json.JSONArray().apply {
+            rows.forEach { row ->
+                put(org.json.JSONObject().put("q", row.query).put("at", row.atMillis))
+            }
+        }.toString()
+    }.getOrDefault("")
+
+    private fun decodeSearchHistory(raw: String): List<SearchEntry> = runCatching {
+        if (raw.isBlank()) return@runCatching emptyList()
+        val arr = org.json.JSONArray(raw)
+        (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            val q = o.optString("q").trim()
+            if (q.isEmpty()) null else SearchEntry(q, o.optLong("at"))
+        }
+    }.getOrDefault(emptyList())
 }
