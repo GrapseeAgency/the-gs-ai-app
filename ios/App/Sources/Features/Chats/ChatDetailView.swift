@@ -267,6 +267,8 @@ struct ChatDetailView: View {
                     dismiss()
                 }
             },
+            // The reference leads with a back arrow inside a conversation.
+            onBack: isWorkspaceRoot ? nil : { dismiss() },
             sparkleMenu: {
                 if let newChat = onNewChat {
                     Button(action: newChat) {
@@ -1318,37 +1320,18 @@ struct MessageBubble: View, Equatable {
             }
             HStack(alignment: .top, spacing: 12) {
                 Spacer(minLength: 44)
-                VStack(alignment: .trailing, spacing: 5) {
+                // The reference user turn is a wide lavender glass pill with the
+                // delivery receipt INSIDE its bottom-right corner — no avatar
+                // beside it (mirrors Android's UserMessage).
+                VStack(alignment: .trailing, spacing: 0) {
                     Text(message.content)
                         .font(.system(size: 13))
                         .foregroundStyle(NexlyInk.prose)
                         .lineSpacing(2)
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: userBubbleColors,
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .strokeBorder(
-                                    highlight ? Aero.accent : Color.white.opacity(0.58),
-                                    lineWidth: highlight ? 2 : 0.5
-                                )
-                        )
-                        .shadow(color: Color(red: 0.55, green: 0.32, blue: 0.24).opacity(0.08),
-                                radius: 3, y: 1)
-                        .frame(maxWidth: sizeClass == .regular ? 260 : 205,
-                               alignment: .trailing)
-                        .textSelection(.enabled)
+                        .padding(.top, 8)
 
-                    // Reference delivery receipt: time, then the double tick.
+                    // Reference delivery receipt: time + double tick, inside.
                     HStack(spacing: 4) {
                         if let stamp = timeLabel(message.createdAt) {
                             Text(stamp)
@@ -1361,9 +1344,32 @@ struct MessageBubble: View, Equatable {
                             color: NexlyInk.meta
                         )
                     }
-                    .padding(.trailing, 2)
+                    .padding(.top, 3)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
                 }
-                NexlyUserAvatar(size: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: userBubbleColors,
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(
+                            highlight ? Aero.accent : Color.white.opacity(0.58),
+                            lineWidth: highlight ? 2 : 0.5
+                        )
+                )
+                .shadow(color: Color(red: 0.55, green: 0.32, blue: 0.24).opacity(0.08),
+                        radius: 3, y: 1)
+                .frame(maxWidth: sizeClass == .regular ? 320 : 280,
+                       alignment: .trailing)
+                .textSelection(.enabled)
             }
         }
         .contextMenu {

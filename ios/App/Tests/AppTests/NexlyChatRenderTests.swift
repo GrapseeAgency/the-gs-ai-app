@@ -262,6 +262,7 @@ private struct NexlyFullChatView: View {
                         menuLabel: "Open menu",
                         onSparkle: {},
                         onMenu: {},
+                        onBack: {},
                         sparkleMenu: { EmptyView() },
                         menuMenu: { EmptyView() }
                     )
@@ -330,6 +331,7 @@ private struct NexlyFlashQuestionView: View {
                         menuLabel: "Open menu",
                         onSparkle: {},
                         onMenu: {},
+                        onBack: {},
                         sparkleMenu: { EmptyView() },
                         menuMenu: { EmptyView() }
                     )
@@ -394,6 +396,7 @@ private struct NexlyFullProseView: View {
                         menuLabel: "Open menu",
                         onSparkle: {},
                         onMenu: {},
+                        onBack: {},
                         sparkleMenu: { EmptyView() },
                         menuMenu: { EmptyView() }
                     )

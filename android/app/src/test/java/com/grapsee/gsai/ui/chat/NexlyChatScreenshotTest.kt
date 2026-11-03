@@ -99,8 +99,9 @@ class NexlyChatScreenshotTest {
 
     /**
      * The WHOLE reference screen built from the production pieces: the real
-     * brand header, the real UserMessage (peach bubble, avatar, ticks), the
-     * real assistant BlocksContent, and the real ComposerRow capsule.
+     * brand header (back arrow + sparkle brand + ⋮), the real UserMessage
+     * (lavender bubble, ticks inside, no avatar), the real assistant
+     * BlocksContent, and the real ComposerRow capsule.
      */
     @Composable
     private fun fullChat() {
@@ -118,10 +119,11 @@ class NexlyChatScreenshotTest {
                     sparkleLabel = "New chat",
                     onSparkle = {},
                     onSparkleLong = null,
-                    menuIcon = GsIcons.Menu,
-                    menuLabel = "Open menu",
+                    menuIcon = GsIcons.MoreVertical,
+                    menuLabel = "Conversation actions",
                     onMenu = {},
-                    onMenuLong = null
+                    onMenuLong = null,
+                    onBack = {}
                 )
                 Column(
                     modifier = Modifier
@@ -158,7 +160,8 @@ class NexlyChatScreenshotTest {
                         onStop = {},
                         queuedText = { "" },
                         onQueue = {},
-                        onUnqueue = {}
+                        onUnqueue = {},
+                        onVoice = {}
                     )
                 }
             }
@@ -186,10 +189,11 @@ class NexlyChatScreenshotTest {
                     sparkleLabel = "New chat",
                     onSparkle = {},
                     onSparkleLong = null,
-                    menuIcon = GsIcons.Menu,
-                    menuLabel = "Open menu",
+                    menuIcon = GsIcons.MoreVertical,
+                    menuLabel = "Conversation actions",
                     onMenu = {},
-                    onMenuLong = null
+                    onMenuLong = null,
+                    onBack = {}
                 )
                 Column(
                     modifier = Modifier
@@ -231,7 +235,8 @@ class NexlyChatScreenshotTest {
                         onStop = {},
                         queuedText = { "" },
                         onQueue = {},
-                        onUnqueue = {}
+                        onUnqueue = {},
+                        onVoice = {}
                     )
                 }
             }
@@ -255,10 +260,11 @@ class NexlyChatScreenshotTest {
                     sparkleLabel = "New chat",
                     onSparkle = {},
                     onSparkleLong = null,
-                    menuIcon = GsIcons.Menu,
-                    menuLabel = "Open menu",
+                    menuIcon = GsIcons.MoreVertical,
+                    menuLabel = "Conversation actions",
                     onMenu = {},
-                    onMenuLong = null
+                    onMenuLong = null,
+                    onBack = {}
                 )
                 Column(
                     modifier = Modifier
@@ -294,7 +300,8 @@ class NexlyChatScreenshotTest {
                         onStop = {},
                         queuedText = { "" },
                         onQueue = {},
-                        onUnqueue = {}
+                        onUnqueue = {},
+                        onVoice = {}
                     )
                 }
             }

@@ -11,11 +11,24 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
     var menuLabel: String
     var onSparkle: () -> Void
     var onMenu: () -> Void
+    /// The reference leads with a back arrow at the far left inside a
+    /// conversation; nil keeps it away (e.g. the workspace root).
+    var onBack: (() -> Void)? = nil
     @ViewBuilder var sparkleMenu: () -> SparkleMenu
     @ViewBuilder var menuMenu: () -> MenuMenu
 
     var body: some View {
         HStack(spacing: 10) {
+            if let onBack {
+                Button(action: onBack) {
+                    NexlyGlyph(name: "arrow-left", size: 18, color: Aero.text)
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(.clear))
+                        .gsGlass(.sunken, corner: 20)
+                }
+                .buttonStyle(KineticPressStyle())
+                .accessibilityLabel("Back")
+            }
             // The reference brand mark: a lilac sparkle in a lit glass circle —
             // the same white-tile + glyph language the pre-chat header uses.
             ZStack {

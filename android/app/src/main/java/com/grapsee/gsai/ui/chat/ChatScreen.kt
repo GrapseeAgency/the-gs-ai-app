@@ -190,7 +190,6 @@ import com.grapsee.gsai.ui.chat.content.LocalVoiceLauncher
 import com.grapsee.gsai.ui.chat.content.NexlyGlassGlyphTile
 import com.grapsee.gsai.ui.chat.content.NexlyGlyph
 import com.grapsee.gsai.ui.chat.content.NexlyInk
-import com.grapsee.gsai.ui.chat.content.NexlyUserAvatar
 import com.grapsee.gsai.ui.chat.content.containsNexlyPlan
 import com.grapsee.gsai.ui.chat.content.nexlyPearlBackdrop
 import com.grapsee.gsai.ui.orbs.OrbSize
@@ -1253,7 +1252,7 @@ fun ChatScreen(
                     searchActiveIndex = 0
                 }
             },
-            menuIcon = if (atWorkspaceRoot && menuAction != null) GsIcons.Menu else GsIcons.ChevronLeft,
+            menuIcon = if (atWorkspaceRoot && menuAction != null) GsIcons.Menu else GsIcons.MoreVertical,
             // Labelled for what the tap DOES. Inside a conversation this control opens
             // the conversation-options sheet, not the drawer and not "back" — the old
             // constant "Back" announced a navigation that never happened, which is both
@@ -1271,7 +1270,10 @@ fun ChatScreen(
             },
             onMenuLong = if (activeConversationId != null) {
                 { chatMenuOpen = true }
-            } else null
+            } else null,
+            // The reference header leads with a back arrow only inside a
+            // conversation; the workspace root keeps its hamburger alone.
+            onBack = if (activeConversationId != null) onBack else null
         )
             if (chatMenuOpen && activeConversationId != null) {
                 val activeId = activeConversationId
@@ -1772,7 +1774,8 @@ fun ChatScreen(
  */
 /**
  * The reference brand header, shared by the chat screen and the render
- * harness: orb, “Nexly / AI Companion”, and two quiet glass controls.
+ * harness: a leading back arrow, the lilac sparkle brand, “Nexly / Your AI
+ * companion”, and two quiet glass controls (new chat + the ⋮ actions sheet).
  */
 @Composable
 internal fun NexlyChatHeader(
@@ -1782,7 +1785,9 @@ internal fun NexlyChatHeader(
     menuIcon: ImageVector,
     menuLabel: String,
     onMenu: () -> Unit,
-    onMenuLong: (() -> Unit)?
+    onMenuLong: (() -> Unit)?,
+    /** The reference shows a back arrow at the far left inside a conversation. */
+    onBack: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
@@ -1802,6 +1807,17 @@ internal fun NexlyChatHeader(
                 .padding(horizontal = GsMotion.spaceM, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // The reference leads with a back arrow in a glass circle, then the
+            // brand. It is only drawn when this surface can actually go back
+            // (inside a conversation), never on the workspace root.
+            if (onBack != null) {
+                ChatTopIconButton(
+                    icon = GsIcons.ArrowLeft,
+                    label = "Back",
+                    onClick = onBack
+                )
+                Spacer(Modifier.width(8.dp))
+            }
             // The reference brand mark: a lilac sparkle in a lit glass circle —
             // the same white-tile + glyph language the pre-chat header uses.
             Box(
@@ -1964,18 +1980,18 @@ internal fun UserMessage(
                 }
             }
         } else {
-            // The reference user turn: a pale translucent peach bubble on the
-            // right, a glass avatar beside it, and the delivered time + double
-            // ticks underneath. Copy and Edit live in the long-press menu so
-            // the resting surface has no action chrome.
+            // The reference user turn: a pale lavender glass bubble on the
+            // right with the delivered time + double ticks INSIDE its
+            // bottom-right corner — no avatar beside it. Copy and Edit live in
+            // the long-press menu so the resting surface has no action chrome.
             val dark = isSystemInDarkTheme()
             val colors = GsTheme.colors
             var userMenu by remember { mutableStateOf(false) }
-            // The sheet's user turn is a narrow column (about half the device),
-            // not a full-width slab: the pearl field stays visible beside it.
+            // The reference bubble is a wide pill, not a narrow half-column:
+            // it spans roughly four-fifths of the sheet before wrapping.
             val maxBubble = minOf(
-                210.dp,
-                (LocalConfiguration.current.screenWidthDp * 0.54f).dp
+                320.dp,
+                (LocalConfiguration.current.screenWidthDp * 0.80f).dp
             )
             // The reference's user turn is LAVENDER, not peach: a pale lilac
             // that sits inside the same bloom as the glass around it.
@@ -2028,16 +2044,46 @@ internal fun UserMessage(
                                             userMenu = true
                                         }
                                     )
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .padding(horizontal = 12.dp, vertical = 7.dp)
                             ) {
-                                Text(
-                                    text = message.content,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 13.sp,
-                                        lineHeight = 18.sp
-                                    ),
-                                    color = NexlyInk.prose
-                                )
+                                Column {
+                                    Text(
+                                        text = message.content,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontSize = 13.sp,
+                                            lineHeight = 18.sp
+                                        ),
+                                        color = NexlyInk.prose
+                                    )
+                                    // The reference carries the delivered time +
+                                    // double ticks inside the bubble, bottom-right.
+                                    val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
+                                    if (stamp.isNotEmpty() || !message.failed) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.End,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 3.dp)
+                                        ) {
+                                            if (stamp.isNotEmpty()) {
+                                                Text(
+                                                    text = stamp,
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
+                                                    color = NexlyInk.meta
+                                                )
+                                            }
+                                            if (!message.failed) {
+                                                Spacer(Modifier.width(4.dp))
+                                                NexlyGlyph(
+                                                    name = "checks",
+                                                    size = 12.dp,
+                                                    color = NexlyInk.meta
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             DropdownMenu(
                                 expanded = userMenu,
@@ -2062,32 +2108,7 @@ internal fun UserMessage(
                             }
                         }
                     }
-                    val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
-                    if (stamp.isNotEmpty() || !message.failed) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.padding(top = 5.dp, end = 2.dp)
-                        ) {
-                            if (stamp.isNotEmpty()) {
-                                Text(
-                                    text = stamp,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
-                                    color = NexlyInk.meta
-                                )
-                            }
-                            if (!message.failed) {
-                                NexlyGlyph(
-                                    name = "checks",
-                                    size = 12.dp,
-                                    color = NexlyInk.meta
-                                )
-                            }
-                        }
-                    }
                 }
-                Spacer(Modifier.width(12.dp))
-                NexlyUserAvatar(size = 30.dp)
             }
         }
     }
