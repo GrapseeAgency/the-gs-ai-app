@@ -5798,3 +5798,12 @@ Work Log:
 - Pulled 6 commits (0d18c24a): lavender user turn, lilac sparkle marks, no user avatar, ticks inside the bubble, inline action chips, blank empty-state gone, Android/iOS aligned to the reference.
 - One stale test: NewChatAndModelPickerTest asserted a tool chip navigates with a bare prompt. The pulled change deliberately seeds the composer instead (a bare draft would land on a chat surface with no transcript). Test updated to the new contract: nothing sent, input contains the chip's prompt.
 - Android 413/413, compile clean. versionCode 131 / 0.86.8.
+
+---
+Task ID: build-0.86.9-theme-fix
+Agent: main
+Task: Pull latest and publish.
+
+Work Log:
+- 1 commit (173b3b05): the pastel chat surface follows the APP theme, not the OS theme — fixes the "dark mud" (warm pastels over a dark OS backdrop).
+- Android 413/413, compile clean. versionCode 132 / 0.86.9.
