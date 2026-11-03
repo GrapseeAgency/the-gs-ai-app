@@ -88,7 +88,12 @@ data class MessageEntity(
     val sources: String = "[]",
     /** PHASE 8.1: clarify quick-choices — the raw clarify payload JSON string
      *  {"question":…,"options":[…]}. Nullable: absent on every ordinary turn. */
-    val clarifyOptions: String? = null
+    val clarifyOptions: String? = null,
+    /** The reader's verdict on THIS assistant turn: "up" / "down" / null when
+     *  they never said. Stored on the turn itself (not a side table) because it
+     *  is a property of the answer, it must survive a reload, and it is what
+     *  the next turn's server-side context quotes back to the model. */
+    val feedback: String? = null
 )
 
 /** Library — content saved from the chat surface ("Save to Library"). */
@@ -260,6 +265,11 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE id = :id LIMIT 1")
     suspend fun byId(id: String): MessageEntity?
 
+    /** The reader's verdict on one assistant turn — the only column a
+     *  feedback tap touches, so voting never rewrites the turn's content. */
+    @Query("UPDATE messages SET feedback = :value WHERE id = :id")
+    suspend fun setFeedback(id: String, value: String?)
+
     /** Fixed-width UTC stamps make >= lexicographic-safe for thread truncation. */
     @Query("DELETE FROM messages WHERE conversationId = :conversationId AND createdAt >= :fromInclusive")
     suspend fun deleteFrom(conversationId: String, fromInclusive: String)
@@ -345,7 +355,7 @@ fun ftsMatchQuery(raw: String): String? {
         ConversationFtsEntity::class,
         MessageFtsEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -429,9 +439,21 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v6 → v7: the turn feedback verdict. One nullable TEXT column — a
+         *  message either has a verdict or it does not, so every pre-existing
+         *  row reads back exactly as before and no history is rebuilt. */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN feedback TEXT")
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "gsai-chat.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(
+                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+                    MIGRATION_5_6, MIGRATION_6_7
+                )
                 // The full 1→6 migration chain is registered, so this fallback
                 // must be unreachable. Destructive fallback is the one thing a
                 // chat app must never silently do to user history — if a future

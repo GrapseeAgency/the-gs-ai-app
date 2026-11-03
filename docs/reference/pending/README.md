@@ -55,6 +55,40 @@ The six owner sheets below return a screen on both platforms.
 - The drawer's recent-chats list is not "Chat History & Search": the reference
   is a full page with search, chips, totals and a Quick Actions grid.
 
+## Chat interface — what this pass changed, and what it honestly does not do
+
+The owner's list (0.86.10) was: send does nothing, the message is unreadable, the
+composer has a redundant send button, the actions are wordy, feedback must reach
+the model.
+
+- **The send bug was a route encoding bug, not a design bug.** `GsRoutes.chat()`
+  emitted `send=1`; Navigation parses booleans with `String.toBoolean()`, which
+  is true only for `"true"`. `autoSend` therefore arrived false, the chat surface
+  found an empty transcript and handed the reader back to the pre-chat page.
+  `attach` was not declared in the route pattern at all. Both fixed and pinned by
+  `ChatRouteArgsTest`, which drives the real builder through a real NavController.
+- **The composer is ONE control.** Mic → arrow-up on a single spring, the two
+  glyphs riding the same 0…1 progress so they cannot desynchronise. Shared by the
+  chat composer and the pre-chat page.
+- **The action row is icons only.** Copy / Regenerate / Read aloud / Share are
+  30dp glass discs with thin-stroke Tabler glyphs (the same 5,247-glyph set the
+  answer bodies already draw). The verbs survive as accessibility labels and in
+  the long-press menu; nothing was removed, only the words.
+- **Feedback is real, not a repaint.** "Helpful?" on every settled turn, written
+  to the turn's Room column AND `PATCH /api/v1/messages/:id/feedback`, and quoted
+  into the next turn's model context. Reversible by tapping the chosen thumb.
+  - **iOS does not have this loop yet.** Its `ChatMessage.id` is a client-side
+    `UUID()`; the endpoint needs the server message id. That plumbing is the
+    prerequisite and is the next task. The iOS composer morph and the icon-only
+    action row ARE shipped.
+- **The bubble's ink is derived from its fill and the contrast is unit-tested**
+  (AAA for the message, AA for the timestamp, fill ≥ 90% so the bloom cannot run
+  through the glyphs). "Heavenly glass" belongs to the container, never to the
+  words.
+- **The attach sheet rises to full height from the bottom** (`skipPartiallyExpanded`)
+  with a reachable close and a scrolling body, instead of the half detent that
+  had to be dragged up by hand.
+
 ## Accepted deltas from the mocks (all three screens)
 
 Every one of these is a place where the mock draws something the build cannot

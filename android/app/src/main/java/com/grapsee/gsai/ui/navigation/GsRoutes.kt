@@ -61,7 +61,11 @@ object GsRoutes {
     // Billing / subscription (reached from Profile).
     const val BILLING = "billing"
 
-    const val CHAT = "chat/{conversationId}?prompt={prompt}&send={send}"
+    // Every optional argument the builder below can emit MUST be declared in
+    // the pattern. `attach` was missing: `chat(new?attach=1)` matched no
+    // destination at all, so the pre-chat page's paperclip threw instead of
+    // opening the sheet, and `?prompt=…&send=1&attach=1` silently dropped it.
+    const val CHAT = "chat/{conversationId}?prompt={prompt}&send={send}&attach={attach}"
     const val ARG_CONVERSATION = "conversationId"
     const val ARG_PROMPT = "prompt"
     const val ARG_SEND = "send"
@@ -92,8 +96,14 @@ object GsRoutes {
         val base = "chat/${conversationId ?: "new"}"
         val params = mutableListOf<String>()
         if (!prompt.isNullOrBlank()) params += "prompt=${Uri.encode(prompt)}"
-        if (autoSend) params += "send=1"
-        if (attach) params += "attach=1"
+        // THE SEND BUG (0.86.10): these were emitted as `send=1` / `attach=1`.
+        // Navigation's BoolType parses with String.toBoolean(), which is true
+        // ONLY for "true" — so "1" arrived as FALSE. A send from the pre-chat
+        // page therefore prefilled the composer without dispatching, the chat
+        // surface found an empty transcript and handed straight back to the
+        // pre-chat page: tapping send appeared to do nothing at all.
+        if (autoSend) params += "send=true"
+        if (attach) params += "attach=true"
         return if (params.isEmpty()) base else "$base?${params.joinToString("&")}"
     }
 

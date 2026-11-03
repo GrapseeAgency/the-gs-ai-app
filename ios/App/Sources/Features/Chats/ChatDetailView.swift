@@ -1602,15 +1602,17 @@ struct MessageBubble: View, Equatable {
         }
     }
 
-    /// The reference's inline action chips under a settled assistant turn. Every
-    /// chip calls a real handler the long-press menu already has — nothing here
-    /// is decorative.
+    /// The turn's resting chrome: ICONS ONLY. The labelled chips ("Copy",
+    /// "Regenerate", "Read aloud", "Share") made every answer end in a row of
+    /// words that read as a menu bar and competed with the answer itself. Four
+    /// quiet glass discs say the same thing at a quarter of the visual weight —
+    /// the words survive as the accessibility label and the long-press menu.
     private var assistantActionChips: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             actionChip(GsIcons.copy, "Copy") { copyAndConfirm(message.content) }
             actionChip(GsIcons.refreshCw, "Regenerate", action: onRegenerate)
             actionChip(isSpeaking ? GsIcons.volumeX : GsIcons.volume2,
-                       isSpeaking ? "Stop" : "Read aloud", action: onReadAloud)
+                       isSpeaking ? "Stop reading" : "Read aloud", action: onReadAloud)
             ShareLink(item: message.content) {
                 chipLabel(GsIcons.share, "Share")
             }
@@ -1625,15 +1627,12 @@ struct MessageBubble: View, Equatable {
     }
 
     private func chipLabel(_ icon: GsIconPaths, _ title: String) -> some View {
-        HStack(spacing: 6) {
-            Image(uiImage: GsMenuGlyph.image(icon, side: 13))
-                .resizable().scaledToFit().frame(width: 13, height: 13)
-            Text(title).font(.system(size: 12, weight: .medium))
-        }
-        .foregroundStyle(Aero.text)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .gsGlass(.floatingControl, corner: 14)
+        Image(uiImage: GsMenuGlyph.image(icon, side: 15))
+            .resizable().scaledToFit().frame(width: 15, height: 15)
+            .foregroundStyle(Aero.text.opacity(0.72))
+            .frame(width: 30, height: 30)
+            .gsGlass(.floatingControl, corner: 15)
+            .accessibilityLabel(title)
     }
 }
 

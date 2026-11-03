@@ -73,6 +73,12 @@ model Message {
   // native quick choices persist here (JSON: {question, options:[{id,label}]}).
   clarifyOptions String?
 
+  // The reader's verdict on an assistant turn: "up" | "down" | null. Set by
+  // PATCH /api/v1/messages/:id/feedback; quoted into the NEXT turn's context so
+  // the model sees what the reader said about its previous answer.
+  feedback   String?
+  feedbackAt DateTime?
+
   @@index([conversationId])
 }
 

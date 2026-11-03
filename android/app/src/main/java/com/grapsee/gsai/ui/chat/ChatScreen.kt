@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -162,6 +163,7 @@ import com.grapsee.gsai.data.OnboardingProfileStore
 import com.grapsee.gsai.data.notifications.ReplyNotifier
 import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsInputBar
+import com.grapsee.gsai.ui.components.GsComposerAction
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.gsContentWidth
 import com.grapsee.gsai.ui.components.gsGlass
@@ -247,7 +249,11 @@ internal data class ChatUiMessage(
     /** PHASE 5: the deep-research branch table (`ledger` events) — same
      *  IN-MEMORY ONLY discipline: null for quick/linear turns, gone after a
      *  reload (the source cards + summary stay — never a fabricated table). */
-    val ledgerView: ResearchLedgerView? = null
+    val ledgerView: ResearchLedgerView? = null,
+    /** The reader's verdict on this turn: "up", "down", or null. Persisted on
+     *  the turn (Room + server), so it survives a reload and rides the next
+     *  turn's model context. */
+    val feedback: String? = null
 )
 
 /**
@@ -676,7 +682,8 @@ fun ChatScreen(
                     // PHASE 8.1: persisted sources/clarifyOptions reload the
                     // turn's citation chips, source cards and quick-choices.
                     sources = decodeSourceCards(it.sources),
-                    clarify = decodeClarifyPrompt(it.clarifyOptions)
+                    clarify = decodeClarifyPrompt(it.clarifyOptions),
+                    feedback = it.feedback
                 )
             }
         )
@@ -969,13 +976,22 @@ fun ChatScreen(
         }
     }
 
-    fun dispatch(text: String, echoUser: Boolean) {
+    fun dispatch(text: String, echoUser: Boolean, takeOver: Boolean = false) {
         val prompt = text.trim()
         // PHASE 5: attachments-only sends are real — the text may be empty when
         // the composer holds ready attachments. Anything not yet ready blocks
         // the send honestly; nothing silently drops.
         val readyDrafts = attachDrafts.toList()
-        if ((prompt.isEmpty() && readyDrafts.isEmpty()) || chatStream.isStreaming) return
+        // `takeOver` is the ARRIVAL send only: the reader explicitly pressed
+        // send on another page and this screen is the destination. The
+        // in-flight gate exists so a tap cannot start a second concurrent
+        // stream — but on arrival the running stream belongs to a DIFFERENT
+        // conversation, and silently dropping the message the reader just
+        // wrote is the one failure a composer may never have. ChatStreamController
+        // .start() already evicts + finalizes a live stream with an ownership
+        // token, so taking over is safe and keeps exactly one stream alive.
+        if (prompt.isEmpty() && readyDrafts.isEmpty()) return
+        if (chatStream.isStreaming && !takeOver) return
         if (!AttachmentStateMachine.canSend(readyDrafts)) {
             showSnack("Attachments aren't ready yet")
             return
@@ -1058,7 +1074,26 @@ fun ChatScreen(
     LaunchedEffect(prefillPrompt, autoSendInitialPrompt) {
         if (autoSendInitialPrompt && !prefillPrompt.isNullOrBlank() && !autoSendConsumed.value) {
             autoSendConsumed.value = true
-            dispatch(prefillPrompt, echoUser = true)
+            // The arrival send owns the screen: it takes over a stream left
+            // running elsewhere rather than being dropped by the in-flight gate.
+            draft = prefillPrompt
+            dispatch(prefillPrompt, echoUser = true, takeOver = true)
+        }
+    }
+
+    /**
+     * The reader's verdict on one settled answer. Applied to the row FIRST (the
+     * tap must feel immediate, and must work in a tunnel), then written through
+     * to Room and the server by the repository — the same record the next
+     * turn's model context is built from. `null` withdraws a mis-tap.
+     */
+    fun setFeedback(messageId: String, value: String?) {
+        val index = messages.indexOfFirst { it.id == messageId }
+        if (index < 0) return
+        messages[index] = messages[index].copy(feedback = value)
+        view.gsHaptic(HapticFeedbackConstants.CLOCK_TICK)
+        scope.launch {
+            runCatching { ServiceLocator.chat.setFeedback(messageId, value) }
         }
     }
 
@@ -1081,8 +1116,7 @@ fun ChatScreen(
         dispatch(text, echoUser = true)
     }
 
-    fun regenerate(assistantMessageId: String) {
-        if (chatStream.isStreaming) return
+    fun regenerate(assistantMessageId: String) {        if (chatStream.isStreaming) return
         val index = messages.indexOfFirst { it.id == assistantMessageId }
         if (index < 0) return
         val userText = messages.subList(0, index).lastOrNull { it.role == "user" }?.content ?: return
@@ -1610,7 +1644,8 @@ fun ChatScreen(
                                         onSendPrompt = { text -> dispatch(text, echoUser = true) },
                                         onNavigateVoice = onNavigateVoice,
                                         userPrompt = turnUserPrompt,
-                                        priorContext = turnPriorAssistant
+                                        priorContext = turnPriorAssistant,
+                                        onFeedback = { value -> setFeedback(message.id, value) }
                                     )
                                 }
                             }
@@ -1993,12 +2028,20 @@ internal fun UserMessage(
                 320.dp,
                 (LocalConfiguration.current.screenWidthDp * 0.80f).dp
             )
-            // The reference's user turn is LAVENDER, not peach: a pale lilac
-            // that sits inside the same bloom as the glass around it.
-            val bubbleTop = if (dark) colors.surface.copy(alpha = 0.54f)
-            else Color(0xFFEDE6FF).copy(alpha = 0.86f)
-            val bubbleBottom = if (dark) colors.accentSoft.copy(alpha = 0.28f)
-            else Color(0xFFDCD1FF).copy(alpha = 0.72f)
+            // LEGIBILITY IS NOT NEGOTIABLE. The bubble used to be 0.72–0.86
+            // alpha lavender carrying a fixed mid-grey ink (0xFF4A4750) and, in
+            // dark mode, a 0.54-alpha dark surface carrying that same grey —
+            // the reader's own sentence sank into the bloom and became the one
+            // thing on the screen you could not read. Glass belongs to the
+            // container, never to the words: the fill is now dense enough to
+            // hold text, and the ink is derived FROM the fill. The palette is a
+            // plain data class so the contrast ratio is unit-tested, not
+            // eyeballed (see ChatBubblePaletteTest).
+            val bubble = ChatBubblePalette.of(dark)
+            val bubbleTop = bubble.top
+            val bubbleBottom = bubble.bottom
+            val bubbleInk = bubble.ink
+            val bubbleMeta = bubble.meta
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -2053,7 +2096,7 @@ internal fun UserMessage(
                                             fontSize = 13.sp,
                                             lineHeight = 18.sp
                                         ),
-                                        color = NexlyInk.prose
+                                        color = bubbleInk
                                     )
                                     // The reference carries the delivered time +
                                     // double ticks inside the bubble, bottom-right.
@@ -2070,7 +2113,7 @@ internal fun UserMessage(
                                                 Text(
                                                     text = stamp,
                                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
-                                                    color = NexlyInk.meta
+                                                    color = bubbleMeta
                                                 )
                                             }
                                             if (!message.failed) {
@@ -2078,7 +2121,7 @@ internal fun UserMessage(
                                                 NexlyGlyph(
                                                     name = "checks",
                                                     size = 12.dp,
-                                                    color = NexlyInk.meta
+                                                    color = bubbleMeta
                                                 )
                                             }
                                         }
@@ -2258,26 +2301,18 @@ internal fun ComposerRow(
                 if (isStreaming) {
                     OrbStopControl(state = orbState ?: OrbState.BREATHING, onStop = onStop)
                 } else {
-                    GsSendButton(enabled = canSend) { onSend(draftText().trim()) }
-                }
-                // The reference composer carries a mic at the trailing edge; it
-                // opens the real voice screen (no route wired → it stays away).
-                if (onVoice != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .clickable(role = Role.Button, onClickLabel = "Voice", onClick = onVoice)
-                            .semantics { contentDescription = "Voice" },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            GsIcons.Mic,
-                            contentDescription = null,
-                            tint = GsTheme.colors.textSecondary,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
+                    // ONE trailing control. It used to be two — a send button
+                    // with a mic parked beside it — which put a second, always
+                    // dead-looking disc in the pill and made the reader pick
+                    // between two glyphs for one slot. The mic now BECOMES the
+                    // send arrow the moment there is something to send, and
+                    // becomes the mic again when the field empties: one
+                    // affordance, one place, a continuous morph between verbs.
+                    GsComposerAction(
+                        hasContent = canSend,
+                        onSend = { onSend(draftText().trim()) },
+                        onVoice = onVoice,
+                    )
                 }
             }
         }
@@ -2497,75 +2532,9 @@ private fun LiveReasoning(live: State<ChatStreamController.StreamState?>?) {
 }
 
 /**
- * The composer's send control, a 36dp ink circle with the up arrow. uiverse
- * vinodjangid07 dull-ladybug-18 press physics materialized monochrome: on
- * press the whole control settles to 0.96 scale and 1dp down over 120ms
- * ease-out; release springs back; reduce motion (settings or OS) applies both
- * states instantly with no animation. Empty field with no attachments:
- * neutral container, inert press, still a 44dp touch target via
- * minimumInteractiveComponentSize.
- */
-@Composable
-private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
-    val colors = GsTheme.colors
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val reduced = SettingsStore.reduceAnimations || SettingsStore.reduceMotion
-    val pressSpec: AnimationSpec<Float> = chatPressSpec(reduced, pressed && enabled)
-    val press by animateFloatAsState(
-        targetValue = if (pressed && enabled) 1f else 0f,
-        animationSpec = pressSpec,
-        label = "sendPress"
-    )
-    Box(
-        modifier = Modifier
-            .padding(end = 3.dp, bottom = 1.dp)
-            .size(36.dp)
-            .graphicsLayer {
-                val scale = 1f - 0.04f * press
-                scaleX = scale
-                scaleY = scale
-                translationY = press * 1.dp.toPx()
-            }
-            .clip(CircleShape)
-            .background(
-                if (enabled) {
-                    Brush.linearGradient(listOf(Color(0xFFA78BFF), Color(0xFF7C5CFF)))
-                } else {
-                    // The reference keeps the send control visible even with an
-                    // empty field; the disabled state is the reduced alpha, not
-                    // a gray disc.
-                    Brush.linearGradient(
-                        listOf(
-                            Color(0xFFA78BFF).copy(alpha = 0.62f),
-                            Color(0xFF7C5CFF).copy(alpha = 0.62f)
-                        )
-                    )
-                }
-            )
-            .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
-            .clickable(
-                interactionSource = interaction,
-                indication = null,
-                enabled = enabled,
-                role = Role.Button,
-                onClickLabel = "Send"
-            ) { onSend() }
-            .semantics { contentDescription = "Send" },
-        contentAlignment = Alignment.Center
-    ) {
-        NexlyGlyph(
-            name = "send-2",
-            size = 18.dp,
-            color = if (enabled) Color.White else Color.White.copy(alpha = 0.88f)
-        )
-    }
-}
-
-/**
  * The queue affordance: the send arrow with a small clock badge, shown while a
  * turn runs and a next message is drafted (left of the stop orb). The arrow is
- * the same shape as [GsSendButton] — same verb, later timing — and the clock
+ * the same shape as [GsComposerAction]'s arrow — same verb, later timing — and the clock
  * badge is what distinguishes "this goes when the reply finishes" from "this
  * goes now". Text-only by construction (the queue carries no attachments).
  */
@@ -2790,7 +2759,10 @@ private fun AssistantMessage(
     // by WidgetRecovery to rebuild a visual when the model answered a
     // "show me a chart" request with prose.
     userPrompt: String = "",
-    priorContext: String = ""
+    priorContext: String = "",
+    // The reader's verdict on this turn ("up"/"down"/null) and the one writer
+    // that persists it locally AND on the server.
+    onFeedback: (String?) -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
@@ -3027,11 +2999,13 @@ private fun AssistantMessage(
                         onRegenerate = onRegenerate
                     )
                 } else if (!hasPlan) {
-                    // The reference surfaces the turn's actions as a quiet chip
-                    // row under the answer, next to its timestamp. Each chip
-                    // calls the SAME real handler the long-press menu carries
-                    // (copy / regenerate / read aloud / share) — the resting
-                    // surface now shows them; nothing here is decorative.
+                    // The turn's resting chrome: ICONS ONLY. The labelled chips
+                    // ("Copy", "Regenerate", "Read aloud", "Share") made every
+                    // answer end in a row of words that read as a menu bar and
+                    // competed with the answer itself. Four quiet glass discs
+                    // with the reference's thin-stroke glyphs say the same
+                    // thing at a quarter of the visual weight — the words still
+                    // exist, as the accessibility label and the long-press menu.
                     val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
                     if (stamp.isNotEmpty()) {
                         Spacer(Modifier.height(3.dp))
@@ -3042,17 +3016,39 @@ private fun AssistantMessage(
                             modifier = Modifier.align(Alignment.End).padding(end = 2.dp)
                         )
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AssistantActionChip(GsIcons.Copy, "Copy") { onCopy(message.content) }
-                        AssistantActionChip(GsIcons.RefreshCw, "Regenerate", onClick = onRegenerate)
-                        AssistantActionChip(
-                            if (isSpeaking) GsIcons.VolumeX else GsIcons.Volume2,
-                            if (isSpeaking) "Stop" else "Read aloud",
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        TurnActionIcon("copy", "Copy") { onCopy(message.content) }
+                        TurnActionIcon("refresh", "Regenerate", onClick = onRegenerate)
+                        TurnActionIcon(
+                            if (isSpeaking) "volume-off" else "volume",
+                            if (isSpeaking) "Stop reading" else "Read aloud",
+                            active = isSpeaking,
                             onClick = onReadAloud,
                         )
-                        AssistantActionChip(GsIcons.Share, "Share", onClick = onShare)
+                        TurnActionIcon("share-3", "Share", onClick = onShare)
+                        Spacer(Modifier.width(2.dp))
+                        TurnVerdict(
+                            verdict = message.feedback,
+                            onVerdict = onFeedback,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
+                } else {
+                    // A PLAN turn keeps its own footer (the timetable card ends
+                    // the answer), so the four action discs stay away — but the
+                    // VERDICT is not layout: a plan is exactly the kind of
+                    // answer a reader has an opinion about, and it used to be
+                    // the one turn that could never be rated.
+                    Spacer(Modifier.height(6.dp))
+                    TurnVerdict(
+                        verdict = message.feedback,
+                        onVerdict = onFeedback,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
             }
@@ -3415,32 +3411,122 @@ private fun BubbleAction(icon: ImageVector, label: String, onClick: () -> Unit) 
     }
 }
 
-/** One reference action pill under a settled assistant turn: a quiet glass
- *  capsule carrying a glyph and its label. Every chip calls a REAL handler the
- *  long-press menu already has — nothing here is decorative. */
+/**
+ * One action on a settled assistant turn: a 30dp glass disc holding a single
+ * thin-stroke glyph. The four of them (copy, regenerate, read aloud, share)
+ * replace the labelled pills — an answer should end in a whisper of tools, not
+ * a toolbar of words. The verb survives as the accessibility label, the
+ * onClickLabel and the long-press menu; the eye gets an icon.
+ */
 @Composable
-private fun AssistantActionChip(
-    icon: ImageVector,
+private fun TurnActionIcon(
+    glyph: String,
     label: String,
+    active: Boolean = false,
     onClick: () -> Unit,
 ) {
     val colors = GsTheme.colors
-    Row(
+    Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
-            .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(14.dp))
+            .size(30.dp)
+            .clip(CircleShape)
+            .gsGlass(GsGlassRole.FloatingControl, CircleShape)
             .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = colors.textSecondary,
-            modifier = Modifier.size(14.dp),
+        NexlyGlyph(
+            name = glyph,
+            size = 15.dp,
+            color = if (active) colors.accentStrong else colors.textSecondary,
         )
-        Text(label, style = MaterialTheme.typography.labelMedium, color = colors.textPrimary)
+    }
+}
+
+/**
+ * THE VERDICT — did this answer actually help?
+ *
+ * It asks once, quietly, on every settled turn ("Helpful?" beside two thumbs),
+ * because the reader who would have said so is exactly the reader who will not
+ * go looking for a feedback page. A tap is durable in two places at once: the
+ * turn's `feedback` column on the device (it survives a reload) and the server
+ * row (PATCH /messages/:id/feedback). The next turn then quotes the verdict
+ * into the model's context, so a thumbs-down changes the very next answer
+ * instead of disappearing into a metric.
+ *
+ * Tapping the chosen thumb again withdraws the verdict — consent has to be
+ * reversible, and a mis-tap must never be permanent.
+ */
+@Composable
+private fun TurnVerdict(
+    verdict: String?,
+    onVerdict: (String?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = GsTheme.colors
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = when (verdict) {
+                "up" -> "Thanks"
+                "down" -> "Noted — I'll adjust"
+                else -> "Helpful?"
+            },
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+            color = colors.textTertiary,
+        )
+        Spacer(Modifier.width(6.dp))
+        VerdictThumb(
+            glyph = "thumb-up",
+            label = if (verdict == "up") "Remove helpful vote" else "This answer was helpful",
+            active = verdict == "up",
+            onClick = { onVerdict(if (verdict == "up") null else "up") },
+        )
+        Spacer(Modifier.width(4.dp))
+        VerdictThumb(
+            glyph = "thumb-down",
+            label = if (verdict == "down") "Remove not-helpful vote" else "This answer was not helpful",
+            active = verdict == "down",
+            onClick = { onVerdict(if (verdict == "down") null else "down") },
+        )
+    }
+}
+
+@Composable
+private fun VerdictThumb(
+    glyph: String,
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    val colors = GsTheme.colors
+    val tint by animateColorAsState(
+        targetValue = if (active) colors.accentStrong else colors.textTertiary,
+        animationSpec = GsEase.state(),
+        label = "verdictTint",
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (active) 1.08f else 1f,
+        animationSpec = GsMotion.snappy(),
+        label = "verdictScale",
+    )
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(CircleShape)
+            .gsGlass(GsGlassRole.FloatingControl, CircleShape)
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        NexlyGlyph(name = glyph, size = 14.dp, color = tint)
     }
 }
 
@@ -3701,8 +3787,18 @@ private fun AttachSheet(
     selectedMode: String = "flash",
     onModeSelected: (String) -> Unit = {}
 ) {
+    // FULL HEIGHT, FROM THE BOTTOM. The attach surface used to open at the
+    // half-expanded detent — a squat card that showed two rows of tiles and
+    // then had to be dragged up by hand to reach the mode row. It now rises
+    // straight to the top (skipPartiallyExpanded) and owns the full height:
+    // the same gesture, one step, everything visible at once, and the body
+    // scrolls on a short screen instead of clipping.
+    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(
+        skipPartiallyExpanded = true
+    )
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = sheetState,
         // A sheet is a SURFACE, not a tint. glassSurface is 80% opaque, and a
         // transcript of tables and code read straight through it — the sheet
         // looked broken rather than translucent. The reference's sheets are
@@ -3713,17 +3809,38 @@ private fun AttachSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = GsMotion.spaceM)
                 .padding(bottom = GsMotion.spaceL),
             verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
         ) {
+            // A reachable close: at full height the drag handle is a long way
+            // from a thumb, and Android's back gesture is not a visual cue.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Attach",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.weight(1f)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .gsGlass(GsGlassRole.FloatingControl, CircleShape)
+                        .clickable(role = Role.Button, onClickLabel = "Close", onClick = onDismiss)
+                        .semantics { contentDescription = "Close" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    NexlyGlyph(name = "x", size = 15.dp, color = GsTheme.colors.textSecondary)
+                }
+            }
             // --- Attach (FIRST — ChatGPT/Kimi put attach on top of the
             //     sheet; behavioral modes sit at the bottom). ---
-            Text(
-                text = "Attach",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground
-            )
             attachOptions.chunked(2).forEach { rowOptions ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),

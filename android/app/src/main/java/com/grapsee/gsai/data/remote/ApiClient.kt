@@ -191,8 +191,18 @@ class ApiClient(
             .progress
     }
 
-    suspend fun messages(id: String): List<MessageDto> {
-        val response = client.get("$root/conversations/$id/messages")
+    /**
+     * The reader's verdict on one assistant turn. [value] is "up" / "down" /
+     * null (withdraw). Best-effort by contract: the caller already persisted
+     * it locally, so a failed POST costs nothing but a later retry.
+     */
+    suspend fun setFeedback(messageId: String, value: String?): Boolean =
+        client.patch("$root/messages/$messageId/feedback") {
+            contentType(ContentType.Application.Json)
+            setBody(FeedbackRequest(value = value ?: ""))
+        }.status.isSuccess()
+
+    suspend fun messages(id: String): List<MessageDto> {        val response = client.get("$root/conversations/$id/messages")
         return decodeList(
             response.bodyAsText(),
             fromEnvelope = { GsApiJson.decodeFromString<MessageListDto>(it).items },

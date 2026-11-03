@@ -146,6 +146,17 @@ data class UpdateConversationRequest(
     val archived: Boolean? = null
 )
 
+/**
+ * PATCH /messages/{id}/feedback body.
+ *
+ * `value` is a non-null String on purpose: the JSON encoder omits nulls, so a
+ * nullable field could never express "withdraw my verdict" — the request would
+ * arrive with the key missing and the server would leave the old value in
+ * place. The empty string is the explicit withdraw.
+ */
+@Serializable
+data class FeedbackRequest(val value: String)
+
 /** One server-sent event line: `data: {"event":"delta","data":"…"}`. */
 @Serializable
 data class SseEvent(

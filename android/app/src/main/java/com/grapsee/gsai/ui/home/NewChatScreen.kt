@@ -373,25 +373,15 @@ private fun Composer(
             Spacer(Modifier.width(8.dp))
             ComposerButton(GsIcons.MoreHorizontal, "More", onMore)
             Spacer(Modifier.weight(1f))
-            Box(
-                Modifier
-                    .size(44.dp)
-                    .testTag("new-chat-send")
-                    .background(
-                        if (draft.isBlank()) colors.accent.copy(alpha = 0.35f) else colors.accent,
-                        CircleShape,
-                    )
-                    .clickable(enabled = draft.isNotBlank(), role = Role.Button, onClickLabel = "Send", onClick = onSend),
-                contentAlignment = Alignment.Center,
-            ) {
-                // The paper plane the chat composer sends with — same glyph,
-                // same verb, one stage earlier.
-                com.grapsee.gsai.ui.chat.content.NexlyGlyph(
-                    name = "send-2",
-                    size = 17.dp,
-                    color = Color.White,
-                )
-            }
+            // The chat composer's own trailing control, one stage earlier: the
+            // same accent disc, the same arrow, the same press physics. Two
+            // different send buttons on two adjacent pages was the kind of
+            // drift that makes an app feel assembled instead of designed.
+            com.grapsee.gsai.ui.components.GsComposerAction(
+                hasContent = draft.isNotBlank(),
+                onSend = onSend,
+                modifier = Modifier.testTag("new-chat-send"),
+            )
         }
     }
 }

@@ -167,11 +167,15 @@ struct NexlyComposerBar: View {
                 .buttonStyle(KineticPressStyle())
                 .accessibilityLabel("Stop generating")
             } else {
-                Button(action: onSend) {
-                    NexlyGlyph(name: "send-2", size: 17, color: .white)
-                        .frame(width: 36, height: 36)
-                        .background(
-                            Circle().fill(
+                // ONE trailing control, two verbs. The mic and the send disc
+                // used to sit side by side; the mic now BECOMES the send arrow
+                // the moment there is something to send, and becomes the mic
+                // again when the field empties. Both glyphs ride the same 0…1
+                // progress so the exchange can never desynchronise.
+                Button(action: canSend ? onSend : onVoice) {
+                    ZStack {
+                        Circle()
+                            .fill(
                                 LinearGradient(
                                     colors: [Color(red: 0.655, green: 0.545, blue: 1.0),
                                              Color(red: 0.486, green: 0.361, blue: 1.0)],
@@ -179,29 +183,43 @@ struct NexlyComposerBar: View {
                                     endPoint: .bottomTrailing
                                 )
                             )
-                        )
-                        .overlay(Circle().strokeBorder(Color.white.opacity(0.55), lineWidth: 1))
-                        .shadow(color: Color(red: 0.486, green: 0.361, blue: 1.0).opacity(0.30), radius: 6, y: 2)
-                        .opacity(canSend ? 1 : 0.75)
+                            .opacity(morph)
+                            .overlay(
+                                Circle()
+                                    .strokeBorder(Color.white.opacity(0.55), lineWidth: 1)
+                                    .opacity(morph)
+                            )
+                        Circle()
+                            .fill(Aero.surface.opacity(0.55))
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
+                            .opacity(1 - morph)
+                        NexlyGlyph(name: "microphone", size: 17, color: Aero.text.opacity(0.75))
+                            .opacity(1 - morph)
+                            .scaleEffect(1 - 0.40 * morph)
+                            .rotationEffect(.degrees(-90 * Double(morph)))
+                        NexlyGlyph(name: "arrow-up", size: 17, color: .white)
+                            .opacity(morph)
+                            .scaleEffect(0.55 + 0.45 * morph)
+                            .rotationEffect(.degrees(90 * Double(1 - morph)))
+                    }
+                    .frame(width: 36, height: 36)
+                    .animation(
+                        SettingsStore.shared.reduceMotion
+                            ? nil
+                            : .spring(response: 0.34, dampingFraction: 0.72),
+                        value: canSend
+                    )
                 }
                 .buttonStyle(KineticPressStyle())
-                .disabled(!canSend)
-                .accessibilityLabel("Send")
+                .accessibilityLabel(canSend ? "Send" : "Voice")
             }
-
-            // The reference composer carries a trailing mic; it opens the real
-            // voice flow.
-            Button(action: onVoice) {
-                Image(systemName: "mic")
-                    .font(.system(size: 17))
-                    .foregroundStyle(Aero.text.opacity(0.7))
-                    .frame(width: 38, height: 38)
-            }
-            .buttonStyle(KineticPressStyle())
-            .accessibilityLabel("Voice")
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
         .gsCapsuleGlass(.floatingControl)
     }
+
+    /// The morph progress: 1 = send, 0 = voice. Reading it from `canSend`
+    /// (instead of storing it) keeps the two glyph layers on one clock.
+    private var morph: CGFloat { canSend ? 1 : 0 }
 }

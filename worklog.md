@@ -5807,3 +5807,19 @@ Task: Pull latest and publish.
 Work Log:
 - 1 commit (173b3b05): the pastel chat surface follows the APP theme, not the OS theme — fixes the "dark mud" (warm pastels over a dark OS backdrop).
 - Android 413/413, compile clean. versionCode 132 / 0.86.9.
+
+---
+Task ID: build-0.86.10-chat-truth-pass
+Agent: main
+Task: The owner's final chat list — send does nothing, the message is unreadable, the composer has a redundant send button, the actions are wordy, feedback must reach the model.
+
+Work Log:
+- THE SEND BUG (the one he hit first). `GsRoutes.chat()` emitted `send=1` / `attach=1`; Navigation parses booleans with `String.toBoolean()`, which is true only for "true". So `autoSend` arrived FALSE: the chat surface got a prefilled composer and an empty transcript, the "nothing here, go to the hero" rule fired, and the reader was handed straight back to the pre-chat page with the draft gone. `attach` was not declared in the route pattern at all, so `chat(new?attach=1)` matched no destination — the paperclip threw instead of opening the sheet. Both fixed; ChatRouteArgsTest now drives the real builder through a real NavController.
+- Arrival send takes over a stream left running elsewhere instead of being dropped by the in-flight gate (dispatch(takeOver = true)). ChatStreamController.start() already evicts with an ownership token, so exactly one stream stays alive.
+- THE UNREADABLE MESSAGE. The user turn carried a fixed mid-grey ink on a 0.72–0.86 alpha lavender gradient (and the same grey on a 0.54-alpha dark surface — about 1.2:1). The palette is now data (ChatBubblePalette) and the contrast is unit-tested: AAA (7:1) for the message, AA for the timestamp, and the fill must stay ≥ 90% so the bloom cannot run through the glyphs.
+- THE COMPOSER. Send and mic were two discs for one slot. They are now one control (GsComposerAction) that morphs mic → arrow-up on a single spring: both glyphs ride the same 0..1 progress, the container crossfades glass → accent. Shared by the chat composer and the pre-chat page so the two pages cannot drift again.
+- THE ACTION ROW. Copy / Regenerate / Read aloud / Share lose their labels: four 30dp glass discs with Tabler thin-stroke glyphs, verbs preserved as accessibility labels and in the long-press menu.
+- FEEDBACK, END TO END. "Helpful?" beside two thumbs on every settled turn (plan turns included — they were the one answer that could never be rated). The verdict is written to the turn's new Room column (DB v7, additive migration) AND to `PATCH /api/v1/messages/:id/feedback`; the next turn quotes the most recent verdict into the model's context, so a thumbs-down changes the very next answer. Tapping the chosen thumb withdraws it.
+- The attach sheet rises to FULL height from the bottom (skipPartiallyExpanded) with a reachable close and a scrolling body.
+- iOS parity: the composer morph (NexlyChatShell) and the icon-only action row (ChatDetailView). The iOS feedback loop is NOT wired — its ChatMessage has no server id, which is the prerequisite; that is the next task, not a silent omission.
+- Android 426/426 (13 new), compile clean, backend tsc 0. versionCode 133 / 0.86.10.

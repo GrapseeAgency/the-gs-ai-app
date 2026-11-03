@@ -300,6 +300,36 @@ class ChatRepository(
     }
 
     /**
+     * The reader's verdict on one assistant turn: "up", "down", or null to take
+     * it back.
+     *
+     * LOCAL FIRST, then the wire — the tap must register even in a tunnel.
+     * Room is the durable record (it survives a reload, an offline week and a
+     * reinstall of the thread from the server), and the POST is what lets the
+     * NEXT turn carry the verdict: the server attaches the most recent
+     * feedback for the conversation to the model's context, so "that wasn't
+     * what I asked" is visible to the model on the very next message instead
+     * of vanishing into a dashboard nobody reads.
+     *
+     * A local-only id (`local-…`, an unsynced conversation) has no server row
+     * to mark — the write is skipped rather than sent to fail.
+     */
+    suspend fun setFeedback(messageId: String, value: String?): Boolean {
+        if (messageId.isBlank()) return false
+        db.messageDao().setFeedback(messageId, value)
+        if (messageId.startsWith("local-")) return true
+        return try {
+            api.setFeedback(messageId, value)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The verdict is already safe on the device; the wire can catch up.
+            _connectionState.value = true
+            false
+        }
+    }
+
+    /**
      * Benchmark branch-new-chat: a fresh local conversation seeded with the
      * source thread up to and including the tapped turn. Local-first (no
      * server echo) so it behaves identically on and offline; the original
