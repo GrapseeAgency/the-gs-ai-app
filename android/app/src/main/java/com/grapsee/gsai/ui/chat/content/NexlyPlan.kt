@@ -2,7 +2,6 @@ package com.grapsee.gsai.ui.chat.content
 
 import android.content.Context
 import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
@@ -10,6 +9,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.Icon
+import com.grapsee.gsai.ui.icons.GsIcons
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,7 +47,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -384,15 +384,25 @@ fun NexlyGlyph(
 /** The companion identity mark outside each glass assistant card. */
 @Composable
 fun NexlyAssistantOrb(size: Dp = 30.dp) {
-    Image(
-        painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
-        contentDescription = "Nexly",
+    // The reference identity mark: a lilac sparkle in a lit glass circle, the
+    // same language as the header brand — not the peach orb.
+    Box(
         modifier = Modifier
             .size(size)
-            .shadow(5.dp, CircleShape)
+            .shadow(4.dp, CircleShape)
             .clip(CircleShape)
-            .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
-    )
+            .background(Color.White.copy(alpha = 0.94f), CircleShape)
+            .border(1.dp, Color.White, CircleShape)
+            .semantics { contentDescription = "Nexly" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            GsIcons.Sparkles,
+            contentDescription = null,
+            tint = Color(0xFF8E7BFF),
+            modifier = Modifier.size(size * 0.5f),
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------
