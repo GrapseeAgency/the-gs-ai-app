@@ -1971,10 +1971,12 @@ internal fun UserMessage(
                 210.dp,
                 (LocalConfiguration.current.screenWidthDp * 0.54f).dp
             )
+            // The reference's user turn is LAVENDER, not peach: a pale lilac
+            // that sits inside the same bloom as the glass around it.
             val bubbleTop = if (dark) colors.surface.copy(alpha = 0.54f)
-            else Color(0xFFFFE9DE).copy(alpha = 0.82f)
+            else Color(0xFFEDE6FF).copy(alpha = 0.86f)
             val bubbleBottom = if (dark) colors.accentSoft.copy(alpha = 0.28f)
-            else Color(0xFFFFD6C4).copy(alpha = 0.68f)
+            else Color(0xFFDCD1FF).copy(alpha = 0.72f)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
