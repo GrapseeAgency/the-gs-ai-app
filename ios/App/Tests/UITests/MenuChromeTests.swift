@@ -209,9 +209,12 @@ final class MenuChromeTests: XCTestCase {
             recordSkip("chat-header-sparkle", because: "the sparkle button consumes the long press as its action")
         }
 
+        // The options control answers to "Open menu" at the workspace root and
+        // "Conversation actions" inside a pushed chat. The leading back arrow is
+        // a separate "Back" button and must not be mistaken for this menu host.
         let headerMenu = app.buttons["Open menu"].firstMatch.exists
             ? app.buttons["Open menu"].firstMatch
-            : app.buttons["Back"].firstMatch
+            : app.buttons["Conversation actions"].firstMatch
         if headerMenu.waitForExistence(timeout: 10),
            openContextMenu(on: headerMenu, app: app, expecting: "Chat options", press: .center) {
             // A pushed chat offers two rows here, not three: "New chat" is the
