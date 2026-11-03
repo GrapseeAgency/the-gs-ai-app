@@ -1460,15 +1460,17 @@ struct MessageBubble: View, Equatable {
             }
             .contextMenu { bubbleMenu }
 
-            // The reference's assistant footer is the timestamp alone; copy,
-            // read aloud, regenerate, translate, save and branch all live in
-            // the long-press menu. A plan card carries its own timestamp.
-            if !message.isStreaming && !hasPlan, let stamp = timeLabel(message.createdAt) {
-                Text(stamp)
-                    .font(.system(size: 10.5, weight: .regular))
-                    .foregroundStyle(Aero.textMuted.opacity(0.85))
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.trailing, 2)
+            // The reference footer: a timestamp, then a quiet action-chip row.
+            // Each chip calls the same real handler the long-press menu carries.
+            if !message.isStreaming && !hasPlan {
+                if let stamp = timeLabel(message.createdAt) {
+                    Text(stamp)
+                        .font(.system(size: 10.5, weight: .regular))
+                        .foregroundStyle(Aero.textMuted.opacity(0.85))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.trailing, 2)
+                }
+                assistantActionChips
             }
         }
     }
@@ -1590,6 +1592,40 @@ struct MessageBubble: View, Equatable {
                 GsMenuLabel("Share", icon: GsIcons.share)
             }
         }
+    }
+
+    /// The reference's inline action chips under a settled assistant turn. Every
+    /// chip calls a real handler the long-press menu already has — nothing here
+    /// is decorative.
+    private var assistantActionChips: some View {
+        HStack(spacing: 8) {
+            actionChip(GsIcons.copy, "Copy") { copyAndConfirm(message.content) }
+            actionChip(GsIcons.refreshCw, "Regenerate", action: onRegenerate)
+            actionChip(isSpeaking ? GsIcons.volumeX : GsIcons.volume2,
+                       isSpeaking ? "Stop" : "Read aloud", action: onReadAloud)
+            ShareLink(item: message.content) {
+                chipLabel(GsIcons.share, "Share")
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func actionChip(_ icon: GsIconPaths, _ title: String,
+                            action: @escaping () -> Void) -> some View {
+        Button(action: action) { chipLabel(icon, title) }
+            .buttonStyle(KineticPressStyle())
+    }
+
+    private func chipLabel(_ icon: GsIconPaths, _ title: String) -> some View {
+        HStack(spacing: 6) {
+            Image(uiImage: GsMenuGlyph.image(icon, side: 13))
+                .resizable().scaledToFit().frame(width: 13, height: 13)
+            Text(title).font(.system(size: 12, weight: .medium))
+        }
+        .foregroundStyle(Aero.text)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .gsGlass(.floatingControl, corner: 14)
     }
 }
 

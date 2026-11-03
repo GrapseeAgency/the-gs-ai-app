@@ -1816,7 +1816,7 @@ internal fun NexlyChatHeader(
                 Icon(
                     GsIcons.Sparkles,
                     contentDescription = "Nexly",
-                    tint = GsTheme.colors.accent,
+                    tint = Color(0xFF8E7BFF),
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -3313,7 +3313,6 @@ private fun SheetActionRow(
  */
 @Composable
 private fun AssistantAvatar() {
-    val colors = GsTheme.colors
     // The reference identity mark: a lilac sparkle set in a lit glass circle —
     // the same white-tile + glyph language the pre-chat header uses, not the
     // peach orb.
@@ -3330,7 +3329,7 @@ private fun AssistantAvatar() {
         Icon(
             GsIcons.Sparkles,
             contentDescription = null,
-            tint = colors.accent,
+            tint = Color(0xFF8E7BFF),
             modifier = Modifier.size(18.dp),
         )
     }
