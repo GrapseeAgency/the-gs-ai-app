@@ -5786,3 +5786,4 @@ Work Log:
 - iOS never had this page (no such string in the Swift tree), so nothing to remove there.
 - Android 413/413, compile clean. versionCode 128 / 0.86.5.
 - Heavenly glass pass: the pre-chat page's tool chips, recent rows and circular controls were flat white tints (0.42/0.46 alpha + hairline). They now use the measured `gsGlass` material (CardLight / FloatingControl), so they carry the lit rim and interior luminance fall the reference draws. iOS NewChatView had the same two flat tints and got the same swap to `.gsGlass(.cardLight, corner:)`.
+- 0.86.6 correction: the blank dark page that survived 0.86.5 was ChatScreen with an empty transcript — the hero was gone but the surface stayed. The redirect had only covered `conversationId == null`; it now covers any loaded-and-empty conversation, waits 600ms for a transcript that is still loading, and refuses to fire while a turn is streaming.

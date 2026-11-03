@@ -203,6 +203,7 @@ import com.grapsee.gsai.ui.theme.gsHaptic
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** One renderable chat turn. role is "user" or "assistant".
@@ -1442,12 +1443,34 @@ fun ChatScreen(
                     // transcript. The redirect is skipped when this turn was
                     // opened WITH something (a prompt, an attachment, an
                     // auto-send), because those land here to be delivered.
-                    LaunchedEffect(conversationId, prefillPrompt, autoSendInitialPrompt, openWithAttachments) {
+                    //
+                    // It also waits for the transcript to be LOADED. An empty
+                    // list is the initial state of every conversation, so
+                    // redirecting on `messages.isEmpty()` alone would bounce a
+                    // reader out of a chat that simply had not painted yet —
+                    // and would leave an existing but empty conversation
+                    // sitting on the blank dark surface this branch exists to
+                    // remove.
+                    LaunchedEffect(
+                        conversationId,
+                        prefillPrompt,
+                        autoSendInitialPrompt,
+                        openWithAttachments,
+                        messages.size,
+                        transcriptLoadedForId,
+                    ) {
                         val arrivedWithWork = !prefillPrompt.isNullOrBlank() ||
                             autoSendInitialPrompt || openWithAttachments
-                        if (conversationId == null && !arrivedWithWork) {
-                            onEmptyChat?.invoke()
+                        if (arrivedWithWork || messages.isNotEmpty()) return@LaunchedEffect
+                        // A transcript that is still loading looks exactly like
+                        // an empty one, so an existing chat gets one grace
+                        // window to paint before it is called empty.
+                        if (conversationId != null && transcriptLoadedForId != conversationId) {
+                            delay(600)
                         }
+                        val streaming =
+                            chatStream.state.value?.phase == ChatStreamController.Phase.Streaming
+                        if (messages.isEmpty() && !streaming) onEmptyChat?.invoke()
                     }
                 } else {
                     LazyColumn(
