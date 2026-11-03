@@ -115,7 +115,6 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -1440,28 +1439,25 @@ fun ChatScreen(
                     // No second hero. A chat with nothing in it belongs on the
                     // pre-chat page, which owns the composer, the tool chips and
                     // the recent list; this screen only draws once there is a
-                    // transcript. The redirect is skipped when this turn was
-                    // opened WITH something (a prompt, an attachment, an
-                    // auto-send), because those land here to be delivered.
+                    // transcript. The redirect is skipped ONLY when this surface
+                    // is about to produce a transcript: an auto-send dispatches on
+                    // arrival, an attach opens with its sheet up. A bare pre-filled
+                    // draft is not work — it belongs on the hero — and letting it
+                    // rest here is exactly the blank dark screen this branch removes.
                     //
                     // It also waits for the transcript to be LOADED. An empty
                     // list is the initial state of every conversation, so
                     // redirecting on `messages.isEmpty()` alone would bounce a
-                    // reader out of a chat that simply had not painted yet —
-                    // and would leave an existing but empty conversation
-                    // sitting on the blank dark surface this branch exists to
-                    // remove.
+                    // reader out of a chat that simply had not painted yet.
                     LaunchedEffect(
                         conversationId,
-                        prefillPrompt,
                         autoSendInitialPrompt,
                         openWithAttachments,
                         messages.size,
                         transcriptLoadedForId,
                     ) {
-                        val arrivedWithWork = !prefillPrompt.isNullOrBlank() ||
-                            autoSendInitialPrompt || openWithAttachments
-                        if (arrivedWithWork || messages.isNotEmpty()) return@LaunchedEffect
+                        val willDispatch = autoSendInitialPrompt || openWithAttachments
+                        if (willDispatch || messages.isNotEmpty()) return@LaunchedEffect
                         // A transcript that is still loading looks exactly like
                         // an empty one, so an existing chat gets one grace
                         // window to paint before it is called empty.
@@ -1701,7 +1697,8 @@ fun ChatScreen(
                         // back first, the new text follows below it.
                         else -> "$pending\n\n$draft"
                     }
-                }
+                },
+                onVoice = onNavigateVoice,
             )
 
             SnackbarHost(hostState = snackbarHostState)
@@ -1805,15 +1802,24 @@ internal fun NexlyChatHeader(
                 .padding(horizontal = GsMotion.spaceM, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Image(
-                painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
-                contentDescription = "Nexly",
+            // The reference brand mark: a lilac sparkle in a lit glass circle —
+            // the same white-tile + glyph language the pre-chat header uses.
+            Box(
                 modifier = Modifier
                     .size(38.dp)
-                    .shadow(3.dp, CircleShape)
+                    .shadow(4.dp, CircleShape)
                     .clip(CircleShape)
-                    .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
-            )
+                    .background(Color.White.copy(alpha = 0.94f), CircleShape)
+                    .border(1.dp, Color.White, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    GsIcons.Sparkles,
+                    contentDescription = "Nexly",
+                    tint = GsTheme.colors.accent,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -1827,7 +1833,7 @@ internal fun NexlyChatHeader(
                     maxLines = 1
                 )
                 Text(
-                    text = "AI Companion",
+                    text = "Your AI companion",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 10.sp,
                         lineHeight = 12.sp
@@ -2124,7 +2130,9 @@ internal fun ComposerRow(
     // FLASH-MODE BUG 2 — the mode chip sat INSIDE the pill, LEFT of the text
     // input; the one-capsule reference moved it into the sparkle's sheet.
     modeLabel: String? = null,
-    onModeChipClick: () -> Unit = {}
+    onModeChipClick: () -> Unit = {},
+    // The reference composer's trailing mic: opens the real voice screen.
+    onVoice: (() -> Unit)? = null
 ) {
     Column {
         AttachmentChipRow(
@@ -2174,7 +2182,7 @@ internal fun ComposerRow(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        GsIcons.Sparkles,
+                        GsIcons.Plus,
                         contentDescription = null,
                         tint = Color(0xFF8E7BFF),
                         modifier = Modifier.size(17.dp)
@@ -2209,7 +2217,7 @@ internal fun ComposerRow(
                         Box {
                             if (draftText().isEmpty()) {
                                 Text(
-                                    text = "Ask me anything...",
+                                    text = "Ask anything…",
                                     style = MaterialTheme.typography.bodyLarge.copy(fontSize = 14.sp),
                                     color = GsTheme.colors.textPlaceholder
                                 )
@@ -2230,6 +2238,25 @@ internal fun ComposerRow(
                     OrbStopControl(state = orbState ?: OrbState.BREATHING, onStop = onStop)
                 } else {
                     GsSendButton(enabled = canSend) { onSend(draftText().trim()) }
+                }
+                // The reference composer carries a mic at the trailing edge; it
+                // opens the real voice screen (no route wired → it stays away).
+                if (onVoice != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .clickable(role = Role.Button, onClickLabel = "Voice", onClick = onVoice)
+                            .semantics { contentDescription = "Voice" },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            GsIcons.Mic,
+                            contentDescription = null,
+                            tint = GsTheme.colors.textSecondary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                 }
             }
         }
@@ -2482,15 +2509,15 @@ private fun GsSendButton(enabled: Boolean, onSend: () -> Unit) {
             .clip(CircleShape)
             .background(
                 if (enabled) {
-                    Brush.linearGradient(listOf(Color(0xFFFFC08D), Color(0xFFF0813F)))
+                    Brush.linearGradient(listOf(Color(0xFFA78BFF), Color(0xFF7C5CFF)))
                 } else {
-                    // The reference keeps the peach send control visible even
-                    // with an empty field; the disabled state is the reduced
-                    // alpha, not a gray disc.
+                    // The reference keeps the send control visible even with an
+                    // empty field; the disabled state is the reduced alpha, not
+                    // a gray disc.
                     Brush.linearGradient(
                         listOf(
-                            Color(0xFFFFC08D).copy(alpha = 0.62f),
-                            Color(0xFFF0813F).copy(alpha = 0.62f)
+                            Color(0xFFA78BFF).copy(alpha = 0.62f),
+                            Color(0xFF7C5CFF).copy(alpha = 0.62f)
                         )
                     )
                 }
@@ -2894,12 +2921,15 @@ private fun AssistantMessage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 640.dp)
-                    .background(
-                        color = if (highlight) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                    .clip(RoundedCornerShape(20.dp))
+                    .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(20.dp))
+                    .border(
+                        width = if (highlight) 2.dp else 0.dp,
+                        color = if (highlight) MaterialTheme.colorScheme.primary
                         else androidx.compose.ui.graphics.Color.Transparent,
-                        shape = GsRadius.smShape()
+                        shape = RoundedCornerShape(20.dp),
                     )
-                    .padding(vertical = 2.dp)
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
                     // Long-press only. There used to be `onClick = {}` here,
                     // which made every non-interactive pixel of an answer a
                     // button that did nothing — the exact "taps are swallowed"
@@ -2976,9 +3006,11 @@ private fun AssistantMessage(
                         onRegenerate = onRegenerate
                     )
                 } else if (!hasPlan) {
-                    // The reference shows only the timestamp under an assistant
-                    // turn. Copy / regenerate / read / share remain reachable
-                    // from the long-press menu, so no capability is lost.
+                    // The reference surfaces the turn's actions as a quiet chip
+                    // row under the answer, next to its timestamp. Each chip
+                    // calls the SAME real handler the long-press menu carries
+                    // (copy / regenerate / read aloud / share) — the resting
+                    // surface now shows them; nothing here is decorative.
                     val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
                     if (stamp.isNotEmpty()) {
                         Spacer(Modifier.height(3.dp))
@@ -2988,6 +3020,17 @@ private fun AssistantMessage(
                             color = MaterialTheme.colorScheme.outline,
                             modifier = Modifier.align(Alignment.End).padding(end = 2.dp)
                         )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AssistantActionChip(GsIcons.Copy, "Copy") { onCopy(message.content) }
+                        AssistantActionChip(GsIcons.RefreshCw, "Regenerate", onClick = onRegenerate)
+                        AssistantActionChip(
+                            if (isSpeaking) GsIcons.VolumeX else GsIcons.Volume2,
+                            if (isSpeaking) "Stop" else "Read aloud",
+                            onClick = onReadAloud,
+                        )
+                        AssistantActionChip(GsIcons.Share, "Share", onClick = onShare)
                     }
                 }
             }
@@ -3270,15 +3313,27 @@ private fun SheetActionRow(
  */
 @Composable
 private fun AssistantAvatar() {
-    Image(
-        painter = painterResource(com.grapsee.gsai.R.drawable.gs_companion_orb),
-        contentDescription = "Nexly",
+    val colors = GsTheme.colors
+    // The reference identity mark: a lilac sparkle set in a lit glass circle —
+    // the same white-tile + glyph language the pre-chat header uses, not the
+    // peach orb.
+    Box(
         modifier = Modifier
             .size(38.dp)
-            .shadow(5.dp, CircleShape)
+            .shadow(4.dp, CircleShape)
             .clip(CircleShape)
-            .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
-    )
+            .background(Color.White.copy(alpha = 0.94f), CircleShape)
+            .border(1.dp, Color.White, CircleShape)
+            .semantics { contentDescription = "Nexly" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            GsIcons.Sparkles,
+            contentDescription = null,
+            tint = colors.accent,
+            modifier = Modifier.size(18.dp),
+        )
+    }
 }
 
 /**
@@ -3337,6 +3392,35 @@ private fun BubbleAction(icon: ImageVector, label: String, onClick: () -> Unit) 
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(16.dp)
         )
+    }
+}
+
+/** One reference action pill under a settled assistant turn: a quiet glass
+ *  capsule carrying a glyph and its label. Every chip calls a REAL handler the
+ *  long-press menu already has — nothing here is decorative. */
+@Composable
+private fun AssistantActionChip(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    val colors = GsTheme.colors
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(14.dp))
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = colors.textSecondary,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(label, style = MaterialTheme.typography.labelMedium, color = colors.textPrimary)
     }
 }
 

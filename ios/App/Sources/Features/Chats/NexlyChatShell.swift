@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// The reference brand header, shared by the chat screen and the full-screen
-/// render harness: orb, “Nexly / AI Companion”, sparkle and menu controls.
-/// The context-menu content is injected so production keeps its real actions
-/// while the harness renders the same visual with empty menus.
+/// render harness: a lilac sparkle in a lit glass circle, “Nexly / Your AI
+/// companion”, sparkle and menu controls. The context-menu content is injected
+/// so production keeps its real actions while the harness renders the same
+/// visual with empty menus.
 struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
     var sparkleLabel: String
     var menuGlyph: String
@@ -15,15 +16,16 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            AnimatedGsIllustration(
-                imageName: "GSCompanionOrb",
-                size: 38,
-                breathDuration: 3.2,
-                rotationDegrees: 0.8,
-                lift: -1,
-                startDelay: 0.1
-            )
-            .overlay(Circle().strokeBorder(Color.white.opacity(0.55), lineWidth: 1))
+            // The reference brand mark: a lilac sparkle in a lit glass circle —
+            // the same white-tile + glyph language the pre-chat header uses.
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.94))
+                    .frame(width: 38, height: 38)
+                    .overlay(Circle().strokeBorder(Color.white, lineWidth: 1))
+                    .shadow(color: Color(red: 0.50, green: 0.40, blue: 0.85).opacity(0.18), radius: 4, y: 1)
+                NexlyGlyph(name: "sparkles", size: 18, color: Color(red: 0.56, green: 0.48, blue: 1.0))
+            }
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -31,7 +33,7 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
                     .font(.system(size: 16.5, weight: .semibold))
                     .foregroundStyle(NexlyInk.header)
                     .lineLimit(1)
-                Text("AI Companion")
+                Text("Your AI companion")
                     .font(.system(size: 10, weight: .regular))
                     .foregroundStyle(NexlyInk.headerMeta)
                     .lineLimit(1)
@@ -90,8 +92,8 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
 }
 
 /// The reference composer capsule, shared by the chat screen and the
-/// full-screen render harness. One capsule: lilac sparkle, field, peach
-/// paper-plane. Attachments/voice/search live in the sparkle menu.
+/// full-screen render harness. One capsule: plus, field, violet paper-plane,
+/// mic. Attachments/modes/search live in the plus menu.
 struct NexlyComposerBar: View {
     @Binding var text: String
     var isStreaming: Bool
@@ -108,7 +110,7 @@ struct NexlyComposerBar: View {
         HStack(alignment: .bottom, spacing: 4) {
             Button(action: onAttach) {
                 NexlyGlyph(
-                    name: "sparkles",
+                    name: "plus",
                     size: 19,
                     color: Color(red: 0.56, green: 0.48, blue: 1.0)
                 )
@@ -128,7 +130,7 @@ struct NexlyComposerBar: View {
                 }
             }
 
-            TextField("Ask me anything...", text: $text, axis: .vertical)
+            TextField("Ask anything...", text: $text, axis: .vertical)
                 .font(.system(size: 14))
                 .foregroundStyle(Aero.text)
                 .lineLimit(1...6)
@@ -158,21 +160,32 @@ struct NexlyComposerBar: View {
                         .background(
                             Circle().fill(
                                 LinearGradient(
-                                    colors: [Color(red: 1.0, green: 0.78, blue: 0.58),
-                                             Color(red: 0.95, green: 0.53, blue: 0.27)],
+                                    colors: [Color(red: 0.655, green: 0.545, blue: 1.0),
+                                             Color(red: 0.486, green: 0.361, blue: 1.0)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
                             )
                         )
                         .overlay(Circle().strokeBorder(Color.white.opacity(0.55), lineWidth: 1))
-                        .shadow(color: Color(red: 0.86, green: 0.42, blue: 0.20).opacity(0.30), radius: 6, y: 2)
+                        .shadow(color: Color(red: 0.486, green: 0.361, blue: 1.0).opacity(0.30), radius: 6, y: 2)
                         .opacity(canSend ? 1 : 0.75)
                 }
                 .buttonStyle(KineticPressStyle())
                 .disabled(!canSend)
                 .accessibilityLabel("Send")
             }
+
+            // The reference composer carries a trailing mic; it opens the real
+            // voice flow.
+            Button(action: onVoice) {
+                Image(systemName: "mic")
+                    .font(.system(size: 17))
+                    .foregroundStyle(Aero.text.opacity(0.7))
+                    .frame(width: 38, height: 38)
+            }
+            .buttonStyle(KineticPressStyle())
+            .accessibilityLabel("Voice")
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 5)

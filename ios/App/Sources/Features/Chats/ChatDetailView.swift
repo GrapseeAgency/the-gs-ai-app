@@ -1447,10 +1447,15 @@ struct MessageBubble: View, Equatable {
                 planTimestamp: message.createdAt,
                 conversationID: conversationID
             )
-            .background {
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            // The reference answer sits in a lit glass card, not raw on the
+            // backdrop; a search hit is a rim, not a fill.
+            .gsGlass(.floatingControl, corner: 20)
+            .overlay {
                 if highlight {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Aero.accentSoft.opacity(0.7))
+                        .strokeBorder(Aero.accent, lineWidth: 2)
                 }
             }
             .contextMenu { bubbleMenu }

@@ -31,6 +31,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.grapsee.gsai.ShortcutBus
+import com.grapsee.gsai.ComposerSeed
 import com.grapsee.gsai.data.SessionStore
 import com.grapsee.gsai.data.DataRetention
 import com.grapsee.gsai.data.notifications.GsNotifier
@@ -279,7 +280,11 @@ fun GsNavHost(
         composable(GsRoutes.HOME) {
             HomeDashboardScreen(
                 onNewChat = { navController.navigate(GsRoutes.NEW_CHAT) },
-                onStartPrompt = { prompt -> navController.navigate(GsRoutes.chat(null, prompt)) },
+                // The home composer is a SEND: dispatch on arrival so the chat
+                // surface never opens on a transcript-less blank screen.
+                onStartPrompt = { prompt ->
+                    navController.navigate(GsRoutes.chat(null, prompt, autoSend = true))
+                },
                 onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) },
                 onOpenDrawer = { scope.launch { drawerState.open() } },
                 onOpenChats = { open(GsRoutes.CHATS) },
@@ -292,6 +297,9 @@ fun GsNavHost(
         // six tool chips both end in `chat(null, prompt)`, and the model entry
         // opens the picker.
         composable(GsRoutes.NEW_CHAT) {
+            // A seed chip (Explore/Discover) hands a partial prompt here; the
+            // hero owns the composer, so the chat surface never opens blank.
+            val seedDraft by ComposerSeed.seed.collectAsStateWithLifecycle()
             NewChatScreen(
                 onStartChat = { prompt, autoSend ->
                     navController.navigate(
@@ -306,6 +314,8 @@ fun GsNavHost(
                 onOpenModels = { open(GsRoutes.MODEL_PICKER) },
                 onOpenMenu = { scope.launch { drawerState.open() } },
                 onOpenExplore = { open(GsRoutes.EXPLORE) },
+                seedPrompt = seedDraft,
+                onSeedConsumed = { ComposerSeed.consume() },
             )
         }
         composable(GsRoutes.MODEL_PICKER) {
@@ -315,12 +325,25 @@ fun GsNavHost(
             )
         }
         composable(GsRoutes.TRAVEL_AGENT) {
-            TravelAgentScreen(onBack = back, onSendToChat = { prompt -> navController.navigate(GsRoutes.chat(null, prompt)) })
+            TravelAgentScreen(
+                onBack = back,
+                // The trip prompt is a SEND — dispatch it into a real transcript.
+                onSendToChat = { prompt ->
+                    navController.navigate(GsRoutes.chat(null, prompt, autoSend = true))
+                },
+            )
         }
         composable(GsRoutes.EXPLORE) {
             ExploreScreen(
                 onOpenChat = { prompt, autoSend ->
-                    navController.navigate(GsRoutes.chat(null, prompt, autoSend))
+                    if (autoSend) {
+                        navController.navigate(GsRoutes.chat(null, prompt, autoSend = true))
+                    } else {
+                        // A seed chip pre-fills the hero composer; it is not a
+                        // transcript, so it never opens the chat surface.
+                        ComposerSeed.set(prompt)
+                        navController.navigate(GsRoutes.NEW_CHAT)
+                    }
                 },
                 onOpenDiscover = { open(GsRoutes.DISCOVER) },
                 // The trip planner has its own screen; Explore is the entry
@@ -335,7 +358,14 @@ fun GsNavHost(
         composable(GsRoutes.DISCOVER) {
             DiscoverScreen(
                 onOpenChat = { prompt, autoSend ->
-                    navController.navigate(GsRoutes.chat(null, prompt, autoSend))
+                    if (autoSend) {
+                        navController.navigate(GsRoutes.chat(null, prompt, autoSend = true))
+                    } else {
+                        // A seed chip pre-fills the hero composer; it is not a
+                        // transcript, so it never opens the chat surface.
+                        ComposerSeed.set(prompt)
+                        navController.navigate(GsRoutes.NEW_CHAT)
+                    }
                 },
                 onOpenTravelAgent = { open(GsRoutes.TRAVEL_AGENT) },
                 onBack = back,
@@ -478,7 +508,11 @@ fun GsNavHost(
             VoiceScreen(
                 onBack = back,
                 onSendToChat = { spoken ->
-                    navController.navigate(GsRoutes.chat(conversationId = null, prompt = spoken))
+                    // A finished utterance is a SEND: dispatch it so the chat
+                    // opens on the answer, never on a blank draft-holding surface.
+                    navController.navigate(
+                        GsRoutes.chat(conversationId = null, prompt = spoken, autoSend = true)
+                    )
                 }
             )
         }

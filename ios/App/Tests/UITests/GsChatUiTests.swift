@@ -33,7 +33,7 @@ final class GsChatUiTests: XCTestCase {
     /// The composer's placeholder, verbatim from NexlyComposerBar
     /// (ios/App/Sources/Features/Chats/NexlyChatShell.swift):
     ///
-    ///     TextField("Ask me anything...", text: $text, axis: .vertical)
+    ///     TextField("Ask anything...", text: $text, axis: .vertical)
     ///
     /// THE STRING THIS SUITE USED TO LOOK FOR NO LONGER EXISTS. Until
     /// 5f78d9f2 the queries asked for "Ask anything…" — AeroInputBar's
@@ -48,9 +48,10 @@ final class GsChatUiTests: XCTestCase {
     ///
     /// NOTE the three ASCII dots, not "…": ExploreView.swift carries a
     /// DIFFERENT field whose placeholder is "Ask me anything…" with a real
-    /// ellipsis. The conversation composer is the ASCII-dots spelling, and a
-    /// test that mixed them up would quietly match the wrong screen's field.
-    private static let composerPlaceholder = "Ask me anything..."
+    /// ellipsis. The conversation composer is the ASCII-dots spelling (now
+    /// "Ask anything..." to match the reference), and a test that mixed them
+    /// up would quietly match the wrong screen's field.
+    private static let composerPlaceholder = "Ask anything..."
 
     /// The composer, whichever control the current simulator image exposes.
     ///

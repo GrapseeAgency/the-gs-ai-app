@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -96,12 +97,23 @@ fun NewChatScreen(
     onOpenModels: () -> Unit,
     onOpenMenu: () -> Unit,
     onOpenExplore: () -> Unit,
+    /** A one-shot composer pre-fill handed from Explore/Discover's seed chips. */
+    seedPrompt: String? = null,
+    onSeedConsumed: () -> Unit = {},
     /** The reader's clock; the capture harness pins it so "2h ago" is stable. */
     now: Long = System.currentTimeMillis(),
 ) {
     val colors = GsTheme.colors
     val dark = LocalGsIsDark.current
     var draft by remember { mutableStateOf("") }
+    // A seed chip arrives with a partial prompt the reader finishes here. It is
+    // consumed once so re-entering the hero does not re-paste a stale seed.
+    LaunchedEffect(seedPrompt) {
+        if (!seedPrompt.isNullOrBlank()) {
+            draft = seedPrompt
+            onSeedConsumed()
+        }
+    }
     val rows by rememberConversationRows().collectAsStateWithLifecycle(initialValue = emptyList())
 
     Box(Modifier.fillMaxSize()) {
@@ -171,7 +183,11 @@ fun NewChatScreen(
                 onMore = onOpenExplore,
             )
             Spacer(Modifier.height(10.dp))
-            ToolGrid(onOpenExplore) { prompt -> startChat(prompt, autoSend = false, onStartChat) }
+            // A tool chip seeds the composer HERE — the reader edits the prompt
+            // and sends it. It must NOT navigate to the chat surface with a bare
+            // draft: that surface has no transcript yet and would paint the blank
+            // dark screen. The hero owns the composer until there is a real turn.
+            ToolGrid(onOpenExplore) { prompt -> draft = prompt }
 
             RecentHeader(onOpenAllChats)
             val recent = rows.take(4)
