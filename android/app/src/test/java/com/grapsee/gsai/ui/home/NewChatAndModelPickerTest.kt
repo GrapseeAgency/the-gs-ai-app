@@ -2,6 +2,7 @@ package com.grapsee.gsai.ui.home
 
 import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -162,7 +163,11 @@ class NewChatAndModelPickerTest {
         }
 
         compose.onNodeWithText("Web Search").performClick()
-        assertEquals(listOf("Search the web for " to false), sent)
+        // The chip seeds the composer and does NOT navigate: a bare draft would
+        // land on a chat surface with no transcript. Nothing is sent until the
+        // reader presses send.
+        assertEquals(emptyList<Pair<String, Boolean>>(), sent)
+        compose.onNodeWithTag("new-chat-input").assertTextContains("Search the web for ")
     }
 
     @Test

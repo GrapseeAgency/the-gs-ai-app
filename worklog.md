@@ -5788,3 +5788,13 @@ Work Log:
 - Heavenly glass pass: the pre-chat page's tool chips, recent rows and circular controls were flat white tints (0.42/0.46 alpha + hairline). They now use the measured `gsGlass` material (CardLight / FloatingControl), so they carry the lit rim and interior luminance fall the reference draws. iOS NewChatView had the same two flat tints and got the same swap to `.gsGlass(.cardLight, corner:)`.
 - 0.86.6 correction: the blank dark page that survived 0.86.5 was ChatScreen with an empty transcript — the hero was gone but the surface stayed. The redirect had only covered `conversationId == null`; it now covers any loaded-and-empty conversation, waits 600ms for a transcript that is still loading, and refuses to fire while a turn is streaming.
 - 0.86.7: chat palette pass, step 1 — the user turn is lavender now (0xFFEDE6FF → 0xFFDCD1FF) instead of the old peach, matching the reference. The mic beside send was attempted and reverted: the composer is an inner composable that does not receive onNavigateVoice, and plumbing it is a separate edit. The rest of the reference's chat anatomy (code card with copy/run, stat tiles, source row, action pills) already exists as the widget system but is styled warm; that is the next pass.
+
+---
+Task ID: build-0.86.8-chat-reference
+Agent: main
+Task: Pull the owner's chat-reference work and publish a build.
+
+Work Log:
+- Pulled 6 commits (0d18c24a): lavender user turn, lilac sparkle marks, no user avatar, ticks inside the bubble, inline action chips, blank empty-state gone, Android/iOS aligned to the reference.
+- One stale test: NewChatAndModelPickerTest asserted a tool chip navigates with a bare prompt. The pulled change deliberately seeds the composer instead (a bare draft would land on a chat surface with no transcript). Test updated to the new contract: nothing sent, input contains the chip's prompt.
+- Android 413/413, compile clean. versionCode 131 / 0.86.8.
