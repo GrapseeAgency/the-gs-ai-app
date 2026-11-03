@@ -5,7 +5,7 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
-import androidx.compose.foundation.isSystemInDarkTheme
+import com.grapsee.gsai.ui.theme.LocalGsIsDark
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -449,7 +449,7 @@ internal object NexlyInk {
  */
 @Composable
 internal fun Modifier.nexlyGlassCard(corner: Dp = 20.dp): Modifier {
-    val dark = isSystemInDarkTheme()
+    val dark = LocalGsIsDark.current
     val shape = RoundedCornerShape(corner)
     return this
         .shadow(
@@ -918,7 +918,7 @@ private fun timeLabelForPlan(iso: String): String? {
  */
 @Composable
 fun Modifier.nexlyPearlBackdrop(): Modifier {
-    val dark = isSystemInDarkTheme()
+    val dark = LocalGsIsDark.current
     val context = LocalContext.current
     val lotus = remember(context) {
         runCatching {

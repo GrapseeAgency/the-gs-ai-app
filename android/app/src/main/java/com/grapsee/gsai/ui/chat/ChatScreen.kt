@@ -115,7 +115,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.foundation.isSystemInDarkTheme
+import com.grapsee.gsai.ui.theme.LocalGsIsDark
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -1984,7 +1984,7 @@ internal fun UserMessage(
             // right with the delivered time + double ticks INSIDE its
             // bottom-right corner — no avatar beside it. Copy and Edit live in
             // the long-press menu so the resting surface has no action chrome.
-            val dark = isSystemInDarkTheme()
+            val dark = LocalGsIsDark.current
             val colors = GsTheme.colors
             var userMenu by remember { mutableStateOf(false) }
             // The reference bubble is a wide pill, not a narrow half-column:
