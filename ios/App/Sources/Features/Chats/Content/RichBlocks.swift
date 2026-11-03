@@ -168,18 +168,19 @@ struct NexlyAssistantBlocksView: View {
     }
 }
 
-/// Companion orb beside each assistant card — the reference keeps identity
-/// outside the glass, never as an avatar inside the text.
+/// Companion mark beside each assistant card — the reference keeps identity
+/// outside the glass, never as an avatar inside the text. It is the lilac
+/// sparkle in a lit glass circle, matching the header brand and Android.
 private struct NexlyAssistantOrb: View {
     var body: some View {
-        AnimatedGsIllustration(
-            imageName: "GSCompanionOrb",
-            size: 30,
-            breathDuration: 3.2,
-            rotationDegrees: 0.8,
-            lift: -1,
-            startDelay: 0.16
-        )
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.94))
+                .frame(width: 30, height: 30)
+                .overlay(Circle().strokeBorder(Color.white, lineWidth: 1))
+                .shadow(color: Color(red: 0.50, green: 0.40, blue: 0.85).opacity(0.18), radius: 3, y: 1)
+            NexlyGlyph(name: "sparkles", size: 15, color: Color(red: 0.56, green: 0.48, blue: 1.0))
+        }
         .accessibilityLabel("Nexly")
     }
 }

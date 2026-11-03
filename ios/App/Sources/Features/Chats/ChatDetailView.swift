@@ -1385,9 +1385,11 @@ struct MessageBubble: View, Equatable {
         if colorScheme == .dark {
             return [Aero.surface.opacity(0.62), Aero.accentSoft.opacity(0.34)]
         }
+        // The reference user turn is lavender, not peach — the same pale lilac
+        // the Android surface uses, sitting inside the same bloom.
         return [
-            Color(red: 1.0, green: 0.914, blue: 0.871).opacity(0.82),
-            Color(red: 1.0, green: 0.839, blue: 0.769).opacity(0.68),
+            Color(red: 0.929, green: 0.902, blue: 1.0).opacity(0.86),
+            Color(red: 0.863, green: 0.820, blue: 1.0).opacity(0.72),
         ]
     }
 
