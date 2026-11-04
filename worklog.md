@@ -5914,3 +5914,15 @@ Work Log:
 - The icons lost their discs in 0.86.13; the header still painted `surface@0.62 -> 0.06` over the bloom. On a page that is one continuous pearl field, any veil reads as a band with an edge where it stops — three passes tried to soften it and all three were still a band.
 - Removed the background entirely on Android (NexlyChatHeader) and iOS (NexlyBrandHeader). The header sits ABOVE the transcript in the column, not over it, so it never needed a surface of its own.
 - versionCode 139 / 0.86.16.
+
+---
+
+Task ID: build-0.86.17-discs-are-the-design
+Agent: main
+Task: The owner's reference image — the header's controls each sit in a round frosted disc. I had removed them; he pointed at the circles and said the band was what should go, not the discs.
+
+Work Log:
+- 0.86.13 removed the discs AND left the band; 0.86.16 removed the band. The reference wants the opposite combination: discs YES, band NO. Restored the discs at 44dp in `GsGlassRole.Elevated` (FloatingControl's fill was within a couple of L of the bloom at this size, so the disc existed and was invisible) with a 1dp lit rim.
+- Brand disc: lilac, not the app accent — the accent is peach, and a peach sparkle in a peach disc loses the product's one fixed mark. `0xFF8E7BFF` light / `0xFFB9A9FF` dark, fill at 0.16, rim at 0.30.
+- iOS: same four discs in `NexlyBrandHeader` (`.elevated` + `Circle().strokeBorder(rimColor)`), same lilac brand, `rimColor` = white 0.65 light / 0.18 dark.
+- versionCode 140 / 0.86.17.

@@ -16,6 +16,22 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
     var onBack: (() -> Void)? = nil
     @ViewBuilder var sparkleMenu: () -> SparkleMenu
     @ViewBuilder var menuMenu: () -> MenuMenu
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// Lilac is the BRAND, not the app accent: the accent is peach, and a peach
+    /// sparkle in a peach disc is the product losing its one fixed mark.
+    /// The lit rim of a control disc: white in light, a whisper of it in dark.
+    /// There is no `glassHighlight` token on this side; the material's rim is
+    /// drawn by `gsGlass`, and this is the hairline that closes it.
+    private var rimColor: Color {
+        Color.white.opacity(colorScheme == .dark ? 0.18 : 0.65)
+    }
+
+    private var brandInk: Color {
+        colorScheme == .dark
+            ? Color(red: 0.73, green: 0.66, blue: 1.0)
+            : Color(red: 0.56, green: 0.48, blue: 1.0)
+    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -28,12 +44,21 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
                 Button(action: onBack) {
                     NexlyGlyph(name: "arrow-left", size: 19, color: Aero.text)
                         .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                        .gsGlass(.elevated, corner: 22)
+                        .overlay(Circle().strokeBorder(rimColor, lineWidth: 1))
+                        .contentShape(Circle())
                 }
                 .buttonStyle(KineticPressStyle())
                 .accessibilityLabel("Back")
             }
-            NexlyGlyph(name: "sparkles", size: 23, color: Color(red: 0.56, green: 0.48, blue: 1.0))
+            // The brand: a lilac sparkle inside a lilac-tinted glass disc. The
+            // disc is the design; what was wrong before was its fill (opaque
+            // white) and the cream band behind the whole header.
+            NexlyGlyph(name: "sparkles", size: 21, color: brandInk)
+                .frame(width: 44, height: 44)
+                .gsGlass(.elevated, corner: 22)
+                .background(Circle().fill(brandInk.opacity(0.16)))
+                .overlay(Circle().strokeBorder(brandInk.opacity(0.30), lineWidth: 1))
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -79,7 +104,9 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
         Button(action: action) {
             NexlyGlyph(name: glyph, size: 19, color: Aero.text)
                 .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
+                .gsGlass(.elevated, corner: 22)
+                .overlay(Circle().strokeBorder(rimColor, lineWidth: 1))
+                .contentShape(Circle())
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityLabel(label)

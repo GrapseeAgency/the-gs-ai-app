@@ -1912,22 +1912,32 @@ internal fun NexlyChatHeader(
                 )
                 Spacer(Modifier.width(8.dp))
             }
-            // The reference brand mark: a lilac sparkle in a lit glass circle.
-            // Theme-aware — the tile used to be Color.White@0.94 in BOTH
-            // themes, which put a blazing white disc on the dark header and
-            // made the one element you look at most the brightest thing on a
-            // dark screen. Light keeps the white tile; dark keeps the glass.
-            // The brand is the GLYPH, not a plate. The white disc that used to
-            // sit here was the brightest object on the dark header and, in
-            // light mode, a second card stacked on a header that has none.
-            // Same rule as the action icons: no background behind it.
+            // THE REFERENCE BRAND MARK, exactly: a lilac sparkle inside a
+            // glass disc. It is not a bare glyph and it is not a white plate —
+            // the disc is the same frosted material as the controls beside it,
+            // tinted by the accent so the brand reads as the one warm object in
+            // the row. (The old white@0.94 tile was the brightest thing on the
+            // dark header; the tint is what fixes that, not the removal.)
             val headerDark = LocalGsIsDark.current
-            Icon(
-                GsIcons.Sparkles,
-                contentDescription = "Nexly",
-                tint = if (headerDark) Color(0xFFB9A9FF) else Color(0xFF8E7BFF),
-                modifier = Modifier.size(23.dp),
-            )
+            // Lilac is the BRAND, not the app accent: the accent is peach, and
+            // a peach sparkle in a peach disc is the product losing its one
+            // fixed mark. Same two values the mark has always had.
+            val brandInk = if (headerDark) Color(0xFFB9A9FF) else Color(0xFF8E7BFF)
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .gsGlass(GsGlassRole.Elevated, CircleShape)
+                    .background(brandInk.copy(alpha = 0.16f), CircleShape)
+                    .border(1.dp, brandInk.copy(alpha = 0.30f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    GsIcons.Sparkles,
+                    contentDescription = "Nexly",
+                    tint = brandInk,
+                    modifier = Modifier.size(21.dp),
+                )
+            }
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -1976,15 +1986,21 @@ private fun ChatTopIconButton(
     onLongClick: (() -> Unit)? = null
 ) {
     val haptics = LocalHapticFeedback.current
-    // NO DISC. These three controls sat in 36dp frosted circles, so the header
-    // carried four visible plates in a row — back, brand, sparkle, menu — and
-    // read as a toolbar of buttons rather than a title with actions. An icon
-    // that is legible on the header does not need a container to be tappable:
-    // the touch target is 44dp, the ink is the affordance.
+    // THE DISC IS THE DESIGN. The reference puts every header control inside a
+    // 44dp frosted circle — back, brand, copy, menu — and those circles are
+    // what make the row read as glass rather than as a toolbar of glyphs
+    // floating on a page. What was wrong before was the disc's FILL (opaque
+    // white, brightest object on a dark screen) and the cream band behind the
+    // whole header. The band is gone; the discs come back as real glass.
     Box(
         modifier = Modifier
             .size(44.dp)
             .kineticPress()
+            // Elevated, not FloatingControl: these sit on the page, not over a
+            // sheet, and at 44dp FloatingControl's fill is within a couple of
+            // luminance points of the bloom — the disc was there and invisible.
+            .gsGlass(GsGlassRole.Elevated, CircleShape)
+            .border(1.dp, GsTheme.colors.glassHighlight.copy(alpha = 0.55f), CircleShape)
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
