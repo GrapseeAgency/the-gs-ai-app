@@ -5878,3 +5878,14 @@ Work Log:
 - iOS parity: `GsFrostedSheet` (availability-guarded for the 16.0 floor) puts `.ultraThinMaterial` behind both sheets, `.fraction(0.66)` instead of `.medium/.large`, drag indicator, 28pt corners; attach tiles and mode cards are glass; the options sheet no longer paints `Aero.background` edge to edge.
 - Bubble timestamps: 10.5sp Android / 9.5pt iOS → 11 (the floor the last pass set everywhere else).
 - Android 445 tests, 0 failures. Probe renders: probe-bubbles-*, probe-attach-*, probe-menu-*, probe-header-*, nexly-chat-full. versionCode 136 / 0.86.13.
+
+---
+
+Task ID: build-0.86.14-proof
+Agent: main
+Task: The owner re-sent the same four screenshots and asked whether anything was actually fixed. The screenshots are build 0.86.12/135 — the diag line inside them is generated from BuildConfig.VERSION_NAME/CODE, so it names the installed APK, not the server.
+
+Work Log:
+- PROOF FIRST: `forensicSuffix()` in ChatRepository prints `build ${BuildConfig.VERSION_NAME}/${BuildConfig.VERSION_CODE}`. The failure card in the screenshot reads 0.86.12/135 — i.e. the previous APK. All four defects were fixed in 0.86.13 (commit 8222e58f, tag v0.86.13).
+- ONE MORE REAL DEFECT FOUND WHILE RE-RENDERING: after the width fix, a one-word message stacked its receipt underneath, making a two-line bubble out of "Hi". Short, single-line messages now put the receipt ON the line (≤30 chars, no newline); longer text keeps it beneath, end-aligned.
+- 0.86.14 / versionCode 137 carries that. Android suite green.

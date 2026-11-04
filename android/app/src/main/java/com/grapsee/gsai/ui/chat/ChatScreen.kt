@@ -2115,10 +2115,43 @@ internal fun UserMessage(
                                 // forced every bubble to the 320dp cap no matter
                                 // what it said — typing "Hi" produced a
                                 // full-width lavender slab, the loudest
-                                // abnormality on the transcript. The row now
-                                // wraps, and the column end-aligns it under the
-                                // text, so a one-word message is a small pill.
-                                Column(horizontalAlignment = Alignment.End) {
+                                // abnormality on the transcript.
+                                //
+                                // And a short message puts the receipt ON ITS
+                                // LINE, the way the reference does: stacking it
+                                // under "Hi" makes a two-line bubble out of one
+                                // word, which is its own small wrongness. Long
+                                // or multi-line text keeps the receipt beneath,
+                                // end-aligned, because there the inline form
+                                // would steal width from every wrapped line.
+                                val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
+                                val inlineReceipt = message.content.length <= 30 &&
+                                    !message.content.contains('\n') &&
+                                    !message.content.contains("\n")
+                                val receipt: @Composable () -> Unit = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.End,
+                                        modifier = Modifier.padding(top = if (inlineReceipt) 0.dp else 3.dp)
+                                    ) {
+                                        if (stamp.isNotEmpty()) {
+                                            Text(
+                                                text = stamp,
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                                color = bubbleMeta
+                                            )
+                                        }
+                                        if (!message.failed) {
+                                            Spacer(Modifier.width(4.dp))
+                                            NexlyGlyph(
+                                                name = "checks",
+                                                size = 12.dp,
+                                                color = bubbleMeta
+                                            )
+                                        }
+                                    }
+                                }
+                                val body: @Composable () -> Unit = {
                                     Text(
                                         text = message.content,
                                         style = MaterialTheme.typography.bodyMedium.copy(
@@ -2127,31 +2160,17 @@ internal fun UserMessage(
                                         ),
                                         color = bubbleInk
                                     )
-                                    // The reference carries the delivered time +
-                                    // double ticks inside the bubble, bottom-right.
-                                    val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
-                                    if (stamp.isNotEmpty() || !message.failed) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.End,
-                                            modifier = Modifier.padding(top = 3.dp)
-                                        ) {
-                                            if (stamp.isNotEmpty()) {
-                                                Text(
-                                                    text = stamp,
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                                    color = bubbleMeta
-                                                )
-                                            }
-                                            if (!message.failed) {
-                                                Spacer(Modifier.width(4.dp))
-                                                NexlyGlyph(
-                                                    name = "checks",
-                                                    size = 12.dp,
-                                                    color = bubbleMeta
-                                                )
-                                            }
-                                        }
+                                }
+                                if (inlineReceipt && (stamp.isNotEmpty() || !message.failed)) {
+                                    Row(verticalAlignment = Alignment.Bottom) {
+                                        body()
+                                        Spacer(Modifier.width(8.dp))
+                                        receipt()
+                                    }
+                                } else {
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        body()
+                                        if (stamp.isNotEmpty() || !message.failed) receipt()
                                     }
                                 }
                             }
