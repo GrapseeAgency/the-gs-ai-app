@@ -5889,3 +5889,17 @@ Work Log:
 - PROOF FIRST: `forensicSuffix()` in ChatRepository prints `build ${BuildConfig.VERSION_NAME}/${BuildConfig.VERSION_CODE}`. The failure card in the screenshot reads 0.86.12/135 — i.e. the previous APK. All four defects were fixed in 0.86.13 (commit 8222e58f, tag v0.86.13).
 - ONE MORE REAL DEFECT FOUND WHILE RE-RENDERING: after the width fix, a one-word message stacked its receipt underneath, making a two-line bubble out of "Hi". Short, single-line messages now put the receipt ON the line (≤30 chars, no newline); longer text keeps it beneath, end-aligned.
 - 0.86.14 / versionCode 137 carries that. Android suite green.
+
+---
+
+Task ID: build-0.86.15-follow-the-stream
+Agent: main
+Task: The reply never comes into view; the jump-to-latest pill appears even though the reader never scrolled.
+
+Work Log:
+- ROOT CAUSE: `isAtBottom` was "the last item is visible". While an answer streams, the last item grows taller than the viewport, that check flips to false, and the follow loop was gated on it — so the app stopped following the very thing it was supposed to follow. Nobody had scrolled; the content had grown. The pill is driven by the same false signal.
+- Second cause: send scrolled immediately after adding two rows that still had zero height, so the scroll landed on a 0dp bubble and left the transcript where it was.
+- Third: only Phase.Streaming was followed; the first token (Connecting -> Streaming) and the commit at Done changed the height without a scroll.
+- FIX: `pinnedToLiveEdge`, cleared ONLY by a DragInteraction.Start and restored when `canScrollForward` goes false. Content growth cannot unpin. `stickToBottom()` scrolls to the last item and then `scrollBy` to the true end (the live edge is the BOTTOM of a bubble taller than the viewport, not its top). Send pins and waits one frame. The follow effect now fires on phase, text length AND message count. IME open re-pins, because the keyboard shrinks the viewport without moving the list.
+- iOS already latches on gestures (live-edge sentinel + DragGesture + 0.6s debounce), so its model was right; no change.
+- versionCode 138 / 0.86.15.

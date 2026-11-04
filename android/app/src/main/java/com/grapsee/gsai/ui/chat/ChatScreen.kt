@@ -35,6 +35,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
@@ -49,7 +50,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -100,6 +103,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -592,12 +596,48 @@ fun ChatScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    // True while the newest turn is on screen — the reader is at the live edge.
-    val isAtBottom by remember {
-        derivedStateOf {
-            val info = listState.layoutInfo
-            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-            lastVisible >= info.totalItemsCount - 1
+    // WHOSE MOVE IS IT? The reader is at the live edge unless THEY left it.
+    //
+    // This used to be inferred from "is the last item visible", which answers a
+    // different question: while an answer streams, the last item grows past the
+    // fold, the check flips to false, the follow loop switches itself off, and
+    // the reply lands off-screen under a "jump to latest" pill — with the reader
+    // never having touched the screen. Exactly what the owner reported.
+    //
+    // Only a DRAG unpins now. Reaching the bottom pins again. Content growing
+    // underneath cannot unpin anything, because content is not a gesture.
+    var pinnedToLiveEdge by remember { mutableStateOf(true) }
+    LaunchedEffect(listState) {
+        listState.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) pinnedToLiveEdge = false
+        }
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.canScrollForward }.collect { canForward ->
+            if (!canForward) pinnedToLiveEdge = true
+        }
+    }
+    // Kept for callers that ask the literal question ("is the end on screen").
+    val isAtBottom by remember { derivedStateOf { !listState.canScrollForward } }
+
+    // The live edge is the BOTTOM of the last item, not its top: while it
+    // streams it is taller than the viewport, so aligning its start would show
+    // the beginning of the answer and hide the newest tokens. scrollBy clamps
+    // at the content end, so the overshoot is harmless.
+    suspend fun stickToBottom() {
+        val last = listState.layoutInfo.totalItemsCount - 1
+        if (last < 0) return
+        listState.scrollToItem(last)
+        listState.scrollBy(4_000f)
+    }
+
+    // The keyboard shrinks the viewport without moving the list, which strands
+    // a pinned reader a few hundred dp above the live edge. Re-pin on open.
+    val imeVisible = WindowInsets.isImeVisible
+    LaunchedEffect(imeVisible) {
+        if (imeVisible && pinnedToLiveEdge) {
+            withFrameNanos { }
+            stickToBottom()
         }
     }
     // The banner tracks the phone's actual connectivity (see GsComponents).
@@ -838,10 +878,12 @@ fun ChatScreen(
                 streamStateRaw.value?.streamText?.length ?: 0,
                 messages.size
             )
-        }.collect { (phase, _, count) ->
-            if (phase == ChatStreamController.Phase.Streaming && isAtBottom && count > 0) {
-                listState.scrollToItem(count - 1)
-            }
+        }.collect { (_, _, count) ->
+            // Every phase change counts, not just Streaming: the first token
+            // arrives with the bubble already taller than the viewport, and the
+            // commit at Done changes the height again. If the reader is pinned,
+            // all three land at the live edge.
+            if (pinnedToLiveEdge && count > 0) stickToBottom()
         }
     }
 
@@ -1033,8 +1075,17 @@ fun ChatScreen(
         }
         val assistantId = UUID.randomUUID().toString()
         messages.add(ChatUiMessage(assistantId, "assistant", "", isStreaming = true, createdAt = ChatRepository.nowIso()))
-        // Sending always returns the reader to the live edge (benchmark behaviour).
-        scope.launch { listState.animateScrollToItem(messages.lastIndex) }
+        // Sending always returns the reader to the live edge (benchmark
+        // behaviour) — and it PINS them there, because sending is the reader
+        // saying "show me the answer". Waiting one frame matters: the two rows
+        // were just added and have no height yet, so an immediate scroll lands
+        // on a bubble that is still zero pixels tall and leaves the transcript
+        // stranded exactly where it was.
+        pinnedToLiveEdge = true
+        scope.launch {
+            withFrameNanos { }
+            stickToBottom()
+        }
         dispatchedHere = true
         myStreamMessageId = assistantId
         // The stream lives in the app-scoped controller: this composition only
@@ -1662,7 +1713,7 @@ fun ChatScreen(
                 // Reading protection companion: appears only when the reader
                 // has scrolled away from the newest turn.
                 androidx.compose.animation.AnimatedVisibility(
-                    visible = !isAtBottom && messages.isNotEmpty(),
+                    visible = !pinnedToLiveEdge && messages.isNotEmpty(),
                     enter = fadeIn(),
                     exit = fadeOut(),
                     modifier = Modifier
@@ -1670,7 +1721,8 @@ fun ChatScreen(
                         .padding(end = GsMotion.spaceM, bottom = GsMotion.spaceS)
                 ) {
                     JumpToLatestPill(onClick = {
-                        scope.launch { listState.animateScrollToItem(messages.lastIndex) }
+                        pinnedToLiveEdge = true
+                        scope.launch { stickToBottom() }
                     })
                 }
             }
