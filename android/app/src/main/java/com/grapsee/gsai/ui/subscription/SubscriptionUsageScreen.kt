@@ -125,7 +125,7 @@ fun SubscriptionUsageScreen(
                 Spacer(Modifier.height(1.dp))
                 Text(
                     "Unlock more limits, advanced models, and premium features.",
-                    fontSize = 8.5.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 11.sp,
                     fontFamily = GsFonts.Product,
                     color = GsTheme.colors.textTertiary,
@@ -246,7 +246,7 @@ fun SubscriptionUsageScreen(
                 Spacer(Modifier.height(1.dp))
                 Text(
                     "One plan, $12.99/month: more usage, advanced models, exclusive features and priority support.",
-                    fontSize = 8.5.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 11.sp,
                     fontFamily = GsFonts.Product,
                     color = GsTheme.colors.textTertiary,
@@ -324,7 +324,7 @@ private fun UsageRow(
             Column(Modifier.weight(1f)) {
                 Text(
                     title,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     lineHeight = 12.sp,
                     fontWeight = FontWeight.Medium,
                     fontFamily = GsFonts.Product,
@@ -334,7 +334,7 @@ private fun UsageRow(
                 )
                 Text(
                     subtitle,
-                    fontSize = 8.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 10.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
@@ -344,7 +344,7 @@ private fun UsageRow(
             }
             Text(
                 if (used < 0) "—" else "$used / ${limitLabel(limit)}",
-                fontSize = 8.5.sp,
+                fontSize = 10.5.sp,
                 fontFamily = GsFonts.Product,
                 color = colors.textSecondary,
             )

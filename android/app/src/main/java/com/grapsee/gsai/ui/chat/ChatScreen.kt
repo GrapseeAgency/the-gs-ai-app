@@ -1886,7 +1886,7 @@ internal fun NexlyChatHeader(
                 Text(
                     text = "Your AI companion",
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         lineHeight = 12.sp
                     ),
                     color = NexlyInk.headerMeta,
@@ -2069,9 +2069,24 @@ internal fun UserMessage(
                                         Brush.verticalGradient(listOf(bubbleTop, bubbleBottom))
                                     )
                                     .border(
-                                        width = if (highlight) 2.dp else 0.5.dp,
-                                        color = if (highlight) colors.accentStrong
-                                        else Color.White.copy(alpha = 0.58f),
+                                        width = if (highlight) 2.dp else 0.9.dp,
+                                        brush = if (highlight) {
+                                            androidx.compose.ui.graphics.SolidColor(colors.accentStrong)
+                                        } else {
+                                            // A lit rim, brightest along the top
+                                            // edge — the cue that makes a fill
+                                            // read as glass instead of as a flat
+                                            // swatch. A single 0.5dp white hairline
+                                            // disappeared entirely on the pearl
+                                            // field, which is why the bubble looked
+                                            // like coloured paper.
+                                            Brush.verticalGradient(
+                                                listOf(
+                                                    Color.White.copy(alpha = if (dark) 0.26f else 0.98f),
+                                                    Color.White.copy(alpha = if (dark) 0.06f else 0.34f)
+                                                )
+                                            )
+                                        },
                                         shape = RoundedCornerShape(18.dp)
                                     )
                                     .combinedClickable(
@@ -2112,7 +2127,7 @@ internal fun UserMessage(
                                             if (stamp.isNotEmpty()) {
                                                 Text(
                                                     text = stamp,
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
                                                     color = bubbleMeta
                                                 )
                                             }
@@ -2501,7 +2516,7 @@ private fun ThinkingRow(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 9.5.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 12.sp
                 ),
                 color = NexlyInk.meta,
@@ -2732,7 +2747,7 @@ private fun JumpToLatestPill(onClick: () -> Unit) {
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AssistantMessage(
+internal fun AssistantMessage(
     message: ChatUiMessage,
     conversationId: String? = null,
     isSpeaking: Boolean,
@@ -3007,17 +3022,17 @@ private fun AssistantMessage(
                     // thing at a quarter of the visual weight — the words still
                     // exist, as the accessibility label and the long-press menu.
                     val stamp = remember(message.createdAt) { timeLabel(message.createdAt) }
-                    if (stamp.isNotEmpty()) {
-                        Spacer(Modifier.height(3.dp))
-                        Text(
-                            text = stamp,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.align(Alignment.End).padding(end = 2.dp)
-                        )
-                    }
-                    Spacer(Modifier.height(6.dp))
+                    // ONE footer line: the four verbs on the left, the turn's
+                    // time and the verdict on the right.
+                    //
+                    // The stamp used to be its own Text aligned to the COLUMN's
+                    // end — and the column is wider than the card — so it floated
+                    // alone in the gap beside the answer, above a second row of
+                    // controls that started somewhere else again. Three elements,
+                    // three alignments, no relationship. They share a baseline now.
+                    Spacer(Modifier.height(7.dp))
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -3030,11 +3045,17 @@ private fun AssistantMessage(
                             onClick = onReadAloud,
                         )
                         TurnActionIcon("share-3", "Share", onClick = onShare)
-                        Spacer(Modifier.width(2.dp))
+                        Spacer(Modifier.weight(1f))
+                        if (stamp.isNotEmpty()) {
+                            Text(
+                                text = stamp,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                color = GsTheme.colors.textTertiary,
+                            )
+                        }
                         TurnVerdict(
                             verdict = message.feedback,
                             onVerdict = onFeedback,
-                            modifier = Modifier.weight(1f),
                         )
                     }
                 } else {
@@ -3330,16 +3351,29 @@ private fun SheetActionRow(
  */
 @Composable
 private fun AssistantAvatar() {
+    val dark = LocalGsIsDark.current
     // The reference identity mark: a lilac sparkle set in a lit glass circle —
     // the same white-tile + glyph language the pre-chat header uses, not the
     // peach orb.
     Box(
         modifier = Modifier
             .size(38.dp)
-            .shadow(4.dp, CircleShape)
+            // A WHITE DISC ON A NEAR-WHITE PAGE IS NOT A MARK. It vanished, and
+            // what was left was a lilac sparkle floating in the margin with no
+            // container — one of the two "stray avatars" on every answer. The
+            // tile carries a lilac wash in light and a white lift in dark, so it
+            // reads as a tile in both.
+            .shadow(3.dp, CircleShape, ambientColor = Color(0x2A7C5CFF), spotColor = Color(0x2A7C5CFF))
             .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.94f), CircleShape)
-            .border(1.dp, Color.White, CircleShape)
+            .background(
+                if (dark) Color.White.copy(alpha = 0.10f) else Color(0xFFF1EBFF),
+                CircleShape
+            )
+            .border(
+                1.dp,
+                if (dark) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.95f),
+                CircleShape
+            )
             .semantics { contentDescription = "Nexly" },
         contentAlignment = Alignment.Center,
     ) {
@@ -3419,7 +3453,7 @@ private fun BubbleAction(icon: ImageVector, label: String, onClick: () -> Unit) 
  * onClickLabel and the long-press menu; the eye gets an icon.
  */
 @Composable
-private fun TurnActionIcon(
+internal fun TurnActionIcon(
     glyph: String,
     label: String,
     active: Boolean = false,
@@ -3458,7 +3492,7 @@ private fun TurnActionIcon(
  * reversible, and a mis-tap must never be permanent.
  */
 @Composable
-private fun TurnVerdict(
+internal fun TurnVerdict(
     verdict: String?,
     onVerdict: (String?) -> Unit,
     modifier: Modifier = Modifier,
@@ -3475,10 +3509,10 @@ private fun TurnVerdict(
                 "down" -> "Noted — I'll adjust"
                 else -> "Helpful?"
             },
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp),
             color = colors.textTertiary,
         )
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(7.dp))
         VerdictThumb(
             glyph = "thumb-up",
             label = if (verdict == "up") "Remove helpful vote" else "This answer was helpful",

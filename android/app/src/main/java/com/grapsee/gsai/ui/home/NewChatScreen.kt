@@ -116,7 +116,13 @@ fun NewChatScreen(
     }
     val rows by rememberConversationRows().collectAsStateWithLifecycle(initialValue = emptyList())
 
-    Box(Modifier.fillMaxSize()) {
+    // THE PAGE PAINTS ITS OWN GROUND. In light the pearl backdrop image does
+    // it; in dark there was NO fill at all, so the page inherited whatever was
+    // behind it — and every token on it (textPrimary, textSecondary) is a
+    // near-white in dark. The result was white type on a white page: "Nexly",
+    // "Start a New Chat", "Recent Chats" and the composer's placeholder were all
+    // literally invisible. A screen may not depend on an ancestor to be legible.
+    Box(Modifier.fillMaxSize().background(colors.appBackground)) {
         if (!dark && SettingsStore.backgroundStyle != "Solid") {
             Image(
                 painter = androidx.compose.ui.res.painterResource(com.grapsee.gsai.R.drawable.gs_home_backdrop),
@@ -159,8 +165,8 @@ fun NewChatScreen(
                 Spacer(Modifier.height(4.dp))
                 androidx.compose.material3.Text(
                     "Ask anything, get instant answers,\nor explore something new.",
-                    fontSize = 10.5.sp,
-                    lineHeight = 14.sp,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -194,8 +200,8 @@ fun NewChatScreen(
             if (recent.isEmpty()) {
                 androidx.compose.material3.Text(
                     "No conversations yet — your first one starts above.",
-                    fontSize = 9.sp,
-                    lineHeight = 12.sp,
+                    fontSize = 12.5.sp,
+                    lineHeight = 17.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
                     modifier = Modifier.padding(vertical = 10.dp),
@@ -287,8 +293,8 @@ private fun CompanionHeader(onOpenMenu: () -> Unit) {
             )
             androidx.compose.material3.Text(
                 "Your AI companion.\nAlways.",
-                fontSize = 9.5.sp,
-                lineHeight = 12.sp,
+                fontSize = 11.5.sp,
+                lineHeight = 14.sp,
                 fontFamily = GsFonts.Product,
                 color = colors.textSecondary,
             )
@@ -341,8 +347,8 @@ private fun Composer(
         Box {
             if (draft.isEmpty()) {
                 androidx.compose.material3.Text(
-                    "Type your message...",
-                    fontSize = 13.sp,
+                    "Type your message…",
+                    fontSize = 15.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
                 )
@@ -350,15 +356,20 @@ private fun Composer(
             BasicTextField(
                 value = draft,
                 onValueChange = onDraft,
+                // THE FIELD WAS 10.5sp — smaller than its own placeholder, and
+                // smaller than any text a phone is meant to show. It is the one
+                // place the reader types; it cannot be the smallest type on the
+                // page. 15sp with a 20dp line box matches the chat composer.
                 textStyle = TextStyle(
-                    fontSize = 10.5.sp,
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textPrimary,
                 ),
                 cursorBrush = SolidColor(colors.accent),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 20.dp)
+                    .heightIn(min = 22.dp)
                     .testTag("new-chat-input"),
                 maxLines = 4,
             )
@@ -470,7 +481,7 @@ private fun RowScope.ToolChip(
         Spacer(Modifier.width(9.dp))
         androidx.compose.material3.Text(
             label,
-            fontSize = 9.sp,
+            fontSize = 12.sp,
             fontFamily = GsFonts.Product,
             color = colors.textPrimary,
             maxLines = 1,
@@ -506,7 +517,7 @@ private fun RecentHeader(onViewAll: () -> Unit) {
         ) {
             androidx.compose.material3.Text(
                 "View all",
-                fontSize = 9.sp,
+                fontSize = 12.sp,
                 fontFamily = GsFonts.Product,
                 color = colors.textTertiary,
             )
@@ -538,7 +549,7 @@ private fun RecentRow(row: ConversationPreviewRow, now: Long, onClick: () -> Uni
         Column(Modifier.weight(1f)) {
             androidx.compose.material3.Text(
                 row.conversation.title.ifBlank { "Untitled chat" },
-                fontSize = 9.5.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = GsFonts.Product,
                 color = colors.textPrimary,
@@ -549,7 +560,7 @@ private fun RecentRow(row: ConversationPreviewRow, now: Long, onClick: () -> Uni
                 Spacer(Modifier.height(1.dp))
                 androidx.compose.material3.Text(
                     startPreview(row.lastMessage.orEmpty()),
-                    fontSize = 7.5.sp,
+                    fontSize = 11.5.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
                     maxLines = 1,
@@ -560,7 +571,7 @@ private fun RecentRow(row: ConversationPreviewRow, now: Long, onClick: () -> Uni
         Spacer(Modifier.width(8.dp))
         androidx.compose.material3.Text(
             startTimeLabel(row.conversation.updatedAt, now),
-            fontSize = 7.5.sp,
+            fontSize = 11.sp,
             fontFamily = GsFonts.Product,
             color = colors.textTertiary,
             modifier = Modifier.widthIn(min = 34.dp),
@@ -583,11 +594,18 @@ private fun ExploreModelsCard(onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .testTag("explore-models")
+            // In dark the entry was a saturated orange bar — the loudest thing on
+            // a page whose whole language is quiet glass. A tint of the accent
+            // (not the accent's fill) keeps it an invitation instead of a banner.
             .background(
-                if (dark) colors.accentSoft.copy(alpha = 0.55f) else GsWellTone.Lilac.wash.copy(alpha = 0.55f),
+                if (dark) colors.accent.copy(alpha = 0.10f) else GsWellTone.Lilac.wash.copy(alpha = 0.55f),
                 RoundedCornerShape(18.dp),
             )
-            .border(1.dp, Color.White.copy(alpha = 0.62f), RoundedCornerShape(18.dp))
+            .border(
+                1.dp,
+                if (dark) colors.accent.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.62f),
+                RoundedCornerShape(18.dp),
+            )
             .clickable(role = Role.Button, onClickLabel = "Explore AI Models", onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -597,7 +615,7 @@ private fun ExploreModelsCard(onClick: () -> Unit) {
         Column(Modifier.weight(1f)) {
             androidx.compose.material3.Text(
                 "Explore AI Models",
-                fontSize = 10.sp,
+                fontSize = 13.5.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = GsFonts.Product,
                 // The mock inks this entry in the accent, not the row ink;
@@ -606,7 +624,7 @@ private fun ExploreModelsCard(onClick: () -> Unit) {
             )
             androidx.compose.material3.Text(
                 "Choose the right model for your needs.",
-                fontSize = 8.sp,
+                fontSize = 11.5.sp,
                 fontFamily = GsFonts.Product,
                 color = colors.textTertiary,
                 maxLines = 1,

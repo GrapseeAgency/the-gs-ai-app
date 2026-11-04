@@ -1397,7 +1397,7 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
     val spanX = geom.spanX
     val spanY = geom.spanY
     val measurer = rememberTextMeasurer()
-    val axisStyle = TextStyle(fontSize = 9.sp, color = GsTheme.colors.textTertiary)
+    val axisStyle = TextStyle(fontSize = 10.5.sp, color = GsTheme.colors.textTertiary)
     val probe = rememberChartProbe()
     val ink = GsTheme.colors.textPrimary
     val xLabels = remember(w.series, w.labels) {
@@ -1591,8 +1591,8 @@ private fun BarChart(w: ChartWidget) {
     }
     val axisMax = remember(maxV) { niceStep(maxV / 3f) * 3f }
     val measurer = rememberTextMeasurer()
-    val axisStyle = TextStyle(fontSize = 9.sp, color = c.textTertiary)
-    val valueStyle = TextStyle(fontSize = 10.sp, color = c.textSecondary, fontWeight = FontWeight.SemiBold)
+    val axisStyle = TextStyle(fontSize = 10.5.sp, color = c.textTertiary)
+    val valueStyle = TextStyle(fontSize = 11.sp, color = c.textSecondary, fontWeight = FontWeight.SemiBold)
     // Value labels only when they cannot collide: one series, at most eight bars.
     val showValues = w.series.size == 1 && labels.size <= 8
 

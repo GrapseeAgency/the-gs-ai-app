@@ -440,7 +440,7 @@ private fun ExplorePageHeader(
             )
             Text(
                 "AI Companion",
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 fontFamily = GsFonts.Product,
                 color = inkMuted,
             )
@@ -907,7 +907,7 @@ fun ExploreScreen(
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 "Discover",
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
                                 fontFamily = GsFonts.Product,
                                 color = ExploreTones.DiscoverInk,
@@ -926,7 +926,7 @@ fun ExploreScreen(
                         Spacer(Modifier.height(7.dp))
                         Text(
                             "Powerful tools, creative features, and more ways to bring your ideas to life — all in one place.",
-                            fontSize = 10.5.sp,
+                            fontSize = 11.sp,
                             lineHeight = 14.sp,
                             fontFamily = GsFonts.Product,
                             color = inkBody,
@@ -1062,7 +1062,7 @@ private fun ExploreToolCardHorizontal(
         Spacer(Modifier.height(7.dp))
         Text(
             tool.subtitle,
-            fontSize = 10.sp,
+            fontSize = 11.sp,
             lineHeight = 13.sp,
             fontFamily = GsFonts.Product,
             color = inkMuted,
@@ -1139,7 +1139,7 @@ private fun ExploreCollectionCard(
             Spacer(Modifier.height(2.dp))
             Text(
                 collection.subtitle,
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 fontFamily = GsFonts.Product,
                 color = inkMuted,
                 maxLines = 1,
@@ -1299,7 +1299,7 @@ private fun ExploreFeaturedCard(
                 Spacer(Modifier.height(2.dp))
                 Text(
                     journey.subtitle,
-                    fontSize = 10.5.sp,
+                    fontSize = 11.sp,
                     lineHeight = 14.sp,
                     fontFamily = GsFonts.Product,
                     color = inkMuted,
@@ -1416,7 +1416,7 @@ fun DiscoverScreen(
                     Column(Modifier.padding(13.dp)) {
                         Text(
                             "EXPLORE",
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = GsFonts.Product,
                             color = inkMuted,
@@ -1434,7 +1434,7 @@ fun DiscoverScreen(
                         Spacer(Modifier.height(7.dp))
                         Text(
                             "AI tools, creative features and smart experiences — all in one place.",
-                            fontSize = 10.5.sp,
+                            fontSize = 11.sp,
                             lineHeight = 14.sp,
                             fontFamily = GsFonts.Product,
                             color = inkBody,
@@ -1713,7 +1713,7 @@ private fun DiscoverToolCardVertical(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 tool.subtitle,
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 lineHeight = 13.sp,
                 fontFamily = GsFonts.Product,
                 color = inkMuted,
@@ -1770,7 +1770,7 @@ private fun ExplorePromptRow(
             Spacer(Modifier.height(2.dp))
             Text(
                 tool.subtitle,
-                fontSize = 10.5.sp,
+                fontSize = 11.sp,
                 fontFamily = GsFonts.Product,
                 color = inkMuted,
                 maxLines = 1,
@@ -1805,7 +1805,7 @@ private fun ExploreEmptySearch(
         Spacer(Modifier.height(5.dp))
         Text(
             "I can still help — ask me directly and we'll figure it out together.",
-            fontSize = 10.5.sp,
+            fontSize = 11.sp,
             lineHeight = 14.sp,
             fontFamily = GsFonts.Product,
             color = inkMuted,

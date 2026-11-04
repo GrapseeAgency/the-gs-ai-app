@@ -158,7 +158,7 @@ fun AccountSecurityScreen(
                     Spacer(Modifier.height(1.dp))
                     Text(
                         email.ifBlank { "No Grapsee address on this device" },
-                        fontSize = 9.sp,
+                        fontSize = 10.5.sp,
                         fontFamily = GsFonts.Product,
                         color = GsTheme.colors.textTertiary,
                         maxLines = 1,
@@ -300,7 +300,7 @@ fun AccountSecurityScreen(
                         Spacer(Modifier.width(4.dp))
                         Text(
                             "This device",
-                            fontSize = 8.sp,
+                            fontSize = 10.5.sp,
                             fontFamily = GsFonts.Product,
                             color = GsTheme.colors.textTertiary,
                         )
@@ -419,7 +419,7 @@ private fun PlanPill() {
         Spacer(Modifier.width(3.dp))
         Text(
             PlanStore.planName,
-            fontSize = 8.sp,
+            fontSize = 10.5.sp,
             fontWeight = FontWeight.Medium,
             fontFamily = GsFonts.Product,
             color = tone.ink,

@@ -220,7 +220,7 @@ fun DataExportAccountDeletionScreen(
                 Spacer(Modifier.height(1.dp))
                 Text(
                     "Choose your preferred file format for export.",
-                    fontSize = 8.5.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 11.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
@@ -398,7 +398,7 @@ private fun RefActionPill(label: String, modifier: Modifier = Modifier) {
     ) {
         Text(
             label,
-            fontSize = 9.5.sp,
+            fontSize = 10.5.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = GsFonts.Product,
             color = colors.accentStrong,
@@ -484,7 +484,7 @@ private fun ExportFormatTile(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 format.label,
-                fontSize = 10.5.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = GsFonts.Product,
                 color = colors.textPrimary,
@@ -510,7 +510,7 @@ private fun ExportFormatTile(
         Spacer(Modifier.height(3.dp))
         Text(
             format.caption,
-            fontSize = 8.sp,
+            fontSize = 10.5.sp,
             lineHeight = 10.sp,
             fontFamily = GsFonts.Product,
             color = colors.textTertiary,
@@ -587,7 +587,7 @@ private fun DeleteAccountCard(
                 Spacer(Modifier.height(1.dp))
                 Text(
                     "This will remove your conversations, saved items, files and account details from this device, and sign you out. This action cannot be undone.",
-                    fontSize = 8.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 10.5.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
@@ -639,7 +639,7 @@ private fun DeleteAccountCard(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "I understand that this action is permanent and I want to delete my account.",
-                    fontSize = 8.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 10.5.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textSecondary,
@@ -675,7 +675,7 @@ private fun DeleteAccountCard(
                 Spacer(Modifier.width(6.dp))
                 Text(
                     "Delete Account",
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = GsFonts.Product,
                     color = Color.White.copy(alpha = 0.92f),

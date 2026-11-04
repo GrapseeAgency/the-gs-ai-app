@@ -163,7 +163,7 @@ fun RefTagPill(
     ) {
         Text(
             text = text,
-            fontSize = 7.sp,
+            fontSize = 10.5.sp,
             fontWeight = FontWeight.Medium,
             fontFamily = GsFonts.Product,
             color = tone,
@@ -342,7 +342,7 @@ fun RefSheetTile(
         if (centered) Spacer(Modifier.height(6.dp)) else Spacer(Modifier.height(9.dp))
         Text(
             title,
-            fontSize = 10.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             fontFamily = GsFonts.Product,
             color = colors.textPrimary,
@@ -353,7 +353,7 @@ fun RefSheetTile(
         Spacer(Modifier.height(1.dp))
         Text(
             caption,
-            fontSize = 8.sp,
+            fontSize = 10.5.sp,
             lineHeight = 10.sp,
             fontFamily = GsFonts.Product,
             color = colors.textTertiary,
@@ -445,7 +445,7 @@ fun RefSheetRow(
         Column(Modifier.weight(1f)) {
             Text(
                 title,
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 lineHeight = 12.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = GsFonts.Product,
@@ -457,7 +457,7 @@ fun RefSheetRow(
                 Spacer(Modifier.height(1.dp))
                 Text(
                     subtitle,
-                    fontSize = 8.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 10.5.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
@@ -509,7 +509,7 @@ fun RefSheetToggle(
         Column(Modifier.weight(1f)) {
             Text(
                 title,
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 lineHeight = 12.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = GsFonts.Product,
@@ -521,7 +521,7 @@ fun RefSheetToggle(
                 Spacer(Modifier.height(1.dp))
                 Text(
                     subtitle,
-                    fontSize = 8.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 10.5.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
@@ -621,7 +621,7 @@ fun RefSheetPillButton(
     ) {
         Text(
             label,
-            fontSize = 9.sp,
+            fontSize = 10.5.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = GsFonts.Product,
             color = colors.textPrimary,
@@ -726,13 +726,13 @@ fun RefFactRow(
         Text(
             label,
             modifier = Modifier.width(labelWidth),
-            fontSize = 9.5.sp,
+            fontSize = 10.5.sp,
             fontFamily = GsFonts.Product,
             color = colors.textSecondary,
         )
         Text(
             value,
-            fontSize = 9.5.sp,
+            fontSize = 10.5.sp,
             fontWeight = FontWeight.Medium,
             fontFamily = GsFonts.Product,
             color = colors.textPrimary,

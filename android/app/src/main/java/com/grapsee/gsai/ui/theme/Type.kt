@@ -149,7 +149,7 @@ val GsTypography = Typography(
     labelSmall = TextStyle(
         fontFamily = GsFonts.Product,
         fontWeight = FontWeight.Medium,
-        fontSize = 10.5.sp,
+        fontSize = 11.sp,
         lineHeight = 14.sp,
         letterSpacing = 0.25.sp
     )

@@ -136,7 +136,7 @@ fun ProfileScreen(
                         ) {
                             Text(
                                 com.grapsee.gsai.data.PlanStore.planName,
-                                fontSize = 9.sp,
+                                fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Medium,
                                 fontFamily = GsFonts.Product,
                                 color = androidx.compose.ui.graphics.Color(0xFF8A4A1F),

@@ -237,7 +237,7 @@ fun HelpSupportScreen(
                         .weight(1f)
                         .testTag("help-search"),
                     textStyle = TextStyle(
-                        fontSize = 10.5.sp,
+                        fontSize = 11.sp,
                         fontFamily = GsFonts.Product,
                         color = colors.textPrimary,
                     ),
@@ -245,7 +245,7 @@ fun HelpSupportScreen(
                         if (query.isBlank()) {
                             Text(
                                 "Search for help, topics, or keywords…",
-                                fontSize = 10.5.sp,
+                                fontSize = 11.sp,
                                 fontFamily = GsFonts.Product,
                                 color = colors.textTertiary,
                                 maxLines = 1,
@@ -282,7 +282,7 @@ fun HelpSupportScreen(
                 Spacer(Modifier.height(1.dp))
                 Text(
                     "Try our AI assistant for instant answers to common questions.",
-                    fontSize = 8.5.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 11.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
@@ -338,7 +338,7 @@ fun HelpSupportScreen(
                         } else {
                             "No topic matches \"$query\". Try a shorter word, or contact support below."
                         },
-                        fontSize = 9.sp,
+                        fontSize = 10.5.sp,
                         lineHeight = 12.sp,
                         fontFamily = GsFonts.Product,
                         color = colors.textTertiary,
@@ -373,7 +373,7 @@ fun HelpSupportScreen(
                     )
                     Text(
                         "Our support team is available 24/7 to assist you.",
-                        fontSize = 8.5.sp,
+                        fontSize = 10.5.sp,
                         fontFamily = GsFonts.Product,
                         color = colors.textTertiary,
                     )
@@ -433,7 +433,7 @@ fun HelpSupportScreen(
                 Spacer(Modifier.width(6.dp))
                 Text(
                     "Your satisfaction matters to us",
-                    fontSize = 9.sp,
+                    fontSize = 10.5.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
                 )
@@ -584,7 +584,7 @@ private fun DialogList(
         title = {
             Column {
                 Text(title, fontFamily = GsFonts.Product, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                Text(subtitle, fontFamily = GsFonts.Product, fontSize = 9.5.sp, color = GsTheme.colors.textTertiary)
+                Text(subtitle, fontFamily = GsFonts.Product, fontSize = 10.5.sp, color = GsTheme.colors.textTertiary)
             }
         },
         text = {
@@ -603,7 +603,7 @@ private fun DialogList(
                         Column(Modifier.weight(1f)) {
                             Text(
                                 row.title,
-                                fontSize = 10.5.sp,
+                                fontSize = 11.sp,
                                 fontFamily = GsFonts.Product,
                                 color = GsTheme.colors.textPrimary,
                                 maxLines = 1,
@@ -611,7 +611,7 @@ private fun DialogList(
                             )
                             Text(
                                 row.subtitle,
-                                fontSize = 8.5.sp,
+                                fontSize = 10.5.sp,
                                 lineHeight = 11.sp,
                                 fontFamily = GsFonts.Product,
                                 color = GsTheme.colors.textTertiary,

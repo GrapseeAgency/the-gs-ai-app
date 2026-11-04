@@ -787,7 +787,7 @@ private fun ReasoningTile(
         )
         Text(
             description,
-            fontSize = 8.sp,
+            fontSize = 10.5.sp,
             lineHeight = 10.5.sp,
             fontFamily = GsFonts.Product,
             color = colors.textTertiary,
@@ -804,7 +804,7 @@ private fun ReasoningTile(
         Spacer(Modifier.height(2.dp))
         Text(
             timing,
-            fontSize = 9.sp,
+            fontSize = 10.5.sp,
             fontFamily = GsFonts.Product,
             color = colors.textTertiary,
             maxLines = 1,
@@ -885,7 +885,7 @@ private fun ModelChoiceRow(
                     Spacer(Modifier.width(8.dp))
                     Text(
                         badge,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         fontFamily = GsFonts.Product,
                         color = colors.accent,
                         modifier = Modifier
@@ -1035,7 +1035,7 @@ fun MemorySettingsScreen(
                             Spacer(Modifier.width(5.dp))
                             Text(
                                 if (memoryOn) "Memory is ON" else "Memory is OFF",
-                                fontSize = 10.5.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
                                 fontFamily = GsFonts.Product,
                                 color = Color(0xFF177A50),
@@ -1091,7 +1091,7 @@ fun MemorySettingsScreen(
                         trailing = {
                             Text(
                                 memoryDate(item.createdAt),
-                                fontSize = 10.5.sp,
+                                fontSize = 11.sp,
                                 fontFamily = GsFonts.Product,
                                 color = colors.textTertiary,
                             )

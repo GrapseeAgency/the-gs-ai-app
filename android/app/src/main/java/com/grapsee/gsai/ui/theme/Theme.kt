@@ -6,6 +6,8 @@ import android.content.ContextWrapper
 import android.view.Window
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -116,8 +118,24 @@ fun TheGsAiTheme(
         MaterialTheme(
             colorScheme = gsColors.toMaterialScheme(dark),
             typography = GsTypography, // font scale flows through LocalDensity
-            content = content,
-        )
+        ) {
+            // THE APP PAINTS ITS OWN GROUND, ONCE.
+            //
+            // Full-bleed pages that draw their own artwork (the pre-chat hero,
+            // the model picker) simply did not fill a background, so in dark mode
+            // they inherited whatever was behind them — and every text token in
+            // dark is near-white. The result was white type on a white page:
+            // titles, model names, placeholders and row labels were literally
+            // invisible. Fixing that screen by screen is how it stayed broken;
+            // the window canvas belongs to the theme, not to each page's memory.
+            androidx.compose.foundation.layout.Box(
+                modifier = androidx.compose.ui.Modifier
+                    .fillMaxSize()
+                    .background(gsColors.appBackground)
+            ) {
+                content()
+            }
+        }
     }
 }
 

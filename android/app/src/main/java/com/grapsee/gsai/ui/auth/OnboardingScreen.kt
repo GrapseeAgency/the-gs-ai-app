@@ -191,7 +191,7 @@ fun OnboardingScreen(onFinished: () -> Unit) {
             Text(
                 text = "STEP ${stepIndex + 1} OF ${SetupStep.entries.size}",
                 style = MaterialTheme.typography.labelMedium.copy(
-                    fontSize = 10.5.sp,
+                    fontSize = 11.sp,
                     letterSpacing = 1.3.sp,
                     fontWeight = FontWeight.Medium
                 ),
@@ -347,7 +347,7 @@ private fun StepHeading(eyebrow: String, title: String, caption: String) {
     Text(
         text = eyebrow.uppercase(),
         style = MaterialTheme.typography.labelMedium.copy(
-            fontSize = 10.5.sp,
+            fontSize = 11.sp,
             letterSpacing = 1.4.sp,
             fontWeight = FontWeight.SemiBold
         ),

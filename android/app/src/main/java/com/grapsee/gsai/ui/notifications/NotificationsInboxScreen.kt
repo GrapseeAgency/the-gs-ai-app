@@ -190,7 +190,7 @@ fun NotificationsInboxScreen(
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 "Mark all as read",
-                                fontSize = 9.sp,
+                                fontSize = 10.5.sp,
                                 fontFamily = GsFonts.Product,
                                 color = if (unread > 0) colors.textSecondary else colors.textTertiary.copy(alpha = 0.5f),
                             )
@@ -265,13 +265,13 @@ fun NotificationsInboxScreen(
                             Text(
                                 item.label,
                                 modifier = Modifier.weight(1f),
-                                fontSize = 10.5.sp,
+                                fontSize = 11.sp,
                                 fontFamily = GsFonts.Product,
                                 color = colors.textPrimary,
                             )
                             Text(
                                 "${counts[item.id] ?: 0}",
-                                fontSize = 9.sp,
+                                fontSize = 10.5.sp,
                                 fontFamily = GsFonts.Product,
                                 color = colors.textTertiary,
                             )
@@ -322,7 +322,7 @@ private fun InboxChip(
         Spacer(Modifier.height(5.dp))
         Text(
             tab.label,
-            fontSize = 9.sp,
+            fontSize = 10.5.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             fontFamily = GsFonts.Product,
             color = colors.textPrimary,
@@ -344,7 +344,7 @@ private fun InboxChip(
         ) {
             Text(
                 "$count",
-                fontSize = 8.sp,
+                fontSize = 10.5.sp,
                 fontFamily = GsFonts.Product,
                 color = colors.textSecondary,
             )
@@ -392,7 +392,7 @@ private fun NoticeRow(entry: NoticeInbox.Entry, now: Long, onClick: () -> Unit) 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     entry.title,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     fontFamily = GsFonts.Product,
                     color = colors.textPrimary,
@@ -405,7 +405,7 @@ private fun NoticeRow(entry: NoticeInbox.Entry, now: Long, onClick: () -> Unit) 
             Spacer(Modifier.height(1.dp))
             Text(
                 entry.body,
-                fontSize = 8.sp,
+                fontSize = 10.5.sp,
                 lineHeight = 10.5.sp,
                 fontFamily = GsFonts.Product,
                 color = colors.textTertiary,
@@ -417,7 +417,7 @@ private fun NoticeRow(entry: NoticeInbox.Entry, now: Long, onClick: () -> Unit) 
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 relativeTime(entry.createdAtMillis, now),
-                fontSize = 8.5.sp,
+                fontSize = 10.5.sp,
                 fontFamily = GsFonts.Product,
                 color = colors.textTertiary,
             )
@@ -473,7 +473,7 @@ private fun AllCaughtUpCard(body: String) {
                 CaughtUpRule()
                 Text(
                     "You're all caught up!",
-                    fontSize = 10.5.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     fontFamily = GsFonts.Product,
                     color = colors.textSecondary,
@@ -483,7 +483,7 @@ private fun AllCaughtUpCard(body: String) {
             }
             Text(
                 body,
-                fontSize = 8.5.sp,
+                fontSize = 10.5.sp,
                 fontFamily = GsFonts.Product,
                 color = colors.textTertiary,
             )
@@ -523,7 +523,7 @@ private fun NoticeDialog(
                 Text(
                     "${style.label} • ${relativeTime(notice.createdAtMillis, now)}",
                     fontFamily = GsFonts.Product,
-                    fontSize = 9.5.sp,
+                    fontSize = 10.5.sp,
                     color = colors.textTertiary,
                 )
             }

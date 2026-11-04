@@ -145,7 +145,7 @@ fun ConnectedAppsScreen(
                 Spacer(Modifier.height(1.dp))
                 Text(
                     "No integration is wired in this build yet — connecting an app starts with a provider adapter.",
-                    fontSize = 8.5.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 11.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
@@ -255,7 +255,7 @@ fun ConnectedAppsScreen(
             Column(Modifier.weight(1f)) {
                 Text(
                     "Your data, your control",
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     lineHeight = 12.sp,
                     fontWeight = FontWeight.Medium,
                     fontFamily = GsFonts.Product,
@@ -264,7 +264,7 @@ fun ConnectedAppsScreen(
                 Spacer(Modifier.height(1.dp))
                 Text(
                     "When an app is connected, you decide what it can read and you can revoke it here at any time.",
-                    fontSize = 8.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 10.5.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
@@ -289,14 +289,14 @@ fun ConnectedAppsScreen(
             Column(Modifier.weight(1f)) {
                 Text(
                     "Connect New App or Service",
-                    fontSize = 10.5.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     fontFamily = GsFonts.Product,
                     color = colors.textPrimary,
                 )
                 Text(
                     "Integration support is not available in this build.",
-                    fontSize = 8.5.sp,
+                    fontSize = 10.5.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
                 )
@@ -414,7 +414,7 @@ fun ConnectedAppsScreen(
                     Text(
                         "None can be connected in this build",
                         fontFamily = GsFonts.Product,
-                        fontSize = 9.5.sp,
+                        fontSize = 10.5.sp,
                         color = colors.textTertiary,
                     )
                 }
@@ -438,13 +438,13 @@ fun ConnectedAppsScreen(
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     provider.name,
-                                    fontSize = 10.5.sp,
+                                    fontSize = 11.sp,
                                     fontFamily = GsFonts.Product,
                                     color = colors.textPrimary,
                                 )
                                 Text(
                                     provider.scope,
-                                    fontSize = 8.5.sp,
+                                    fontSize = 10.5.sp,
                                     fontFamily = GsFonts.Product,
                                     color = colors.textTertiary,
                                 )
@@ -477,7 +477,7 @@ private fun RefConnectPill(onClick: () -> Unit) {
         Spacer(Modifier.width(3.dp))
         Text(
             "Connect",
-            fontSize = 8.5.sp,
+            fontSize = 10.5.sp,
             fontWeight = FontWeight.Medium,
             fontFamily = GsFonts.Product,
             color = colors.textPrimary,

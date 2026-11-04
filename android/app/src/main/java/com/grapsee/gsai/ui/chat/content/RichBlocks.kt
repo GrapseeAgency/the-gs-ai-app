@@ -288,17 +288,22 @@ private fun NexlyAssistantBlocks(
     // The sheet keeps the assistant cards narrower than the phone: about 69%
     // of the device width, so the pearl backdrop stays visible at the right.
     val wide = LocalConfiguration.current.screenWidthDp >= 600
-    val cardMax = if (wide) 340.dp else 286.dp
-    val planMax = if (wide) 350.dp else 290.dp
+    // The card used to be hard-capped at 286dp on EVERY phone. On a 393dp
+    // device that left a 28dp dead column at the right, and on a 411dp one 46dp:
+    // the answer stopped short of the question above it, and the action row
+    // underneath ran wider than the card it belonged to. A card is as wide as
+    // the reading column; only a tablet needs a cap.
+    val cardMax = if (wide) 520.dp else 2000.dp
+    val planMax = if (wide) 540.dp else 2000.dp
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         groups.forEach { group ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
-            ) {
-                NexlyAssistantOrb(size = 28.dp)
-                Spacer(Modifier.width(9.dp))
-                Box(Modifier.weight(1f)) {
+            // ONE identity mark per turn, not two. This row used to draw its own
+            // 28dp orb AND the transcript row above drew a 38dp avatar, so every
+            // answer began with two sparkles at different sizes and different
+            // offsets — the clearest "assembled by two people" tell on the page.
+            // The transcript owns identity (it knows the turn grouping); the
+            // blocks own content.
+            Box(modifier = Modifier.fillMaxWidth()) {
                     when (group) {
                         is NexlyGroup.Plan -> NexlyPlanCard(
                             plan = group.block.plan,
@@ -360,7 +365,6 @@ private fun NexlyAssistantBlocks(
                         }
                     }
                 }
-            }
         }
         if (isStreaming && blocks.isEmpty() && groups.isEmpty()) {
             StreamingCaret()

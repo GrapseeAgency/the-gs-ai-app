@@ -432,14 +432,21 @@ internal val LocalNexlyCodeWrap = androidx.compose.runtime.staticCompositionLoca
  * the reference: every line was at maximum contrast.
  */
 internal object NexlyInk {
-    val prose = Color(0xFF4A4750)
-    val title = Color(0xFF555860)
-    val row = Color(0xFF5E6068)
-    val label = Color(0xFF4B4E58)
-    val meta = Color(0xFF8C8E96)
-    val header = Color(0xFF3B3A40)
-    val headerMeta = Color(0xFF7E7E86)
-    val peach = Color(0xFFD57F4C)
+    // THE INK FOLLOWS THE THEME. Every value here used to be a fixed mid-grey,
+    // chosen against the light pearl field. In dark mode the same grey sat on a
+    // 0.44-alpha dark card: roughly 1.6:1, which is why a dark chat answered in
+    // what looked like grey smoke. The light values are unchanged; the dark ones
+    // are the same hues lifted until the body text clears AA on the dark card.
+    private val dark: Boolean @Composable get() = LocalGsIsDark.current
+
+    val prose: Color @Composable get() = if (dark) Color(0xFFEDEAF6) else Color(0xFF4A4750)
+    val title: Color @Composable get() = if (dark) Color(0xFFF4F1FA) else Color(0xFF555860)
+    val row: Color @Composable get() = if (dark) Color(0xFFDDD8EA) else Color(0xFF5E6068)
+    val label: Color @Composable get() = if (dark) Color(0xFFE6E1F2) else Color(0xFF4B4E58)
+    val meta: Color @Composable get() = if (dark) Color(0xFFA9A3BD) else Color(0xFF8C8E96)
+    val header: Color @Composable get() = if (dark) Color(0xFFF6F3FC) else Color(0xFF3B3A40)
+    val headerMeta: Color @Composable get() = if (dark) Color(0xFFA9A3BD) else Color(0xFF7E7E86)
+    val peach: Color @Composable get() = if (dark) Color(0xFFE8A87C) else Color(0xFFD57F4C)
 }
 
 /**
@@ -460,19 +467,33 @@ internal fun Modifier.nexlyGlassCard(corner: Dp = 20.dp): Modifier {
         )
         .clip(shape)
         .background(
+            // THE CARD IS FROSTED GLASS, NOT A BEIGE SLAB. The old fill was a
+            // warm grey (F3E8E4) at 0.62 over a cool lilac backdrop, which reads
+            // as mud — the "dark mud" complaint, one layer up. Frost is the
+            // backdrop seen through a white veil: high white alpha in light,
+            // a faint white lift in dark, so the bloom still shows through and
+            // the card never turns into a grey rectangle.
             Brush.verticalGradient(
                 listOf(
-                    (if (dark) GsTheme.colors.surface else Color(0xFFF3E8E4)).copy(
-                        alpha = if (dark) 0.44f else 0.62f
-                    ),
-                    (if (dark) GsTheme.colors.surface else Color(0xFFEDDFDB)).copy(
-                        alpha = if (dark) 0.28f else 0.46f
-                    )
+                    Color.White.copy(alpha = if (dark) 0.10f else 0.78f),
+                    Color.White.copy(alpha = if (dark) 0.055f else 0.60f)
                 )
             ),
             shape
         )
-        .border(0.8.dp, Color.White.copy(alpha = if (dark) 0.18f else 0.72f), shape)
+        // The lit rim, brightest at the top edge — the same optical cue the app's
+        // gsGlass material uses, so a chat card and a settings card are the same
+        // substance.
+        .border(
+            width = 0.9.dp,
+            brush = Brush.verticalGradient(
+                listOf(
+                    Color.White.copy(alpha = if (dark) 0.22f else 0.95f),
+                    Color.White.copy(alpha = if (dark) 0.07f else 0.45f)
+                )
+            ),
+            shape = shape
+        )
 }
 
 private fun tone(name: String): NexlyTone = when (name) {
@@ -722,7 +743,7 @@ fun NexlyPlanCard(
                             Text(
                                 text = row.time,
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 9.5.sp,
+                                    fontSize = 10.5.sp,
                                     lineHeight = 11.5.sp,
                                     fontWeight = FontWeight.Normal,
                                     textDecoration = if (done) TextDecoration.LineThrough else null
@@ -793,7 +814,7 @@ fun NexlyPlanCard(
                 if (stamp != null) {
                     Text(
                         text = stamp,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
                         color = NexlyInk.meta
                     )
                 }
@@ -810,7 +831,7 @@ fun NexlyPlanCard(
             Text(
                 text = "Was this plan helpful?",
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 9.5.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 12.sp
                 ),
                 color = NexlyInk.meta

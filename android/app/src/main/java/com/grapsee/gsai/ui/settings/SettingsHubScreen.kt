@@ -167,7 +167,7 @@ fun SettingsHubScreen(
                         ) {
                             Text(
                                 com.grapsee.gsai.data.PlanStore.planName,
-                                fontSize = 9.sp,
+                                fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Medium,
                                 fontFamily = GsFonts.Product,
                                 color = Color(0xFF8A4A1F),
@@ -207,7 +207,7 @@ fun SettingsHubScreen(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         "Get more power, faster responses, and exclusive features.",
-                        fontSize = 9.5.sp,
+                        fontSize = 10.5.sp,
                         lineHeight = 15.sp,
                         fontFamily = GsFonts.Product,
                         color = colors.textTertiary,

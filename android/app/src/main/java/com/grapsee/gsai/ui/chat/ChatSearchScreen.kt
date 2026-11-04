@@ -639,7 +639,7 @@ private fun ViewAllLink(onClick: () -> Unit) {
     ) {
         Text(
             "View all",
-            fontSize = 10.5.sp,
+            fontSize = 11.sp,
             fontFamily = com.grapsee.gsai.ui.theme.GsFonts.Product,
             color = colors.accent,
         )

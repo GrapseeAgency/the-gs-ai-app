@@ -177,8 +177,8 @@ android {
 
         minSdk = 26
         targetSdk = 35
-        versionCode = 133
-        versionName = "0.86.10"
+        versionCode = 134
+        versionName = "0.86.11"
 
 
         // REAL transport origin — applies to EVERY build type (v0.66.0 fix).

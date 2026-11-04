@@ -5823,3 +5823,23 @@ Work Log:
 - The attach sheet rises to FULL height from the bottom (skipPartiallyExpanded) with a reachable close and a scrolling body.
 - iOS parity: the composer morph (NexlyChatShell) and the icon-only action row (ChatDetailView). The iOS feedback loop is NOT wired — its ChatMessage has no server id, which is the prerequisite; that is the next task, not a silent omission.
 - Android 426/426 (13 new), compile clean, backend tsc 0. versionCode 133 / 0.86.10.
+
+---
+Task ID: build-0.86.11-render-truth
+Agent: main
+Task: The owner said nothing had changed and that the app reads like a sick AI app. He was right — every previous pass argued from source and had never LOOKED at the pixels.
+
+Work Log:
+- BUILT THE EYE FIRST. `ChatDefectProbeTest` renders the real UserMessage, the real AssistantMessage, the real action row and the real pre-chat page to PNG through Roborazzi, so a claim about the UI can be checked against an image instead of a comment.
+- WHAT THE FIRST RENDER SHOWED (all fixed):
+  1. Every answer began with TWO identity marks — a 38dp avatar from the transcript row and a 28dp orb from the blocks — at different sizes and offsets. The orb is gone; identity belongs to the transcript, content to the blocks.
+  2. The turn's timestamp floated alone at the far right, outside a card that ended 46dp earlier, above a second row of controls that started somewhere else. Three elements, three alignments. They share one footer baseline now.
+  3. The answer card was hard-capped at 286dp on every phone: a dead column at the right on any device, and a card narrower than the question above it.
+  4. The card fill was a warm grey (F3E8E4) at 0.62 over a cool lilac backdrop — mud. It is now a white veil (0.78/0.60) with a top-lit rim gradient, the same optical cue as gsGlass.
+  5. `NexlyInk` was a fixed mid-grey in both themes: in dark the answer was grey smoke on a 0.44-alpha panel. Every ink now follows the theme.
+  6. The pre-chat page and the model picker painted NO background in dark, so near-white text sat on white: "Nexly", "Start a New Chat", "Model Selection", every model name, every placeholder — invisible. The ground now belongs to TheGsAiTheme, once, instead of to each page's memory.
+  7. Type was collapsed to fit a mock: 105 sites below 11sp, including 7.5sp timestamps, 8sp subtitles and a 10.5sp composer INPUT that was smaller than its own placeholder. Floor raised app-wide; the pre-chat composer is 15sp.
+  8. The user bubble's rim was a 0.5dp white hairline that vanished on the pearl field — it read as coloured paper. Now a top-lit gradient rim.
+  9. The assistant avatar was a white disc on a near-white page: the disc disappeared and left a stray sparkle in the margin. It is a lilac glass tile.
+  10. Model-picker tag chips and the effort track were hard-coded white fills carrying light ink in dark. Both follow the theme; the selected model card dropped from a saturated orange block to a 0.13 accent tint.
+- Android 437/437, release APK signed, versionCode 134 / 0.86.11.

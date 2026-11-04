@@ -142,7 +142,7 @@ fun RefGroupHeader(
             ) {
                 Text(
                     text = caption,
-                    fontSize = 9.sp,
+                    fontSize = 10.5.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
                     maxLines = 1,
@@ -263,7 +263,7 @@ fun RefNavRow(
         Column(Modifier.weight(1f)) {
             Text(
                 title,
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 lineHeight = 12.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = GsFonts.Product,
@@ -275,7 +275,7 @@ fun RefNavRow(
                 Spacer(Modifier.height(1.dp))
                 Text(
                     subtitle,
-                    fontSize = 8.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 10.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
@@ -294,7 +294,7 @@ fun RefNavRow(
 fun RefRowValue(text: String) {
     Text(
         text = text,
-        fontSize = 8.sp,
+        fontSize = 10.5.sp,
         fontFamily = GsFonts.Product,
         color = GsTheme.colors.textTertiary,
         maxLines = 1,
@@ -419,7 +419,7 @@ fun RefTileStrip(tiles: List<RefStripTile>, modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(2.dp))
                 Text(
                     tile.caption,
-                    fontSize = 9.5.sp,
+                    fontSize = 10.5.sp,
                     lineHeight = 12.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,
@@ -607,7 +607,7 @@ fun RefSettingsPage(
                     if (!subtitle.isNullOrBlank()) {
                         Text(
                             text = subtitle,
-                            fontSize = 10.5.sp,
+                            fontSize = 11.sp,
                             lineHeight = 13.5.sp,
                             fontFamily = GsFonts.Product,
                             color = colors.textTertiary,

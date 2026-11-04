@@ -186,7 +186,7 @@ private fun ModelTabs(selected: String, onSelect: (String) -> Unit) {
                 Spacer(Modifier.height(2.dp))
                 androidx.compose.material3.Text(
                     item.label,
-                    fontSize = 8.5.sp,
+                    fontSize = 10.5.sp,
                     fontFamily = GsFonts.Product,
                     fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (active) colors.textPrimary else colors.textSecondary,
@@ -209,7 +209,7 @@ private fun RecommendedCaption() {
         Spacer(Modifier.width(4.dp))
         androidx.compose.material3.Text(
             "Recommended",
-            fontSize = 9.sp,
+            fontSize = 10.5.sp,
             fontFamily = GsFonts.Product,
             color = colors.accent,
         )
@@ -259,7 +259,7 @@ private fun ModelCard(model: GsModel, isSelected: Boolean, onClick: () -> Unit) 
             .testTag("model-card-${model.id}")
             .background(
                 if (isSelected) {
-                    if (dark) colors.accentSoft.copy(alpha = 0.55f) else tint.wash.copy(alpha = 0.55f)
+                    if (dark) colors.accent.copy(alpha = 0.13f) else tint.wash.copy(alpha = 0.55f)
                 } else {
                     Color.White.copy(alpha = if (dark) 0.07f else 0.40f)
                 },
@@ -299,7 +299,7 @@ private fun ModelCard(model: GsModel, isSelected: Boolean, onClick: () -> Unit) 
             Spacer(Modifier.height(2.dp))
             androidx.compose.material3.Text(
                 model.description(),
-                fontSize = 8.5.sp,
+                fontSize = 10.5.sp,
                 lineHeight = 11.5.sp,
                 fontFamily = GsFonts.Product,
                 color = colors.textTertiary,
@@ -324,7 +324,7 @@ private fun RecommendedPill() {
     ) {
         androidx.compose.material3.Text(
             "Recommended",
-            fontSize = 7.5.sp,
+            fontSize = 10.5.sp,
             fontFamily = GsFonts.Product,
             color = colors.accentStrong,
         )
@@ -336,13 +336,25 @@ private fun ModelTag(label: String) {
     val colors = GsTheme.colors
     Box(
         Modifier
-            .background(Color.White.copy(alpha = 0.55f), RoundedCornerShape(7.dp))
-            .border(1.dp, Color.White.copy(alpha = 0.60f), RoundedCornerShape(7.dp))
+            // A hard-coded white chip is invisible in dark: the ink on it is
+            // textSecondary, which is LIGHT in dark mode. The chip lifts with the
+            // theme instead of against it.
+            .background(
+                if (LocalGsIsDark.current) Color.White.copy(alpha = 0.10f)
+                else Color.White.copy(alpha = 0.55f),
+                RoundedCornerShape(7.dp)
+            )
+            .border(
+                1.dp,
+                if (LocalGsIsDark.current) Color.White.copy(alpha = 0.14f)
+                else Color.White.copy(alpha = 0.60f),
+                RoundedCornerShape(7.dp)
+            )
             .padding(horizontal = 6.dp, vertical = 3.dp),
     ) {
         androidx.compose.material3.Text(
             label,
-            fontSize = 7.5.sp,
+            fontSize = 10.5.sp,
             fontFamily = GsFonts.Product,
             color = colors.textSecondary,
             maxLines = 1,
@@ -418,7 +430,7 @@ private fun ReasoningBlock(
     Spacer(Modifier.height(3.dp))
     androidx.compose.material3.Text(
         "Control how much time and thought the model spends on its response.",
-        fontSize = 9.sp,
+        fontSize = 10.5.sp,
         lineHeight = 12.sp,
         fontFamily = GsFonts.Product,
         color = colors.textTertiary,
@@ -496,8 +508,17 @@ private fun EffortSegments(selected: String, onSelect: (String) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White.copy(alpha = 0.55f), RoundedCornerShape(999.dp))
-            .border(1.dp, Color.White.copy(alpha = 0.70f), RoundedCornerShape(999.dp))
+            .background(
+                if (LocalGsIsDark.current) Color.White.copy(alpha = 0.07f)
+                else Color.White.copy(alpha = 0.55f),
+                RoundedCornerShape(999.dp)
+            )
+            .border(
+                1.dp,
+                if (LocalGsIsDark.current) Color.White.copy(alpha = 0.12f)
+                else Color.White.copy(alpha = 0.70f),
+                RoundedCornerShape(999.dp)
+            )
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
@@ -525,7 +546,7 @@ private fun EffortSegments(selected: String, onSelect: (String) -> Unit) {
             ) {
                 androidx.compose.material3.Text(
                     option.label,
-                    fontSize = 9.sp,
+                    fontSize = 10.5.sp,
                     fontFamily = GsFonts.Product,
                     fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (active) Color.White else colors.textSecondary,
@@ -556,7 +577,7 @@ private fun AutoSelectRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) 
         Column(Modifier.weight(1f)) {
             androidx.compose.material3.Text(
                 "Auto Select Model",
-                fontSize = 10.5.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = GsFonts.Product,
                 color = colors.textPrimary,
@@ -564,7 +585,7 @@ private fun AutoSelectRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) 
             Spacer(Modifier.height(1.dp))
             androidx.compose.material3.Text(
                 "Let Nexly choose the best model for your message.",
-                fontSize = 8.sp,
+                fontSize = 10.5.sp,
                 lineHeight = 10.5.sp,
                 fontFamily = GsFonts.Product,
                 color = colors.textTertiary,
