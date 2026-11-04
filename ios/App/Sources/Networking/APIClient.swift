@@ -136,8 +136,26 @@ final class APIClient {
         return (try? decoder.decode(Conversation.self, from: data)) != nil || data.isEmpty
     }
 
-    // MARK: - Streaming (SSE)
+    /// PATCH /api/v1/messages/{id}/feedback — the reader's verdict on a turn.
+    ///
+    /// The UI has already applied the verdict locally (the thumb must respond
+    /// on touch, not on a round-trip), so this is the sync step. A failure is
+    /// reported to the caller rather than swallowed, and the caller decides
+    /// whether to roll the thumb back; the verdict is a fact about the reader's
+    /// experience and silently dropping it would be worse than showing an error.
+    @discardableResult
+    func setFeedback(messageID: String, value: String?) async throws -> Bool {
+        let request = try buildRequest(
+            path: "/api/v1/messages/\(Self.escaped(messageID))/feedback",
+            method: "PATCH",
+            body: try encoded(FeedbackRequest(value: value ?? "")))
+        // The server answers `{ id, feedback }`, not a full Message — any 2xx
+        // body is a success here; `validatedData` throws on anything else.
+        _ = try await validatedData(for: request)
+        return true
+    }
 
+    // MARK: - Streaming (SSE)
     /// POSTs a user message with `stream: true` and consumes the
     /// `text/event-stream` reply.
     ///

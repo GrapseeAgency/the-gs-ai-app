@@ -5843,3 +5843,22 @@ Work Log:
   9. The assistant avatar was a white disc on a near-white page: the disc disappeared and left a stray sparkle in the margin. It is a lilac glass tile.
   10. Model-picker tag chips and the effort track were hard-coded white fills carrying light ink in dark. Both follow the theme; the selected model card dropped from a saturated orange block to a 0.13 accent tint.
 - Android 437/437, release APK signed, versionCode 134 / 0.86.11.
+
+---
+
+Task ID: build-0.86.12-look-again
+Agent: main
+Task: Push 0.86.11 (the token finally worked), then keep looking at pixels — the header and the full chat screen had never been rendered even once.
+
+Work Log:
+- 0.86.11 PUSHED + RELEASED (commit cd8afd5d, tag v0.86.11, APK attached). The earlier 401 was an expired token, nothing else.
+- NEW PROBE SURFACE: `NexlyChatHeader` rendered light + dark. The strip the reader sees on every conversation had never been looked at.
+- WHAT IT SHOWED (all fixed):
+  1. The brand tile was `Color.White@0.94` in BOTH themes — a blazing white disc on the dark header, the brightest object on a dark screen, 3dp from the title. Now a white tile in light, white@0.10 glass with a 0.16 rim in dark. The same defect existed on the pre-chat page's tile; fixed there too.
+  2. The header closed with a `Color.White@0.42` 0.75dp rule. In dark that is a lit strip across the full width — the single hardest edge on the screen. Removed; the header veil now fades 0.62 → 0.06 and simply dissolves.
+  3. The backdrop's `verticalGradient` had a third stop in the middle that did not lie on the line between its neighbours, so the gradient changed slope at exactly 50% height: a horizontal crease across every page. Two stops now.
+  4. The lotus asset carries its own wash (alpha 0 → 134/255 within 60px of its top edge). Scaled to 1.18× screen width that ramp is a visible band where the image begins. The image is now composited in a layer and faded in with a DstIn mask, so it rises out of the ground instead of starting at a line.
+  5. Plan card: "Was this plan helpful?" was 10.5sp — the question the card exists to ask was the smallest text in it. 11.5sp, and its timestamp stamp 10.5 → 11.
+- VERDICT SURVIVED A RELOAD (the real "hidden" bug): the verdict was written to Room and to the server, but the history rebuild never read it back, so reopening a thread reset the thumb to "Helpful?" and asked the same question again. Fixed on Android (history + older pages) and the server serializer now returns `feedback` so iOS can do the same.
+- iOS FEEDBACK LOOP, previously blocked, now wired: `ChatMessage.serverId` (set from the done payload — a turn that was stopped or produced offline has no row, and the thumb stays hidden rather than 404ing), `ChatMessage.feedback`, `APIClient.setFeedback`, `ChatViewModel.setFeedback` with optimistic apply + rollback on failure, and a verdict row in the iOS turn footer (re-tap withdraws).
+- Android 439/439 (was 437), backend `tsc` 0, versionCode 135 / 0.86.12.

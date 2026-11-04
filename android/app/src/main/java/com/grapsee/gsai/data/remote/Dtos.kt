@@ -82,7 +82,10 @@ data class MessageDto(
     /** PHASE 8.1: clarify quick-choices as the JSON string of the clarify
      *  payload {"question":…,"options":[{id,label}…]} — parsed lazily so a
      *  corrupt column degrades to "no chips", never a crash. */
-    val clarifyOptions: String? = null
+    val clarifyOptions: String? = null,
+    /** 0.86.12: the reader's verdict on this turn ("up" | "down"). Absent on
+     *  older servers → null, which is the same as "not asked yet". */
+    val feedback: String? = null
 )
 
 /**

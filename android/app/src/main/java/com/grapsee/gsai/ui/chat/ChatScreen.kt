@@ -746,7 +746,11 @@ fun ChatScreen(
                 createdAt = it.createdAt,
                 attachments = ChatRepository.decodeAttachments(it.attachments),
                 sources = decodeSourceCards(it.sources),
-                clarify = decodeClarifyPrompt(it.clarifyOptions)
+                clarify = decodeClarifyPrompt(it.clarifyOptions),
+                // The verdict lives on the row. Without this the thumb resets
+                // to "Helpful?" every time the thread is reopened, asking the
+                // same question again and inviting a contradicting answer.
+                feedback = it.feedback
             )
         }.toMutableList()
         val live = chatStream.state.value
@@ -793,7 +797,8 @@ fun ChatScreen(
                                     createdAt = it.createdAt,
                                     attachments = ChatRepository.decodeAttachments(it.attachments),
                                     sources = decodeSourceCards(it.sources),
-                                    clarify = decodeClarifyPrompt(it.clarifyOptions)
+                                    clarify = decodeClarifyPrompt(it.clarifyOptions),
+                                    feedback = it.feedback
                                 )
                             }
                         )
@@ -1828,10 +1833,15 @@ internal fun NexlyChatHeader(
         modifier = Modifier
             .fillMaxWidth()
             .background(
+                // A veil that FADES, not a band that stops. The old version
+                // held 30% opacity to the very last pixel and closed with a
+                // white hairline, so every conversation had a bright rule
+                // drawn across the top of it — the single hardest edge on the
+                // screen. Nothing here is a border; the header just dissolves.
                 Brush.verticalGradient(
                     listOf(
-                        GsTheme.colors.surface.copy(alpha = 0.56f),
-                        GsTheme.colors.surface.copy(alpha = 0.30f)
+                        GsTheme.colors.surface.copy(alpha = 0.62f),
+                        GsTheme.colors.surface.copy(alpha = 0.06f)
                     )
                 )
             )
@@ -1853,21 +1863,33 @@ internal fun NexlyChatHeader(
                 )
                 Spacer(Modifier.width(8.dp))
             }
-            // The reference brand mark: a lilac sparkle in a lit glass circle —
-            // the same white-tile + glyph language the pre-chat header uses.
+            // The reference brand mark: a lilac sparkle in a lit glass circle.
+            // Theme-aware — the tile used to be Color.White@0.94 in BOTH
+            // themes, which put a blazing white disc on the dark header and
+            // made the one element you look at most the brightest thing on a
+            // dark screen. Light keeps the white tile; dark keeps the glass.
+            val headerDark = LocalGsIsDark.current
             Box(
                 modifier = Modifier
                     .size(38.dp)
-                    .shadow(4.dp, CircleShape)
+                    .shadow(if (headerDark) 0.dp else 4.dp, CircleShape)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.94f), CircleShape)
-                    .border(1.dp, Color.White, CircleShape),
+                    .background(
+                        if (headerDark) Color.White.copy(alpha = 0.10f)
+                        else Color.White.copy(alpha = 0.94f),
+                        CircleShape
+                    )
+                    .border(
+                        1.dp,
+                        if (headerDark) Color.White.copy(alpha = 0.16f) else Color.White,
+                        CircleShape
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     GsIcons.Sparkles,
                     contentDescription = "Nexly",
-                    tint = Color(0xFF8E7BFF),
+                    tint = if (headerDark) Color(0xFFB9A9FF) else Color(0xFF8E7BFF),
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -1907,14 +1929,6 @@ internal fun NexlyChatHeader(
                 onLongClick = onMenuLong
             )
         }
-        // The sheet closes the header with a hairline instead of letting it
-        // dissolve into the backdrop.
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(0.75.dp)
-                .background(Color.White.copy(alpha = 0.42f))
-        )
     }
 }
 

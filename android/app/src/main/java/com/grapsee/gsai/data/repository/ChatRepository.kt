@@ -1158,7 +1158,8 @@ class ChatRepository(
         createdAt = createdAt,
         attachments = attachmentsJson(attachments),
         sources = sourcesJson(sources),
-        clarifyOptions = clarifyOptions
+        clarifyOptions = clarifyOptions,
+        feedback = feedback
     )
 
     companion object {

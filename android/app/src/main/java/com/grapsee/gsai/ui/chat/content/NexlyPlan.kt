@@ -37,9 +37,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -814,7 +817,7 @@ fun NexlyPlanCard(
                 if (stamp != null) {
                     Text(
                         text = stamp,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                         color = NexlyInk.meta
                     )
                 }
@@ -831,8 +834,10 @@ fun NexlyPlanCard(
             Text(
                 text = "Was this plan helpful?",
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 10.5.sp,
-                    lineHeight = 12.sp
+                    // 11.5, not 10.5: the question the whole card exists to
+                    // ask was the smallest text on the screen.
+                    fontSize = 11.5.sp,
+                    lineHeight = 14.sp
                 ),
                 color = NexlyInk.meta
             )
@@ -953,16 +958,19 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
         drawRect(
             Brush.verticalGradient(
                 if (dark) {
+                    // TWO stops, not three. A middle stop that does not lie on
+                    // the line between its neighbours makes the gradient
+                    // change slope at exactly 50% height — on screen that is a
+                    // visible horizontal crease across the whole page, and it
+                    // was sitting in the middle of every conversation.
                     listOf(
                         Color(0xFF171210),
-                        Color(0xFF241A17),
-                        Color(0xFF1A1311)
+                        Color(0xFF1B1412)
                     )
                 } else {
                     listOf(
-                        Color(0xFFFFFBF6),
-                        Color(0xFFFDF2EA),
-                        Color(0xFFFFF8F3)
+                        Color(0xFFFFFCF7),
+                        Color(0xFFFDF1E9)
                     )
                 }
             )
@@ -1045,16 +1053,39 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
             if (image.width > 0 && image.height > 0) {
                 val targetW = w * 1.18f
                 val targetH = targetW * (image.height.toFloat() / image.width.toFloat())
+                val left = w * 0.16f - targetW / 2f
+                val top = h * 0.90f - targetH / 2f
+                // The asset carries its own wash: alpha 0 at its top edge,
+                // already 134/255 sixty pixels down. Scaled to this width that
+                // ramp is a visible horizontal band across the page — the one
+                // hard edge left on the chat surface, and the reason the
+                // backdrop looked like two rectangles stacked.
+                //
+                // So the image is composited into its own layer and faded in
+                // with a DstIn mask: the flower still sits low and warm, but
+                // it arrives out of the ground instead of starting at a line.
+                drawContext.canvas.saveLayer(
+                    Rect(left, top, left + targetW, top + targetH),
+                    Paint()
+                )
                 drawImage(
                     image = image,
-                    dstOffset = IntOffset(
-                        (w * 0.16f - targetW / 2f).roundToInt(),
-                        (h * 0.90f - targetH / 2f).roundToInt()
-                    ),
+                    dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
                     dstSize = IntSize(targetW.roundToInt(), targetH.roundToInt()),
                     alpha = if (dark) 0.16f else 0.72f,
                     filterQuality = FilterQuality.Medium
                 )
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        0.30f to Color.Black,
+                        1f to Color.Black
+                    ),
+                    topLeft = Offset(left, top),
+                    size = Size(targetW, targetH),
+                    blendMode = BlendMode.DstIn
+                )
+                drawContext.canvas.restore()
             }
         }
     }

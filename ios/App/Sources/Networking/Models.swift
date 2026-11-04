@@ -259,6 +259,10 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
     /// payload as a JSON string (same shape the `clarify` event sends), so a
     /// reloaded thread re-renders the quick-choice chips.
     var clarifyOptions: String?
+    /// 0.86.12: the reader's verdict on this turn ("up" | "down"). Present on
+    /// reloaded history so the thumb shows the vote that was actually cast
+    /// instead of asking again and inviting a contradicting second one.
+    var feedback: String?
 
     init(
         id: String,
@@ -268,7 +272,8 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
         createdAt: String,
         attachments: [Attachment]? = nil,
         sources: [MessageSource]? = nil,
-        clarifyOptions: String? = nil
+        clarifyOptions: String? = nil,
+        feedback: String? = nil
     ) {
         self.id = id
         self.conversationId = conversationId
@@ -278,6 +283,7 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
         self.attachments = attachments
         self.sources = sources
         self.clarifyOptions = clarifyOptions
+        self.feedback = feedback
     }
 
     init(from decoder: Decoder) throws {
@@ -290,6 +296,7 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
         attachments = try container.decodeIfPresent([Attachment].self, forKey: .attachments)
         sources = try container.decodeIfPresent([MessageSource].self, forKey: .sources)
         clarifyOptions = try container.decodeIfPresent(String.self, forKey: .clarifyOptions)
+        feedback = try container.decodeIfPresent(String.self, forKey: .feedback)
     }
 }
 
@@ -361,6 +368,15 @@ struct UpdateConversationRequest: Codable, Equatable {
         self.pinned = pinned
         self.archived = archived
     }
+}
+
+/// PATCH /api/v1/messages/{id}/feedback — the reader's verdict on one
+/// assistant turn. `value` is "up", "down", or nil to withdraw. The server
+/// stores it on `Message.feedback` and quotes the most recent verdict into
+/// the next turn's runtime context, which is the whole point: the model
+/// should see that its last answer missed.
+struct FeedbackRequest: Codable, Equatable {
+    var value: String?
 }
 
 // MARK: - SSE frame

@@ -263,17 +263,28 @@ private fun CompanionHeader(onOpenMenu: () -> Unit) {
     ) {
         // The mock's brand mark: a white rounded-square tile carrying the lilac
         // lotus glyph — not the peach orb the home dashboard still draws.
+        // Theme-aware tile: white in light, a lit glass square in dark. A
+        // white@0.94 tile on a dark page is a lamp, not a logo.
+        val tileDark = LocalGsIsDark.current
         Box(
             Modifier
                 .size(34.dp)
                 .shadow(
-                    elevation = 4.dp,
+                    elevation = if (tileDark) 0.dp else 4.dp,
                     shape = RoundedCornerShape(10.dp),
                     ambientColor = Color(0x1E8065D8),
                     spotColor = Color(0x298065D8),
                 )
-                .background(Color.White.copy(alpha = 0.94f), RoundedCornerShape(10.dp))
-                .border(1.dp, Color.White, RoundedCornerShape(10.dp)),
+                .background(
+                    if (tileDark) Color.White.copy(alpha = 0.10f)
+                    else Color.White.copy(alpha = 0.94f),
+                    RoundedCornerShape(10.dp)
+                )
+                .border(
+                    1.dp,
+                    if (tileDark) Color.White.copy(alpha = 0.16f) else Color.White,
+                    RoundedCornerShape(10.dp)
+                ),
             contentAlignment = Alignment.Center,
         ) {
             com.grapsee.gsai.ui.chat.content.NexlyGlyph(

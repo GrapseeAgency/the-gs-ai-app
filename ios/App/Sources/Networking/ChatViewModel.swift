@@ -385,6 +385,16 @@ final class ChatViewModel: ObservableObject {
         /// a reloaded thread re-derives the audit from persisted `sources[]`
         /// per the protocol's research-details rule. nil after reload.
         var traceSteps: [SearchTraceStep]? = nil
+        /// The SERVER id of this turn. `id` above is a client UUID (SwiftUI
+        /// identity, stable across streaming deltas); the verdict endpoint
+        /// needs the row the database actually knows. A streaming assistant
+        /// turn has no server id until `done` arrives, which is exactly when
+        /// it becomes eligible for feedback — so nil here means "not yet a
+        /// real row", and the verdict UI stays hidden rather than guessing.
+        var serverId: String? = nil
+        /// "up" | "down" | nil — the reader's verdict on this turn. Local
+        /// truth: it is applied on tap, before the PATCH resolves.
+        var feedback: String? = nil
     }
 
     // MARK: - Published state
@@ -1114,8 +1124,34 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    private func finalize(with message: Message?) {
-        defer {
+    // MARK: - Verdict (Helpful / Not helpful)
+
+    /// Records the reader's verdict on one assistant turn.
+    ///
+    /// Local first: the thumb must answer the finger, not the network. The
+    /// PATCH follows, and a failure rolls the thumb back with an honest error —
+    /// a vote the server never received is not a vote, and leaving the thumb lit
+    /// would make the UI lie about what the model will see next turn.
+    func setFeedback(for id: UUID, value: String?) {
+        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        let previous = messages[index].feedback
+        guard previous != value else { return }
+        messages[index].feedback = value
+        guard let serverID = messages[index].serverId, !serverID.isEmpty else { return }
+        Task { @MainActor [weak self] in
+            do {
+                try await APIClient.shared.setFeedback(messageID: serverID, value: value)
+            } catch {
+                guard let self else { return }
+                if let i = self.messages.firstIndex(where: { $0.id == id }) {
+                    self.messages[i].feedback = previous
+                }
+                self.errorMessage = "Couldn't save your feedback — try again."
+            }
+        }
+    }
+
+    private func finalize(with message: Message?) {        defer {
             isStreaming = false
             streamTask = nil
             searchPhase = .idle // done → the orb honestly goes idle
@@ -1129,6 +1165,10 @@ final class ChatViewModel: ObservableObject {
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
         messages[index].content = message.content
         messages[index].isStreaming = false
+        // The row now exists in the database, so the verdict endpoint finally
+        // has something to point at. Before `done` there is no id and the
+        // thumb stays hidden — a thumb that 404s is worse than no thumb.
+        messages[index].serverId = message.id
         // PHASE 8.1: the done payload's persisted sources are the truth for
         // citation chips and cards; the live event rows back them up only if
         // the server sent none (older backend). Clarify backfills the same way.
@@ -1349,7 +1389,9 @@ final class ChatViewModel: ObservableObject {
                         createdAt: $0.createdAt,
                         attachments: $0.attachments,
                         sources: $0.sources,
-                        clarifyOptions: $0.clarifyOptions)
+                        clarifyOptions: $0.clarifyOptions,
+                        serverId: $0.id,
+                        feedback: $0.feedback)
                 }
                 // The remote seed carries the full thread — nothing older locally.
                 self.oldestStamp = self.messages.first?.createdAt

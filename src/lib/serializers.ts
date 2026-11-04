@@ -35,6 +35,10 @@ export type MessageJson = {
   sources?: MessageSourceJson[]
   // PHASE 8.1 — ambiguity clarification quick choices (JSON string, §6).
   clarifyOptions?: string
+  // 0.86.12 — the reader's verdict on this turn ("up" | "down"), so a
+  // reopened thread shows the thumb the reader already pressed instead of
+  // resetting it to "Helpful?" and inviting a second, contradictory vote.
+  feedback?: string
 }
 
 /** PHASE 8 — canonical web-search source metadata for grounded answers. */
@@ -123,6 +127,7 @@ export function messageToJson(
       ? { sources: m.sources.map(sourceToJson) }
       : {}),
     ...(m.clarifyOptions ? { clarifyOptions: m.clarifyOptions } : {}),
+    ...(m.feedback ? { feedback: m.feedback } : {}),
   }
 }
 

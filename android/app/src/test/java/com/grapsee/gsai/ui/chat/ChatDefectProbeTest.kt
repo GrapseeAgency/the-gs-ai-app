@@ -258,4 +258,44 @@ class ChatDefectProbeTest {
         }
         compose.onRoot().captureRoboImage("build/screenshots/probe-models-dark.png")
     }
+
+    /**
+     * The strip the reader looks at every single time, and the one surface the
+     * earlier probes never rendered: the chat header. It carries a sparkle, a
+     * back arrow, the thread title and a menu — four things that can drift out
+     * of alignment without any test noticing.
+     */
+    @Composable
+    private fun header(dark: Boolean) {
+        TheGsAiTheme(darkTheme = dark) {
+            Box(modifier = Modifier.fillMaxSize().nexlyPearlBackdrop()) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    NexlyChatHeader(
+                        sparkleLabel = "New chat",
+                        onSparkle = {},
+                        onSparkleLong = null,
+                        menuIcon = com.grapsee.gsai.ui.icons.GsIcons.MoreVertical,
+                        menuLabel = "Conversation options",
+                        onMenu = {},
+                        onMenuLong = null,
+                        onBack = {}
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun headerLight() {
+        compose.setContent { header(false) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-header-light.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun headerDark() {
+        compose.setContent { header(true) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-header-dark.png")
+    }
 }

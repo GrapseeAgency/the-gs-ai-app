@@ -517,7 +517,8 @@ struct ChatDetailView: View {
                         editDraft = message.content
                         editingIndex = index
                     },
-                    onBranch: { vm.branch(at: index) }
+                    onBranch: { vm.branch(at: index) },
+                    onFeedback: { value in vm.setFeedback(for: message.id, value: value) }
                 )
                 if message.role == "assistant" {
                     if message.isStreaming {
@@ -1249,6 +1250,9 @@ struct MessageBubble: View, Equatable {
     var onSave: () -> Void = {}
     var onEditStart: () -> Void = {}
     var onBranch: () -> Void = {}
+    /// The reader's verdict on this turn (nil = withdrawn). Owned by the view
+    /// model, which persists it locally and PATCHes the message row.
+    var onFeedback: (String?) -> Void = { _ in }
 
     @State private var copied = false
     @State private var sawThinking = false
@@ -1471,14 +1475,18 @@ struct MessageBubble: View, Equatable {
             // The reference footer: a timestamp, then a quiet action-chip row.
             // Each chip calls the same real handler the long-press menu carries.
             if !message.isStreaming && !hasPlan {
-                if let stamp = timeLabel(message.createdAt) {
-                    Text(stamp)
-                        .font(.system(size: 10.5, weight: .regular))
-                        .foregroundStyle(Aero.textMuted.opacity(0.85))
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                        .padding(.trailing, 2)
+                HStack(alignment: .center, spacing: 6) {
+                    assistantActionChips
+                    Spacer(minLength: 0)
+                    if let stamp = timeLabel(message.createdAt) {
+                        Text(stamp)
+                            .font(.system(size: 10.5, weight: .regular))
+                            .foregroundStyle(Aero.textMuted.opacity(0.85))
+                            .padding(.trailing, 2)
+                    }
+                    verdictRow
                 }
-                assistantActionChips
+                .padding(.trailing, 2)
             }
         }
     }
@@ -1624,6 +1632,63 @@ struct MessageBubble: View, Equatable {
                             action: @escaping () -> Void) -> some View {
         Button(action: action) { chipLabel(icon, title) }
             .buttonStyle(KineticPressStyle())
+    }
+
+    // MARK: Verdict (Helpful / Not helpful)
+
+    /// The reader's verdict, asked on every finished turn and stored on the
+    /// message row — the next turn quotes it into the model's context, which is
+    /// the only honest meaning of "the model learns from your feedback".
+    ///
+    /// Hidden while `serverId` is nil: a turn that was stopped, produced
+    /// offline, or has not received `done` has no row to attach a verdict to,
+    /// and a thumb that 404s is worse than no thumb.
+    @ViewBuilder
+    private var verdictRow: some View {
+        if message.serverId != nil {
+            HStack(spacing: 4) {
+                Text(verdictCaption)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Aero.textMuted)
+                    .lineLimit(1)
+                verdictChip(GsIcons.thumbsUp, "Helpful", value: "up")
+                verdictChip(GsIcons.thumbsDown, "Not helpful", value: "down")
+            }
+            .accessibilityElement(children: .contain)
+        }
+    }
+
+    private var verdictCaption: String {
+        switch message.feedback {
+        case "up": return "Thanks"
+        case "down": return "Noted"
+        default: return "Helpful?"
+        }
+    }
+
+    private func verdictChip(_ icon: GsIconPaths, _ title: String, value: String) -> some View {
+        let active = message.feedback == value
+        return Button {
+            // Re-tapping the same thumb withdraws the verdict — a vote you
+            // cannot take back is a trap, and the server accepts "" for that.
+            onFeedback(active ? nil : value)
+        } label: {
+            Image(uiImage: GsMenuGlyph.image(icon, side: 14))
+                .resizable().scaledToFit().frame(width: 14, height: 14)
+                .foregroundStyle(active ? Aero.accent : Aero.text.opacity(0.62))
+                .frame(width: 26, height: 26)
+                .background(
+                    Circle().fill(active ? Aero.accent.opacity(0.16) : Color.clear)
+                )
+                .overlay(
+                    Circle().strokeBorder(
+                        active ? Aero.accent.opacity(0.45) : Aero.text.opacity(0.10),
+                        lineWidth: 1
+                    )
+                )
+                .accessibilityLabel(active ? "\(title), selected" : title)
+        }
+        .buttonStyle(KineticPressStyle())
     }
 
     private func chipLabel(_ icon: GsIconPaths, _ title: String) -> some View {
