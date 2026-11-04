@@ -169,7 +169,10 @@ import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsInputBar
 import com.grapsee.gsai.ui.components.GsComposerAction
 import com.grapsee.gsai.ui.components.GsGlassRole
+import com.grapsee.gsai.ui.components.GsAnchoredPopover
 import com.grapsee.gsai.ui.components.GsFloatingOverlay
+import com.grapsee.gsai.ui.components.GsPopoverRow
+import com.grapsee.gsai.ui.components.GsPopoverRule
 import com.grapsee.gsai.ui.components.OverlaySectionLabel
 import com.grapsee.gsai.ui.components.gsContentWidth
 import com.grapsee.gsai.ui.components.gsGlass
@@ -204,6 +207,7 @@ import com.grapsee.gsai.ui.orbs.OrbSize
 import com.grapsee.gsai.ui.orbs.OrbState
 import com.grapsee.gsai.ui.orbs.ThinkingOrb
 import com.grapsee.gsai.ui.orbs.orbStateForChatStream
+import com.grapsee.gsai.ui.theme.GsFonts
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.gsHaptic
 import java.time.OffsetDateTime
@@ -3270,9 +3274,14 @@ private fun ConversationOptionsSheet(
     onClear: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    // A floating glass panel, sized to these six rows — not a cream sheet
-    // stretched from the status bar to the nav bar. See [GsFloatingOverlay].
-    GsFloatingOverlay(onDismiss = onDismiss) {
+    // Hangs off the three dots, 68dp down (the header) and 14dp in from the
+    // right — a menu, the way the reference does it. See [GsAnchoredPopover].
+    GsAnchoredPopover(
+        alignment = Alignment.TopEnd,
+        onDismiss = onDismiss,
+        width = 208.dp,
+        verticalInset = 68.dp,
+    ) {
         ConversationOptionsContent(
             title = title,
             onDismiss = onDismiss,
@@ -3286,7 +3295,16 @@ private fun ConversationOptionsSheet(
     }
 }
 
-/** The panel's body, split out so the render probe can photograph it. */
+/**
+ * The panel's body, split out so the render probe can photograph it.
+ *
+ * A MENU, NOT A SHEET OF CONTENT. The reference the owner kept pointing at has
+ * four lines, no title, no subtitles, no Cancel button and no drag handle: it
+ * hangs off the three dots in the header, the way a menu does. The earlier
+ * version was a six-row sheet with a headline and a supporting sentence under
+ * every row — correct information, wrong object. The rows are now 46dp, the
+ * glyphs bare, Delete is the only coloured line, and tapping the page closes it.
+ */
 @Composable
 internal fun ConversationOptionsContent(
     title: String,
@@ -3302,60 +3320,28 @@ internal fun ConversationOptionsContent(
     var renameDraft by remember { mutableStateOf(title) }
     var confirmingDelete by remember { mutableStateOf(false) }
     var confirmingClear by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 6.dp, end = 2.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title.ifBlank { "This chat" },
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontSize = 15.5.sp,
-                lineHeight = 19.sp,
-                fontWeight = FontWeight.SemiBold
-            ),
-            color = GsTheme.colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        Box(
-            modifier = Modifier
-                .size(30.dp)
-                .clip(CircleShape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    role = Role.Button,
-                    onClickLabel = "Close",
-                    onClick = onDismiss
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            NexlyGlyph(name = "x", size = 15.dp, color = GsTheme.colors.textTertiary)
-        }
-    }
     when {
         confirmingDelete -> {
-            SheetActionRow(
+            GsPopoverRow(
                 icon = GsIcons.Trash2,
-                title = "Delete this chat?",
-                subtitle = "This action cannot be undone. The conversation will be permanently removed from your history.",
+                label = "Delete this chat?",
+                subtitle = "It cannot be undone.",
                 destructive = true,
+                well = false,
                 onClick = onDelete
             )
-            SheetActionRow(GsIcons.X, "Cancel", onClick = { confirmingDelete = false })
+            GsPopoverRow(GsIcons.X, "Keep it", onClick = { confirmingDelete = false }, well = false)
         }
         confirmingClear -> {
-            SheetActionRow(
+            GsPopoverRow(
                 icon = GsIcons.Eraser,
-                title = "Clear all messages?",
-                subtitle = "The chat stays in your history, but every message in it is removed.",
+                label = "Clear every message?",
+                subtitle = "The chat stays in your history.",
                 destructive = true,
+                well = false,
                 onClick = onClear
             )
-            SheetActionRow(GsIcons.X, "Cancel", onClick = { confirmingClear = false })
+            GsPopoverRow(GsIcons.X, "Keep them", onClick = { confirmingClear = false }, well = false)
         }
         renaming -> {
             OutlinedTextField(
@@ -3363,61 +3349,34 @@ internal fun ConversationOptionsContent(
                 onValueChange = { renameDraft = it },
                 label = { Text("Chat name") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp)
             )
-            SheetActionRow(GsIcons.Check, "Save", onClick = {
+            GsPopoverRow(GsIcons.Check, "Save", well = false, onClick = {
                 val trimmed = renameDraft.trim()
                 if (trimmed.isNotEmpty()) onRename(trimmed)
             })
-            SheetActionRow(GsIcons.X, "Cancel", onClick = { renaming = false })
+            GsPopoverRow(GsIcons.X, "Cancel", well = false, onClick = { renaming = false })
         }
         else -> {
-            SheetActionRow(
-                icon = GsIcons.Share,
-                title = "Share Chat",
-                subtitle = "Share this conversation",
-                onClick = onShare
-            )
-            SheetActionRow(
-                icon = GsIcons.SquarePen,
-                title = "Rename Chat",
-                subtitle = "Give your chat a new name",
-                onClick = {
-                    renameDraft = title
-                    renaming = true
-                }
-            )
+            GsPopoverRow(GsIcons.Share, "Share chat", well = false, onClick = onShare)
+            GsPopoverRow(GsIcons.SquarePen, "Rename", well = false, onClick = {
+                renameDraft = title
+                renaming = true
+            })
             if (onDetails != null) {
-                SheetActionRow(
-                    icon = GsIcons.Info,
-                    title = "Chat Details",
-                    subtitle = "View info & stats",
-                    onClick = onDetails
-                )
+                GsPopoverRow(GsIcons.Info, "Chat details", well = false, onClick = onDetails)
             }
-            SheetActionRow(
-                icon = GsIcons.FileText,
-                title = "Export Chat",
-                subtitle = "Send the transcript as text",
-                onClick = onExport
-            )
-            SheetActionRow(
-                icon = GsIcons.Eraser,
-                title = "Clear Chat",
-                subtitle = "Remove all messages",
-                onClick = { confirmingClear = true }
-            )
-            SheetActionRow(
+            GsPopoverRow(GsIcons.FileText, "Export transcript", well = false, onClick = onExport)
+            GsPopoverRule()
+            GsPopoverRow(GsIcons.Eraser, "Clear messages", well = false, onClick = { confirmingClear = true })
+            GsPopoverRow(
                 icon = GsIcons.Trash2,
-                title = "Delete Chat",
-                subtitle = "Permanently delete this chat",
+                label = "Delete",
                 destructive = true,
+                well = false,
                 onClick = { confirmingDelete = true }
-            )
-            SheetActionRow(
-                icon = GsIcons.X,
-                title = "Cancel",
-                onClick = onDismiss
             )
         }
     }
@@ -3959,11 +3918,15 @@ private fun AttachSheet(
     selectedMode: String = "flash",
     onModeSelected: (String) -> Unit = {}
 ) {
-    // A PANEL, NOT A PAGE. This used to open at full height — a cream plane
-    // from the status bar down, which is not an overlay, it is a second screen
-    // that happens to slide. It is now a card that fits its own content and
-    // floats clear of the page on all four sides.
-    GsFloatingOverlay(onDismiss = onDismiss, maxHeightFraction = 0.72f) {
+    // Sits in the bottom-left corner, 84dp up (clear of the composer) and 14dp
+    // in from the left, so its bottom edge lines up with the "+" that opened
+    // it. A menu is an appendage of one control; this is that control's.
+    GsAnchoredPopover(
+        alignment = Alignment.BottomStart,
+        onDismiss = onDismiss,
+        width = 248.dp,
+        verticalInset = 84.dp,
+    ) {
         AttachPanelContent(
             onDismiss = onDismiss,
             onGallery = onGallery,
@@ -3977,7 +3940,15 @@ private fun AttachSheet(
     }
 }
 
-/** The panel's body, split out so the render probe can photograph it. */
+/**
+ * The panel's body, split out so the render probe can photograph it.
+ *
+ * A narrow list anchored to the "+" button, not a two-column tile grid with a
+ * headline. The reference is a column of five rows, each a circular glyph well
+ * and a label, and it reads as "here are the things this button can do" —
+ * which is exactly what an attach menu is. The tile grid read as a settings
+ * screen that happened to be floating.
+ */
 @Composable
 internal fun AttachPanelContent(
     onDismiss: () -> Unit,
@@ -3989,78 +3960,43 @@ internal fun AttachPanelContent(
     selectedMode: String = "flash",
     onModeSelected: (String) -> Unit = {}
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Attach",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontSize = 15.5.sp,
-                    lineHeight = 19.sp,
-                    fontWeight = FontWeight.SemiBold
-                ),
-                color = GsTheme.colors.textPrimary,
-                modifier = Modifier.weight(1f)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        attachOptions.forEach { option ->
+            GsPopoverRow(
+                icon = option.icon,
+                label = when (option.label) {
+                    "Gallery" -> "Photos"
+                    else -> option.label
+                },
+                enabled = true,
+                onClick = {
+                    when {
+                        option.isVoice -> onVoice()
+                        !option.available -> onUnavailable(option.label)
+                        option.label == "Gallery" -> onGallery()
+                        option.label == "Camera" -> onCamera()
+                        option.label == "Files" -> onFiles()
+                    }
+                }
             )
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .clickable(role = Role.Button, onClickLabel = "Close", onClick = onDismiss)
-                    .semantics { contentDescription = "Close" },
-                contentAlignment = Alignment.Center,
-            ) {
-                NexlyGlyph(name = "x", size = 15.dp, color = GsTheme.colors.textTertiary)
-            }
         }
-        // --- Attach (FIRST — ChatGPT/Kimi put attach on top of the
-        //     sheet; behavioral modes sit at the bottom). ---
-        attachOptions.chunked(2).forEach { rowOptions ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-            ) {
-                rowOptions.forEach { option ->
-                    AttachTile(
-                        option = option,
-                        modifier = Modifier.weight(1f),
-                        onClick = {
-                            when {
-                                option.isVoice -> onVoice()
-                                !option.available -> onUnavailable(option.label)
-                                option.label == "Gallery" -> onGallery()
-                                option.label == "Camera" -> onCamera()
-                                option.label == "Files" -> onFiles()
-                            }
-                        }
-                    )
-                }
-                if (rowOptions.size == 1) {
-                    Spacer(Modifier.weight(1f))
-                }
-            }
-        }
-        Spacer(Modifier.height(2.dp))
-        OverlaySectionLabel("Mode")
+        GsPopoverRule()
+        // Mode stays, because it is the one thing this button can change that
+        // is not a file — but it is a row of small chips, not a carousel of
+        // cards. The menu is a menu all the way down.
         val modes = listOf(
             Triple("flash", "Flash", "Instant replies"),
             Triple("thinking", "Thinking", "Deep reasoning"),
             Triple("auto", "Auto", "System decides")
         )
-        // Three equal tiles that FIT THE PANEL. The old row was a horizontal
-        // carousel of 148dp cards, so the third mode was half off-screen
-        // inside a sheet that had room for all three.
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             modes.forEach { (value, label, hint) ->
-                ModeCarouselItem(
+                ModeChip(
                     label = label,
                     hint = hint,
                     selected = selectedMode == value,
@@ -4069,6 +4005,54 @@ internal fun AttachPanelContent(
                 )
             }
         }
+    }
+}
+
+/** A 30dp chip: the selected one is lit, the others are clear glass. */
+@Composable
+private fun ModeChip(
+    label: String,
+    hint: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = GsTheme.colors
+    val ink by animateColorAsState(
+        targetValue = if (selected) colors.accentStrong else colors.textSecondary,
+        animationSpec = GsEase.state(),
+        label = "modeChipInk"
+    )
+    Box(
+        modifier = modifier
+            .height(30.dp)
+            .clip(RoundedCornerShape(99.dp))
+            .background(
+                if (selected) colors.accent.copy(alpha = 0.14f)
+                else colors.textPrimary.copy(alpha = 0.04f)
+            )
+            .border(
+                1.dp,
+                if (selected) colors.accent.copy(alpha = 0.42f) else colors.glassBorder.copy(alpha = 0.7f),
+                RoundedCornerShape(99.dp)
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.RadioButton,
+                onClickLabel = "$label mode — $hint",
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            fontSize = 11.5.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            fontFamily = GsFonts.Product,
+            color = ink,
+            maxLines = 1
+        )
     }
 }
 

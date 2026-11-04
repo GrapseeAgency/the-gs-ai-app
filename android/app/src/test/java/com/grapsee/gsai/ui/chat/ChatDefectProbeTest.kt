@@ -362,11 +362,19 @@ class ChatDefectProbeTest {
     private fun attachOverlay(dark: Boolean) {
         TheGsAiTheme(darkTheme = dark) {
             Box(modifier = Modifier.fillMaxSize().nexlyPearlBackdrop()) {
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(14.dp),
-                    verticalArrangement = Arrangement.Bottom
+                // The popover's own container: 248dp, bottom-left, 84dp up —
+                // the same numbers `GsAnchoredPopover` uses, so what the probe
+                // photographs is what the phone draws.
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 84.dp),
+                    contentAlignment = Alignment.BottomStart
                 ) {
-                    GsOverlayPanel {
+                    Column(
+                        modifier = Modifier
+                            .width(248.dp)
+                            .gsGlass(GsGlassRole.Modal, androidx.compose.foundation.shape.RoundedCornerShape(22.dp))
+                            .padding(vertical = 6.dp)
+                    ) {
                         AttachPanelContent(
                             onDismiss = {},
                             onGallery = {},
@@ -401,11 +409,16 @@ class ChatDefectProbeTest {
     private fun chatMenuOverlay(dark: Boolean) {
         TheGsAiTheme(darkTheme = dark) {
             Box(modifier = Modifier.fillMaxSize().nexlyPearlBackdrop()) {
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(14.dp),
-                    verticalArrangement = Arrangement.Bottom
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 68.dp),
+                    contentAlignment = Alignment.TopEnd
                 ) {
-                    GsOverlayPanel {
+                    Column(
+                        modifier = Modifier
+                            .width(208.dp)
+                            .gsGlass(GsGlassRole.Modal, androidx.compose.foundation.shape.RoundedCornerShape(22.dp))
+                            .padding(vertical = 6.dp)
+                    ) {
                         ConversationOptionsContent(
                             title = "hello",
                             onDismiss = {},

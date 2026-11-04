@@ -29,6 +29,7 @@ struct AttachmentSheetView: View {
     var onModeSelected: (String) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var router: Router
 
     @State private var pickerItems: [PhotosPickerItem] = []
@@ -88,67 +89,32 @@ struct AttachmentSheetView: View {
 
     private var atCapacity: Bool { remainingSlots <= 0 }
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12),
-    ]
-
     var body: some View {
-        AeroSheetShell(title: "Options") {
-            VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-                // --- Attach (FIRST — FLASH-MODE BUG 2: ChatGPT/Kimi put
-                //     attach on top; behavioral modes sit at the bottom). ---
-                if atCapacity {
-                    Text("Six attachments per message, remove one to add another.")
-                        .font(Aero.caption())
-                        .foregroundStyle(Aero.textMuted)
-                } else if loadingGallery {
-                    HStack(spacing: Aero.Spacing.s) {
-                        ProgressView()
-                        Text("Preparing your photos…")
-                            .font(Aero.caption())
-                            .foregroundStyle(Aero.textMuted)
-                    }
-                } else {
-                    Text("Photos, documents and voice, files are uploaded to the conversation when you send.")
-                        .font(Aero.caption())
-                        .foregroundStyle(Aero.textMuted)
-                }
-
-                LazyVGrid(columns: columns, spacing: 12) {
-                    galleryTile
-                    cameraTile
-                    filesTile
-                    voiceTile
-                    ForEach(tiles.filter { !$0.available }) { tile in
-                        unavailableTile(tile)
-                    }
-                }
-
-                Divider()
-
-                // --- Mode (LAST — FLASH-MODE BUG 2). -------------------------
-                VStack(alignment: .leading, spacing: Aero.Spacing.s) {
-                    Text("Mode")
-                        .font(Aero.label())
-                        .foregroundStyle(Aero.textMuted)
-                    ModeCarouselRow(selected: selectedMode, onSelect: onModeSelected)
-                    Text(modeHint)
-                        .font(Aero.caption())
-                        .foregroundStyle(Aero.textMuted)
-                }
-                Spacer(minLength: 0)
+        // A MENU, NOT A SHEET OF TILES. The reference is a narrow column of
+        // rows — a circular glyph well and a label — hanging off the "+" it
+        // came from. The 3-column tile grid with a headline read as a settings
+        // page that happened to be floating; this reads as "here is what this
+        // button can do".
+        VStack(spacing: 0) {
+            if atCapacity {
+                Text("Six attachments per message, remove one to add another.")
+                    .font(Aero.caption())
+                    .foregroundStyle(Aero.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
             }
+            galleryRow
+            cameraRow
+            filesRow
+            voiceRow
+            ForEach(tiles.filter { !$0.available }) { tile in
+                unavailableRow(tile)
+            }
+            GsPopoverRule()
+            modeChips
         }
-        // 420: the carousel row (88pt cards) + labels need more vertical room
-        // than the segmented picker this row replaced.
-        .presentationDetents([.height(430)])
-        // A real frosted backdrop and a floating corner radius — the system
-        // sheet was painting `Aero.background` edge to edge, which is a page,
-        // not an overlay. Guarded for the 16.0 floor.
-        .modifier(GsFrostedSheet())
-        .presentationDragIndicator(.visible)
         .onChange(of: pickerItems) { items in
             guard !items.isEmpty else { return }
             pickerItems = [] // re-arm the picker for the next visit
@@ -176,97 +142,131 @@ struct AttachmentSheetView: View {
         }
     }
 
-    // MARK: Real tiles
+    // MARK: Rows
 
-    /// System photo picker — matching .images only, capped at the remaining
-    /// per-message slots.
-    private var galleryTile: some View {
+    /// The menu's one anatomy: 38pt well, 54pt row, 14.5pt label.
+    private func row(symbol: String, title: String, muted: Bool = false) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(muted ? Aero.textTertiary : Aero.text)
+                .frame(width: 38, height: 38)
+                .background(
+                    Circle().fill(Aero.text.opacity(colorScheme == .dark ? 0.10 : 0.055)))
+                .overlay(
+                    Circle().strokeBorder(
+                        Aero.outline.opacity(colorScheme == .dark ? 0.45 : 0.75),
+                        lineWidth: 0.7))
+            Text(title)
+                .font(.custom(Aero.productName(.medium), size: 14.5, relativeTo: .body))
+                .foregroundStyle(muted ? Aero.textTertiary : Aero.text)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .frame(minHeight: 54)
+        .contentShape(Rectangle())
+    }
+
+    private var galleryRow: some View {
         PhotosPicker(
             selection: $pickerItems,
             maxSelectionCount: max(1, remainingSlots),
             matching: .images
         ) {
-            tileContent(for: tiles[0])
+            row(symbol: "photo", title: "Photos")
         }
-        .buttonStyle(KineticPressStyle())
+        .buttonStyle(.plain)
         .disabled(atCapacity || loadingGallery)
-        .accessibilityLabel(atCapacity ? "Gallery, six attachments per message" : "Add from Gallery")
+        .accessibilityLabel(atCapacity ? "Photos, six attachments per message" : "Add from Photos")
     }
 
-    private var cameraTile: some View {
+    private var cameraRow: some View {
         Button {
             openCamera()
         } label: {
-            tileContent(for: tiles[1])
+            row(symbol: "camera.fill", title: "Camera")
         }
-        .buttonStyle(KineticPressStyle())
+        .buttonStyle(.plain)
         .disabled(atCapacity)
         .accessibilityLabel(atCapacity ? "Camera, six attachments per message" : "Take a photo")
     }
 
-    private var filesTile: some View {
+    private var filesRow: some View {
         Button {
             showFileImporter = true
         } label: {
-            tileContent(for: tiles[2])
+            row(symbol: "folder", title: "Files")
         }
-        .buttonStyle(KineticPressStyle())
+        .buttonStyle(.plain)
         .disabled(atCapacity)
         .accessibilityLabel(atCapacity ? "Files, six attachments per message" : "Add a document")
     }
 
-    /// Voice note → the dedicated voice experience (the same route the
-    /// composer mic uses). The engine stays the single source of truth.
-    private var voiceTile: some View {
+    /// Voice note → the dedicated voice experience (the same route the composer
+    /// mic uses). The engine stays the single source of truth.
+    private var voiceRow: some View {
         Button {
             dismiss()
             router.path.append(.voice)
         } label: {
-            tileContent(for: tiles[3])
+            row(symbol: "mic", title: "Voice note")
         }
-        .buttonStyle(KineticPressStyle())
+        .buttonStyle(.plain)
         .accessibilityLabel("Record a voice note")
     }
 
-    // MARK: Honestly unavailable tiles
-
-    /// Muted, non-functional, labelled — tapping keeps the honest toast.
-    private func unavailableTile(_ tile: Tile) -> some View {
+    private func unavailableRow(_ tile: Tile) -> some View {
         Button {
             onUnavailable(tile.label)
         } label: {
-            tileContent(for: tile)
+            row(symbol: tile.icon, title: tile.label, muted: true)
         }
-        .buttonStyle(KineticPressStyle())
+        .buttonStyle(.plain)
         .accessibilityLabel("\(tile.label). Not available yet")
     }
 
-    // MARK: Tile chrome
+    // MARK: Mode chips
 
-    /// Functional tiles render in full ink; unavailable ones are muted with
-    /// the honest "Not available yet" marker.
-    private func tileContent(for tile: Tile) -> some View {
-        VStack(spacing: Aero.Spacing.s) {
-            // GLASS, not `Aero.container`. A flat swatch inside a frosted sheet
-            // is two materials in one object — the reason these tiles read as
-            // "normal" next to the rest of the app.
-            Image(systemName: tile.icon)
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(tile.available ? Aero.accent : Aero.textDisabled)
-                .frame(width: 52, height: 52)
-                .gsGlass(.floatingControl, corner: 16)
-            Text(tile.label)
-                .font(Aero.label())
-                .foregroundStyle(tile.available ? Aero.text : Aero.textDisabled)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            if !tile.available {
-                Text("Not available yet")
-                    .font(Aero.metadata())
-                    .foregroundStyle(Aero.textDisabled)
+    /// Mode stays, because it is the one thing this button changes that is not a
+    /// file — but it is a row of small chips, not a carousel of cards. The menu
+    /// is a menu all the way down.
+    private var modeChips: some View {
+        HStack(spacing: 6) {
+            ForEach(
+                [
+                    (value: "flash", label: "Flash"),
+                    (value: "thinking", label: "Thinking"),
+                    (value: "auto", label: "Auto"),
+                ],
+                id: \.value
+            ) { mode in
+                let on = selectedMode == mode.value
+                Button {
+                    onModeSelected(mode.value)
+                } label: {
+                    Text(mode.label)
+                        .font(.custom(
+                            Aero.productName(on ? .semibold : .medium),
+                            size: 11.5, relativeTo: .caption2))
+                        .foregroundStyle(on ? Aero.accentStrong : Aero.textSecondary)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 30)
+                        .background(
+                            Capsule().fill(
+                                on ? Aero.accent.opacity(0.14) : Aero.text.opacity(0.04)))
+                        .overlay(
+                            Capsule().strokeBorder(
+                                on ? Aero.accent.opacity(0.42) : Aero.outline.opacity(0.7),
+                                lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(mode.label) mode")
             }
         }
-        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
     }
 
     // MARK: Gallery loading

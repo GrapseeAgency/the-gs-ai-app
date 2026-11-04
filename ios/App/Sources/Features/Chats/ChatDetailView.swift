@@ -168,9 +168,22 @@ struct ChatDetailView: View {
         } message: {
             Text("The chat stays in your history, but every message in it is removed.")
         }
-        .sheet(isPresented: $showOptions) {
-            conversationOptionsSheet
+        // A MENU, ANCHORED TO THE THREE DOTS. It used to be a .sheet at 66% —
+        // a second screen that slid over the chat to show six short lines. The
+        // reference hangs a narrow list off the header control instead.
+        .overlay(alignment: .topTrailing) {
+            if showOptions {
+                GsAnchoredPopover(
+                    alignment: .topTrailing,
+                    width: 208,
+                    verticalInset: 68,
+                    onDismiss: { showOptions = false }
+                ) {
+                    conversationOptionsSheet
+                }
+            }
         }
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: showOptions)
         .sheet(isPresented: $showInfo) {
             chatInfoSheet
         }
@@ -212,26 +225,38 @@ struct ChatDetailView: View {
                 sendAndClearDraft()
             }
         }
-        .sheet(isPresented: $showingAttachments) {
-            AttachmentSheetView(
-                onImageData: { data, mime, source in
-                    if source == .camera {
-                        attachments.addCameraCapture(data)
-                    } else {
-                        attachments.addImageData(data, mimeType: mime, source: source)
-                    }
-                },
-                onFileURL: { url in
-                    attachments.addFileURL(url)
-                },
-                onUnavailable: { option in
-                    showToast(attachmentMessage(for: option))
-                },
-                remainingSlots: attachments.remainingSlots,
-                // FLASH MODE (Phase 3) — the Mode section in the same sheet.
-                selectedMode: vm.chatMode,
-                onModeSelected: { vm.setChatMode($0) })
+        // Same rule for attach: it hangs off the "+" in the bottom-left corner,
+        // 84pt up so its bottom edge sits level with the composer.
+        .overlay(alignment: .bottomLeading) {
+            if showingAttachments {
+                GsAnchoredPopover(
+                    alignment: .bottomLeading,
+                    width: 248,
+                    verticalInset: 84,
+                    onDismiss: { showingAttachments = false }
+                ) {
+                    AttachmentSheetView(
+                        onImageData: { data, mime, source in
+                            if source == .camera {
+                                attachments.addCameraCapture(data)
+                            } else {
+                                attachments.addImageData(data, mimeType: mime, source: source)
+                            }
+                        },
+                        onFileURL: { url in
+                            attachments.addFileURL(url)
+                        },
+                        onUnavailable: { option in
+                            showToast(attachmentMessage(for: option))
+                        },
+                        remainingSlots: attachments.remainingSlots,
+                        // FLASH MODE (Phase 3) — the mode chips in the same menu.
+                        selectedMode: vm.chatMode,
+                        onModeSelected: { vm.setChatMode($0) })
+                }
+            }
         }
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: showingAttachments)
         .sheet(item: $translationCard) { card in
             TranslationSheet(
                 source: card.source,
@@ -747,100 +772,44 @@ struct ChatDetailView: View {
     }
 
     private var conversationOptionsSheet: some View {
-        VStack(spacing: 6) {
-            Capsule()
-                .fill(Aero.outlineStrong)
-                .frame(width: 38, height: 4)
-                .padding(.top, 8)
-            Text(conversationTitle)
-                .font(Aero.title())
-                .foregroundStyle(Aero.text)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
-            ScrollView {
-                VStack(spacing: 4) {
-                    ShareLink(item: transcriptText) {
-                        // `share`, not `squareArrowUp`: the SF glyph this row
-                        // carried was square.and.arrow.up, but Android's sheet
-                        // draws GsIcons.Share (ChatScreen's option row), and one
-                        // product means one icon per action.
-                        optionLabel(GsIcons.share, "Share Chat", "Share this conversation")
-                    }
-                    Button {
-                        showOptions = false
-                        openAfterDismiss { showRename = true }
-                    } label: {
-                        // squarePen — Android's rename mark (GsIcons.SquarePen).
-                        optionLabel(GsIcons.squarePen, "Rename Chat", "Give your chat a new name")
-                    }
-                    Button {
-                        showOptions = false
-                        openAfterDismiss { showInfo = true }
-                    } label: {
-                        optionLabel(GsIcons.info, "Chat Details", "View info & stats")
-                    }
-                    ShareLink(item: exportText) {
-                        optionLabel(GsIcons.fileText, "Export Chat", "Send the transcript as text")
-                    }
-                    Button {
-                        showOptions = false
-                        openAfterDismiss { showClearConfirm = true }
-                    } label: {
-                        optionLabel(GsIcons.eraser, "Clear Chat", "Remove all messages")
-                    }
-                    Button {
-                        showOptions = false
-                        openAfterDismiss { showDeleteConfirm = true }
-                    } label: {
-                        optionLabel(GsIcons.trash2, "Delete Chat", "Permanently delete this chat", destructive: true)
-                    }
-                    Button {
-                        showOptions = false
-                    } label: {
-                        optionLabel(GsIcons.x, "Cancel", "")
-                    }
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-                .padding(.bottom, 24)
+        // A menu, not a page: no drag handle, no title, no supporting sentence
+        // under every row, no Cancel button. The reference has six short lines
+        // and one of them is red. The title it used to print is already on the
+        // screen this menu belongs to.
+        VStack(spacing: 2) {
+            ShareLink(item: transcriptText) {
+                GsPopoverRow(icon: GsIcons.share, label: "Share chat", well: false)
+            }
+            Button {
+                showOptions = false
+                openAfterDismiss { showRename = true }
+            } label: {
+                GsPopoverRow(icon: GsIcons.squarePen, label: "Rename", well: false)
+            }
+            Button {
+                showOptions = false
+                openAfterDismiss { showInfo = true }
+            } label: {
+                GsPopoverRow(icon: GsIcons.info, label: "Chat details", well: false)
+            }
+            ShareLink(item: exportText) {
+                GsPopoverRow(icon: GsIcons.fileText, label: "Export transcript", well: false)
+            }
+            GsPopoverRule()
+            Button {
+                showOptions = false
+                openAfterDismiss { showClearConfirm = true }
+            } label: {
+                GsPopoverRow(icon: GsIcons.eraser, label: "Clear messages", well: false)
+            }
+            Button {
+                showOptions = false
+                openAfterDismiss { showDeleteConfirm = true }
+            } label: {
+                GsPopoverRow(icon: GsIcons.trash2, label: "Delete", destructive: true, well: false)
             }
         }
-        // A FLOATING FROSTED PANEL, not a cream page. `Aero.background` edge to
-        // edge plus a .medium detent is a second screen that slides; the
-        // material and the fraction make it an overlay that belongs to the
-        // conversation behind it.
-        .presentationDetents([.fraction(0.66)])
-        .modifier(GsFrostedSheet())
-        .presentationDragIndicator(.visible)
-    }
-
-    private func optionLabel(
-        _ icon: GsIconPaths,
-        _ title: String,
-        _ subtitle: String,
-        destructive: Bool = false
-    ) -> some View {
-        HStack(spacing: 12) {
-            GsIconView(icon, size: 15, color: destructive ? Aero.danger : Aero.textSecondary)
-                .frame(width: 38, height: 38)
-                .gsGlass(.sunken, corner: 12)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(Aero.label())
-                    .foregroundStyle(destructive ? Aero.danger : Aero.text)
-                if !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(Aero.caption())
-                        .foregroundStyle(destructive ? Aero.danger.opacity(0.75) : Aero.textMuted)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
     }
 
     private var chatInfoSheet: some View {

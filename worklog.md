@@ -5952,3 +5952,18 @@ Work Log:
 - First render was wrong twice: the OFF track used `glassHighlight` (near-white), so on the cream page it vanished into the card and left an empty outline; and the rungs at 34dp were wider than tall, reading as a row of lozenges. Fixed with the ink-based well + warm rim, and 13→42dp rounded-rect tiles.
 - iOS mirrors it in `Components/GsGlassControls.swift` (`GsGlassSwitch`, `GsGlassToggleStyle`, `GsTextSizeLadder` — same 48×28 / 22pt knob / ten rungs at 13→42). `GsSheetSwitch` is now a delegate, so every `GsSheetToggle` sheet switched material at once; `SettingsView.toggleRow` and the Ai Intelligence / Model Selection / Voice trailing toggles use the switch directly. Not compiled here — no Swift toolchain in this environment.
 - versionCode 142 / 0.86.19. Android suite 449 tests, 0 failures; probe renders probe-a11y-*, probe-controls-*.
+
+---
+
+Task ID: build-0.86.20-anchored-menus
+Agent: main
+Task: "ami bolchilam ei rokom overlay banayte … thik kore overlay ta thik kor" — with two reference shots: a narrow attach menu in the bottom-left corner and a narrow options menu under the header dots.
+
+Work Log:
+- The defect was the SHAPE, not the material. 0.86.13 had replaced `ModalBottomSheet` with a floating panel — but a panel is still a sheet: full width, centred, 14dp inset, a drag handle, a title, and a supporting sentence under every row. The reference has none of that: it is a menu that belongs to one button.
+- New Android `GsAnchoredPopover(alignment, width, horizontalInset, verticalInset)`: a `Dialog` with `usePlatformDefaultWidth = false`, a 12% scrim (a menu does not black out the page it points at), the panel pinned to a corner, and `graphicsLayer` scale 0.94→1 with `transformOrigin` ON that corner, so it grows out of the button.
+- Attach: bottom-start, 248dp, 84dp up (level with the composer), rows Camera/Photos/Files/Voice note + the two honest-unavailable ones, then a rule and three 30dp mode chips — the mode selector survives as chips instead of a card carousel.
+- Options: top-end, 208dp, 68dp down (below the header), bare 46dp rows, Delete the only red line, no Cancel (tap outside), two-step confirms kept inside the same menu.
+- Readability: a menu has to sit over ANY content, so it is the one surface that is nearly opaque — `dialogSurface` at 0.88/0.92 under the glass, a 22dp shadow, and one hairline, because the glass rim is white-on-white on the pearl page. First probe showed rows floating on the bloom with no panel at all.
+- iOS mirrors it: `Components/GsPopover.swift` (`GsAnchoredPopover`, `GsPopoverRow`, `GsPopoverRule`), `AttachmentSheetView` body rewritten from a 3-column tile grid to rows, `conversationOptionsSheet` from a titled 66% sheet to six lines. Both are now `.overlay(alignment:)` instead of `.sheet`, so the pickers and camera still present from inside them.
+- versionCode 143 / 0.86.20. Android suite 449 tests, 0 failures; probe renders probe-attach-*, probe-menu-*.
