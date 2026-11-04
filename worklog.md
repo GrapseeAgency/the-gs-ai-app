@@ -5926,3 +5926,13 @@ Work Log:
 - Brand disc: lilac, not the app accent — the accent is peach, and a peach sparkle in a peach disc loses the product's one fixed mark. `0xFF8E7BFF` light / `0xFFB9A9FF` dark, fill at 0.16, rim at 0.30.
 - iOS: same four discs in `NexlyBrandHeader` (`.elevated` + `Circle().strokeBorder(rimColor)`), same lilac brand, `rimColor` = white 0.65 light / 0.18 dark.
 - versionCode 140 / 0.86.17.
+
+---
+
+Task ID: build-0.86.18-name-only
+Agent: main
+Task: Drop "Your AI companion" from the header; keep the name and the discs.
+
+Work Log:
+- Removed the second line on Android (NexlyChatHeader) and iOS (NexlyBrandHeader). "Nexly" now sits alone, vertically centred on the 44dp discs.
+- versionCode 141 / 0.86.18.
