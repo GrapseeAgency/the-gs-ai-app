@@ -54,6 +54,10 @@ enum AeroRoute: Hashable {
     case modelSelection
     /// Voice & Speech — the iOS twin of Android's `SETTINGS_VOICE` page.
     case voiceSettings
+    /// Voice & Speech → Speech engine (`SETTINGS_VOICE_ENGINE` on Android).
+    case speechEngine
+    /// About → Open-source licences (`SETTINGS_LICENCES` on Android).
+    case licences
     case travelAgent
     case explore
     case discover
@@ -318,6 +322,8 @@ struct AeroDestinations: ViewModifier {
             case .chatSearch: ChatSearchView()
             case .modelSelection: AiIntelligenceView()
             case .voiceSettings: VoiceSpeechView()
+            case .speechEngine: SpeechEngineView()
+            case .licences: LicencesView()
             case .travelAgent: TravelAgentView(onBack: { router.path.removeLast() }, onSendToChat: { prompt in router.path.append(.chatPrefill(prompt)) })
             case .explore: ExploreView(
                 onOpenChat: { router.path.append($0) },

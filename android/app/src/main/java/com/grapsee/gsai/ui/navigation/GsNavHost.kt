@@ -66,7 +66,9 @@ import com.grapsee.gsai.ui.settings.ModelDetailsScreen
 import com.grapsee.gsai.ui.settings.ModelSelectionScreen
 import com.grapsee.gsai.ui.settings.NotificationsAlertsScreen
 import com.grapsee.gsai.ui.settings.PrivacySettingsScreen
+import com.grapsee.gsai.ui.settings.LicencesScreen
 import com.grapsee.gsai.ui.settings.SettingsHubScreen
+import com.grapsee.gsai.ui.settings.SpeechEngineScreen
 import com.grapsee.gsai.ui.settings.ThemeCustomisationScreen
 import com.grapsee.gsai.ui.settings.VoiceSettingsScreen
 import com.grapsee.gsai.ui.specimen.GlassSpecimenScreen
@@ -479,6 +481,9 @@ fun GsNavHost(
         composable(GsRoutes.SETTINGS_VOICE) {
             VoiceSettingsScreen(onBack = back, onNavigate = open)
         }
+        composable(GsRoutes.SETTINGS_VOICE_ENGINE) {
+            SpeechEngineScreen(onBack = back)
+        }
         composable(GsRoutes.SETTINGS_ACCESSIBILITY) {
             AccessibilitySettingsScreen(onBack = back)
         }
@@ -490,7 +495,10 @@ fun GsNavHost(
             ConnectedAppsScreen(onBack = back)
         }
         composable(GsRoutes.SETTINGS_ABOUT) {
-            AboutSettingsScreen(onBack = back)
+            AboutSettingsScreen(onBack = back, onNavigate = open)
+        }
+        composable(GsRoutes.SETTINGS_LICENCES) {
+            LicencesScreen(onBack = back)
         }
         composable(GsRoutes.SETTINGS_PLAN) {
             SubscriptionUsageScreen(onBack = back, onNavigate = open)

@@ -47,17 +47,18 @@ struct VoiceSpeechView: View {
                 } trailing: {
                     GsSheetChevron()
                 }
-                // A value, not a control: the synthesizer is the system
-                // default voice, and naming an engine we do not let the reader
-                // pick would be the dead-control failure this repo removes.
+                // Was a value row with no destination — a label that reads as a
+                // control. The engine's name, its voice, speed and pitch all
+                // live one tap away now, and those controls are wired to the
+                // synthesizer that actually speaks.
                 GsSettingsRow(
                     title: "Speech engine",
-                    detail: "Device default",
-                    action: nil
+                    detail: engineSummary,
+                    action: { router.path.append(.speechEngine) }
                 ) {
                     GsWellTile(glyph: "wave-sine", tone: .lilac, size: 28)
                 } trailing: {
-                    EmptyView()
+                    GsSheetChevron()
                 }
                 GsSettingsRow(
                     title: "Haptic confirmation",
@@ -76,6 +77,19 @@ struct VoiceSpeechView: View {
 
             footnote("Speech is synthesized locally on this device. Audio is not uploaded to GS.")
         }
+    }
+
+    /// "Natural · device synthesizer", or the reader's chosen step.
+    private var engineSummary: String {
+        // `object(forKey:)` rather than `integer(forKey:)`: the latter returns 0
+        // for an unset key, which would make a fresh install report "Slower"
+        // while the engine screen (whose @AppStorage default is 1) says
+        // "Natural". An unset key means the middle step on both pages.
+        let speed = UserDefaults.standard.object(forKey: "gs.tts.rateStep") as? Int ?? 1
+        let pitch = UserDefaults.standard.object(forKey: "gs.tts.pitchStep") as? Int ?? 1
+        let speedLabel = ["Slower", "Natural", "Faster"][min(max(speed, 0), 2)]
+        let pitchLabel = ["lower pitch", "natural pitch", "higher pitch"][min(max(pitch, 0), 2)]
+        return "\(speedLabel) · \(pitchLabel) · device synthesizer"
     }
 
     private func footnote(_ text: String) -> some View {

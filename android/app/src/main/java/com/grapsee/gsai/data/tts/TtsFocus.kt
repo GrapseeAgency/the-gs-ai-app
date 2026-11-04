@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.speech.tts.TextToSpeech
+import com.grapsee.gsai.data.SettingsStore
 
 /**
  * Read-aloud with audio-focus discipline. Every TextToSpeech instance in the
@@ -70,9 +71,20 @@ class TtsFocus(
         runCatching { audioManager.abandonAudioFocusRequest(focusRequest) }
     }
 
-    /** Focus-gated QUEUE_FLUSH speak; returns TextToSpeech.SUCCESS/ERROR. */
+    /**
+     * Focus-gated QUEUE_FLUSH speak; returns TextToSpeech.SUCCESS/ERROR.
+     *
+     * The reader's delivery settings are applied HERE, not in the screen that
+     * owns them: every read-aloud path in the app goes through this method, so
+     * one write is enough for chat playback, voice-mode read-back and the
+     * "Test voice" button on the Speech engine page.
+     */
     fun speak(text: String, utteranceId: String): Int {
         if (!requestFocus()) return TextToSpeech.ERROR
+        runCatching {
+            engine.setSpeechRate(SettingsStore.ttsRate)
+            engine.setPitch(SettingsStore.ttsPitch)
+        }
         return engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
     }
 

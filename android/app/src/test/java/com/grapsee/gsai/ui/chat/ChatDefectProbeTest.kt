@@ -549,4 +549,51 @@ class ChatDefectProbeTest {
         compose.setContent { controlsMatrix(true) }
         compose.onRoot().captureRoboImage("build/screenshots/probe-controls-dark.png")
     }
+
+    // --- 0.86.21: the pages that were missing ------------------------------
+
+    /** Settings → Voice → Speech engine. No synthesizer exists in this JVM, so
+     *  the probe also proves the page's own "unavailable" state is a page and
+     *  not a crash. */
+    @Composable
+    private fun speechEnginePage(dark: Boolean) {
+        TheGsAiTheme(darkTheme = dark) {
+            com.grapsee.gsai.ui.settings.SpeechEngineScreen(onBack = {})
+        }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun speechEngineLight() {
+        compose.setContent { speechEnginePage(false) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-speech-light.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun speechEngineDark() {
+        compose.setContent { speechEnginePage(true) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-speech-dark.png")
+    }
+
+    @Composable
+    private fun licencesPage(dark: Boolean) {
+        TheGsAiTheme(darkTheme = dark) {
+            com.grapsee.gsai.ui.settings.LicencesScreen(onBack = {})
+        }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun licencesLight() {
+        compose.setContent { licencesPage(false) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-licences-light.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun licencesDark() {
+        compose.setContent { licencesPage(true) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-licences-dark.png")
+    }
 }

@@ -5967,3 +5967,25 @@ Work Log:
 - Readability: a menu has to sit over ANY content, so it is the one surface that is nearly opaque — `dialogSurface` at 0.88/0.92 under the glass, a 22dp shadow, and one hairline, because the glass rim is white-on-white on the pearl page. First probe showed rows floating on the bloom with no panel at all.
 - iOS mirrors it: `Components/GsPopover.swift` (`GsAnchoredPopover`, `GsPopoverRow`, `GsPopoverRule`), `AttachmentSheetView` body rewritten from a 3-column tile grid to rows, `conversationOptionsSheet` from a titled 66% sheet to six lines. Both are now `.overlay(alignment:)` instead of `.sheet`, so the pickers and camera still present from inside them.
 - versionCode 143 / 0.86.20. Android suite 449 tests, 0 failures; probe renders probe-attach-*, probe-menu-*.
+
+---
+
+Task ID: build-0.86.21-settings-depth
+Agent: main
+Task: "eigula logically thik ache and eigular shob kichur jonno extra decorated sub page even oitar sub page o ache kina … shob kichu complete koro eke stop hoba na … iOS as well" — an audit of the settings tree, its sub-pages, and the abnormal states behind them.
+
+Work Log:
+- AUDIT (what was actually wrong, not what looked wrong):
+  - Hub, both platforms: `Privacy Settings`, `Data Controls` and `Export / Delete Data` all pointed at ONE page (Privacy). Two of the three labels were aliases.
+  - `Export / Delete Data` pointed at Privacy, not at the Data page that owns export and deletion.
+  - Android: `SETTINGS_INTEGRATIONS` (Connected Apps) had a screen and a route and no hub row — an orphan. iOS carried the row, so the two hubs disagreed.
+  - Voice → "Speech engine" was a `RefValueRow`/`GsSettingsRow` with `action: nil`: a label shaped like a control, with no page behind it. Nothing in the app could set speed or pitch, and `TtsFocus` had no reader for either.
+  - About → "Open-source licences" was an `AlertDialog` (Android) / a `.sheet` with one grey paragraph (iOS): the only surface in About not built like the rest of the app, and the only "page" that was not a page.
+  - Everything else checked out: Notifications (types/channels/quiet hours with a real DND filter + window editor), Account & Security (real session + biometric), Data Export/Deletion (retention, auto-delete, clear, delete with consent gate), Memory (list + manage), Accessibility, Appearance, Chat, AI, Search History, Permissions — each has its own scaffold, and the ones with list content have decorated empty states (`RefEmptyState`).
+- New Android `ui/settings/SettingsDeepScreens.kt`:
+  - `SpeechEngineScreen` — engine name from `TextToSpeech.defaultEngine` resolved against the installed engine list, voice + locale, "System speech settings" row, Speed/Pitch as three-step glass segments written to `SettingsStore.ttsRate/ttsPitch`, and a "Test voice" button that speaks through `TtsFocus` (so it takes audio focus like every other read-aloud). No engine → a real "unavailable" state with a button into system settings, not a silent button. `runCatching` around the TTS constructor: a few OEM builds throw when nothing is installed, and a settings page must open and say so.
+  - `LicencesScreen` — grouped by Typeface / Runtime & UI / On-device inference, each entry naming project + licence + what it does here, ending with a real link to the LICENSES folder. Replaces the dialog.
+- `TtsFocus.speak` now applies `SettingsStore.ttsRate/ttsPitch` before every utterance — the one path all read-aloud takes, so the new controls are audible in chat and voice mode too, not just on their own page.
+- Hub fixes (both): `Export / Delete Data` → the Data page; the `Data Controls` alias replaced by `Connected Apps` (the orphan); iOS's duplicate Connected Apps row removed from App Settings so the two hubs now list the same three privacy destinations.
+- iOS mirrors it: `Features/Settings/SettingsDeepViews.swift` (`SpeechEngineView`, `LicencesView`), routes `.speechEngine` / `.licences`, `VoiceSpeechView`'s dead row now pushes the engine page and summarises the chosen steps, About pushes licences instead of presenting a sheet. Speed/pitch persist via `@AppStorage("gs.tts.rateStep"/"pitchStep")`; the summary reads `object(forKey:)` so an unset key means the middle step on both pages.
+- versionCode 144 / 0.86.21. Android suite 453 tests, 0 failures; probe renders probe-speech-*, probe-licences-*. iOS sources updated, not compiled (no Swift toolchain here).

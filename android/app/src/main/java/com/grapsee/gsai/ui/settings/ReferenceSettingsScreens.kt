@@ -1248,10 +1248,19 @@ fun VoiceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
                 onClick = { onNavigate(GsRoutes.VOICE) }
             )
             RefDivider()
-            RefValueRow(
+            // Was a value row with no destination — a label that reads as a
+            // control. The engine's name, its voice, speed and pitch all live
+            // one tap away now, and those controls are wired to the synthesizer.
+            RefRow(
                 title = "Speech engine",
-                value = "Device default",
-                icon = GsIcons.AudioLines
+                subtitle = buildString {
+                    append(if (SettingsStore.ttsRate == 1.0f) "Natural" else if (SettingsStore.ttsRate < 1f) "Slower" else "Faster")
+                    append(" · ")
+                    append(if (SettingsStore.ttsPitch == 1.0f) "natural pitch" else if (SettingsStore.ttsPitch < 1f) "lower pitch" else "higher pitch")
+                    append(" · device synthesizer")
+                },
+                icon = GsIcons.AudioLines,
+                onClick = { onNavigate(GsRoutes.SETTINGS_VOICE_ENGINE) }
             )
             RefDivider()
             RefToggleRow(
@@ -1412,10 +1421,14 @@ fun LanguageSettingsScreen(
 // ---------------------------------------------------------------------------
 
 @Composable
-fun AboutSettingsScreen(onBack: () -> Unit) {
+fun AboutSettingsScreen(
+    onBack: () -> Unit,
+    /** The licences page is its own destination; the dialog that used to live
+     *  here was the last surface in About not built like the rest of the app. */
+    onNavigate: (String) -> Unit = {},
+) {
     val context = LocalContext.current
     val colors = GsTheme.colors
-    var showLicenses by remember { mutableStateOf(false) }
 
     RefSettingsPage(
         title = "About GS AI",
@@ -1467,7 +1480,7 @@ fun AboutSettingsScreen(onBack: () -> Unit) {
                 title = "Open-source licences",
                 subtitle = "Poppins, Kotlin, Compose, llama.cpp and more",
                 icon = GsIcons.BookOpen,
-                onClick = { showLicenses = true }
+                onClick = { onNavigate(GsRoutes.SETTINGS_LICENCES) }
             )
             RefDivider()
             RefRow(
@@ -1483,24 +1496,6 @@ fun AboutSettingsScreen(onBack: () -> Unit) {
         RefQuietButton("Back to settings", onBack)
     }
 
-    if (showLicenses) {
-        AlertDialog(
-            onDismissRequest = { showLicenses = false },
-            title = { Text("Open-source licences") },
-            text = {
-                Text(
-                    "Poppins — Copyright 2020 The Poppins Project Authors, SIL Open Font License 1.1.\n\n" +
-                        "Kotlin and Jetpack Compose — Apache License 2.0.\n\n" +
-                        "llama.cpp — MIT License.\n\n" +
-                        "OkHttp, Room, Coil and kotlinx — Apache License 2.0.\n\n" +
-                        "Full texts ship in the repository's LICENSES directory."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { showLicenses = false }) { Text("Close") }
-            }
-        )
-    }
 }
 
 // ---------------------------------------------------------------------------

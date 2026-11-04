@@ -31,7 +31,6 @@ struct SettingsView: View {
 
     // Sign-out is UI-local; the privacy flows live on PrivacyDataControlsView.
     @State private var showSignOut = false
-    @State private var showLicences = false
 
     var body: some View {
         Group {
@@ -56,7 +55,6 @@ struct SettingsView: View {
         } message: {
             Text("You can sign back in any time. Your local chats stay on this device.")
         }
-        .sheet(isPresented: $showLicences) { licencesSheet }
     }
 
     // MARK: Hub — the reference mock
@@ -130,9 +128,16 @@ struct SettingsView: View {
             GsGroupCard {
                 hubRow("Privacy Settings", "Manage your data and activity", "lock", .peach, .privacyDataControls)
                 hubDivider
-                hubRow("Data Controls", "Control what you share and store", "shield-check", .peach, .privacyDataControls)
+                // "Data Controls" pointed at the same page as the row above it;
+                // that page is titled "Privacy & Data Controls", so the alias is
+                // gone and the slot carries a destination that had no entry on
+                // this hub at all — Connected Apps.
+                hubRow("Connected Apps", "Integrations and permissions", "link", .peach, .connectedApps)
                 hubDivider
-                hubRow("Export / Delete Data", "Download or remove your data", "database", .peach, .privacyDataControls, divider: false)
+                // This row used to open the Privacy page — the same destination
+                // as the two rows above it, under a label that promises export
+                // and deletion. The Data page owns both.
+                hubRow("Export / Delete Data", "Download or remove your data", "database", .peach, .dataExportAccountDeletion, divider: false)
             }
 
             // App Settings.
@@ -158,8 +163,6 @@ struct SettingsView: View {
                 hubRow("Notifications & Alerts", "Choose what you receive", "bell", .peach, .notificationsAlerts)
                 hubDivider
                 hubRow("Account & Security", "Sign-in, app lock and sessions", "device-mobile", .peach, .accountSecurity)
-                hubDivider
-                hubRow("Connected Apps", "Integrations and permissions", "link", .peach, .connectedApps)
                 hubDivider
                 hubRow("Help & Support", "Answers, assistant and contact", "help-circle", .peach, .helpSupport)
                 hubDivider
@@ -424,43 +427,9 @@ struct SettingsView: View {
                         .font(.system(size: 12))
                         .foregroundStyle(Aero.textMuted)
                 },
-                action: { showLicences = true }
+                action: { onRoute?(.licences) }
             )
         }
-    }
-
-    /// The same credit list Android shows, naming what this build actually uses.
-    private var licencesSheet: some View {
-        VStack(alignment: .leading, spacing: Aero.Spacing.m) {
-            Text("Open-source licences")
-                .font(Aero.headline())
-                .foregroundStyle(Aero.text)
-            ScrollView {
-                Text("""
-                Poppins — Copyright 2020 The Poppins Project Authors, SIL Open Font License 1.1.
-
-                Swift and SwiftUI — Apache License 2.0 with Runtime Library Exception.
-
-                llama.cpp — MIT License.
-
-                SQLite — public domain.
-
-                Full texts ship in the repository's LICENSES directory.
-                """)
-                .font(Aero.caption())
-                .foregroundStyle(Aero.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            Button("Close") { showLicences = false }
-                .font(Aero.button())
-                .foregroundStyle(Aero.text)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(Capsule().fill(Aero.container))
-        }
-        .padding(Aero.Spacing.l)
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
     }
 
     /// Read live from the bundle so the row always names the installed build.

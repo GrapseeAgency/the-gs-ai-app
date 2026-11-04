@@ -267,19 +267,28 @@ fun SettingsHubScreen(
                 leading = { RefWellTile(GsIcons.Lock, GsWellTone.Peach, 28.dp) },
             )
             RefRowDivider()
+            // "Data Controls" used to sit here pointing at the same page as the
+            // row above it. The page it named is the Privacy page — titled
+            // "Privacy & Data Controls" — so the alias is gone and the slot now
+            // holds a destination that did not exist on this hub at all.
             RefNavRow(
-                title = "Data Controls",
-                subtitle = "Control what you share and store",
-                onClick = { onNavigate(GsRoutes.SETTINGS_PRIVACY) },
-                leading = { RefWellTile(GsIcons.Shield, GsWellTone.Peach, 28.dp) },
+                title = "Connected Apps",
+                subtitle = "Integrations and permissions",
+                onClick = { onNavigate(GsRoutes.SETTINGS_INTEGRATIONS) },
+                leading = { RefWellTile(GsIcons.Paperclip, GsWellTone.Peach, 28.dp) },
             )
             RefRowDivider()
+            // This row used to open the Privacy page — the same destination as
+            // the two rows above it, under a label that promises export and
+            // deletion. The Data page is the one that actually owns both, so
+            // the row now goes where its name says.
             RefNavRow(
                 title = "Export / Delete Data",
                 subtitle = "Download or remove your data",
-                onClick = { onNavigate(GsRoutes.SETTINGS_PRIVACY) },
+                onClick = { onNavigate(GsRoutes.SETTINGS_DATA) },
                 leading = { RefWellTile(GsIcons.Database, GsWellTone.Peach, 28.dp) },
             )
+
         }
 
         // ---- App Settings -------------------------------------------------

@@ -90,6 +90,19 @@ object SettingsStore {
     var screenReaderHints by mutableStateOf(false); private set
     var haptics by mutableStateOf(true); private set
 
+    // ---- Read-aloud delivery (Settings → Voice → Speech engine) ----
+    /**
+     * How fast read-aloud speaks, and at what pitch.
+     *
+     * These live here rather than in the Speech engine screen's own `remember`
+     * because [TtsFocus] reads them on every utterance: a slider whose value
+     * dies with the page is the dead-control failure this settings tree keeps
+     * removing. The screen offers three steps each; anything else a restored
+     * backup puts here is clamped by the engine itself.
+     */
+    var ttsRate by mutableStateOf(1.0f); private set
+    var ttsPitch by mutableStateOf(1.0f); private set
+
     // ---- Model selection (docs/reference/pending/model-selection.png) ----
     /** The model radio the reference draws. Persisted because the screen used
      *  to hold this in a local `remember`, so the tick jumped back to Pro on
@@ -165,6 +178,8 @@ object SettingsStore {
         reduceMotion = p.bool(K.reduceMotion, reduceMotion)
         screenReaderHints = p.bool(K.screenReaderHints, screenReaderHints)
         haptics = p.bool(K.haptics, haptics)
+        ttsRate = p.flt(K.ttsRate, ttsRate)
+        ttsPitch = p.flt(K.ttsPitch, ttsPitch)
         preferredModel = p.string(K.preferredModel, preferredModel)
         reasoningEffort = p.string(K.reasoningEffort, reasoningEffort)
         rememberChoices = p.bool(K.rememberChoices, rememberChoices)
@@ -213,6 +228,8 @@ object SettingsStore {
         const val reduceMotion = "settings.reduceMotion"
         const val screenReaderHints = "settings.screenReaderHints"
         const val haptics = "settings.haptics"
+        const val ttsRate = "settings.tts.rate"
+        const val ttsPitch = "settings.tts.pitch"
         const val preferredModel = "settings.preferredModel"
         const val reasoningEffort = "settings.reasoningEffort"
         const val rememberChoices = "settings.rememberChoices"
@@ -399,6 +416,17 @@ object SettingsStore {
     fun updateReduceMotion(v: Boolean) { reduceMotion = v; put(K.reduceMotion, v) }
     fun updateScreenReaderHints(v: Boolean) { screenReaderHints = v; put(K.screenReaderHints, v) }
     fun updateHaptics(v: Boolean) { haptics = v; put(K.haptics, v) }
+
+    /** Clamped so a corrupt pref cannot make the engine shout or whisper. */
+    fun updateTtsRate(v: Float) {
+        ttsRate = v.coerceIn(0.5f, 2.0f)
+        put(K.ttsRate, ttsRate)
+    }
+
+    fun updateTtsPitch(v: Float) {
+        ttsPitch = v.coerceIn(0.5f, 2.0f)
+        put(K.ttsPitch, ttsPitch)
+    }
 
     // ---- Search history ----------------------------------------------------
     /** Record one submitted query. Repeating a query moves it to the top
