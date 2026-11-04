@@ -29,6 +29,26 @@ import SwiftUI
  * `Shape`/`LinearGradient`/`Material`/`shadow` — available since the app's iOS 16
  * floor, nothing experimental, so it compiles wherever the app does.
  */
+/// The sheet as an OVERLAY rather than a page: a real frosted backdrop and a
+/// floating corner radius.
+///
+/// `presentationBackground` and `presentationCornerRadius` are iOS 16.4, and
+/// this app's floor is 16.0 — so they are guarded here instead of being called
+/// inline (which would fail the build on the deployment target, not on the
+/// device). Below 16.4 the sheet keeps the system background; everything else
+/// about it is unchanged.
+struct GsFrostedSheet: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 16.4, *) {
+            content
+                .presentationBackground(.ultraThinMaterial)
+                .presentationCornerRadius(28)
+        } else {
+            content
+        }
+    }
+}
+
 enum GsGlassRole {
     case card
     /**

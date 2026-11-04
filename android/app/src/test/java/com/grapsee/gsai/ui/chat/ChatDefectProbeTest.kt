@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.grapsee.gsai.ui.chat.content.nexlyPearlBackdrop
+import com.grapsee.gsai.ui.components.GsOverlayPanel
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
 import org.junit.Assume.assumeTrue
@@ -297,5 +298,137 @@ class ChatDefectProbeTest {
     fun headerDark() {
         compose.setContent { header(true) }
         compose.onRoot().captureRoboImage("build/screenshots/probe-header-dark.png")
+    }
+    // --- 0.86.13: the overlay and the one-word bubble -----------------------
+
+    /** "Hi" is the whole message. The bubble must be as wide as the word. */
+    @Composable
+    private fun shortBubbles(dark: Boolean) {
+        TheGsAiTheme(darkTheme = dark) {
+            Box(modifier = Modifier.fillMaxSize().nexlyPearlBackdrop()) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    UserMessage(
+                        message = ChatUiMessage(
+                            id = "hi",
+                            role = "user",
+                            content = "Hi",
+                            createdAt = "2026-11-04T16:40:00Z"
+                        )
+                    )
+                    UserMessage(
+                        message = ChatUiMessage(
+                            id = "short",
+                            role = "user",
+                            content = "what time is it in Tokyo?",
+                            createdAt = "2026-11-04T16:41:00Z"
+                        )
+                    )
+                    UserMessage(
+                        message = ChatUiMessage(
+                            id = "long",
+                            role = "user",
+                            content = "I work a 9-5 shift tomorrow and need to fit in a gym session, meal prep, and two hours of study for an exam. Can you plan my day?",
+                            createdAt = "2026-11-04T16:42:00Z"
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun shortBubblesLight() {
+        compose.setContent { shortBubbles(false) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-bubbles-light.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun shortBubblesDark() {
+        compose.setContent { shortBubbles(true) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-bubbles-dark.png")
+    }
+
+    /** The attach panel exactly as the overlay mounts it, over a live page. */
+    @Composable
+    private fun attachOverlay(dark: Boolean) {
+        TheGsAiTheme(darkTheme = dark) {
+            Box(modifier = Modifier.fillMaxSize().nexlyPearlBackdrop()) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(14.dp),
+                    verticalArrangement = Arrangement.Bottom
+                ) {
+                    GsOverlayPanel {
+                        AttachPanelContent(
+                            onDismiss = {},
+                            onGallery = {},
+                            onCamera = {},
+                            onFiles = {},
+                            onVoice = {},
+                            onUnavailable = {},
+                            selectedMode = "auto",
+                            onModeSelected = {}
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun attachOverlayLight() {
+        compose.setContent { attachOverlay(false) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-attach-light.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun attachOverlayDark() {
+        compose.setContent { attachOverlay(true) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-attach-dark.png")
+    }
+
+    @Composable
+    private fun chatMenuOverlay(dark: Boolean) {
+        TheGsAiTheme(darkTheme = dark) {
+            Box(modifier = Modifier.fillMaxSize().nexlyPearlBackdrop()) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(14.dp),
+                    verticalArrangement = Arrangement.Bottom
+                ) {
+                    GsOverlayPanel {
+                        ConversationOptionsContent(
+                            title = "hello",
+                            onDismiss = {},
+                            onRename = {},
+                            onShare = {},
+                            onDetails = {},
+                            onExport = {},
+                            onClear = {},
+                            onDelete = {}
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun chatMenuOverlayLight() {
+        compose.setContent { chatMenuOverlay(false) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-menu-light.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun chatMenuOverlayDark() {
+        compose.setContent { chatMenuOverlay(true) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-menu-dark.png")
     }
 }

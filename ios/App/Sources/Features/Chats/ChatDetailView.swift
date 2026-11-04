@@ -808,8 +808,13 @@ struct ChatDetailView: View {
                 .padding(.bottom, 24)
             }
         }
-        .background(Aero.background.ignoresSafeArea())
-        .presentationDetents([.medium, .large])
+        // A FLOATING FROSTED PANEL, not a cream page. `Aero.background` edge to
+        // edge plus a .medium detent is a second screen that slides; the
+        // material and the fraction make it an overlay that belongs to the
+        // conversation behind it.
+        .presentationDetents([.fraction(0.66)])
+        .modifier(GsFrostedSheet())
+        .presentationDragIndicator(.visible)
     }
 
     private func optionLabel(
@@ -1339,7 +1344,7 @@ struct MessageBubble: View, Equatable {
                     HStack(spacing: 4) {
                         if let stamp = timeLabel(message.createdAt) {
                             Text(stamp)
-                                .font(.system(size: 9.5, weight: .regular))
+                                .font(.system(size: 11, weight: .regular))
                                 .foregroundStyle(NexlyInk.meta)
                         }
                         NexlyGlyph(

@@ -165,6 +165,8 @@ import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsInputBar
 import com.grapsee.gsai.ui.components.GsComposerAction
 import com.grapsee.gsai.ui.components.GsGlassRole
+import com.grapsee.gsai.ui.components.GsFloatingOverlay
+import com.grapsee.gsai.ui.components.OverlaySectionLabel
 import com.grapsee.gsai.ui.components.gsContentWidth
 import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.components.rememberDeviceOffline
@@ -1868,31 +1870,17 @@ internal fun NexlyChatHeader(
             // themes, which put a blazing white disc on the dark header and
             // made the one element you look at most the brightest thing on a
             // dark screen. Light keeps the white tile; dark keeps the glass.
+            // The brand is the GLYPH, not a plate. The white disc that used to
+            // sit here was the brightest object on the dark header and, in
+            // light mode, a second card stacked on a header that has none.
+            // Same rule as the action icons: no background behind it.
             val headerDark = LocalGsIsDark.current
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .shadow(if (headerDark) 0.dp else 4.dp, CircleShape)
-                    .clip(CircleShape)
-                    .background(
-                        if (headerDark) Color.White.copy(alpha = 0.10f)
-                        else Color.White.copy(alpha = 0.94f),
-                        CircleShape
-                    )
-                    .border(
-                        1.dp,
-                        if (headerDark) Color.White.copy(alpha = 0.16f) else Color.White,
-                        CircleShape
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    GsIcons.Sparkles,
-                    contentDescription = "Nexly",
-                    tint = if (headerDark) Color(0xFFB9A9FF) else Color(0xFF8E7BFF),
-                    modifier = Modifier.size(18.dp),
-                )
-            }
+            Icon(
+                GsIcons.Sparkles,
+                contentDescription = "Nexly",
+                tint = if (headerDark) Color(0xFFB9A9FF) else Color(0xFF8E7BFF),
+                modifier = Modifier.size(23.dp),
+            )
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -1941,11 +1929,15 @@ private fun ChatTopIconButton(
     onLongClick: (() -> Unit)? = null
 ) {
     val haptics = LocalHapticFeedback.current
+    // NO DISC. These three controls sat in 36dp frosted circles, so the header
+    // carried four visible plates in a row — back, brand, sparkle, menu — and
+    // read as a toolbar of buttons rather than a title with actions. An icon
+    // that is legible on the header does not need a container to be tappable:
+    // the touch target is 44dp, the ink is the affordance.
     Box(
         modifier = Modifier
-            .size(36.dp)
+            .size(44.dp)
             .kineticPress()
-            .gsGlass(GsGlassRole.Sunken, CircleShape)
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -2118,7 +2110,15 @@ internal fun UserMessage(
                                     )
                                     .padding(horizontal = 12.dp, vertical = 7.dp)
                             ) {
-                                Column {
+                                // A bubble is sized by its SENTENCE. The stamp
+                                // row below used to be `fillMaxWidth()`, which
+                                // forced every bubble to the 320dp cap no matter
+                                // what it said — typing "Hi" produced a
+                                // full-width lavender slab, the loudest
+                                // abnormality on the transcript. The row now
+                                // wraps, and the column end-aligns it under the
+                                // text, so a one-word message is a small pill.
+                                Column(horizontalAlignment = Alignment.End) {
                                     Text(
                                         text = message.content,
                                         style = MaterialTheme.typography.bodyMedium.copy(
@@ -2134,14 +2134,12 @@ internal fun UserMessage(
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.End,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(top = 3.dp)
+                                            modifier = Modifier.padding(top = 3.dp)
                                         ) {
                                             if (stamp.isNotEmpty()) {
                                                 Text(
                                                     text = stamp,
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                                                     color = bubbleMeta
                                                 )
                                             }
@@ -2159,7 +2157,13 @@ internal fun UserMessage(
                             }
                             DropdownMenu(
                                 expanded = userMenu,
-                                onDismissRequest = { userMenu = false }
+                                onDismissRequest = { userMenu = false },
+                                // The same glass as everything else: a menu is
+                                // an overlay, and a menu was the one surface
+                                // still painted in stock Material grey.
+                                shape = RoundedCornerShape(18.dp),
+                                containerColor = GsTheme.colors.glassSurface,
+                                tonalElevation = 0.dp
                             ) {
                                 DropdownMenuItem(
                                     text = { Text("Copy") },
@@ -3090,7 +3094,10 @@ internal fun AssistantMessage(
         }
         DropdownMenu(
             expanded = menuExpanded,
-            onDismissRequest = { menuExpanded = false }
+            onDismissRequest = { menuExpanded = false },
+            shape = RoundedCornerShape(18.dp),
+            containerColor = GsTheme.colors.glassSurface,
+            tonalElevation = 0.dp
         ) {
             DropdownMenuItem(
                 text = { Text("Copy") },
@@ -3176,9 +3183,36 @@ internal fun AssistantMessage(
  * take a second tap so none is a one-tap accident. Every row calls a real
  * repository method or a real system intent; nothing here is inert.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ConversationOptionsSheet(
+    title: String,
+    onDismiss: () -> Unit,
+    onRename: (String) -> Unit,
+    onShare: () -> Unit,
+    onDetails: (() -> Unit)?,
+    onExport: () -> Unit,
+    onClear: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    // A floating glass panel, sized to these six rows — not a cream sheet
+    // stretched from the status bar to the nav bar. See [GsFloatingOverlay].
+    GsFloatingOverlay(onDismiss = onDismiss) {
+        ConversationOptionsContent(
+            title = title,
+            onDismiss = onDismiss,
+            onRename = onRename,
+            onShare = onShare,
+            onDetails = onDetails,
+            onExport = onExport,
+            onClear = onClear,
+            onDelete = onDelete,
+        )
+    }
+}
+
+/** The panel's body, split out so the render probe can photograph it. */
+@Composable
+internal fun ConversationOptionsContent(
     title: String,
     onDismiss: () -> Unit,
     onRename: (String) -> Unit,
@@ -3192,114 +3226,123 @@ private fun ConversationOptionsSheet(
     var renameDraft by remember { mutableStateOf(title) }
     var confirmingDelete by remember { mutableStateOf(false) }
     var confirmingClear by remember { mutableStateOf(false) }
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        // A sheet is a SURFACE, not a tint. glassSurface is 80% opaque, and a
-        // transcript of tables and code read straight through it — the sheet
-        // looked broken rather than translucent. The reference's sheets are
-        // solid cream; the glass language lives in the cards behind them.
-        containerColor = GsTheme.colors.sheetSurface,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 6.dp, end = 2.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
+        Text(
+            text = title.ifBlank { "This chat" },
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontSize = 15.5.sp,
+                lineHeight = 19.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = GsTheme.colors.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = GsMotion.spaceM)
-                .padding(bottom = GsMotion.spaceL),
-            verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+                .size(30.dp)
+                .clip(CircleShape)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    role = Role.Button,
+                    onClickLabel = "Close",
+                    onClick = onDismiss
+                ),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = title.ifBlank { "This chat" },
-                style = MaterialTheme.typography.titleMedium,
-                color = GsTheme.colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+            NexlyGlyph(name = "x", size = 15.dp, color = GsTheme.colors.textTertiary)
+        }
+    }
+    when {
+        confirmingDelete -> {
+            SheetActionRow(
+                icon = GsIcons.Trash2,
+                title = "Delete this chat?",
+                subtitle = "This action cannot be undone. The conversation will be permanently removed from your history.",
+                destructive = true,
+                onClick = onDelete
             )
-            when {
-                confirmingDelete -> {
-                    SheetActionRow(
-                        icon = GsIcons.Trash2,
-                        title = "Delete this chat?",
-                        subtitle = "This action cannot be undone. The conversation will be permanently removed from your history.",
-                        destructive = true,
-                        onClick = onDelete
-                    )
-                    SheetActionRow(GsIcons.X, "Cancel", onClick = { confirmingDelete = false })
+            SheetActionRow(GsIcons.X, "Cancel", onClick = { confirmingDelete = false })
+        }
+        confirmingClear -> {
+            SheetActionRow(
+                icon = GsIcons.Eraser,
+                title = "Clear all messages?",
+                subtitle = "The chat stays in your history, but every message in it is removed.",
+                destructive = true,
+                onClick = onClear
+            )
+            SheetActionRow(GsIcons.X, "Cancel", onClick = { confirmingClear = false })
+        }
+        renaming -> {
+            OutlinedTextField(
+                value = renameDraft,
+                onValueChange = { renameDraft = it },
+                label = { Text("Chat name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            SheetActionRow(GsIcons.Check, "Save", onClick = {
+                val trimmed = renameDraft.trim()
+                if (trimmed.isNotEmpty()) onRename(trimmed)
+            })
+            SheetActionRow(GsIcons.X, "Cancel", onClick = { renaming = false })
+        }
+        else -> {
+            SheetActionRow(
+                icon = GsIcons.Share,
+                title = "Share Chat",
+                subtitle = "Share this conversation",
+                onClick = onShare
+            )
+            SheetActionRow(
+                icon = GsIcons.SquarePen,
+                title = "Rename Chat",
+                subtitle = "Give your chat a new name",
+                onClick = {
+                    renameDraft = title
+                    renaming = true
                 }
-                confirmingClear -> {
-                    SheetActionRow(
-                        icon = GsIcons.Eraser,
-                        title = "Clear all messages?",
-                        subtitle = "The chat stays in your history, but every message in it is removed.",
-                        destructive = true,
-                        onClick = onClear
-                    )
-                    SheetActionRow(GsIcons.X, "Cancel", onClick = { confirmingClear = false })
-                }
-                renaming -> {
-                    OutlinedTextField(
-                        value = renameDraft,
-                        onValueChange = { renameDraft = it },
-                        label = { Text("Chat name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    SheetActionRow(GsIcons.Check, "Save", onClick = {
-                        val trimmed = renameDraft.trim()
-                        if (trimmed.isNotEmpty()) onRename(trimmed)
-                    })
-                    SheetActionRow(GsIcons.X, "Cancel", onClick = { renaming = false })
-                }
-                else -> {
-                    SheetActionRow(
-                        icon = GsIcons.Share,
-                        title = "Share Chat",
-                        subtitle = "Share this conversation",
-                        onClick = onShare
-                    )
-                    SheetActionRow(
-                        icon = GsIcons.SquarePen,
-                        title = "Rename Chat",
-                        subtitle = "Give your chat a new name",
-                        onClick = {
-                            renameDraft = title
-                            renaming = true
-                        }
-                    )
-                    if (onDetails != null) {
-                        SheetActionRow(
-                            icon = GsIcons.Info,
-                            title = "Chat Details",
-                            subtitle = "View info & stats",
-                            onClick = onDetails
-                        )
-                    }
-                    SheetActionRow(
-                        icon = GsIcons.FileText,
-                        title = "Export Chat",
-                        subtitle = "Send the transcript as text",
-                        onClick = onExport
-                    )
-                    SheetActionRow(
-                        icon = GsIcons.Eraser,
-                        title = "Clear Chat",
-                        subtitle = "Remove all messages",
-                        onClick = { confirmingClear = true }
-                    )
-                    SheetActionRow(
-                        icon = GsIcons.Trash2,
-                        title = "Delete Chat",
-                        subtitle = "Permanently delete this chat",
-                        destructive = true,
-                        onClick = { confirmingDelete = true }
-                    )
-                    SheetActionRow(
-                        icon = GsIcons.X,
-                        title = "Cancel",
-                        onClick = onDismiss
-                    )
-                }
+            )
+            if (onDetails != null) {
+                SheetActionRow(
+                    icon = GsIcons.Info,
+                    title = "Chat Details",
+                    subtitle = "View info & stats",
+                    onClick = onDetails
+                )
             }
+            SheetActionRow(
+                icon = GsIcons.FileText,
+                title = "Export Chat",
+                subtitle = "Send the transcript as text",
+                onClick = onExport
+            )
+            SheetActionRow(
+                icon = GsIcons.Eraser,
+                title = "Clear Chat",
+                subtitle = "Remove all messages",
+                onClick = { confirmingClear = true }
+            )
+            SheetActionRow(
+                icon = GsIcons.Trash2,
+                title = "Delete Chat",
+                subtitle = "Permanently delete this chat",
+                destructive = true,
+                onClick = { confirmingDelete = true }
+            )
+            SheetActionRow(
+                icon = GsIcons.X,
+                title = "Cancel",
+                onClick = onDismiss
+            )
         }
     }
 }
@@ -3318,8 +3361,8 @@ private fun SheetActionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = if (subtitle == null) 52.dp else 64.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .heightIn(min = if (subtitle == null) 46.dp else 58.dp)
+            .clip(RoundedCornerShape(16.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -3327,27 +3370,32 @@ private fun SheetActionRow(
                 onClickLabel = title,
                 onClick = onClick
             )
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 4.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(11.dp)
     ) {
+        // The tile is the SAME glass as the panel's cards — the material's lit
+        // rim, not a flat swatch with a 1dp outline. A row inside an overlay is
+        // still part of the app; it was the one place still speaking Material.
         Box(
             modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(colors.glassSurface.copy(alpha = 0.85f))
-                .border(1.dp, colors.glassBorder, RoundedCornerShape(12.dp)),
+                .size(34.dp)
+                .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(11.dp)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 icon,
                 contentDescription = null,
                 tint = if (destructive) colors.error else colors.textSecondary,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(17.dp)
             )
         }
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, color = tint)
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp),
+                color = tint
+            )
             if (subtitle != null) {
                 Text(
                     subtitle,
@@ -3835,110 +3883,114 @@ private fun AttachSheet(
     selectedMode: String = "flash",
     onModeSelected: (String) -> Unit = {}
 ) {
-    // FULL HEIGHT, FROM THE BOTTOM. The attach surface used to open at the
-    // half-expanded detent — a squat card that showed two rows of tiles and
-    // then had to be dragged up by hand to reach the mode row. It now rises
-    // straight to the top (skipPartiallyExpanded) and owns the full height:
-    // the same gesture, one step, everything visible at once, and the body
-    // scrolls on a short screen instead of clipping.
-    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(
-        skipPartiallyExpanded = true
-    )
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        // A sheet is a SURFACE, not a tint. glassSurface is 80% opaque, and a
-        // transcript of tables and code read straight through it — the sheet
-        // looked broken rather than translucent. The reference's sheets are
-        // solid cream; the glass language lives in the cards behind them.
-        containerColor = GsTheme.colors.sheetSurface,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    // A PANEL, NOT A PAGE. This used to open at full height — a cream plane
+    // from the status bar down, which is not an overlay, it is a second screen
+    // that happens to slide. It is now a card that fits its own content and
+    // floats clear of the page on all four sides.
+    GsFloatingOverlay(onDismiss = onDismiss, maxHeightFraction = 0.72f) {
+        AttachPanelContent(
+            onDismiss = onDismiss,
+            onGallery = onGallery,
+            onCamera = onCamera,
+            onFiles = onFiles,
+            onVoice = onVoice,
+            onUnavailable = onUnavailable,
+            selectedMode = selectedMode,
+            onModeSelected = onModeSelected,
+        )
+    }
+}
+
+/** The panel's body, split out so the render probe can photograph it. */
+@Composable
+internal fun AttachPanelContent(
+    onDismiss: () -> Unit,
+    onGallery: () -> Unit,
+    onCamera: () -> Unit,
+    onFiles: () -> Unit,
+    onVoice: () -> Unit,
+    onUnavailable: (String) -> Unit,
+    selectedMode: String = "flash",
+    onModeSelected: (String) -> Unit = {}
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = GsMotion.spaceM)
-                .padding(bottom = GsMotion.spaceL),
-            verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // A reachable close: at full height the drag handle is a long way
-            // from a thumb, and Android's back gesture is not a visual cue.
+            Text(
+                text = "Attach",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 15.5.sp,
+                    lineHeight = 19.sp,
+                    fontWeight = FontWeight.SemiBold
+                ),
+                color = GsTheme.colors.textPrimary,
+                modifier = Modifier.weight(1f)
+            )
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .clickable(role = Role.Button, onClickLabel = "Close", onClick = onDismiss)
+                    .semantics { contentDescription = "Close" },
+                contentAlignment = Alignment.Center,
+            ) {
+                NexlyGlyph(name = "x", size = 15.dp, color = GsTheme.colors.textTertiary)
+            }
+        }
+        // --- Attach (FIRST — ChatGPT/Kimi put attach on top of the
+        //     sheet; behavioral modes sit at the bottom). ---
+        attachOptions.chunked(2).forEach { rowOptions ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
             ) {
-                Text(
-                    text = "Attach",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.weight(1f)
-                )
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .gsGlass(GsGlassRole.FloatingControl, CircleShape)
-                        .clickable(role = Role.Button, onClickLabel = "Close", onClick = onDismiss)
-                        .semantics { contentDescription = "Close" },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    NexlyGlyph(name = "x", size = 15.dp, color = GsTheme.colors.textSecondary)
-                }
-            }
-            // --- Attach (FIRST — ChatGPT/Kimi put attach on top of the
-            //     sheet; behavioral modes sit at the bottom). ---
-            attachOptions.chunked(2).forEach { rowOptions ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
-                ) {
-                    rowOptions.forEach { option ->
-                        AttachTile(
-                            option = option,
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                when {
-                                    option.isVoice -> onVoice()
-                                    !option.available -> onUnavailable(option.label)
-                                    option.label == "Gallery" -> onGallery()
-                                    option.label == "Camera" -> onCamera()
-                                    option.label == "Files" -> onFiles()
-                                }
+                rowOptions.forEach { option ->
+                    AttachTile(
+                        option = option,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            when {
+                                option.isVoice -> onVoice()
+                                !option.available -> onUnavailable(option.label)
+                                option.label == "Gallery" -> onGallery()
+                                option.label == "Camera" -> onCamera()
+                                option.label == "Files" -> onFiles()
                             }
-                        )
-                    }
-                    if (rowOptions.size == 1) {
-                        Spacer(Modifier.weight(1f))
-                    }
-                }
-            }
-            // Spacing — attach (intent) above, mode (infrastructure) below.
-            Spacer(Modifier.height(GsMotion.spaceM))
-            // --- Mode (LAST): the MD3 carousel selection row. ---------------
-            Text(
-                text = "Mode",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            val modes = listOf(
-                Triple("flash", "Flash", "Instant replies"),
-                Triple("thinking", "Thinking", "Deep reasoning"),
-                Triple("auto", "Auto", "System decides")
-            )
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(GsMotion.spaceS),
-                contentPadding = PaddingValues(horizontal = 2.dp)
-            ) {
-                items(modes, key = { it.first }) { (value, label, hint) ->
-                    ModeCarouselItem(
-                        label = label,
-                        hint = hint,
-                        selected = selectedMode == value,
-                        onClick = { onModeSelected(value) }
+                        }
                     )
                 }
+                if (rowOptions.size == 1) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+        Spacer(Modifier.height(2.dp))
+        OverlaySectionLabel("Mode")
+        val modes = listOf(
+            Triple("flash", "Flash", "Instant replies"),
+            Triple("thinking", "Thinking", "Deep reasoning"),
+            Triple("auto", "Auto", "System decides")
+        )
+        // Three equal tiles that FIT THE PANEL. The old row was a horizontal
+        // carousel of 148dp cards, so the third mode was half off-screen
+        // inside a sheet that had room for all three.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            modes.forEach { (value, label, hint) ->
+                ModeCarouselItem(
+                    label = label,
+                    hint = hint,
+                    selected = selectedMode == value,
+                    onClick = { onModeSelected(value) },
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
@@ -3952,16 +4004,23 @@ private fun ModeCarouselItem(
     label: String,
     hint: String,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val colors = GsTheme.colors
-    val container by animateColorAsState(
-        targetValue = if (selected) colors.textPrimary else colors.raisedSurface,
+    // SELECTION IS A LIT RIM, NOT AN INVERTED SLAB. The old selected state was
+    // `textPrimary` — a black tile with white text inside a cream sheet, the
+    // only hard black object in the app, and the reason the attach panel looked
+    // like it came from a different product. Selected now means "this glass is
+    // lit": the accent tints the fill and the rim, the label goes accent-ink,
+    // and a check appears. Same material, different light.
+    val rimAlpha by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
         animationSpec = GsEase.state(),
-        label = "modeContainer"
+        label = "modeRim"
     )
     val contentColor by animateColorAsState(
-        targetValue = if (selected) colors.appBackground else colors.textPrimary,
+        targetValue = if (selected) colors.accentStrong else colors.textPrimary,
         animationSpec = GsEase.state(),
         label = "modeContent"
     )
@@ -3970,16 +4029,31 @@ private fun ModeCarouselItem(
         animationSpec = GsEase.state(),
         label = "modeCheck"
     )
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(GsRadius.card),
-        color = container,
-        modifier = Modifier
-            .width(148.dp)
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(GsRadius.card))
+            .gsGlass(
+                if (selected) GsGlassRole.FloatingControl else GsGlassRole.CardDim,
+                RoundedCornerShape(GsRadius.card)
+            )
+            .background(colors.accent.copy(alpha = 0.10f * rimAlpha))
+            .border(
+                width = 1.dp,
+                color = colors.accent.copy(alpha = 0.45f * rimAlpha)
+                    .let { if (rimAlpha > 0.01f) it else colors.glassBorder.copy(alpha = if (LocalGsIsDark.current) 0.55f else 1f) },
+                shape = RoundedCornerShape(GsRadius.card)
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.RadioButton,
+                onClickLabel = label,
+                onClick = onClick
+            )
             .kineticPress()
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Row(
@@ -4026,45 +4100,66 @@ private fun AttachTile(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(GsRadius.card),
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+    val colors = GsTheme.colors
+    // GLASS, NOT A MATERIAL SURFACE. `surfaceContainerLow` inside a glass panel
+    // is a flat swatch sitting on frosted glass — two materials in one object,
+    // and the reason these tiles read as "normal" next to the rest of the app.
+    val tileDark = LocalGsIsDark.current
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(GsRadius.card))
+            .gsGlass(GsGlassRole.CardDim, RoundedCornerShape(GsRadius.card))
+            // A hairline, because on a bright page CardDim's fill is within a
+            // couple of luminance points of the panel under it and the grid
+            // dissolved into six floating words.
+            .border(
+                width = 1.dp,
+                color = colors.glassBorder.copy(alpha = if (tileDark) 0.55f else 1f),
+                shape = RoundedCornerShape(GsRadius.card)
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = option.label,
+                onClick = onClick
+            )
+            .kineticPress()
     ) {
         Row(
             modifier = Modifier
-                .padding(horizontal = 12.dp, vertical = 12.dp)
-                .alpha(if (option.available) 1f else 0.45f),
+                .padding(horizontal = 10.dp, vertical = 9.dp)
+                .alpha(if (option.available) 1f else 0.42f),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(9.dp)
         ) {
-            // One container spec: rounded square, neutral fill, ink icon.
-            Surface(
-                shape = RoundedCornerShape(GsRadius.md),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier.size(36.dp)
+            // The glyph tile is the same lit glass as the header controls, with
+            // the accent in the ink — a capability should look like it belongs
+            // to this app, not like a settings row.
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(9.dp)),
+                contentAlignment = Alignment.Center
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = option.icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                Icon(
+                    imageVector = option.icon,
+                    contentDescription = null,
+                    tint = if (option.available) colors.accentStrong else colors.textTertiary,
+                    modifier = Modifier.size(16.dp)
+                )
             }
             Column {
                 Text(
                     text = option.label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface
+                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.5.sp),
+                    color = colors.textPrimary
                 )
                 if (!option.available) {
                     Text(
                         text = "Not available yet",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        color = colors.textTertiary
                     )
                 }
             }

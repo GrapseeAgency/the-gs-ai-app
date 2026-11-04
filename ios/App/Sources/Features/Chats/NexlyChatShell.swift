@@ -19,27 +19,22 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
 
     var body: some View {
         HStack(spacing: 10) {
+            // NO PLATES. Back, brand, sparkle and menu used to sit in four
+            // frosted circles in a row, which read as a toolbar rather than a
+            // title with actions — and the brand disc was pure white, the
+            // brightest object on a dark screen. The glyphs are the affordance;
+            // the touch target is 44pt and invisible.
             if let onBack {
                 Button(action: onBack) {
-                    NexlyGlyph(name: "arrow-left", size: 18, color: Aero.text)
-                        .frame(width: 36, height: 36)
-                        .background(Circle().fill(.clear))
-                        .gsGlass(.sunken, corner: 20)
+                    NexlyGlyph(name: "arrow-left", size: 19, color: Aero.text)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(KineticPressStyle())
                 .accessibilityLabel("Back")
             }
-            // The reference brand mark: a lilac sparkle in a lit glass circle —
-            // the same white-tile + glyph language the pre-chat header uses.
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(0.94))
-                    .frame(width: 38, height: 38)
-                    .overlay(Circle().strokeBorder(Color.white, lineWidth: 1))
-                    .shadow(color: Color(red: 0.50, green: 0.40, blue: 0.85).opacity(0.18), radius: 4, y: 1)
-                NexlyGlyph(name: "sparkles", size: 18, color: Color(red: 0.56, green: 0.48, blue: 1.0))
-            }
-            .accessibilityHidden(true)
+            NexlyGlyph(name: "sparkles", size: 23, color: Color(red: 0.56, green: 0.48, blue: 1.0))
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("Nexly")
@@ -47,7 +42,7 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
                     .foregroundStyle(NexlyInk.header)
                     .lineLimit(1)
                 Text("Your AI companion")
-                    .font(.system(size: 10, weight: .regular))
+                    .font(.system(size: 11, weight: .regular))
                     .foregroundStyle(NexlyInk.headerMeta)
                     .lineLimit(1)
             }
@@ -67,23 +62,21 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
                 menu: menuMenu
             )
         }
-        .padding(.horizontal, Aero.Spacing.m)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        // A veil that FADES, not a band that stops, and no closing rule. The
+        // white@0.42 hairline at the bottom was a lit strip across the top of
+        // every conversation in dark mode — the hardest edge on the screen.
         .background(
             LinearGradient(
                 colors: [
-                    Color(red: 1.0, green: 0.96, blue: 0.935).opacity(0.66),
-                    Color(red: 1.0, green: 0.94, blue: 0.915).opacity(0.30),
+                    Aero.surface.opacity(0.62),
+                    Aero.surface.opacity(0.06),
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
         )
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(Color.white.opacity(0.42))
-                .frame(height: 0.75)
-        }
     }
 
     private func headerIconButton<Menu: View>(
@@ -93,10 +86,9 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
         @ViewBuilder menu: () -> Menu
     ) -> some View {
         Button(action: action) {
-            NexlyGlyph(name: glyph, size: 18, color: Aero.text)
-                .frame(width: 36, height: 36)
-                .background(Circle().fill(.clear))
-                .gsGlass(.sunken, corner: 20)
+            NexlyGlyph(name: glyph, size: 19, color: Aero.text)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityLabel(label)

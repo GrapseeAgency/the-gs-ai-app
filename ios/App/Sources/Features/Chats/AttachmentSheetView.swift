@@ -143,7 +143,12 @@ struct AttachmentSheetView: View {
         }
         // 420: the carousel row (88pt cards) + labels need more vertical room
         // than the segmented picker this row replaced.
-        .presentationDetents([.height(420)])
+        .presentationDetents([.height(430)])
+        // A real frosted backdrop and a floating corner radius — the system
+        // sheet was painting `Aero.background` edge to edge, which is a page,
+        // not an overlay. Guarded for the 16.0 floor.
+        .modifier(GsFrostedSheet())
+        .presentationDragIndicator(.visible)
         .onChange(of: pickerItems) { items in
             guard !items.isEmpty else { return }
             pickerItems = [] // re-arm the picker for the next visit
@@ -242,12 +247,14 @@ struct AttachmentSheetView: View {
     /// the honest "Not available yet" marker.
     private func tileContent(for tile: Tile) -> some View {
         VStack(spacing: Aero.Spacing.s) {
+            // GLASS, not `Aero.container`. A flat swatch inside a frosted sheet
+            // is two materials in one object — the reason these tiles read as
+            // "normal" next to the rest of the app.
             Image(systemName: tile.icon)
                 .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(tile.available ? Aero.text : Aero.textDisabled)
+                .foregroundStyle(tile.available ? Aero.accent : Aero.textDisabled)
                 .frame(width: 52, height: 52)
-                .background(RoundedRectangle(cornerRadius: 16).fill(Aero.container))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Aero.outline, lineWidth: 1))
+                .gsGlass(.floatingControl, corner: 16)
             Text(tile.label)
                 .font(Aero.label())
                 .foregroundStyle(tile.available ? Aero.text : Aero.textDisabled)
@@ -304,18 +311,17 @@ struct AttachmentSheetView: View {
         }
 
         var body: some View {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Aero.Spacing.s) {
-                    ForEach(modes, id: \.value) { mode in
-                        ModeCarouselCard(
-                            label: mode.label,
-                            hint: mode.hint,
-                            selected: selected == mode.value,
-                            onSelect: { onSelect(mode.value) }
-                        )
-                    }
+            // Three equal cards that FIT the panel. The old row was a 148pt
+            // horizontal carousel, so the third mode was half off-screen.
+            HStack(spacing: 8) {
+                ForEach(modes, id: \.value) { mode in
+                    ModeCarouselCard(
+                        label: mode.label,
+                        hint: mode.hint,
+                        selected: selected == mode.value,
+                        onSelect: { onSelect(mode.value) }
+                    )
                 }
-                .padding(.horizontal, 2)
             }
         }
     }
@@ -337,31 +343,39 @@ struct AttachmentSheetView: View {
                     HStack(spacing: 4) {
                         Text(label)
                             .font(Aero.label())
-                            .foregroundStyle(selected ? Aero.textInverted : Aero.text)
+                            .foregroundStyle(selected ? Aero.accent : Aero.text)
                         Spacer(minLength: 0)
                         Image(systemName: "checkmark")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(selected ? Aero.textInverted : Aero.text)
+                            .foregroundStyle(selected ? Aero.accent : Aero.text)
                             .scaleEffect(selected ? 1 : 0.4)
                             .opacity(selected ? 1 : 0)
                             .frame(width: 18, height: 18)
                     }
                     Text(hint)
                         .font(Aero.metadata())
-                        .foregroundStyle((selected ? Aero.textInverted : Aero.text).opacity(0.7))
+                        .foregroundStyle((selected ? Aero.accent : Aero.text).opacity(0.75))
                         .lineLimit(1)
                 }
-                .padding(12)
-                .frame(width: 148, height: 88, alignment: .topLeading)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(selected ? Aero.text : Aero.raisedSurface)
+                .padding(10)
+                .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
+                // SELECTION IS A LIT RIM, NOT AN INVERTED SLAB. `Aero.text` was
+                // a hard black tile — the only black object in the app — inside
+                // a cream sheet. Selected now means this glass is lit: accent
+                // tint, accent rim, accent ink.
+                .gsGlass(selected ? .floatingControl : .cardDim, corner: 14)
+                // The tint is an OVERLAY, not a background: a background sits
+                // behind the glass fill and is muted by it, which is why the
+                // first attempt read as "almost selected".
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(selected ? Aero.accent.opacity(0.12) : Color.clear)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(selected ? Aero.text : Aero.outline, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(selected ? Aero.accent.opacity(0.45) : Aero.outline, lineWidth: 1)
                 )
-                .contentShape(RoundedRectangle(cornerRadius: 16))
+                .contentShape(RoundedRectangle(cornerRadius: 14))
             }
             .buttonStyle(KineticPressStyle())
             .animation(Aero.chatCurve, value: selected)

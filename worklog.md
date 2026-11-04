@@ -5862,3 +5862,19 @@ Work Log:
 - VERDICT SURVIVED A RELOAD (the real "hidden" bug): the verdict was written to Room and to the server, but the history rebuild never read it back, so reopening a thread reset the thumb to "Helpful?" and asked the same question again. Fixed on Android (history + older pages) and the server serializer now returns `feedback` so iOS can do the same.
 - iOS FEEDBACK LOOP, previously blocked, now wired: `ChatMessage.serverId` (set from the done payload — a turn that was stopped or produced offline has no row, and the thumb stays hidden rather than 404ing), `ChatMessage.feedback`, `APIClient.setFeedback`, `ChatViewModel.setFeedback` with optimistic apply + rollback on failure, and a verdict row in the iOS turn footer (re-tap withdraws).
 - Android 439/439 (was 437), backend `tsc` 0, versionCode 135 / 0.86.12.
+
+---
+
+Task ID: build-0.86.13-hug-and-overlay
+Agent: main
+Task: The owner's four screenshots — a full-width "Hi", a full-screen cream sheet, a plain white attach panel, and header icons sitting on plates. Fix every one, on both platforms.
+
+Work Log:
+- THE BUBBLE HUGS ITS SENTENCE. `UserMessage`'s stamp row was `fillMaxWidth()`, so the bubble always measured to the 320dp cap no matter what it said: "Hi" became a full-width lavender slab. The row wraps now and the column end-aligns it under the text. Verified by rendering "Hi", a one-line question and a long paragraph side by side.
+- THE HEADER HAS NO PLATES. Back, brand, sparkle and menu each sat in a 36dp frosted disc — four visible plates in a row on a header that is supposed to be a title with two quiet actions. All four are bare glyphs on a 44dp invisible target now (the brand's white@0.94 disc was also the brightest object on the dark header). Same fix on iOS's NexlyBrandHeader, where the white disc and the white@0.42 bottom rule also lived.
+- THE OVERLAY IS AN OVERLAY. `ConversationOptionsSheet` and `AttachSheet` were `ModalBottomSheet` at full height with `sheetSurface` — a cream page from the status bar to the nav bar, not a panel. New `GsFloatingOverlay` (ui/components/GsOverlay.kt): a Dialog with a 26% scrim, a card inset 14dp on three sides, capped at 72–78% of the window, on the same `GsGlassRole.Modal` glass, rising 44dp on the snappy spring. Sized to content, not to the screen.
+- NO MATERIAL INSIDE THE GLASS. The attach tiles were `surfaceContainerLow` / `surfaceContainerHigh`; the mode row was a 148dp carousel whose selected state was a BLACK `textPrimary` slab (the only black object in the app). Tiles are `CardDim` glass with a hairline, glyph tiles are `FloatingControl` glass with accent ink, and selection is now a LIT rim — accent fill tint, accent border, accent label, check — with three equal tiles that fit the panel instead of a third one hanging off-screen.
+- Long-press DropdownMenus get the glass container and 18dp shape; they were the last stock-Material surface in the chat.
+- iOS parity: `GsFrostedSheet` (availability-guarded for the 16.0 floor) puts `.ultraThinMaterial` behind both sheets, `.fraction(0.66)` instead of `.medium/.large`, drag indicator, 28pt corners; attach tiles and mode cards are glass; the options sheet no longer paints `Aero.background` edge to edge.
+- Bubble timestamps: 10.5sp Android / 9.5pt iOS → 11 (the floor the last pass set everywhere else).
+- Android 445 tests, 0 failures. Probe renders: probe-bubbles-*, probe-attach-*, probe-menu-*, probe-header-*, nexly-chat-full. versionCode 136 / 0.86.13.
