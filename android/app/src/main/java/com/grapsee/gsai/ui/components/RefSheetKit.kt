@@ -74,9 +74,15 @@ private val quietWash = listOf(
 )
 
 /**
- * The mock's switch. The Material 3 switch is 52×32 — a third again as tall
- * and half again as wide as the reference's 31×18, which is what made every
- * toggle row on these sheets read a size too loud.
+ * The mock's switch, now drawn from the shared glass control.
+ *
+ * The 31×18 capsule this used to draw was the right SIZE and the wrong
+ * material: a flat gradient track with a white dot on it. [GsGlassSwitch] keeps
+ * the compact footprint (it is the reason these rows do not shout) and adds the
+ * part that was missing — the track is sunken glass when off, and when on it is
+ * lit from inside by the accent and throws a coloured halo onto the card. Every
+ * switch in the app is now the same object, so a settings page and a sheet
+ * cannot drift apart again.
  *
  * [enabled] false keeps the shape (the row still owns its slot) but removes
  * the touch target and the colour, which is how a channel this build does not
@@ -88,65 +94,12 @@ fun RefSwitch(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-) {
-    val colors = GsTheme.colors
-    val trackWidth = 34.dp
-    val thumb = 16.dp
-    val travel by animateDpAsState(
-        targetValue = if (checked) trackWidth - thumb - 4.dp else 2.dp,
-        animationSpec = spring(dampingRatio = 0.8f, stiffness = 900f),
-        label = "ref-switch-thumb",
-    )
-    val onWash = Brush.horizontalGradient(
-        listOf(colors.accentSoft, colors.accentStrong)
-    )
-    Box(
-        modifier = modifier
-            .width(trackWidth)
-            .height(20.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .then(
-                if (checked) {
-                    Modifier.background(onWash)
-                } else {
-                    Modifier.background(
-                        if (LocalGsIsDark.current) {
-                            colors.border.copy(alpha = 0.55f)
-                        } else {
-                            Color.White.copy(alpha = 0.62f)
-                        }
-                    )
-                }
-            )
-            .border(
-                1.dp,
-                if (checked) {
-                    Color.White.copy(alpha = 0.42f)
-                } else {
-                    colors.border.copy(alpha = 0.55f)
-                },
-                RoundedCornerShape(999.dp),
-            )
-            .toggleable(
-                value = checked,
-                enabled = enabled,
-                role = Role.Switch,
-                onValueChange = onCheckedChange,
-            )
-            .alphaFor(enabled),
-    ) {
-        Box(
-            Modifier
-                .offset(x = travel, y = 2.dp)
-                .size(thumb)
-                .shadow(2.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.16f))
-                .background(Color.White, CircleShape),
-        )
-    }
-}
-
-private fun Modifier.alphaFor(enabled: Boolean): Modifier =
-    if (enabled) this else this.alpha(0.55f)
+) = GsGlassSwitch(
+    checked = checked,
+    onCheckedChange = onCheckedChange,
+    modifier = modifier,
+    enabled = enabled,
+)
 
 /** A compact status tag ("Update", "Connected", "Primary"): 8.5pt on a wash. */
 @Composable

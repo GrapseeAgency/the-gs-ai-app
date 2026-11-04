@@ -34,7 +34,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -61,6 +60,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import com.grapsee.gsai.ui.theme.GsTheme
 import androidx.compose.foundation.Image
+import com.grapsee.gsai.ui.components.GsGlassSwitch
 
 // --- gauge -------------------------------------------------------------------
 
@@ -393,7 +393,7 @@ internal fun FormWidgetView(w: FormWidget, onSendPrompt: ((String) -> Unit)?) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(f.label, style = MaterialTheme.typography.labelMedium, color = c.textPrimary)
-                        Switch(
+                        GsGlassSwitch(
                             checked = values[i] == "on",
                             onCheckedChange = { values[i] = if (it) "on" else "off" }
                         )

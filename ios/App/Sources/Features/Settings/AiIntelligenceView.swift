@@ -338,10 +338,7 @@ struct AiIntelligenceView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .tint(Aero.accent)
-                .disabled(!enabled)
+            GsGlassSwitch(isOn: isOn, enabled: enabled)
                 .accessibilityLabel(title)
         }
         .padding(.horizontal, 12)

@@ -22,7 +22,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.grapsee.gsai.ui.chat.content.nexlyPearlBackdrop
+import com.grapsee.gsai.ui.components.GsGlassRole
+import com.grapsee.gsai.ui.components.GsGlassSwitch
 import com.grapsee.gsai.ui.components.GsOverlayPanel
+import com.grapsee.gsai.ui.components.GsTextSizeControl
+import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
 import org.junit.Assume.assumeTrue
@@ -430,5 +434,106 @@ class ChatDefectProbeTest {
     fun chatMenuOverlayDark() {
         compose.setContent { chatMenuOverlay(true) }
         compose.onRoot().captureRoboImage("build/screenshots/probe-menu-dark.png")
+    }
+
+    // --- 0.86.19: the two controls that were still stock ---------------------
+
+    /**
+     * The Accessibility page, which is where both offenders lived: the font-size
+     * slider above, four toggles below. Rendered at phone size so the ladder and
+     * the switches can be judged as a page, not as an idea.
+     */
+    @Composable
+    private fun accessibilityPage(dark: Boolean) {
+        TheGsAiTheme(darkTheme = dark) {
+            com.grapsee.gsai.ui.settings.AccessibilitySettingsScreen(onBack = {})
+        }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun accessibilityLight() {
+        compose.setContent { accessibilityPage(false) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-a11y-light.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun accessibilityDark() {
+        compose.setContent { accessibilityPage(true) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-a11y-dark.png")
+    }
+
+    /**
+     * The controls alone, at three states each, on the pearl backdrop — off/on
+     * for the switch and small/middle/large for the ladder. A page shot hides
+     * the state that matters (the reader only ever sees one at a time); this is
+     * the only view where both states are in the same frame.
+     */
+    @Composable
+    private fun controlsMatrix(dark: Boolean) {
+        TheGsAiTheme(darkTheme = dark) {
+            Box(modifier = Modifier.fillMaxSize().nexlyPearlBackdrop()) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(18.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        GsGlassSwitch(checked = false, onCheckedChange = {})
+                        GsGlassSwitch(checked = true, onCheckedChange = {})
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .gsGlass(GsGlassRole.CardLight, androidx.compose.foundation.shape.RoundedCornerShape(22.dp))
+                    ) {
+                        GsTextSizeControl(
+                            value = 0.85f,
+                            onValueChange = {},
+                            onValueChangeFinished = {}
+                        )
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .gsGlass(GsGlassRole.CardLight, androidx.compose.foundation.shape.RoundedCornerShape(22.dp))
+                    ) {
+                        GsTextSizeControl(
+                            value = 1.05f,
+                            onValueChange = {},
+                            onValueChangeFinished = {}
+                        )
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .gsGlass(GsGlassRole.CardLight, androidx.compose.foundation.shape.RoundedCornerShape(22.dp))
+                    ) {
+                        GsTextSizeControl(
+                            value = 1.30f,
+                            onValueChange = {},
+                            onValueChangeFinished = {}
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun controlsMatrixLight() {
+        compose.setContent { controlsMatrix(false) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-controls-light.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun controlsMatrixDark() {
+        compose.setContent { controlsMatrix(true) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-controls-dark.png")
     }
 }

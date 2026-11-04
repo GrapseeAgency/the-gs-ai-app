@@ -31,9 +31,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -61,6 +59,8 @@ import android.view.HapticFeedbackConstants
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import com.grapsee.gsai.ui.components.GsChip
+import com.grapsee.gsai.ui.components.GsGlassSwitch
+import com.grapsee.gsai.ui.components.GsTextSizeControl
 import com.grapsee.gsai.ui.components.gsContentWidth
 import com.grapsee.gsai.BuildConfig
 import com.grapsee.gsai.CrashReporter
@@ -322,36 +322,18 @@ fun SettingsScreen(
                     onToggle = { expandedId = if (expandedId == "accessibility") null else "accessibility" }
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(GsMotion.spaceXS)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Font scale",
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontWeight = FontWeight.Medium,
-                                    letterSpacing = 0.sp
-                                ),
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = "${(SettingsStore.fontScale * 100).toInt()}%",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontSize = 14.sp,
-                                    letterSpacing = 0.sp
-                                ),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Slider(
+                        // The header row (label + "112%") is gone: the control
+                        // carries its own title and its own glass readout, so
+                        // keeping both printed the same number twice.
+                        GsTextSizeControl(
+                            title = "Font scale",
                             value = SettingsStore.fontScale,
                             onValueChange = { SettingsStore.stageFontScale(it) },
                             onValueChangeFinished = {
                                 SettingsStore.updateFontScale(SettingsStore.fontScale)
                             },
                             valueRange = 0.8f..1.4f,
-                            steps = 5
+                            steps = 5,
                         )
                         Text(
                             text = "Aa. How your chats will read",
@@ -731,7 +713,7 @@ private fun SwitchRow(
             }
         }
         Spacer(modifier = Modifier.width(GsMotion.spaceM))
-        Switch(checked = checked, onCheckedChange = null)
+        GsGlassSwitch(checked = checked, onCheckedChange = null)
     }
 }
 

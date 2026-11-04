@@ -27,8 +27,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -58,6 +56,7 @@ import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelStore
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsGlassRole
+import com.grapsee.gsai.ui.components.GsTextSizeControl
 import com.grapsee.gsai.ui.components.GsLinks
 import com.grapsee.gsai.ui.components.RefAccentRow
 import com.grapsee.gsai.ui.components.RefArt
@@ -1290,28 +1289,14 @@ fun AccessibilitySettingsScreen(onBack: () -> Unit) {
                 onCheckedChange = { SettingsStore.updateHighContrast(it) }
             )
             RefDivider()
-            Column(Modifier.padding(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Text size", style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary, modifier = Modifier.weight(1f))
-                    Text(
-                        "${(scale * 100).toInt()}%",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.accentStrong
-                    )
-                }
-                Slider(
-                    value = scale,
-                    onValueChange = { SettingsStore.stageFontScale(it) },
-                    onValueChangeFinished = { SettingsStore.updateFontScale(scale) },
-                    valueRange = 0.85f..1.30f,
-                    steps = 8,
-                    colors = SliderDefaults.colors(
-                        thumbColor = colors.accent,
-                        activeTrackColor = colors.accent,
-                        inactiveTrackColor = colors.accentSoft
-                    )
-                )
-            }
+            // A ladder of glass rungs that grow small → big, instead of a
+            // Material rail with a dot on it. The shape states the axis, the
+            // lit rung states the value, and the chip states the number.
+            GsTextSizeControl(
+                value = scale,
+                onValueChange = { SettingsStore.stageFontScale(it) },
+                onValueChangeFinished = { SettingsStore.updateFontScale(SettingsStore.fontScale) },
+            )
             RefDivider()
             RefToggleRow(
                 title = "Screen reader hints",

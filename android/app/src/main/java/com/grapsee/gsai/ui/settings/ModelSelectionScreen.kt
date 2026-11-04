@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.GsModel
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.components.GsGlassRole
+import com.grapsee.gsai.ui.components.GsGlassSwitch
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefGroupHeader
@@ -594,18 +595,7 @@ private fun AutoSelectRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) 
             )
         }
         Spacer(Modifier.width(8.dp))
-        androidx.compose.material3.Switch(
-            checked = checked,
-            onCheckedChange = null,
-            colors = androidx.compose.material3.SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = colors.accent,
-                checkedBorderColor = Color.Transparent,
-                uncheckedThumbColor = Color.White,
-                uncheckedTrackColor = colors.border,
-                uncheckedBorderColor = Color.Transparent,
-            ),
-        )
+        GsGlassSwitch(checked = checked, onCheckedChange = null)
     }
 }
 

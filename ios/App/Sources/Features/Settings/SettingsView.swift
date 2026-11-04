@@ -375,26 +375,21 @@ struct SettingsView: View {
 
     private var accessibilitySection: some View {
         section("Accessibility") {
-            VStack(alignment: .leading, spacing: Aero.Spacing.xs) {
-                HStack {
-                    Text("Font scale")
-                        .font(Aero.body())
-                        .foregroundStyle(Aero.text)
-                    Spacer()
-                    Text("\(Int((settings.fontScale * 100).rounded()))%")
-                        .font(Aero.caption())
-                        .foregroundStyle(Aero.textMuted)
-                }
-                Slider(value: $settings.fontScale, in: 0.8...1.4)
-                    .tint(Aero.accent)
-                Text("The quick brown fox jumps over the lazy dog.")
-                    .font(Aero.body())
-                    .foregroundStyle(Aero.text)
-                    .scaleEffect(settings.fontScale)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, Aero.Spacing.s)
-                    .animation(Aero.gentle, value: settings.fontScale)
+            // A ladder of glass rungs that grow small → big, instead of a system
+            // rail with a dot on it. The shape states the axis, the lit rung
+            // states the value, and the chip states the number — so no tick
+            // marks and no explanatory caption are needed. Android draws the
+            // same object (GsGlassControls.kt).
+            GsTextSizeLadder(value: $settings.fontScale, range: 0.8...1.4, steps: 8) {
+                GSHaptics.select()
             }
+            Text("The quick brown fox jumps over the lazy dog.")
+                .font(Aero.body())
+                .foregroundStyle(Aero.text)
+                .scaleEffect(settings.fontScale)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, Aero.Spacing.s)
+                .animation(Aero.gentle, value: settings.fontScale)
             toggleRow("High contrast", isOn: $settings.highContrast)
             toggleRow("Reduce motion", isOn: $settings.reduceMotion)
             toggleRow("Screen reader hints", isOn: $settings.screenReaderHints)
@@ -525,13 +520,28 @@ struct SettingsView: View {
         }
     }
 
+    /// A settings row: label on the left, the app's glass switch on the right.
+    ///
+    /// This was a system `Toggle` with a `.tint`, which is a 51×31 iOS switch —
+    /// a third again as tall as everything else on the page and the one piece of
+    /// chrome that was not made of light. The tap target is the whole row.
     private func toggleRow(_ title: String, isOn: Binding<Bool>) -> some View {
-        Toggle(title, isOn: isOn)
-            .font(Aero.body())
-            .foregroundStyle(Aero.text)
-            .tint(Aero.accent)
+        HStack(spacing: 12) {
+            Text(title)
+                .font(Aero.body())
+                .foregroundStyle(Aero.text)
+            Spacer(minLength: 8)
+            GsGlassSwitch(isOn: isOn)
+        }
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.62)) {
+                isOn.wrappedValue.toggle()
+            }
             // Inline state flip — the selection tick (Task 85-e I10).
-            .onChange(of: isOn.wrappedValue) { _ in GSHaptics.select() }
+            GSHaptics.select()
+        }
     }
 
     private func leadingIcon(_ name: String) -> some View {

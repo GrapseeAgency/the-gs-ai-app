@@ -273,11 +273,9 @@ struct ModelSelectionView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 8)
-                    Toggle("", isOn: Binding(
+                    GsGlassSwitch(isOn: Binding(
                         get: { settings.autoSelectModel },
                         set: { settings.autoSelectModel = $0 }))
-                        .labelsHidden()
-                        .tint(Aero.refAccent)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 11)

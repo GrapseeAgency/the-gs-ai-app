@@ -67,11 +67,9 @@ struct VoiceSpeechView: View {
                 ) {
                     GsWellTile(glyph: "device-mobile", tone: .mint, size: 28)
                 } trailing: {
-                    Toggle("", isOn: Binding(
+                    GsGlassSwitch(isOn: Binding(
                         get: { settings.haptics },
                         set: { settings.haptics = $0; GSHaptics.select() }))
-                        .labelsHidden()
-                        .tint(Aero.accent)
                         .accessibilityLabel("Haptic confirmation")
                 }
             }

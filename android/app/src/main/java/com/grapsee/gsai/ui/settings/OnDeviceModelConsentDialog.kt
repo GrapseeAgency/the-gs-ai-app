@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,6 +24,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.grapsee.gsai.data.local.ModelCatalog
+import com.grapsee.gsai.ui.components.GsGlassSwitch
 import com.grapsee.gsai.ui.components.GsStaggeredLoader
 import com.grapsee.gsai.data.local.ModelDownloader
 import com.grapsee.gsai.data.local.ModelStore
@@ -125,7 +125,7 @@ fun OnDeviceModelConsentDialog(
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.weight(1f),
                             )
-                            Switch(
+                            GsGlassSwitch(
                                 checked = !ModelStore.wifiOnlyConsent,
                                 onCheckedChange = { ModelStore.updateWifiOnly(!it) },
                                 modifier = Modifier.testTag("gs_consent_cellular"),

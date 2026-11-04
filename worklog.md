@@ -5936,3 +5936,19 @@ Task: Drop "Your AI companion" from the header; keep the name and the discs.
 Work Log:
 - Removed the second line on Android (NexlyChatHeader) and iOS (NexlyBrandHeader). "Nexly" now sits alone, vertically centred on the 44dp discs.
 - versionCode 141 / 0.86.18.
+
+---
+
+Task ID: build-0.86.19-glass-controls
+Agent: main
+Task: "choto theke boro korar font size … design ta kmn ekta old school" and "arekta button jeta diye off on kore … eitar design o old school baje lagteche fix koro duitai" — the text-size slider and the on/off switch, on both platforms.
+
+Work Log:
+- Both controls were still Material/UIKit stock: an M3 `Slider` (hairline rail, round thumb, tick marks) and an M3 `Switch` (flat track, white dot) on Android; `Slider` + system `Toggle` on iOS. Everything around them is glass, so these two were the pieces giving the material away.
+- New Android `ui/components/GsGlassControls.kt`:
+  - `GsGlassSwitch` — 48×28 capsule. OFF is a well: the page's own ink at 0.085 (light) / 0.15 (dark) with a warm `border` hairline and a frosted knob. ON is lit from inside: `accentStrong -> accent` vertical fill, white rim, a coloured shadow as the halo, and a lit 7dp core in the knob. Spring travel (damping 0.62), `Role.Switch`, disabled keeps the shape at 0.45 alpha.
+  - `GsTextSizeControl` — ten glass rungs in a `Sunken` well, growing 13→42dp left to right, so the shape itself says "small to big" (no rail, no ticks). Rungs behind the current step wash with `accentSoft`, the current rung is lit with the accent plus a halo, rungs ahead stay clear glass in the page's warm `border`. Percent readout is a glass chip in the header; "Aa / Aa" end labels replace tick marks. Tap or drag across picks the nearest rung (`awaitEachGesture` + `drag`), only release writes to prefs, and `progressBarRangeInfo` + `setProgress` keep TalkBack usable.
+- Wired it everywhere rather than only on the page he was looking at: `RefToggleRow` (ReferenceKit), `RefSwitch` (RefSheetKit, now a delegate), the model-consent dialog, `SwitchRow` in SettingsScreen, ModelSelectionScreen and the GenUI form toggle. `Slider` is gone from Accessibility, Appearance and Settings — one control, three doors.
+- First render was wrong twice: the OFF track used `glassHighlight` (near-white), so on the cream page it vanished into the card and left an empty outline; and the rungs at 34dp were wider than tall, reading as a row of lozenges. Fixed with the ink-based well + warm rim, and 13→42dp rounded-rect tiles.
+- iOS mirrors it in `Components/GsGlassControls.swift` (`GsGlassSwitch`, `GsGlassToggleStyle`, `GsTextSizeLadder` — same 48×28 / 22pt knob / ten rungs at 13→42). `GsSheetSwitch` is now a delegate, so every `GsSheetToggle` sheet switched material at once; `SettingsView.toggleRow` and the Ai Intelligence / Model Selection / Voice trailing toggles use the switch directly. Not compiled here — no Swift toolchain in this environment.
+- versionCode 142 / 0.86.19. Android suite 449 tests, 0 failures; probe renders probe-a11y-*, probe-controls-*.

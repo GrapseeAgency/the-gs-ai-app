@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -33,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.components.GsGlassRole
+import com.grapsee.gsai.ui.components.GsTextSizeControl
 import com.grapsee.gsai.ui.components.RefAccentRow
 import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefFootnote
@@ -136,25 +135,14 @@ fun AppearanceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
 
         RefSectionLabelText("Text size")
         RefCard(role = GsGlassRole.CardLight, padding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Aa", style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
-                Slider(
-                    value = scale,
-                    onValueChange = { SettingsStore.stageFontScale(it) },
-                    onValueChangeFinished = { SettingsStore.updateFontScale(scale) },
-                    valueRange = 0.85f..1.30f,
-                    steps = 8,
-                    colors = SliderDefaults.colors(
-                        thumbColor = colors.accent,
-                        activeTrackColor = colors.accent,
-                        inactiveTrackColor = colors.accentSoft
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 10.dp)
-                )
-                Text("Aa", style = MaterialTheme.typography.titleMedium, color = colors.textSecondary)
-            }
+            // The same ladder the Accessibility page draws — one control, two
+            // doors into it. The "Aa … Aa" pair either side of the old rail is
+            // now the rungs themselves plus their end labels.
+            GsTextSizeControl(
+                value = scale,
+                onValueChange = { SettingsStore.stageFontScale(it) },
+                onValueChangeFinished = { SettingsStore.updateFontScale(SettingsStore.fontScale) },
+            )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Small", style = MaterialTheme.typography.labelSmall, color = colors.textTertiary)
                 Text(

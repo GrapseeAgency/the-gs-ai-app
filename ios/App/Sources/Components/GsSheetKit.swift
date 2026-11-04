@@ -189,51 +189,25 @@ struct GsSheetGroupHeader: View {
 
 // MARK: - Switch
 
-/// The mock's 31×18 switch. `Toggle`'s default is the 51×31 system switch.
+/// The sheet kit's switch, now drawn from the shared glass control.
+///
+/// What stood here was a 34×20 capsule with a flat peach gradient and a white
+/// dot on it — the right SIZE and the wrong material. `GsGlassSwitch` keeps the
+/// compact footprint and adds the part that was missing: the track is sunken
+/// glass when off, and when on it is lit from inside by the accent and throws a
+/// coloured halo onto the card. Every switch in the app is now the same object,
+/// so a settings page and a sheet cannot drift apart again.
+///
+/// `onColors` is retained so the one call site that passed it still compiles; it
+/// no longer has any effect, because a per-page ON tint is exactly the drift this
+/// change removes — the switch lights with the reader's accent, everywhere.
 struct GsSheetSwitch: View {
     @Binding var isOn: Bool
     var enabled: Bool = true
-    /// Page-scoped ON-track gradient. Nil keeps the kit's peach default; the
-    /// Dreamy Pastel reference pages pass their Aero.refAccent family so the
-    /// switch reads the reference art's lilac without retinting other sheets.
     var onColors: [Color]? = nil
 
     var body: some View {
-        Button {
-            guard enabled else { return }
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
-                isOn.toggle()
-            }
-        } label: {
-            Capsule()
-                .fill(
-                    isOn
-                        ? AnyShapeStyle(
-                            LinearGradient(
-                                colors: onColors ?? [ExplorePalette.peachDeep, ExplorePalette.peach],
-                                startPoint: .leading, endPoint: .trailing))
-                        : AnyShapeStyle(Color.white.opacity(0.62))
-                )
-                .frame(width: 34, height: 20)
-                .overlay(
-                    Capsule().strokeBorder(
-                        isOn ? Color.white.opacity(0.42) : Aero.outline.opacity(0.55),
-                        lineWidth: 1)
-                )
-                .overlay(alignment: isOn ? .trailing : .leading) {
-                    Circle()
-                        .fill(.white)
-                        .frame(width: 16, height: 16)
-                        .padding(.horizontal, 2)
-                        .shadow(color: .black.opacity(0.14), radius: 1.5, y: 1)
-                }
-                .opacity(enabled ? 1 : 0.55)
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .accessibilityRepresentation {
-            Toggle("", isOn: $isOn).labelsHidden().disabled(!enabled)
-        }
+        GsGlassSwitch(isOn: $isOn, enabled: enabled)
     }
 }
 
