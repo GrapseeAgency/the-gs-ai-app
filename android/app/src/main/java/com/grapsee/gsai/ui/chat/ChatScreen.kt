@@ -1886,19 +1886,14 @@ internal fun NexlyChatHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                // A veil that FADES, not a band that stops. The old version
-                // held 30% opacity to the very last pixel and closed with a
-                // white hairline, so every conversation had a bright rule
-                // drawn across the top of it — the single hardest edge on the
-                // screen. Nothing here is a border; the header just dissolves.
-                Brush.verticalGradient(
-                    listOf(
-                        GsTheme.colors.surface.copy(alpha = 0.62f),
-                        GsTheme.colors.surface.copy(alpha = 0.06f)
-                    )
-                )
-            )
+        // NO BACKGROUND AT ALL. Three passes tried to make this band
+        // acceptable — a 30% stop with a hairline, then a 0.62 → 0.06 fade —
+        // and each one was still a band: a whiter strip across the top of a
+        // page whose whole identity is one continuous bloom, with a visible
+        // edge where the veil ended. The header does not overlap the
+        // transcript (it sits above it in the column), so there is nothing it
+        // needs to separate itself from. The page shows through; the icons and
+        // the title sit on it directly.
     ) {
         Row(
             modifier = Modifier

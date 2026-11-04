@@ -5903,3 +5903,14 @@ Work Log:
 - FIX: `pinnedToLiveEdge`, cleared ONLY by a DragInteraction.Start and restored when `canScrollForward` goes false. Content growth cannot unpin. `stickToBottom()` scrolls to the last item and then `scrollBy` to the true end (the live edge is the BOTTOM of a bubble taller than the viewport, not its top). Send pins and waits one frame. The follow effect now fires on phase, text length AND message count. IME open re-pins, because the keyboard shrinks the viewport without moving the list.
 - iOS already latches on gestures (live-edge sentinel + DragGesture + 0.6s debounce), so its model was right; no change.
 - versionCode 138 / 0.86.15.
+
+---
+
+Task ID: build-0.86.16-no-band
+Agent: main
+Task: The header band itself — the owner's last screenshot shows no icon plates, but the whole header still sits on a lighter strip.
+
+Work Log:
+- The icons lost their discs in 0.86.13; the header still painted `surface@0.62 -> 0.06` over the bloom. On a page that is one continuous pearl field, any veil reads as a band with an edge where it stops — three passes tried to soften it and all three were still a band.
+- Removed the background entirely on Android (NexlyChatHeader) and iOS (NexlyBrandHeader). The header sits ABOVE the transcript in the column, not over it, so it never needed a surface of its own.
+- versionCode 139 / 0.86.16.

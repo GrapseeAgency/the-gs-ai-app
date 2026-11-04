@@ -64,19 +64,10 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        // A veil that FADES, not a band that stops, and no closing rule. The
-        // white@0.42 hairline at the bottom was a lit strip across the top of
-        // every conversation in dark mode — the hardest edge on the screen.
-        .background(
-            LinearGradient(
-                colors: [
-                    Aero.surface.opacity(0.62),
-                    Aero.surface.opacity(0.06),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        // NO BACKGROUND AT ALL — same rule as Android. A veil, a fade, a
+        // hairline: all three were still a band drawn across the top of a page
+        // that is meant to be one continuous bloom. The header sits above the
+        // transcript, not over it, so it needs no surface of its own.
     }
 
     private func headerIconButton<Menu: View>(
