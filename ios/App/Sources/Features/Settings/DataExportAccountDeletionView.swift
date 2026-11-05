@@ -156,71 +156,84 @@ struct DataExportAccountDeletionView: View {
                 ActivitySheet(items: [exportURL])
             }
         }
-        .confirmationDialog(
-            "Data Retention Period",
-            isPresented: $showRetention,
-            titleVisibility: .visible
-        ) {
-            ForEach([3, 6, 12, 24], id: \.self) { months in
-                Button("\(months) months") {
+        .gsDialog(isPresented: showRetention) {
+            GsChoiceDialog(
+                title: "Data Retention Period",
+                subtitle: "Conversations untouched for longer than this are removed when auto-delete is on.",
+                options: [3, 6, 12, 24].map { months in
+                    GsChoice(
+                        id: "\(months)",
+                        label: "\(months) months",
+                        detail: months == 24 ? "Two years \u{2014} the longest window offered" : nil,
+                        selected: settings.dataRetentionMonths == months
+                    )
+                },
+                onSelect: { choice in
+                    guard let months = Int(choice.id) else { return }
                     settings.dataRetentionMonths = months
                     if settings.autoDeleteInactive {
                         purgeNow()
                     }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Conversations untouched for longer than the period are removed when auto-delete is on.")
+                    showRetention = false
+                },
+                onDismiss: { showRetention = false }
+            )
         }
-        .confirmationDialog(
-            "Clear chat history?",
-            isPresented: $showClear,
-            titleVisibility: .visible
-        ) {
-            Button("Clear history", role: .destructive) {
-                DataRetention.clearChatHistory()
-                GSHaptics.warning()
-                notice = Notice(
-                    title: "Chat history cleared",
-                    message: "Every conversation and message left this device. Library saves stayed.")
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Every conversation and message on this device will be removed, along with staged attachment copies. Library saves stay. This cannot be undone.")
+        .gsDialog(isPresented: showClear) {
+            GsDialog(
+                title: "Clear chat history?",
+                message: "Every conversation and message on this device will be removed, along with staged attachment copies. Library saves stay. This cannot be undone.",
+                confirmLabel: "Clear history",
+                onConfirm: {
+                    DataRetention.clearChatHistory()
+                    GSHaptics.warning()
+                    notice = Notice(
+                        title: "Chat history cleared",
+                        message: "Every conversation and message left this device. Library saves stayed.")
+                },
+                onDismiss: { showClear = false },
+                destructive: true,
+                glyph: "trash",
+                tone: .rose,
+                footnote: "Library saves stay."
+            )
         }
-        .confirmationDialog(
-            "Delete everything on this device?",
-            isPresented: $showDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete account", role: .destructive) {
-                DataRetention.deleteAllContent()
-                // Account details and the local plan activation go with the
-                // corpus; leaving either behind would make "account details"
-                // a half-truth the next sign-in inherits.
-                AccountStore.shared.setDisplayName("")
-                AccountStore.shared.setEmail("")
-                PlanStore.shared.clearActivation()
-                GSHaptics.warning()
-                // There is no server account to delete; the honest action is
-                // to close the identity with the local corpus.
-                sessionActive = false
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Your conversations, saved items, attachment files and account details will be removed, and you'll be signed out. This cannot be undone.")
+        .gsDialog(isPresented: showDelete) {
+            GsDialog(
+                title: "Delete everything on this device?",
+                message: "Your conversations, saved items, attachment files and account details will be removed, and you'll be signed out. This cannot be undone.",
+                confirmLabel: "Delete account",
+                onConfirm: {
+                    DataRetention.deleteAllContent()
+                    // Account details and the local plan activation go with the
+                    // corpus; leaving either behind would make "account details"
+                    // a half-truth the next sign-in inherits.
+                    AccountStore.shared.setDisplayName("")
+                    AccountStore.shared.setEmail("")
+                    PlanStore.shared.clearActivation()
+                    GSHaptics.warning()
+                    // There is no server account to delete; the honest action is
+                    // to close the identity with the local corpus.
+                    sessionActive = false
+                },
+                onDismiss: { showDelete = false },
+                destructive: true,
+                glyph: "user-x",
+                tone: .rose,
+                footnote: "No server copy exists \u{2014} this is the whole record."
+            )
         }
-        .alert(
-            notice?.title ?? "",
-            isPresented: Binding(
-                get: { notice != nil },
-                set: { if !$0 { notice = nil } }),
-            presenting: notice
-        ) { _ in
-            Button("OK", role: .cancel) { notice = nil }
-        } message: { value in
-            Text(value.message)
+        .gsDialog(isPresented: notice != nil) {
+            GsDialog(
+                title: notice?.title ?? "",
+                message: notice?.message ?? "",
+                confirmLabel: "OK",
+                onConfirm: {},
+                onDismiss: { notice = nil },
+                dismissLabel: nil,
+                glyph: "circle-check",
+                tone: .mint
+            )
         }
     }
 

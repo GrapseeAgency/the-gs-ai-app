@@ -42,18 +42,21 @@ struct SettingsView: View {
                 hub
             }
         }
-        .confirmationDialog(
-            "Log out of Nexly?",
-            isPresented: $showSignOut,
-            titleVisibility: .visible
-        ) {
-            Button("Log Out", role: .destructive) {
-                GSHaptics.warning()
-                sessionActive = false
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("You can sign back in any time. Your local chats stay on this device.")
+        .gsDialog(isPresented: showSignOut) {
+            GsDialog(
+                title: "Log out of Nexly?",
+                message: "You can sign back in any time. Your local chats stay on this device.",
+                confirmLabel: "Log Out",
+                onConfirm: {
+                    GSHaptics.warning()
+                    sessionActive = false
+                },
+                onDismiss: { showSignOut = false },
+                destructive: true,
+                glyph: "logout",
+                tone: .rose,
+                footnote: "Signing out never deletes a conversation."
+            )
         }
     }
 

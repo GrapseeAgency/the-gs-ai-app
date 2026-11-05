@@ -151,9 +151,8 @@ struct NotificationsAlertsView: View {
                     .strokeBorder(.white.opacity(0.55), lineWidth: 1)
             )
         }
-        .sheet(isPresented: $editQuietHours) {
-            QuietHoursSheet()
-                .presentationDetents([.medium])
+        .gsDialog(isPresented: editQuietHours) {
+            QuietHoursSheet(onDismiss: { editQuietHours = false })
         }
         // The OS permission is requested only here, from the switch itself.
         // A reader who declines gets the switch back at off: a control that
@@ -211,17 +210,28 @@ struct NotificationsAlertsView: View {
 /// switch lives in here rather than being invented on the row.
 private struct QuietHoursSheet: View {
 
-    @ObservedObject private var settings = SettingsStore.shared
-    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var settings = SettingsStore.shared
+    /// An overlay cannot `dismiss()` — the sheet's own environment action is a
+    /// no-op once the editor sits inside `GsDialogFrame`, so the caller closes
+    /// it explicitly.
+    var onDismiss: () -> Void
 
     var body: some View {
-        ScrollView {
+        GsDialogFrame(onDismiss: onDismiss) {
             VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text("Quiet Hours")
-                        .font(.custom(Aero.productName(.semibold), size: 15, relativeTo: .headline))
-                        .foregroundStyle(Aero.text)
-                    Spacer()
+                HStack(spacing: 12) {
+                    GsWellTile(glyph: "moon", tone: .lilac, size: 38)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Quiet Hours")
+                            .font(.custom(Aero.productName(.semibold), size: 15, relativeTo: .headline))
+                            .foregroundStyle(Aero.text)
+                        Text(settings.quietHoursEnabled
+                             ? "Holding notices \(NotificationsAlertsView.clockLabel(settings.quietStartMinute)) – \(NotificationsAlertsView.clockLabel(settings.quietEndMinute))"
+                             : "Off — every notice arrives as it happens")
+                            .font(.custom(Aero.productName(.regular), size: 11, relativeTo: .caption2))
+                            .foregroundStyle(Aero.textSecondary)
+                    }
+                    Spacer(minLength: 6)
                     GsSheetSwitch(isOn: $settings.quietHoursEnabled)
                 }
                 stepperRow(
@@ -238,9 +248,7 @@ private struct QuietHoursSheet: View {
                     .font(.custom(Aero.productName(.regular), size: 11.5, relativeTo: .caption))
                     .foregroundStyle(Aero.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button {
-                    dismiss()
-                } label: {
+                Button(action: onDismiss) {
                     Text("Done")
                         .font(Aero.button())
                         .foregroundStyle(.white)
@@ -249,8 +257,10 @@ private struct QuietHoursSheet: View {
                         .background(Capsule().fill(ExplorePalette.peachDeep))
                 }
                 .buttonStyle(KineticPressStyle())
+                .padding(.top, 2)
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 22)
         }
     }
 

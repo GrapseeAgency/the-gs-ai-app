@@ -49,12 +49,16 @@ import com.grapsee.gsai.ui.theme.GsTheme
  * PROFILE & PREFERENCES — rebuilt to
  * docs/reference/settings/profile-preferences.png.
  *
- * Real values only: AccountStore supplies name/email, OnboardingProfileStore
- * supplies tone/detail/interests/tools. Rows with no editor (Date of Birth,
- * Location, Language) render "Not set" / their static value WITHOUT a
- * chevron — the mock paints chevrons everywhere, but a chevron with no
- * destination is a dead end. Name/Email open the real account editor;
- * interests and tools open the real setup wizard.
+ * Real values only: AccountStore supplies name/email/date of birth/location,
+ * OnboardingProfileStore supplies tone/detail/interests/tools.
+ *
+ * Every row on this page now goes somewhere, which was not true before:
+ *  - Name, Email, Date of Birth and Location open the identity editor (the
+ *    last two used to print "Not set" forever, with no chevron — a field the
+ *    app names and can never learn);
+ *  - Tone & Detail and Language open Response Style, where the two choices are
+ *    actually editable and the chat turn actually reads them;
+ *  - Interests and Content Preferences open the setup wizard.
  */
 @Composable
 fun ProfileScreen(
@@ -164,36 +168,42 @@ fun ProfileScreen(
                 leading = { RefWellTile(GsIcons.Mail, GsWellTone.Lilac, 28.dp) },
             )
             RefRowDivider()
+            // These two rows printed "Not set" forever with no chevron: a
+            // field the app names and can never learn. They now open the same
+            // editor as the name and address, which stores both.
             RefNavRow(
                 title = "Date of Birth",
-                subtitle = "Not set",
+                subtitle = AccountStore.dateOfBirth(context).ifBlank { "Not set" },
+                onClick = { onNavigate(GsRoutes.SETTINGS_IDENTITY) },
                 leading = { RefWellTile(GsIcons.Calendar, GsWellTone.Mint, 28.dp) },
-                trailing = {},
             )
             RefRowDivider()
             RefNavRow(
                 title = "Location",
-                subtitle = "Not set",
+                subtitle = AccountStore.location(context).ifBlank { "Not set" },
+                onClick = { onNavigate(GsRoutes.SETTINGS_IDENTITY) },
                 leading = { RefWellTile(GsIcons.MapPin, GsWellTone.Blue, 28.dp) },
-                trailing = {},
             )
         }
 
         // ---- Response Style ----------------------------------------------
+        // Tone and Detail used to be two rows that showed a value and offered
+        // no way to change it; Language was a third. One page now owns all
+        // three, and the two choices are read by the chat turn.
         RefGroupHeader("Response Style", "How Nexly communicates with you")
         RefCard(role = GsGlassRole.CardLight) {
             RefNavRow(
-                title = "Tone",
-                subtitle = OnboardingProfileStore.personality,
+                title = "Tone & Detail",
+                subtitle = "${OnboardingProfileStore.personality} · ${OnboardingProfileStore.responseStyle}",
+                onClick = { onNavigate(GsRoutes.SETTINGS_RESPONSE_STYLE) },
                 leading = { RefWellTile(GsIcons.MessageCircle, GsWellTone.Peach, 28.dp) },
-                trailing = {},
             )
             RefRowDivider()
             RefNavRow(
-                title = "Detail Level",
-                subtitle = OnboardingProfileStore.responseStyle,
-                leading = { RefWellTile(GsIcons.Sliders, GsWellTone.Peach, 28.dp) },
-                trailing = {},
+                title = "Language",
+                subtitle = "English (UK) — the only language this build ships",
+                onClick = { onNavigate(GsRoutes.SETTINGS_RESPONSE_STYLE) },
+                leading = { RefWellTile(GsIcons.Languages, GsWellTone.Mint, 28.dp) },
             )
         }
 
@@ -213,13 +223,7 @@ fun ProfileScreen(
                 onClick = { onNavigate(GsRoutes.ONBOARDING_SETUP) },
                 leading = { RefWellTile(GsIcons.BookOpen, GsWellTone.Lilac, 28.dp) },
             )
-            RefRowDivider()
-            RefNavRow(
-                title = "Language",
-                subtitle = "English (UK)",
-                leading = { RefWellTile(GsIcons.Languages, GsWellTone.Mint, 28.dp) },
-                trailing = {},
-            )
+
         }
 
         Spacer(Modifier.height(14.dp))

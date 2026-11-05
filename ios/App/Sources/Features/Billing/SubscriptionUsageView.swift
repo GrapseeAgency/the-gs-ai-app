@@ -159,9 +159,8 @@ struct SubscriptionUsageView: View {
             let measured = await MainActor.run { GSUsageMeter.read() }
             await MainActor.run { usage = measured }
         }
-        .sheet(item: $usageDetail) { kind in
-            usageSheet(kind)
-                .presentationDetents([.medium])
+        .gsDialog(isPresented: usageDetail != nil) {
+            usageSheet(usageDetail ?? .messages)
         }
     }
 
@@ -270,7 +269,13 @@ struct SubscriptionUsageView: View {
                 ("Why", "Effort is stored per conversation, not counted per message"),
             ]
         }
-        return GsFactSheet(title: kind.rawValue.capitalized, facts: facts)
+        return GsFactDialog(
+            title: kind.rawValue.capitalized,
+            facts: facts,
+            glyph: "chart-bar",
+            tone: .peach,
+            footnote: "Counted from this device's own store, not from a server report.",
+            onDismiss: { usageDetail = nil })
     }
 
     // MARK: Helpers

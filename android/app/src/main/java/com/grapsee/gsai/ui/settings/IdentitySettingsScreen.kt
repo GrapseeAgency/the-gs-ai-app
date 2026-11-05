@@ -37,6 +37,9 @@ fun IdentitySettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var name by remember { mutableStateOf(AccountStore.displayName(context)) }
     var email by remember { mutableStateOf(AccountStore.email(context)) }
+    // The two rows Profile used to print as "Not set" with no way to set them.
+    var dob by remember { mutableStateOf(AccountStore.dateOfBirth(context)) }
+    var place by remember { mutableStateOf(AccountStore.location(context)) }
     val cleanEmail = email.trim()
     val emailError = if (cleanEmail.isNotEmpty() && !cleanEmail.contains("@")) {
         "Enter an address like you@grapsee.com"
@@ -46,7 +49,7 @@ fun IdentitySettingsScreen(onBack: () -> Unit) {
 
     RefSettingsPage(
         title = "Your details",
-        subtitle = "The name and address this app shows.",
+        subtitle = "The name, address and details this app shows.",
         onBack = onBack,
     ) {
         RefSection(label = "Profile", role = GsGlassRole.CardLight) {
@@ -72,11 +75,29 @@ fun IdentitySettingsScreen(onBack: () -> Unit) {
                     leadingIcon = GsIcons.Mail,
                     fieldTestTag = "identity-email",
                 )
+                RefTextField(
+                    value = dob,
+                    onValueChange = { dob = it },
+                    label = "Date of birth",
+                    placeholder = "YYYY-MM-DD",
+                    leadingIcon = GsIcons.Calendar,
+                    fieldTestTag = "identity-dob",
+                )
+                RefTextField(
+                    value = place,
+                    onValueChange = { place = it },
+                    label = "Location",
+                    placeholder = "City, country",
+                    leadingIcon = GsIcons.MapPin,
+                    fieldTestTag = "identity-location",
+                )
             }
         }
         RefFootnote(
             "Saved on this device. This changes what the app shows; it does " +
-                "not create or move a Grapsee Mail account."
+                "not create or move a Grapsee Mail account. Date of birth and " +
+                "location are used only on your Profile — nothing is inferred " +
+                "from them and they are never sent to a model."
         )
         Spacer(Modifier.height(10.dp))
         RefPrimaryButton(
@@ -85,6 +106,8 @@ fun IdentitySettingsScreen(onBack: () -> Unit) {
                 if (emailError == null) {
                     AccountStore.setDisplayName(context, name.trim())
                     AccountStore.setEmail(context, cleanEmail)
+                    AccountStore.setDateOfBirth(context, dob)
+                    AccountStore.setLocation(context, place)
                     onBack()
                 }
             },

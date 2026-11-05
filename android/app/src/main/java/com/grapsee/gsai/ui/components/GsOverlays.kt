@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
@@ -80,58 +79,4 @@ fun GsSheet(
     }
 }
 
-/**
- * The shared confirmation dialog. `destructive = true` renders the confirm
- * action in the error role — the only sanctioned treatment for irreversible
- * operations.
- */
-@Composable
-fun GsConfirmDialog(
-    title: String,
-    message: String,
-    confirmLabel: String,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-    destructive: Boolean = false,
-    dismissLabel: String = "Cancel",
-) {
-    val colors = GsTheme.colors
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        modifier = modifier,
-        shape = RoundedCornerShape(GsRadius.sheet),
-        containerColor = colors.dialogSurface,
-        titleContentColor = colors.textPrimary,
-        textContentColor = colors.textSecondary,
-        tonalElevation = 0.dp,
-        title = { Text(title, style = androidx.compose.material3.MaterialTheme.typography.headlineSmall) },
-        text = { Text(message, style = androidx.compose.material3.MaterialTheme.typography.bodyMedium) },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(); onDismiss() }) {
-                Text(
-                    confirmLabel,
-                    color = if (destructive) colors.error else colors.accent,
-                    style = GsTheme.textStyles.button,
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(dismissLabel, color = colors.textSecondary, style = GsTheme.textStyles.button)
-            }
-        },
-    )
-}
-
-/** Compact dropdown-menu surface token wrapper (context menus). */
-@Composable
-fun GsMenuSurface(content: @Composable () -> Unit) {
-    Surface(
-        shape = GsRadius.mdShape(),
-        color = GsTheme.colors.elevatedSurface,
-        tonalElevation = 3.dp,
-        content = content,
-    )
-}
 

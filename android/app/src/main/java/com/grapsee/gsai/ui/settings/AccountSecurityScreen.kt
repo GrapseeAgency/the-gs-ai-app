@@ -17,10 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +41,7 @@ import com.grapsee.gsai.data.PlanStore
 import com.grapsee.gsai.data.SessionStore
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.chat.content.NexlyGlyph
+import com.grapsee.gsai.ui.components.GsFactDialog
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefCard
@@ -440,43 +439,13 @@ private fun FactDialog(
     facts: List<Pair<String, String>>,
     onDismiss: () -> Unit,
 ) {
-    val colors = GsTheme.colors
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                title,
-                fontFamily = GsFonts.Product,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 15.sp,
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                facts.forEach { (label, value) ->
-                    Row(Modifier.fillMaxWidth()) {
-                        Text(
-                            label,
-                            modifier = Modifier.width(108.dp),
-                            fontSize = 11.sp,
-                            fontFamily = GsFonts.Product,
-                            color = colors.textSecondary,
-                        )
-                        Text(
-                            value,
-                            fontSize = 11.sp,
-                            fontFamily = GsFonts.Product,
-                            color = colors.textPrimary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
-        },
+    GsFactDialog(
+        title = title,
+        facts = facts,
+        onDismiss = onDismiss,
+        icon = GsIcons.ShieldCheck,
+        tone = GsWellTone.Blue,
+        footnote = "Read from this device just now \u2014 nothing here is estimated.",
     )
 }
 

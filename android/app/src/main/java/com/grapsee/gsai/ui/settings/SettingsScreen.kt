@@ -26,14 +26,11 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +56,7 @@ import android.view.HapticFeedbackConstants
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import com.grapsee.gsai.ui.components.GsChip
+import com.grapsee.gsai.ui.components.GsConfirmDialog
 import com.grapsee.gsai.ui.components.GsGlassSwitch
 import com.grapsee.gsai.ui.components.GsTextSizeControl
 import com.grapsee.gsai.ui.components.gsContentWidth
@@ -408,14 +406,13 @@ fun SettingsScreen(
                             }
                         )
                     }
-                    TextButton(
-                        onClick = { showDeleteAccount = true },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Text("Delete account")
-                    }
+                    ActionRow(
+                        title = "Delete account",
+                        subtitle = "Removes the account, its assistants, chats and files for good",
+                        leading = GsIcons.UserX,
+                        danger = true,
+                        onClick = { showDeleteAccount = true }
+                    )
                 }
                 GroupSeparator()
                 ExpandRow(
@@ -466,94 +463,63 @@ fun SettingsScreen(
 
     if (showClearData) {
         val view = LocalView.current
-        AlertDialog(
-            onDismissRequest = { showClearData = false },
-            title = { Text("Clear local data?") },
-            text = {
-                Text("Cached chats, files and preferences on this device will be removed. Anything synced to your account stays safe.")
+        GsConfirmDialog(
+            title = "Clear local data?",
+            message = "Cached chats, files and preferences on this device will be removed. " +
+                "Anything synced to your account stays safe.",
+            confirmLabel = "Clear",
+            dismissLabel = "Cancel",
+            destructive = true,
+            footnote = "The account and anything already uploaded are untouched.",
+            onConfirm = {
+                // Destructive confirmations get the heavy long-press haptic the
+                // system uses for delete moments.
+                view.gsHaptic(HapticFeedbackConstants.LONG_PRESS)
+                scope.launch {
+                    runCatching {
+                        val db = ServiceLocator.db
+                        db.messageDao().deleteAll()
+                        db.savedItemDao().clear()
+                        db.conversationDao().clear()
+                    }
+                }
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        // Destructive confirmations get the heavy long-press
-                        // haptic the system uses for delete moments.
-                        view.gsHaptic(HapticFeedbackConstants.LONG_PRESS)
-                        showClearData = false
-                        scope.launch {
-                            runCatching {
-                                val db = ServiceLocator.db
-                                db.messageDao().deleteAll()
-                                db.savedItemDao().clear()
-                                db.conversationDao().clear()
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) { Text("Clear") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearData = false }) { Text("Cancel") }
-            }
+            onDismiss = { showClearData = false },
         )
     }
 
     if (showDeleteAccount) {
         val view = LocalView.current
-        AlertDialog(
-            onDismissRequest = { showDeleteAccount = false },
-            title = { Text("Delete account?") },
-            text = {
-                Text("This permanently deletes your account, assistants, chats and files. This action cannot be undone.")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        view.gsHaptic(HapticFeedbackConstants.LONG_PRESS)
-                        showDeleteAccount = false
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteAccount = false }) { Text("Cancel") }
-            }
+        GsConfirmDialog(
+            title = "Delete account?",
+            message = "This permanently deletes your account, assistants, chats and files. " +
+                "This action cannot be undone.",
+            confirmLabel = "Delete",
+            dismissLabel = "Cancel",
+            destructive = true,
+            onConfirm = { view.gsHaptic(HapticFeedbackConstants.LONG_PRESS) },
+            onDismiss = { showDeleteAccount = false },
         )
     }
 
     if (showDeleteModel) {
         val view = LocalView.current
-        AlertDialog(
-            onDismissRequest = { showDeleteModel = false },
-            title = { Text("Delete on-device model?") },
-            text = {
-                Text(
-                    "The model file is removed from this device and answers go back to " +
-                        "the network. You can download it again at any time. " +
-                        "\"Prefer on-device AI\" turns off with it."
-                )
+        GsConfirmDialog(
+            title = "Delete on-device model?",
+            message = "The model file is removed from this device and answers go back to " +
+                "the network. You can download it again at any time.",
+            confirmLabel = "Delete",
+            dismissLabel = "Keep",
+            destructive = true,
+            footnote = "\u201CPrefer on-device AI\u201D turns off with it.",
+            onConfirm = {
+                view.gsHaptic(HapticFeedbackConstants.LONG_PRESS)
+                runCatching { ModelStore.removeInstalled() }
+                // A preference for an engine that no longer exists is a lie the
+                // switch would tell on its next read.
+                SettingsStore.updatePreferLocal(false)
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        view.gsHaptic(HapticFeedbackConstants.LONG_PRESS)
-                        runCatching { ModelStore.removeInstalled() }
-                        // A preference for an engine that no longer exists is a
-                        // lie the switch would tell on its next read.
-                        SettingsStore.updatePreferLocal(false)
-                        showDeleteModel = false
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteModel = false }) { Text("Keep") }
-            }
+            onDismiss = { showDeleteModel = false },
         )
     }
 }
@@ -750,7 +716,9 @@ private fun ActionRow(
     title: String,
     subtitle: String?,
     leading: ImageVector?,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    /** A row that removes something — tinted, so it never reads as a setting. */
+    danger: Boolean = false
 ) {
     Row(
         modifier = Modifier
@@ -772,7 +740,7 @@ private fun ActionRow(
                 Icon(
                     imageVector = leading,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
+                    tint = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -784,7 +752,7 @@ private fun ActionRow(
                     fontWeight = FontWeight.Medium,
                     letterSpacing = 0.sp
                 ),
-                color = MaterialTheme.colorScheme.onSurface
+                color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
             )
             if (subtitle != null) {
                 Text(

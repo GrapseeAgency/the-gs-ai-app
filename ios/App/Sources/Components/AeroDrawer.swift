@@ -103,23 +103,23 @@ struct AeroDrawer: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Navigation menu")
         .accessibilityAction(.escape) { onClose() }
-        .alert("Rename chat", isPresented: Binding(
-            get: { renameId != nil },
-            set: { if !$0 { renameId = nil } }
-        )) {
-            TextField("Chat name", text: $renameDraft)
-            Button("Rename") {
-                let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let id = renameId, !trimmed.isEmpty {
-                    store.rename(id: id, to: trimmed)
-                    sync(id, title: trimmed)
-                    GSHaptics.success()
-                }
-                renameId = nil
-            }
-            Button("Cancel", role: .cancel) { renameId = nil }
-        } message: {
-            Text("Give this conversation a name you'll recognise.")
+        .gsDialog(isPresented: renameId != nil) {
+            GsPromptDialog(
+                title: "Rename chat",
+                fieldLabel: "Chat name",
+                initial: renameDraft,
+                message: "Give this conversation a name you'll recognise.",
+                placeholder: "Chat name",
+                confirmLabel: "Rename",
+                onConfirm: { name in
+                    if let id = renameId {
+                        store.rename(id: id, to: name)
+                        sync(id, title: name)
+                        GSHaptics.success()
+                    }
+                },
+                onDismiss: { renameId = nil }
+            )
         }
     }
 

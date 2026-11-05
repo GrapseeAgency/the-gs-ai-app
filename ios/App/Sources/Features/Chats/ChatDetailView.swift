@@ -132,41 +132,52 @@ struct ChatDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .toolbar(.hidden, for: .navigationBar)
-        .alert("Rename chat", isPresented: $showRename) {
-            TextField("Chat name", text: $renameDraft)
-            Button("Save") {
-                if let id = vm.conversationID {
-                    conversations.rename(id: id, to: renameDraft)
-                }
-            }
-            Button("Cancel", role: .cancel) {}
+        .gsDialog(isPresented: showRename) {
+            GsPromptDialog(
+                title: "Rename chat",
+                fieldLabel: "Chat name",
+                initial: renameDraft,
+                message: "Give this conversation a name you'll recognise.",
+                placeholder: "Chat name",
+                confirmLabel: "Save",
+                onConfirm: { name in
+                    if let id = vm.conversationID {
+                        conversations.rename(id: id, to: name)
+                    }
+                },
+                onDismiss: { showRename = false }
+            )
         }
-        .confirmationDialog(
-            "Delete this chat?",
-            isPresented: $showDeleteConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                if let id = vm.conversationID {
-                    conversations.delete(id: id)
-                }
-                leaveConversation()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This conversation and its messages will be removed from this device.")
+        .gsDialog(isPresented: showDeleteConfirm) {
+            GsDialog(
+                title: "Delete this chat?",
+                message: "This conversation and its messages will be removed from this device.",
+                confirmLabel: "Delete",
+                onConfirm: {
+                    if let id = vm.conversationID {
+                        conversations.delete(id: id)
+                    }
+                    leaveConversation()
+                },
+                onDismiss: { showDeleteConfirm = false },
+                destructive: true,
+                glyph: "trash",
+                tone: .rose,
+                footnote: "Library saves made from it are kept."
+            )
         }
-        .confirmationDialog(
-            "Clear all messages?",
-            isPresented: $showClearConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Clear messages", role: .destructive) {
-                clearMessages()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The chat stays in your history, but every message in it is removed.")
+        .gsDialog(isPresented: showClearConfirm) {
+            GsDialog(
+                title: "Clear all messages?",
+                message: "The chat stays in your history, but every message in it is removed.",
+                confirmLabel: "Clear messages",
+                onConfirm: { clearMessages() },
+                onDismiss: { showClearConfirm = false },
+                destructive: true,
+                glyph: "eraser",
+                tone: .rose,
+                footnote: "The chat itself stays in your history."
+            )
         }
         // A MENU, ANCHORED TO THE THREE DOTS. It used to be a .sheet at 66% —
         // a second screen that slid over the chat to show six short lines. The

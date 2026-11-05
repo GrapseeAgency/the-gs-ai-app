@@ -34,12 +34,19 @@ final class AccountStore: ObservableObject {
     @Published private(set) var displayName: String
     /// The stored email, or "" when none was given.
     @Published private(set) var email: String
+    /// Date of birth and location — the two rows Profile used to print as
+    /// "Not set" with no editor. Stored with the rest of the identity and
+    /// edited on the same page as the name and address.
+    @Published private(set) var dateOfBirth: String
+    @Published private(set) var location: String
 
     private let defaults = UserDefaults.standard
 
     private init() {
         displayName = Self.read(Self.nameKey)
         email = Self.read(Self.emailKey)
+        dateOfBirth = Self.read(Self.dobKey)
+        location = Self.read(Self.locationKey)
     }
 
     /// The leading whitespace-separated word of the display name — the form
@@ -71,6 +78,26 @@ final class AccountStore: ObservableObject {
         email = trimmed
     }
 
+    func setDateOfBirth(_ value: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            defaults.removeObject(forKey: Self.dobKey)
+        } else {
+            defaults.set(trimmed, forKey: Self.dobKey)
+        }
+        dateOfBirth = trimmed
+    }
+
+    func setLocation(_ value: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            defaults.removeObject(forKey: Self.locationKey)
+        } else {
+            defaults.set(trimmed, forKey: Self.locationKey)
+        }
+        location = trimmed
+    }
+
     /// The stored value, or "" when the user never gave one — never a
     /// placeholder.
     private static func read(_ key: String) -> String {
@@ -80,4 +107,6 @@ final class AccountStore: ObservableObject {
 
     private static let nameKey = "gs.account.displayName"
     private static let emailKey = "gs.account.email"
+    private static let dobKey = "gs.account.dateOfBirth"
+    private static let locationKey = "gs.account.location"
 }

@@ -207,6 +207,17 @@ internal fun HomeContent(
     onOpenVoice: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    // The device's own calendar day, as the stored ISO date compares to it.
+    // Compared as text because `updatedAt` is written as an ISO string; parsing
+    // it back would add a failure mode for a value we only ever compare.
+    val todayIso = remember {
+        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            .format(java.util.Date())
+    }
+    val todayRows = recent
+        .filter { it.conversation.updatedAt.take(10) == todayIso }
+        .take(3)
+
     Box(Modifier.fillMaxSize()) {
         // Hoisted so the dock's Home button can scroll this page back to its top.
         // It used to be `onHome = {}` — a labelled, focusable, accessibility-
@@ -274,7 +285,18 @@ internal fun HomeContent(
                     },
                 )
                 Spacer(Modifier.height(10.dp))
+                // "Today's Used" used to be a heading with a "See All" and
+                // NOTHING under it — the next thing on the page was the
+                // Suggestions card. A section title that promises a list and
+                // delivers a different card is the exact defect this pass is
+                // about, so the list is real now, and an empty day says so.
                 TodayUsedHeader(onSeeAll = onOpenChats)
+                Spacer(Modifier.height(10.dp))
+                TodayUsedList(
+                    rows = todayRows,
+                    onOpen = onOpenConversation,
+                    onStart = onNewChat,
+                )
                 Spacer(Modifier.height(18.dp))
                 SuggestionsCard(
                     title = "Suggestions",
@@ -758,6 +780,115 @@ private fun ReflectionCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
 // ---------------------------------------------------------------------------
 // Today's Used + suggestions
 // ---------------------------------------------------------------------------
+
+/**
+ * The three conversations this device actually opened today.
+ *
+ * A day with nothing in it is a real state, not a hole: the card says so and
+ * offers the one action that would change it. What it never does is show
+ * yesterday's threads under a heading that says "Today".
+ */
+@Composable
+private fun TodayUsedList(
+    rows: List<ConversationPreviewRow>,
+    onOpen: (String) -> Unit,
+    onStart: () -> Unit,
+) {
+    val colors = GsTheme.colors
+    if (rows.isEmpty()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(GsRadius.homeCardShape())
+                .gsGlass(GsGlassRole.CardDim, GsRadius.homeCardShape())
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    role = Role.Button,
+                    onClickLabel = "Start a conversation",
+                    onClick = onStart
+                )
+                .padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = "Nothing yet today",
+                style = MaterialTheme.typography.bodyMedium.untracked().copy(fontSize = 13.sp),
+                color = colors.textPrimary
+            )
+            Text(
+                text = "Start a conversation and it will appear here.",
+                style = MaterialTheme.typography.labelMedium.untracked().copy(fontSize = 11.sp),
+                color = colors.textTertiary
+            )
+        }
+        return
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(GsRadius.homeCardShape())
+            .gsGlass(GsGlassRole.CardLight, GsRadius.homeCardShape())
+    ) {
+        rows.forEachIndexed { index, row ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        role = Role.Button,
+                        onClickLabel = row.conversation.title,
+                        onClick = { onOpen(row.conversation.id) }
+                    )
+                    .padding(horizontal = 13.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = row.conversation.title,
+                        style = MaterialTheme.typography.bodyMedium.untracked().copy(fontSize = 12.5.sp),
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = cleanPreview(row.lastMessage ?: "", 90).ifBlank { "No messages yet" },
+                        style = MaterialTheme.typography.labelSmall.untracked().copy(fontSize = 10.5.sp),
+                        color = colors.textTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    // A clock, not a date: the list is already "today".
+                    text = row.conversation.updatedAt.let { stamp ->
+                        if (stamp.length >= 16 && stamp[10] == 'T') stamp.substring(11, 16) else "Today"
+                    },
+                    style = MaterialTheme.typography.labelSmall.untracked().copy(fontSize = 10.sp),
+                    color = colors.textTertiary
+                )
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    GsIcons.ArrowRight,
+                    contentDescription = null,
+                    tint = colors.textTertiary,
+                    modifier = Modifier.size(13.dp)
+                )
+            }
+            if (index != rows.lastIndex) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(start = 13.dp, end = 13.dp)
+                        .height(0.7.dp)
+                        .background(colors.border.copy(alpha = 0.45f))
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun TodayUsedHeader(onSeeAll: () -> Unit) {

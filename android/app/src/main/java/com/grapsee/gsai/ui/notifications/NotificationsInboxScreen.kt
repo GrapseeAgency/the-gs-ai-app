@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.notifications.NoticeInbox
 import com.grapsee.gsai.ui.chat.content.NexlyGlyph
+import com.grapsee.gsai.ui.components.GsChoice
+import com.grapsee.gsai.ui.components.GsChoiceDialog
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefCard
@@ -45,6 +46,7 @@ import com.grapsee.gsai.ui.components.RefSettingsPage
 import com.grapsee.gsai.ui.components.RefTagPill
 import com.grapsee.gsai.ui.components.RefWellTile
 import com.grapsee.gsai.ui.icons.GsIcons
+import com.grapsee.gsai.ui.navigation.GsRoutes
 import com.grapsee.gsai.ui.theme.GsFonts
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.LocalGsIsDark
@@ -95,7 +97,6 @@ fun NotificationsInboxScreen(
     var tab by remember { mutableStateOf("all") }
     var earlierExpanded by remember { mutableStateOf(false) }
     var showFilter by remember { mutableStateOf(false) }
-    var openNotice by remember { mutableStateOf<NoticeInbox.Entry?>(null) }
 
     // Newest first is the reader's contract, not the producer's: `record()`
     // prepends today, but a fixture, a restored backup or a future producer
@@ -197,7 +198,7 @@ fun NotificationsInboxScreen(
                         }
                     },
                 )
-                NoticeList(today, now) { openNotice = it }
+                NoticeList(today, now) { notice -> onNavigate(GsRoutes.notification(notice.id)) }
             }
             if (earlier.isNotEmpty()) {
                 val shown = if (earlierExpanded) earlier else earlier.take(3)
@@ -206,7 +207,7 @@ fun NotificationsInboxScreen(
                     caption = if (earlierExpanded) "Show less" else "See all",
                     onCaptionClick = { earlierExpanded = !earlierExpanded },
                 )
-                NoticeList(shown, now) { openNotice = it }
+                NoticeList(shown, now) { notice -> onNavigate(GsRoutes.notification(notice.id)) }
             }
             Spacer(Modifier.height(14.dp))
             AllCaughtUpCard(body = "No more notifications for now.")
@@ -214,73 +215,24 @@ fun NotificationsInboxScreen(
         Spacer(Modifier.height(14.dp))
     }
 
-    openNotice?.let { notice ->
-        NoticeDialog(
-            notice = notice,
-            now = now,
-            onDismiss = { openNotice = null },
-            onOpenSettings = {
-                openNotice = null
-                onNavigate(com.grapsee.gsai.ui.navigation.GsRoutes.SETTINGS_NOTIFICATIONS)
-            },
-        )
-        // Opening a notice is what marks it read — the dot disappears for the
-        // same reason the store flips the flag.
-        androidx.compose.runtime.LaunchedEffect(notice.id) {
-            if (!notice.read) NoticeInbox.markRead(context, notice.id)
-        }
-    }
-
     if (showFilter) {
-        AlertDialog(
-            onDismissRequest = { showFilter = false },
-            title = {
-                Text(
-                    "Filter notifications",
-                    fontFamily = GsFonts.Product,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
+        GsChoiceDialog(
+            title = "Filter notifications",
+            subtitle = "Five kinds, counted from what was actually sent",
+            options = tabs.map { item ->
+                GsChoice(
+                    id = item.id,
+                    label = item.label,
+                    detail = "${counts[item.id] ?: 0} notices",
+                    glyph = item.glyph,
+                    tone = item.tone,
+                    selected = tab == item.id,
                 )
             },
-            text = {
-                Column {
-                    tabs.forEach { item ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable {
-                                    tab = item.id
-                                    showFilter = false
-                                }
-                                .padding(horizontal = 4.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            com.grapsee.gsai.ui.components.RefGlyphWell(
-                                glyph = item.glyph,
-                                tone = item.tone,
-                                size = 30.dp,
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                item.label,
-                                modifier = Modifier.weight(1f),
-                                fontSize = 11.sp,
-                                fontFamily = GsFonts.Product,
-                                color = colors.textPrimary,
-                            )
-                            Text(
-                                "${counts[item.id] ?: 0}",
-                                fontSize = 10.5.sp,
-                                fontFamily = GsFonts.Product,
-                                color = colors.textTertiary,
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showFilter = false }) { Text("Close") }
+            onDismiss = { showFilter = false },
+            onSelect = { choice ->
+                tab = choice.id
+                showFilter = false
             },
         )
     }
@@ -377,7 +329,7 @@ private fun NoticeList(
 @Composable
 private fun NoticeRow(entry: NoticeInbox.Entry, now: Long, onClick: () -> Unit) {
     val colors = GsTheme.colors
-    val style = styleFor(entry.kindId)
+    val style = noticeStyleFor(entry.kindId)
     Row(
         Modifier
             .fillMaxWidth()
@@ -416,7 +368,7 @@ private fun NoticeRow(entry: NoticeInbox.Entry, now: Long, onClick: () -> Unit) 
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                relativeTime(entry.createdAtMillis, now),
+                relativeNoticeTime(entry.createdAtMillis, now),
                 fontSize = 10.5.sp,
                 fontFamily = GsFonts.Product,
                 color = colors.textTertiary,
@@ -443,13 +395,13 @@ private fun NoticeRow(entry: NoticeInbox.Entry, now: Long, onClick: () -> Unit) 
     }
 }
 
-private data class NoticeStyle(
+internal data class NoticeStyle(
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val tone: GsWellTone,
     val label: String,
 )
 
-private fun styleFor(kindId: String): NoticeStyle = when (kindId) {
+internal fun noticeStyleFor(kindId: String): NoticeStyle = when (kindId) {
     "messages" -> NoticeStyle(GsIcons.MessageCircle, GsWellTone.Rose, "Messages")
     "ai-updates" -> NoticeStyle(GsIcons.Sparkles, GsWellTone.Lilac, "Update")
     "product-updates" -> NoticeStyle(GsIcons.Cog, GsWellTone.Blue, "Updates")
@@ -501,51 +453,6 @@ private fun CaughtUpRule() {
     )
 }
 
-@Composable
-private fun NoticeDialog(
-    notice: NoticeInbox.Entry,
-    now: Long,
-    onDismiss: () -> Unit,
-    onOpenSettings: () -> Unit,
-) {
-    val colors = GsTheme.colors
-    val style = styleFor(notice.kindId)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Column {
-                Text(
-                    notice.title,
-                    fontFamily = GsFonts.Product,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                )
-                Text(
-                    "${style.label} • ${relativeTime(notice.createdAtMillis, now)}",
-                    fontFamily = GsFonts.Product,
-                    fontSize = 10.5.sp,
-                    color = colors.textTertiary,
-                )
-            }
-        },
-        text = {
-            Text(
-                notice.body,
-                fontFamily = GsFonts.Product,
-                fontSize = 11.sp,
-                lineHeight = 15.sp,
-                color = colors.textSecondary,
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
-        },
-        dismissButton = {
-            TextButton(onClick = onOpenSettings) { Text("Notification settings") }
-        },
-    )
-}
-
 private fun startOfToday(now: Long): Long {
     val cal = java.util.Calendar.getInstance().apply {
         timeInMillis = now
@@ -558,7 +465,7 @@ private fun startOfToday(now: Long): Long {
 }
 
 /** Real elapsed time from the stored stamp — never a canned "2h ago". */
-private fun relativeTime(then: Long, now: Long): String {
+internal fun relativeNoticeTime(then: Long, now: Long): String {
     val delta = (now - then).coerceAtLeast(0L)
     val minutes = delta / 60_000
     val hours = minutes / 60

@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,6 +35,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.ui.chat.content.NexlyGlyph
+import com.grapsee.gsai.ui.components.GsChoice
+import com.grapsee.gsai.ui.components.GsChoiceDialog
+import com.grapsee.gsai.ui.components.GsDialog
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefBrandWell
@@ -315,147 +317,67 @@ fun ConnectedAppsScreen(
     }
 
     // ---- Real sheets -------------------------------------------------------
+    //
+    // These four were `material3.AlertDialog`: a grey box in the middle of a
+    // page made of light. They are glass dialogs now — same words, same
+    // honesty, the app's own material.
 
     sheetProvider?.let { provider ->
-        AlertDialog(
-            onDismissRequest = { sheetProvider = null },
-            title = {
-                Text(
-                    provider.name,
-                    fontFamily = GsFonts.Product,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                )
-            },
-            text = {
-                Text(
-                    "Not connected. Nexly has no authorization to ${provider.name}: no token is stored and no third-party data is read. A connection can exist only once a ${provider.name} adapter ships in the app.",
-                    fontFamily = GsFonts.Product,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp,
-                    color = colors.textSecondary,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { sheetProvider = null }) { Text("Close") }
-            },
+        GsDialog(
+            title = provider.name,
+            message = "Not connected. Nexly has no authorization to ${provider.name}: no token is stored and no third-party data is read. A connection can exist only once a ${provider.name} adapter ships in the app.",
+            confirmLabel = "Close",
+            onConfirm = {},
+            onDismiss = { sheetProvider = null },
+            dismissLabel = null,
+            icon = GsIcons.Link,
+            tone = GsWellTone.Lilac,
+            footnote = "Status: Not Connected",
         )
     }
 
     if (showLearnMore) {
-        AlertDialog(
-            onDismissRequest = { showLearnMore = false },
-            title = {
-                Text(
-                    "How integrations work",
-                    fontFamily = GsFonts.Product,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                )
-            },
-            text = {
-                Text(
-                    "An integration needs four things this build does not ship: an OAuth client for the provider, a token store, a permissions registry and an adapter that reads the provider's data. Until all four exist, every app here stays Not Connected — and nothing on this screen claims otherwise.",
-                    fontFamily = GsFonts.Product,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp,
-                    color = colors.textSecondary,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { showLearnMore = false }) { Text("Got it") }
-            },
+        GsDialog(
+            title = "How integrations work",
+            message = "An integration needs four things this build does not ship: an OAuth client for the provider, a token store, a permissions registry and an adapter that reads the provider's data. Until all four exist, every app here stays Not Connected — and nothing on this screen claims otherwise.",
+            confirmLabel = "Got it",
+            onConfirm = {},
+            onDismiss = { showLearnMore = false },
+            dismissLabel = null,
+            icon = GsIcons.Info,
+            tone = GsWellTone.Blue,
         )
     }
 
     if (showPermissions) {
-        AlertDialog(
-            onDismissRequest = { showPermissions = false },
-            title = {
-                Text(
-                    "Manage Permissions",
-                    fontFamily = GsFonts.Product,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                )
-            },
-            text = {
-                Text(
-                    "No permissions are granted. There is no connected app, so there is nothing to allow, limit or revoke. Your data, your control keeps the on-device privacy switches in one place.",
-                    fontFamily = GsFonts.Product,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp,
-                    color = colors.textSecondary,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showPermissions = false
-                    onNavigate(GsRoutes.SETTINGS_PRIVACY)
-                }) { Text("Open Privacy") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPermissions = false }) { Text("Close") }
-            },
+        GsDialog(
+            title = "Manage Permissions",
+            message = "No permissions are granted. There is no connected app, so there is nothing to allow, limit or revoke. Your data, your control keeps the on-device privacy switches in one place.",
+            confirmLabel = "Open Privacy",
+            onConfirm = { onNavigate(GsRoutes.SETTINGS_PRIVACY) },
+            onDismiss = { showPermissions = false },
+            dismissLabel = "Close",
+            icon = GsIcons.ShieldCheck,
+            tone = GsWellTone.Mint,
         )
     }
 
     if (showBrowseAll) {
-        AlertDialog(
-            onDismissRequest = { showBrowseAll = false },
-            title = {
-                Column {
-                    Text(
-                        "Available Integrations",
-                        fontFamily = GsFonts.Product,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp,
-                    )
-                    Text(
-                        "None can be connected in this build",
-                        fontFamily = GsFonts.Product,
-                        fontSize = 10.5.sp,
-                        color = colors.textTertiary,
-                    )
-                }
+        GsChoiceDialog(
+            title = "Available Integrations",
+            subtitle = "None can be connected in this build",
+            options = available.map { provider ->
+                GsChoice(
+                    id = provider.name,
+                    label = provider.name,
+                    detail = provider.scope,
+                    tone = GsWellTone.Lilac,
+                )
             },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    available.forEach { provider ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable {
-                                    showBrowseAll = false
-                                    sheetProvider = provider
-                                }
-                                .padding(horizontal = 4.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RefBrandWell(glyph = provider.glyph, size = 30.dp, tint = provider.tint)
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    provider.name,
-                                    fontSize = 11.sp,
-                                    fontFamily = GsFonts.Product,
-                                    color = colors.textPrimary,
-                                )
-                                Text(
-                                    provider.scope,
-                                    fontSize = 10.5.sp,
-                                    fontFamily = GsFonts.Product,
-                                    color = colors.textTertiary,
-                                )
-                            }
-                            RefTagPill("Not Connected", colors.textSecondary)
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showBrowseAll = false }) { Text("Close") }
+            onDismiss = { showBrowseAll = false },
+            onSelect = { choice ->
+                showBrowseAll = false
+                sheetProvider = available.firstOrNull { it.name == choice.id }
             },
         )
     }

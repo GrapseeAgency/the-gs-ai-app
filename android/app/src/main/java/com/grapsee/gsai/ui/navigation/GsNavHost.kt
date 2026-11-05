@@ -50,9 +50,11 @@ import com.grapsee.gsai.ui.settings.AccessibilitySettingsScreen
 import com.grapsee.gsai.ui.settings.AppPermissionsScreen
 import com.grapsee.gsai.ui.settings.PersonalizationScreen
 import com.grapsee.gsai.ui.settings.SearchHistoryScreen
+import com.grapsee.gsai.ui.notifications.NotificationDetailScreen
 import com.grapsee.gsai.ui.notifications.NotificationsInboxScreen
 import com.grapsee.gsai.ui.billing.BillingScreen
 import com.grapsee.gsai.ui.integrations.ConnectedAppsScreen
+import com.grapsee.gsai.ui.support.HelpArticleScreen
 import com.grapsee.gsai.ui.support.HelpSupportScreen
 import com.grapsee.gsai.ui.settings.AccountSecurityScreen
 import com.grapsee.gsai.ui.settings.AiIntelligenceScreen
@@ -67,12 +69,14 @@ import com.grapsee.gsai.ui.settings.ModelSelectionScreen
 import com.grapsee.gsai.ui.settings.NotificationsAlertsScreen
 import com.grapsee.gsai.ui.settings.PrivacySettingsScreen
 import com.grapsee.gsai.ui.settings.LicencesScreen
+import com.grapsee.gsai.ui.settings.ResponseStyleScreen
 import com.grapsee.gsai.ui.settings.SettingsHubScreen
 import com.grapsee.gsai.ui.settings.SpeechEngineScreen
 import com.grapsee.gsai.ui.settings.ThemeCustomisationScreen
 import com.grapsee.gsai.ui.settings.VoiceSettingsScreen
 import com.grapsee.gsai.ui.specimen.GlassSpecimenScreen
 import com.grapsee.gsai.ui.voice.VoiceScreen
+import com.grapsee.gsai.ui.explore.CollectionScreen
 import com.grapsee.gsai.ui.explore.DiscoverScreen
 import com.grapsee.gsai.ui.explore.ExploreScreen
 import com.grapsee.gsai.ui.home.HomeDashboardScreen
@@ -355,6 +359,25 @@ fun GsNavHost(
                 // the reference dock's Settings is the same push every
                 // other surface uses; its Home is the plain pop (onBack).
                 onOpenSettings = { open(GsRoutes.SETTINGS) },
+                onOpenCollection = { id -> open(GsRoutes.collection(id)) },
+            )
+        }
+        composable(
+            route = GsRoutes.EXPLORE_COLLECTION,
+            arguments = listOf(navArgument(GsRoutes.ARG_COLLECTION) { type = NavType.StringType })
+        ) { entry ->
+            CollectionScreen(
+                collectionId = entry.arguments?.getString(GsRoutes.ARG_COLLECTION).orEmpty(),
+                onBack = back,
+                onOpenChat = { prompt, autoSend ->
+                    if (autoSend) {
+                        navController.navigate(GsRoutes.chat(null, prompt, autoSend = true))
+                    } else {
+                        ComposerSeed.set(prompt)
+                        navController.navigate(GsRoutes.NEW_CHAT)
+                    }
+                },
+                onExploreAll = { open(GsRoutes.DISCOVER) },
             )
         }
         composable(GsRoutes.DISCOVER) {
@@ -484,11 +507,24 @@ fun GsNavHost(
         composable(GsRoutes.SETTINGS_VOICE_ENGINE) {
             SpeechEngineScreen(onBack = back)
         }
+        composable(GsRoutes.SETTINGS_RESPONSE_STYLE) {
+            ResponseStyleScreen(onBack = back)
+        }
         composable(GsRoutes.SETTINGS_ACCESSIBILITY) {
             AccessibilitySettingsScreen(onBack = back)
         }
         composable(GsRoutes.SETTINGS_HELP) {
             HelpSupportScreen(onBack = back, onNavigate = open)
+        }
+        composable(
+            route = GsRoutes.HELP_ARTICLE,
+            arguments = listOf(navArgument(GsRoutes.ARG_TOPIC) { type = NavType.StringType })
+        ) { entry ->
+            HelpArticleScreen(
+                topicId = entry.arguments?.getString(GsRoutes.ARG_TOPIC).orEmpty(),
+                onBack = back,
+                onNavigate = { open(it) }
+            )
         }
 
         composable(GsRoutes.SETTINGS_INTEGRATIONS) {
@@ -507,6 +543,16 @@ fun GsNavHost(
             NotificationsInboxScreen(
                 onBack = back,
                 onNavigate = { navController.navigate(it) }
+            )
+        }
+        composable(
+            route = GsRoutes.NOTIFICATION_DETAIL,
+            arguments = listOf(navArgument(GsRoutes.ARG_NOTICE) { type = NavType.LongType })
+        ) { entry ->
+            NotificationDetailScreen(
+                noticeId = entry.arguments?.getLong(GsRoutes.ARG_NOTICE) ?: -1L,
+                onBack = back,
+                onNavigate = { open(it) }
             )
         }
         composable(GsRoutes.GLASS_SPECIMEN) {

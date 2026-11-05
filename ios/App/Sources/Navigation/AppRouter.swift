@@ -26,6 +26,17 @@ enum AeroRoute: Hashable {
     case chatAttach
     case settings
     case notifications
+    /// One notice, opened from the inbox (Android: `NOTIFICATION_DETAIL`).
+    /// The inbox used to answer a tap with a `.sheet`.
+    case notificationDetail(Double)
+    /// One help article (Android: `HELP_ARTICLE`) — the answer, its steps and
+    /// the two ways to reach a person, instead of a clipped sheet.
+    case helpArticle(String)
+    /// One Creative Collection (Android: `EXPLORE_COLLECTION`). A collection
+    /// card used to open the mixed Discover catalogue.
+    case collection(String)
+    /// Tone, detail level and language (Android: `SETTINGS_RESPONSE_STYLE`).
+    case responseStyle
     /// The six owner sheets (docs/reference/pending): settings alerts, the
     /// inbox's settings destination, account security, the plan, support and
     /// integrations. One case each so the drawer/hub can reach them without a
@@ -310,6 +321,10 @@ struct AeroDestinations: ViewModifier {
                 SettingsView(detail: section, onRoute: { router.path.append($0) })
             case .memory: MemoryManagementView()
             case .notifications: NotificationsView()
+            case .notificationDetail(let id): NotificationDetailView(noticeID: id)
+            case .helpArticle(let id): HelpArticleView(topicID: id)
+            case .collection(let id): CollectionView(collectionID: id)
+            case .responseStyle: ResponseStyleView()
             case .notificationsAlerts: NotificationsAlertsView()
             case .privacyDataControls: PrivacyDataControlsView()
             case .dataExportAccountDeletion: DataExportAccountDeletionView()
@@ -328,6 +343,7 @@ struct AeroDestinations: ViewModifier {
             case .explore: ExploreView(
                 onOpenChat: { router.path.append($0) },
                 onOpenDiscover: { router.path.append(.discover) },
+                onOpenCollection: { router.path.append(.collection($0)) },
                 onOpenTravelAgent: { router.path.append(.travelAgent) },
                 // The dock's Home is a pop to the root surface; Settings is
                 // the same push every other surface uses.

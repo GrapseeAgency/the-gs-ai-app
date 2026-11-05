@@ -8,17 +8,19 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,10 +33,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.notifications.GsNotifier
+import com.grapsee.gsai.ui.components.GsDialogShell
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefCard
@@ -352,57 +356,159 @@ private fun QuietHoursDialog(
         return ((next % 1440) + 1440) % 1440
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Quiet Hours") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("Quiet hours", color = colors.textSecondary, fontSize = 13.sp)
-                    RefSwitch(checked = enabled, onCheckedChange = { enabled = it })
+    GsDialogShell(onDismiss = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 22.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                RefWellTile(GsIcons.Moon, GsWellTone.Lilac, 38.dp)
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Quiet Hours",
+                        fontSize = 15.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        fontFamily = GsFonts.Product,
+                        color = colors.textPrimary,
+                    )
+                    Text(
+                        if (enabled) "Holding notices ${formatClock(start)} \u2013 ${formatClock(end)}"
+                        else "Off \u2014 every notice arrives as it happens",
+                        fontSize = 11.sp,
+                        fontFamily = GsFonts.Product,
+                        color = colors.textSecondary,
+                    )
                 }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("From", color = colors.textSecondary, fontSize = 13.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { start = step(start, -30) }) { Text("–") }
-                        Text(formatClock(start), color = colors.textPrimary, fontSize = 14.sp)
-                        TextButton(onClick = { start = step(start, 30) }) { Text("+") }
-                    }
-                }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("Until", color = colors.textSecondary, fontSize = 13.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { end = step(end, -30) }) { Text("–") }
-                        Text(formatClock(end), color = colors.textPrimary, fontSize = 14.sp)
-                        TextButton(onClick = { end = step(end, 30) }) { Text("+") }
-                    }
-                }
-                Text(
-                    "Nexly holds every notice back inside this window. Messages you miss are still there when it ends.",
-                    color = colors.textTertiary,
-                    fontSize = 11.5.sp,
-                    lineHeight = 15.sp,
-                    fontFamily = GsFonts.Product,
-                )
+                RefSwitch(checked = enabled, onCheckedChange = { enabled = it })
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onApply(enabled, start, end) }) { Text("Save") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-    )
+
+            Spacer(Modifier.height(16.dp))
+
+            // The two ends of the window. Steppers keep it to taps: a wheel
+            // picker inside a glass slab would be a second material language
+            // in the one place the reader is deciding something.
+            ClockStepper(
+                label = "From",
+                minute = start,
+                enabled = enabled,
+                onStep = { start = step(start, it) },
+            )
+            Spacer(Modifier.height(10.dp))
+            ClockStepper(
+                label = "Until",
+                minute = end,
+                enabled = enabled,
+                onStep = { end = step(end, it) },
+            )
+
+            Spacer(Modifier.height(14.dp))
+            Text(
+                "Nexly holds every notice back inside this window. Messages you miss are still there when it ends.",
+                color = colors.textTertiary,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+                fontFamily = GsFonts.Product,
+            )
+
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "Save",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(999.dp))
+                    .background(colors.accent)
+                    .clickable(
+                        role = androidx.compose.ui.semantics.Role.Button,
+                        onClick = { onApply(enabled, start, end) }
+                    )
+                    .padding(vertical = 13.dp),
+                fontSize = 13.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                fontFamily = GsFonts.Product,
+                color = Color.White,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            Text(
+                text = "Cancel",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(999.dp))
+                    .clickable(
+                        role = androidx.compose.ui.semantics.Role.Button,
+                        onClick = onDismiss
+                    )
+                    .padding(vertical = 12.dp),
+                fontSize = 12.sp,
+                fontFamily = GsFonts.Product,
+                color = colors.textSecondary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
+    }
+}
+
+/** One end of the quiet window: a label, a minus, the time, a plus. */
+@Composable
+private fun ClockStepper(
+    label: String,
+    minute: Int,
+    enabled: Boolean,
+    onStep: (Int) -> Unit,
+) {
+    val colors = GsTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+            .background(colors.textPrimary.copy(alpha = if (enabled) 0.05f else 0.03f))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            modifier = Modifier.weight(1f),
+            fontSize = 12.sp,
+            fontFamily = GsFonts.Product,
+            color = if (enabled) colors.textSecondary else colors.textTertiary,
+        )
+        StepChip("−", enabled) { onStep(-30) }
+        Text(
+            formatClock(minute),
+            modifier = Modifier.padding(horizontal = 10.dp),
+            fontSize = 14.sp,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+            fontFamily = GsFonts.Product,
+            color = if (enabled) colors.textPrimary else colors.textTertiary,
+        )
+        StepChip("+", enabled) { onStep(30) }
+    }
+}
+
+@Composable
+private fun StepChip(glyph: String, enabled: Boolean, onClick: () -> Unit) {
+    val colors = GsTheme.colors
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .background(colors.textPrimary.copy(alpha = if (enabled) 0.07f else 0.03f))
+            .clickable(
+                enabled = enabled,
+                role = androidx.compose.ui.semantics.Role.Button,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            glyph,
+            fontSize = 15.sp,
+            fontFamily = GsFonts.Product,
+            color = if (enabled) colors.textPrimary else colors.textTertiary,
+        )
+    }
 }

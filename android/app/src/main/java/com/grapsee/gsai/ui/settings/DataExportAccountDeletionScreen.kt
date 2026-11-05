@@ -23,7 +23,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -54,6 +53,9 @@ import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.DataExport
 import com.grapsee.gsai.data.DataRetention
 import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.ui.components.GsChoice
+import com.grapsee.gsai.ui.components.GsChoiceDialog
+import com.grapsee.gsai.ui.components.GsConfirmDialog
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefCard
@@ -310,63 +312,47 @@ fun DataExportAccountDeletionScreen(
     }
 
     if (showClear) {
-        AlertDialog(
-            onDismissRequest = { showClear = false },
-            title = { Text("Clear chat history?") },
-            text = {
-                Text(
-                    "Every conversation and message on this device will be removed, along with staged attachment copies. Library saves stay. This cannot be undone."
-                )
+        GsConfirmDialog(
+            title = "Clear chat history?",
+            message = "Every conversation and message on this device will be removed, along with staged attachment copies. Library saves stay. This cannot be undone.",
+            confirmLabel = "Clear history",
+            destructive = true,
+            onConfirm = {
+                scope.launch {
+                    runCatching { DataRetention.clearChatHistory() }
+                        .onSuccess { Toast.makeText(context, "Chat history cleared", Toast.LENGTH_SHORT).show() }
+                        .onFailure { Toast.makeText(context, "Could not clear chat history", Toast.LENGTH_SHORT).show() }
+                }
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    showClear = false
-                    scope.launch {
-                        runCatching { DataRetention.clearChatHistory() }
-                            .onSuccess { Toast.makeText(context, "Chat history cleared", Toast.LENGTH_SHORT).show() }
-                            .onFailure { Toast.makeText(context, "Could not clear chat history", Toast.LENGTH_SHORT).show() }
-                    }
-                }) { Text("Clear history") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClear = false }) { Text("Cancel") }
-            },
+            onDismiss = { showClear = false },
         )
     }
 
     if (showDelete) {
-        AlertDialog(
-            onDismissRequest = { if (!busy) showDelete = false },
-            title = { Text("Delete everything on this device?") },
-            text = {
-                Text(
-                    "Your conversations, saved items, attachment files and account details will be removed, and you'll be signed out. This cannot be undone."
-                )
+        GsConfirmDialog(
+            title = "Delete everything on this device?",
+            message = "Your conversations, saved items, attachment files and account details will be removed, and you'll be signed out. This cannot be undone.",
+            confirmLabel = if (busy) "Deleting…" else "Delete everything",
+            destructive = true,
+            onConfirm = {
+                if (!busy) {
+                    busy = true
+                    scope.launch {
+                        runCatching { DataRetention.deleteAllContent() }
+                            .onSuccess { onAccountDeleted() }
+                            .onFailure {
+                                busy = false
+                                showDelete = false
+                                Toast.makeText(
+                                    context,
+                                    "Could not delete everything",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                    }
+                }
             },
-            confirmButton = {
-                TextButton(
-                    enabled = !busy,
-                    onClick = {
-                        busy = true
-                        scope.launch {
-                            runCatching { DataRetention.deleteAllContent() }
-                                .onSuccess { onAccountDeleted() }
-                                .onFailure {
-                                    busy = false
-                                    showDelete = false
-                                    Toast.makeText(
-                                        context,
-                                        "Could not delete everything",
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                                }
-                        }
-                    },
-                ) { Text(if (busy) "Deleting…" else "Delete account") }
-            },
-            dismissButton = {
-                TextButton(enabled = !busy, onClick = { showDelete = false }) { Text("Cancel") }
-            },
+            onDismiss = { if (!busy) showDelete = false },
         )
     }
 }
@@ -693,37 +679,21 @@ private fun RetentionPeriodDialog(
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Data Retention Period") },
-        text = {
-            Column {
-                Text(
-                    "Conversations untouched for longer than the period are removed when auto-delete is on.",
-                    fontSize = 13.sp,
-                )
-                Spacer(Modifier.height(8.dp))
-                listOf(3, 6, 12, 24).forEach { months ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = selected == months,
-                                role = Role.RadioButton,
-                                onClick = { onSelect(months) },
-                            )
-                            .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = selected == months, onClick = { onSelect(months) })
-                        Spacer(Modifier.width(8.dp))
-                        Text("$months months", fontSize = 14.sp)
-                    }
-                }
-            }
+    GsChoiceDialog(
+        title = "Data Retention Period",
+        subtitle = "Conversations untouched for longer than the period are removed when auto-delete is on.",
+        options = listOf(3, 6, 12, 24).map { months ->
+            GsChoice(
+                id = months.toString(),
+                label = "$months months",
+                detail = if (months == 24) "The longest window this build offers" else null,
+                selected = selected == months,
+            )
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
+        onDismiss = onDismiss,
+        onSelect = { choice ->
+            choice.id.toIntOrNull()?.let(onSelect)
+            onDismiss()
         },
     )
 }

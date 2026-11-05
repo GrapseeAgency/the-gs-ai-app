@@ -127,18 +127,21 @@ struct PrivacyDataControlsView: View {
             footer
             Spacer(minLength: 10)
         }
-        .confirmationDialog(
-            "Clear local data?",
-            isPresented: $confirmClear,
-            titleVisibility: .visible
-        ) {
-            Button("Clear local data", role: .destructive) {
-                ConversationStore.shared.wipeAllContent()
-                GSHaptics.warning()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Cached chats, files and drafts on this device will be removed. Your account is untouched.")
+        .gsDialog(isPresented: confirmClear) {
+            GsDialog(
+                title: "Clear local data?",
+                message: "Cached chats, files and drafts on this device will be removed. Your account is untouched.",
+                confirmLabel: "Clear local data",
+                onConfirm: {
+                    ConversationStore.shared.wipeAllContent()
+                    GSHaptics.warning()
+                },
+                onDismiss: { confirmClear = false },
+                destructive: true,
+                glyph: "trash",
+                tone: .rose,
+                footnote: "Anything already synced to your account stays safe."
+            )
         }
     }
 

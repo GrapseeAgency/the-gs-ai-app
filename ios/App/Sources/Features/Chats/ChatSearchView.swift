@@ -161,22 +161,22 @@ struct ChatSearchView: View {
                 ActivitySheet(items: [url])
             }
         }
-        .alert("Rename chat", isPresented: Binding(
-            get: { renameTarget != nil },
-            set: { if !$0 { renameTarget = nil } }
-        )) {
-            TextField("Chat name", text: $renameDraft)
-            Button("Rename") {
-                let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let target = renameTarget, !trimmed.isEmpty {
-                    store.rename(id: target.id, to: trimmed)
-                    GSHaptics.success()
-                }
-                renameTarget = nil
-            }
-            Button("Cancel", role: .cancel) { renameTarget = nil }
-        } message: {
-            Text("Give this conversation a name you'll recognise.")
+        .gsDialog(isPresented: renameTarget != nil) {
+            GsPromptDialog(
+                title: "Rename chat",
+                fieldLabel: "Chat name",
+                initial: renameDraft,
+                message: "Give this conversation a name you'll recognise.",
+                placeholder: "Chat name",
+                confirmLabel: "Rename",
+                onConfirm: { name in
+                    if let target = renameTarget {
+                        store.rename(id: target.id, to: name)
+                        GSHaptics.success()
+                    }
+                },
+                onDismiss: { renameTarget = nil }
+            )
         }
     }
 

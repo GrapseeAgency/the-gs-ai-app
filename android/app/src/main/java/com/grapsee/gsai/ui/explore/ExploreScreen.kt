@@ -782,6 +782,8 @@ fun ExploreScreen(
     // Required, not defaulted: a forgotten wire would compile green and ship
     // a dead dock Settings button. The render harness passes an explicit no-op.
     onOpenSettings: () -> Unit,
+    /** A Creative Collection card opens its own page, not the whole catalogue. */
+    onOpenCollection: (String) -> Unit = {},
     /** Render-harness entry points: the real states, driven from outside. */
     initialSearchOpen: Boolean = false,
 ) {
@@ -1010,8 +1012,10 @@ fun ExploreScreen(
                 ) {
                     ExploreCatalog.collections.forEach { collection ->
                         ExploreCollectionCard(collection, inkStrong, inkMuted) {
-                            // a collection opens the Discover page
-                            onOpenDiscover()
+                            // A collection opens its own page. It used to call
+                            // onOpenDiscover(), which answered "here is
+                            // everything" to the question "here is this".
+                            onOpenCollection(collection.id)
                         }
                     }
                 }

@@ -12,6 +12,7 @@ import SwiftUI
 struct ProfilePreferencesView: View {
     @ObservedObject private var account = AccountStore.shared
     @ObservedObject private var onboarding = OnboardingProfileStore.shared
+    @EnvironmentObject private var router: Router
     @Environment(\.dismiss) private var dismiss
     @State private var showIdentityEditor = false
 
@@ -29,25 +30,37 @@ struct ProfilePreferencesView: View {
                 divider
                 staticRow("Email", value("Email", account.email), glyph: "mail", tone: .lilac)
                 divider
-                staticRow("Date of Birth", "Not set", glyph: "calendar", tone: .mint, trailingChevron: false)
+                // These two printed "Not set" forever with no chevron: a field
+                // the app names and can never learn. They open the same editor
+                // as the name and address, which now stores both.
+                navRow("Date of Birth", value("Date of Birth", account.dateOfBirth), glyph: "calendar", tone: .mint) {
+                    showIdentityEditor = true
+                }
                 divider
-                staticRow("Location", "Not set", glyph: "map-pin", tone: .blue, trailingChevron: false, isLast: true)
+                navRow("Location", value("Location", account.location), glyph: "map-pin", tone: .blue, isLast: true) {
+                    showIdentityEditor = true
+                }
             }
 
+            // Tone, Detail and Language used to be three rows that showed a
+            // value and offered no way to change it. One page owns all three,
+            // and the two choices are read by the chat turn.
             GsGroupHeader(title: "Response Style", caption: "How Nexly communicates with you")
             GsGroupCard {
-                staticRow("Tone", onboarding.personality, glyph: "message-circle", tone: .peach, isLast: false)
+                navRow("Tone & Detail", "\(onboarding.personality) · \(onboarding.responseStyle)", glyph: "message-circle", tone: .peach) {
+                    router.path.append(.responseStyle)
+                }
                 divider
-                staticRow("Detail Level", onboarding.responseStyle, glyph: "adjustments", tone: .peach, isLast: true)
+                navRow("Language", "English (UK) — the only language this build ships", glyph: "language", tone: .mint, isLast: true) {
+                    router.path.append(.responseStyle)
+                }
             }
 
             GsGroupHeader(title: "Personalization Preferences", caption: "Tailor your experience")
             GsGroupCard {
                 staticRow("Interests", joined(onboarding.interests), glyph: "sparkles", tone: .peach)
                 divider
-                staticRow("Content Preferences", joined(onboarding.capabilities), glyph: "book-2", tone: .lilac)
-                divider
-                staticRow("Language", "English (UK)", glyph: "language", tone: .mint, trailingChevron: false, isLast: true)
+                staticRow("Content Preferences", joined(onboarding.capabilities), glyph: "book-2", tone: .lilac, isLast: true)
             }
 
             Spacer().frame(height: 14)
@@ -135,6 +148,23 @@ struct ProfilePreferencesView: View {
             .padding(.trailing, 12)
     }
 
+    /// A row that goes somewhere. A chevron only ever appears on these.
+    private func navRow(
+        _ title: String,
+        _ shown: String,
+        glyph: String,
+        tone: GsWellTone,
+        isLast: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            staticRow(title, shown, glyph: glyph, tone: tone, trailingChevron: true, isLast: isLast)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title): \(shown)")
+    }
+
     /// A read-only value row. `trailingChevron` is only true where a real
     /// destination exists; everything the app cannot edit renders plainly.
     private func staticRow(
@@ -185,6 +215,8 @@ private struct IdentityEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var email = ""
+    @State private var dob = ""
+    @State private var place = ""
 
     private var emailInvalid: Bool {
         let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -204,6 +236,14 @@ private struct IdentityEditSheet: View {
                 .keyboardType(.emailAddress)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+            TextField("YYYY-MM-DD", text: $dob)
+                .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+                .accessibilityLabel("Date of birth")
+            TextField("City, country", text: $place)
+                .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+                .accessibilityLabel("Location")
             if emailInvalid {
                 Text("Enter an address like you@grapsee.com")
                     .font(Aero.caption())
@@ -220,6 +260,8 @@ private struct IdentityEditSheet: View {
                 Button("Save") {
                     account.setDisplayName(name.trimmingCharacters(in: .whitespacesAndNewlines))
                     account.setEmail(email.trimmingCharacters(in: .whitespacesAndNewlines))
+                    account.setDateOfBirth(dob.trimmingCharacters(in: .whitespacesAndNewlines))
+                    account.setLocation(place.trimmingCharacters(in: .whitespacesAndNewlines))
                     dismiss()
                 }
                 .font(Aero.button())
@@ -228,11 +270,13 @@ private struct IdentityEditSheet: View {
             Spacer()
         }
         .padding(Aero.Spacing.l)
-        .presentationDetents([.medium])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .onAppear {
             name = account.displayName
             email = account.email
+            dob = account.dateOfBirth
+            place = account.location
         }
     }
 }

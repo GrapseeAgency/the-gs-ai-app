@@ -1,16 +1,17 @@
 package com.grapsee.gsai.ui.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,14 +19,27 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.local.ModelCatalog
+import com.grapsee.gsai.ui.components.GsDialogShell
 import com.grapsee.gsai.ui.components.GsGlassSwitch
 import com.grapsee.gsai.ui.components.GsStaggeredLoader
+import com.grapsee.gsai.ui.components.RefGlyphWell
+import com.grapsee.gsai.ui.components.GsWellTone
+import com.grapsee.gsai.ui.icons.GsIcons
+import com.grapsee.gsai.ui.theme.GsFonts
+import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.data.local.ModelDownloader
 import com.grapsee.gsai.data.local.ModelStore
 import com.grapsee.gsai.data.local.ModelStore.Consent
@@ -35,11 +49,12 @@ import kotlinx.coroutines.launch
 /**
  * The one-time permission gate for an on-device model download.
  *
- * A Compose `AlertDialog`, which is what this app already uses for every other
- * modal (`androidx.compose.material3.AlertDialog`, including the
- * model-download wait state this dialog feeds). No Activity, no ViewController, no
- * nav route, no new design token, no new screen: it is a dialog over whatever is
- * already on the stack, which is what a permission gate is.
+ * A modal over whatever is already on the stack — no Activity, no
+ * ViewController, no nav route, no new screen. Since 0.86.23 it sits in the
+ * same glass slab as every other decision in the app ([GsDialogShell]) instead
+ * of a stock `material3.AlertDialog`: this is the longest dialog in the build
+ * (a size disclosure, a data-policy question, a progress bar, an error), and it
+ * was the only one still wearing Compose's default chrome.
  *
  * ## The ordering, which is the whole point
  *
@@ -93,8 +108,11 @@ fun OnDeviceModelConsentDialog(
         //   'when' expression must be exhaustive. Add the 'HIDDEN' branch
         Phase.HIDDEN -> Unit
 
-        Phase.ASK -> AlertDialog(
-            onDismissRequest = {
+        Phase.ASK -> ConsentFrame(
+            title = "Enable on-device AI?",
+            icon = GsIcons.Cpu,
+            tone = GsWellTone.Lilac,
+            onDismiss = {
                 // A swipe-away is not consent and not refusal. Leaving it
                 // UNDECIDED would mean re-prompting next launch, which is the
                 // nag the "once per install" promise forbids. A dismissal is a
@@ -106,185 +124,307 @@ fun OnDeviceModelConsentDialog(
                 phase = Phase.HIDDEN
                 onDismiss()
             },
-            title = { Text("Enable on-device AI?") },
-            text = {
-                Column {
-                    Text(ModelCatalog.consentMessage(model))
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "This device is ${ModelStore.tier.name} class, so it gets " +
-                            "${model.displayName}.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    if (ModelStore.isCellular()) {
-                        Spacer(Modifier.height(12.dp))
-                        Row2 {
-                            Text(
-                                "You're on mobile data. Allow a ${model.sizeLabel()} " +
-                                    "download on mobile data?",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.weight(1f),
-                            )
-                            GsGlassSwitch(
-                                checked = !ModelStore.wifiOnlyConsent,
-                                onCheckedChange = { ModelStore.updateWifiOnly(!it) },
-                                modifier = Modifier.testTag("gs_consent_cellular"),
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        ModelStore.updateConsent(Consent.GRANTED)
-                        // Re-check rather than assume: the size, the checksum and
-                        // the network policy are all enforced again here, so a
-                        // GRANTED state is a permission, not a guarantee.
-                        when (val gate = ModelStore.mayDownload()) {
-                            is ModelStore.Result.Allowed -> {
-                                phase = Phase.DOWNLOADING
-                                job = scope.launch {
-                                    val dest = ModelCatalog.destination(context, model)
-                                    val partial = ModelCatalog.partialDestination(context, model)
-                                    val r = ModelDownloader.download(model, dest, partial) { b, t ->
-                                        bytes = b; total = t
-                                    }
-                                    when (r) {
-                                        is ModelDownloader.Result.Complete -> {
-                                            ModelStore.recordInstalled(r.file, model.id)
-                                            ModelStore.updateLastError(null)
-                                            phase = Phase.DONE
-                                        }
-                                        is ModelDownloader.Result.Failed -> {
-                                            ModelStore.updateLastError(r.reason)
-                                            // Stay on the dialog with the reason
-                                            // shown, rather than closing and
-                                            // failing silently.
-                                            phase = Phase.FAILED
-                                        }
-                                    }
+            primaryLabel = "Enable",
+            primaryTag = "gs_consent_accept",
+            onPrimary = {
+                ModelStore.updateConsent(Consent.GRANTED)
+                // Re-check rather than assume: the size, the checksum and
+                // the network policy are all enforced again here, so a
+                // GRANTED state is a permission, not a guarantee.
+                when (val gate = ModelStore.mayDownload()) {
+                    is ModelStore.Result.Allowed -> {
+                        phase = Phase.DOWNLOADING
+                        job = scope.launch {
+                            val dest = ModelCatalog.destination(context, model)
+                            val partial = ModelCatalog.partialDestination(context, model)
+                            val r = ModelDownloader.download(model, dest, partial) { b, t ->
+                                bytes = b; total = t
+                            }
+                            when (r) {
+                                is ModelDownloader.Result.Complete -> {
+                                    ModelStore.recordInstalled(r.file, model.id)
+                                    ModelStore.updateLastError(null)
+                                    phase = Phase.DONE
+                                }
+                                is ModelDownloader.Result.Failed -> {
+                                    ModelStore.updateLastError(r.reason)
+                                    // Stay on the dialog with the reason
+                                    // shown, rather than closing and
+                                    // failing silently.
+                                    phase = Phase.FAILED
                                 }
                             }
-                            is ModelStore.Result.Refused -> {
-                                ModelStore.updateLastError(gate.reason)
-                                phase = Phase.FAILED
-                            }
                         }
-                    },
-                    modifier = Modifier.testTag("gs_consent_accept"),
-                ) { Text("Enable") }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        ModelStore.updateConsent(Consent.DECLINED)
-                        // HIDE OURSELVES: onDismiss() is a NO-OP when the
-                        // caller passed nothing, which is how MainActivity calls
-                        // this -- relying on it left the dialog stuck on screen.
-                        phase = Phase.HIDDEN
-                        onDismiss()
-                    },
-                    modifier = Modifier.testTag("gs_consent_decline"),
-                ) { Text("Not now") }
-            },
-        )
-
-        Phase.DOWNLOADING -> AlertDialog(
-            onDismissRequest = { /* not dismissible: cancelling goes through the button */ },
-            title = { Text("Downloading ${model.displayName}") },
-            text = {
-                Column {
-                    if (total > 0) {
-                        val pct = ((bytes * 100) / total).coerceIn(0, 100)
-                        LinearProgressIndicator(
-                            progress = { pct / 100f },
-                            modifier = Modifier.testTag("gs_consent_progress"),
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "${pct}%  ${fmt(bytes)} of ${fmt(total)}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    } else {
-                        // The server sent no Content-Length. A staggered
-                        // wait-state loader is the honest thing; a percentage
-                        // would be invented. (testTag kept on the loader row.)
-                        Row(
-                            modifier = Modifier
-                                .testTag("gs_consent_progress")
-                                .fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            GsStaggeredLoader()
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "${fmt(bytes)} downloaded",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                    }
+                    is ModelStore.Result.Refused -> {
+                        ModelStore.updateLastError(gate.reason)
+                        phase = Phase.FAILED
                     }
                 }
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        // Cancel KEEPS the partial file. That is what makes the
-                        // next attempt a resume rather than a restart.
-                        job?.cancel()
-                        ModelStore.updateLastError("Download cancelled. Partial download kept for resume.")
-                        phase = Phase.ASK
-                    },
-                    modifier = Modifier.testTag("gs_consent_cancel"),
-                ) { Text("Cancel") }
+            secondaryLabel = "Not now",
+            secondaryTag = "gs_consent_decline",
+            onSecondary = {
+                ModelStore.updateConsent(Consent.DECLINED)
+                // HIDE OURSELVES: onDismiss() is a NO-OP when the
+                // caller passed nothing, which is how MainActivity calls
+                // this -- relying on it left the dialog stuck on screen.
+                phase = Phase.HIDDEN
+                onDismiss()
             },
-        )
+        ) {
+            Text(
+                ModelCatalog.consentMessage(model),
+                fontSize = 12.5.sp,
+                lineHeight = 18.sp,
+                fontFamily = GsFonts.Product,
+                color = GsTheme.colors.textSecondary,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "This device is ${ModelStore.tier.name} class, so it gets " +
+                    "${model.displayName}.",
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+                fontFamily = GsFonts.Product,
+                color = GsTheme.colors.textTertiary,
+            )
+            if (ModelStore.isCellular()) {
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(GsTheme.colors.textPrimary.copy(alpha = 0.05f))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        "You're on mobile data. Allow a ${model.sizeLabel()} " +
+                            "download on mobile data?",
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        fontFamily = GsFonts.Product,
+                        color = GsTheme.colors.textSecondary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    GsGlassSwitch(
+                        checked = !ModelStore.wifiOnlyConsent,
+                        onCheckedChange = { ModelStore.updateWifiOnly(!it) },
+                        modifier = Modifier.testTag("gs_consent_cellular"),
+                    )
+                }
+            }
+        }
 
-        Phase.DONE -> AlertDialog(
+        // Not dismissible: the scrim does nothing, because cancelling has to go
+        // through the button that also keeps the partial file.
+        Phase.DOWNLOADING -> ConsentFrame(
+            title = "Downloading ${model.displayName}",
+            icon = GsIcons.Download,
+            tone = GsWellTone.Blue,
+            onDismiss = null,
+            primaryLabel = "Cancel",
+            primaryTag = "gs_consent_cancel",
+            onPrimary = {
+                // Cancel KEEPS the partial file. That is what makes the
+                // next attempt a resume rather than a restart.
+                job?.cancel()
+                ModelStore.updateLastError("Download cancelled. Partial download kept for resume.")
+                phase = Phase.ASK
+            },
+        ) {
+            if (total > 0) {
+                val pct = ((bytes * 100) / total).coerceIn(0, 100)
+                // A drawn bar rather than Material's indicator: one line of
+                // ink on the slab, at the slab's own radius.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(GsTheme.colors.textPrimary.copy(alpha = 0.08f))
+                        .testTag("gs_consent_progress"),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(pct / 100f)
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(GsTheme.colors.accentStrong, GsTheme.colors.accent)
+                                )
+                            ),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "$pct%  ${fmt(bytes)} of ${fmt(total)}",
+                    fontSize = 11.sp,
+                    fontFamily = GsFonts.Product,
+                    color = GsTheme.colors.textSecondary,
+                )
+            } else {
+                // The server sent no Content-Length. A staggered
+                // wait-state loader is the honest thing; a percentage
+                // would be invented. (testTag kept on the loader row.)
+                Row(
+                    modifier = Modifier
+                        .testTag("gs_consent_progress")
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    GsStaggeredLoader()
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "${fmt(bytes)} downloaded",
+                    fontSize = 11.sp,
+                    fontFamily = GsFonts.Product,
+                    color = GsTheme.colors.textSecondary,
+                )
+            }
+        }
+
+        Phase.DONE -> ConsentFrame(
             // Every exit sets HIDDEN itself. `onDismiss` alone is a NO-OP when the
             // caller supplied none, which is how MainActivity calls this dialog --
             // so DONE and FAILED were stuck on screen for exactly the same reason ASK
             // was, and neither has an automated test.
-            onDismissRequest = { phase = Phase.HIDDEN; onDismiss() },
-            title = { Text("Ready") },
-            text = { Text("On-device AI is installed and works offline. You can delete it any time in Settings.") },
-            confirmButton = {
-                TextButton(
-                    onClick = { phase = Phase.HIDDEN; onDismiss() },
-                    modifier = Modifier.testTag("gs_consent_done"),
-                ) {
-                    Text("Done")
-                }
-            },
-        )
+            title = "Ready",
+            icon = GsIcons.CheckCircle2,
+            tone = GsWellTone.Mint,
+            onDismiss = { phase = Phase.HIDDEN; onDismiss() },
+            primaryLabel = "Done",
+            primaryTag = "gs_consent_done",
+            onPrimary = { phase = Phase.HIDDEN; onDismiss() },
+        ) {
+            Text(
+                "On-device AI is installed and works offline. You can delete it any " +
+                    "time in Settings.",
+                fontSize = 12.5.sp,
+                lineHeight = 18.sp,
+                fontFamily = GsFonts.Product,
+                color = GsTheme.colors.textSecondary,
+            )
+        }
 
-        Phase.FAILED -> AlertDialog(
-            onDismissRequest = { phase = Phase.HIDDEN; onDismiss() },
-            title = { Text("Could not start the download") },
-            text = {
-                Column {
-                    Text(
-                        ModelStore.lastError ?: "unknown error",
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Start,
+        Phase.FAILED -> ConsentFrame(
+            title = "Could not start the download",
+            icon = GsIcons.CircleAlert,
+            tone = GsWellTone.Rose,
+            onDismiss = { phase = Phase.HIDDEN; onDismiss() },
+            primaryLabel = "Close",
+            primaryTag = "gs_consent_dismiss_error",
+            onPrimary = { phase = Phase.HIDDEN; onDismiss() },
+        ) {
+            Text(
+                ModelStore.lastError ?: "unknown error",
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                fontFamily = GsFonts.Product,
+                color = GsTheme.colors.error,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Nothing was installed. Any partial download was kept, so " +
+                    "trying again continues where this left off.",
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+                fontFamily = GsFonts.Product,
+                color = GsTheme.colors.textTertiary,
+            )
+        }
+    }
+}
+
+/**
+ * One slab, four phases: well + title, the caller's body, one primary pill and
+ * an optional quiet row under it.
+ *
+ * [onDismiss] is nullable on purpose — a download in flight must not be
+ * swipeable, and the scrim's tap is wired to the same lambda as the back
+ * gesture, so `null` closes both at once instead of leaving one of them live.
+ */
+@Composable
+private fun ConsentFrame(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tone: GsWellTone,
+    onDismiss: (() -> Unit)?,
+    primaryLabel: String,
+    primaryTag: String,
+    onPrimary: () -> Unit,
+    secondaryLabel: String? = null,
+    secondaryTag: String? = null,
+    onSecondary: (() -> Unit)? = null,
+    body: @Composable () -> Unit,
+) {
+    val colors = GsTheme.colors
+    GsDialogShell(onDismiss = { onDismiss?.invoke() }) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 22.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                RefGlyphWell(glyph = "", tone = tone, size = 40.dp, icon = icon)
+                Text(
+                    title,
+                    modifier = Modifier.weight(1f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = GsFonts.Product,
+                    color = colors.textPrimary,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            body()
+            Spacer(Modifier.height(18.dp))
+
+            val pill = RoundedCornerShape(999.dp)
+            Text(
+                text = primaryLabel,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(pill)
+                    .background(
+                        Brush.verticalGradient(listOf(colors.accentStrong, colors.accent))
                     )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Nothing was installed. Any partial download was kept, so " +
-                            "trying again continues where this left off.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { phase = Phase.HIDDEN; onDismiss() },
-                    modifier = Modifier.testTag("gs_consent_dismiss_error"),
-                ) {
-                    Text("Close")
-                }
-            },
-        )
+                    .clickable(role = Role.Button, onClick = onPrimary)
+                    .testTag(primaryTag)
+                    .padding(vertical = 13.dp),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GsFonts.Product,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+            )
+
+            if (secondaryLabel != null && onSecondary != null) {
+                Text(
+                    text = secondaryLabel,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(pill)
+                        .clickable(role = Role.Button, onClick = onSecondary)
+                        .then(
+                            if (secondaryTag != null) Modifier.testTag(secondaryTag)
+                            else Modifier
+                        )
+                        .padding(vertical = 12.dp),
+                    fontSize = 12.5.sp,
+                    fontFamily = GsFonts.Product,
+                    color = colors.textSecondary,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
     }
 }
 
@@ -308,15 +448,6 @@ fun OnDeviceModelConsentDialog(
  * closed.
  */
 private enum class Phase { HIDDEN, ASK, DOWNLOADING, DONE, FAILED }
-
-/** A Row that keeps this file's imports short without pulling in more. */
-@Composable
-private fun Row2(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
-    androidx.compose.foundation.layout.Row(
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-        content = content,
-    )
-}
 
 private fun fmt(b: Long): String = when {
     b >= 1_000_000_000L -> String.format("%.2f GB", b / 1e9)

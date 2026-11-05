@@ -4,17 +4,6 @@ import UIKit
 /// One help topic. This is app CONTENT, not invented telemetry: each answer
 /// describes something this build actually does, and a topic whose feature does
 /// not exist is not listed.
-struct GsHelpTopic: Hashable, Identifiable {
-    var id: String { question }
-    let question: String
-    let answer: String
-    /// The one-line row subtitle; `answer` is the article body.
-    let summary: String
-    let category: GsHelpCategory
-    let glyph: String
-    let tone: GsWellTone
-}
-
 enum GsHelpCategory: String, CaseIterable, Hashable, Identifiable {
     var id: String { rawValue }
     case general, troubleshooting, account, privacy, features, support
@@ -90,47 +79,8 @@ struct HelpSupportView: View {
     @State private var query = ""
     @State private var library: GsHelpCategory?
     @State private var showAllTopics = false
-    @State private var openTopic: GsHelpTopic?
 
-    private var topics: [GsHelpTopic] {
-        [
-            GsHelpTopic(
-                question: "How do I change my AI model?",
-                answer: "Settings → AI & Intelligence opens the model screen. The effort tile is remembered for the next new chat, and on-device models are managed under AI & Intelligence → On-device.",
-                summary: "Switch models and adjust reasoning effort in AI & Intelligence.",
-                category: .features, glyph: "sparkles", tone: .lilac),
-            GsHelpTopic(
-                question: "Where is my Grapsee Mail address?",
-                answer: "Account & Security shows the Grapsee Mail address this install signs in with. Edit it in Profile & Preferences; Nexly never asks for a password.",
-                summary: "Account & Security shows the address this install signs in with.",
-                category: .account, glyph: "lock", tone: .rose),
-            GsHelpTopic(
-                question: "Manage my subscription",
-                answer: "Subscription & Usage shows Nexly Pro at $12.99 per month and this month's real usage. No payment is taken in this build, so there is no card or invoice to manage.",
-                summary: "Nexly Pro is $12.99/month — see this month's real usage.",
-                category: .account, glyph: "credit-card", tone: .blue),
-            GsHelpTopic(
-                question: "Fix image generation issues",
-                answer: "Image generation is not part of this build. Chat replies, attachments and on-device models are; if a reply fails, the composer keeps your text so you can retry.",
-                summary: "Image generation is not part of this build.",
-                category: .troubleshooting, glyph: "photo", tone: .mint),
-            GsHelpTopic(
-                question: "Notifications aren't arriving",
-                answer: "Check the master switch, the per-type switch and iOS's own permission. Quiet Hours also holds notices back until the window ends.",
-                summary: "Check the switches, the permission and Quiet Hours.",
-                category: .troubleshooting, glyph: "bell", tone: .peach),
-            GsHelpTopic(
-                question: "How do I turn on Biometric Login?",
-                answer: "Account & Security → Biometric Login asks for your fingerprint or face, and only switches on once it succeeds. The lock is then required at launch.",
-                summary: "Ask for your fingerprint or face at launch.",
-                category: .privacy, glyph: "fingerprint", tone: .rose),
-            GsHelpTopic(
-                question: "Why does an update say it is available?",
-                answer: "The app checks its release feed and says so once per version, with a route straight to Your chats. Nothing is installed without your tap.",
-                summary: "The app checks its release feed once per version.",
-                category: .features, glyph: "sparkles", tone: .lilac),
-        ]
-    }
+    private var topics: [GsHelpTopic] { GsHelpCatalog.topics }
 
     private var visible: [GsHelpTopic] {
         guard !query.isEmpty else { return topics }
@@ -180,6 +130,10 @@ struct HelpSupportView: View {
                 onAskNexly: {
                     library = nil
                     router.path.append(.chat(nil))
+                },
+                onOpenArticle: { slug in
+                    library = nil
+                    router.path.append(.helpArticle(slug))
                 })
                 .presentationDetents([.large])
         }
@@ -192,19 +146,15 @@ struct HelpSupportView: View {
                 onAskNexly: {
                     showAllTopics = false
                     router.path.append(.chat(nil))
+                },
+                onOpenArticle: { slug in
+                    showAllTopics = false
+                    router.path.append(.helpArticle(slug))
                 })
                 .presentationDetents([.large])
         }
-        .sheet(item: $openTopic) { topic in
-            GsHelpTopicSheet(
-                topic: topic,
-                onAskNexly: {
-                    openTopic = nil
-                    router.path.append(.chat(nil))
-                },
-                onEmail: { collectMail(for: topic) })
-                .presentationDetents([.medium])
-        }
+        // A topic used to open a `.medium` sheet: a paragraph in a box. The
+        // article is a pushed page now (see HelpArticleView).
     }
 
     // MARK: Search
@@ -288,7 +238,7 @@ struct HelpSupportView: View {
                     GsSheetRow(
                         title: topic.question,
                         detail: topic.summary,
-                        action: { openTopic = topic },
+                        action: { router.path.append(.helpArticle(topic.slug)) },
                         showDivider: index < shown.count - 1
                     ) {
                         GsWellTile(glyph: topic.glyph, tone: topic.tone, size: 34)
@@ -402,6 +352,9 @@ struct GsHelpLibrarySheet: View {
     let categories: [GsHelpCategory]
     let startAt: GsHelpCategory?
     let onAskNexly: () -> Void
+    /// The sheet hands the article to the shell: one article page exists, and
+    /// it is the pushed one (HelpArticleView), not a second body in here.
+    var onOpenArticle: (String) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
     @State private var path: [GsHelpRoute] = []
@@ -456,7 +409,8 @@ struct GsHelpLibrarySheet: View {
                             } else {
                                 ForEach(inCategory) { topic in
                                     Button {
-                                        path.append(.topic(topic))
+                                        dismiss()
+                                        onOpenArticle(topic.slug)
                                     } label: {
                                         HStack(spacing: 10) {
                                             GsWellTile(glyph: topic.glyph, tone: topic.tone, size: 30)
@@ -485,12 +439,9 @@ struct GsHelpLibrarySheet: View {
                     .navigationTitle(category.label)
                     .navigationBarTitleDisplayMode(.inline)
                 case .topic(let topic):
-                    GsHelpTopicBody(topic: topic, onAskNexly: {
-                        dismiss()
-                        onAskNexly()
-                    })
-                    .navigationTitle("Article")
-                    .navigationBarTitleDisplayMode(.inline)
+                    // Unreachable since rows hand the slug to the shell, but a
+                    // destination must exist for every case.
+                    Color.clear.onAppear { dismiss(); onOpenArticle(topic.slug) }
                 }
             }
         }
@@ -505,78 +456,4 @@ struct GsHelpLibrarySheet: View {
 enum GsHelpRoute: Hashable {
     case category(GsHelpCategory)
     case topic(GsHelpTopic)
-}
-
-struct GsHelpTopicBody: View {
-    let topic: GsHelpTopic
-    let onAskNexly: () -> Void
-
-    var body: some View {
-        ScrollView {
-            GsHelpTopicContent(topic: topic, onAskNexly: onAskNexly)
-        }
-        .background(Aero.background.ignoresSafeArea())
-    }
-}
-
-/// The article's content without a scroll container, so it can sit inside a
-/// sheet's own scroll view without nesting two.
-struct GsHelpTopicContent: View {
-    let topic: GsHelpTopic
-    let onAskNexly: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    GsWellTile(glyph: topic.glyph, tone: topic.tone, size: 36)
-                    Text(topic.question)
-                        .font(.custom(Aero.productName(.semibold), size: 14, relativeTo: .headline))
-                        .foregroundStyle(Aero.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Text(topic.answer)
-                    .font(.custom(Aero.productName(.regular), size: 12, relativeTo: .caption))
-                    .foregroundStyle(Aero.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button(action: onAskNexly) {
-                    Text("Ask Nexly")
-                        .font(Aero.button())
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Capsule().fill(ExplorePalette.peachDeep))
-                }
-                .buttonStyle(KineticPressStyle())
-        }
-        .padding(20)
-    }
-}
-
-/// The article sheet opened from the Popular list.
-struct GsHelpTopicSheet: View {
-    let topic: GsHelpTopic
-    let onAskNexly: () -> Void
-    let onEmail: () -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                GsHelpTopicContent(topic: topic, onAskNexly: onAskNexly)
-                Button(action: onEmail) {
-                    HStack(spacing: 6) {
-                        NexlyGlyph(name: "mail", size: 12, color: Aero.accent)
-                        Text("Email support")
-                            .font(Aero.button())
-                            .foregroundStyle(Aero.accent)
-                    }
-                }
-                .buttonStyle(.plain)
-                Button("Close") { dismiss() }
-                    .font(Aero.button())
-                    .foregroundStyle(Aero.textSecondary)
-            }
-            .padding(.horizontal, 4)
-        }
-    }
 }

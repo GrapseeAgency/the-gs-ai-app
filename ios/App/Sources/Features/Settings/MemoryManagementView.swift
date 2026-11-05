@@ -71,25 +71,29 @@ struct MemoryManagementView: View {
             )
             Spacer().frame(height: 10)
         }
-        .confirmationDialog(
-            "Clear all memories?",
-            isPresented: $showClearAll,
-            titleVisibility: .visible
-        ) {
-            Button("Clear all memories", role: .destructive) {
-                for item in items {
-                    store.deleteLibraryItem(id: item.id)
-                }
-                GSHaptics.warning()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Every saved memory leaves this device. Your conversations stay.")
+        .gsDialog(isPresented: showClearAll) {
+            GsDialog(
+                title: "Clear all memories?",
+                message: "Every saved memory leaves this device. Your conversations stay.",
+                confirmLabel: "Clear all memories",
+                onConfirm: {
+                    for item in items {
+                        store.deleteLibraryItem(id: item.id)
+                    }
+                    GSHaptics.warning()
+                },
+                onDismiss: { showClearAll = false },
+                destructive: true,
+                glyph: "trash",
+                tone: .rose,
+                footnote: "Your conversations stay exactly where they are."
+            )
         }
-        .sheet(isPresented: $showItemsSheet) {
-            MemoryItemsSheet(items: items) { id in
-                store.deleteLibraryItem(id: id)
-            }
+        .gsDialog(isPresented: showItemsSheet) {
+            MemoryItemsDialog(
+                items: items,
+                onDelete: { id in store.deleteLibraryItem(id: id) },
+                onDismiss: { showItemsSheet = false })
         }
     }
 
@@ -251,48 +255,94 @@ struct MemoryManagementView: View {
 
 /// The honest "edit what Nexly remembers" surface: the real saved items, each
 /// deletable — no fabricated memory list.
-private struct MemoryItemsSheet: View {
+private struct MemoryItemsDialog: View {
     let items: [LibraryItem]
     let onDelete: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
+    var onDismiss: () -> Void
 
     var body: some View {
-        NavigationStack {
-            Group {
+        GsDialogFrame(onDismiss: onDismiss) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("What Nexly remembers")
+                    .font(.custom(Aero.productName(.semibold), size: 15, relativeTo: .headline))
+                    .foregroundStyle(Aero.text)
+                Text(items.isEmpty
+                     ? "Nothing saved yet."
+                     : "\(items.count) \(items.count == 1 ? "memory" : "memories") on this device")
+                    .font(.custom(Aero.productName(.regular), size: 11, relativeTo: .caption2))
+                    .foregroundStyle(Aero.textSecondary)
+                Spacer().frame(height: 12)
+
                 if items.isEmpty {
-                    Text("Nothing saved yet.")
-                        .font(Aero.caption())
+                    Text("Save something from a conversation and it will be listed here.")
+                        .font(.custom(Aero.productName(.regular), size: 11.5, relativeTo: .caption))
                         .foregroundStyle(Aero.textTertiary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    List {
-                        ForEach(items) { item in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.title)
-                                    .font(Aero.bodyMedium().weight(.medium))
-                                Text(String(item.content.prefix(120)))
-                                    .font(Aero.caption())
-                                    .foregroundStyle(Aero.textTertiary)
-                                    .lineLimit(2)
-                            }
-                            .swipeActions {
-                                Button(role: .destructive) {
-                                    onDelete(item.id)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 2) {
+                            ForEach(items.prefix(40)) { item in
+                                HStack(spacing: 10) {
+                                    GsWellTile(glyph: Self.glyph(item.kind), tone: Self.tone(item.kind), size: 28)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(item.title)
+                                            .font(.custom(Aero.productName(.medium), size: 12, relativeTo: .footnote))
+                                            .foregroundStyle(Aero.text)
+                                            .lineLimit(1)
+                                        Text(item.content.replacingOccurrences(of: "\n", with: " ")
+                                                .trimmingCharacters(in: .whitespacesAndNewlines))
+                                            .font(.custom(Aero.productName(.regular), size: 10.5, relativeTo: .caption2))
+                                            .foregroundStyle(Aero.textTertiary)
+                                            .lineLimit(2)
+                                    }
+                                    Spacer(minLength: 6)
+                                    Button {
+                                        onDelete(item.id)
+                                        GSHaptics.warning()
+                                    } label: {
+                                        NexlyGlyph(name: "trash", size: 14, color: Aero.textTertiary)
+                                            .frame(width: 26, height: 26)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Delete memory")
                                 }
+                                .padding(.vertical, 6)
                             }
                         }
                     }
+                    .frame(maxHeight: 300)
                 }
-            }
-            .navigationTitle("What Nexly remembers")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+
+                Spacer().frame(height: 14)
+                Button(action: onDismiss) {
+                    Text("Done")
+                        .font(.custom(Aero.productName(.medium), size: 12.5, relativeTo: .footnote))
+                        .foregroundStyle(Aero.text)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background(Capsule().fill(Aero.text.opacity(0.06)))
                 }
+                .buttonStyle(.plain)
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 22)
+        }
+    }
+
+    /// Same three kinds the library rows use; anything else is a note.
+    private static func glyph(_ kind: String) -> String {
+        switch kind {
+        case "image": return "palette"
+        case "draft": return "file-text"
+        default: return "message-circle"
+        }
+    }
+
+    private static func tone(_ kind: String) -> GsWellTone {
+        switch kind {
+        case "image": return .rose
+        case "draft": return .blue
+        default: return .lilac
         }
     }
 }

@@ -16,7 +16,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -109,61 +108,26 @@ fun ConversationActionsSheet(
     }
 
     if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete this chat?") },
-            text = { Text("\"$title\" and its messages will be removed from this device and the server. This cannot be undone.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmDelete = false
-                        onDelete()
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) { Text("Keep") }
-            }
+        GsConfirmDialog(
+            title = "Delete this chat?",
+            message = "\"$title\" and its messages will be removed from this device and the server. This cannot be undone.",
+            confirmLabel = "Delete",
+            dismissLabel = "Keep",
+            destructive = true,
+            onConfirm = onDelete,
+            onDismiss = { confirmDelete = false },
         )
     }
 
     if (renameOpen) {
-        AlertDialog(
-            onDismissRequest = { renameOpen = false },
-            title = { Text("Rename chat") },
-            text = {
-                // Done on the keyboard action submits the rename — it used to
-                // do nothing, forcing a second tap on the dialog button.
-                val commit: () -> Unit = {
-                    if (renameDraft.isNotBlank()) {
-                        renameOpen = false
-                        onRename(renameDraft.trim())
-                    }
-                }
-                OutlinedTextField(
-                    value = renameDraft,
-                    onValueChange = { renameDraft = it },
-                    singleLine = true,
-                    label = { Text("Chat name") },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { commit() })
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        renameOpen = false
-                        onRename(renameDraft.trim())
-                    },
-                    enabled = renameDraft.isNotBlank()
-                ) { Text("Rename") }
-            },
-            dismissButton = {
-                TextButton(onClick = { renameOpen = false }) { Text("Cancel") }
-            }
+        GsPromptDialog(
+            title = "Rename chat",
+            message = "The name is shown in Your chats and on this conversation's info page.",
+            label = "Chat name",
+            initial = renameDraft,
+            confirmLabel = "Rename",
+            onConfirm = { onRename(it) },
+            onDismiss = { renameOpen = false },
         )
     }
 }

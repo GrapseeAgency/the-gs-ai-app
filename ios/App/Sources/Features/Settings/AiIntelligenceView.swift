@@ -165,14 +165,20 @@ struct AiIntelligenceView: View {
 
             footnote("On-device generation is slower and uses battery. It is the honest choice when the network is gone, not a silent replacement for the cloud model.")
         }
-        .alert("Reset to Nexly's recommended settings?", isPresented: $confirmReset) {
-            Button("Reset") {
-                settings.resetModelPreferences()
-                GSHaptics.success()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The model returns to Nexly Pro, reasoning effort to Standard, and \"Remember my choices\" turns back on.")
+        .gsDialog(isPresented: confirmReset) {
+            GsDialog(
+                title: "Reset to Nexly's recommended settings?",
+                message: "The model returns to Nexly Pro, reasoning effort to Standard, and \"Remember my choices\" turns back on.",
+                confirmLabel: "Reset",
+                onConfirm: {
+                    settings.resetModelPreferences()
+                    GSHaptics.success()
+                },
+                onDismiss: { confirmReset = false },
+                destructive: false,
+                glyph: "sparkles",
+                tone: .peach
+            )
         }
         .sheet(isPresented: $showModelDetails) {
             ModelDetailsSheet(engineAvailable: engineAvailable)

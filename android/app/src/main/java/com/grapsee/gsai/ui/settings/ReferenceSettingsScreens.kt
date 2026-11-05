@@ -18,17 +18,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +56,8 @@ import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelStore
 import com.grapsee.gsai.di.ServiceLocator
+import com.grapsee.gsai.ui.components.GsConfirmDialog
+import com.grapsee.gsai.ui.components.GsDialogShell
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsTextSizeControl
 import com.grapsee.gsai.ui.components.GsLinks
@@ -420,28 +423,27 @@ fun ChatSettingsScreen(
     }
 
     if (confirmClear) {
-        AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            title = { Text("Clear conversation history?") },
-            text = { Text("Every message and conversation on this device will be removed. This cannot be undone.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmClear = false
-                    scope.launch {
-                        withContext(Dispatchers.IO) {
-                            runCatching {
-                                val db = ServiceLocator.db
-                                db.messageDao().deleteAll()
-                                db.conversationDao().clear()
-                            }
+        GsConfirmDialog(
+            title = "Clear conversation history?",
+            message = "Every message and conversation on this device will be removed. " +
+                "This cannot be undone.",
+            confirmLabel = "Clear history",
+            dismissLabel = "Cancel",
+            destructive = true,
+            footnote = "Saved items and memories are kept.",
+            onConfirm = {
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            val db = ServiceLocator.db
+                            db.messageDao().deleteAll()
+                            db.conversationDao().clear()
                         }
-                        Toast.makeText(context, "History cleared", Toast.LENGTH_SHORT).show()
                     }
-                }) { Text("Clear history") }
+                    Toast.makeText(context, "History cleared", Toast.LENGTH_SHORT).show()
+                }
             },
-            dismissButton = {
-                TextButton(onClick = { confirmClear = false }) { Text("Cancel") }
-            }
+            onDismiss = { confirmClear = false },
         )
     }
 }
@@ -686,21 +688,19 @@ fun AiIntelligenceScreen(
     }
 
     if (confirmReset) {
-        AlertDialog(
-            onDismissRequest = { confirmReset = false },
-            title = { Text("Reset to Nexly's recommended settings?") },
-            text = { Text("The model returns to Nexly Pro, reasoning effort to Standard, and \"Remember my choices\" turns back on.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmReset = false
-                    SettingsStore.updatePreferredModel(MODEL_PRO)
-                    SettingsStore.updateRememberChoices(true)
-                    SettingsStore.updateReasoningEffort("standard")
-                }) { Text("Reset") }
+        GsConfirmDialog(
+            title = "Reset to Nexly's recommended settings?",
+            message = "The model returns to Nexly Pro, reasoning effort to Standard, and " +
+                "\"Remember my choices\" turns back on.",
+            confirmLabel = "Reset",
+            dismissLabel = "Cancel",
+            destructive = false,
+            onConfirm = {
+                SettingsStore.updatePreferredModel(MODEL_PRO)
+                SettingsStore.updateRememberChoices(true)
+                SettingsStore.updateReasoningEffort("standard")
             },
-            dismissButton = {
-                TextButton(onClick = { confirmReset = false }) { Text("Cancel") }
-            },
+            onDismiss = { confirmReset = false },
         )
     }
 }
@@ -1135,55 +1135,100 @@ fun MemorySettingsScreen(
     }
 
     if (showClearAll) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showClearAll = false },
-            title = { Text("Clear all memories?") },
-            text = { Text("Every saved memory leaves this device. Your conversations stay.") },
-            confirmButton = {
-                androidx.compose.material3.TextButton(
-                    onClick = {
-                        scope.launch { dao.clear() }
-                        showClearAll = false
-                    },
-                ) { Text("Clear all") }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { showClearAll = false }) { Text("Cancel") }
-            },
+        GsConfirmDialog(
+            title = "Clear all memories?",
+            message = "Every saved memory leaves this device. Your conversations stay.",
+            confirmLabel = "Clear all",
+            dismissLabel = "Cancel",
+            destructive = true,
+            onConfirm = { scope.launch { dao.clear() } },
+            onDismiss = { showClearAll = false },
         )
     }
 
     if (showItems) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showItems = false },
-            title = { Text("What Nexly remembers") },
-            text = {
-                Column {
-                    if (items.isEmpty()) {
-                        Text("Nothing saved yet.")
-                    } else {
-                        items.take(8).forEach { item ->
+        GsDialogShell(onDismiss = { showItems = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 22.dp),
+            ) {
+                Text(
+                    "What Nexly remembers",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = GsFonts.Product,
+                    color = colors.textPrimary,
+                )
+                Text(
+                    if (items.isEmpty()) "Nothing saved yet."
+                    else "${items.size} ${if (items.size == 1) "memory" else "memories"} on this device",
+                    fontSize = 11.sp,
+                    fontFamily = GsFonts.Product,
+                    color = colors.textSecondary,
+                )
+                Spacer(Modifier.height(12.dp))
+
+                if (items.isEmpty()) {
+                    // An empty list still needs a body, or the slab is a title
+                    // floating over nothing.
+                    Text(
+                        "Save something from a conversation and it will be listed here.",
+                        fontSize = 11.5.sp,
+                        lineHeight = 16.sp,
+                        fontFamily = GsFonts.Product,
+                        color = colors.textTertiary,
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 300.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        items.take(40).forEach { item ->
                             Row(
                                 Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
+                                    .padding(vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                Text(
-                                    item.title,
-                                    fontSize = 12.sp,
-                                    fontFamily = GsFonts.Product,
-                                    color = colors.textPrimary,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                                // The kind, not the id: a memory of a picture
+                                // and a memory of a draft read the same in a
+                                // title, and this is the only place both are
+                                // listed together.
+                                RefWellTile(
+                                    kindGlyph(item.kind),
+                                    kindTone(item.kind),
+                                    28.dp
                                 )
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        item.title,
+                                        fontSize = 12.sp,
+                                        fontFamily = GsFonts.Product,
+                                        color = colors.textPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        item.content.replace('\n', ' ').trim(),
+                                        fontSize = 10.5.sp,
+                                        lineHeight = 14.sp,
+                                        fontFamily = GsFonts.Product,
+                                        color = colors.textTertiary,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                                 Icon(
                                     GsIcons.Trash2,
                                     contentDescription = "Delete memory",
                                     tint = colors.textTertiary,
                                     modifier = Modifier
-                                        .size(16.dp)
+                                        .size(18.dp)
+                                        .clip(CircleShape)
                                         .clickable(role = Role.Button, onClickLabel = "Delete memory") {
                                             scope.launch { dao.delete(item.id) }
                                         },
@@ -1192,11 +1237,24 @@ fun MemorySettingsScreen(
                         }
                     }
                 }
-            },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = { showItems = false }) { Text("Done") }
-            },
-        )
+
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = "Done",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(colors.textPrimary.copy(alpha = 0.06f))
+                        .clickable(role = Role.Button, onClick = { showItems = false })
+                        .padding(vertical = 13.dp),
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = GsFonts.Product,
+                    color = colors.textPrimary,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
     }
 }
 

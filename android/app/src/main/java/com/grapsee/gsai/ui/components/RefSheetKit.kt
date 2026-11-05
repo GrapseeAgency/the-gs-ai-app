@@ -500,6 +500,8 @@ fun RefGlyphWell(
     size: Dp,
     modifier: Modifier = Modifier,
     circle: Boolean = true,
+    /** A vector instead of a font glyph — the modal dialogs draw one. */
+    icon: ImageVector? = null,
 ) {
     val shape = if (circle) CircleShape else RoundedCornerShape(size * 0.28f)
     Box(
@@ -518,11 +520,20 @@ fun RefGlyphWell(
             .border(1.dp, Color.White.copy(alpha = 0.85f), shape),
         contentAlignment = Alignment.Center,
     ) {
-        com.grapsee.gsai.ui.chat.content.NexlyGlyph(
-            name = glyph,
-            size = size * 0.50f,
-            color = tone.ink,
-        )
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tone.ink,
+                modifier = Modifier.size(size * 0.46f),
+            )
+        } else {
+            com.grapsee.gsai.ui.chat.content.NexlyGlyph(
+                name = glyph,
+                size = size * 0.50f,
+                color = tone.ink,
+            )
+        }
     }
 }
 

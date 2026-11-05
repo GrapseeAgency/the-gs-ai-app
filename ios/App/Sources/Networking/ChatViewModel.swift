@@ -501,6 +501,17 @@ final class ChatViewModel: ObservableObject {
 
     // MARK: - Intents
 
+    /// The turn's hidden context: the plan checklist plus the reader's tone and
+    /// detail. Empty means nil — an empty system message is not context.
+    static func turnContext(for conversationID: String) -> String? {
+        let parts = [
+            NexlyPlanProgressStore.shared.context(for: conversationID),
+            ResponseStyle.directive,
+        ].compactMap { $0 }
+        let joined = parts.joined(separator: "\n\n")
+        return joined.isEmpty ? nil : joined
+    }
+
     /// PHASE 5: `attachments` (every draft `ready` — the caller gates on
     /// AttachmentStore) travel as their uploaded server ids; the optimistic
     /// user bubble renders the chips immediately. Text may be empty ONLY
@@ -743,7 +754,12 @@ final class ChatViewModel: ObservableObject {
                     conversationID: conversationID,
                     attachmentIDs: attachments?.map { $0.id },
                     mode: mode,
-                    turnContext: NexlyPlanProgressStore.shared.context(for: conversationID),
+                    // Two kinds of non-visible context ride together: the plan
+                    // checklist (real progress) and the response style (tone and
+                    // depth the reader chose). The style used to be stored and
+                    // never read — this is the reader that makes it mean
+                    // something.
+                    turnContext: Self.turnContext(for: conversationID),
                     onDelta: { [buffer = self.streamBuffer] delta in
                         buffer.append(delta) // lock-guarded — no main hop per token
                     },

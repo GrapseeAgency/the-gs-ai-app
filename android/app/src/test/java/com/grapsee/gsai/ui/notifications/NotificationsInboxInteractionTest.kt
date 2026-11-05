@@ -11,6 +11,8 @@ import com.grapsee.gsai.data.notifications.NoticeInbox
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
 import org.json.JSONArray
 import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -81,10 +83,13 @@ class NotificationsInboxInteractionTest {
         read = read,
     )
 
-    private fun renderScreen(now: Long = System.currentTimeMillis()) {
+    private fun renderScreen(
+        now: Long = System.currentTimeMillis(),
+        onNavigate: (String) -> Unit = {},
+    ) {
         compose.setContent {
             TheGsAiTheme(darkTheme = false) {
-                NotificationsInboxScreen(onBack = {}, onNavigate = {}, now = now)
+                NotificationsInboxScreen(onBack = {}, onNavigate = onNavigate, now = now)
             }
         }
         compose.waitForIdle()
@@ -113,17 +118,46 @@ class NotificationsInboxInteractionTest {
         )
     }
 
+    /**
+     * 0.86.22: a row now PUSHES the notice's page, and the PAGE is what marks
+     * it read.
+     *
+     * The old contract ("tapping the row flips the flag") was true while a tap
+     * opened a dialog. Once a tap navigates, the inbox cannot know whether the
+     * page was reached, so the write belongs where the notice is actually
+     * shown — otherwise a failed navigation would mark a notice read that
+     * nobody saw. Both halves are asserted: the route, then the flag.
+     */
     @Test
-    fun openingANoticeMarksThatRowRead() {
+    fun tappingANoticeOpensItsPageAndThePageMarksItRead() {
         seed(listOf(entry(7, "Account update", System.currentTimeMillis())))
-        renderScreen()
+        var route: String? = null
+        renderScreen(onNavigate = { route = it })
 
         compose.onNodeWithTag("notice-row-7").performClick()
         compose.waitForIdle()
 
-        assertTrue(
-            "opening a notice did not flip its stored read flag",
+        assertEquals("notification/7", route)
+        assertFalse(
+            "the inbox must not mark a notice read before its page is shown",
             NoticeInbox.read(ctx).single { it.id == 7L }.read,
+        )
+
+    }
+
+    @Test
+    fun theNoticePageIsWhatMarksItRead() {
+        seed(listOf(entry(9, "Account update", System.currentTimeMillis())))
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                NotificationDetailScreen(noticeId = 9L, onBack = {})
+            }
+        }
+        compose.waitForIdle()
+
+        assertTrue(
+            "opening the notice's page did not flip its stored read flag",
+            NoticeInbox.read(ctx).single { it.id == 9L }.read,
         )
     }
 

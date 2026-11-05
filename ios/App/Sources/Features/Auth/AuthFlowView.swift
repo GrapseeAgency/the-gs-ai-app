@@ -72,10 +72,17 @@ struct AuthFlowView: View {
                 }
             }
         }
-        .alert("Use a backup code", isPresented: $showBackupNote) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Backup codes are created in Settings → Security. Enter one here any time your authenticator is out of reach.")
+        .gsDialog(isPresented: showBackupNote) {
+            GsDialog(
+                title: "Use a backup code",
+                message: "Backup codes are created in Settings → Security. Enter one here any time your authenticator is out of reach.",
+                confirmLabel: "Got it",
+                onConfirm: {},
+                onDismiss: { showBackupNote = false },
+                dismissLabel: nil,
+                glyph: "key",
+                tone: .lilac
+            )
         }
         .onAppear { GSHaptics.prepare() }
     }

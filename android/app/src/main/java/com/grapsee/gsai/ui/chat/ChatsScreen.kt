@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +48,7 @@ import com.grapsee.gsai.data.liveupdate.LiveUpdateState
 import com.grapsee.gsai.data.liveupdate.LiveUpdater
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.ConversationActionsSheet
+import com.grapsee.gsai.ui.components.GsConfirmDialog
 import com.grapsee.gsai.ui.components.RefArt
 import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefDivider
@@ -323,23 +323,17 @@ fun ChatsScreen(onNavigate: (String) -> Unit) {
     }
 
     if (confirmingBulkDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmingBulkDelete = false },
-            title = { Text("Delete ${selection.size} chat${if (selection.size == 1) "" else "s"}?") },
-            text = { Text("This cannot be undone. Every message in them is removed from this device.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    val ids = selection
-                    confirmingBulkDelete = false
-                    selection = emptySet()
-                    scope.launch { ids.forEach { runCatching { ServiceLocator.chat.delete(it) } } }
-                }) {
-                    Text("Delete", color = GsTheme.colors.error)
-                }
+        GsConfirmDialog(
+            title = "Delete ${selection.size} chat${if (selection.size == 1) "" else "s"}?",
+            message = "This cannot be undone. Every message in them is removed from this device.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onConfirm = {
+                val ids = selection
+                selection = emptySet()
+                scope.launch { ids.forEach { runCatching { ServiceLocator.chat.delete(it) } } }
             },
-            dismissButton = {
-                TextButton(onClick = { confirmingBulkDelete = false }) { Text("Cancel") }
-            }
+            onDismiss = { confirmingBulkDelete = false },
         )
     }
 }

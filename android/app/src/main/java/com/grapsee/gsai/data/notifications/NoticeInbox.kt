@@ -89,6 +89,16 @@ object NoticeInbox {
         write(context, read(context).map { if (it.id == id) it.copy(read = true) else it })
     }
 
+    /** The reader put the dot back: the notice is unread again, not new. */
+    fun markUnread(context: Context, id: Long) {
+        write(context, read(context).map { if (it.id == id) it.copy(read = false) else it })
+    }
+
+    /** Removes one notice from this device. The ring buffer may still trim. */
+    fun delete(context: Context, id: Long) {
+        write(context, read(context).filterNot { it.id == id })
+    }
+
     private fun write(context: Context, entries: List<Entry>) {
         val arr = JSONArray()
         for (e in entries) {

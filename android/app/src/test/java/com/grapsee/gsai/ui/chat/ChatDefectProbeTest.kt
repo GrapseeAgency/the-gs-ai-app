@@ -17,7 +17,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -595,5 +599,179 @@ class ChatDefectProbeTest {
     fun licencesDark() {
         compose.setContent { licencesPage(true) }
         compose.onRoot().captureRoboImage("build/screenshots/probe-licences-dark.png")
+    }
+
+    // --- 0.86.22: the pages that replaced dialogs and dead rows -----------
+
+    @Composable
+    private fun responseStylePage(dark: Boolean) {
+        TheGsAiTheme(darkTheme = dark) {
+            com.grapsee.gsai.ui.settings.ResponseStyleScreen(onBack = {})
+        }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun responseStyleLight() {
+        compose.setContent { responseStylePage(false) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-response-light.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun responseStyleDark() {
+        compose.setContent { responseStylePage(true) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-response-dark.png")
+    }
+
+    @Composable
+    private fun helpArticlePage(dark: Boolean) {
+        TheGsAiTheme(darkTheme = dark) {
+            com.grapsee.gsai.ui.support.HelpArticleScreen(topicId = "notifications", onBack = {})
+        }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun helpArticleLight() {
+        compose.setContent { helpArticlePage(false) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-article-light.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun helpArticleDark() {
+        compose.setContent { helpArticlePage(true) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-article-dark.png")
+    }
+
+    @Composable
+    private fun collectionPage(dark: Boolean) {
+        TheGsAiTheme(darkTheme = dark) {
+            com.grapsee.gsai.ui.explore.CollectionScreen(
+                collectionId = "work",
+                onBack = {},
+                onOpenChat = { _, _ -> },
+            )
+        }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun collectionLight() {
+        compose.setContent { collectionPage(false) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-collection-light.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun collectionDark() {
+        compose.setContent { collectionPage(true) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-collection-dark.png")
+    }
+
+    @Composable
+    private fun dialogPage(dark: Boolean) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val notice = androidx.compose.runtime.remember {
+            com.grapsee.gsai.data.notifications.NoticeInbox.record(
+                context,
+                com.grapsee.gsai.data.notifications.GsNotifier.Kind.MESSAGES,
+                "Nexly finished your plan",
+                "The checklist for \"Q4 launch\" is ready. Three of the five steps are already ticked.",
+            )
+            com.grapsee.gsai.data.notifications.NoticeInbox.read(context).first()
+        }
+        TheGsAiTheme(darkTheme = dark) {
+            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
+                com.grapsee.gsai.ui.notifications.NotificationDetailScreen(
+                    noticeId = notice.id,
+                    onBack = {},
+                    now = notice.createdAtMillis + 90 * 60 * 1000L,
+                )
+            }
+        }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun noticeDetailLight() {
+        compose.setContent { dialogPage(false) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-notice-light.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun noticeDetailDark() {
+        compose.setContent { dialogPage(true) }
+        compose.onRoot().captureRoboImage("build/screenshots/probe-notice-dark.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun glassDialogLight() {
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
+                    com.grapsee.gsai.ui.components.GsDialog(
+                        title = "Delete this chat?",
+                        message = "\"Q4 launch plan\" and its messages will be removed from this device and the server. This cannot be undone.",
+                        confirmLabel = "Delete",
+                        onConfirm = {},
+                        onDismiss = {},
+                        destructive = true,
+                        icon = com.grapsee.gsai.ui.icons.GsIcons.Trash,
+                        tone = com.grapsee.gsai.ui.components.GsWellTone.Rose,
+                    )
+                }
+            }
+        }
+        // A Dialog is its own window, so the app root is not the thing to
+        // capture — the dialog root is.
+        compose.onNode(androidx.compose.ui.test.isDialog())
+            .captureRoboImage("build/screenshots/probe-dialog-light.png")
+    }
+
+    /**
+     * The facts slab — the shape the session and security popups take. A table
+     * flattened into a sentence was the thing this replaced.
+     */
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun factDialogLight() {
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                Box(Modifier.fillMaxSize()) {
+                    com.grapsee.gsai.ui.components.GsFactDialog(
+                        title = "Current session",
+                        facts = listOf(
+                            "Device" to "Pixel 8 Pro (Android 14)",
+                            "Session" to "3f9c1a72-8b40",
+                            "Signed in with" to "owner@grapsee.com",
+                            "Plan" to "Nexly Pro · active",
+                        ),
+                        onDismiss = {},
+                    )
+                }
+            }
+        }
+        compose.onNode(androidx.compose.ui.test.isDialog())
+            .captureRoboImage("build/screenshots/probe-fact-dialog.png")
+    }
+
+    /** Quiet Hours, opened from its row — the editor, not a mock of it. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun quietHoursDialog() {
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                com.grapsee.gsai.ui.settings.NotificationsAlertsScreen(onBack = {})
+            }
+        }
+        compose.waitForIdle()
+        compose.onAllNodesWithText("Quiet Hours", useUnmergedTree = true).onLast().performClick()
+        compose.waitForIdle()
+        compose.onNode(androidx.compose.ui.test.isDialog())
+            .captureRoboImage("build/screenshots/probe-quiet-hours.png")
     }
 }

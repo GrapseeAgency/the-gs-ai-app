@@ -525,6 +525,9 @@ private struct ExploreSectionHeader: View {
 struct ExploreView: View {
     let onOpenChat: (AeroRoute) -> Void
     let onOpenDiscover: () -> Void
+    /// A Creative Collection opens its own page. It used to call onOpenDiscover,
+    /// which answered "here is everything" to the question "here is this".
+    let onOpenCollection: (String) -> Void
     /// The trip planner has a real destination of its own (Travel Agent);
     /// without this the screen was built but unreachable on both platforms.
     let onOpenTravelAgent: () -> Void
@@ -538,6 +541,7 @@ struct ExploreView: View {
     init(
         onOpenChat: @escaping (AeroRoute) -> Void,
         onOpenDiscover: @escaping () -> Void = {},
+        onOpenCollection: @escaping (String) -> Void = { _ in },
         onOpenTravelAgent: @escaping () -> Void,
         // Required, not defaulted: a forgotten wire here would compile green
         // and ship a dead dock control. The render harness passes explicit no-ops.
@@ -547,6 +551,7 @@ struct ExploreView: View {
     ) {
         self.onOpenChat = onOpenChat
         self.onOpenDiscover = onOpenDiscover
+        self.onOpenCollection = onOpenCollection
         self.onOpenTravelAgent = onOpenTravelAgent
         self.onOpenHome = onOpenHome
         self.onOpenSettings = onOpenSettings
@@ -798,7 +803,7 @@ struct ExploreView: View {
             HStack(spacing: 10) {
                 ForEach(ExploreCatalog.collections) { collection in
                     Button {
-                        onOpenDiscover()
+                        onOpenCollection(collection.id)
                     } label: {
                         VStack(alignment: .leading, spacing: 0) {
                             collectionArt(collection)

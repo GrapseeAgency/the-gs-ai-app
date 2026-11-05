@@ -223,26 +223,30 @@ struct AccountSecurityView: View {
             }
             .buttonStyle(KineticPressStyle())
         }
-        .sheet(isPresented: $showSessionFacts) {
-            GsFactSheet(
+        .gsDialog(isPresented: showSessionFacts) {
+            GsFactDialog(
                 title: "Current session",
                 facts: [
                     ("Device", deviceLabel),
                     ("Session", sessionId),
                     ("Signed in with", account.email.isEmpty ? "Grapsee Mail" : account.email),
-                ])
-                .presentationDetents([.medium])
+                ],
+                glyph: "device-mobile",
+                tone: .blue,
+                onDismiss: { showSessionFacts = false })
         }
-        .sheet(isPresented: $showSecurityFacts) {
-            GsFactSheet(
+        .gsDialog(isPresented: showSecurityFacts) {
+            GsFactDialog(
                 title: "Your account is protected",
                 facts: [
                     ("App lock", settings.biometricUnlock ? "Biometric Login on" : "Off"),
                     ("Last check", formattedLastCheck),
                     ("Plan", plan.planName),
                     ("Two-factor", "Not available in this build"),
-                ])
-                .presentationDetents([.medium])
+                ],
+                glyph: "shield-check",
+                tone: .mint,
+                onDismiss: { showSecurityFacts = false })
         }
     }
 
@@ -362,45 +366,67 @@ struct AccountSecurityView: View {
     }
 }
 
-/// A small real fact sheet, shared by the session and security rows.
-struct GsFactSheet: View {
+/// A small real fact dialog, shared by the session and security rows.
+///
+/// iOS twin of `GsFactDialog`: a prose `GsDialog` would flatten a table into a
+/// sentence, so the pairs keep their two-column alignment inside the same slab.
+struct GsFactDialog: View {
     let title: String
     let facts: [(String, String)]
-    @Environment(\.dismiss) private var dismiss
+    var glyph: String = "shield-check"
+    var tone: GsWellTone = .blue
+    var footnote: String? = "Read from this device just now — nothing here is estimated."
+    var onDismiss: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(title)
-                    .font(.custom(Aero.productName(.semibold), size: 15, relativeTo: .headline))
-                    .foregroundStyle(Aero.text)
-                ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
-                    HStack(alignment: .top) {
-                        Text(fact.0)
-                            .font(.custom(Aero.productName(.regular), size: 11, relativeTo: .caption))
-                            .foregroundStyle(Aero.textSecondary)
-                            .frame(width: 108, alignment: .leading)
-                        Text(fact.1)
-                            .font(.custom(Aero.productName(.regular), size: 11, relativeTo: .caption))
-                            .foregroundStyle(Aero.text)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Spacer(minLength: 0)
+        GsDialogFrame(onDismiss: onDismiss) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 10) {
+                    GsWellTile(glyph: glyph, tone: tone, size: 40)
+                    Text(title)
+                        .font(.custom(Aero.productName(.semibold), size: 15, relativeTo: .headline))
+                        .foregroundStyle(Aero.text)
+                }
+                Spacer().frame(height: 12)
+
+                VStack(alignment: .leading, spacing: 9) {
+                    ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
+                        HStack(alignment: .top, spacing: 10) {
+                            Text(fact.0)
+                                .font(.custom(Aero.productName(.regular), size: 11, relativeTo: .caption))
+                                .foregroundStyle(Aero.textSecondary)
+                                .frame(width: 112, alignment: .leading)
+                            Text(fact.1)
+                                .font(.custom(Aero.productName(.regular), size: 11, relativeTo: .caption))
+                                .foregroundStyle(Aero.text)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                 }
-                Button {
-                    dismiss()
-                } label: {
+
+                Spacer().frame(height: 16)
+                Button(action: onDismiss) {
                     Text("Done")
-                        .font(Aero.button())
-                        .foregroundStyle(.white)
+                        .font(.custom(Aero.productName(.medium), size: 12.5, relativeTo: .footnote))
+                        .foregroundStyle(Aero.text)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Capsule().fill(ExplorePalette.peachDeep))
+                        .padding(.vertical, 13)
+                        .background(Capsule().fill(Aero.text.opacity(0.06)))
                 }
-                .buttonStyle(KineticPressStyle())
-                .padding(.top, 6)
+                .buttonStyle(.plain)
+
+                if let footnote {
+                    Text(footnote)
+                        .font(.custom(Aero.productName(.regular), size: 10.5, relativeTo: .caption2))
+                        .foregroundStyle(Aero.textTertiary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
+                }
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 22)
         }
     }
 }

@@ -5,6 +5,7 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
 import com.grapsee.gsai.BuildConfig
+import com.grapsee.gsai.data.ResponseStyle
 import com.grapsee.gsai.data.attachment.AttachmentDraft
 import com.grapsee.gsai.data.attachment.AttachmentPhase
 import com.grapsee.gsai.data.chat.NexlyPlanProgressStore
@@ -612,7 +613,15 @@ class ChatRepository(
                 // rides as non-visible system context so the model can adapt
                 // the next answer instead of pretending the checks never
                 // happened.
-                turnContext = NexlyPlanProgressStore.contextFor(appContext, activeId),
+                // Two kinds of non-visible context ride together: the plan
+                // checklist (the reader's real progress) and the response
+                // style (the tone and depth they chose). The style used to be
+                // stored and never read — this is the reader that makes the
+                // setting mean something.
+                turnContext = listOfNotNull(
+                    NexlyPlanProgressStore.contextFor(appContext, activeId),
+                    ResponseStyle.directive(),
+                ).joinToString("\n\n").takeIf { it.isNotBlank() },
                 onDelta = { delta ->
                     receivedAnyEvent = true
                     accumulated.append(delta)

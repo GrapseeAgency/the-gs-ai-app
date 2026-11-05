@@ -79,6 +79,13 @@ struct HomeDashboardView: View {
                         Spacer().frame(height: 10)
                         VStack(alignment: .leading, spacing: 18) {
                             todayUsedHeader
+                            // "Today's Used" was a heading with a "See All" and
+                            // NOTHING under it — the next thing on the page was
+                            // the Suggestions card. The list is real now, and an
+                            // empty day says so.
+                            HomeTodayUsed(
+                                onOpenConversation: onOpenConversation,
+                                onNewChat: onNewChat)
                             suggestionsCard
                         }
                         // Clear the floating dock so the last card is reachable —
@@ -364,6 +371,106 @@ struct HomeDashboardView: View {
             .buttonStyle(KineticPressStyle())
         }
         .padding(.top, 4)
+    }
+
+    /// The three conversations this device actually opened today.
+    ///
+    /// The store is observed HERE for the same reason HomeResumeCard observes
+    /// it: ConversationStore publishes on every message write, and this page is
+    /// the NavigationStack root.
+    private struct HomeTodayUsed: View {
+        let onOpenConversation: (String) -> Void
+        let onNewChat: () -> Void
+        @ObservedObject private var store = ConversationStore.shared
+
+        private var todayRows: [Conversation] {
+            let today = Calendar.current.startOfDay(for: Date())
+            return store.activeConversations
+                .filter { conversation in
+                    guard let date = Self.parse(conversation.updatedAt) else { return false }
+                    return date >= today
+                }
+                .prefix(3)
+                .map { $0 }
+        }
+
+        private static func parse(_ iso: String) -> Date? {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatter.date(from: iso) { return date }
+            formatter.formatOptions = [.withInternetDateTime]
+            return formatter.date(from: iso)
+        }
+
+        var body: some View {
+            if todayRows.isEmpty {
+                Button(action: onNewChat) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Nothing yet today")
+                            .font(Aero.responsive(13, .medium, relativeTo: .body))
+                            .foregroundStyle(Aero.text)
+                        Text("Start a conversation and it will appear here.")
+                            .font(Aero.responsive(11, .medium, relativeTo: .footnote))
+                            .foregroundStyle(Aero.textMuted)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 13)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .gsGlass(.cardDim, corner: Aero.Radius.homeCard)
+                }
+                .buttonStyle(KineticPressStyle())
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(todayRows.enumerated()), id: \.element.id) { index, conversation in
+                        Button {
+                            onOpenConversation(conversation.id)
+                        } label: {
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(conversation.title)
+                                        .font(Aero.responsive(12.5, .medium, relativeTo: .footnote))
+                                        .foregroundStyle(Aero.text)
+                                        .lineLimit(1)
+                                    Text(HomeDashboardView.cleanPreview(store.lastMessage(for: conversation.id)?.content ?? "").isEmpty
+                                         ? "No messages yet"
+                                         : HomeDashboardView.cleanPreview(store.lastMessage(for: conversation.id)?.content ?? ""))
+                                        .font(Aero.responsive(10.5, .regular, relativeTo: .caption2))
+                                        .foregroundStyle(Aero.textMuted)
+                                        .lineLimit(1)
+                                }
+                                Spacer(minLength: 6)
+                                if let date = Self.parse(conversation.updatedAt) {
+                                    Text(Self.clock(date))
+                                        .font(Aero.responsive(10, .regular, relativeTo: .caption2))
+                                        .foregroundStyle(Aero.textMuted)
+                                }
+                                GsIconView(GsIcons.arrowRight,
+                                           size: Aero.scaledLength(11, relativeTo: .caption),
+                                           color: Aero.textMuted)
+                            }
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 11)
+                            .frame(maxWidth: .infinity)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        if index != todayRows.count - 1 {
+                            Rectangle()
+                                .fill(Aero.divider.opacity(0.45))
+                                .frame(height: 1.0 / 3.0)
+                                .padding(.horizontal, 13)
+                        }
+                    }
+                }
+                .gsGlass(.cardLight, corner: Aero.Radius.homeCard)
+            }
+        }
+
+        private static func clock(_ date: Date) -> String {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm"
+            return formatter.string(from: date)
+        }
     }
 
     private var suggestionsCard: some View {

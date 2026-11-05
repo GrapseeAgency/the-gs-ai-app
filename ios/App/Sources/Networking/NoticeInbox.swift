@@ -67,6 +67,20 @@ final class GsNoticeInbox: ObservableObject {
         persist()
     }
 
+    /// The reader put the dot back: the notice is unread again, not new.
+    func markUnread(id: Double) {
+        guard let index = entries.firstIndex(where: { $0.id == id }), entries[index].read else { return }
+        entries[index].read = false
+        persist()
+    }
+
+    /// Removes one notice from this device. The ring may still trim the rest.
+    func delete(id: Double) {
+        guard entries.contains(where: { $0.id == id }) else { return }
+        entries.removeAll { $0.id == id }
+        persist()
+    }
+
     func markAllRead() {
         guard entries.contains(where: { !$0.read }) else { return }
         entries = entries.map { entry in

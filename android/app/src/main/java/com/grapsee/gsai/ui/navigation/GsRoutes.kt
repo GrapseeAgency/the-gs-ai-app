@@ -15,6 +15,10 @@ object GsRoutes {
     const val TRAVEL_AGENT = "travel-agent"
     const val EXPLORE = "explore"
     const val DISCOVER = "discover"
+    /** One Creative Collection. Tapping a collection used to open the mixed
+     *  Discover catalogue, which answered a different question. */
+    const val EXPLORE_COLLECTION = "explore/collection/{collectionId}"
+    const val ARG_COLLECTION = "collectionId"
     const val CHATS = "chats"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
@@ -40,12 +44,24 @@ object GsRoutes {
     const val SETTINGS_VOICE = "settings/voice"
     const val SETTINGS_VOICE_ENGINE = "settings/voice/engine"
     const val SETTINGS_ACCESSIBILITY = "settings/accessibility"
+    /** Tone, detail level and language — the three Profile rows that showed a
+     *  value and offered no way to change it. */
+    const val SETTINGS_RESPONSE_STYLE = "settings/response-style"
     const val SETTINGS_HELP = "settings/help"
+    /** One help article — the answer, its category and the two ways to get a
+     *  human, instead of a dialog that clipped long copy. */
+    const val HELP_ARTICLE = "help/article/{topicId}"
+    const val ARG_TOPIC = "topicId"
     const val SETTINGS_INTEGRATIONS = "settings/integrations"
     const val SETTINGS_ABOUT = "settings/about"
     const val SETTINGS_LICENCES = "settings/about/licenses"
     const val SETTINGS_PLAN = "settings/plan"
     const val NOTIFICATIONS = "notifications"
+    /** One notice, opened from the inbox. The inbox used to answer a tap with
+     *  a stock AlertDialog; a notice has a body, a time and a destination, and
+     *  each of those needs a page. */
+    const val NOTIFICATION_DETAIL = "notification/{noticeId}"
+    const val ARG_NOTICE = "noticeId"
     const val VOICE = "voice"
     /** Mandate §3 material specimen. Internal tooling: dispatched directly, never
      *  linked from the app, so it can be screenshotted without a nav path. */
@@ -77,6 +93,12 @@ object GsRoutes {
     const val CHAT_INFO = "chat-info/{conversationId}"
 
     fun chatInfo(conversationId: String): String = "chat-info/${Uri.encode(conversationId)}"
+
+    fun notification(noticeId: Long): String = "notification/$noticeId"
+
+    fun helpArticle(topicId: String): String = "help/article/${Uri.encode(topicId)}"
+
+    fun collection(collectionId: String): String = "explore/collection/${Uri.encode(collectionId)}"
 
     /**
      * Open a conversation. [prompt] prefills the composer; [autoSend] sends it

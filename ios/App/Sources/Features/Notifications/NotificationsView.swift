@@ -39,7 +39,7 @@ struct NotificationsView: View {
     @State private var tab = "all"
     @State private var earlierExpanded = false
     @State private var showFilter = false
-    @State private var openNotice: GsNoticeEntry?
+    @EnvironmentObject private var router: Router
 
     private let tabs: [GsInboxTab] = [
         GsInboxTab(id: "all", label: "All", glyph: "bell", tone: .peach),
@@ -116,13 +116,26 @@ struct NotificationsView: View {
                 caughtUp(body: "No more notifications for now.")
             }
         }
-        .sheet(item: $openNotice) { notice in
-            noticeSheet(notice)
-                .presentationDetents([.medium])
-        }
-        .sheet(isPresented: $showFilter) {
-            filterSheet
-                .presentationDetents([.medium])
+        // The filter was a half-height sheet — a menu wearing a page's clothes.
+        // It is a glass chooser now, and a notice is a pushed page.
+        .gsDialog(isPresented: $showFilter) {
+            GsChoiceDialog(
+                title: "Filter notifications",
+                subtitle: "Five kinds, counted from what was actually sent",
+                options: tabs.map { item in
+                    GsChoice(
+                        id: item.id,
+                        label: item.label,
+                        detail: "\(inbox.counts[item.id] ?? 0) notices",
+                        glyph: item.glyph,
+                        tone: item.tone,
+                        selected: tab == item.id)
+                },
+                onSelect: { choice in
+                    tab = choice.id
+                    showFilter = false
+                },
+                onDismiss: { showFilter = false })
         }
     }
 
@@ -199,27 +212,27 @@ struct NotificationsView: View {
                     detail: entry.body,
                     titleTrailing: AnyView(
                         GsTagPill(
-                            text: styleFor(entry.kindId).label,
-                            tone: styleFor(entry.kindId).tone.ink)),
+                            text: GsNoticeStyle.forKind(entry.kindId).label,
+                            tone: GsNoticeStyle.forKind(entry.kindId).tone.ink)),
                     action: {
                         inbox.markRead(id: entry.id)
-                        openNotice = entry
+                        router.path.append(.notificationDetail(entry.id))
                     }
                 ) {
                     GsWellTile(
-                        glyph: styleFor(entry.kindId).glyph,
-                        tone: styleFor(entry.kindId).tone,
+                        glyph: GsNoticeStyle.forKind(entry.kindId).glyph,
+                        tone: GsNoticeStyle.forKind(entry.kindId).tone,
                         size: 34)
                 } trailing: {
                     VStack(alignment: .trailing, spacing: 6) {
-                        Text(relativeLabel(entry.createdAt, now: now))
+                        Text(GsNoticeStyle.relative(entry.createdAt, now: now))
                             .font(.custom(Aero.productName(.regular), size: 8.5, relativeTo: .caption2))
                             .foregroundStyle(Aero.textTertiary)
                         if entry.read {
                             NexlyGlyph(name: "chevron-right", size: 11, color: Aero.textTertiary)
                         } else {
                             Circle()
-                                .fill(styleFor(entry.kindId).tone.ink)
+                                .fill(GsNoticeStyle.forKind(entry.kindId).tone.ink)
                                 .frame(width: 5, height: 5)
                         }
                     }
@@ -277,96 +290,6 @@ struct NotificationsView: View {
         .gsSheetCard(corner: 22)
     }
 
-    // MARK: Sheets
-
-    private func noticeSheet(_ notice: GsNoticeEntry) -> some View {
-        let style = styleFor(notice.kindId)
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    GsWellTile(glyph: style.glyph, tone: style.tone, size: 38)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(notice.title)
-                            .font(.custom(Aero.productName(.semibold), size: 14, relativeTo: .headline))
-                            .foregroundStyle(Aero.text)
-                        Text("\(style.label) • \(relativeLabel(notice.createdAt, now: now))")
-                            .font(.custom(Aero.productName(.regular), size: 9.5, relativeTo: .caption2))
-                            .foregroundStyle(Aero.textTertiary)
-                    }
-                    Spacer()
-                }
-                Text(notice.body)
-                    .font(.custom(Aero.productName(.regular), size: 12, relativeTo: .caption))
-                    .foregroundStyle(Aero.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button {
-                    openNotice = nil
-                    NotificationCenter.default.post(name: .gsOpenNotificationSettings, object: nil)
-                } label: {
-                    Text("Notification settings")
-                        .font(Aero.button())
-                        .foregroundStyle(Aero.accent)
-                }
-                .buttonStyle(.plain)
-                Spacer()
-            }
-            .padding(20)
-        }
-    }
-
-    private var filterSheet: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Filter notifications")
-                    .font(.custom(Aero.productName(.semibold), size: 14, relativeTo: .headline))
-                    .foregroundStyle(Aero.text)
-                    .padding(.bottom, 6)
-                ForEach(tabs) { item in
-                    Button {
-                        tab = item.id
-                        showFilter = false
-                    } label: {
-                        HStack(spacing: 10) {
-                            GsWellTile(glyph: item.glyph, tone: item.tone, size: 30)
-                            Text(item.label)
-                                .font(.custom(Aero.productName(.medium), size: 11, relativeTo: .caption))
-                                .foregroundStyle(Aero.text)
-                            Spacer()
-                            Text("\(inbox.counts[item.id] ?? 0)")
-                                .font(.custom(Aero.productName(.regular), size: 9, relativeTo: .caption2))
-                                .foregroundStyle(Aero.textTertiary)
-                        }
-                        .padding(.vertical, 7)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(20)
-        }
-    }
-
-    // MARK: Helpers
-
-    private func styleFor(_ kindId: String) -> (glyph: String, tone: GsWellTone, label: String) {
-        switch kindId {
-        case "messages": return ("message-circle", .rose, "Messages")
-        case "ai-updates": return ("sparkles", .lilac, "Update")
-        case "product-updates": return ("settings", .blue, "Updates")
-        case "account-activity": return ("user", .peach, "Account")
-        case "tips": return ("bulb", .peach, "Tips")
-        default: return ("bell", .blue, "Update")
-        }
-    }
-
-    private func relativeLabel(_ date: Date, now: Date) -> String {
-        let seconds = max(0, now.timeIntervalSince(date))
-        let minutes = Int(seconds / 60)
-        if minutes < 1 { return "now" }
-        if minutes < 60 { return "\(minutes)m ago" }
-        let hours = minutes / 60
-        if hours < 24 { return "\(hours)h ago" }
-        return "\(hours / 24)d ago"
-    }
 }
 
 extension Notification.Name {
