@@ -592,6 +592,124 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   check('pointer fence -> collab kind with default room', pointerFence[0]?.kind === 'collab')
 }
 
+// 38. MODEL FREEDOM — JS/Python JSON dialect repair (unquoted keys, single
+// quotes, trailing commas, Python True/False/None, comments, formatted numbers).
+{
+  const jsDialect = "```barchart\n{title: 'Quarterly Revenue', categories: ['Q1', 'Q2', 'Q3'], datasets: [{label: 'ARR', data: ['$1,200', '$1,850', '$2,400'],}],}\n```"
+  const c = compileWidgets({ reply: jsDialect, userPrompt: 'quarterly revenue' })
+  check('JS dialect + barchart fence + Chart.js datasets + $ strings compile', c.widgets === 1 && c.errors.length === 0, c.errors.join(','))
+  const parsed = JSON.parse(extractWidgetFences(c.text)[0].json) as Record<string, unknown>
+  check('barchart canonicalises to chart/bar with 3 points', parsed.type === 'bar' && ((parsed.series as Array<{ data: unknown[] }>)[0]?.data?.length === 3))
+
+  const pyDialect = '```kpi\n{"title": "Metrics", "metrics": [{"name": "Conversion", "value": "4.8%", "change": "+0.6%", "active": True, "note": None}]}\n```'
+  const cp = compileWidgets({ reply: pyDialect, userPrompt: 'metrics' })
+  check('Python True/None + kpi fence + metrics/name/change synonyms compile', cp.widgets === 1 && cp.errors.length === 0, cp.errors.join(','))
+  const statParsed = JSON.parse(extractWidgetFences(cp.text)[0].json) as Record<string, unknown>
+  const firstCard = (statParsed.cards as Array<Record<string, unknown>>)[0]
+  check('stat auto-infers up direction from +0.6% change', firstCard?.label === 'Conversion' && firstCard?.direction === 'up')
+}
+
+// 39. MODEL FREEDOM — candlestick 4D [o,h,l,c] and bubble 3D [x,y,z] survival,
+// plus single-series pie auto-expansion.
+{
+  const ohlc = '```ohlc\n{"title":"BTC","labels":["Mon","Tue"],"series":[{"name":"BTC","data":[[100,115,95,110],[110,125,105,120]]}]}\n```'
+  const co = compileWidgets({ reply: ohlc, userPrompt: 'btc candlestick' })
+  const ohlcPayload = JSON.parse(extractWidgetFences(co.text)[0].json) as { type: string; series: Array<{ data: number[][] }> }
+  check('ohlc fence -> candlestick with 4D points intact', ohlcPayload.type === 'candlestick' && ohlcPayload.series[0]?.data[0]?.length === 4, JSON.stringify(ohlcPayload.series[0]?.data[0]))
+
+  const ohlcObj = validateWidget('chart', '{"type":"candlestick","series":[{"name":"BTC","data":[{"open":100,"high":115,"low":95,"close":110},{"o":110,"h":125,"l":105,"c":120}]}]}')
+  check('candlestick object points {open,high,low,close} -> 4D array', ohlcObj.ok && (ohlcObj.widget.series as Array<{ data: number[][] }>)[0]?.data[0]?.length === 4)
+
+  const singlePie = validateWidget('chart', '{"type":"doughnut","labels":["iOS","Android","Web"],"values":[45,40,15]}')
+  check('single-series doughnut expands into 3 slices for PieChart', singlePie.ok && singlePie.widget.type === 'donut' && (singlePie.widget.series as unknown[]).length === 3)
+}
+
+// 40. MODEL FREEDOM — natural schema shapes across table, compare, quiz,
+// accordion, steps, checklist, flashcards, diff, calc, and panel.
+{
+  const objTable = validateWidget('table', '{"title":"Team","rows":[{"Name":"Alice","Role":"Eng","Score":98},{"Name":"Bob","Role":"Design","Score":94}]}')
+  check('table with object rows auto-derives columns and string rows', objTable.ok && (objTable.widget.columns as string[]).join(',') === 'Name,Role,Score' && (objTable.widget.rows as string[][]).length === 2)
+
+  const prosCons = compileWidgets({
+    reply: '```proscons\n{"title":"Rust","pros":["Memory safety","Zero-cost abstractions"],"cons":["Steep borrow checker","Long compile times"]}\n```',
+    userPrompt: 'pros and cons of rust',
+  })
+  check('proscons fence + pros/cons arrays compile to compare', prosCons.widgets === 1 && prosCons.text.startsWith('```compare'))
+
+  const letterQuiz = validateWidget('quiz', '{"question":"Capital of Japan?","choices":["Seoul","Tokyo","Beijing"],"answer":"B"}')
+  check('flat quiz with choices + letter answer "B" -> index 1', letterQuiz.ok && (letterQuiz.widget.questions as Array<{ answer: number }>)[0]?.answer === 1)
+
+  const faqFence = compileWidgets({
+    reply: '```faq\n{"title":"Help","faqs":[{"question":"Is it free?","answer":"Yes, during beta."}]}\n```',
+    userPrompt: 'faq',
+  })
+  check('faq fence + question/answer keys compile to accordion', faqFence.widgets === 1 && faqFence.text.startsWith('```accordion'))
+
+  const todoFence = compileWidgets({
+    reply: '```todos\n{"title":"Sprint","todos":["Ship parser","Run gates"]}\n```',
+    userPrompt: 'todos',
+  })
+  check('todos fence + string items compile to checklist', todoFence.widgets === 1 && todoFence.text.startsWith('```checklist'))
+
+  const calloutFence = compileWidgets({
+    reply: '```callout\n{"title":"Heads up","message":"Rate limits reset at midnight UTC.","severity":"warning"}\n```',
+    userPrompt: 'callout',
+  })
+  check('callout fence + message/severity compile to warning panel', calloutFence.widgets === 1 && calloutFence.text.startsWith('```panel'))
+}
+
+// 41. MODEL FREEDOM — cross-kind self-healing when the model picks the wrong
+// fence name for a valid widget payload, plus generic ```widget / ~~~ fences.
+{
+  const cardsWithKpis = compileWidgets({
+    reply: '```cards\n{"title":"KPIs","cards":[{"label":"MRR","value":"$82k","delta":"+14%"},{"label":"NRR","value":"118%","delta":"+4%"}]}\n```',
+    userPrompt: 'kpis',
+  })
+  check('```cards fence holding stat KPIs self-heals to ```stat', cardsWithKpis.widgets === 1 && cardsWithKpis.text.startsWith('```stat'))
+
+  const cardsWithFlashcards = compileWidgets({
+    reply: '```cards\n{"title":"Spanish","cards":[{"front":"Hola","back":"Hello"},{"front":"Gracias","back":"Thank you"}]}\n```',
+    userPrompt: 'flashcards',
+  })
+  check('```cards fence holding front/back pairs self-heals to ```flashcards', cardsWithFlashcards.widgets === 1 && cardsWithFlashcards.text.startsWith('```flashcards'))
+
+  const tildeGeneric = compileWidgets({
+    reply: '~~~widget\n{"title":"Architecture Decision","left":{"title":"Monolith","points":["Simple deploy"]},"right":{"title":"Microservices","points":["Independent scaling"]}}\n~~~',
+    userPrompt: 'compare',
+  })
+  check('~~~widget fence infers and compiles to ```compare', tildeGeneric.widgets === 1 && tildeGeneric.text.startsWith('```compare'))
+}
+
+// 42. HOSTILE & DIALECT FUZZ — never throws and never pollutes Object.prototype
+// across all 36 widget kinds, repairJson, inferWidgetKind, and compileWidgets.
+{
+  const hostilePayloads = [
+    '',
+    '{',
+    '{{{[[[',
+    "{'a': 'b', '__proto__': {'polluted': True}, 'constructor': {'prototype': {'polluted': 1}},",
+    '{unquoted: "val\nue\twith\nnewlines", num: "$1,234.56", nanVal: NaN, infVal: -Infinity, undef: undefined, trailing: [1, 2, 3, ], }',
+    '{"series": [null, true, false, 123, "str", {}, {"data": [["a", "b", "c", "d", "e", "f"]]}]}',
+    '{"rows": [null, {"__proto__": "x", "a": 1}]}',
+    '```json\n{"__proto__":{"polluted":true},"cards":[{"label":"X","value":"1"}]}\n```',
+  ]
+  let threw = false
+  for (const raw of hostilePayloads) {
+    try {
+      repairJson(raw)
+      inferWidgetKind(raw)
+      compileWidgets({ reply: raw, userPrompt: 'test' })
+      for (const k of WIDGET_KINDS) {
+        validateWidget(k, raw)
+      }
+    } catch {
+      threw = true
+    }
+  }
+  const polluted = ({} as Record<string, unknown>).polluted !== undefined
+  check('hostile & dialect fuzz across all 36 kinds never throws or pollutes prototype', !threw && !polluted)
+}
+
 console.log(`\n${passed} passed, ${failures.length} failed`)
 if (failures.length) {
   for (const f of failures) console.log(`  - ${f}`)

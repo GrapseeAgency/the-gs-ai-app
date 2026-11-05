@@ -22,6 +22,7 @@ import {
   SIM_TYPES,
   STAGE3D_TYPES,
   MEDIA_TYPES,
+  canonicalChartType,
   injectWidgetType,
   isChartType,
   isWidgetKind,
@@ -50,8 +51,11 @@ export type ValidationResult =
     }
   | { ok: false; kind: string; errors: string[] }
 
-/** ```kind\n{...}\n``` at the start of a line. */
-const FENCE = /^```([a-zA-Z][\w-]*)[ \t]*\r?\n([\s\S]*?)^```[ \t]*$/gm
+/** ```kind\n{...}\n``` (or ~~~kind, optional indent, optional info string). */
+const FENCE = /^[ \t]{0,3}(?:```|~~~)([a-zA-Z][\w-]*)[ \t]*[^\r\n]*\r?\n([\s\S]*?)^[ \t]{0,3}(?:```|~~~)[ \t]*$/gm
+
+/** Generic fence labels models use when wrapping a widget JSON payload. */
+const GENERIC_WIDGET_FENCES = new Set(['json', 'jsonc', 'widget', 'genui', 'data', 'ui'])
 
 /**
  * Fence languages a model naturally reaches for when it means the Nexly
@@ -66,75 +70,137 @@ export function extractWidgetFences(text: string): WidgetFence[] {
     const language = m[1]
     const lower = language.toLowerCase()
     const body = m[2].trim()
-    // A chart sub-type fence (```funnel, ```gantt …) is a chart widget with the
-    // type implied by the fence. Normalising here means the persisted answer
-    // only ever carries the canonical ```chart form, and the client never sees
-    // a payload it would render as a code block.
-    let kind = widgetKindOf(language)
-    if (PLAN_FENCE_LANGUAGES.has(lower) && body.startsWith('{')) {
-      try {
-        if (isNexlyPlanPayload(JSON.parse(body))) kind = 'plan'
-      } catch {
-        // The validator below reports the malformed body.
-      }
-    }
-    if (!kind) continue
-    const start = m.index ?? 0
     // A widget payload is a JSON OBJECT. A ```gantt fence holding mermaid's
     // gantt syntax (dateFormat/section lines — the model does this constantly)
     // is NOT a widget: validating it would report "invalid JSON" and STRIP the
     // fence, destroying a diagram the client could have rendered. Leave it in
     // the text, untouched, for the client's diagram renderer.
     if (!body.startsWith('{')) continue
-    const json = kind === 'plan'
-      ? body
-      : lower !== kind
-        ? injectWidgetType(body, language, kind)
-        : body
+    // A chart sub-type fence (```funnel, ```gantt …) is a chart widget with the
+    // type implied by the fence. Normalising here means the persisted answer
+    // only ever carries the canonical ```chart form, and the client never sees
+    // a payload it would render as a code block.
+    let kind = widgetKindOf(language)
+    if (PLAN_FENCE_LANGUAGES.has(lower)) {
+      try {
+        const repaired = repairJson(body)
+        if (repaired && isNexlyPlanPayload(JSON.parse(repaired))) kind = 'plan'
+      } catch {
+        // The validator below reports the malformed body.
+      }
+    }
+    if (!kind && GENERIC_WIDGET_FENCES.has(lower)) {
+      kind = inferWidgetKind(body)
+    }
+    if (!kind) continue
+    const start = m.index ?? 0
+    const json =
+      kind === 'plan' || GENERIC_WIDGET_FENCES.has(lower)
+        ? body
+        : lower !== kind
+          ? injectWidgetType(body, language, kind)
+          : body
     out.push({ kind, json, start, end: start + m[0].length })
   }
   return out
 }
 
-/** A fenced block whose body is plausibly a bare widget payload. */const JSON_FENCE = /^```(json|jsonc|widget|genui|data)[ \t]*\r?\n([\s\S]*?)^```[ \t]*$/gm
+/** A fenced block whose body is plausibly a bare widget payload. */
+const JSON_FENCE = /^[ \t]{0,3}(?:```|~~~)(json|jsonc|widget|genui|data|ui)[ \t]*[^\r\n]*\r?\n([\s\S]*?)^[ \t]{0,3}(?:```|~~~)[ \t]*$/gm
 
 /**
  * The widget kind a BARE payload describes, or null when it is not a widget.
  *
- * The model sometimes answers with no fence at all (or a ```json one). Left
- * alone, that JSON reaches the client as body text. Kind is inferred from the
- * payload's own discriminator and then CONFIRMED by the real validator, so
+ * The model sometimes answers with no fence at all (or a ```json / ```widget
+ * one). Left alone, that JSON reaches the client as body text. Kind is inferred
+ * from an explicit discriminator (`kind`, `widget`, `type`) or structural keys
+ * across all 36 catalogue kinds and then CONFIRMED by the real validator, so
  * prose containing braces is never promoted. Mirrors inferWidgetKind() on the
  * clients.
  */
 export function inferWidgetKind(json: string): WidgetKind | null {
+  const repaired = repairJson(json)
+  if (!repaired) return null
   let parsed: unknown
   try {
-    parsed = JSON.parse(json)
+    parsed = JSON.parse(repaired)
   } catch {
     return null
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
   const obj = parsed as Record<string, unknown>
   const has = (k: string) => k in obj
+
   const candidates: WidgetKind[] = []
-  if (has('series')) candidates.push('chart')
-  if (has('columns') && has('rows')) candidates.push('table')
-  if (has('cards')) candidates.push('stat')
-  if (has('entries')) candidates.push('timeline')
-  // Only timed rows are a plan. A `{rows:[...]}` payload with labels/values is
-  // usually a table or a bespoke widget; do not steal it from its renderer.
-  if (has('rows') && isNexlyPlanPayload(obj)) candidates.push('plan')
-  if (has('items') && isNexlyPlanPayload(obj)) candidates.push('plan')
-  if (has('questions')) candidates.push('quiz')
-  if (has('fields')) candidates.push('form')
-  if (has('prompts')) candidates.push('followups')
-  if (has('buttons')) candidates.push('actions')
-  if (has('items')) candidates.push('progress', 'gauge', 'carousel', 'app', 'media')
-  if (has('pages')) candidates.push('media')
-  if (has('steps') || has('groups')) candidates.push('app')
+  const push = (...ks: WidgetKind[]) => {
+    for (const k of ks) {
+      if (!candidates.includes(k)) candidates.push(k)
+    }
+  }
+
+  // 1. Explicit kind/widget discriminator (`{"kind":"stat",...}` or `{"widget":"chart",...}`).
+  for (const key of ['kind', 'widget']) {
+    const raw = obj[key]
+    if (typeof raw === 'string' && raw.trim()) {
+      const k = widgetKindOf(raw)
+      if (k) push(k)
+    }
+  }
+
+  // 2. Explicit sub-type discriminator (`type`, `sim`, `view`, `surface`, `editor`).
+  for (const key of ['type', 'sim', 'view', 'surface', 'editor']) {
+    const raw = obj[key]
+    if (typeof raw === 'string' && raw.trim()) {
+      const k = widgetKindOf(raw)
+      if (k) push(k)
+    }
+  }
+
+  // 3. Structural discriminators across all 36 catalogue kinds.
+  if (has('rows') && isNexlyPlanPayload(obj)) push('plan')
+  if (has('items') && isNexlyPlanPayload(obj)) push('plan')
+  if (has('series') || has('datasets') || has('values') || has('slices') || has('points') || has('axes') || has('bids') || has('asks') || has('words') || has('links')) {
+    push('chart')
+  }
+  if ((has('columns') || has('headers')) && (has('rows') || has('data'))) push('table')
+  if (has('cards') || has('stats') || has('metrics') || has('kpis')) push('stat', 'flashcards', 'cards')
+  if (has('deck') || has('pairs')) push('flashcards')
+  if ((has('left') && has('right')) || (has('pros') && has('cons')) || (has('before') && has('after')) || has('sides')) {
+    push('compare', 'diff')
+  }
+  if (has('unified') || has('patch') || (has('before') && has('after'))) push('diff')
+  if (has('entries') || has('events') || has('milestones')) push('timeline')
+  if (has('fields') && (has('outputs') || has('results') || has('formulas'))) push('calc')
+  if (has('inputs') && (has('outputs') || has('results') || has('formulas'))) push('calc')
+  if (has('questions')) push('quiz', 'accordion', 'followups')
+  if (has('fields') || has('inputs') || has('controls')) push('form', 'calc')
+  if (has('prompts') || has('suggestions') || has('followups')) push('followups')
+  if (has('buttons') || has('actions')) push('actions')
+  if (has('tabs') || has('views')) push('tabs')
+  if (has('sections') || has('faqs') || has('panels')) push('accordion', 'tabs')
+  if (has('steps') || has('stages') || has('phases')) push('steps', 'app')
+  if (has('roots') || has('root') || has('hierarchy')) push('tree', 'chart')
+  if (has('question') && (has('options') || has('choices') || has('answers'))) push('poll', 'quiz')
+  if (has('options') || has('choices') || has('chips')) push('chips', 'menu', 'poll')
+  if (has('style') && ['star', 'heart', 'thumb', 'nps'].includes(String(obj.style ?? '').toLowerCase())) push('rating')
+  if (has('tasks') || has('todos')) push('checklist', 'app')
+  if (has('slides') || has('images') || has('photos')) push('carousel', 'media')
+  if (has('pages') || has('results') || has('url') || has('code')) push('media')
+  if (has('bars')) push('progress')
+  if (has('gauges') || has('meters')) push('gauge')
+  if (has('items')) push('checklist', 'progress', 'gauge', 'carousel', 'app', 'media', 'chart', 'menu', 'chips')
+  if (has('groups') || has('slots') || has('columns') || has('rows')) push('app', 'table')
+  if (has('summary') || has('badges') || has('popover') || has('callout')) push('panel')
+  if (has('hint') && has('prompt')) push('voice')
+  if (has('commands') && (has('welcome') || has('title'))) push('terminal')
+  if (has('room') || has('channel')) push('collab')
+  if (has('gravity') || has('damping') || has('sim')) push('sim')
+  if (has('bonds') || has('z') || has('view')) push('stage3d')
+  if (has('nodes') && (has('edges') || has('links'))) push('chart', 'canvas', 'editor', 'stage3d')
+  if (has('cells') || has('tracks') || has('layout') || has('editor')) push('editor')
+
   for (const kind of candidates) {
-    if (validateWidget(kind, json).ok) return kind
+    if (validateWidget(kind, repaired).ok) return kind
   }
   return null
 }
@@ -164,11 +230,6 @@ export function extractBareWidget(text: string): WidgetFence | null {
 }
 
 /**
- * Repairs the failures models actually produce: smart quotes, trailing commas,
- * comments, a stray "Here is the JSON:" prefix, or a single missing brace.
- * Returns null when the text is not recoverable.
- */
-/**
  * Remove `//` and slash-star comments WITHOUT touching string contents.
  *
  * The naive regex version deleted everything after `//` on a line — including
@@ -179,19 +240,32 @@ export function extractBareWidget(text: string): WidgetFence | null {
  */
 function stripJsonComments(input: string): string {
   let out = ''
-  let inString = false
+  let inDouble = false
+  let inSingle = false
   let escaped = false
   for (let i = 0; i < input.length; i++) {
     const ch = input[i]
-    if (inString) {
+    if (inDouble) {
       out += ch
       if (escaped) escaped = false
       else if (ch === '\\') escaped = true
-      else if (ch === '"') inString = false
+      else if (ch === '"') inDouble = false
+      continue
+    }
+    if (inSingle) {
+      out += ch
+      if (escaped) escaped = false
+      else if (ch === '\\') escaped = true
+      else if (ch === "'") inSingle = false
       continue
     }
     if (ch === '"') {
-      inString = true
+      inDouble = true
+      out += ch
+      continue
+    }
+    if (ch === "'") {
+      inSingle = true
       out += ch
       continue
     }
@@ -208,6 +282,127 @@ function stripJsonComments(input: string): string {
     }
     out += ch
   }
+  return out
+}
+
+/**
+ * Normalise LLM JSON dialects into strict RFC 8259 JSON in one string-aware
+ * pass:
+ *  - single-quoted strings `'hello "world"'` -> `"hello \"world\""`
+ *  - raw unescaped newlines/tabs inside strings -> `\n`, `\r`, `\t`
+ *  - unquoted object keys `{title: "KPI", retry_2: 1}` -> `{"title": "KPI", "retry_2": 1}`
+ *  - Python/JS value literals `True`, `False`, `None`, `undefined`, `NaN`,
+ *    `Infinity`, `-Infinity` -> `true`, `false`, `null`
+ *  - leading `+` on numbers `:+12.5` -> `:12.5`
+ */
+function normaliseJsonDialect(input: string): string {
+  let out = ''
+  let i = 0
+  let inDouble = false
+  let inSingle = false
+  let escaped = false
+
+  while (i < input.length) {
+    const ch = input[i]
+
+    if (inDouble) {
+      if (escaped) {
+        // `\'` is common in JS strings but invalid in strict JSON.
+        if (ch === "'") out = out.slice(0, -1) + "'"
+        else out += ch
+        escaped = false
+      } else if (ch === '\\') {
+        out += ch
+        escaped = true
+      } else if (ch === '"') {
+        out += ch
+        inDouble = false
+      } else if (ch === '\n') {
+        out += '\\n'
+      } else if (ch === '\r') {
+        out += '\\r'
+      } else if (ch === '\t') {
+        out += '\\t'
+      } else {
+        out += ch
+      }
+      i++
+      continue
+    }
+
+    if (inSingle) {
+      if (escaped) {
+        if (ch === "'") out += "'"
+        else if (ch === '"') out += '\\"'
+        else out += '\\' + ch
+        escaped = false
+      } else if (ch === '\\') {
+        escaped = true
+      } else if (ch === "'") {
+        out += '"'
+        inSingle = false
+      } else if (ch === '"') {
+        out += '\\"'
+      } else if (ch === '\n') {
+        out += '\\n'
+      } else if (ch === '\r') {
+        out += '\\r'
+      } else if (ch === '\t') {
+        out += '\\t'
+      } else {
+        out += ch
+      }
+      i++
+      continue
+    }
+
+    if (ch === '"') {
+      inDouble = true
+      out += '"'
+      i++
+      continue
+    }
+    if (ch === "'") {
+      inSingle = true
+      out += '"'
+      i++
+      continue
+    }
+
+    // Outside strings: check for unquoted keys or bare Python/JS literals.
+    const rest = input.slice(i)
+
+    // Unquoted key after `{` or `,` (look back in `out` past whitespace).
+    const keyMatch = /^([a-zA-Z_$][\w$-]*)(\s*:)/.exec(rest)
+    if (keyMatch) {
+      const prev = out.trimEnd().slice(-1)
+      if (prev === '{' || prev === ',') {
+        out += `"${keyMatch[1]}"${keyMatch[2]}`
+        i += keyMatch[0].length
+        continue
+      }
+    }
+
+    // Bare value literals after `:`, `[`, or `,`.
+    const prev = out.trimEnd().slice(-1)
+    if (prev === ':' || prev === '[' || prev === ',') {
+      const litMatch = /^(True|False|None|undefined|NaN|-?Infinity)(?=[\s,}\]]|$)/.exec(rest)
+      if (litMatch) {
+        const word = litMatch[1]
+        out += word === 'True' ? 'true' : word === 'False' ? 'false' : 'null'
+        i += word.length
+        continue
+      }
+      if (ch === '+' && /\d/.test(input[i + 1] ?? '')) {
+        i++
+        continue
+      }
+    }
+
+    out += ch
+    i++
+  }
+
   return out
 }
 
@@ -264,7 +459,16 @@ function closeOpenStructures(s: string): string | null {
     out += ch
   }
   if (inString) out += '"'
+  // Strip any dangling incomplete key/colon or trailing comma at the truncation point.
+  if (stack[stack.length - 1] === '}') {
+    out = out.replace(/,\s*"[^"]*"\s*:\s*$/, '')
+    out = out.replace(/,\s*"[^"]*"\s*$/, '')
+    out = out.replace(/\{\s*"[^"]*"\s*:\s*$/, '{')
+    out = out.replace(/\{\s*"[^"]*"\s*$/, '{')
+  }
+  out = out.replace(/,\s*$/, '')
   while (stack.length > 0) out += stack.pop()
+  out = out.replace(/,\s*([}\]])/g, '$1')
   try {
     JSON.parse(out)
     return out
@@ -279,6 +483,7 @@ export function repairJson(raw: string): string | null {
 
   // Strip a prose prefix before the first brace.
   const firstBrace = s.indexOf('{')
+  if (firstBrace < 0) return null
   if (firstBrace > 0) s = s.slice(firstBrace)
   const lastBrace = s.lastIndexOf('}')
   if (lastBrace >= 0) s = s.slice(0, lastBrace + 1)
@@ -286,7 +491,8 @@ export function repairJson(raw: string): string | null {
   s = stripJsonComments(s)
     .replace(/[\u201c\u201d]/g, '"')
     .replace(/[\u2018\u2019]/g, "'")
-    .replace(/,\s*([}\]])/g, '$1')
+
+  s = normaliseJsonDialect(s).replace(/,\s*([}\]])/g, '$1')
 
   try {
     JSON.parse(s)
@@ -308,12 +514,24 @@ const isObj = (v: unknown): v is Record<string, unknown> =>
 const asArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
 
 const asString = (v: unknown, fallback = ''): string =>
-  typeof v === 'string' ? v : typeof v === 'number' ? String(v) : fallback
+  typeof v === 'string'
+    ? v
+    : typeof v === 'number' && Number.isFinite(v)
+      ? String(v)
+      : typeof v === 'boolean'
+        ? String(v)
+        : fallback
 
 const asNumber = (v: unknown): number | null => {
   if (typeof v === 'number' && Number.isFinite(v)) return v
   if (typeof v === 'string') {
-    const n = Number(v.replace(/[,\s]/g, ''))
+    const cleaned = v
+      .trim()
+      .replace(/^[+$€£¥₹৳\s]+/, '')
+      .replace(/[%$,\s]+$/g, '')
+      .replace(/,/g, '')
+    if (!cleaned) return null
+    const n = Number(cleaned)
     return Number.isFinite(n) ? n : null
   }
   return null
@@ -402,22 +620,43 @@ export function validationErrors(result: ValidationResult): string[] {
 function normalisePoints(raw: unknown[], labelHints: string[]): number[][] {
   const out: number[][] = []
   raw.forEach((item, index) => {
-    if (typeof item === 'number' && Number.isFinite(item)) {
-      out.push([index, item])
+    const direct = asNumber(item)
+    if (direct !== null && !Array.isArray(item) && !isObj(item)) {
+      out.push([index, direct])
       return
     }
     if (Array.isArray(item)) {
       const first = item[0]
-      if (typeof first === 'string' && first.trim()) labelHints.push(first.trim())
+      if (typeof first === 'string' && first.trim() && asNumber(first) === null) {
+        labelHints.push(first.trim())
+        const restNums = item.slice(1).map(asNumber).filter((n): n is number => n !== null)
+        if (restNums.length >= 2) out.push(restNums.slice(0, 5))
+        else if (restNums.length === 1) out.push([index, restNums[0]])
+        return
+      }
       const nums = item.map(asNumber).filter((n): n is number => n !== null)
-      if (nums.length >= 2) out.push([nums[0], nums[1]])
+      // Preserve 2D [x,y], 3D bubble [x,y,z], and 4D/5D candlestick [o,h,l,c].
+      if (nums.length >= 2) out.push(nums.slice(0, 5))
       else if (nums.length === 1) out.push([index, nums[0]])
       return
     }
     if (isObj(item)) {
-      const y = asNumber(item.y) ?? asNumber(item.value)
+      const hint = asString(item.label ?? item.name ?? (typeof item.x === 'string' && asNumber(item.x) === null ? item.x : '')).trim()
+      if (hint) labelHints.push(hint)
+      // Candlestick object shape: {open/o, high/h, low/l, close/c}
+      const o = asNumber(item.open ?? item.o)
+      const h = asNumber(item.high ?? item.h)
+      const l = asNumber(item.low ?? item.l)
+      const c = asNumber(item.close ?? item.c)
+      if (o !== null && h !== null && l !== null && c !== null) {
+        out.push([o, h, l, c])
+        return
+      }
+      const y = asNumber(item.y ?? item.value ?? item.val ?? item.count ?? item.amount)
       if (y === null) return
-      out.push([asNumber(item.x) ?? index, y])
+      const x = asNumber(item.x) ?? index
+      const z = asNumber(item.z ?? item.size ?? item.r)
+      out.push(z !== null ? [x, y, z] : [x, y])
     }
   })
   return out.slice(0, LIMITS.maxPointsPerSeries)
@@ -620,7 +859,9 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
   chart: (p) => {
     const errors: string[] = []
     let repaired = false
-    let type = asString(p.type, 'line')
+    const rawType = asString(p.type, 'line')
+    let type = canonicalChartType(rawType)
+    if (type !== rawType) repaired = true
     if (!isChartType(type)) {
       type = 'bar'
       repaired = true
@@ -636,37 +877,108 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     // rejected every canonical gantt payload.
     const minPoints = pieLike || type === 'gantt' ? 1 : 2
 
-    // Models send [[x,y]] (documented), [12,18] (flat), [["Q1",120]] (string
-    // label as x) and [{"x":0,"y":12}]. Only the first used to survive, so the
-    // other three were silently DROPPED as invalid — a correct answer thrown
-    // away by our own validator.
-    // Models also put the data at the top level instead of in a series:
-    //   {"type":"bar","labels":["Q1","Q2"],"values":[120,180]}
-    //   {"type":"line","data":[[0,1],[1,2]]}
-    // Both are unambiguous, and both used to be rejected as "chart needs at
-    // least one series" — a correct answer discarded by the validator.
+    // Accept series, Chart.js datasets, or lines/bars.
     let rawSeries = asArray(p.series)
-    if (rawSeries.length === 0) {
-      const flat = asArray(p.values).length > 0 ? asArray(p.values) : asArray(p.data)
-      if (flat.length > 0) {
-        rawSeries = [{ name: asString(p.name, 'Value'), data: flat }]
+    if (rawSeries.length === 0 && asArray(p.datasets).length > 0) {
+      rawSeries = asArray(p.datasets)
+      repaired = true
+    }
+    if (rawSeries.length === 0 && asArray(p.lines ?? p.bars).length > 0) {
+      rawSeries = asArray(p.lines ?? p.bars)
+      repaired = true
+    }
+
+    const labelHints: string[] = []
+
+    // Gantt task-object shape: {"type":"gantt","tasks":[{"name":"Design","start":0,"end":3}]}
+    if (type === 'gantt' && rawSeries.length === 0 && asArray(p.tasks ?? p.items).length > 0) {
+      const taskSeries: Array<{ name: string; data: number[][] }> = []
+      for (const item of asArray(p.tasks ?? p.items)) {
+        const o = isObj(item) ? item : {}
+        const name = asString(o.name ?? o.title ?? o.label ?? o.task, 'Task')
+        const start = asNumber(o.start ?? o.from ?? o.begin)
+        const end = asNumber(o.end ?? o.to) ?? (start !== null && asNumber(o.duration) !== null ? start + (asNumber(o.duration) ?? 1) : null)
+        if (start !== null && end !== null) {
+          taskSeries.push({ name, data: [[start, end]] })
+        }
+      }
+      if (taskSeries.length > 0) {
+        rawSeries = taskSeries
         repaired = true
       }
     }
 
-    const labelHints: string[] = []
-    const series = rawSeries
+    if (rawSeries.length === 0) {
+      const flat =
+        asArray(p.values).length > 0
+          ? asArray(p.values)
+          : asArray(p.data).length > 0
+            ? asArray(p.data)
+            : asArray(p.points).length > 0
+              ? asArray(p.points)
+              : asArray(p.slices).length > 0
+                ? asArray(p.slices)
+                : asArray(p.items)
+      if (flat.length > 0) {
+        if (pieLike && flat.every((item) => isObj(item) && (asNumber((item as Record<string, unknown>).value ?? (item as Record<string, unknown>).y ?? (item as Record<string, unknown>).percent) !== null))) {
+          rawSeries = flat.map((item, idx) => {
+            const o = item as Record<string, unknown>
+            const sliceName = asString(o.label ?? o.name ?? o.title, `Slice ${idx + 1}`)
+            labelHints.push(sliceName)
+            const val = asNumber(o.value ?? o.y ?? o.percent) ?? 0
+            return { name: sliceName, data: [[0, val]] }
+          })
+        } else {
+          rawSeries = [{ name: asString(p.name, 'Value'), data: flat }]
+        }
+        repaired = true
+      } else if (isObj(p.data)) {
+        // Object map: {"type":"bar","data":{"Q1":120,"Q2":180}}
+        const entries = Object.entries(p.data)
+          .map(([k, v]) => [k, asNumber(v)] as const)
+          .filter((pair): pair is [string, number] => pair[1] !== null)
+        if (entries.length > 0) {
+          for (const [k] of entries) labelHints.push(k)
+          rawSeries = [{ name: asString(p.name, 'Value'), data: entries.map(([, v], idx) => [idx, v]) }]
+          repaired = true
+        }
+      }
+    }
+
+    const xAxisObj = isObj(p.xAxis) ? p.xAxis : null
+    const declared = asArray(
+      p.labels ?? p.categories ?? (Array.isArray(p.xAxis) ? p.xAxis : xAxisObj ? xAxisObj.categories ?? xAxisObj.data ?? xAxisObj.labels : undefined)
+    )
+      .map((l) => asString(l))
+      .filter(Boolean)
+
+    let series = rawSeries
       .map((s) => {
         const row = isObj(s) ? s : {}
-        const data = normalisePoints(asArray(row.data), labelHints)
-        return { name: asString(row.name, 'Series'), data }
+        const rawPoints = asArray(row.data).length > 0 ? asArray(row.data) : asArray(row.values).length > 0 ? asArray(row.values) : asArray(row.points)
+        const data = normalisePoints(rawPoints, labelHints)
+        return { name: asString(row.name ?? row.label ?? row.title ?? row.id, 'Series'), data }
       })
       .filter((s) => s.data.length >= minPoints)
       .slice(0, LIMITS.maxChartSeries)
 
-    if (series.length === 0) errors.push('chart needs at least one series with enough points')
-    const declared = asArray(p.labels).map((l) => asString(l)).filter(Boolean)
     const labels = declared.length > 0 ? declared : labelHints
+
+    // If a pie/donut arrived as a SINGLE series with multiple slice points
+    // ({"type":"pie","labels":["A","B"],"series":[{"name":"Share","data":[[0,40],[1,60]]}]}),
+    // expand it to the canonical one-series-per-slice form so every renderer
+    // (Web & Android) draws all slices instead of only the first point.
+    if (pieLike && series.length === 1 && series[0].data.length > 1) {
+      series = series[0].data
+        .slice(0, LIMITS.maxChartSeries)
+        .map((pt, idx) => ({
+          name: labels[idx] ?? `${series[0].name} ${idx + 1}`,
+          data: [[0, pt[pt.length - 1] ?? 0]],
+        }))
+      repaired = true
+    }
+
+    if (series.length === 0) errors.push('chart needs at least one series with enough points')
 
     return {
       widget: { type, title: asString(p.title), unit: asString(p.unit), labels, series },
@@ -676,15 +988,37 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
   },
 
   stat: (p) => {
-    const cards = asArray(p.cards)
+    let repaired = false
+    let rawCards = asArray(p.cards)
+    if (rawCards.length === 0) {
+      const alt = asArray(p.stats ?? p.metrics ?? p.items ?? p.kpis ?? p.values)
+      if (alt.length > 0) {
+        rawCards = alt
+        repaired = true
+      } else if (isObj(p.metrics ?? p.stats ?? p.data)) {
+        const mapObj = (p.metrics ?? p.stats ?? p.data) as Record<string, unknown>
+        rawCards = Object.entries(mapObj).map(([k, v]) => ({ label: k, value: asString(v) }))
+        repaired = true
+      } else if (asString(p.label ?? p.metric) && asString(p.value ?? p.val ?? p.amount)) {
+        rawCards = [p]
+        repaired = true
+      }
+    }
+    const cards = rawCards
       .map((c) => {
         const row = isObj(c) ? c : {}
+        const delta = asString(row.delta ?? row.change ?? row.trend ?? row.diff)
+        let direction = asString(row.direction)
+        if (!direction && delta) {
+          if (delta.startsWith('+') || /↑|up/i.test(delta)) direction = 'up'
+          else if (delta.startsWith('-') || /↓|down/i.test(delta)) direction = 'down'
+        }
         return {
-          label: asString(row.label),
-          value: asString(row.value),
+          label: asString(row.label ?? row.title ?? row.name ?? row.metric ?? row.key),
+          value: asString(row.value ?? row.val ?? row.amount ?? row.number ?? row.score),
           unit: asString(row.unit),
-          delta: asString(row.delta),
-          direction: asString(row.direction),
+          delta,
+          direction,
         }
       })
       .filter((c) => c.label && c.value)
@@ -692,17 +1026,51 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     return {
       widget: { title: asString(p.title), cards },
       errors: cards.length ? [] : ['stat needs at least one card'],
-      repaired: false,
+      repaired,
     }
   },
 
   table: (p) => {
-    const columns = asArray(p.columns)
-      .map((c) => asString(c))
+    let repaired = false
+    const rawCols = asArray(p.columns ?? p.headers ?? p.fields)
+    const colKeys: string[] = []
+    let columns = rawCols
+      .map((c) => {
+        if (isObj(c)) {
+          const key = asString(c.key ?? c.field ?? c.id ?? c.label ?? c.title ?? c.header ?? c.name)
+          const label = asString(c.label ?? c.title ?? c.header ?? c.name ?? c.key ?? c.field)
+          if (key) colKeys.push(key)
+          return label
+        }
+        const s = asString(c)
+        if (s) colKeys.push(s)
+        return s
+      })
       .filter(Boolean)
       .slice(0, LIMITS.maxTableColumns)
-    const rows = asArray(p.rows)
-      .map((r) => asArray(r).map((c) => asString(c)).slice(0, columns.length))
+
+    const rawRows = asArray(p.rows ?? p.data ?? p.items)
+    // If rows are objects [{"Brand":"A","Price":"120"}] and columns were omitted,
+    // derive columns from the keys of the first row object.
+    if (columns.length === 0 && rawRows.length > 0 && isObj(rawRows[0])) {
+      const derived = Object.keys(rawRows[0]).slice(0, LIMITS.maxTableColumns)
+      columns = derived
+      colKeys.push(...derived)
+      repaired = true
+    }
+
+    const rows = rawRows
+      .map((r) => {
+        if (Array.isArray(r)) {
+          return r.map((c) => asString(c)).slice(0, columns.length)
+        }
+        if (isObj(r)) {
+          repaired = true
+          const keys = colKeys.length > 0 ? colKeys.slice(0, columns.length) : columns
+          return keys.map((k, idx) => asString(r[k] ?? r[columns[idx]] ?? Object.values(r)[idx]))
+        }
+        return []
+      })
       .filter((r) => r.length > 0)
       .slice(0, LIMITS.maxTableRows)
     const errors: string[] = []
@@ -711,53 +1079,89 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     return {
       widget: { title: asString(p.title), columns, rows, sortable: p.sortable === true },
       errors,
-      repaired: false,
+      repaired,
     }
   },
 
   compare: (p) => {
-    const side = (v: unknown) => {
+    let repaired = false
+    const side = (v: unknown, fallbackTitle = '') => {
+      if (Array.isArray(v)) {
+        repaired = true
+        return { title: fallbackTitle, items: v.map((i) => asString(i)).filter(Boolean) }
+      }
       const o = isObj(v) ? v : {}
+      const rawItems = asArray(o.items ?? o.points ?? o.bullets ?? o.features ?? o.list ?? o.pros ?? o.cons)
       return {
-        title: asString(o.title),
-        items: asArray(o.items).map((i) => asString(i)).filter(Boolean),
+        title: asString(o.title ?? o.label ?? o.name ?? o.heading, fallbackTitle),
+        items: rawItems.map((i) => (isObj(i) ? asString(i.text ?? i.label ?? i.title) : asString(i))).filter(Boolean),
       }
     }
-    const left = side(p.left)
-    const right = side(p.right)
+    const sidesArr = asArray(p.sides ?? p.columns ?? p.options)
+    let left = side(p.left)
+    let right = side(p.right)
+    if (!left.items.length && !right.items.length) {
+      if (p.pros !== undefined || p.cons !== undefined) {
+        left = side(p.pros, 'Pros')
+        right = side(p.cons, 'Cons')
+        repaired = true
+      } else if (p.a !== undefined || p.b !== undefined) {
+        left = side(p.a, 'Option A')
+        right = side(p.b, 'Option B')
+        repaired = true
+      } else if (p.before !== undefined && p.after !== undefined && (isObj(p.before) || Array.isArray(p.before))) {
+        left = side(p.before, 'Before')
+        right = side(p.after, 'After')
+        repaired = true
+      } else if (sidesArr.length >= 2) {
+        left = side(sidesArr[0], 'Left')
+        right = side(sidesArr[1], 'Right')
+        repaired = true
+      }
+    }
     return {
       widget: { title: asString(p.title), left, right },
       errors: left.items.length || right.items.length ? [] : ['compare needs items on a side'],
-      repaired: false,
+      repaired,
     }
   },
 
   progress: (p) => {
-    const items = asArray(p.items)
+    let repaired = false
+    const rawItems = asArray(p.items).length > 0 ? asArray(p.items) : asArray(p.bars ?? p.metrics ?? p.steps ?? p.tasks)
+    if (!Array.isArray(p.items) && rawItems.length > 0) repaired = true
+    const items = rawItems
       .map((i) => {
         const o = isObj(i) ? i : {}
-        const percent = asNumber(o.percent)
-        return { label: asString(o.label), percent: percent === null ? 0 : clamp(percent, 0, 100) }
+        const percent = asNumber(o.percent ?? o.value ?? o.progress ?? o.pct ?? o.score)
+        return { label: asString(o.label ?? o.title ?? o.name), percent: percent === null ? 0 : clamp(percent, 0, 100) }
       })
       .filter((i) => i.label)
     return {
       widget: { title: asString(p.title), items },
       errors: items.length ? [] : ['progress needs items'],
-      repaired: false,
+      repaired,
     }
   },
 
   timeline: (p) => {
-    const entries = asArray(p.entries)
+    let repaired = false
+    const rawEntries = asArray(p.entries).length > 0 ? asArray(p.entries) : asArray(p.events ?? p.items ?? p.milestones ?? p.steps ?? p.history)
+    if (!Array.isArray(p.entries) && rawEntries.length > 0) repaired = true
+    const entries = rawEntries
       .map((e) => {
         const o = isObj(e) ? e : {}
-        return { date: asString(o.date), title: asString(o.title), detail: asString(o.detail) }
+        return {
+          date: asString(o.date ?? o.time ?? o.year ?? o.when ?? o.period ?? o.phase ?? o.step),
+          title: asString(o.title ?? o.label ?? o.event ?? o.name ?? o.heading),
+          detail: asString(o.detail ?? o.description ?? o.body ?? o.text ?? o.summary),
+        }
       })
       .filter((e) => e.date && e.title)
     return {
       widget: { title: asString(p.title), entries },
       errors: entries.length ? [] : ['timeline needs dated entries'],
-      repaired: false,
+      repaired,
     }
   },
 
@@ -771,13 +1175,25 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
   },
 
   gauge: (p) => {
-    const items = asArray(p.items)
+    let repaired = false
+    let rawItems = asArray(p.items)
+    if (rawItems.length === 0) {
+      const alt = asArray(p.gauges ?? p.metrics ?? p.meters)
+      if (alt.length > 0) {
+        rawItems = alt
+        repaired = true
+      } else if (asString(p.label) && asNumber(p.value ?? p.percent) !== null) {
+        rawItems = [p]
+        repaired = true
+      }
+    }
+    const items = rawItems
       .map((i) => {
         const o = isObj(i) ? i : {}
-        const value = asNumber(o.value)
-        const max = asNumber(o.max)
+        const value = asNumber(o.value ?? o.val ?? o.percent ?? o.score)
+        const max = asNumber(o.max ?? o.total ?? o.target)
         return {
-          label: asString(o.label),
+          label: asString(o.label ?? o.title ?? o.name),
           value: value === null ? 0 : Math.max(0, value),
           max: max === null || max <= 0 ? 100 : max,
           unit: asString(o.unit),
@@ -788,21 +1204,50 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     return {
       widget: { title: asString(p.title), items },
       errors: items.length ? [] : ['gauge needs items'],
-      repaired: false,
+      repaired,
     }
   },
 
   quiz: (p) => {
-    const questions = asArray(p.questions)
+    let repaired = false
+    let rawQuestions = asArray(p.questions)
+    if (rawQuestions.length === 0) {
+      const alt = asArray(p.items ?? p.cards)
+      if (alt.length > 0) {
+        rawQuestions = alt
+        repaired = true
+      } else if (asString(p.q ?? p.question) && asArray(p.options ?? p.choices).length >= 2) {
+        rawQuestions = [p]
+        repaired = true
+      }
+    }
+    const questions = rawQuestions
       .map((q) => {
         const o = isObj(q) ? q : {}
-        const options = asArray(o.options).map((x) => asString(x)).filter(Boolean)
-        const answer = asNumber(o.answer)
+        const options = asArray(o.options ?? o.choices ?? o.answers)
+          .map((x) => (isObj(x) ? asString(x.label ?? x.text ?? x.value) : asString(x)))
+          .filter(Boolean)
+        const rawAns = o.answer ?? o.correct ?? o.correctAnswer
+        let answer = asNumber(rawAns)
+        if (answer === null && typeof rawAns === 'string' && options.length > 0) {
+          const trimmedAns = rawAns.trim()
+          const exactIdx = options.findIndex((opt) => opt.toLowerCase() === trimmedAns.toLowerCase())
+          if (exactIdx >= 0) {
+            answer = exactIdx
+            repaired = true
+          } else if (/^[A-Fa-f]$/.test(trimmedAns)) {
+            const letterIdx = trimmedAns.toUpperCase().charCodeAt(0) - 65
+            if (letterIdx >= 0 && letterIdx < options.length) {
+              answer = letterIdx
+              repaired = true
+            }
+          }
+        }
         return {
-          q: asString(o.q),
+          q: asString(o.q ?? o.question ?? o.prompt ?? o.title),
           options,
           answer: options.length ? clamp(answer === null ? 0 : answer, 0, options.length - 1) : 0,
-          explain: asString(o.explain),
+          explain: asString(o.explain ?? o.explanation ?? o.reason ?? o.rationale ?? o.detail),
         }
       })
       .filter((q) => q.q && q.options.length >= 2)
@@ -810,13 +1255,15 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     return {
       widget: { title: asString(p.title), questions },
       errors: questions.length ? [] : ['quiz needs questions with options'],
-      repaired: false,
+      repaired,
     }
   },
 
   form: (p) => {
     let repaired = false
-    const fields = asArray(p.fields)
+    const rawFields = asArray(p.fields).length > 0 ? asArray(p.fields) : asArray(p.inputs ?? p.controls ?? p.items ?? p.questions)
+    if (!Array.isArray(p.fields) && rawFields.length > 0) repaired = true
+    const fields = rawFields
       .map((f) => {
         const o = isObj(f) ? f : {}
         let type = asString(o.type, 'text')
@@ -826,47 +1273,63 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
         }
         return {
           type,
-          label: asString(o.label),
-          options: asArray(o.options).map((x) => asString(x)).filter(Boolean),
+          label: asString(o.label ?? o.name ?? o.title ?? o.placeholder ?? o.key),
+          options: asArray(o.options ?? o.choices ?? o.values)
+            .map((x) => (isObj(x) ? asString(x.label ?? x.value ?? x.text) : asString(x)))
+            .filter(Boolean),
           required: o.required === true,
           min: asNumber(o.min),
           max: asNumber(o.max),
-          value: asNumber(o.value),
+          value: asNumber(o.value ?? o.default),
           unit: asString(o.unit),
         }
       })
       .filter((f) => f.label)
       .slice(0, LIMITS.maxFormFields)
     return {
-      widget: { title: asString(p.title), submitLabel: asString(p.submitLabel), fields },
+      widget: { title: asString(p.title), submitLabel: asString(p.submitLabel ?? p.button ?? p.cta), fields },
       errors: fields.length ? [] : ['form needs labelled fields'],
       repaired,
     }
   },
 
   carousel: (p) => {
-    const items = asArray(p.items)
+    let repaired = false
+    const rawItems = asArray(p.items).length > 0 ? asArray(p.items) : asArray(p.slides ?? p.images ?? p.cards ?? p.photos)
+    if (!Array.isArray(p.items) && rawItems.length > 0) repaired = true
+    const items = rawItems
       .map((i) => {
+        if (typeof i === 'string') return { image: i, caption: '' }
         const o = isObj(i) ? i : {}
-        return { image: asString(o.image), caption: asString(o.caption) }
+        return {
+          image: asString(o.image ?? o.url ?? o.src ?? o.thumb),
+          caption: asString(o.caption ?? o.title ?? o.label ?? o.alt ?? o.text),
+        }
       })
       .filter((i) => isHttps(i.image))
       .slice(0, 20)
     return {
       widget: { title: asString(p.title), items },
       errors: items.length ? [] : ['carousel needs https images'],
-      repaired: false,
+      repaired,
     }
   },
 
   cards: (p) => {
-    const cards = asArray(p.cards)
+    let repaired = false
+    const rawCards = asArray(p.cards).length > 0 ? asArray(p.cards) : asArray(p.items ?? p.options)
+    if (!Array.isArray(p.cards) && rawCards.length > 0) repaired = true
+    const cards = rawCards
       .map((c) => {
         const o = isObj(c) ? c : {}
+        // A {label, value} pair without `title` is a KPI stat card, not a browsing card.
+        if (o.title === undefined && o.label !== undefined && o.value !== undefined) {
+          return { title: '', subtitle: '', prompt: '' }
+        }
         return {
-          title: asString(o.title),
-          subtitle: asString(o.subtitle),
-          prompt: asString(o.prompt),
+          title: asString(o.title ?? o.label ?? o.name ?? o.heading),
+          subtitle: asString(o.subtitle ?? o.detail ?? o.description ?? o.body ?? o.text ?? o.meta),
+          prompt: asString(o.prompt ?? o.action ?? o.query ?? o.value),
         }
       })
       .filter((c) => c.title)
@@ -874,16 +1337,22 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     return {
       widget: { title: asString(p.title), cards },
       errors: cards.length ? [] : ['cards need titles'],
-      repaired: false,
+      repaired,
     }
   },
 
   followups: (p) => {
-    const prompts = asArray(p.prompts).map((x) => asString(x)).filter(Boolean).slice(0, 12)
+    let repaired = false
+    const rawPrompts = asArray(p.prompts).length > 0 ? asArray(p.prompts) : asArray(p.questions ?? p.suggestions ?? p.items ?? p.options ?? p.followups)
+    if (!Array.isArray(p.prompts) && rawPrompts.length > 0) repaired = true
+    const prompts = rawPrompts
+      .map((x) => (isObj(x) ? asString(x.prompt ?? x.label ?? x.text ?? x.title ?? x.question) : asString(x)))
+      .filter(Boolean)
+      .slice(0, 12)
     return {
       widget: { title: asString(p.title), prompts },
       errors: prompts.length ? [] : ['followups need prompts'],
-      repaired: false,
+      repaired,
     }
   },
 
@@ -894,7 +1363,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     //   {"title":…,"pages":3}                      — a page COUNT only
     const pages = asArray(p.pages)
       .map((x) => (x && typeof x === 'object' ? (x as Record<string, unknown>) : {}))
-      .map((o) => ({ page: asNumber(o.page) ?? 0, text: asString(o.text) }))
+      .map((o, idx) => ({ page: asNumber(o.page) ?? idx + 1, text: asString(o.text ?? o.body ?? o.content) }))
       .filter((x) => x.text.trim().length > 0)
       .slice(0, 20)
     const pageCount =
@@ -916,35 +1385,36 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     // A ```search fence carries `results` for the same list — the probe watched
     // the live server send it, and the validator called it empty.
     let rawItems = asArray(p.items)
-    if (rawItems.length === 0 && asArray(p.results).length > 0) {
-      rawItems = asArray(p.results)
+    if (rawItems.length === 0 && asArray(p.results ?? p.images ?? p.links ?? p.files ?? p.products).length > 0) {
+      rawItems = asArray(p.results ?? p.images ?? p.links ?? p.files ?? p.products)
       repaired = true
     }
-    if (rawItems.length === 0 && asString(p.url)) {
-      rawItems = [{ url: p.url, thumb: p.thumb, title: p.title, caption: p.caption }]
+    if (rawItems.length === 0 && asString(p.url ?? p.src ?? p.image)) {
+      rawItems = [{ url: p.url ?? p.src ?? p.image, thumb: p.thumb, title: p.title, caption: p.caption }]
     }
     const items = rawItems
       .map((i) => {
+        if (typeof i === 'string') return { url: i, thumb: '', title: '', subtitle: '', caption: '', meta: '', prompt: '', domain: '', snippet: '', price: '', badge: '', rating: '', mime: '' }
         const o = isObj(i) ? i : {}
         return {
-          url: asString(o.url),
-          thumb: asString(o.thumb),
-          title: asString(o.title),
-          subtitle: asString(o.subtitle),
-          caption: asString(o.caption),
+          url: asString(o.url ?? o.src ?? o.image ?? o.href),
+          thumb: asString(o.thumb ?? o.thumbnail),
+          title: asString(o.title ?? o.name ?? o.label),
+          subtitle: asString(o.subtitle ?? o.author),
+          caption: asString(o.caption ?? o.description ?? o.alt),
           meta: asString(o.meta),
           prompt: asString(o.prompt),
-          domain: asString(o.domain),
-          snippet: asString(o.snippet),
+          domain: asString(o.domain ?? o.source),
+          snippet: asString(o.snippet ?? o.summary ?? o.text),
           price: asString(o.price),
-          badge: asString(o.badge),
+          badge: asString(o.badge ?? o.tag),
           rating: asString(o.rating),
           mime: asString(o.mime),
         }
       })
       .slice(0, 20)
     const code = asString(p.code)
-    const text = asString(p.text)
+    const text = asString(p.text ?? p.content ?? p.body)
     const ok = items.length > 0 || code.length > 0 || text.length > 0 || pages.length > 0 || pageCount > 0
     return {
       widget: { type, title: asString(p.title), items, code, language: asString(p.language), text, pages, pageCount },
@@ -955,18 +1425,22 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
 
   actions: (p) => {
     let repaired = false
-    const buttons = asArray(p.buttons)
+    const rawButtons = asArray(p.buttons).length > 0 ? asArray(p.buttons) : asArray(p.actions ?? p.items ?? p.options)
+    if (!Array.isArray(p.buttons) && rawButtons.length > 0) repaired = true
+    const buttons = rawButtons
       .map((b) => {
+        if (typeof b === 'string') return { label: b, kind: 'prompt', value: b, style: 'filled' }
         const o = isObj(b) ? b : {}
-        let kind = asString(o.kind, 'prompt')
+        let kind = asString(o.kind ?? o.type, 'prompt')
         if (!['prompt', 'copy', 'open'].includes(kind)) {
           kind = 'prompt'
           repaired = true
         }
+        const label = asString(o.label ?? o.title ?? o.text ?? o.name)
         return {
-          label: asString(o.label),
+          label,
           kind,
-          value: asString(o.value),
+          value: asString(o.value ?? o.prompt ?? o.url ?? o.href ?? o.action, label),
           style: asString(o.style, 'filled'),
         }
       })
@@ -981,13 +1455,14 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
 
   panel: (p) => {
     const widget = {
-      title: asString(p.title),
-      summary: asString(p.summary),
-      body: asString(p.body),
+      title: asString(p.title ?? p.heading ?? p.label),
+      summary: asString(p.summary ?? p.subtitle ?? p.header),
+      body: asString(p.body ?? p.text ?? p.content ?? p.detail ?? p.description ?? p.message ?? p.callout ?? p.note),
       expanded: p.expanded === true,
-      badges: asArray(p.badges).map((b) => {
+      badges: asArray(p.badges ?? p.tags).map((b) => {
+        if (typeof b === 'string') return { label: b, tone: 'accent' }
         const o = isObj(b) ? b : {}
-        return { label: asString(o.label), tone: asString(o.tone, 'accent') }
+        return { label: asString(o.label ?? o.text ?? o.name), tone: asString(o.tone, 'accent') }
       }),
       popover: asString(p.popover),
     }
@@ -1000,9 +1475,9 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
 
   voice: (p) => {
     const widget = {
-      title: asString(p.title),
-      prompt: asString(p.prompt),
-      hint: asString(p.hint),
+      title: asString(p.title ?? p.label),
+      prompt: asString(p.prompt ?? p.text ?? p.query),
+      hint: asString(p.hint ?? p.subtitle ?? p.detail),
     }
     return {
       widget,
@@ -1018,30 +1493,39 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       type = 'finance'
       repaired = true
     }
-    const fields = asArray(p.fields)
-      .map((f) => {
+    const rawFields = asArray(p.fields).length > 0 ? asArray(p.fields) : asArray(p.inputs ?? p.variables ?? p.parameters)
+    if (!Array.isArray(p.fields) && rawFields.length > 0) repaired = true
+    const fields = rawFields
+      .map((f, idx) => {
         const o = isObj(f) ? f : {}
+        const label = asString(o.label ?? o.title ?? o.name ?? o.key)
+        const key =
+          asString(o.key ?? o.id ?? o.name) ||
+          label.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') ||
+          `x${idx + 1}`
         return {
-          key: asString(o.key),
-          label: asString(o.label),
-          value: asNumber(o.value) ?? 0,
+          key,
+          label: label || key,
+          value: asNumber(o.value ?? o.default) ?? 0,
           unit: asString(o.unit),
           min: asNumber(o.min),
           max: asNumber(o.max),
           step: asNumber(o.step),
-          choices: asArray(o.choices).map((c) => {
+          choices: asArray(o.choices ?? o.options).map((c) => {
             const ch = isObj(c) ? c : {}
-            return { label: asString(ch.label), value: asNumber(ch.value) ?? 0 }
+            return { label: asString(ch.label ?? ch.name), value: asNumber(ch.value) ?? 0 }
           }),
         }
       })
       .filter((f) => f.key && f.label)
-    const outputs = asArray(p.outputs)
+    const rawOutputs = asArray(p.outputs).length > 0 ? asArray(p.outputs) : asArray(p.results ?? p.formulas)
+    if (!Array.isArray(p.outputs) && rawOutputs.length > 0) repaired = true
+    const outputs = rawOutputs
       .map((o) => {
         const row = isObj(o) ? o : {}
         return {
-          label: asString(row.label),
-          expr: asString(row.expr),
+          label: asString(row.label ?? row.title ?? row.name),
+          expr: asString(row.expr ?? row.formula ?? row.expression ?? row.calc),
           unit: asString(row.unit),
           format: asString(row.format),
           primary: row.primary === true,
@@ -1065,16 +1549,18 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       type = 'wizard'
       repaired = true
     }
+    const rawItems = asArray(p.items).length > 0 ? asArray(p.items) : asArray(p.events ?? p.tasks ?? p.cards ?? p.files ?? p.metrics)
+    if (!Array.isArray(p.items) && rawItems.length > 0) repaired = true
     const widget = {
       type,
       title: asString(p.title),
-      steps: asArray(p.steps),
-      columns: asArray(p.columns),
-      items: asArray(p.items).slice(0, LIMITS.maxAppItems),
-      groups: asArray(p.groups),
-      rows: asArray(p.rows),
-      slots: asArray(p.slots),
-      month: asString(p.month),
+      steps: asArray(p.steps ?? p.stages),
+      columns: asArray(p.columns ?? p.lanes ?? p.boards),
+      items: rawItems.slice(0, LIMITS.maxAppItems),
+      groups: asArray(p.groups ?? p.sections ?? p.categories),
+      rows: asArray(p.rows ?? p.data),
+      slots: asArray(p.slots ?? p.times),
+      month: asString(p.month ?? p.date),
       submitLabel: asString(p.submitLabel),
     }
     const hasBody =
@@ -1096,13 +1582,16 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
   // ------------------------------------------------------------------
 
   tabs: (p) => {
-    const tabs = asArray(p.tabs)
+    let repaired = false
+    const rawTabs = asArray(p.tabs).length > 0 ? asArray(p.tabs) : asArray(p.sections ?? p.panels ?? p.items ?? p.views)
+    if (!Array.isArray(p.tabs) && rawTabs.length > 0) repaired = true
+    const tabs = rawTabs
       .map((t) => {
         const o = isObj(t) ? t : {}
         return {
-          label: asString(o.label),
-          body: asString(o.body),
-          items: asArray(o.items).map((i) => asString(i)).filter(Boolean).slice(0, LIMITS.maxAppItems),
+          label: asString(o.label ?? o.title ?? o.name ?? o.tab),
+          body: asString(o.body ?? o.content ?? o.text ?? o.detail ?? o.description),
+          items: asArray(o.items ?? o.bullets ?? o.points).map((i) => asString(i)).filter(Boolean).slice(0, LIMITS.maxAppItems),
         }
       })
       .filter((t) => t.label && (t.body || t.items.length > 0))
@@ -1110,18 +1599,21 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     return {
       widget: { title: asString(p.title), tabs },
       errors: tabs.length ? [] : ['tabs need at least one labelled tab'],
-      repaired: false,
+      repaired,
     }
   },
 
   accordion: (p) => {
-    const sections = asArray(p.sections ?? p.items)
+    let repaired = false
+    const rawSections = asArray(p.sections ?? p.items).length > 0 ? asArray(p.sections ?? p.items) : asArray(p.panels ?? p.faqs ?? p.questions)
+    if (!Array.isArray(p.sections) && !Array.isArray(p.items) && rawSections.length > 0) repaired = true
+    const sections = rawSections
       .map((s) => {
         const o = isObj(s) ? s : {}
         return {
-          label: asString(o.label ?? o.title),
-          body: asString(o.body ?? o.detail),
-          expanded: o.expanded === true,
+          label: asString(o.label ?? o.title ?? o.question ?? o.q ?? o.heading ?? o.summary),
+          body: asString(o.body ?? o.detail ?? o.content ?? o.text ?? o.answer ?? o.a ?? o.description),
+          expanded: o.expanded === true || o.open === true,
         }
       })
       .filter((s) => s.label && s.body)
@@ -1129,18 +1621,29 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     return {
       widget: { title: asString(p.title), sections },
       errors: sections.length ? [] : ['accordion needs labelled sections with body text'],
-      repaired: false,
+      repaired,
     }
   },
 
   steps: (p) => {
-    const stepList = asArray(p.steps)
+    let repaired = false
+    const rawSteps = asArray(p.steps).length > 0 ? asArray(p.steps) : asArray(p.items ?? p.stages ?? p.phases)
+    if (!Array.isArray(p.steps) && rawSteps.length > 0) repaired = true
+    const stepList = rawSteps
       .map((s) => {
+        if (typeof s === 'string') return { title: s, body: '', state: 'todo' }
         const o = isObj(s) ? s : {}
+        const rawState = asString(o.state ?? o.status).toLowerCase()
+        const state =
+          rawState === 'done' || rawState === 'completed' || rawState === 'complete' || rawState === 'finished' || o.done === true
+            ? 'done'
+            : rawState === 'current' || rawState === 'active' || rawState === 'in_progress' || rawState === 'in-progress' || rawState === 'doing'
+              ? 'current'
+              : 'todo'
         return {
-          title: asString(o.title),
-          body: asString(o.body ?? o.detail),
-          state: ['done', 'current', 'todo'].includes(asString(o.state)) ? asString(o.state) : 'todo',
+          title: asString(o.title ?? o.label ?? o.name ?? o.step),
+          body: asString(o.body ?? o.detail ?? o.description ?? o.text),
+          state,
         }
       })
       .filter((s) => s.title)
@@ -1148,18 +1651,19 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     return {
       widget: { title: asString(p.title), steps: stepList },
       errors: stepList.length ? [] : ['steps need titled steps'],
-      repaired: false,
+      repaired,
     }
   },
 
   menu: (p) => {
-    const options = asArray(p.options ?? p.items)
+    const options = asArray(p.options ?? p.items ?? p.choices ?? p.actions)
       .map((o) => {
         const row = isObj(o) ? o : {}
+        const label = typeof o === 'string' ? o : asString(row.label ?? row.title ?? row.text ?? row.name)
         return {
-          label: typeof o === 'string' ? o : asString(row.label),
-          detail: asString(row.detail),
-          prompt: asString(row.prompt ?? row.value),
+          label,
+          detail: asString(row.detail ?? row.description ?? row.subtitle),
+          prompt: asString(row.prompt ?? row.value ?? row.action, label),
         }
       })
       .filter((o) => o.label)
@@ -1172,12 +1676,13 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
   },
 
   chips: (p) => {
-    const options = asArray(p.options ?? p.chips)
+    const options = asArray(p.options ?? p.chips ?? p.items ?? p.tags ?? p.choices)
       .map((o) => {
         const row = isObj(o) ? o : {}
+        const label = typeof o === 'string' ? o : asString(row.label ?? row.title ?? row.text ?? row.name)
         return {
-          label: typeof o === 'string' ? o : asString(row.label),
-          prompt: asString(row.prompt ?? row.value),
+          label,
+          prompt: asString(row.prompt ?? row.value ?? row.action, label),
         }
       })
       .filter((o) => o.label)
@@ -1191,15 +1696,15 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
 
   rating: (p) => {
     let repaired = false
-    let style = asString(p.style, 'star')
+    let style = asString(p.style ?? p.type, 'star')
     if (!['star', 'heart', 'thumb', 'nps'].includes(style)) {
       style = 'star'
       repaired = true
     }
     const widget = {
-      title: asString(p.title),
-      prompt: asString(p.prompt),
-      max: clamp(asNumber(p.max) ?? (style === 'nps' ? 11 : 5), 2, 11),
+      title: asString(p.title ?? p.question),
+      prompt: asString(p.prompt ?? p.subtitle ?? p.label),
+      max: clamp(asNumber(p.max ?? p.scale) ?? (style === 'nps' ? 11 : 5), 2, 11),
       style,
       labels: asArray(p.labels).map((l) => asString(l)).slice(0, 2),
     }
@@ -1211,27 +1716,32 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
   },
 
   poll: (p) => {
-    const options = asArray(p.options)
+    const options = asArray(p.options ?? p.choices ?? p.items ?? p.answers)
       .map((o) => {
         const row = isObj(o) ? o : {}
-        return typeof o === 'string' ? { label: o, votes: 0 } : { label: asString(row.label), votes: asNumber(row.votes) ?? 0 }
+        return typeof o === 'string'
+          ? { label: o, votes: 0 }
+          : {
+              label: asString(row.label ?? row.text ?? row.option ?? row.title ?? row.choice),
+              votes: asNumber(row.votes ?? row.count ?? row.value) ?? 0,
+            }
       })
       .filter((o) => o.label)
       .slice(0, LIMITS.maxOptions)
     return {
-      widget: { title: asString(p.title), question: asString(p.question), options },
+      widget: { title: asString(p.title), question: asString(p.question ?? p.prompt ?? p.q ?? p.title), options },
       errors: options.length >= 2 ? [] : ['poll needs at least two options'],
       repaired: false,
     }
   },
 
   diff: (p) => {
-    const before = asString(p.before ?? p.old)
-    const after = asString(p.after ?? p.newText ?? p.updated)
-    const unified = asString(p.unified)
+    const before = asString(p.before ?? p.old ?? p.original ?? p.left ?? p.oldCode)
+    const after = asString(p.after ?? p.newText ?? p.updated ?? p.new ?? p.right ?? p.newCode)
+    const unified = asString(p.unified ?? p.patch ?? p.diff)
     const ok = unified.length > 0 || before.length > 0 || after.length > 0
     return {
-      widget: { title: asString(p.title), language: asString(p.language), before, after, unified },
+      widget: { title: asString(p.title), language: asString(p.language ?? p.lang), before, after, unified },
       errors: ok ? [] : ['diff needs before/after or a unified patch'],
       repaired: false,
     }
@@ -1242,17 +1752,22 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       if (depth > LIMITS.maxTreeDepth) return null
       if (typeof v === 'string') return { label: v, detail: '', children: [] }
       const o = isObj(v) ? v : {}
-      const label = asString(o.label ?? o.name ?? o.title)
+      const label = asString(o.label ?? o.name ?? o.title ?? o.id)
       if (!label) return null
       return {
         label,
-        detail: asString(o.detail ?? o.meta),
-        children: asArray(o.children)
+        detail: asString(o.detail ?? o.meta ?? o.description ?? o.value),
+        children: asArray(o.children ?? o.items ?? o.nodes ?? o.subitems)
           .map((c) => read(c, depth + 1))
           .filter((c): c is { label: string; detail: string; children: unknown[] } => c !== null),
       }
     }
-    const rawRoots = asArray(p.roots).length > 0 ? asArray(p.roots) : isObj(p.root) ? [p.root] : asArray(p.nodes)
+    const rawRoots =
+      asArray(p.roots).length > 0
+        ? asArray(p.roots)
+        : isObj(p.root ?? p.tree ?? p.hierarchy)
+          ? [p.root ?? p.tree ?? p.hierarchy]
+          : asArray(p.nodes ?? p.items ?? p.children)
     const roots = rawRoots
       .map((r) => read(r, 0))
       .filter((r): r is { label: string; detail: string; children: unknown[] } => r !== null)
@@ -1265,10 +1780,13 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
   },
 
   flashcards: (p) => {
-    const cards = asArray(p.cards)
+    const cards = asArray(p.cards ?? p.items ?? p.deck ?? p.pairs ?? p.questions)
       .map((c) => {
         const o = isObj(c) ? c : {}
-        return { front: asString(o.front ?? o.q ?? o.question), back: asString(o.back ?? o.a ?? o.answer) }
+        return {
+          front: asString(o.front ?? o.q ?? o.question ?? o.term ?? o.prompt ?? o.title),
+          back: asString(o.back ?? o.a ?? o.answer ?? o.definition ?? o.detail ?? o.body ?? o.text),
+        }
       })
       .filter((c) => c.front && c.back)
       .slice(0, LIMITS.maxFlashcards)
@@ -1280,13 +1798,13 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
   },
 
   checklist: (p) => {
-    const items = asArray(p.items)
+    const items = asArray(p.items ?? p.tasks ?? p.todos ?? p.steps ?? p.list)
       .map((i) => {
         const o = isObj(i) ? i : {}
         return {
-          label: typeof i === 'string' ? i : asString(o.label ?? o.title),
-          detail: asString(o.detail),
-          done: o.done === true,
+          label: typeof i === 'string' ? i : asString(o.label ?? o.title ?? o.text ?? o.task ?? o.name),
+          detail: asString(o.detail ?? o.description ?? o.note ?? o.body),
+          done: o.done === true || o.checked === true || o.completed === true || o.status === 'done',
         }
       })
       .filter((i) => i.label)

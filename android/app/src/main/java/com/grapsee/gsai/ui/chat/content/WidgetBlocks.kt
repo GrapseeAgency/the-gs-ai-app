@@ -150,16 +150,38 @@ internal object PointListSerializer : KSerializer<List<List<Float>>> {
         is JsonArray -> {
             val numbers = item.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
             when {
-                numbers.size >= 2 -> listOf(numbers[0], numbers[1])
+                // Preserve up to 5 coordinates so 2D [x, y], 3D bubble [x, y, z],
+                // and 4D candlestick [o, h, l, c] all survive intact.
+                numbers.size >= 2 -> numbers.take(5)
                 numbers.size == 1 -> listOf(index.toFloat(), numbers[0])
                 else -> null
             }
         }
         is JsonObject -> {
-            val y = (item["y"] as? JsonPrimitive)?.floatOrNull
-                ?: (item["value"] as? JsonPrimitive)?.floatOrNull
-            if (y == null) null
-            else listOf((item["x"] as? JsonPrimitive)?.floatOrNull ?: index.toFloat(), y)
+            val o = (item["open"] as? JsonPrimitive)?.floatOrNull ?: (item["o"] as? JsonPrimitive)?.floatOrNull
+            val h = (item["high"] as? JsonPrimitive)?.floatOrNull ?: (item["h"] as? JsonPrimitive)?.floatOrNull
+            val l = (item["low"] as? JsonPrimitive)?.floatOrNull ?: (item["l"] as? JsonPrimitive)?.floatOrNull
+            val c = (item["close"] as? JsonPrimitive)?.floatOrNull ?: (item["c"] as? JsonPrimitive)?.floatOrNull
+            if (o != null && h != null && l != null && c != null) {
+                listOf(o, h, l, c)
+            } else {
+                val y = (item["y"] as? JsonPrimitive)?.floatOrNull
+                    ?: (item["value"] as? JsonPrimitive)?.floatOrNull
+                    ?: (item["val"] as? JsonPrimitive)?.floatOrNull
+                    ?: (item["v"] as? JsonPrimitive)?.floatOrNull
+                    ?: (item["score"] as? JsonPrimitive)?.floatOrNull
+                    ?: (item["count"] as? JsonPrimitive)?.floatOrNull
+                    ?: (item["amount"] as? JsonPrimitive)?.floatOrNull
+                if (y == null) null
+                else {
+                    val x = (item["x"] as? JsonPrimitive)?.floatOrNull ?: index.toFloat()
+                    val z = (item["z"] as? JsonPrimitive)?.floatOrNull
+                        ?: (item["size"] as? JsonPrimitive)?.floatOrNull
+                        ?: (item["r"] as? JsonPrimitive)?.floatOrNull
+                        ?: (item["radius"] as? JsonPrimitive)?.floatOrNull
+                    if (z != null) listOf(x, y, z) else listOf(x, y)
+                }
+            }
         }
         else -> null
     }
@@ -855,20 +877,43 @@ fun inferWidgetKind(json: String): String? {
     } ?: return null
     val keys = obj.keys
     val candidates = buildList {
-        if ("series" in keys) add("chart")
-        if ("columns" in keys && "rows" in keys) add("table")
-        if ("cards" in keys) add("stat")
-        if ("entries" in keys) add("timeline")
+        // Explicit kind / sub-type discriminators
+        for (k in listOf("kind", "widget", "type", "sim", "view", "surface", "editor")) {
+            val raw = (obj[k] as? JsonPrimitive)?.contentOrNull?.trim() ?: continue
+            val mapped = widgetKindOf(raw)
+            if (mapped != null && mapped !in this) add(mapped)
+        }
+        // Structural signatures across all supported kinds
         if (("rows" in keys || "items" in keys) && hasTimedRows(obj)) add("plan")
+        if ("series" in keys || "nodes" in keys && "links" in keys || "words" in keys || "root" in keys || "axes" in keys) add("chart")
+        if ("columns" in keys && "rows" in keys) {
+            add("table"); add("editor"); add("app")
+        }
+        if ("cards" in keys) {
+            add("stat"); add("cards")
+        }
+        if ("left" in keys && "right" in keys) add("compare")
+        if ("entries" in keys) add("timeline")
         if ("questions" in keys) add("quiz")
         if ("fields" in keys) add("form")
         if ("prompts" in keys) add("followups")
         if ("buttons" in keys) add("actions")
+        if ("phrases" in keys) add("voice")
+        if ("sliders" in keys || "outputs" in keys) add("calc")
+        if ("sim" in keys) add("sim")
+        if ("view" in keys || "bonds" in keys || "z" in keys) add("stage3d")
+        if ("surface" in keys) {
+            add("canvas"); add("collab")
+        }
+        if ("editor" in keys || "tracks" in keys || "cells" in keys || "blocks" in keys) add("editor")
+        if ("commands" in keys || "cwd" in keys) add("terminal")
+        if ("room" in keys) add("collab")
         if ("items" in keys) {
-            add("progress"); add("gauge"); add("carousel"); add("app"); add("media")
+            add("progress"); add("gauge"); add("carousel"); add("cards"); add("app"); add("media"); add("collab")
         }
         if ("pages" in keys) add("media")
-        if ("steps" in keys || "groups" in keys) add("app")
+        if ("steps" in keys || "groups" in keys || "slots" in keys) add("app")
+        if ("body" in keys && ("title" in keys || "tone" in keys || "cta" in keys)) add("panel")
     }
     return candidates.firstOrNull {
         if (it == "plan") parseNexlyPlanData(json) != null else parseWidget(it, json) != null

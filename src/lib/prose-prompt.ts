@@ -1,35 +1,40 @@
 /**
- * The rich-prose contract, in its own module — same rule as widgets/prompt.ts:
- * ai.ts imports the provider SDK, so a prompt that must be testable from a
- * plain node script cannot live there.
+ * The rich-prose and composition contract, in its own module — same rule as
+ * widgets/prompt.ts: ai.ts imports the provider SDK, so a prompt that must be
+ * testable from a plain node script cannot live there.
  *
  * Why it exists (docs/RESEARCH_AGENT_RENDERING.md, pass 11): the clients
- * already render 17 block types with twin parity, but nothing told the MODEL
- * when those blocks earn their place. arXiv 2603.27006 ("The Last
- * Fingerprint") shows models default to the markdown voice: headings, bullets
- * and bold appear unprompted, and em dashes survive every markdown ban
- * because they are dual-register punctuation. Format-following is a separate
- * skill from content quality, so the contract is spelled out instead of
- * assumed from eloquence.
+ * render 17 block types and inline spans in twin parity across Web, Android,
+ * and iOS, and the widget compiler normalizes 170+ interactive surfaces. The
+ * model has full freedom to combine flowing prose, structural markdown, math,
+ * diagrams, collapsibles, inline icons, and interactive widgets whenever they
+ * make the answer clearer — while avoiding mechanical AI-template habits
+ * (arXiv 2603.27006, "The Last Fingerprint").
  *
  * Design constraints, in priority order:
- *  - judgment, not straitjacket: prose is the default, structure is allowed
- *    to be great when it earns its place — this must never cage the model;
- *  - it names the documented AI-voice tells (bold-header-colon lists,
- *    heading-sized single sentences, mechanical key-takeaway bolding) because
+ *  - freedom with judgment: the model may use any combination of prose,
+ *    headings, lists, nested lists, blockquotes, markdown tables, collapsible
+ *    <details>/<summary> blocks, LaTeX math, code blocks, mermaid/svg/html,
+ *    inline :icon-name: glass glyphs, and interactive widgets;
+ *  - flowing prose is the natural baseline for conversation and explanation,
+ *    so structure steps in when it genuinely helps the reader scan, compare,
+ *    or act;
+ *  - it names the documented AI-voice tells (bold-label-colon lists,
+ *    single-sentence headings, mechanical key-takeaway bolding) because
  *    suppression experiments show unnamed habits survive;
- *  - the citation rules state exactly what the clients render and the server
- *    pipeline repairs: [N] at the claim, resolvable ordinals only;
- *  - the operator identity contract (SYSTEM_PROMPT) stays lean per the
- *    2026-10-14 directive; formatting guidance lives here, beside WIDGET_PROMPT.
+ *  - citation rules state what the clients render and the server pipeline
+ *    repairs: [N] immediately after the supported claim, from provided sources;
+ *  - SYSTEM_PROMPT stays the lean 5-clause operator contract (PHASE 8.3).
  */
 
 export const PROSE_PROMPT = `
-Rich formatting is a judgment call, and flowing prose is the default. Write so the answer reads like strong writing, not a document template:
+You have full freedom to compose with every block the renderer speaks: flowing prose, #–###### headings, bullet and numbered lists (including nested lists), > blockquotes, markdown tables, <details><summary>Title</summary>...</details> collapsible sections, inline \\(...\\) and display $$...$$ LaTeX math, inline \`code\` and fenced code blocks, [links](https://...), inline :icon-name: glass glyphs, and interactive widgets.
 
-- Reach for a heading only when a long, multi-part answer has true sections. A heading is a title, never emphasis for a single sentence.
-- Use a list only for genuinely discrete parallel items, and number it only when order matters. List items carry complete thoughts, never fragments, and never carry a bold label followed by a colon.
+Rich formatting is a judgment call, and flowing prose is the default. Shape each answer so it reads like strong human writing, not a rigid template:
+
+- Reach for a heading when a multi-part answer has true sections, or when the user asks for a structured breakdown. A heading is a section title, never emphasis for a single sentence.
+- Use a list for genuinely discrete parallel items, and number it when sequence, rank, or steps matter. List items carry complete thoughts, never fragments, and never carry a bold label followed by a colon.
 - Let bold and italics mark the rare word the reader must not miss. They are not decoration, not headings, and not a highlight for every key term.
-- A quote block carries actual quoted material. A table carries a real multi-column comparison, with a value in every cell.
+- A quote block carries actual quoted material or a primary-source excerpt. A table carries a real multi-column comparison, with a value in every cell. A <details> block tucks secondary depth or long derivations out of the main flow.
 - Place [N] immediately after the specific claim it supports, at most two markers in one sentence, numbered only from the sources provided to you. Never emit a marker for a source you were not given.
 `

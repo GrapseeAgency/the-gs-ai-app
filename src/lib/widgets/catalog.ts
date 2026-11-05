@@ -305,10 +305,159 @@ const COLLAB_ALIASES = COLLAB_TYPES as readonly string[]
 /** ```code is source code, never a media widget. */
 const MEDIA_ALIASES = (MEDIA_TYPES as readonly string[]).filter((t) => t !== 'code')
 
+/**
+ * Natural chart fence names models invent when given open-ended freedom
+ * (```barchart, ```piechart, ```doughnut, ```scatterplot, ```ohlc...).
+ * Mapped to their canonical CHART_TYPES value so both widgetKindOf() and
+ * canonicalChartType() resolve them without dropping the fence.
+ */
+const CHART_SYNONYMS: Readonly<Record<string, (typeof CHART_TYPES)[number]>> = {
+  barchart: 'bar',
+  'bar-chart': 'bar',
+  column: 'bar',
+  columnchart: 'bar',
+  'column-chart': 'bar',
+  hbarchart: 'hbar',
+  'horizontal-bar': 'hbar',
+  horizontalbar: 'hbar',
+  linechart: 'line',
+  'line-chart': 'line',
+  sparkline: 'line',
+  areachart: 'area',
+  'area-chart': 'area',
+  'stacked-area': 'stackedArea',
+  'stacked-bar': 'stacked',
+  stackedbar: 'stacked',
+  'grouped-bar': 'grouped',
+  groupedbar: 'grouped',
+  piechart: 'pie',
+  'pie-chart': 'pie',
+  donutchart: 'donut',
+  'donut-chart': 'donut',
+  doughnut: 'donut',
+  doughnutchart: 'donut',
+  scatterplot: 'scatter',
+  'scatter-plot': 'scatter',
+  bubblechart: 'bubble',
+  'bubble-chart': 'bubble',
+  radarchart: 'radar',
+  'radar-chart': 'radar',
+  spider: 'radar',
+  spiderchart: 'radar',
+  funnelchart: 'funnel',
+  'funnel-chart': 'funnel',
+  ganttchart: 'gantt',
+  'gantt-chart': 'gantt',
+  sankeydiagram: 'sankey',
+  treemapchart: 'treemap',
+  waterfallchart: 'waterfall',
+  candlestickchart: 'candlestick',
+  ohlc: 'candlestick',
+  boxplotchart: 'boxplot',
+  'box-plot': 'boxplot',
+  wordcloudchart: 'wordcloud',
+  'word-cloud': 'wordcloud',
+  sunburstchart: 'sunburst',
+  bulletchart: 'bullet',
+  forcegraph: 'force',
+  'force-graph': 'force',
+  parallelcoords: 'parallel',
+  depthchart: 'depth',
+  orderbook: 'depth',
+  'order-book': 'depth',
+  plot: 'bar',
+  graph: 'bar',
+}
+
+/**
+ * Natural fence synonyms for top-level widget kinds when models name the
+ * concept rather than the catalogue slug (```kpi, ```proscons, ```callout,
+ * ```faq, ```todos, ```calculator...).
+ */
+const KIND_SYNONYMS: Readonly<Record<string, WidgetKind>> = {
+  stats: 'stat',
+  kpi: 'stat',
+  kpis: 'stat',
+  metrics: 'stat',
+  metric: 'stat',
+  scorecard: 'stat',
+  comparison: 'compare',
+  versus: 'compare',
+  vs: 'compare',
+  proscons: 'compare',
+  'pros-cons': 'compare',
+  progressbar: 'progress',
+  meters: 'progress',
+  roadmap: 'timeline',
+  milestones: 'timeline',
+  chronology: 'timeline',
+  history: 'timeline',
+  events: 'timeline',
+  faq: 'accordion',
+  faqs: 'accordion',
+  collapsible: 'accordion',
+  details: 'accordion',
+  stepper: 'steps',
+  todos: 'checklist',
+  'todo-list': 'checklist',
+  tasklist: 'checklist',
+  'task-list': 'checklist',
+  flashcard: 'flashcards',
+  study: 'flashcards',
+  deck: 'flashcards',
+  survey: 'poll',
+  ballot: 'poll',
+  calculator: 'calc',
+  converter: 'calc',
+  formula: 'calc',
+  patch: 'diff',
+  codediff: 'diff',
+  'code-diff': 'diff',
+  hierarchy: 'tree',
+  filetree: 'tree',
+  'file-tree': 'tree',
+  orgchart: 'tree',
+  'org-chart': 'tree',
+  taxonomy: 'tree',
+  callout: 'panel',
+  alert: 'panel',
+  notice: 'panel',
+  note: 'panel',
+  tip: 'panel',
+  warning: 'panel',
+  info: 'panel',
+  console: 'terminal',
+  cli: 'terminal',
+  repl: 'terminal',
+  suggestions: 'followups',
+  'next-steps': 'followups',
+  prompts: 'followups',
+  buttons: 'actions',
+  cta: 'actions',
+  choices: 'menu',
+  tags: 'chips',
+  nps: 'rating',
+  stars: 'rating',
+  slides: 'carousel',
+  slideshow: 'carousel',
+}
+
+const SUBTYPED_KINDS = new Set<WidgetKind>([
+  'chart',
+  'media',
+  'calc',
+  'app',
+  'sim',
+  'stage3d',
+  'canvas',
+  'editor',
+  'collab',
+])
+
 export function widgetKindOf(language: string): WidgetKind | null {
-  const lang = language.toLowerCase()
+  const lang = language.trim().toLowerCase()
   if (isWidgetKind(lang)) return lang
-  if (CHART_ALIASES.includes(lang)) return 'chart'
+  if (CHART_ALIASES.includes(lang) || lang in CHART_SYNONYMS) return 'chart'
   // Media first: "search" is both a media result list and an app filter panel,
   // and a ```search fence almost always holds results.
   if (MEDIA_ALIASES.includes(lang)) return 'media'
@@ -320,18 +469,21 @@ export function widgetKindOf(language: string): WidgetKind | null {
   if (EDITOR_ALIASES.includes(lang)) return 'editor'
   if (lang === 'terminal') return 'terminal'
   if (COLLAB_ALIASES.includes(lang)) return 'collab'
+  if (lang in KIND_SYNONYMS) return KIND_SYNONYMS[lang]
   return null
 }
 
-/** `stackedarea` -> `stackedArea`; every other alias is already canonical. */
+/** `stackedarea` -> `stackedArea`, `barchart` -> `bar`; every other alias is already canonical. */
 export function canonicalChartType(alias: string): string {
-  const hit = CHART_TYPES.find((t) => t.toLowerCase() === alias.toLowerCase())
+  const lower = alias.trim().toLowerCase()
+  if (lower in CHART_SYNONYMS) return CHART_SYNONYMS[lower]
+  const hit = CHART_TYPES.find((t) => t.toLowerCase() === lower)
   return hit ?? alias
 }
 
 /** Inject the type implied by the fence when the payload does not name one. */
 export function injectChartType(json: string, alias: string): string {
-  if (/\"type\"\s*:/.test(json)) return json
+  if (/(?:["']type["']|\btype)\s*:/.test(json)) return json
   const brace = json.indexOf('{')
   if (brace < 0) return json
   return `${json.slice(0, brace + 1)}\"type\":\"${canonicalChartType(alias)}\",${json.slice(brace + 1)}`
@@ -339,13 +491,17 @@ export function injectChartType(json: string, alias: string): string {
 
 /** Same, for a sub-type fence: ```kanban -> kind "app", type "kanban". */
 export function injectWidgetType(json: string, alias: string, kind: WidgetKind): string {
-  if (/\"type\"\s*:/.test(json)) return json
+  if (!SUBTYPED_KINDS.has(kind)) return json
+  if (/(?:["']type["']|\btype)\s*:/.test(json)) return json
+  const lower = alias.trim().toLowerCase()
+  if (lower in KIND_SYNONYMS && !(lower in CHART_SYNONYMS)) return json
   const brace = json.indexOf('{')
   if (brace < 0) return json
-  const type = kind === 'chart' ? canonicalChartType(alias) : alias.toLowerCase()
+  const type = kind === 'chart' ? canonicalChartType(alias) : lower
   return `${json.slice(0, brace + 1)}\"type\":\"${type}\",${json.slice(brace + 1)}`
 }
 
 export function isChartType(value: unknown): value is (typeof CHART_TYPES)[number] {
-  return typeof value === 'string' && (CHART_TYPES as readonly string[]).includes(value)
+  if (typeof value !== 'string') return false
+  return (CHART_TYPES as readonly string[]).includes(value)
 }

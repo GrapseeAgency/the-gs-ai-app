@@ -130,7 +130,7 @@ private func toLines(_ text: String) -> [GSLine] {
 
 private let headingLineRegex = try! NSRegularExpression(pattern: "^(#{1,6})\\s+(.+?)\\s*#*\\s*$")
 private let hrLineRegex = try! NSRegularExpression(pattern: "^ {0,3}((\\* *){3,}|(- *){3,}|(_ *){3,})$")
-private let bulletItemRegex = try! NSRegularExpression(pattern: "^(\\s*)([-*+])\\s+(.*)$")
+private let bulletItemRegex = try! NSRegularExpression(pattern: "^(\\s*)([-*+•·])\\s+(.*)$")
 private let orderedItemRegex = try! NSRegularExpression(pattern: "^(\\s*)(\\d{1,9})[.)]\\s+(.*)$")
 private let quoteLineRegex = try! NSRegularExpression(pattern: "^\\s{0,3}>\\s?(.*)$")
 private let imageOnlyRegex = try! NSRegularExpression(pattern: "^!\\[([^\\]]*)\\]\\(([^)\\s]+)(?:\\s+\"[^\"]*\")?\\)\\s*$")
@@ -327,7 +327,9 @@ private func parseFence(_ lines: [GSLine], start: Int) -> (Block, Int) {
             // the stream never lays out a diagram mid-flight. Parity with the
             // Android twin's fenceToBlock.
             let block: Block
-            if language?.lowercased() == "mermaid" {
+            let isJson = code.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("{")
+            if language?.lowercased() == "mermaid" ||
+               ((language?.lowercased() == "mindmap" || language?.lowercased() == "gantt") && !isJson) {
                 block = .mermaid(source: code, sourceStart: lines[start].offset)
             } else if let lang = language?.lowercased(),
                       nexlyPlanFenceLanguages.contains(lang),
@@ -336,7 +338,7 @@ private func parseFence(_ lines: [GSLine], start: Int) -> (Block, Int) {
                 // fence stays source code — never an empty glass surface.
                 block = .plan(plan, open: false, sourceStart: lines[start].offset)
             } else if let lang = language?.lowercased(),
-                      ["json", "jsonc", "widget", "genui", "data"].contains(lang),
+                      ["json", "jsonc", "widget", "genui", "data", "ui"].contains(lang),
                       let plan = parseNexlyPlan(code) {
                 // The model sometimes labels the same payload ```json. The
                 // validator only returns a plan when timed rows are present, so

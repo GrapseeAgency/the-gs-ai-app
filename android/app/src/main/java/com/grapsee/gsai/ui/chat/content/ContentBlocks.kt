@@ -187,7 +187,7 @@ fun containsNexlyPlan(content: String): Boolean {
 }
 
 /** Languages whose body is plausibly a bare widget payload. */
-private val JSONISH_LANGUAGES = setOf("json", "jsonc", "widget", "genui", "data")
+private val JSONISH_LANGUAGES = setOf("json", "jsonc", "widget", "genui", "data", "ui")
 
 /**
  * Fence languages a model naturally reaches for when it means the Nexly
@@ -240,7 +240,7 @@ private fun toLines(text: String): List<Line> {
 
 private val headingLineRegex = Regex("^(#{1,6})\\s+(.+?)\\s*#*\\s*$")
 private val hrLineRegex = Regex("^ {0,3}((\\* *){3,}|(- *){3,}|(_ *){3,})$")
-private val bulletItemRegex = Regex("^(\\s*)([-*+])\\s+(.*)$")
+private val bulletItemRegex = Regex("^(\\s*)([-*+•·])\\s+(.*)$")
 private val orderedItemRegex = Regex("^(\\s*)(\\d{1,9})[.)]\\s+(.*)$")
 private val quoteLineRegex = Regex("^\\s{0,3}>\\s?(.*)$")
 private val imageOnlyRegex = Regex("^!\\[([^\\]]*)\\]\\(([^)\\s]+)(?:\\s+\"[^\"]*\")?\\)\\s*$")
@@ -494,12 +494,114 @@ val APP_LANGUAGE_ALIASES: Set<String> = APP_TYPES
 val CALC_LANGUAGE_ALIASES: Set<String> = CALC_TYPES
 val MEDIA_LANGUAGE_ALIASES: Set<String> = MEDIA_TYPES - "code" // ```code is source, never a widget
 
+private val CHART_SYNONYMS: Map<String, String> = mapOf(
+    "stackedarea" to "stackedArea",
+    "stacked_area" to "stackedArea",
+    "stacked-area" to "stackedArea",
+    "barchart" to "bar",
+    "bar_chart" to "bar",
+    "bar-chart" to "bar",
+    "column" to "bar",
+    "columns" to "bar",
+    "horizontalbar" to "hbar",
+    "horizontal_bar" to "hbar",
+    "horizontal-bar" to "hbar",
+    "linechart" to "line",
+    "line_chart" to "line",
+    "line-chart" to "line",
+    "areachart" to "area",
+    "area_chart" to "area",
+    "area-chart" to "area",
+    "piechart" to "pie",
+    "pie_chart" to "pie",
+    "pie-chart" to "pie",
+    "doughnut" to "donut",
+    "donutchart" to "donut",
+    "donut_chart" to "donut",
+    "scatterplot" to "scatter",
+    "scatter_plot" to "scatter",
+    "scatter-plot" to "scatter",
+    "bubblechart" to "bubble",
+    "bubble_chart" to "bubble",
+    "radarchart" to "radar",
+    "spider" to "radar",
+    "box" to "boxplot",
+    "box_plot" to "boxplot",
+    "box-plot" to "boxplot",
+    "candles" to "candlestick",
+    "ohlc" to "candlestick",
+    "kline" to "candlestick",
+    "word_cloud" to "wordcloud",
+    "word-cloud" to "wordcloud",
+    "graph" to "network",
+    "orderbook" to "depth",
+    "order_book" to "depth"
+)
+
+private val KIND_SYNONYMS: Map<String, String> = mapOf(
+    "charts" to "chart",
+    "plot" to "chart",
+    "stats" to "stat",
+    "kpi" to "stat",
+    "kpis" to "stat",
+    "metric" to "stat",
+    "metrics" to "stat",
+    "scorecard" to "stat",
+    "tables" to "table",
+    "datatable" to "table",
+    "data_table" to "table",
+    "comparison" to "compare",
+    "versus" to "compare",
+    "vs" to "compare",
+    "proscons" to "compare",
+    "pros_cons" to "compare",
+    "pros-cons" to "compare",
+    "progressbar" to "progress",
+    "progress_bar" to "progress",
+    "gauges" to "gauge",
+    "meter" to "gauge",
+    "dial" to "gauge",
+    "quizzes" to "quiz",
+    "trivia" to "quiz",
+    "mcq" to "quiz",
+    "forms" to "form",
+    "survey" to "form",
+    "slider" to "carousel",
+    "card" to "cards",
+    "followup" to "followups",
+    "follow_ups" to "followups",
+    "follow-ups" to "followups",
+    "suggestions" to "followups",
+    "action" to "actions",
+    "buttons" to "actions",
+    "callout" to "panel",
+    "alert" to "panel",
+    "banner" to "panel",
+    "notice" to "panel",
+    "admonition" to "panel",
+    "tts" to "voice",
+    "speech" to "voice",
+    "pronunciation" to "voice",
+    "calculator" to "calc",
+    "simulation" to "sim",
+    "physics" to "sim",
+    "3d" to "stage3d",
+    "shell" to "terminal",
+    "cli" to "terminal",
+    "console" to "terminal"
+)
+
+private val SUBTYPED_KINDS: Set<String> = setOf(
+    "chart", "media", "calc", "app", "sim", "stage3d", "canvas", "editor", "collab"
+)
+
 /** Every fence language that opens a widget block (kinds + aliases). */
 val WIDGET_FENCE_LANGUAGES: Set<String> =
     WIDGET_LANGUAGES + CHART_LANGUAGE_ALIASES + EDITOR_LANGUAGE_ALIASES +
         SIM_LANGUAGE_ALIASES + STAGE3D_LANGUAGE_ALIASES + CANVAS_LANGUAGE_ALIASES +
         COLLAB_LANGUAGE_ALIASES + APP_LANGUAGE_ALIASES +
-        CALC_LANGUAGE_ALIASES + MEDIA_LANGUAGE_ALIASES
+        CALC_LANGUAGE_ALIASES + MEDIA_LANGUAGE_ALIASES +
+        CHART_SYNONYMS.keys + KIND_SYNONYMS.keys
 
 /**
  * Canonical widget kind for a fence language, or null when the language is not
@@ -509,10 +611,10 @@ val WIDGET_FENCE_LANGUAGES: Set<String> =
  * never disagree about what counts as a widget.
  */
 fun widgetKindOf(language: String?): String? {
-    val lang = language?.lowercase() ?: return null
+    val lang = language?.lowercase()?.trim() ?: return null
     return when {
         lang in WIDGET_LANGUAGES -> lang
-        lang in CHART_LANGUAGE_ALIASES -> "chart"
+        lang in CHART_LANGUAGE_ALIASES || lang in CHART_SYNONYMS -> "chart"
         // v3 sub-type families before media/app — several of their names
         // ("video", "audio", "site", "css") double as media types.
         lang in EDITOR_LANGUAGE_ALIASES -> "editor"
@@ -525,6 +627,7 @@ fun widgetKindOf(language: String?): String? {
         lang in MEDIA_LANGUAGE_ALIASES -> "media"
         lang in APP_LANGUAGE_ALIASES -> "app"
         lang in CALC_LANGUAGE_ALIASES -> "calc"
+        lang in KIND_SYNONYMS -> KIND_SYNONYMS[lang]
         else -> null
     }
 }
@@ -535,6 +638,7 @@ fun widgetKindOf(language: String?): String? {
  * the fence did.
  */
 internal fun injectWidgetType(json: String, alias: String, kind: String): String {
+    if (kind !in SUBTYPED_KINDS) return json
     if (json.contains("\"type\"")) return json
     val type = if (kind == "chart") canonicalChartType(alias) else alias.lowercase()
     val brace = json.indexOf('{')
@@ -542,9 +646,11 @@ internal fun injectWidgetType(json: String, alias: String, kind: String): String
     return json.substring(0, brace + 1) + "\"type\":\"" + type + "\"," + json.substring(brace + 1)
 }
 
-/** `stackedarea` → `stackedArea`; every other alias is already canonical. */
-internal fun canonicalChartType(alias: String): String =
-    if (alias.equals("stackedarea", ignoreCase = true)) "stackedArea" else alias
+/** `stackedarea` → `stackedArea`; every other alias maps to its canonical chart type. */
+internal fun canonicalChartType(alias: String): String {
+    val lower = alias.lowercase().trim()
+    return CHART_SYNONYMS[lower] ?: if (lower in CHART_LANGUAGE_ALIASES) lower else alias
+}
 
 /**
  * Inject the chart type implied by the fence into a payload that has none.

@@ -287,7 +287,7 @@ private func append(
 
 // MARK: - Citation chips (PHASE 8.1)
 
-private let citationMarkerRegex = try! NSRegularExpression(pattern: "\\[(\\d{1,3})\\]")
+private let citationMarkerRegex = try! NSRegularExpression(pattern: "[\\[【〚［]\\s*(\\d{1,3})\\s*[\\]】〛］]")
 
 /// Splits a plain-text run on `[N]` markers: matched ordinals become tappable
 /// superscript chips linking the real source URL; unmatched markers stay
@@ -326,7 +326,8 @@ private func appendCitations(
     theme: SpanTheme,
     style: InlinePresentationIntent
 ) {
-    guard !theme.citations.isEmpty, text.contains("[") else {
+    guard !theme.citations.isEmpty,
+          text.contains("[") || text.contains("【") || text.contains("〚") || text.contains("［") else {
         result.append(styledRun(text, style: style))
         return
     }
