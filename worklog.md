@@ -6038,3 +6038,26 @@ Work Log:
 - Two new probes: `probe-fact-dialog.png` and `probe-quiet-hours.png` (the latter opens the row and captures the real dialog). Both inspected: the quiet-hours panel reads correctly (switch off → greyed steppers, live subtitle, Save/Cancel hierarchy), the facts panel aligns its two columns.
 - versionCode 146 / 0.86.23. Android suite 465 tests, 0 failures. Release APK assembled and signed with `gs-live.keystore`.
 - iOS sources updated but NOT COMPILED — this sandbox has no Swift toolchain (`which swift swiftc xcodebuild` all empty). The Swift changes are checked for brace/paren balance and for glyph-name existence against `Resources/nexly-icons.json`, but they have not been through a compiler.
+
+---
+Task ID: build-0.86.24-explore-depth-and-profile-editors
+Agent: main
+Task: the second half of "full app" — the surfaces that still had a card with no page behind it, and the two Profile rows that printed a value and offered nothing.
+
+Work Log:
+- EXPLORE HAD NO MIDDLE STEP. Every tool card — Explore's Popular Tools, Discover's Featured Tools, a collection's tool list, and the search results — called onOpenChat(tool.prompt, false). That is a real action, but it answers a question the reader has not asked: they tapped "Image Studio" to find out what it does, and the app replied with a paragraph already sitting in the composer.
+- New `ToolCatalog` (Android `ui/explore/ToolCatalog.kt`, iOS `Features/Explore/ToolCatalog.swift`): for each of the nine tools — what it is for, the three moves it makes, three openings, and two tools that pair with it. The Discover mock's four cards are ALIASES, not separate tools: "Code Helper" and "Code Assistant" are one capability with different copy, and separate pages would have drifted the two mocks apart. `canonicalId()` is the seam, and a test asserts every id in both catalogues resolves to a page.
+- New `ToolDetailScreen` / `ToolDetailView`: tone-washed hero (glyph, category kicker, title, subtitle, blurb), "How it works" as three numbered moves, "Try it with" as three tappable openings plus "Use my own words", and "Pairs well with" rows that lead to another tool's page — the sub-page of this sub-page. The trip planner's primary action opens Travel Agent rather than a seeded chat, because a purpose-built surface should not be demoted to a prompt.
+- Route `explore/tool/{toolId}` / `.tool(String)`; wired from Explore, Discover, Collection and search. `openTool()` in both ExploreView and DiscoverView is now one line: the page decides.
+- TWO PROFILE ROWS HAD NO EDITOR. Android's "Interests" and "Content Preferences" opened ONBOARDING_SETUP — the whole wizard from step one, which re-asks name, tone and notifications and rewrites all four answers on the way out. iOS's were `staticRow`s: a value, no chevron, no way in at all.
+- New `ProfilePersonalizationScreen` / `ProfilePersonalizationView`: interest chips and the six pinned capabilities, editing in place. `OnboardingProfileStore.setInterests` / `setCapabilities` write ONE key each — the wizard's `save()` rewrites all four and is the wrong tool for a settings page. Four tests assert the other three answers survive an edit, that the edit reaches disk, and that `clear()` still resets everything.
+- The option lists are shared, not copied: Android exposes `interestOptions` / `capabilityOptions` as `internal` from the onboarding screen; iOS moves them to `static` on `OnboardingView`. Two lists that must agree always drift.
+- iOS BUG FOUND BY READING, NOT BY THE COMPILER: `ExploreCategory` had no `label`, yet `CollectionView` (shipped in 0.86.22) used `collection.category.label`. The iOS tree has never been through a compiler in this sandbox, so that file could not have built. Added the property.
+- Dark-mode contrast fixed on both platforms after inspecting the first capture: the step numbers were `tone.fg` (a deep green) on a 30% `tone.bg` circle over near-black, i.e. invisible. Dark now inks with `tone.bg` (the light member of the pair), the hero well drops to a white 10% tile, and the paired-tool wells show each tool's OWN glyph instead of a row of identical sparkles.
+- Probes: `probe-tool-light.png`, `probe-tool-dark.png`, `probe-personalization.png`. All three inspected.
+- Tests: `ToolDetailInteractionTest` (6) — every catalogue id has a page, aliases resolve, an example hands its own sentence (not the generic prompt) to the composer, a pair navigates, the trip planner's CTA opens Travel Agent and does NOT fall back to a chat, an unknown id says so. `ProfilePreferencesStoreTest` (4).
+- versionCode 147 / 0.86.24.
+
+Known, not done (stated rather than implied):
+- The three Featured journey cards still start their conversation directly. They are CTAs ("begin this journey"), not catalogue entries, so they were left alone deliberately — but a journey page listing its stops is the obvious next step if the carousel is meant to be browsed rather than started.
+- iOS remains uncompiled here: no Swift toolchain in this sandbox. Every Swift file touched was brace/paren balanced and every glyph name checked against Resources/nexly-icons.json; that is not a substitute for xcodebuild.

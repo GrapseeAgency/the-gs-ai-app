@@ -62,6 +62,20 @@ final class OnboardingProfileStore: ObservableObject {
         defaults.set(personality, forKey: Self.personalityKey)
     }
 
+    /// Edit ONE half of the profile. The wizard's `save` rewrites all four
+    /// fields at once, which is right for a wizard and wrong for a settings
+    /// page: changing your interests must not silently reset the tone you
+    /// picked three screens earlier.
+    func setInterests(_ values: Set<String>) {
+        interests = values
+        write(values, forKey: Self.interestsKey)
+    }
+
+    func setCapabilities(_ values: Set<String>) {
+        capabilities = values
+        write(values, forKey: Self.capabilitiesKey)
+    }
+
     func clear() {
         interests = []
         capabilities = []

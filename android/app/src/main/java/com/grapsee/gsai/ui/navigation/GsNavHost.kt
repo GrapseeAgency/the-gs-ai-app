@@ -44,6 +44,7 @@ import com.grapsee.gsai.ui.chat.ChatInfoScreen
 import com.grapsee.gsai.ui.chat.ChatScreen
 import com.grapsee.gsai.ui.chat.ChatSearchScreen
 import com.grapsee.gsai.ui.chat.ChatsScreen
+import com.grapsee.gsai.ui.profile.ProfilePersonalizationScreen
 import com.grapsee.gsai.ui.profile.ProfileScreen
 import com.grapsee.gsai.ui.settings.AboutSettingsScreen
 import com.grapsee.gsai.ui.settings.AccessibilitySettingsScreen
@@ -79,6 +80,7 @@ import com.grapsee.gsai.ui.voice.VoiceScreen
 import com.grapsee.gsai.ui.explore.CollectionScreen
 import com.grapsee.gsai.ui.explore.DiscoverScreen
 import com.grapsee.gsai.ui.explore.ExploreScreen
+import com.grapsee.gsai.ui.explore.ToolDetailScreen
 import com.grapsee.gsai.ui.home.HomeDashboardScreen
 import com.grapsee.gsai.ui.home.NewChatScreen
 import com.grapsee.gsai.ui.agents.TravelAgentScreen
@@ -360,6 +362,7 @@ fun GsNavHost(
                 // other surface uses; its Home is the plain pop (onBack).
                 onOpenSettings = { open(GsRoutes.SETTINGS) },
                 onOpenCollection = { id -> open(GsRoutes.collection(id)) },
+                onOpenTool = { id -> open(GsRoutes.tool(id)) },
             )
         }
         composable(
@@ -378,6 +381,22 @@ fun GsNavHost(
                     }
                 },
                 onExploreAll = { open(GsRoutes.DISCOVER) },
+                onOpenTool = { id -> open(GsRoutes.tool(id)) },
+            )
+        }
+        composable(
+            route = GsRoutes.EXPLORE_TOOL,
+            arguments = listOf(navArgument(GsRoutes.ARG_TOOL) { type = NavType.StringType })
+        ) { entry ->
+            ToolDetailScreen(
+                toolId = entry.arguments?.getString(GsRoutes.ARG_TOOL).orEmpty(),
+                onBack = back,
+                onStart = { prompt ->
+                    ComposerSeed.set(prompt)
+                    navController.navigate(GsRoutes.NEW_CHAT)
+                },
+                onOpenTool = { id -> open(GsRoutes.tool(id)) },
+                onOpenTravelAgent = { open(GsRoutes.TRAVEL_AGENT) },
             )
         }
         composable(GsRoutes.DISCOVER) {
@@ -393,6 +412,7 @@ fun GsNavHost(
                     }
                 },
                 onOpenTravelAgent = { open(GsRoutes.TRAVEL_AGENT) },
+                onOpenTool = { id -> open(GsRoutes.tool(id)) },
                 onBack = back,
             )
         }
@@ -506,6 +526,9 @@ fun GsNavHost(
         }
         composable(GsRoutes.SETTINGS_VOICE_ENGINE) {
             SpeechEngineScreen(onBack = back)
+        }
+        composable(GsRoutes.SETTINGS_PROFILE_PREFS) {
+            ProfilePersonalizationScreen(onBack = back)
         }
         composable(GsRoutes.SETTINGS_RESPONSE_STYLE) {
             ResponseStyleScreen(onBack = back)

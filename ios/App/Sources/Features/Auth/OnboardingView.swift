@@ -16,7 +16,9 @@ struct OnboardingView: View {
 
     // Interests (multi-select, >= 1 to continue)
     @State private var selectedInterests: Set<String> = []
-    private let interests = [
+    /// The twelve topics. Shared with Profile's personalization page rather
+    /// than copied there: two lists that must agree always drift.
+    static let interestOptions = [
         "Writing", "Coding", "Research", "Business", "Design", "Education",
         "Science", "Language", "Productivity", "Entertainment", "Marketing", "Data"
     ]
@@ -46,13 +48,14 @@ struct OnboardingView: View {
     @State private var readyProgress: CGFloat = 0
     @State private var readyAnimated = false
 
-    private struct CapabilityOption {
+    struct CapabilityOption {
         let title: String
         let caption: String
         let variant: NativeIllustrationVariant
     }
 
-    private let capabilityOptions: [CapabilityOption] = [
+    /// Shared with Profile's personalization page, same reason as the topics.
+    static let capabilityOptions: [CapabilityOption] = [
         CapabilityOption(title: "Draft and write", caption: "Emails, posts, docs and scripts", variant: .companion),
         CapabilityOption(title: "Research the web", caption: "Live sources with citations", variant: .research),
         CapabilityOption(title: "Analyse images", caption: "Charts, screenshots and scans", variant: .vision),
@@ -156,7 +159,7 @@ struct OnboardingView: View {
             }
             StaggerIn(index: 1) {
                 LazyVGrid(columns: chipColumns, alignment: .leading, spacing: Aero.Spacing.xs) {
-                    ForEach(interests, id: \.self) { interest in
+                    ForEach(Self.interestOptions, id: \.self) { interest in
                         AeroChip(text: interest, selected: selectedInterests.contains(interest)) {
                             GSHaptics.select()
                             withAnimation(Aero.snappy) {
@@ -240,7 +243,7 @@ struct OnboardingView: View {
             }
             StaggerIn(index: 1) {
                 VStack(spacing: Aero.Spacing.s) {
-                    ForEach(capabilityOptions, id: \.title) { option in
+                    ForEach(Self.capabilityOptions, id: \.title) { option in
                         capabilityRow(option)
                     }
                 }

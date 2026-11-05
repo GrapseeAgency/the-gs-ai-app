@@ -84,7 +84,7 @@ import com.grapsee.gsai.ui.theme.GsTheme
  */
 private enum class SetupStep { Interests, Voice, Tools, Quiet, Personal, Ready }
 
-private val interestOptions = listOf(
+internal val interestOptions = listOf(
     "Writing", "Coding", "Research", "Business", "Design", "Education",
     "Science", "Language", "Productivity", "Marketing", "Data", "Travel"
 )
@@ -101,9 +101,9 @@ private val personalityOptions = listOf(
     Triple("Playful", "Light, curious, more personality", GsIcons.Wand)
 )
 
-private data class CapabilityOption(val title: String, val caption: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+internal data class CapabilityOption(val title: String, val caption: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 
-private val capabilityOptions = listOf(
+internal val capabilityOptions = listOf(
     CapabilityOption("Draft and write", "Docs, emails and posts in your voice", GsIcons.NotebookPen),
     CapabilityOption("Research the web", "Sourced answers with links", GsIcons.Globe),
     CapabilityOption("Analyse images", "Charts, screenshots and photos", GsIcons.ImagePlus),

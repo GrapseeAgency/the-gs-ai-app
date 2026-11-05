@@ -19,6 +19,10 @@ object GsRoutes {
      *  Discover catalogue, which answered a different question. */
     const val EXPLORE_COLLECTION = "explore/collection/{collectionId}"
     const val ARG_COLLECTION = "collectionId"
+    /** One tool, explained: what it is for, the three moves it makes, and three
+     *  openings. Every Explore/Discover/collection card lands here first. */
+    const val EXPLORE_TOOL = "explore/tool/{toolId}"
+    const val ARG_TOOL = "toolId"
     const val CHATS = "chats"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
@@ -47,6 +51,9 @@ object GsRoutes {
     /** Tone, detail level and language — the three Profile rows that showed a
      *  value and offered no way to change it. */
     const val SETTINGS_RESPONSE_STYLE = "settings/response-style"
+    /** Interests and the pinned tools — the two Profile rows that used to be
+     *  static text with no editor. */
+    const val SETTINGS_PROFILE_PREFS = "settings/profile-preferences"
     const val SETTINGS_HELP = "settings/help"
     /** One help article — the answer, its category and the two ways to get a
      *  human, instead of a dialog that clipped long copy. */
@@ -99,6 +106,8 @@ object GsRoutes {
     fun helpArticle(topicId: String): String = "help/article/${Uri.encode(topicId)}"
 
     fun collection(collectionId: String): String = "explore/collection/${Uri.encode(collectionId)}"
+
+    fun tool(toolId: String): String = "explore/tool/${Uri.encode(toolId)}"
 
     /**
      * Open a conversation. [prompt] prefills the composer; [autoSend] sends it

@@ -784,6 +784,8 @@ fun ExploreScreen(
     onOpenSettings: () -> Unit,
     /** A Creative Collection card opens its own page, not the whole catalogue. */
     onOpenCollection: (String) -> Unit = {},
+    /** Every tool card opens its own page, which then starts the conversation. */
+    onOpenTool: (String) -> Unit = {},
     /** Render-harness entry points: the real states, driven from outside. */
     initialSearchOpen: Boolean = false,
 ) {
@@ -794,11 +796,11 @@ fun ExploreScreen(
     val inkBody = if (isDark) colors.textSecondary else ExploreTones.InkBody
     val inkMuted = if (isDark) colors.textTertiary else ExploreTones.InkMuted
 
-    // One place decides what a catalogue tap opens. The trip planner has its
-    // own screen; every other tool seeds the composer with its prompt.
+    // One place decides what a catalogue tap opens. Since 0.86.24 that is the
+    // tool's own page — it explains the tool and offers three openings, and the
+    // trip planner's page forwards to Travel Agent from its primary action.
     fun openTool(tool: ExploreTool) {
-        if (tool.id == "trip-planner") onOpenTravelAgent()
-        else onOpenChat(tool.prompt, false)
+        onOpenTool(tool.id)
     }
 
     var query by rememberSaveable { mutableStateOf("") }
@@ -1327,6 +1329,8 @@ fun DiscoverScreen(
     /** The trip planner has its own screen; Discover's Popular list is where
      *  that tile is visible, so this page carries the same rule. */
     onOpenTravelAgent: () -> Unit,
+    /** Featured Tools open their page first — same rule as Explore. */
+    onOpenTool: (String) -> Unit = {},
     onBack: () -> Unit = {},
     initialQuery: String = "",
     initialSearchOpen: Boolean = false,
@@ -1339,8 +1343,7 @@ fun DiscoverScreen(
     val inkMuted = if (isDark) colors.textTertiary else ExploreTones.InkMuted
 
     fun openTool(tool: ExploreTool) {
-        if (tool.id == "trip-planner") onOpenTravelAgent()
-        else onOpenChat(tool.prompt, false)
+        onOpenTool(tool.id)
     }
 
     var query by rememberSaveable { mutableStateOf(initialQuery) }
@@ -1561,7 +1564,7 @@ fun DiscoverScreen(
                         rowTools.forEach { tool ->
                             Box(Modifier.weight(1f)) {
                                 DiscoverToolCardVertical(tool, inkStrong, inkMuted) {
-                                    onOpenChat(tool.prompt, false)
+                                    openTool(tool)
                                 }
                             }
                         }

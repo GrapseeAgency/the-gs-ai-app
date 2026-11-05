@@ -213,14 +213,18 @@ fun ProfileScreen(
             RefNavRow(
                 title = "Interests",
                 subtitle = joined(OnboardingProfileStore.interests),
-                onClick = { onNavigate(GsRoutes.ONBOARDING_SETUP) },
+                // It used to open ONBOARDING_SETUP — the whole wizard from
+                // step one, which re-asks name, tone and notifications and
+                // overwrites all four answers on the way out. Editing one
+                // list must not cost you the other three.
+                onClick = { onNavigate(GsRoutes.SETTINGS_PROFILE_PREFS) },
                 leading = { RefWellTile(GsIcons.Sparkles, GsWellTone.Peach, 28.dp) },
             )
             RefRowDivider()
             RefNavRow(
                 title = "Content Preferences",
                 subtitle = joined(OnboardingProfileStore.capabilities),
-                onClick = { onNavigate(GsRoutes.ONBOARDING_SETUP) },
+                onClick = { onNavigate(GsRoutes.SETTINGS_PROFILE_PREFS) },
                 leading = { RefWellTile(GsIcons.BookOpen, GsWellTone.Lilac, 28.dp) },
             )
 

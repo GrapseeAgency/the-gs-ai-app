@@ -35,8 +35,14 @@ enum AeroRoute: Hashable {
     /// One Creative Collection (Android: `EXPLORE_COLLECTION`). A collection
     /// card used to open the mixed Discover catalogue.
     case collection(String)
+    /// One tool, explained (Android: `EXPLORE_TOOL`). Every Explore, Discover
+    /// and collection card lands here before it starts a conversation.
+    case tool(String)
     /// Tone, detail level and language (Android: `SETTINGS_RESPONSE_STYLE`).
     case responseStyle
+    /// Interests and the pinned tools (Android: `SETTINGS_PROFILE_PREFS`) —
+    /// the two Profile rows that used to be static text with no editor.
+    case profilePersonalization
     /// The six owner sheets (docs/reference/pending): settings alerts, the
     /// inbox's settings destination, account security, the plan, support and
     /// integrations. One case each so the drawer/hub can reach them without a
@@ -324,7 +330,9 @@ struct AeroDestinations: ViewModifier {
             case .notificationDetail(let id): NotificationDetailView(noticeID: id)
             case .helpArticle(let id): HelpArticleView(topicID: id)
             case .collection(let id): CollectionView(collectionID: id)
+            case .tool(let id): ToolDetailView(toolID: id)
             case .responseStyle: ResponseStyleView()
+            case .profilePersonalization: ProfilePersonalizationView()
             case .notificationsAlerts: NotificationsAlertsView()
             case .privacyDataControls: PrivacyDataControlsView()
             case .dataExportAccountDeletion: DataExportAccountDeletionView()
@@ -344,6 +352,7 @@ struct AeroDestinations: ViewModifier {
                 onOpenChat: { router.path.append($0) },
                 onOpenDiscover: { router.path.append(.discover) },
                 onOpenCollection: { router.path.append(.collection($0)) },
+                onOpenTool: { router.path.append(.tool($0)) },
                 onOpenTravelAgent: { router.path.append(.travelAgent) },
                 // The dock's Home is a pop to the root surface; Settings is
                 // the same push every other surface uses.
@@ -353,6 +362,7 @@ struct AeroDestinations: ViewModifier {
             case .discover: DiscoverView(
                 onOpenChat: { router.path.append($0) },
                 onOpenTravelAgent: { router.path.append(.travelAgent) },
+                onOpenTool: { router.path.append(.tool($0)) },
                 onBack: { router.path.removeLast() })
 
             // Section roots (drawer)

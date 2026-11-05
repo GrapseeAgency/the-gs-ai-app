@@ -58,9 +58,17 @@ struct ProfilePreferencesView: View {
 
             GsGroupHeader(title: "Personalization Preferences", caption: "Tailor your experience")
             GsGroupCard {
-                staticRow("Interests", joined(onboarding.interests), glyph: "sparkles", tone: .peach)
+                // These were static rows: the value, no chevron, no way in.
+                // The only editor was the whole onboarding wizard from step
+                // one, which re-asks name, tone and notifications and
+                // overwrites all four answers on the way out.
+                navRow("Interests", joined(onboarding.interests), glyph: "sparkles", tone: .peach) {
+                    router.path.append(.profilePersonalization)
+                }
                 divider
-                staticRow("Content Preferences", joined(onboarding.capabilities), glyph: "book-2", tone: .lilac, isLast: true)
+                navRow("Content Preferences", joined(onboarding.capabilities), glyph: "book-2", tone: .lilac, isLast: true) {
+                    router.path.append(.profilePersonalization)
+                }
             }
 
             Spacer().frame(height: 14)

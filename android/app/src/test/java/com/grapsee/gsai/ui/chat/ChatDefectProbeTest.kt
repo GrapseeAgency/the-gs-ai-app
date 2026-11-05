@@ -774,4 +774,60 @@ class ChatDefectProbeTest {
         compose.onNode(androidx.compose.ui.test.isDialog())
             .captureRoboImage("build/screenshots/probe-quiet-hours.png")
     }
+
+    /**
+     * A tool's own page. The card used to push a paragraph straight into the
+     * composer; this is the middle step that explains the tool first.
+     */
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun toolPageLight() {
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                com.grapsee.gsai.ui.explore.ToolDetailScreen(
+                    toolId = "image-studio",
+                    onBack = {},
+                    onStart = {},
+                )
+            }
+        }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("build/screenshots/probe-tool-light.png")
+    }
+
+    /**
+     * The personalization editor — the page the two Profile rows used to send
+     * to the whole onboarding wizard.
+     */
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun personalizationPageLight() {
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                com.grapsee.gsai.ui.profile.ProfilePersonalizationScreen(
+                    onBack = {},
+                    initialInterests = setOf("Writing", "Design", "Travel"),
+                    initialCapabilities = setOf("Draft and write", "Summarise documents"),
+                )
+            }
+        }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("build/screenshots/probe-personalization.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+    fun toolPageDark() {
+        compose.setContent {
+            TheGsAiTheme(darkTheme = true) {
+                com.grapsee.gsai.ui.explore.ToolDetailScreen(
+                    toolId = "trip-planner",
+                    onBack = {},
+                    onStart = {},
+                )
+            }
+        }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("build/screenshots/probe-tool-dark.png")
+    }
 }

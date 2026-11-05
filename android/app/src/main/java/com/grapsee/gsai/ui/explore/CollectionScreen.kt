@@ -65,6 +65,8 @@ fun CollectionScreen(
     onBack: () -> Unit,
     onOpenChat: (prompt: String, autoSend: Boolean) -> Unit,
     onExploreAll: () -> Unit = {},
+    /** A tool card opens the tool's own page, which then starts the chat. */
+    onOpenTool: (String) -> Unit = {},
 ) {
     val colors = GsTheme.colors
     val dark = LocalGsIsDark.current
@@ -184,13 +186,13 @@ fun CollectionScreen(
             RefGroupHeader("Tools", "Each one opens a real conversation")
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 tools.forEach { tool ->
-                    CollectionToolCard(tool) { onOpenChat(tool.prompt, false) }
+                    CollectionToolCard(tool) { onOpenTool(tool.id) }
                 }
             }
         }
 
         Spacer(Modifier.height(14.dp))
-        RefFootnote("A tool card seeds the composer with its own prompt. Nothing is sent until you press send.")
+        RefFootnote("Each tool opens its own page first, with three openings to start from. Nothing is sent until you press send.")
         Spacer(Modifier.height(10.dp))
         RefPrimaryButton(
             label = "Explore everything",

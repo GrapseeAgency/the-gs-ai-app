@@ -95,7 +95,7 @@ struct CollectionView: View {
             }
 
             Spacer().frame(height: 14)
-            Text("A tool card seeds the composer with its own prompt. Nothing is sent until you press send.")
+            Text("Each tool opens its own page first, with three openings to start from. Nothing is sent until you press send.")
                 .font(.custom(Aero.productName(.regular), size: 10.5, relativeTo: .caption2))
                 .foregroundStyle(Aero.textTertiary)
                 .padding(.horizontal, 6)
@@ -121,7 +121,7 @@ struct CollectionView: View {
 
     private func toolRow(_ tool: ExploreTool) -> some View {
         Button {
-            router.path.append(.chatPrefill(tool.prompt))
+            router.path.append(.tool(tool.id))
         } label: {
             HStack(spacing: 11) {
                 ZStack {

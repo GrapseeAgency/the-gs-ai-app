@@ -39,6 +39,10 @@ enum ExploreCategory: String, CaseIterable, Identifiable {
     case lifestyle = "Lifestyle"
 
     var id: String { rawValue }
+
+    /// The word the UI prints. Kept as a property rather than using `rawValue`
+    /// at each call site so a future category can be renamed without a sweep.
+    var label: String { rawValue }
 }
 
 enum ExploreCatalog {
@@ -528,6 +532,8 @@ struct ExploreView: View {
     /// A Creative Collection opens its own page. It used to call onOpenDiscover,
     /// which answered "here is everything" to the question "here is this".
     let onOpenCollection: (String) -> Void
+    /// Every tool card opens its own page, which then starts the conversation.
+    let onOpenTool: (String) -> Void
     /// The trip planner has a real destination of its own (Travel Agent);
     /// without this the screen was built but unreachable on both platforms.
     let onOpenTravelAgent: () -> Void
@@ -542,6 +548,7 @@ struct ExploreView: View {
         onOpenChat: @escaping (AeroRoute) -> Void,
         onOpenDiscover: @escaping () -> Void = {},
         onOpenCollection: @escaping (String) -> Void = { _ in },
+        onOpenTool: @escaping (String) -> Void = { _ in },
         onOpenTravelAgent: @escaping () -> Void,
         // Required, not defaulted: a forgotten wire here would compile green
         // and ship a dead dock control. The render harness passes explicit no-ops.
@@ -552,6 +559,7 @@ struct ExploreView: View {
         self.onOpenChat = onOpenChat
         self.onOpenDiscover = onOpenDiscover
         self.onOpenCollection = onOpenCollection
+        self.onOpenTool = onOpenTool
         self.onOpenTravelAgent = onOpenTravelAgent
         self.onOpenHome = onOpenHome
         self.onOpenSettings = onOpenSettings
@@ -750,15 +758,12 @@ struct ExploreView: View {
         }
     }
 
-    /// One place decides what a catalogue tap opens. The trip planner has its
-    /// own screen (Travel Agent) with travel-specific starters; every other
-    /// tool seeds the composer with its prompt. Both platforms use this rule.
+    /// One place decides what a catalogue tap opens. Since 0.86.24 that is the
+    /// tool's own page — it explains the tool and offers three openings, and
+    /// the trip planner's page forwards to Travel Agent from its primary
+    /// action. Both platforms use this rule.
     private func openTool(_ tool: ExploreTool) {
-        if tool.id == "trip-planner" {
-            onOpenTravelAgent()
-        } else {
-            onOpenChat(.chatPrefill(tool.prompt))
-        }
+        onOpenTool(tool.id)
     }
 
     /// The reference's Popular Tools card: icon LEFT, copy right, arrow low-right.
@@ -1034,6 +1039,8 @@ struct DiscoverView: View {
     /// The trip planner has its own screen; Discover's Popular list is where
     /// that tile is visible, so this page carries the same rule as Explore.
     let onOpenTravelAgent: () -> Void
+    /// Featured Tools open their page first — same rule as Explore.
+    let onOpenTool: (String) -> Void
     /// The page hides the system bar (its header is the chrome), so it owns
     /// its back control.
     let onBack: () -> Void
@@ -1049,12 +1056,14 @@ struct DiscoverView: View {
     init(
         onOpenChat: @escaping (AeroRoute) -> Void,
         onOpenTravelAgent: @escaping () -> Void,
+        onOpenTool: @escaping (String) -> Void = { _ in },
         onBack: @escaping () -> Void,
         initialQuery: String = "",
         initialSearchOpen: Bool = false
     ) {
         self.onOpenChat = onOpenChat
         self.onOpenTravelAgent = onOpenTravelAgent
+        self.onOpenTool = onOpenTool
         self.onBack = onBack
         self.initialQuery = initialQuery
         self.initialSearchOpen = initialSearchOpen
@@ -1064,11 +1073,7 @@ struct DiscoverView: View {
 
     /// One place decides what a catalogue tap opens, exactly as Explore does.
     private func openTool(_ tool: ExploreTool) {
-        if tool.id == "trip-planner" {
-            onOpenTravelAgent()
-        } else {
-            onOpenChat(.chatPrefill(tool.prompt))
-        }
+        onOpenTool(tool.id)
     }
 
     var body: some View {

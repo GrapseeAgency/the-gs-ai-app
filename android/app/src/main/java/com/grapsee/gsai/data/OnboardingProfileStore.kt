@@ -70,6 +70,22 @@ object OnboardingProfileStore {
             ?.apply()
     }
 
+    /**
+     * Edit ONE half of the profile. The wizard's `save` rewrites all four
+     * fields at once, which is right for a wizard and wrong for a settings
+     * page: changing your interests must not silently reset the tone you
+     * picked three screens earlier.
+     */
+    fun setInterests(values: Collection<String>) {
+        interests = values.toSet()
+        prefs?.edit()?.putString(K.interests, interests.joinToString(","))?.apply()
+    }
+
+    fun setCapabilities(values: Collection<String>) {
+        capabilities = values.toSet()
+        prefs?.edit()?.putString(K.capabilities, capabilities.joinToString(","))?.apply()
+    }
+
     fun clear() {
         interests = emptySet()
         capabilities = emptySet()

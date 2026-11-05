@@ -14,10 +14,14 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Catalogue taps have exactly one rule: the trip planner opens its own screen
- * (Travel Agent), every other tool seeds the composer. Travel Agent was built
- * and mounted in the nav host but NOTHING navigated to it — Discover's Popular
- * list is where the planner is visible, so that is the path this pins.
+ * Catalogue taps have exactly one rule since 0.86.24: a tool card opens that
+ * tool's PAGE, and the page — not the card — decides what happens next.
+ *
+ * Before this, the trip planner jumped straight to Travel Agent and every
+ * other tool pushed its prompt into the composer. Both were real actions, and
+ * both skipped the question the reader was asking when they tapped a card
+ * called "Image Studio": what does this do? The rule that replaced them is
+ * simpler to state and harder to get wrong — a card opens its own page.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -26,12 +30,17 @@ class ExploreReachabilityTest {
 
     @get:Rule val compose = createComposeRule()
 
-    private fun renderDiscover(onAgent: () -> Unit, onChat: () -> Unit) {
+    private fun renderDiscover(
+        onTool: (String) -> Unit,
+        onAgent: () -> Unit = {},
+        onChat: () -> Unit = {},
+    ) {
         compose.setContent {
             TheGsAiTheme(darkTheme = false) {
                 DiscoverScreen(
                     onOpenChat = { _, _ -> onChat() },
                     onOpenTravelAgent = onAgent,
+                    onOpenTool = onTool,
                     onBack = {},
                 )
             }
@@ -40,26 +49,30 @@ class ExploreReachabilityTest {
     }
 
     @Test
-    fun theTripPlannerOpensTheTravelAgent() {
+    fun theTripPlannerOpensItsOwnPage() {
+        var opened: String? = null
         var agent = 0
         var chats = 0
-        renderDiscover(onAgent = { agent++ }, onChat = { chats++ })
+        renderDiscover(onTool = { opened = it }, onAgent = { agent++ }, onChat = { chats++ })
 
         compose.onNodeWithText("Plan a trip").performScrollTo().performClick()
 
-        assertEquals("the trip planner must open Travel Agent", 1, agent)
-        assertEquals("no chat may open for the trip planner", 0, chats)
+        assertEquals("the trip planner card must open the tool page", "trip-planner", opened)
+        assertEquals("the card must not jump to Travel Agent itself", 0, agent)
+        assertEquals("the card must not start a chat", 0, chats)
     }
 
     @Test
-    fun everyOtherToolStillSeedsTheComposer() {
+    fun everyOtherToolOpensItsOwnPage() {
+        var opened: String? = null
         var agent = 0
         var chats = 0
-        renderDiscover(onAgent = { agent++ }, onChat = { chats++ })
+        renderDiscover(onTool = { opened = it }, onAgent = { agent++ }, onChat = { chats++ })
 
         compose.onNodeWithText("Generate a logo").performScrollTo().performClick()
 
+        assertEquals("logo-maker", opened)
         assertEquals("a non-travel tool must not open Travel Agent", 0, agent)
-        assertEquals("a non-travel tool seeds the composer", 1, chats)
+        assertEquals("a non-travel tool must not seed a chat from the card", 0, chats)
     }
 }
