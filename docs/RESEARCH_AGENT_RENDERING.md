@@ -346,3 +346,53 @@ recorded in the session; to be resolved before implementation.
 ## Cumulative research index (10 passes)
 
 1. Layers + SotA · 2. Streaming + judgment · 3. A2UI/OpenUI/SwiftUI SDUI · 4. A2UI internals + Artifacts + official renderer + veterans · 5. Tokens + DSL math + AG-UI + a11y · 6. Perf contracts + layout science + security · 7. M3E + Liquid Glass + reveal + evidence · 8. RTL + QA + MCP Apps + offline · 9. Bangla + list mechanics + sameness science · 10. Chart budgets + draw discipline + haptics + diversity knobs.
+
+---
+
+# PASS 11 — the rich-prose layer: audit of what ships + the science of model formatting + citation UX (2026-11-05)
+
+## AUDIT — the six prose components in this repo (verified against source, not assumed)
+
+Renderer side (both platforms, twin parity, 17 block types):
+- **Text/paragraphs**: ParagraphBlock with streaming caret; inline precedence parser (code > math > images-degraded-to-links > links http(s)-only > bare autolinks > bold/italic/strike recursive). Android `RichBlocks.kt` + `InlineMarkdown.kt`; iOS `RichBlocks.swift` + `InlineMarkdown.swift`.
+- **Headings**: rendered blocks with a11y semantics on BOTH platforms (Android `Modifier.semantics { heading() }`, iOS `.accessibilityAddTraits(.isHeader)`).
+- **Lists**: bullet + ordered, nested (ListItemRow/NestedChildView recursion on Android; BulletListView/OrderedListView on iOS).
+- **Quotes**: BlockQuoteView with full-height accent bar (IntrinsicSize.Min trick, twin-matched).
+- **Links**: http(s)-only enforcement at parse time + scheme denylist ("model output is not trusted") + GsLinks external-open policy on explicit long-press paths only.
+- **Citations**: inline `[N]` → superscript chip → real source URL via LinkAnnotation (Android) / run.link (iOS); unmatched markers stay plain text (honesty); server pipeline already normalizes fullwidth brackets, deletes dangling `[7]`-of-5 markers, handles failed-source citations (websearch.ts PHASE 8.1c).
+- Beyond the six: tables, dividers, code (+ ASCII-fence-secret-widget upgrade), math, mermaid, collapsible, image, html, widget, tool-result blocks. Test coverage: ContentBlocksTest, SubtypeFenceTest, ParserStreamingBenchmark, WidgetBlocksTest.
+- VERDICT: the rendering half of the "rookie layer" is already beyond anything surveyed — including citation-chip honesty (unmatched = plain text) which Perplexity teardowns treat as best-in-class.
+
+## THE GAP (the one code-sized hole in the layer)
+
+`SYSTEM_PROMPT` (src/lib/ai.ts) says: "Write plain prose … prefer commas, colons and parentheses over em dashes" — and the file's own comment declares the prompt owns NO formatting instructions. The renderers speak 17 block types fluently; the MODEL is given no contract for when headings/lists/quotes/tables earn their place, no `[N]` format spec, no anti-AI-voice rules. The layer's missing half is the MODEL-side rich-prose contract.
+
+## The science of model formatting (what the contract must encode)
+
+- **The Last Fingerprint (arXiv 2603.27006)**: LLMs default to the "markdown voice" — RLHF selected for structure (evaluators rate organized prose higher); unconstrained, models emit headings/bullets/bold unprompted. Suppression experiment across 12 models/5 providers: banning markdown kills headers/bullets/bold but EM DASHES PERSIST (dual-register: prose-legal AND a structural marker in training data) — explicit em-dash instruction is REQUIRED, which GS already has. The plain-prose default in our prompt is mechanistically sound.
+- **Format-following is a separate skill from content quality** — a model can write brilliantly in the wrong format; never assume structure competence from eloquence.
+- **Claude platform best practices**: state what TO do, not what not to do ("composed of flowing prose paragraphs" beats "don't use markdown"); prompt style leaks into output style; lists only for genuinely discrete items; "NEVER output a series of overly short bullet points."
+- **Known AI-voice markers to ban explicitly** (signs-of-AI-writing corpus): excessive boldface ("key takeaways" mechanical emphasis), the inline-header vertical list (`- **Header**: description` colon pattern), heading-per-short-paragraph. Anti-monotony applies to PROSE too, not just GSUI blocks.
+- Emphasis interpretation is weak in models — bold is low-impact signaling; hierarchy comes from headings/lists, so the contract should make bold nearly-never in chat prose.
+- Pivotal format study: GPT-4 reasoning 81.2% with markdown-structured prompts vs 73.9% JSON — structure in the RIGHT register helps comprehension; markdown is the model's native register, which is why our whole stack speaks it.
+
+## Citation UX science (validates our design + the contract rules)
+
+- The verified best pattern (Perplexity-class, multiple teardowns): **inline markers at the claim + source cards/list below** — exactly GS's `[N]` chips + CitationsBlock. Layered trust: chips for skimmers → cards for readers → full audit list for skeptics; "wrong sources" is a first-class failure category in feedback UIs.
+- Contract rules the model side must carry: cite AT the claim it supports (not paragraph end), 1–2 markers per sentence MAX (3–4 = retrieval redundancy smell), only for retrieved evidence, every `[N]` must resolve (pipeline already repairs violations — belt and suspenders).
+- Mobile is the known density failure mode (tap-target clutter) — superscript chips (not domain chips) are the mobile-correct choice; GS already ships superscript, not chips-with-favicons.
+
+## THE PROSE CONTRACT BLUEPRINT (ready to apply on permission — the "completion" of the layer)
+
+A small formatting section for the prompt scaffold (per Claude-docs form: what-TO-do):
+1. Default = flowing prose paragraphs; structure must earn its place (long multi-part answers may use ## headings for true sections).
+2. Lists only for genuinely discrete parallel items; never a series of ultra-short bullets; never the bold-header-colon pattern.
+3. Bold/italic: reserved for terms the user asked to stress (near-never in chat).
+4. Quotes only for actual quoted material; tables only for real multi-column comparisons.
+5. Citations: `[N]` immediately after the supported claim, 1–2/sentence max, N from the provided sources only.
+6. Keep the em-dash ban (mechanistically justified by The Last Fingerprint).
+Plus: Bangla/prose interplay already safe (UTF-8, platform shaping). Estimated delta: ~15 prompt lines + fixture tests; awaiting permission like all code.
+
+## Cumulative research index (11 passes)
+
+1. Layers + SotA · 2. Streaming + judgment · 3. A2UI/OpenUI/SwiftUI SDUI · 4. A2UI internals + Artifacts + official renderer + veterans · 5. Tokens + DSL math + AG-UI + a11y · 6. Perf + layout science + security · 7. M3E + Liquid Glass + reveal + evidence · 8. RTL + QA + MCP Apps + offline · 9. Bangla + list mechanics + sameness science · 10. Charts + draw discipline + haptics + diversity knobs · 11. Rich-prose audit + markdown-voice science + citation UX.
