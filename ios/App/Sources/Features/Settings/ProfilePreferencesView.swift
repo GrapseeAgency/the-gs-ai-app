@@ -5,10 +5,11 @@ import SwiftUI
 /// Every value is real or honestly "Not set": the identity card reads
 /// `AccountStore`, Response Style and Personalization read
 /// `OnboardingProfileStore` (this screen is its first iOS reader — see the
-/// store's contract comment), and the two rows the app has no editor for
-/// (Date of Birth, Location) render "Not set" WITHOUT a chevron: a chevron
-/// with no destination is a dead end, which the mocks' visual language can
-/// afford to paint and the app cannot.
+/// store's contract comment). All four Profile rows open the identity editor,
+/// which stores all four fields; none of them is a value with no way to change
+/// it, and `staticRow`'s `trailingChevron` stays false everywhere a real
+/// destination does not exist — a chevron with no destination is a dead end,
+/// which the mocks' visual language can afford to paint and the app cannot.
 struct ProfilePreferencesView: View {
     @ObservedObject private var account = AccountStore.shared
     @ObservedObject private var onboarding = OnboardingProfileStore.shared
@@ -26,9 +27,17 @@ struct ProfilePreferencesView: View {
 
             GsGroupHeader(title: "Profile", caption: "Your basic information")
             GsGroupCard {
-                staticRow("Name", value("Name", account.displayName), glyph: "user", tone: .peach)
+                // Name and Email were the only two rows here with no action,
+                // while Date of Birth and Location opened the very editor that
+                // stores all four. Android has always let you tap them; on iOS
+                // the two most important fields were the two you could not.
+                navRow("Name", value("Name", account.displayName), glyph: "user", tone: .peach) {
+                    showIdentityEditor = true
+                }
                 divider
-                staticRow("Email", value("Email", account.email), glyph: "mail", tone: .lilac)
+                navRow("Email", value("Email", account.email), glyph: "mail", tone: .lilac) {
+                    showIdentityEditor = true
+                }
                 divider
                 // These two printed "Not set" forever with no chevron: a field
                 // the app names and can never learn. They open the same editor
