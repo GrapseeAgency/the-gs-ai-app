@@ -177,3 +177,64 @@ recorded in the session; to be resolved before implementation.
 4. Fallback/isolation renderer is milestone-zero, not an afterthought.
 5. Telemetry counters (drops, clamps, unknown components) ship WITH the renderer.
 6. Semantic+generic hybrid vocabulary confirmed as the survivor pattern.
+
+---
+
+# PASS 5 — grammar science, transport standard, token architecture, accessibility (2026-11-05)
+
+## Design tokens (W3C DTCG) — how glass scales to two platforms
+
+- Three tiers: **primitive** (`color.blue.500`, `space.4`) → **semantic** (`color.surface.primary = {color.blue.500}`) → **component** (`button.primary.background`). Reference chains (`{…}`) make one edit propagate everywhere; composite types (shadow, gradient, typography, border) are first-class; OKLCH for perceptual uniformity.
+- Anti-pattern: raw pixels in semantic tokens — breaks the whole point.
+- GSUI rule this forces: **payloads carry SEMANTIC tokens only** (`accent: teal`, `surface: hero`, `hue: 3`) — never raw hex. Each platform's renderer maps semantic → its own glass primitives. The model literally cannot break the design system because it never touches raw values.
+
+## DSL vs JSON for LLMs — the honest math
+
+- Grammar School benchmark: DSL tokens stay CONSTANT as data grows; JSON grows linearly; crossover ≈100 items; grammar overhead ≈2k tokens one-time.
+- TOON benchmark (arXiv 2603.03306): the **"prompt tax"** — a novel format's instructional prompt can EXCEED its output savings for small payloads (Qwen3-235B: TOON total 4715 tokens vs plain JSON 2772!); plain JSON still wins one-shot accuracy; constrained decoding can CRATER strong models (Hermes-405B: 92.5% → 35% under grammar constraints); repair loops double token cost when the system prompt is huge; per-case few-shot examples matching the schema reduce structural mistakes.
+- YAML line research: fewer punctuation tokens → fewer structure-breaking mistakes.
+- GSUI consequences: (1) the GSUI prompt section must be LEAN — the grammar + component table is a per-request tax; (2) judgment layer: GSUI blocks only pay off when the UI is substantial (tiny stat → plain widget fence, not a gsui block); (3) few-shot examples in the prompt must match the schema exactly; (4) do NOT use grammar-constrained decoding — the DSL is designed to be safe in plain generation with a tolerant parser.
+
+## AG-UI — the transport standard (if GS ever exposes GSUI externally)
+
+17 typed events over SSE: RUN_STARTED/FINISHED/ERROR, TEXT_MESSAGE_START/CONTENT/END, TOOL_CALL_START/ARGS/END/RESULT, STATE_SNAPSHOT/STATE_DELTA (RFC 6902 JSON Patch), THINKING, CUSTOM, RAW, ACTIVITY_*. Our internal chat SSE + fenced blocks maps 1:1 onto this vocabulary; adopting the names in our internal docs keeps a future external binding cheap.
+
+## Accessibility — dynamic UI is systematically invisible to screen readers
+
+- ACM study: dynamic visual changes (animations, state feedback) often produce NO accessibility event and NO label → blind users get nothing. Root causes: missing labels on dynamic components, missing live-region announcements.
+- Codename One pattern: a portable **semantics tree** parallel to the visual tree (roles, values, ranges, actions, grouping, traversal order, live regions) mapped per platform.
+- Flutter: `Semantics(liveRegion:)` auto-announces updates; semantics-tree build cost is a real perf line item.
+- GSUI consequences: every primitive gets an automatic semantic contract (role + label defaults per component, live-region on progress/stat updates, traversal order = document order by construction). Accessibility is IN the grammar (optional a11y overrides), not a renderer afterthought.
+
+# PASS 6 — platform performance contracts, layout science, security model (2026-11-05)
+
+## Compose: stability is correctness, not optimization
+
+- `List<T>` is UNSTABLE to the Compose compiler → non-skippable composables → recomposition storms. Production case: 7.2× recompositions per scroll frame, 450 ms frames on flagships, fixed by `@Immutable` + `kotlinx.collections.immutable` `ImmutableList` (recompositions 7.2→1.0, janky frames −60%).
+- Compiler metrics (`compose_reports`) catch non-skippable composables at build time; teams run the diff in CI.
+- `derivedStateOf` narrows scope; state reads pushed to leaves; `Modifier.Node` over `composed{}` (3–10× faster); R8 full mode.
+- GSUI consequences: parsed tree = `@Immutable data class` with `ImmutableList` children; per-line streaming updates keyed by node id (stable keys or state loss); recomposition counter ships in debug from day one.
+
+## SwiftUI: identity + diffing boundaries (Airbnb engineering)
+
+- Diffing: Equatable conformance controls what's compared; `@Equatable` + `@SkipEquatable` (closures excluded); decomposed subviews = diffing boundaries (Airbnb: scroll hitches −15% on Search).
+- Identity: ForEach ids from DATA (never indices, never `UUID()`); unstable id = destroy + rebuild (state loss).
+- GSUI consequences: `GsuiNode: Equatable`; each primitive view is a small diffable struct taking scalars, not the whole subtree; node id is the identity.
+
+## Layout science — why GSUI must be coordinate-free (validated by research)
+
+- LaySPA (arXiv 2509.16891): LLMs have "spatial cognition deficiency" — even GPT-5 fails alignment, overlap avoidance, hierarchy on canvas layouts; RL with geometric-validity rewards helps but specialized models still win.
+- SG-Layout (arXiv 2608.1106): accuracy degrades as object count and relation density grow; graph-structured conditioning helps.
+- LayoutLLM-T2I: LLMs are good "architects" for STRUCTURE (coarse boxes) — fine geometry belongs to the renderer.
+- GSUI design validated: the model emits STRUCTURE (stack/grid/flow/grouping); the renderer owns ALL geometry. No x/y/width/height in the grammar — ever. Absolute positioning is the one door we keep closed.
+
+## Security — the threat model for model-authored UI
+
+- Indirect prompt injection is in the wild (Unit42): hidden zero-size/opacity-0 text, attribute embedding, runtime assembly; top intent = corrupting output.
+- EchoLeak (AAAI): zero-click exfiltration via generated markdown + CSP-allowlist abuse.
+- Defense stack that survived review: prompt partitioning, provenance gating, **output policy gates (format allowlists!)**, URL allowlists, strict CSP, signed media proxies, HITL for external content, **action allowlisting with dangerous flags**.
+- GSUI inherits a strong position (native text, no webview, no eval) but must still ship: action allowlist v1 = prompt|copy ONLY; URL/scheme validation on image/link/video (http(s) + app-known hosts; block data:/javascript:); string clipping (already in caps); the widget composite routes through the validated pipeline = output policy gate; telemetry counters on drops/clamps = detection.
+
+## Cumulative research index (6 passes)
+
+1. Layers + SotA landscape · 2. Streaming mechanics + judgment matrix · 3. A2UI/OpenUI Lang/SwiftUI SDUI · 4. A2UI spec internals + Artifacts + official Compose renderer + SDUI veterans · 5. Design tokens + DSL math + AG-UI + a11y · 6. Compose/SwiftUI performance contracts + layout science + security.
