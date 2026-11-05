@@ -10,7 +10,7 @@
  */
 
 import { injectWidgetType, widgetKindOf } from '@/lib/widgets/catalog'
-import { inferWidgetKind, repairJson, validateWidget } from '@/lib/widgets/validate'
+import { extractBareWidget, inferWidgetKind, repairJson, tabularTextToJson, validateWidget } from '@/lib/widgets/validate'
 import { isNexlyPlanPayload } from '@/lib/nexly/plan'
 
 export type Segment =
@@ -22,14 +22,17 @@ export type Segment =
   | { kind: 'svg'; source: string }
   | { kind: 'map'; payload: Record<string, unknown> }
 
-const GENERIC_WIDGET_FENCES = new Set(['json', 'jsonc', 'widget', 'genui', 'data', 'ui'])
+const GENERIC_WIDGET_FENCES = new Set(['json', 'jsonc', 'widget', 'genui', 'data', 'ui', 'gsui', 'card_ui', 'block'])
 const PLAN_FENCES = new Set(['plan', 'schedule', 'timetable', 'itinerary', 'routine', 'day'])
 const HTML_FENCES = new Set(['html', 'htm', 'web', 'webapp', 'page', 'interactive', 'miniapp'])
 
 /** Parse a (possibly still-streaming) answer into segments. */
 export function parseStream(text: string): Segment[] {
   const trimmedWhole = text.trim()
-  if (trimmedWhole.startsWith('{') && trimmedWhole.endsWith('}')) {
+  if (
+    (trimmedWhole.startsWith('{') && trimmedWhole.endsWith('}')) ||
+    (trimmedWhole.startsWith('[') && trimmedWhole.endsWith(']'))
+  ) {
     const bareKind = inferWidgetKind(trimmedWhole)
     if (bareKind) {
       const v = validateWidget(bareKind, trimmedWhole)
@@ -40,11 +43,25 @@ export function parseStream(text: string): Segment[] {
   }
 
   const segments: Segment[] = []
-  const fence = /^[ \t]{0,3}(```|~~~)([a-zA-Z][\w+-]*)[ \t]*[^\r\n]*\r?\n/gm
+  const fence = /^[ \t]{0,8}(```|~~~)([a-zA-Z][\w:./+-]*)?[ \t]*[^\r\n]*\r?\n/gm
   let cursor = 0
 
   const pushText = (chunk: string) => {
-    if (chunk.trim().length > 0) segments.push({ kind: 'text', text: chunk.trim() })
+    const trimmed = chunk.trim()
+    if (trimmed.length === 0) return
+    const bare = extractBareWidget(chunk)
+    if (bare) {
+      const v = validateWidget(bare.kind, bare.json)
+      if (v.ok) {
+        const before = chunk.slice(0, bare.start).trim()
+        const after = chunk.slice(bare.end).trim()
+        if (before.length > 0) segments.push({ kind: 'text', text: before })
+        segments.push({ kind: 'widget', widget: v.kind, payload: v.widget, complete: true })
+        if (after.length > 0) pushText(after)
+        return
+      }
+    }
+    segments.push({ kind: 'text', text: trimmed })
   }
 
   while (cursor < text.length) {
@@ -56,9 +73,9 @@ export function parseStream(text: string): Segment[] {
     }
     pushText(text.slice(cursor, open.index))
     const marker = open[1]
-    const lang = open[2]
+    const lang = open[2] ?? ''
     const bodyStart = open.index + open[0].length
-    const closeRe = new RegExp(`\\r?\\n[ \\t]{0,3}${marker}[ \\t]*(?=\\r?\\n|$)`, 'g')
+    const closeRe = new RegExp(`\\r?\\n[ \\t]{0,8}${marker}[ \\t]*(?=\\r?\\n|$)`, 'g')
     closeRe.lastIndex = bodyStart
     const closeMatch = closeRe.exec(text)
     const complete = closeMatch !== null
@@ -67,7 +84,7 @@ export function parseStream(text: string): Segment[] {
 
     const lower = lang.toLowerCase()
     const trimmedBody = body.trim()
-    const isJsonBody = trimmedBody.startsWith('{')
+    let isJsonBody = trimmedBody.startsWith('{') || trimmedBody.startsWith('[')
 
     // Mermaid diagrams, including ```mindmap or ```gantt when the body is
     // Mermaid syntax rather than a JSON widget payload.
@@ -89,13 +106,21 @@ export function parseStream(text: string): Segment[] {
       continue
     }
 
-    let kind = widgetKindOf(lower)
+    let kind = lower ? widgetKindOf(lower) : null
+    let effectiveBody = trimmedBody
+    if (kind === 'table' && !isJsonBody && complete) {
+      const coerced = tabularTextToJson(trimmedBody)
+      if (coerced) {
+        effectiveBody = coerced
+        isJsonBody = true
+      }
+    }
     if (PLAN_FENCES.has(lower) && isJsonBody) {
-      const parsed = safeJson(body)
+      const parsed = safeJson(effectiveBody)
       if (parsed && isNexlyPlanPayload(parsed)) kind = 'plan'
     }
-    if (!kind && GENERIC_WIDGET_FENCES.has(lower) && isJsonBody && complete) {
-      kind = inferWidgetKind(trimmedBody)
+    if (!kind && isJsonBody && complete) {
+      kind = inferWidgetKind(effectiveBody)
     }
 
     if (kind && (isJsonBody || !complete)) {
@@ -104,11 +129,11 @@ export function parseStream(text: string): Segment[] {
         continue
       }
       const injected =
-        kind === 'plan' || GENERIC_WIDGET_FENCES.has(lower)
-          ? trimmedBody
+        kind === 'plan' || GENERIC_WIDGET_FENCES.has(lower) || !lower
+          ? effectiveBody
           : lower !== kind
-            ? injectWidgetType(trimmedBody, lang, kind)
-            : trimmedBody
+            ? injectWidgetType(effectiveBody, lang, kind)
+            : effectiveBody
       let v = validateWidget(kind, injected)
       if (!v.ok) {
         const healedKind = inferWidgetKind(injected)

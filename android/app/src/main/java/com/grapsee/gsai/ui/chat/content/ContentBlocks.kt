@@ -213,13 +213,14 @@ private fun promoteBarePayload(block: Block): Block {
     val candidate = when (block) {
         is Block.Paragraph ->
             if (block.spans.size == 1) (block.spans.first() as? InlineSpan.TextSpan)?.text else null
-        is Block.CodeBlock ->
-            if (block.language == null || block.language.lowercase() in JSONISH_LANGUAGES) block.code else null
+        is Block.CodeBlock -> block.code
         else -> null
     } ?: return block
     val trimmed = candidate.trim()
     if (trimmed.length < 2 || trimmed.length > 64 * 1024) return block
-    if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return block
+    val isObj = trimmed.startsWith("{") && trimmed.endsWith("}")
+    val isArr = trimmed.startsWith("[") && trimmed.endsWith("]")
+    if (!isObj && !isArr) return block
     val kind = inferWidgetKind(trimmed) ?: return block
     if (kind == "plan") {
         val plan = parseNexlyPlanData(trimmed) ?: return block
@@ -449,6 +450,9 @@ val WIDGET_LANGUAGES = setOf(
     "chart", "stat", "table", "compare", "progress", "timeline", "plan",
     "gauge", "quiz", "form", "carousel", "cards", "followups",
     "media", "actions", "panel", "voice", "calc", "app",
+    // v2 kinds
+    "tabs", "accordion", "steps", "menu", "chips", "rating",
+    "poll", "diff", "tree", "flashcards", "checklist",
     // v3 kinds
     "sim", "stage3d", "canvas", "editor", "terminal", "collab"
 )
@@ -588,7 +592,50 @@ private val KIND_SYNONYMS: Map<String, String> = mapOf(
     "3d" to "stage3d",
     "shell" to "terminal",
     "cli" to "terminal",
-    "console" to "terminal"
+    "console" to "terminal",
+    "faq" to "accordion",
+    "faqs" to "accordion",
+    "collapsible" to "accordion",
+    "details" to "accordion",
+    "stepper" to "steps",
+    "walkthrough" to "steps",
+    "howto" to "steps",
+    "how-to" to "steps",
+    "guide" to "steps",
+    "todos" to "checklist",
+    "todo-list" to "checklist",
+    "tasklist" to "checklist",
+    "task-list" to "checklist",
+    "flashcard" to "flashcards",
+    "study" to "flashcards",
+    "deck" to "flashcards",
+    "vocab" to "flashcards",
+    "ballot" to "poll",
+    "voting" to "poll",
+    "patch" to "diff",
+    "codediff" to "diff",
+    "code-diff" to "diff",
+    "hierarchy" to "tree",
+    "filetree" to "tree",
+    "file-tree" to "tree",
+    "orgchart" to "tree",
+    "org-chart" to "tree",
+    "taxonomy" to "tree",
+    "choices" to "menu",
+    "tags" to "chips",
+    "nps" to "rating",
+    "stars" to "rating",
+    "review" to "rating",
+    "roadmap" to "timeline",
+    "milestones" to "timeline",
+    "chronology" to "timeline",
+    "history" to "timeline",
+    "events" to "timeline",
+    "agenda" to "timeline",
+    "csv" to "table",
+    "tsv" to "table",
+    "grid" to "table",
+    "leaderboard" to "table"
 )
 
 private val SUBTYPED_KINDS: Set<String> = setOf(
@@ -686,7 +733,7 @@ val HTML_LANGUAGES = setOf(
 private fun fenceToBlock(language: String?, code: String, open: Boolean, offset: Int): Block {
     val lang = language?.lowercase()
     val kind = widgetKindOf(lang)
-    val isJson = code.trimStart().startsWith("{")
+    val isJson = code.trimStart().let { it.startsWith("{") || it.startsWith("[") }
     val parsedPlan = if (!open && lang != null && lang in PLAN_FENCE_LANGUAGES) {
         parseNexlyPlanData(code)
     } else {

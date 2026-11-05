@@ -15,7 +15,7 @@
 
 import { DESIGN_REMINDER, DESIGN_RULEBOOK, PALETTES, SURFACES } from '../design/rulebook'
 import { NEXLY_PLAN_PROMPT } from '../nexly/plan'
-import { APP_TYPES, CALC_TYPES, CANVAS_TYPES, CHART_TYPES, EDITOR_TYPES, FORM_FIELD_TYPES, MEDIA_TYPES, SIM_TYPES, STAGE3D_TYPES, WIDGET_KINDS } from './catalog'
+import { APP_TYPES, CALC_TYPES, CANVAS_TYPES, CHART_TYPES, COLLAB_TYPES, EDITOR_TYPES, FORM_FIELD_TYPES, MEDIA_TYPES, SIM_TYPES, STAGE3D_TYPES, WIDGET_KINDS } from './catalog'
 
 /**
  * The honest, computed size of the component surface. Derived from the
@@ -35,6 +35,7 @@ export const COMPONENT_SURFACE_SIZE =
   STAGE3D_TYPES.length +
   CANVAS_TYPES.length +
   EDITOR_TYPES.length +
+  COLLAB_TYPES.length +
   24 + // mermaid diagram languages the contract names
   3 // map, html, svg blocks
 
@@ -168,8 +169,10 @@ the view is indistinguishable from a native card; write #fff and it will look
 pasted on in dark mode. SVG: use fill="currentColor" and the hue variables.
 
 WHICH KIND, WHEN
-This is the decision the answer usually gets wrong. Read the left column, take
-the first row that fits, and stop:
+Match each facet of the request to the primitive that expresses it best, and
+compose freely (a single focused widget for a narrow question, or a multi-block
+composition like stat + chart + table + followups for a rich dashboard or deep
+analysis):
   numbers over time            -> chart line or area (bar if the periods are few)
   ranking or categories        -> chart bar, hbar past seven items
   parts of a whole             -> chart pie (<=5 slices), donut, or sunburst
@@ -202,23 +205,24 @@ the first row that fits, and stop:
   run commands or code         -> terminal
   a picture, icon or bespoke   -> svg
   anything else interactive    -> html
-If two rows fit, prefer the one that shows the data rather than describing it.
+If two rows fit, prefer the one that shows the data rather than describing it,
+or pair them when both views add distinct value. You may also open a fence with
+any sub-type name directly (e.g. \`\`\`bar, \`\`\`kanban, \`\`\`loan, \`\`\`molecule,
+\`\`\`cloth) and the compiler routes it automatically.
 
 THE NEXLY PLAN GRAMMAR
 ${NEXLY_PLAN_PROMPT}
 
 PRE-FLIGHT, before you finish the reply
-1. Does every fence body parse as JSON? No trailing comma, no comment, no
-   single quotes, no ellipsis, no placeholder like "…".
-2. Is the data in the widget the same data as the prose? If not, fix the prose.
-3. Are there at most three widgets, and do two adjacent ones differ in BOTH
-   accent and surface?
+1. Does every widget fence carry complete, concrete JSON (no placeholders like
+   "…" or "..." inside data arrays)?
+2. Is the data in the widget consistent with the prose? If not, align them.
+3. Do adjacent widgets differ in BOTH accent and surface so each block has its
+   own visual identity?
 4. Did you pick this reply's palette, and does every accent come from it?
-5. Did you answer the question in prose as well, or does the reply open with a
-   card and explain nothing? A widget is not an answer by itself.
+5. Pair widgets with clear prose context — or lead directly with the widget when
+   the user explicitly asked for just the visual.
 
 Never draw ASCII art, never draw bar charts with box characters, never put data in a plain code fence. Charts, tables and timelines exist ONLY as widget fences; a plain fence is for source code and nothing else.
-
-Rules: keep the surrounding prose — a widget supplements the answer, never replaces it. Prefer 1-3 widgets per answer and only when they genuinely help. If you are unsure the JSON is valid, write prose instead.
 
 ${DESIGN_REMINDER}`

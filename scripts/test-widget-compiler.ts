@@ -710,6 +710,102 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   check('hostile & dialect fuzz across all 36 kinds never throws or pollutes prototype', !threw && !polluted)
 }
 
+// 43. PASS 2 FREEDOM — top-level JSON array payloads ([...]) across fences & bare blocks.
+{
+  const arrayStat = compileWidgets({
+    reply: '```stat\n[{"label":"MRR","value":"$92k","delta":"+18%"},{"label":"Churn","value":"1.1%","delta":"-0.3%"}]\n```',
+    userPrompt: 'kpis',
+  })
+  check('top-level array in ```stat compiles to stat widget', arrayStat.widgets === 1 && arrayStat.text.startsWith('```stat'))
+
+  const arrayFlash = compileWidgets({
+    reply: '```flashcards\n[{"front":" Mito ","back":"Powerhouse of the cell"},{"front":"ATP","back":"Energy currency"}]\n```',
+    userPrompt: 'flashcards',
+  })
+  check('top-level array in ```flashcards compiles to flashcards widget', arrayFlash.widgets === 1 && arrayFlash.text.startsWith('```flashcards'))
+
+  const arrayTable = compileWidgets({
+    reply: '```table\n[{"Service":"Auth","Latency":"12ms"},{"Service":"Search","Latency":"38ms"}]\n```',
+    userPrompt: 'table',
+  })
+  check('top-level array of objects in ```table compiles to table widget', arrayTable.widgets === 1 && arrayTable.text.startsWith('```table'))
+
+  const arrayChecklist = compileWidgets({
+    reply: '```checklist\n["Audit parser","Verify Android parity","Verify iOS parity"]\n```',
+    userPrompt: 'checklist',
+  })
+  check('top-level string array in ```checklist compiles to checklist widget', arrayChecklist.widgets === 1 && arrayChecklist.text.startsWith('```checklist'))
+}
+
+// 44. PASS 2 FREEDOM — root wrapper envelopes ({"chart":{...}}, {"widget":{...}}, {"data":{...}}).
+{
+  const envChart = compileWidgets({
+    reply: '```chart\n{"title":"Sales","chart":{"type":"bar","series":[{"name":"Rev","data":[["Q1",10],["Q2",20]]}]}}\n```',
+    userPrompt: 'chart',
+  })
+  check('root {"chart":{...}} envelope unwraps and compiles to ```chart', envChart.widgets === 1 && envChart.text.startsWith('```chart'))
+
+  const envWidget = compileWidgets({
+    reply: '```json\n{"widget":{"kind":"stat","title":"Health","cards":[{"label":"Uptime","value":"99.99%"}]}}\n```',
+    userPrompt: 'uptime',
+  })
+  check('root {"widget":{"kind":"stat",...}} envelope in ```json compiles to ```stat', envWidget.widgets === 1 && envWidget.text.startsWith('```stat'))
+}
+
+// 45. PASS 2 FREEDOM — pipe/CSV table fences, custom/bare/indented/unclosed fences, and prose-surrounded bare JSON.
+{
+  const pipeInTableFence = compileWidgets({
+    reply: '```table\n| Tier | Price | Quota |\n| --- | --- | --- |\n| Free | $0 | 1,000 |\n| Pro | $29 | 50,000 |\n```',
+    userPrompt: 'pricing table',
+  })
+  check('Markdown pipe table inside ```table fence compiles to ```table JSON widget', pipeInTableFence.widgets === 1 && pipeInTableFence.text.startsWith('```table'))
+
+  const csvFence = compileWidgets({
+    reply: '```csv\nRegion,Q1,Q2\nAPAC,120,145\nEMEA,98,112\n```',
+    userPrompt: 'csv table',
+  })
+  check('CSV rows inside ```csv fence compile to ```table JSON widget', csvFence.widgets === 1 && csvFence.text.startsWith('```table'))
+
+  const customFence = compileWidgets({
+    reply: '```custom_viz\n{"title":"Funnel","type":"funnel","series":[{"name":"Users","data":[["Visit",1000],["Signup",300],["Paid",80]]}]}\n```',
+    userPrompt: 'funnel',
+  })
+  check('invented fence language ```custom_viz with valid payload infers and compiles to ```chart', customFence.widgets === 1 && customFence.text.startsWith('```chart'))
+
+  const bareFence = compileWidgets({
+    reply: '```\n{"title":"Key Metrics","cards":[{"label":"DAU","value":"42k"},{"label":"MAU","value":"310k"}]}\n```',
+    userPrompt: 'metrics',
+  })
+  check('bare ``` fence with valid widget JSON infers and compiles to ```stat', bareFence.widgets === 1 && bareFence.text.startsWith('```stat'))
+
+  const unclosedTail = compileWidgets({
+    reply: 'Here is the chart:\n\n```bar\n{"title":"Growth","series":[{"name":"ARR","data":[["2024",10],["2025",24]]}]}',
+    userPrompt: 'growth chart',
+  })
+  check('unclosed trailing widget fence recovers and compiles to closed ```chart', unclosedTail.widgets === 1 && unclosedTail.text.includes('```chart'))
+
+  const embeddedBare = compileWidgets({
+    reply: 'Here is the snapshot:\n\n{"title":"Runway","cards":[{"label":"Cash","value":"$4.2M"},{"label":"Burn","value":"$180k/mo"}]}\n\nLet me know if you want the full model.',
+    userPrompt: 'runway',
+  })
+  check('unfenced JSON object surrounded by prose paragraphs promotes to ```stat', embeddedBare.widgets === 1 && embeddedBare.text.includes('```stat') && embeddedBare.text.includes('Here is the snapshot:'))
+}
+
+// 46. PASS 2 FREEDOM — multi-widget dashboard (>3 widgets) and compound fence tokens.
+{
+  const fiveWidgets = compileWidgets({
+    reply: [
+      '```widget:stat\n{"title":"M1","cards":[{"label":"A","value":"1"}]}\n```',
+      '```chart/line\n{"title":"M2","series":[{"name":"S","data":[["Jan",1],["Feb",2]]}]}\n```',
+      '```table\n{"title":"M3","columns":["K","V"],"rows":[["x","1"]]}\n```',
+      '```checklist\n{"title":"M4","items":["Step 1","Step 2"]}\n```',
+      '```panel\n{"title":"M5","body":"All systems nominal."}\n```',
+    ].join('\n\n'),
+    userPrompt: 'executive dashboard',
+  })
+  check('5-widget dashboard with compound fence names compiles all 5 widgets without dropping', fiveWidgets.widgets === 5)
+}
+
 console.log(`\n${passed} passed, ${failures.length} failed`)
 if (failures.length) {
   for (const f of failures) console.log(`  - ${f}`)

@@ -247,13 +247,13 @@ export const EDITOR_TYPES = [
 
 /** Hard limits, mirrored by the clients. */
 export const LIMITS = {
-  maxWidgetsPerAnswer: 3,
+  maxWidgetsPerAnswer: 12,
   maxWidgetBytes: 64 * 1024,
-  maxChartSeries: 8,
+  maxChartSeries: 16,
   maxPointsPerSeries: 200,
   maxTableRows: 100,
   maxTableColumns: 8,
-  maxCards: 8,
+  maxCards: 12,
   maxQuizQuestions: 10,
   maxFormFields: 12,
   maxAppItems: 40,
@@ -438,8 +438,30 @@ const KIND_SYNONYMS: Readonly<Record<string, WidgetKind>> = {
   tags: 'chips',
   nps: 'rating',
   stars: 'rating',
+  review: 'rating',
   slides: 'carousel',
   slideshow: 'carousel',
+  csv: 'table',
+  tsv: 'table',
+  grid: 'table',
+  leaderboard: 'table',
+  matrix: 'table',
+  highlights: 'stat',
+  numbers: 'stat',
+  summary: 'panel',
+  overview: 'panel',
+  admonition: 'panel',
+  banner: 'panel',
+  agenda: 'timeline',
+  walkthrough: 'steps',
+  howto: 'steps',
+  'how-to': 'steps',
+  guide: 'steps',
+  workflow: 'steps',
+  voting: 'poll',
+  vocab: 'flashcards',
+  trivia: 'quiz',
+  mcq: 'quiz',
 }
 
 const SUBTYPED_KINDS = new Set<WidgetKind>([
@@ -454,8 +476,7 @@ const SUBTYPED_KINDS = new Set<WidgetKind>([
   'collab',
 ])
 
-export function widgetKindOf(language: string): WidgetKind | null {
-  const lang = language.trim().toLowerCase()
+function singleTokenKindOf(lang: string): WidgetKind | null {
   if (isWidgetKind(lang)) return lang
   if (CHART_ALIASES.includes(lang) || lang in CHART_SYNONYMS) return 'chart'
   // Media first: "search" is both a media result list and an app filter panel,
@@ -473,12 +494,35 @@ export function widgetKindOf(language: string): WidgetKind | null {
   return null
 }
 
+export function widgetKindOf(language: string): WidgetKind | null {
+  const lang = language.trim().toLowerCase()
+  const direct = singleTokenKindOf(lang)
+  if (direct) return direct
+  // Compound fence names like `bar_chart_2026`, `comparison-table`, `kpi_cards`:
+  // inspect tokens so creative model fence names still resolve cleanly.
+  const parts = lang.split(/[-_:/.\s]+/).filter(Boolean)
+  if (parts.length > 1) {
+    for (const part of parts) {
+      const hit = singleTokenKindOf(part)
+      if (hit) return hit
+    }
+  }
+  return null
+}
+
 /** `stackedarea` -> `stackedArea`, `barchart` -> `bar`; every other alias is already canonical. */
 export function canonicalChartType(alias: string): string {
   const lower = alias.trim().toLowerCase()
   if (lower in CHART_SYNONYMS) return CHART_SYNONYMS[lower]
   const hit = CHART_TYPES.find((t) => t.toLowerCase() === lower)
-  return hit ?? alias
+  if (hit) return hit
+  const parts = lower.split(/[-_:/.\s]+/).filter(Boolean)
+  for (const part of parts) {
+    if (part in CHART_SYNONYMS) return CHART_SYNONYMS[part]
+    const pHit = CHART_TYPES.find((t) => t.toLowerCase() === part)
+    if (pHit) return pHit
+  }
+  return alias
 }
 
 /** Inject the type implied by the fence when the payload does not name one. */

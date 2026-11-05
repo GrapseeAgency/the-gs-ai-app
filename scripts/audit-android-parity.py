@@ -48,8 +48,11 @@ def ts_list(name: str) -> list[str]:
 
 
 def kt_set(name: str, src: str) -> list[str]:
-    i = src.find(f"internal val {name} = setOf(")
-    if i < 0:
+    for prefix in (f"internal val {name} = setOf(", f"val {name} = setOf("):
+        i = src.find(prefix)
+        if i >= 0:
+            break
+    else:
         failures.append(f"Android: type set {name} not found")
         return []
     j = src.index("(", i)
@@ -63,6 +66,22 @@ def kt_set(name: str, src: str) -> list[str]:
                 return re.findall(r'"([^"]+)"', src[j + 1 : k])
     return []
 
+
+# --- 0. top-level widget kinds (WIDGET_KINDS == WIDGET_LANGUAGES) -----------
+web_kinds = ts_list("WIDGET_KINDS")
+android_kinds = kt_set("WIDGET_LANGUAGES", kt_all)
+missing_kinds = [k for k in web_kinds if k not in android_kinds]
+extra_kinds = [k for k in android_kinds if k not in web_kinds]
+if missing_kinds:
+    failures.append(f"WIDGET_LANGUAGES: Android missing {missing_kinds}")
+if extra_kinds:
+    failures.append(f"WIDGET_LANGUAGES: Android has extras {extra_kinds}")
+wb_src = read(K / "WidgetBlocks.kt")
+unparsed_kinds = [k for k in web_kinds if k != "plan" and f'"{k}" ->' not in wb_src]
+if unparsed_kinds:
+    failures.append(f"parseWidget: Android missing decoder branch for {unparsed_kinds}")
+if not missing_kinds and not extra_kinds and not unparsed_kinds:
+    notes.append(f"WIDGET_LANGUAGES + parseWidget: {len(web_kinds)}/{len(web_kinds)} top-level kinds match")
 
 # --- 1. sub-type lists, exact match ------------------------------------------
 LISTS = [
@@ -158,6 +177,35 @@ for h in unsupported_ok:
     if h in heads and h not in bundle:
         failures.append(f"mermaid head '{h}' must not be gated (engine lacks it)")
 notes.append(f"mermaid: {len(heads)} heads verified against the bundled engine")
+
+# --- 5. iOS parity (WidgetBlocks.swift) --------------------------------------
+IOS_WB = ROOT / "ios/App/Sources/Features/Chats/Content/WidgetBlocks.swift"
+if not IOS_WB.exists():
+    failures.append("iOS: WidgetBlocks.swift missing")
+else:
+    ios_src = read(IOS_WB)
+
+    def swift_set(name: str) -> list[str]:
+        m_s = re.search(rf"let {name}: Set<String> = \[(.*?)\]", ios_src, re.S)
+        if not m_s:
+            failures.append(f"iOS: set {name} not found in WidgetBlocks.swift")
+            return []
+        return [s.strip().lower() for s in re.findall(r'"([^"]+)"', m_s.group(1))]
+
+    ios_kinds = swift_set("WIDGET_LANGUAGES")
+    missing_ios_kinds = [k for k in web_kinds if k not in ios_kinds]
+    if missing_ios_kinds:
+        failures.append(f"iOS WIDGET_LANGUAGES missing {missing_ios_kinds}")
+    else:
+        notes.append(f"iOS WIDGET_LANGUAGES: {len(web_kinds)}/{len(web_kinds)} top-level kinds match")
+
+    for ts_name, sw_name in LISTS:
+        web_items = [t.lower() for t in ts_list(ts_name)]
+        ios_items = swift_set(sw_name)
+        miss = [t for t in web_items if t not in ios_items]
+        if miss:
+            failures.append(f"iOS {sw_name} missing {miss}")
+    notes.append(f"iOS sub-type sets: {len(LISTS)}/{len(LISTS)} lists verified")
 
 # --- report ------------------------------------------------------------------
 print("== android parity audit ==")

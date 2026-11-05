@@ -523,6 +523,17 @@ sealed interface Widget {
     data class Voice(val w: VoiceWidget) : Widget { override val title get() = w.title }
     data class Calc(val w: CalcWidget) : Widget { override val title get() = w.title }
     data class App(val w: AppWidget) : Widget { override val title get() = w.title }
+    data class Tabs(val w: TabsWidget) : Widget { override val title get() = w.title }
+    data class Accordion(val w: AccordionWidget) : Widget { override val title get() = w.title }
+    data class Steps(val w: StepsWidget) : Widget { override val title get() = w.title }
+    data class Menu(val w: MenuWidget) : Widget { override val title get() = w.title }
+    data class Chips(val w: ChipsWidget) : Widget { override val title get() = w.title }
+    data class Rating(val w: RatingWidget) : Widget { override val title get() = w.title }
+    data class Poll(val w: PollWidget) : Widget { override val title get() = w.title }
+    data class Diff(val w: DiffWidget) : Widget { override val title get() = w.title }
+    data class Tree(val w: TreeWidget) : Widget { override val title get() = w.title }
+    data class Flashcards(val w: FlashcardsWidget) : Widget { override val title get() = w.title }
+    data class Checklist(val w: ChecklistWidget) : Widget { override val title get() = w.title }
     data class Sim(val w: SimWidget) : Widget { override val title get() = w.title }
     data class Stage3D(val w: Stage3DWidget) : Widget { override val title get() = w.title }
     data class Canvas(val w: CanvasWidgetData) : Widget { override val title get() = w.title }
@@ -553,10 +564,12 @@ internal val widgetJson = Json {
  * caller renders the raw JSON as a code block, so the model can never break
  * the transcript with a bad widget.
  */
-fun parseWidget(kind: String, json: String): Widget? {
-    if (json.isBlank() || json.length > MAX_WIDGET_BYTES) return null
+fun parseWidget(kind: String, rawJson: String): Widget? {
+    if (rawJson.isBlank() || rawJson.length > MAX_WIDGET_BYTES) return null
+    val resolvedKind = widgetKindOf(kind) ?: kind.lowercase().trim()
+    val json = normalizeWidgetJson(resolvedKind, rawJson)
     return try {
-        when (kind) {
+        when (resolvedKind) {
             "chart" -> {
                 val w = widgetJson.decodeFromString<ChartWidget>(json)
                 // Pie/donut are documented as ONE SERIES PER SLICE with a
@@ -819,6 +832,51 @@ fun parseWidget(kind: String, json: String): Widget? {
                     .trim('-').take(48).ifEmpty { "lobby" }
                 Widget.Collab(w.copy(surface = surface, room = room, items = w.items.filter { it.isNotBlank() }.take(12)))
             }
+            // v2 — layout, navigation, and interactive controls.
+            "tabs" -> widgetJson.decodeFromString<TabsWidget>(json).let { w ->
+                val tabs = w.tabs.filter { it.label.isNotBlank() && (it.body.isNotBlank() || it.items.isNotEmpty()) }.take(8)
+                if (tabs.isEmpty()) null else Widget.Tabs(w.copy(tabs = tabs))
+            }
+            "accordion" -> widgetJson.decodeFromString<AccordionWidget>(json).let { w ->
+                val sections = w.sections.filter { it.label.isNotBlank() && it.body.isNotBlank() }.take(10)
+                if (sections.isEmpty()) null else Widget.Accordion(w.copy(sections = sections))
+            }
+            "steps" -> widgetJson.decodeFromString<StepsWidget>(json).let { w ->
+                val steps = w.steps.filter { it.title.isNotBlank() }.take(12)
+                if (steps.isEmpty()) null else Widget.Steps(w.copy(steps = steps))
+            }
+            "menu" -> widgetJson.decodeFromString<MenuWidget>(json).let { w ->
+                val options = w.options.filter { it.label.isNotBlank() }.take(12)
+                if (options.isEmpty()) null else Widget.Menu(w.copy(options = options))
+            }
+            "chips" -> widgetJson.decodeFromString<ChipsWidget>(json).let { w ->
+                val options = w.options.filter { it.label.isNotBlank() }.take(12)
+                if (options.isEmpty()) null else Widget.Chips(w.copy(options = options))
+            }
+            "rating" -> widgetJson.decodeFromString<RatingWidget>(json).let { w ->
+                val style = if (w.style in setOf("star", "heart", "thumb", "nps")) w.style else "star"
+                if (w.title.isBlank() && w.prompt.isBlank()) null else Widget.Rating(w.copy(style = style))
+            }
+            "poll" -> widgetJson.decodeFromString<PollWidget>(json).let { w ->
+                val options = w.options.filter { it.label.isNotBlank() }.take(12)
+                if (options.size < 2) null else Widget.Poll(w.copy(options = options))
+            }
+            "diff" -> widgetJson.decodeFromString<DiffWidget>(json).let { w ->
+                if (w.unified.isBlank() && w.before.isBlank() && w.after.isBlank()) null
+                else Widget.Diff(w)
+            }
+            "tree" -> widgetJson.decodeFromString<TreeWidget>(json).let { w ->
+                val roots = w.roots.filter { it.label.isNotBlank() }.take(8)
+                if (roots.isEmpty()) null else Widget.Tree(w.copy(roots = roots))
+            }
+            "flashcards" -> widgetJson.decodeFromString<FlashcardsWidget>(json).let { w ->
+                val cards = w.cards.filter { it.front.isNotBlank() && it.back.isNotBlank() }.take(20)
+                if (cards.isEmpty()) null else Widget.Flashcards(w.copy(cards = cards))
+            }
+            "checklist" -> widgetJson.decodeFromString<ChecklistWidget>(json).let { w ->
+                val items = w.items.filter { it.label.isNotBlank() }.take(30)
+                if (items.isEmpty()) null else Widget.Checklist(w.copy(items = items))
+            }
             else -> null
         }
     } catch (_: Throwable) {
@@ -870,8 +928,9 @@ private fun hasTimedRows(obj: JsonObject): Boolean {
 }
 
 fun inferWidgetKind(json: String): String? {
+    val normalized = normalizeWidgetJson("json", json)
     val obj = try {
-        widgetJson.parseToJsonElement(json) as? JsonObject
+        widgetJson.parseToJsonElement(normalized) as? JsonObject
     } catch (_: Throwable) {
         null
     } ?: return null
@@ -889,13 +948,21 @@ fun inferWidgetKind(json: String): String? {
         if ("columns" in keys && "rows" in keys) {
             add("table"); add("editor"); add("app")
         }
+        if ("tabs" in keys) add("tabs")
+        if ("sections" in keys) { add("accordion"); add("tabs") }
+        if ("roots" in keys || "tree" in keys) add("tree")
+        if ("unified" in keys || ("before" in keys && "after" in keys) || ("old" in keys && "new" in keys)) add("diff")
         if ("cards" in keys) {
-            add("stat"); add("cards")
+            add("flashcards"); add("stat"); add("cards")
         }
         if ("left" in keys && "right" in keys) add("compare")
         if ("entries" in keys) add("timeline")
         if ("questions" in keys) add("quiz")
         if ("fields" in keys) add("form")
+        if ("options" in keys || "choices" in keys) {
+            add("poll"); add("menu"); add("chips")
+        }
+        if ("style" in keys && ("max" in keys || "prompt" in keys)) add("rating")
         if ("prompts" in keys) add("followups")
         if ("buttons" in keys) add("actions")
         if ("phrases" in keys) add("voice")
@@ -908,15 +975,18 @@ fun inferWidgetKind(json: String): String? {
         if ("editor" in keys || "tracks" in keys || "cells" in keys || "blocks" in keys) add("editor")
         if ("commands" in keys || "cwd" in keys) add("terminal")
         if ("room" in keys) add("collab")
-        if ("items" in keys) {
-            add("progress"); add("gauge"); add("carousel"); add("cards"); add("app"); add("media"); add("collab")
+        if ("steps" in keys) {
+            add("steps"); add("app")
+        }
+        if ("items" in keys || "tasks" in keys || "todos" in keys) {
+            add("checklist"); add("progress"); add("gauge"); add("carousel"); add("cards"); add("steps"); add("accordion"); add("menu"); add("chips"); add("app"); add("media"); add("collab")
         }
         if ("pages" in keys) add("media")
-        if ("steps" in keys || "groups" in keys || "slots" in keys) add("app")
+        if ("groups" in keys || "slots" in keys) add("app")
         if ("body" in keys && ("title" in keys || "tone" in keys || "cta" in keys)) add("panel")
     }
     return candidates.firstOrNull {
-        if (it == "plan") parseNexlyPlanData(json) != null else parseWidget(it, json) != null
+        if (it == "plan") parseNexlyPlanData(normalized) != null else parseWidget(it, normalized) != null
     }
 }
 
@@ -1034,7 +1104,10 @@ private val FAMILY_SLOTS = mapOf(
     "progress" to 4, "timeline" to 5, "table" to 6, "quiz" to 7,
     "form" to 8, "carousel" to 9, "cards" to 10, "followups" to 11,
     "media" to 3, "actions" to 2, "panel" to 1, "voice" to 8,
-    "calc" to 9, "app" to 4
+    "calc" to 9, "app" to 4,
+    "tabs" to 0, "accordion" to 5, "steps" to 4, "menu" to 8,
+    "chips" to 11, "rating" to 2, "poll" to 7, "diff" to 9,
+    "tree" to 10, "flashcards" to 6, "checklist" to 1
 )
 
 /**
@@ -1057,11 +1130,11 @@ internal fun widgetFamily(tag: String): String {
 }
 
 internal fun widgetTone(tag: String): CardTone = when (widgetFamily(tag)) {
-    "chart", "carousel" -> CardTone.Tinted
-    "stat", "gauge" -> CardTone.Hero
-    "form", "quiz", "calc", "app" -> CardTone.Inset
-    "timeline", "panel" -> CardTone.Editorial
-    "table", "cards", "media" -> CardTone.Plain
+    "chart", "carousel", "tabs", "flashcards" -> CardTone.Tinted
+    "stat", "gauge", "rating" -> CardTone.Hero
+    "form", "quiz", "calc", "app", "poll", "diff" -> CardTone.Inset
+    "timeline", "panel", "steps", "accordion" -> CardTone.Editorial
+    "table", "cards", "media", "tree", "checklist" -> CardTone.Plain
     else -> CardTone.Outline
 }
 
@@ -1269,7 +1342,10 @@ fun WidgetBlockView(block: Block.WidgetBlock, streaming: Boolean, onSendPrompt: 
         WidgetSkeleton(block.kind)
         return
     }
-    val widget = remember(block.kind, block.json) { parseWidget(block.kind, block.json) }
+    val widget = remember(block.kind, block.json) {
+        parseWidget(block.kind, block.json)
+            ?: inferWidgetKind(block.json)?.let { inferred -> parseWidget(inferred, block.json) }
+    }
     if (widget == null) {
         WidgetFallback(block)
         return
@@ -1306,6 +1382,17 @@ fun WidgetView(widget: Widget, onSendPrompt: ((String) -> Unit)? = null) {
         is Widget.Voice -> VoiceWidgetView(widget.w, onSendPrompt)
         is Widget.Calc -> CalcWidgetView(widget.w, onSendPrompt)
         is Widget.App -> AppWidgetView(widget.w, onSendPrompt)
+        is Widget.Tabs -> TabsWidgetView(widget.w)
+        is Widget.Accordion -> AccordionWidgetView(widget.w)
+        is Widget.Steps -> StepsWidgetView(widget.w)
+        is Widget.Menu -> MenuWidgetView(widget.w, onSendPrompt)
+        is Widget.Chips -> ChipsWidgetView(widget.w, onSendPrompt)
+        is Widget.Rating -> RatingWidgetView(widget.w, onSendPrompt)
+        is Widget.Poll -> PollWidgetView(widget.w, onSendPrompt)
+        is Widget.Diff -> DiffWidgetView(widget.w)
+        is Widget.Tree -> TreeWidgetView(widget.w)
+        is Widget.Flashcards -> FlashcardsWidgetView(widget.w)
+        is Widget.Checklist -> ChecklistWidgetView(widget.w)
         is Widget.Sim -> SimWidgetView(widget.w)
         is Widget.Stage3D -> Stage3DWidgetView(widget.w)
         is Widget.Canvas -> CanvasWidgetView(widget.w)

@@ -50,6 +50,10 @@ indirect enum Block: Equatable {
     /// renders time + glass glyph + activity rows, and never falls through to
     /// a markdown table or raw JSON. `open` is the mid-stream skeleton.
     case plan(NexlyPlanData, open: Bool, sourceStart: Int)
+    /// Interactive GENUI widget block across all 36 `WIDGET_KINDS`.
+    case widget(kind: String, json: String, open: Bool, sourceStart: Int)
+    /// Interactive HTML / SVG / map surface block.
+    case html(kind: String, source: String, open: Bool, sourceStart: Int)
     case divider(sourceStart: Int)
     case mathBlock(latex: String, sourceStart: Int)
     case mermaid(source: String, sourceStart: Int)
@@ -69,6 +73,8 @@ indirect enum Block: Equatable {
         case .codeBlock(_, _, _, let s): return s
         case .table(_, _, _, let s): return s
         case .plan(_, _, let s): return s
+        case .widget(_, _, _, let s): return s
+        case .html(_, _, _, let s): return s
         case .divider(let s): return s
         case .mathBlock(_, let s): return s
         case .mermaid(_, let s): return s
@@ -109,13 +115,40 @@ struct GSLine {
 func parseBlocks(_ content: String, metadata: RichMetadata? = nil) -> [Block] {
     let normalized = content.replacingOccurrences(of: "\r\n", with: "\n")
     let lines = toLines(normalized)
-    var blocks = parseCore(lines)
+    var blocks = parseCore(lines).map(promoteBarePayload)
     if let metadata = metadata {
         let tools = metadata.toolResults.map { Block.toolResult($0, sourceStart: 0) }
         let citations = metadata.citations.isEmpty ? [] : [Block.citations(metadata.citations, sourceStart: 0)]
         blocks = tools + blocks + citations
     }
     return blocks
+}
+
+private func promoteBarePayload(_ block: Block) -> Block {
+    let candidate: String?
+    switch block {
+    case .paragraph(let spans, _):
+        if spans.count == 1, case .text(let t) = spans[0] {
+            candidate = t
+        } else {
+            candidate = nil
+        }
+    case .codeBlock(_, let code, let open, _):
+        candidate = open ? nil : code
+    default:
+        candidate = nil
+    }
+    guard let raw = candidate?.trimmingCharacters(in: .whitespacesAndNewlines),
+          raw.count >= 2, raw.count <= 65_536 else { return block }
+    let isObj = raw.hasPrefix("{") && raw.hasSuffix("}")
+    let isArr = raw.hasPrefix("[") && raw.hasSuffix("]")
+    guard isObj || isArr else { return block }
+    guard let kind = inferWidgetKind(raw) else { return block }
+    if kind == "plan" {
+        guard let plan = parseNexlyPlan(raw) else { return block }
+        return .plan(plan, open: false, sourceStart: block.sourceStart)
+    }
+    return .widget(kind: kind, json: raw, open: false, sourceStart: block.sourceStart)
 }
 
 private func toLines(_ text: String) -> [GSLine] {
@@ -207,7 +240,7 @@ private func parseCore(_ lines: [GSLine]) -> [Block] {
             continue
         }
 
-        if lead.hasPrefix("```") {
+        if lead.hasPrefix("```") || lead.hasPrefix("~~~") {
             let (block, next) = parseFence(lines, start: i)
             blocks.append(block)
             i = next
@@ -291,7 +324,7 @@ private func isProse(_ lines: [GSLine], index: Int) -> Bool {
     if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return false }
     let t = text.trimmedEnd
     let lead = t.trimmingCharacters(in: .whitespaces)
-    if lead.hasPrefix("```") { return false }
+    if lead.hasPrefix("```") || lead.hasPrefix("~~~") { return false }
     if lead.hasPrefix("$$") { return false }
     if headingLineRegex.firstMatch(in: t, range: NSRange(location: 0, length: (t as NSString).length)) != nil { return false }
     if t.matchesEntire(hrLineRegex) { return false }
@@ -310,7 +343,9 @@ private let nexlyPlanFenceLanguages: Set<String> = [
 ]
 
 private func parseFence(_ lines: [GSLine], start: Int) -> (Block, Int) {
-    let opener = lines[start].text.trimmingCharacters(in: .whitespaces)
+    let leadLine = lines[start].text.trimmingCharacters(in: .whitespaces)
+    let fenceMarker = leadLine.hasPrefix("~~~") ? "~~~" : "```"
+    let opener = leadLine
         .dropFirst(3)
         .trimmingCharacters(in: .whitespaces)
     let language = opener
@@ -320,49 +355,54 @@ private func parseFence(_ lines: [GSLine], start: Int) -> (Block, Int) {
     var i = start + 1
     while i < lines.count {
         let trimmed = lines[i].text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasPrefix("```") && trimmed.dropFirst(3).trimmingCharacters(in: .whitespaces).isEmpty {
+        if trimmed.hasPrefix(fenceMarker) && trimmed.dropFirst(3).trimmingCharacters(in: .whitespaces).isEmpty {
             let code = String(body.dropLast(body.hasSuffix("\n") ? 1 : 0))
-            // A CLOSED mermaid fence is a first-class diagram block (native
-            // renderer, finalize-time layout); an OPEN one stays plain code so
-            // the stream never lays out a diagram mid-flight. Parity with the
-            // Android twin's fenceToBlock.
-            let block: Block
-            let isJson = code.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("{")
-            if language?.lowercased() == "mermaid" ||
-               ((language?.lowercased() == "mindmap" || language?.lowercased() == "gantt") && !isJson) {
-                block = .mermaid(source: code, sourceStart: lines[start].offset)
-            } else if let lang = language?.lowercased(),
-                      nexlyPlanFenceLanguages.contains(lang),
-                      let plan = parseNexlyPlan(code) {
-                // A validated timetable owns a real card. A malformed plan
-                // fence stays source code — never an empty glass surface.
-                block = .plan(plan, open: false, sourceStart: lines[start].offset)
-            } else if let lang = language?.lowercased(),
-                      ["json", "jsonc", "widget", "genui", "data", "ui"].contains(lang),
-                      let plan = parseNexlyPlan(code) {
-                // The model sometimes labels the same payload ```json. The
-                // validator only returns a plan when timed rows are present, so
-                // ordinary JSON stays code. Native parity with Android's
-                // promoteBarePayload().
-                block = .plan(plan, open: false, sourceStart: lines[start].offset)
-            } else {
-                block = .codeBlock(language: language, code: code, open: false, sourceStart: lines[start].offset)
-            }
-            return (block, i + 1)
+            return (fenceToBlock(language: language, code: code, open: false, offset: lines[start].offset), i + 1)
         }
         if !body.isEmpty { body.append("\n") }
         body.append(lines[i].text)
         i += 1
     }
     let openCode = String(body.dropLast(body.hasSuffix("\n") ? 1 : 0))
-    // Unterminated trailing plan: show the glass skeleton rather than a wall
-    // of raw JSON. Everything else keeps the honest open-code representation.
-    if language?.lowercased() == "plan" {
-        return (.plan(parseNexlyPlan(openCode) ?? .placeholder,
-                      open: true,
-                      sourceStart: lines[start].offset), lines.count)
+    return (fenceToBlock(language: language, code: openCode, open: true, offset: lines[start].offset), lines.count)
+}
+
+private func fenceToBlock(language: String?, code: String, open: Bool, offset: Int) -> Block {
+    let lang = language?.lowercased()
+    let kind = widgetKindOf(lang)
+    let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+    let isJson = trimmedCode.hasPrefix("{") || trimmedCode.hasPrefix("[")
+
+    if !open,
+       (lang == "mermaid" || ((lang == "mindmap" || lang == "gantt") && !isJson)) {
+        return .mermaid(source: code, sourceStart: offset)
     }
-    return (.codeBlock(language: language, code: openCode, open: true, sourceStart: lines[start].offset), lines.count)
+    if lang == "map" {
+        return .html(kind: "map", source: code, open: open, sourceStart: offset)
+    }
+    if !open, let lang, nexlyPlanFenceLanguages.contains(lang), let plan = parseNexlyPlan(code) {
+        return .plan(plan, open: false, sourceStart: offset)
+    }
+    if !open, let lang, ["json", "jsonc", "widget", "genui", "data", "ui"].contains(lang),
+       let plan = parseNexlyPlan(code) {
+        return .plan(plan, open: false, sourceStart: offset)
+    }
+    if lang == "plan" {
+        if open {
+            return .plan(parseNexlyPlan(code) ?? .placeholder, open: true, sourceStart: offset)
+        }
+        return .codeBlock(language: language, code: code, open: false, sourceStart: offset)
+    }
+    if let kind, kind != "plan", (isJson || open) {
+        let injected = (lang != nil && lang != kind && isJson)
+            ? injectWidgetType(json: code, alias: lang!, kind: kind)
+            : code
+        return .widget(kind: kind, json: injected, open: open, sourceStart: offset)
+    }
+    if let lang, HTML_LANGUAGES.contains(lang) {
+        return .html(kind: lang == "svg" ? "svg" : "html", source: code, open: open, sourceStart: offset)
+    }
+    return .codeBlock(language: language, code: code, open: open, sourceStart: offset)
 }
 
 private func parseMathBlock(_ lines: [GSLine], start: Int, into blocks: inout [Block]) -> Int {
@@ -639,6 +679,10 @@ private func shiftSource(_ block: Block, by delta: Int) -> Block {
         return .table(headers: headers, aligns: aligns, rows: rows, sourceStart: s + delta)
     case .plan(let plan, let open, let s):
         return .plan(plan, open: open, sourceStart: s + delta)
+    case .widget(let kind, let json, let open, let s):
+        return .widget(kind: kind, json: json, open: open, sourceStart: s + delta)
+    case .html(let kind, let source, let open, let s):
+        return .html(kind: kind, source: source, open: open, sourceStart: s + delta)
     case .divider(let s):
         return .divider(sourceStart: s + delta)
     case .mathBlock(let latex, let s):

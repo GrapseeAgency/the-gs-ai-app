@@ -204,6 +204,10 @@ func BlockView(block: Block, isLast: Bool, citations: [Int: String]) -> some Vie
         TableBlockView(headers: headers, aligns: aligns, rows: rows, citations: citations)
     case .plan(let plan, let open, _):
         NexlyPlanCard(plan: plan, open: open)
+    case .widget(let kind, let json, let open, _):
+        WidgetBlockView(kind: kind, json: json, open: open)
+    case .html(let kind, let source, let open, _):
+        HtmlBlockView(kind: kind, source: source, open: open)
     case .divider:
         DividerBlockView()
     case .mathBlock(let latex, _):

@@ -248,6 +248,8 @@ private func summarize(_ blocks: [Block]) -> FixtureSummary {
         case .collapsible: return "Collapsible"
         case .citations: return "Citations"
         case .plan: return "Plan"
+        case .widget: return "Widget"
+        case .html: return "Html"
         case .toolResult: return "ToolResult"
         }
     }

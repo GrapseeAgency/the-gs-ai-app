@@ -22,6 +22,7 @@ import {
   SIM_TYPES,
   STAGE3D_TYPES,
   MEDIA_TYPES,
+  WIDGET_KINDS,
   canonicalChartType,
   injectWidgetType,
   isChartType,
@@ -51,11 +52,20 @@ export type ValidationResult =
     }
   | { ok: false; kind: string; errors: string[] }
 
-/** ```kind\n{...}\n``` (or ~~~kind, optional indent, optional info string). */
-const FENCE = /^[ \t]{0,3}(?:```|~~~)([a-zA-Z][\w-]*)[ \t]*[^\r\n]*\r?\n([\s\S]*?)^[ \t]{0,3}(?:```|~~~)[ \t]*$/gm
+/** ```kind\n{...}\n``` (or ~~~kind, optional indent up to 8 spaces for list items, optional language/info string). */
+const FENCE = /^[ \t]{0,8}(?:```|~~~)([a-zA-Z0-9][\w+-]*)?[ \t]*[^\r\n]*\r?\n([\s\S]*?)^[ \t]{0,8}(?:```|~~~)[ \t]*$/gm
+
+/** Trailing unclosed fence when the stream or model truncated before the closing ```. */
+const UNCLOSED_TAIL_FENCE = /(?:^|\r?\n)[ \t]{0,8}(?:```|~~~)([a-zA-Z0-9][\w+-]*)[ \t]*[^\r\n]*\r?\n([\s\S]+)$/
 
 /** Generic fence labels models use when wrapping a widget JSON payload. */
-const GENERIC_WIDGET_FENCES = new Set(['json', 'jsonc', 'widget', 'genui', 'data', 'ui'])
+const GENERIC_WIDGET_FENCES = new Set(['json', 'jsonc', 'widget', 'genui', 'data', 'ui', 'gsui', 'card_ui', 'block'])
+
+/** Non-widget visual fences handled by dedicated client renderers. */
+const NON_WIDGET_VISUAL_FENCES = new Set(['mermaid', 'html', 'htm', 'web', 'webapp', 'svg', 'map'])
+
+/** Fences whose non-JSON body can be CSV / TSV / Markdown pipe rows for a table widget. */
+const TABULAR_FENCES = new Set(['table', 'tables', 'datatable', 'data_table', 'csv', 'tsv', 'grid', 'spreadsheet', 'leaderboard', 'matrix'])
 
 /**
  * Fence languages a model naturally reaches for when it means the Nexly
@@ -64,23 +74,93 @@ const GENERIC_WIDGET_FENCES = new Set(['json', 'jsonc', 'widget', 'genui', 'data
  */
 const PLAN_FENCE_LANGUAGES = new Set(['plan', 'schedule', 'timetable', 'itinerary', 'routine', 'day'])
 
+/**
+ * Convert a Markdown pipe table or CSV/TSV block inside a ```table / ```csv
+ * fence into a canonical JSON `{ columns, rows, sortable: true }` payload.
+ */
+export function tabularTextToJson(raw: string): string | null {
+  const lines = raw
+    .trim()
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+  if (lines.length < 2) return null
+
+  // 1. Markdown pipe table
+  if (lines[0].includes('|') && lines[1].includes('|')) {
+    const splitPipe = (line: string) => {
+      let s = line.trim()
+      if (s.startsWith('|')) s = s.slice(1)
+      if (s.endsWith('|')) s = s.slice(0, -1)
+      return s.split('|').map((c) => c.trim())
+    }
+    const isSep = (line: string) => /^[|\-: \t]+$/.test(line) && line.includes('-')
+    const columns = splitPipe(lines[0]).filter((_, i, a) => a.length > 1 || Boolean(a[i]))
+    const dataLines = lines.slice(1).filter((l) => !isSep(l))
+    if (columns.length >= 1 && dataLines.length >= 1) {
+      const rows = dataLines.map((l) => splitPipe(l))
+      return JSON.stringify({ columns, rows, sortable: true })
+    }
+  }
+
+  // 2. CSV / TSV lines
+  const delim = lines[0].includes('\t') ? '\t' : lines[0].includes(',') ? ',' : null
+  if (!delim) return null
+  const parseRow = (line: string): string[] => {
+    const cells: string[] = []
+    let cur = ''
+    let inQuotes = false
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          cur += '"'
+          i++
+        } else {
+          inQuotes = !inQuotes
+        }
+      } else if (ch === delim && !inQuotes) {
+        cells.push(cur.trim())
+        cur = ''
+      } else {
+        cur += ch
+      }
+    }
+    cells.push(cur.trim())
+    return cells
+  }
+  const columns = parseRow(lines[0])
+  if (columns.length < 2) return null
+  const rows = lines.slice(1).map(parseRow).filter((r) => r.some(Boolean))
+  if (rows.length === 0) return null
+  return JSON.stringify({ columns, rows, sortable: true })
+}
+
 export function extractWidgetFences(text: string): WidgetFence[] {
   const out: WidgetFence[] = []
+  let lastEnd = 0
   for (const m of text.matchAll(FENCE)) {
-    const language = m[1]
+    const language = m[1] ?? ''
     const lower = language.toLowerCase()
-    const body = m[2].trim()
-    // A widget payload is a JSON OBJECT. A ```gantt fence holding mermaid's
-    // gantt syntax (dateFormat/section lines — the model does this constantly)
-    // is NOT a widget: validating it would report "invalid JSON" and STRIP the
-    // fence, destroying a diagram the client could have rendered. Leave it in
-    // the text, untouched, for the client's diagram renderer.
-    if (!body.startsWith('{')) continue
-    // A chart sub-type fence (```funnel, ```gantt …) is a chart widget with the
-    // type implied by the fence. Normalising here means the persisted answer
-    // only ever carries the canonical ```chart form, and the client never sees
-    // a payload it would render as a code block.
-    let kind = widgetKindOf(language)
+    let body = m[2].trim()
+    const start = m.index ?? 0
+    const end = start + m[0].length
+    lastEnd = Math.max(lastEnd, end)
+
+    if (NON_WIDGET_VISUAL_FENCES.has(lower)) continue
+
+    // Convert CSV/TSV/pipe tables inside a ```table or ```csv fence into JSON.
+    if (!body.startsWith('{') && !body.startsWith('[') && TABULAR_FENCES.has(lower)) {
+      const converted = tabularTextToJson(body)
+      if (converted) body = converted
+    }
+
+    // A widget payload is a JSON object or array. A ```gantt fence holding
+    // mermaid's gantt syntax (dateFormat/section lines — the model does this
+    // constantly) is NOT a widget: leave it untouched for the diagram renderer.
+    if (!body.startsWith('{') && !body.startsWith('[')) continue
+
+    let kind = language ? widgetKindOf(language) : null
     if (PLAN_FENCE_LANGUAGES.has(lower)) {
       try {
         const repaired = repairJson(body)
@@ -89,24 +169,110 @@ export function extractWidgetFences(text: string): WidgetFence[] {
         // The validator below reports the malformed body.
       }
     }
-    if (!kind && GENERIC_WIDGET_FENCES.has(lower)) {
+    if (!kind && (GENERIC_WIDGET_FENCES.has(lower) || !language || body.startsWith('{') || body.startsWith('['))) {
       kind = inferWidgetKind(body)
     }
     if (!kind) continue
-    const start = m.index ?? 0
     const json =
-      kind === 'plan' || GENERIC_WIDGET_FENCES.has(lower)
+      kind === 'plan' || GENERIC_WIDGET_FENCES.has(lower) || !language || !body.startsWith('{')
         ? body
         : lower !== kind
           ? injectWidgetType(body, language, kind)
           : body
-    out.push({ kind, json, start, end: start + m[0].length })
+    out.push({ kind, json, start, end })
   }
+
+  // Recover a trailing UNCLOSED widget fence if the reply was truncated after opening it.
+  const tailSlice = text.slice(lastEnd)
+  const tailMatch = UNCLOSED_TAIL_FENCE.exec(tailSlice)
+  if (tailMatch && !tailMatch[2].includes('```') && !tailMatch[2].includes('~~~')) {
+    const language = tailMatch[1]
+    const lower = language.toLowerCase()
+    const body = tailMatch[2].trim()
+    if (!NON_WIDGET_VISUAL_FENCES.has(lower) && (body.startsWith('{') || body.startsWith('['))) {
+      let kind = widgetKindOf(language)
+      if (!kind && GENERIC_WIDGET_FENCES.has(lower)) kind = inferWidgetKind(body)
+      if (kind) {
+        const offsetInTail = tailMatch.index + (tailMatch[0].startsWith('\n') || tailMatch[0].startsWith('\r') ? 1 : 0)
+        const start = lastEnd + offsetInTail
+        const json =
+          kind === 'plan' || GENERIC_WIDGET_FENCES.has(lower) || !body.startsWith('{')
+            ? body
+            : lower !== kind
+              ? injectWidgetType(body, language, kind)
+              : body
+        if (validateWidget(kind, json).ok) {
+          out.push({ kind, json, start, end: text.length })
+        }
+      }
+    }
+  }
+
   return out
 }
 
 /** A fenced block whose body is plausibly a bare widget payload. */
-const JSON_FENCE = /^[ \t]{0,3}(?:```|~~~)(json|jsonc|widget|genui|data|ui)[ \t]*[^\r\n]*\r?\n([\s\S]*?)^[ \t]{0,3}(?:```|~~~)[ \t]*$/gm
+const JSON_FENCE = /^[ \t]{0,8}(?:```|~~~)(json|jsonc|widget|genui|data|ui|gsui)[ \t]*[^\r\n]*\r?\n([\s\S]*?)^[ \t]{0,8}(?:```|~~~)[ \t]*$/gm
+
+/**
+ * Unwrap a root envelope (`{"chart":{...}}`, `{"widget":{...}}`, `{"data":{...}}`)
+ * or wrap a top-level array (`[{...}]`) into an object so validators and
+ * inference see the canonical keys regardless of outer wrapping.
+ */
+function normaliseRootPayload(
+  parsed: unknown,
+  targetKind?: WidgetKind
+): { obj: Record<string, unknown>; wrappedOrUnwrapped: boolean } | null {
+  if (Array.isArray(parsed)) {
+    if (parsed.length === 0) return null
+    return {
+      obj: {
+        items: parsed,
+        cards: parsed,
+        rows: parsed,
+        entries: parsed,
+        questions: parsed,
+        fields: parsed,
+        prompts: parsed,
+        buttons: parsed,
+        tabs: parsed,
+        sections: parsed,
+        steps: parsed,
+        options: parsed,
+        roots: parsed,
+        series: parsed,
+      },
+      wrappedOrUnwrapped: true,
+    }
+  }
+  if (!isObj(parsed)) return null
+  const envelopeKeys = [
+    'widget',
+    'payload',
+    'data',
+    'content',
+    'result',
+    'spec',
+    'config',
+    ...(targetKind ? [targetKind] : WIDGET_KINDS),
+  ]
+  for (const key of envelopeKeys) {
+    const inner = parsed[key]
+    if (isObj(inner) && Object.keys(inner).length > 0) {
+      // Only unwrap when the outer object doesn't already own another primary collection key.
+      const otherKeys = Object.keys(parsed).filter(
+        (k) => k !== key && !['title', 'accent', 'variant', 'palette', 'kind', 'type', 'unit', 'subtitle'].includes(k)
+      )
+      if (otherKeys.length === 0) {
+        return {
+          obj: { ...parsed, ...inner },
+          wrappedOrUnwrapped: true,
+        }
+      }
+    }
+  }
+  return { obj: parsed, wrappedOrUnwrapped: false }
+}
 
 /**
  * The widget kind a BARE payload describes, or null when it is not a widget.
@@ -127,8 +293,31 @@ export function inferWidgetKind(json: string): WidgetKind | null {
   } catch {
     return null
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
-  const obj = parsed as Record<string, unknown>
+  if (Array.isArray(parsed)) {
+    if (parsed.length === 0) return null
+    const first = parsed[0]
+    const arrayCandidates: WidgetKind[] = []
+    if (typeof first === 'string') {
+      arrayCandidates.push('followups', 'checklist', 'chips')
+    } else if (isObj(first)) {
+      if (('time' in first || 'slot' in first) && ('text' in first || 'title' in first || 'activity' in first)) arrayCandidates.push('plan')
+      if (('date' in first || 'year' in first || 'era' in first) && ('title' in first || 'event' in first || 'label' in first)) arrayCandidates.push('timeline')
+      if ('front' in first && 'back' in first) arrayCandidates.push('flashcards')
+      if (('q' in first || 'question' in first) && ('options' in first || 'choices' in first)) arrayCandidates.push('quiz')
+      if ('question' in first && 'answer' in first) arrayCandidates.push('accordion')
+      if ('percent' in first || 'percentage' in first) arrayCandidates.push('progress')
+      if (('label' in first || 'name' in first || 'metric' in first) && 'value' in first) arrayCandidates.push('stat', 'gauge')
+      if ('data' in first && Array.isArray(first.data)) arrayCandidates.push('chart')
+      if (Object.keys(first).length >= 2) arrayCandidates.push('table', 'cards', 'checklist')
+    }
+    for (const k of arrayCandidates) {
+      if (validateWidget(k, repaired).ok) return k
+    }
+    return null
+  }
+  const norm = normaliseRootPayload(parsed)
+  if (!norm) return null
+  const obj = norm.obj
   const has = (k: string) => k in obj
 
   const candidates: WidgetKind[] = []
@@ -154,6 +343,12 @@ export function inferWidgetKind(json: string): WidgetKind | null {
       const k = widgetKindOf(raw)
       if (k) push(k)
     }
+  }
+
+  // 2b. Single-key envelope named after a widget kind (`{"chart":{...}}`, `{"stat":{...}}`).
+  for (const key of Object.keys( parsed as Record<string, unknown> )) {
+    const k = widgetKindOf(key)
+    if (k && isObj((parsed as Record<string, unknown>)[key])) push(k)
   }
 
   // 3. Structural discriminators across all 36 catalogue kinds.
@@ -212,7 +407,7 @@ export function inferWidgetKind(json: string): WidgetKind | null {
  */
 export function extractBareWidget(text: string): WidgetFence | null {
   const whole = text.trim()
-  if (whole.startsWith('{') && whole.endsWith('}')) {
+  if ((whole.startsWith('{') && whole.endsWith('}')) || (whole.startsWith('[') && whole.endsWith(']'))) {
     const kind = inferWidgetKind(whole)
     if (kind) {
       const start = text.indexOf(whole)
@@ -225,6 +420,19 @@ export function extractBareWidget(text: string): WidgetFence | null {
     if (!kind) continue
     const start = m.index ?? 0
     return { kind, json: body, start, end: start + m[0].length }
+  }
+  // Also check standalone JSON object paragraphs (`\n\n{ ... }\n\n`) that the
+  // model emitted between prose paragraphs without opening a code fence.
+  const paraRe = /(?:^|\n\s*\n)([ \t]*\{[\s\S]*?\}[ \t]*)(?=\n\s*\n|$)/g
+  for (const m of text.matchAll(paraRe)) {
+    const rawBlock = m[1]
+    const trimmed = rawBlock.trim()
+    if (trimmed.includes('```') || trimmed.includes('~~~')) continue
+    const kind = inferWidgetKind(trimmed)
+    if (!kind) continue
+    const blockOffset = m[0].indexOf(rawBlock)
+    const start = (m.index ?? 0) + blockOffset
+    return { kind, json: trimmed, start, end: start + rawBlock.length }
   }
   return null
 }
@@ -481,12 +689,15 @@ export function repairJson(raw: string): string | null {
   let s = raw.trim()
   if (!s) return null
 
-  // Strip a prose prefix before the first brace.
+  // Strip a prose prefix before the first `{` or `[`.
   const firstBrace = s.indexOf('{')
-  if (firstBrace < 0) return null
-  if (firstBrace > 0) s = s.slice(firstBrace)
-  const lastBrace = s.lastIndexOf('}')
-  if (lastBrace >= 0) s = s.slice(0, lastBrace + 1)
+  const firstBracket = s.indexOf('[')
+  const isArrayRoot = firstBracket >= 0 && (firstBrace < 0 || firstBracket < firstBrace)
+  const firstOpen = isArrayRoot ? firstBracket : firstBrace
+  if (firstOpen < 0) return null
+  if (firstOpen > 0) s = s.slice(firstOpen)
+  const lastClose = isArrayRoot ? Math.max(s.lastIndexOf(']'), s.lastIndexOf('}')) : s.lastIndexOf('}')
+  if (lastClose >= 0) s = s.slice(0, lastClose + 1)
 
   s = stripJsonComments(s)
     .replace(/[\u201c\u201d]/g, '"')
@@ -557,16 +768,18 @@ export function validateWidget(kind: string, rawJson: string): ValidationResult 
   const repairedJson = repairJson(rawJson)
   if (repairedJson === null) return { ok: false, kind, errors: ['invalid JSON'] }
 
-  let payload: unknown
+  let rawParsed: unknown
   try {
-    payload = JSON.parse(repairedJson)
+    rawParsed = JSON.parse(repairedJson)
   } catch {
     return { ok: false, kind, errors: ['invalid JSON'] }
   }
-  if (!isObj(payload)) return { ok: false, kind, errors: ['payload is not an object'] }
+  const normalised = normaliseRootPayload(rawParsed, kind)
+  if (!normalised) return { ok: false, kind, errors: ['payload is not an object'] }
+  const payload = normalised.obj
 
-    const jsonRepaired = repairedJson !== rawJson.trim()
-    const check = CHECKS[kind](payload)
+  const jsonRepaired = repairedJson !== rawJson.trim() || normalised.wrappedOrUnwrapped
+  const check = CHECKS[kind](payload)
     if (check.errors.length > 0) return { ok: false, kind, errors: check.errors }
 
     // Art direction belongs to the model: it may choose an accent and a surface
@@ -1454,22 +1667,47 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
   },
 
   panel: (p) => {
+    let repaired = false
+    const badges = asArray(p.badges ?? p.tags).map((b) => {
+      if (typeof b === 'string') return { label: b, tone: 'accent' }
+      const o = isObj(b) ? b : {}
+      return { label: asString(o.label ?? o.text ?? o.name), tone: asString(o.tone, 'accent') }
+    })
+    const rawTone = asString(p.severity ?? p.tone ?? p.level ?? p.status).toLowerCase()
+    if (rawTone && badges.length === 0) {
+      const mappedTone =
+        rawTone === 'error' || rawTone === 'critical' || rawTone === 'danger'
+          ? 'danger'
+          : rawTone === 'warn' || rawTone === 'warning' || rawTone === 'caution'
+            ? 'warning'
+            : rawTone === 'ok' || rawTone === 'good' || rawTone === 'success'
+              ? 'success'
+              : 'accent'
+      badges.push({ label: rawTone.toUpperCase(), tone: mappedTone })
+      repaired = true
+    }
+    let body = asString(p.body ?? p.text ?? p.content ?? p.detail ?? p.description ?? p.message ?? p.callout ?? p.note)
+    if (!body) {
+      const list = asArray(p.items ?? p.points ?? p.bullets ?? p.highlights)
+        .map((x) => (isObj(x) ? asString(x.text ?? x.label ?? x.title) : asString(x)))
+        .filter(Boolean)
+      if (list.length > 0) {
+        body = list.map((line) => `• ${line}`).join('\n')
+        repaired = true
+      }
+    }
     const widget = {
-      title: asString(p.title ?? p.heading ?? p.label),
+      title: asString(p.title ?? p.heading ?? p.label ?? p.name),
       summary: asString(p.summary ?? p.subtitle ?? p.header),
-      body: asString(p.body ?? p.text ?? p.content ?? p.detail ?? p.description ?? p.message ?? p.callout ?? p.note),
-      expanded: p.expanded === true,
-      badges: asArray(p.badges ?? p.tags).map((b) => {
-        if (typeof b === 'string') return { label: b, tone: 'accent' }
-        const o = isObj(b) ? b : {}
-        return { label: asString(o.label ?? o.text ?? o.name), tone: asString(o.tone, 'accent') }
-      }),
+      body,
+      expanded: typeof p.expanded === 'boolean' ? p.expanded : Boolean(body),
+      badges,
       popover: asString(p.popover),
     }
     return {
       widget,
       errors: widget.title || widget.body || widget.summary ? [] : ['panel needs content'],
-      repaired: false,
+      repaired,
     }
   },
 
