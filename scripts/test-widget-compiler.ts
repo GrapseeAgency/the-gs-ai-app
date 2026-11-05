@@ -592,6 +592,262 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   check('pointer fence -> collab kind with default room', pointerFence[0]?.kind === 'collab')
 }
 
+// 38. MODEL FREEDOM — JS/Python JSON dialect repair (unquoted keys, single
+// quotes, trailing commas, Python True/False/None, comments, formatted numbers).
+{
+  const jsDialect = "```barchart\n{title: 'Quarterly Revenue', categories: ['Q1', 'Q2', 'Q3'], datasets: [{label: 'ARR', data: ['$1,200', '$1,850', '$2,400'],}],}\n```"
+  const c = compileWidgets({ reply: jsDialect, userPrompt: 'quarterly revenue' })
+  check('JS dialect + barchart fence + Chart.js datasets + $ strings compile', c.widgets === 1 && c.errors.length === 0, c.errors.join(','))
+  const parsed = JSON.parse(extractWidgetFences(c.text)[0].json) as Record<string, unknown>
+  check('barchart canonicalises to chart/bar with 3 points', parsed.type === 'bar' && ((parsed.series as Array<{ data: unknown[] }>)[0]?.data?.length === 3))
+
+  const pyDialect = '```kpi\n{"title": "Metrics", "metrics": [{"name": "Conversion", "value": "4.8%", "change": "+0.6%", "active": True, "note": None}]}\n```'
+  const cp = compileWidgets({ reply: pyDialect, userPrompt: 'metrics' })
+  check('Python True/None + kpi fence + metrics/name/change synonyms compile', cp.widgets === 1 && cp.errors.length === 0, cp.errors.join(','))
+  const statParsed = JSON.parse(extractWidgetFences(cp.text)[0].json) as Record<string, unknown>
+  const firstCard = (statParsed.cards as Array<Record<string, unknown>>)[0]
+  check('stat auto-infers up direction from +0.6% change', firstCard?.label === 'Conversion' && firstCard?.direction === 'up')
+}
+
+// 39. MODEL FREEDOM — candlestick 4D [o,h,l,c] and bubble 3D [x,y,z] survival,
+// plus single-series pie auto-expansion.
+{
+  const ohlc = '```ohlc\n{"title":"BTC","labels":["Mon","Tue"],"series":[{"name":"BTC","data":[[100,115,95,110],[110,125,105,120]]}]}\n```'
+  const co = compileWidgets({ reply: ohlc, userPrompt: 'btc candlestick' })
+  const ohlcPayload = JSON.parse(extractWidgetFences(co.text)[0].json) as { type: string; series: Array<{ data: number[][] }> }
+  check('ohlc fence -> candlestick with 4D points intact', ohlcPayload.type === 'candlestick' && ohlcPayload.series[0]?.data[0]?.length === 4, JSON.stringify(ohlcPayload.series[0]?.data[0]))
+
+  const ohlcObj = validateWidget('chart', '{"type":"candlestick","series":[{"name":"BTC","data":[{"open":100,"high":115,"low":95,"close":110},{"o":110,"h":125,"l":105,"c":120}]}]}')
+  check('candlestick object points {open,high,low,close} -> 4D array', ohlcObj.ok && (ohlcObj.widget.series as Array<{ data: number[][] }>)[0]?.data[0]?.length === 4)
+
+  const singlePie = validateWidget('chart', '{"type":"doughnut","labels":["iOS","Android","Web"],"values":[45,40,15]}')
+  check('single-series doughnut expands into 3 slices for PieChart', singlePie.ok && singlePie.widget.type === 'donut' && (singlePie.widget.series as unknown[]).length === 3)
+}
+
+// 40. MODEL FREEDOM — natural schema shapes across table, compare, quiz,
+// accordion, steps, checklist, flashcards, diff, calc, and panel.
+{
+  const objTable = validateWidget('table', '{"title":"Team","rows":[{"Name":"Alice","Role":"Eng","Score":98},{"Name":"Bob","Role":"Design","Score":94}]}')
+  check('table with object rows auto-derives columns and string rows', objTable.ok && (objTable.widget.columns as string[]).join(',') === 'Name,Role,Score' && (objTable.widget.rows as string[][]).length === 2)
+
+  const prosCons = compileWidgets({
+    reply: '```proscons\n{"title":"Rust","pros":["Memory safety","Zero-cost abstractions"],"cons":["Steep borrow checker","Long compile times"]}\n```',
+    userPrompt: 'pros and cons of rust',
+  })
+  check('proscons fence + pros/cons arrays compile to compare', prosCons.widgets === 1 && prosCons.text.startsWith('```compare'))
+
+  const letterQuiz = validateWidget('quiz', '{"question":"Capital of Japan?","choices":["Seoul","Tokyo","Beijing"],"answer":"B"}')
+  check('flat quiz with choices + letter answer "B" -> index 1', letterQuiz.ok && (letterQuiz.widget.questions as Array<{ answer: number }>)[0]?.answer === 1)
+
+  const faqFence = compileWidgets({
+    reply: '```faq\n{"title":"Help","faqs":[{"question":"Is it free?","answer":"Yes, during beta."}]}\n```',
+    userPrompt: 'faq',
+  })
+  check('faq fence + question/answer keys compile to accordion', faqFence.widgets === 1 && faqFence.text.startsWith('```accordion'))
+
+  const todoFence = compileWidgets({
+    reply: '```todos\n{"title":"Sprint","todos":["Ship parser","Run gates"]}\n```',
+    userPrompt: 'todos',
+  })
+  check('todos fence + string items compile to checklist', todoFence.widgets === 1 && todoFence.text.startsWith('```checklist'))
+
+  const calloutFence = compileWidgets({
+    reply: '```callout\n{"title":"Heads up","message":"Rate limits reset at midnight UTC.","severity":"warning"}\n```',
+    userPrompt: 'callout',
+  })
+  check('callout fence + message/severity compile to warning panel', calloutFence.widgets === 1 && calloutFence.text.startsWith('```panel'))
+}
+
+// 41. MODEL FREEDOM — cross-kind self-healing when the model picks the wrong
+// fence name for a valid widget payload, plus generic ```widget / ~~~ fences.
+{
+  const cardsWithKpis = compileWidgets({
+    reply: '```cards\n{"title":"KPIs","cards":[{"label":"MRR","value":"$82k","delta":"+14%"},{"label":"NRR","value":"118%","delta":"+4%"}]}\n```',
+    userPrompt: 'kpis',
+  })
+  check('```cards fence holding stat KPIs self-heals to ```stat', cardsWithKpis.widgets === 1 && cardsWithKpis.text.startsWith('```stat'))
+
+  const cardsWithFlashcards = compileWidgets({
+    reply: '```cards\n{"title":"Spanish","cards":[{"front":"Hola","back":"Hello"},{"front":"Gracias","back":"Thank you"}]}\n```',
+    userPrompt: 'flashcards',
+  })
+  check('```cards fence holding front/back pairs self-heals to ```flashcards', cardsWithFlashcards.widgets === 1 && cardsWithFlashcards.text.startsWith('```flashcards'))
+
+  const tildeGeneric = compileWidgets({
+    reply: '~~~widget\n{"title":"Architecture Decision","left":{"title":"Monolith","points":["Simple deploy"]},"right":{"title":"Microservices","points":["Independent scaling"]}}\n~~~',
+    userPrompt: 'compare',
+  })
+  check('~~~widget fence infers and compiles to ```compare', tildeGeneric.widgets === 1 && tildeGeneric.text.startsWith('```compare'))
+}
+
+// 42. HOSTILE & DIALECT FUZZ — never throws and never pollutes Object.prototype
+// across all 36 widget kinds, repairJson, inferWidgetKind, and compileWidgets.
+{
+  const hostilePayloads = [
+    '',
+    '{',
+    '{{{[[[',
+    "{'a': 'b', '__proto__': {'polluted': True}, 'constructor': {'prototype': {'polluted': 1}},",
+    '{unquoted: "val\nue\twith\nnewlines", num: "$1,234.56", nanVal: NaN, infVal: -Infinity, undef: undefined, trailing: [1, 2, 3, ], }',
+    '{"series": [null, true, false, 123, "str", {}, {"data": [["a", "b", "c", "d", "e", "f"]]}]}',
+    '{"rows": [null, {"__proto__": "x", "a": 1}]}',
+    '```json\n{"__proto__":{"polluted":true},"cards":[{"label":"X","value":"1"}]}\n```',
+  ]
+  let threw = false
+  for (const raw of hostilePayloads) {
+    try {
+      repairJson(raw)
+      inferWidgetKind(raw)
+      compileWidgets({ reply: raw, userPrompt: 'test' })
+      for (const k of WIDGET_KINDS) {
+        validateWidget(k, raw)
+      }
+    } catch {
+      threw = true
+    }
+  }
+  const polluted = ({} as Record<string, unknown>).polluted !== undefined
+  check('hostile & dialect fuzz across all 36 kinds never throws or pollutes prototype', !threw && !polluted)
+}
+
+// 43. PASS 2 FREEDOM — top-level JSON array payloads ([...]) across fences & bare blocks.
+{
+  const arrayStat = compileWidgets({
+    reply: '```stat\n[{"label":"MRR","value":"$92k","delta":"+18%"},{"label":"Churn","value":"1.1%","delta":"-0.3%"}]\n```',
+    userPrompt: 'kpis',
+  })
+  check('top-level array in ```stat compiles to stat widget', arrayStat.widgets === 1 && arrayStat.text.startsWith('```stat'))
+
+  const arrayFlash = compileWidgets({
+    reply: '```flashcards\n[{"front":" Mito ","back":"Powerhouse of the cell"},{"front":"ATP","back":"Energy currency"}]\n```',
+    userPrompt: 'flashcards',
+  })
+  check('top-level array in ```flashcards compiles to flashcards widget', arrayFlash.widgets === 1 && arrayFlash.text.startsWith('```flashcards'))
+
+  const arrayTable = compileWidgets({
+    reply: '```table\n[{"Service":"Auth","Latency":"12ms"},{"Service":"Search","Latency":"38ms"}]\n```',
+    userPrompt: 'table',
+  })
+  check('top-level array of objects in ```table compiles to table widget', arrayTable.widgets === 1 && arrayTable.text.startsWith('```table'))
+
+  const arrayChecklist = compileWidgets({
+    reply: '```checklist\n["Audit parser","Verify Android parity","Verify iOS parity"]\n```',
+    userPrompt: 'checklist',
+  })
+  check('top-level string array in ```checklist compiles to checklist widget', arrayChecklist.widgets === 1 && arrayChecklist.text.startsWith('```checklist'))
+}
+
+// 44. PASS 2 FREEDOM — root wrapper envelopes ({"chart":{...}}, {"widget":{...}}, {"data":{...}}).
+{
+  const envChart = compileWidgets({
+    reply: '```chart\n{"title":"Sales","chart":{"type":"bar","series":[{"name":"Rev","data":[["Q1",10],["Q2",20]]}]}}\n```',
+    userPrompt: 'chart',
+  })
+  check('root {"chart":{...}} envelope unwraps and compiles to ```chart', envChart.widgets === 1 && envChart.text.startsWith('```chart'))
+
+  const envWidget = compileWidgets({
+    reply: '```json\n{"widget":{"kind":"stat","title":"Health","cards":[{"label":"Uptime","value":"99.99%"}]}}\n```',
+    userPrompt: 'uptime',
+  })
+  check('root {"widget":{"kind":"stat",...}} envelope in ```json compiles to ```stat', envWidget.widgets === 1 && envWidget.text.startsWith('```stat'))
+}
+
+// 45. PASS 2 FREEDOM — pipe/CSV table fences, custom/bare/indented/unclosed fences, and prose-surrounded bare JSON.
+{
+  const pipeInTableFence = compileWidgets({
+    reply: '```table\n| Tier | Price | Quota |\n| --- | --- | --- |\n| Free | $0 | 1,000 |\n| Pro | $29 | 50,000 |\n```',
+    userPrompt: 'pricing table',
+  })
+  check('Markdown pipe table inside ```table fence compiles to ```table JSON widget', pipeInTableFence.widgets === 1 && pipeInTableFence.text.startsWith('```table'))
+
+  const csvFence = compileWidgets({
+    reply: '```csv\nRegion,Q1,Q2\nAPAC,120,145\nEMEA,98,112\n```',
+    userPrompt: 'csv table',
+  })
+  check('CSV rows inside ```csv fence compile to ```table JSON widget', csvFence.widgets === 1 && csvFence.text.startsWith('```table'))
+
+  const customFence = compileWidgets({
+    reply: '```custom_viz\n{"title":"Funnel","type":"funnel","series":[{"name":"Users","data":[["Visit",1000],["Signup",300],["Paid",80]]}]}\n```',
+    userPrompt: 'funnel',
+  })
+  check('invented fence language ```custom_viz with valid payload infers and compiles to ```chart', customFence.widgets === 1 && customFence.text.startsWith('```chart'))
+
+  const bareFence = compileWidgets({
+    reply: '```\n{"title":"Key Metrics","cards":[{"label":"DAU","value":"42k"},{"label":"MAU","value":"310k"}]}\n```',
+    userPrompt: 'metrics',
+  })
+  check('bare ``` fence with valid widget JSON infers and compiles to ```stat', bareFence.widgets === 1 && bareFence.text.startsWith('```stat'))
+
+  const unclosedTail = compileWidgets({
+    reply: 'Here is the chart:\n\n```bar\n{"title":"Growth","series":[{"name":"ARR","data":[["2024",10],["2025",24]]}]}',
+    userPrompt: 'growth chart',
+  })
+  check('unclosed trailing widget fence recovers and compiles to closed ```chart', unclosedTail.widgets === 1 && unclosedTail.text.includes('```chart'))
+
+  const embeddedBare = compileWidgets({
+    reply: 'Here is the snapshot:\n\n{"title":"Runway","cards":[{"label":"Cash","value":"$4.2M"},{"label":"Burn","value":"$180k/mo"}]}\n\nLet me know if you want the full model.',
+    userPrompt: 'runway',
+  })
+  check('unfenced JSON object surrounded by prose paragraphs promotes to ```stat', embeddedBare.widgets === 1 && embeddedBare.text.includes('```stat') && embeddedBare.text.includes('Here is the snapshot:'))
+}
+
+// 46. PASS 2 FREEDOM — multi-widget dashboard (>3 widgets) and compound fence tokens.
+{
+  const fiveWidgets = compileWidgets({
+    reply: [
+      '```widget:stat\n{"title":"M1","cards":[{"label":"A","value":"1"}]}\n```',
+      '```chart/line\n{"title":"M2","series":[{"name":"S","data":[["Jan",1],["Feb",2]]}]}\n```',
+      '```table\n{"title":"M3","columns":["K","V"],"rows":[["x","1"]]}\n```',
+      '```checklist\n{"title":"M4","items":["Step 1","Step 2"]}\n```',
+      '```panel\n{"title":"M5","body":"All systems nominal."}\n```',
+    ].join('\n\n'),
+    userPrompt: 'executive dashboard',
+  })
+  check('5-widget dashboard with compound fence names compiles all 5 widgets without dropping', fiveWidgets.widgets === 5)
+}
+
+// 47. PASS 3 NINE-PILLAR CAPABILITY PROOF — Kanban object-map/string-item
+// normalization, Spreadsheet columns+rows->cells seeding, single-item media
+// cards without URLs, and Mermaid/Map fence aliases preserved intact.
+{
+  const kanbanMap = compileWidgets({
+    reply: '```kanban\n{"title":"Sprint Board","columns":{"To Do":["Design schema","Write parser"],"In Progress":[{"task":"Wire iOS","priority":"P0"}],"Done":["Audit parity"]}}\n```',
+    userPrompt: 'kanban board',
+  })
+  const kanbanVal = validateWidget('app', '{"type":"kanban","title":"Sprint","columns":{"To Do":["Design"],"Done":["Ship"]}}')
+  check(
+    'kanban with object-map columns and string cards normalizes to app/kanban',
+    kanbanMap.widgets === 1 &&
+      kanbanVal.ok &&
+      ((kanbanVal.widget.columns as Array<{ title: string; items: Array<{ title: string }> }>)[0]?.items[0]?.title === 'Design')
+  )
+
+  const sheetFromRows = validateWidget(
+    'editor',
+    '{"editor":"sheet","title":"Budget","headers":["Item","Cost"],"data":[["Hosting","120"],["API","80"],["Total","=SUM(B2:B3)"]]}'
+  )
+  const seededCells = (sheetFromRows.ok ? (sheetFromRows.widget.cells as Record<string, string>) : {}) ?? {}
+  check(
+    'spreadsheet with headers+data auto-populates A1/B1..B4 formula cells',
+    sheetFromRows.ok && seededCells.A1 === 'Item' && seededCells.B2 === '120' && seededCells.B4 === '=SUM(B2:B3)'
+  )
+
+  const singleProduct = compileWidgets({
+    reply: '```product\n{"name":"AirPods Pro 2","price":"$249","rating":"4.8","description":"Adaptive Audio + USB-C"}\n```',
+    userPrompt: 'product card',
+  })
+  check('single-item ```product without items[] or url compiles to ```media', singleProduct.widgets === 1 && singleProduct.text.startsWith('```media'))
+
+  const mermaidAndMapAliases = compileWidgets({
+    reply: '```flowchart\ngraph TD\n  A-->B\n```\n\n```location\n{"title":"Tokyo Tower","lat":35.6586,"lng":139.7454}\n```',
+    userPrompt: 'diagram and location',
+  })
+  check(
+    '```flowchart and ```location fences survive compiler untouched for client diagram/map renderers',
+    mermaidAndMapAliases.text.includes('```flowchart') && mermaidAndMapAliases.text.includes('```location')
+  )
+}
+
 console.log(`\n${passed} passed, ${failures.length} failed`)
 if (failures.length) {
   for (const f of failures) console.log(`  - ${f}`)

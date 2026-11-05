@@ -26,7 +26,7 @@ import {
   isChartType,
   type WidgetKind,
 } from './catalog'
-import { extractBareWidget, extractWidgetFences, validateWidget, validationErrors } from './validate'
+import { extractBareWidget, extractWidgetFences, inferWidgetKind, validateWidget, validationErrors } from './validate'
 import { directWidgetArt, type ArtDirection } from './art-direct'
 
 export interface CompileInput {
@@ -110,13 +110,17 @@ export function compileWidgets(input: CompileInput): CompileResult {
 
   for (const fence of fences) {
     let result = validateWidget(fence.kind, fence.json)
-    // A ```gantt fence whose payload is a SCHEDULE ({"entries":[{date,title}]})
-    // and not a chart series: a gantt chart with no series is nothing, but a
-    // timeline of dated entries is exactly what the model meant. Retry once as
-    // a timeline before dropping the fence. The probe caught this live.
-    if (!result.ok && fence.kind === 'chart' && /"entries"\s*:/.test(fence.json)) {
-      const asTimeline = validateWidget('timeline', fence.json)
-      if (asTimeline.ok) result = asTimeline
+    // Cross-kind self-healing: when the fence language and the payload's real
+    // structure disagree (e.g. a ```gantt fence holding dated timeline entries,
+    // a ```cards fence holding stat KPIs or flashcards, a ```table fence
+    // holding a left/right comparison), infer the true kind from the payload
+    // and validate against it before dropping the block.
+    if (!result.ok) {
+      const healedKind = inferWidgetKind(fence.json)
+      if (healedKind && healedKind !== fence.kind) {
+        const healed = validateWidget(healedKind, fence.json)
+        if (healed.ok) result = healed
+      }
     }
     if (result.ok) {
       const payload = JSON.parse(result.json) as Record<string, unknown>

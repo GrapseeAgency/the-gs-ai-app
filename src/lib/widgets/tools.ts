@@ -13,7 +13,20 @@
  * the long tail uses `render_widget` with a closed kind enum.
  */
 
-import { APP_TYPES, CALC_TYPES, CHART_TYPES, MEDIA_TYPES, WIDGET_KINDS } from './catalog'
+import {
+  APP_TYPES,
+  CALC_TYPES,
+  CANVAS_TYPES,
+  CHART_TYPES,
+  COLLAB_TYPES,
+  EDITOR_TYPES,
+  MEDIA_TYPES,
+  SIM_TYPES,
+  STAGE3D_TYPES,
+  WIDGET_KINDS,
+  injectWidgetType,
+  widgetKindOf,
+} from './catalog'
 import { DATA_HUES, PALETTES, SURFACES } from '../design/rulebook'
 
 export interface JsonSchema {
@@ -152,7 +165,17 @@ const WIDGET_TOOL: ToolDefinition = {
       payload: { type: 'object' },
       subtype: {
         type: 'string',
-        enum: ['', ...MEDIA_TYPES, ...CALC_TYPES, ...APP_TYPES],
+        enum: [
+          '',
+          ...MEDIA_TYPES,
+          ...CALC_TYPES,
+          ...APP_TYPES,
+          ...SIM_TYPES,
+          ...STAGE3D_TYPES,
+          ...CANVAS_TYPES,
+          ...EDITOR_TYPES,
+          ...COLLAB_TYPES,
+        ],
       },
       ...STYLE_PROPERTIES,
     },
@@ -197,7 +220,7 @@ export function toAnthropicTools(tools: ToolDefinition[] = WIDGET_TOOLS) {
  * Android/iOS side.
  */
 export function toolCallToFence(name: string, input: Record<string, unknown>): string | null {
-  const kind =
+  const rawKind =
     name === 'render_chart'
       ? 'chart'
       : name === 'render_table'
@@ -208,8 +231,10 @@ export function toolCallToFence(name: string, input: Record<string, unknown>): s
             ? typeof input.kind === 'string'
               ? input.kind
               : null
-            : null
-  if (!kind) return null
+            : widgetKindOf(name.replace(/^render_/, ''))
+  if (!rawKind) return null
+  const kind = widgetKindOf(rawKind) ?? rawKind
+  const subtype = typeof input.subtype === 'string' && input.subtype.trim() ? input.subtype.trim() : rawKind
   const payload =
     name === 'render_widget' && typeof input.payload === 'object' && input.payload !== null
       ? {
@@ -218,7 +243,12 @@ export function toolCallToFence(name: string, input: Record<string, unknown>): s
           // rendered payload, so fold it in on the way to the fence.
           ...(typeof input.accent === 'string' ? { accent: input.accent } : {}),
           ...(typeof input.variant === 'string' ? { variant: input.variant } : {}),
+          ...(typeof input.palette === 'string' ? { palette: input.palette } : {}),
         }
       : input
-  return '```' + kind + '\n' + JSON.stringify(payload) + '\n```'
+  let json = JSON.stringify(payload)
+  if (subtype && subtype.toLowerCase() !== kind && widgetKindOf(subtype) === kind) {
+    json = injectWidgetType(json, subtype, kind as never)
+  }
+  return '```' + kind + '\n' + json + '\n```'
 }

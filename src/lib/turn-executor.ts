@@ -41,6 +41,7 @@ import { configuredProviderKey } from '@/lib/provider-catalog-store'
 import {
   SYSTEM_PROMPT,
   WIDGET_PROMPT,
+  PROSE_PROMPT,
   VISION_GROUNDING_PROMPT,
   VISION_OCR_FALLBACK_PREFIX,
   streamChat,
@@ -488,8 +489,8 @@ export async function prepareTurn(
   const runtimeContext = `\n\nCONTEXT\n- Today is ${clock.localIso.slice(0, 10)} in ${clock.timezone} (local time ${clock.localIso.slice(11, 16)}).\n- Resolve every relative date (\"last 6 months\", \"this quarter\", \"next Friday\") from this clock, never from memory.\n- If a widget needs dates, use these dates.${planContext}${feedbackContext}`
 
   const baseSystemPrompt = conversation.assistant?.instructions
-    ? `${conversation.assistant.instructions}\n\n(Platform persona base: ${SYSTEM_PROMPT})\n\n${WIDGET_PROMPT}${runtimeContext}`
-    : `${SYSTEM_PROMPT}\n\n${WIDGET_PROMPT}${runtimeContext}`
+    ? `${conversation.assistant.instructions}\n\n(Platform persona base: ${SYSTEM_PROMPT})\n\n${PROSE_PROMPT}\n${WIDGET_PROMPT}${runtimeContext}`
+    : `${SYSTEM_PROMPT}\n\n${PROSE_PROMPT}\n${WIDGET_PROMPT}${runtimeContext}`
 
   const recentDesc = await db.message.findMany({
     where: { conversationId: id, id: { not: userMessage.id } },

@@ -115,9 +115,21 @@ internal fun EditorWidgetView(w: EditorWidgetData) {
 private fun SheetEditorView(w: EditorWidgetData) {
     val cells = remember(w) {
         mutableStateMapOf<String, String>().apply {
-            put("B1", "120"); put("B2", "180"); put("B3", "95")
-            put("B4", "=SUM(B1:B3)"); put("B5", "=AVG(B1:B3)"); put("C1", "=B4*1.2")
-            putAll(w.cells.entries.take(200).associate { it.key to it.value })
+            if (w.cells.isNotEmpty()) {
+                putAll(w.cells.entries.take(200).associate { it.key.uppercase() to it.value })
+            } else if (w.columns.isNotEmpty() || w.rows.isNotEmpty()) {
+                var rowOffset = 1
+                if (w.columns.isNotEmpty()) {
+                    w.columns.take(6).forEachIndexed { ci, col -> put("${colName(ci)}1", col) }
+                    rowOffset = 2
+                }
+                w.rows.take(10 - rowOffset + 1).forEachIndexed { ri, row ->
+                    row.take(6).forEachIndexed { ci, v -> put("${colName(ci)}${ri + rowOffset}", v) }
+                }
+            } else {
+                put("B1", "120"); put("B2", "180"); put("B3", "95")
+                put("B4", "=SUM(B1:B3)"); put("B5", "=AVG(B1:B3)"); put("C1", "=B4*1.2")
+            }
         }
     }
     var editing by remember { mutableStateOf<String?>(null) }

@@ -70,7 +70,7 @@ export function MediaWidget({ payload, onPrompt }: { payload: MediaPayload; onPr
         <TitleRow title={payload.title} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {items.map((item, i) => (
-            <MediaRow key={i} item={item} type={type} onPrompt={onPrompt} />
+            <MediaRow key={i} index={i} item={item} type={type} onPrompt={onPrompt} />
           ))}
         </div>
       </div>
@@ -87,9 +87,36 @@ export function MediaWidget({ payload, onPrompt }: { payload: MediaPayload; onPr
   return <EmptyState label="No media" />
 }
 
-function MediaRow({ item, type, onPrompt }: { item: Record<string, string>; type: string; onPrompt?: (p: string) => void }) {
+function MediaRow({
+  index,
+  item,
+  type,
+  onPrompt,
+}: {
+  index: number
+  item: Record<string, string>
+  type: string
+  onPrompt?: (p: string) => void
+}) {
   const { accent, theme } = useWidgetIdentity()
   const clickable = Boolean(item.prompt || item.url)
+  const isCitationLike = type === 'citation' || type === 'search' || type === 'link'
+  const domain =
+    item.domain ||
+    (() => {
+      try {
+        return item.url ? new URL(item.url).hostname.replace(/^www\./, '') : ''
+      } catch {
+        return ''
+      }
+    })()
+  const hay = `${domain} ${item.url ?? ''}`.toLowerCase()
+  const academic =
+    hay.includes('.edu') ||
+    hay.includes('nature.com') ||
+    hay.includes('arxiv.org') ||
+    hay.includes('ieee.org') ||
+    hay.includes('acm.org')
   const action = () => {
     if (item.prompt) onPrompt?.(item.prompt)
     else if (item.url) window.open(item.url, '_blank', 'noopener')
@@ -100,9 +127,9 @@ function MediaRow({ item, type, onPrompt }: { item: Record<string, string>; type
       role={clickable ? 'button' : undefined}
       style={{
         display: 'flex',
-        gap: 12,
-        alignItems: 'center',
-        padding: 10,
+        gap: 11,
+        alignItems: isCitationLike ? 'flex-start' : 'center',
+        padding: '10px 12px',
         borderRadius: RADIUS.md,
         border: `1px solid ${theme.border}`,
         cursor: clickable ? 'pointer' : 'default',
@@ -111,29 +138,72 @@ function MediaRow({ item, type, onPrompt }: { item: Record<string, string>; type
       onMouseEnter={(e) => clickable && (e.currentTarget.style.borderColor = alpha(accent, 0.5))}
       onMouseLeave={(e) => clickable && (e.currentTarget.style.borderColor = theme.border)}
     >
-      {item.thumb ? (
+      {isCitationLike ? (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 24,
+            height: 24,
+            borderRadius: 12,
+            background: 'rgba(124, 92, 252, 0.14)',
+            border: '1px solid rgba(124, 92, 252, 0.25)',
+            color: '#5B3DF5',
+            fontSize: 11.5,
+            fontWeight: 700,
+            flexShrink: 0,
+            marginTop: 1,
+          }}
+        >
+          {index + 1}
+        </span>
+      ) : item.thumb ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={item.thumb} alt="" loading="lazy" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }} />
       ) : null}
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: TYPE.label, fontWeight: 600, color: theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {item.title ?? item.domain ?? item.url}
+        <span style={{ display: 'block', fontSize: TYPE.label, fontWeight: 700, color: theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {item.title ?? domain ?? item.url}
         </span>
         {item.subtitle || item.snippet ? (
           <span style={{ display: '-webkit-box', fontSize: TYPE.micro, color: theme.text3, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as never }}>
             {item.subtitle ?? item.snippet}
           </span>
         ) : null}
-        {(item.meta || item.price || item.rating || item.badge || item.domain) && (
-          <span style={{ display: 'flex', gap: 8, marginTop: 4, fontSize: TYPE.micro, color: theme.text3, flexWrap: 'wrap' }}>
-            {item.price ? <b style={{ color: accent }}>{item.price}</b> : null}
-            {item.rating ? <span>★ {item.rating}</span> : null}
-            {item.badge ? <span style={{ fontWeight: 700, color: accent }}>{item.badge}</span> : null}
-            <span>{item.meta ?? item.domain}</span>
+        {isCitationLike ? (
+          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: '#5B3DF5' }}>
+              ↗ {domain || item.url || 'Source'}
+            </span>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '1px 7px',
+                borderRadius: 999,
+                fontSize: 10.5,
+                fontWeight: 700,
+                background: academic ? 'rgba(124, 92, 252, 0.14)' : 'rgba(18, 154, 90, 0.14)',
+                color: academic ? '#5B3DF5' : '#129A5A',
+              }}
+            >
+              {academic ? '🏛 Academic' : '✓ Trusted Source'}
+            </span>
           </span>
+        ) : (
+          (item.meta || item.price || item.rating || item.badge || item.domain) && (
+            <span style={{ display: 'flex', gap: 8, marginTop: 4, fontSize: TYPE.micro, color: theme.text3, flexWrap: 'wrap' }}>
+              {item.price ? <b style={{ color: accent }}>{item.price}</b> : null}
+              {item.rating ? <span>★ {item.rating}</span> : null}
+              {item.badge ? <span style={{ fontWeight: 700, color: accent }}>{item.badge}</span> : null}
+              <span>{item.meta ?? item.domain}</span>
+            </span>
+          )
         )}
       </span>
-      {clickable ? <span style={{ color: accent, flexShrink: 0 }}>→</span> : null}
+      {clickable && !isCitationLike ? <span style={{ color: accent, flexShrink: 0 }}>→</span> : null}
     </div>
   )
   if (type === 'citation' && item.url && !item.prompt) {

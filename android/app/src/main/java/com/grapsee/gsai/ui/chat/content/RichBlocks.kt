@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -632,6 +633,159 @@ private fun StreamingCaret() {
 // Prose blocks
 // ---------------------------------------------------------------------------
 
+private enum class CalloutTone { SUMMARY, WARNING, FACT }
+
+private data class CalloutParsed(
+    val tone: CalloutTone,
+    val icon: String,
+    val title: String,
+    val bodySpans: List<InlineSpan>
+)
+
+private fun plainTextOfSpans(spans: List<InlineSpan>): String = buildString {
+    spans.forEach { span ->
+        when (span) {
+            is InlineSpan.Text -> append(span.text)
+            is InlineSpan.Code -> append(span.code)
+            is InlineSpan.Math -> append(span.latex)
+            is InlineSpan.Citation -> append("[${span.index}]")
+            is InlineSpan.Bold -> append(plainTextOfSpans(span.children))
+            is InlineSpan.Italic -> append(plainTextOfSpans(span.children))
+            is InlineSpan.Strikethrough -> append(plainTextOfSpans(span.children))
+            is InlineSpan.Link -> append(plainTextOfSpans(span.children))
+        }
+    }
+}
+
+private fun detectCalloutFromSpans(spans: List<InlineSpan>): CalloutParsed? {
+    if (spans.isEmpty()) return null
+    val first = spans.first()
+    if (first is InlineSpan.Bold) {
+        val rawTitle = plainTextOfSpans(first.children).trim().trimEnd(':').trim()
+        val lower = rawTitle.lowercase()
+        val toneAndIcon: Pair<CalloutTone, String>? = when {
+            lower in setOf("important", "warning", "caution", "attention") ->
+                CalloutTone.WARNING to "⚠️"
+            lower in setOf("quick summary", "summary", "tl;dr", "tldr", "executive summary") ->
+                CalloutTone.SUMMARY to "⚡"
+            lower in setOf("key insight", "key insights", "quick fact", "pro tip", "tip", "note", "takeaway") ->
+                CalloutTone.FACT to "💡"
+            else -> null
+        }
+        if (toneAndIcon != null) {
+            val rest = spans.drop(1).toMutableList()
+            if (rest.isNotEmpty()) {
+                val head = rest.first()
+                if (head is InlineSpan.Text) {
+                    val cleaned = head.text.replace(Regex("^\\s*[:\\-—–]\\s*"), "")
+                    if (cleaned.isEmpty()) rest.removeAt(0) else rest[0] = InlineSpan.Text(cleaned)
+                }
+            }
+            if (rest.isNotEmpty()) {
+                return CalloutParsed(
+                    tone = toneAndIcon.first,
+                    icon = toneAndIcon.second,
+                    title = rawTitle,
+                    bodySpans = rest
+                )
+            }
+        }
+    }
+    if (first is InlineSpan.Text) {
+        val m = Regex("^\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)]\\s*(.*)$", RegexOption.IGNORE_CASE)
+            .find(first.text)
+        if (m != null) {
+            val kind = m.groupValues[1].uppercase()
+            val tail = m.groupValues[2]
+            val rest = spans.drop(1).toMutableList()
+            if (tail.isNotBlank()) rest.add(0, InlineSpan.Text(tail))
+            val isWarn = kind in setOf("IMPORTANT", "WARNING", "CAUTION")
+            return CalloutParsed(
+                tone = if (isWarn) CalloutTone.WARNING else CalloutTone.FACT,
+                icon = if (isWarn) "⚠️" else "💡",
+                title = if (kind == "IMPORTANT") "Important" else if (isWarn) "Warning" else "Key Insight",
+                bodySpans = rest
+            )
+        }
+    }
+    return null
+}
+
+private fun sectionBadgeForHeadingText(raw: String): String? {
+    val clean = raw.trim()
+    if (clean.isEmpty()) return null
+    val firstCode = clean.codePointAt(0)
+    if (firstCode > 0x2190) return null
+    val lower = clean.lowercase()
+    return when {
+        "priorit" in lower || "goal" in lower || "objective" in lower -> "🎯"
+        "step-by-step" in lower || "steps" in lower || "plan" in lower || "roadmap" in lower -> "☰"
+        "next action" in lower || "action item" in lower || "checklist" in lower || "todo" in lower -> "☑️"
+        "key source" in lower || "sources" in lower -> "🔗"
+        "reference" in lower || "citation" in lower || "further reading" in lower -> "📖"
+        "feature" in lower || "highlight" in lower || "benefit" in lower -> "✦"
+        lower.startsWith("top ") || "chart" in lower || "metric" in lower || "overview" in lower -> "📊"
+        else -> null
+    }
+}
+
+@Composable
+private fun NexlyCalloutCard(
+    callout: CalloutParsed,
+    citationUrls: Map<Int, String>,
+    extraBlocks: (@Composable () -> Unit)? = null
+) {
+    val isWarn = callout.tone == CalloutTone.WARNING
+    val bgColor = if (isWarn) Color(0xFFFFF4E6) else Color(0xFFF2ECFF)
+    val borderColor = if (isWarn) Color(0xFFF6C88F) else Color(0xFFD9CCFF)
+    val iconBg = if (isWarn) Color(0xFFFDE3C2) else Color(0xFFE4D8FF)
+    val titleColor = if (isWarn) Color(0xFF6B3206) else Color(0xFF211845)
+    val bodyColor = if (isWarn) Color(0xFF5A3310) else Color(0xFF39325C)
+
+    val bodyStyle = LocalNexlyProseStyle.current ?: MaterialTheme.typography.bodyMedium
+    val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, bodyColor)
+    val bodyText = remember(callout.title, callout.bodySpans, theme) {
+        buildAnnotatedString {
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = titleColor)) {
+                append("${callout.title}: ")
+            }
+            append(spansToAnnotatedString(callout.bodySpans, theme))
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(bgColor)
+            .border(1.dp, borderColor, RoundedCornerShape(14.dp))
+            .padding(horizontal = 13.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(iconBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = callout.icon, fontSize = 13.sp)
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = bodyText,
+                style = bodyStyle,
+                color = bodyColor
+            )
+            extraBlocks?.invoke()
+        }
+    }
+}
+
 @Composable
 private fun ParagraphBlock(
     block: Block.Paragraph,
@@ -640,6 +794,13 @@ private fun ParagraphBlock(
     citationUrls: Map<Int, String>
 ) {
     if (block.spans.isEmpty()) return
+    val callout = remember(block.spans) {
+        if (showCaret) null else detectCalloutFromSpans(block.spans)
+    }
+    if (callout != null) {
+        NexlyCalloutCard(callout = callout, citationUrls = citationUrls)
+        return
+    }
     val compact = LocalNexlyProseStyle.current
     val bodyStyle = compact ?: MaterialTheme.typography.bodyMedium
     val ink = compact?.color ?: MaterialTheme.colorScheme.onSurface
@@ -661,6 +822,9 @@ private fun ParagraphBlock(
 private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: Map<Int, String>) {
     val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize, citationUrls)
     val styled = remember(block.spans, theme) { spansToAnnotatedString(block.spans, theme) }
+    val badge = remember(block.spans, block.level) {
+        if (block.level in 2..3) sectionBadgeForHeadingText(plainTextOfSpans(block.spans)) else null
+    }
     val style = when (block.level) {
         1 -> MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
         2 -> MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
@@ -675,31 +839,208 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
     Column {
         if (!isFirst && block.level <= 3) Spacer(Modifier.height(8.dp))
         SelectionContainer {
-            Text(
-                text = styled,
-                style = style,
-                color = if (block.level == 6) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.semantics { heading() }
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (badge != null) {
+                    Text(
+                        text = badge,
+                        fontSize = if (block.level == 2) 15.sp else 14.sp,
+                        modifier = Modifier.padding(end = 6.dp)
+                    )
+                }
+                Text(
+                    text = styled,
+                    style = style,
+                    color = if (block.level == 6) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() }
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citationUrls: Map<Int, String>) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
         block.items.forEach { item ->
-            ListItemRow(marker = "•", markerColor = MaterialTheme.colorScheme.primary, item = item, selectable = selectable, citationUrls = citationUrls)
+            if (item.checked != null) {
+                InteractiveChecklistItemRow(
+                    initialChecked = item.checked,
+                    item = item,
+                    selectable = selectable,
+                    citationUrls = citationUrls
+                )
+            } else {
+                ListItemRow(
+                    marker = "•",
+                    markerColor = MaterialTheme.colorScheme.primary,
+                    item = item,
+                    selectable = selectable,
+                    citationUrls = citationUrls
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun InteractiveChecklistItemRow(
+    initialChecked: Boolean,
+    item: ListItem,
+    selectable: Boolean,
+    citationUrls: Map<Int, String>
+) {
+    var checked by remember(item.spans, initialChecked) { mutableStateOf(initialChecked) }
+    val bodyStyle = LocalNexlyProseStyle.current ?: MaterialTheme.typography.bodyMedium
+    val ink = if (checked) MaterialTheme.colorScheme.onSurfaceVariant else (bodyStyle.color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface)
+    val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
+    val styled = remember(item.spans, theme) { spansToAnnotatedString(item.spans, theme) }
+
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(9.dp))
+                .clickable { checked = !checked }
+                .padding(vertical = 3.dp, horizontal = 2.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(if (checked) Color(0xFF6C4CF6) else Color.White.copy(alpha = 0.85f))
+                    .border(
+                        width = if (checked) 0.dp else 1.5.dp,
+                        color = if (checked) Color.Transparent else Color(0xFF9C88F8),
+                        shape = RoundedCornerShape(5.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (checked) {
+                    Text(
+                        text = "✓",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Spacer(Modifier.width(9.dp))
+            Text(
+                text = styled,
+                style = bodyStyle.copy(
+                    textDecoration = if (checked) TextDecoration.LineThrough else TextDecoration.None
+                ),
+                color = ink
+            )
+        }
+        if (item.children.isNotEmpty()) {
+            Column(
+                modifier = Modifier.padding(start = 26.dp, top = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                item.children.forEach { child -> NestedChildView(child, selectable, citationUrls) }
+            }
         }
     }
 }
 
 @Composable
 private fun OrderedListBlock(block: Block.OrderedList, selectable: Boolean, citationUrls: Map<Int, String>) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         block.items.forEachIndexed { index, item ->
             val number = item.number ?: (block.start + index)
-            ListItemRow(marker = "$number.", markerColor = MaterialTheme.colorScheme.onSurfaceVariant, item = item, selectable = selectable, citationUrls = citationUrls)
+            StepOrderedListItemRow(
+                number = number,
+                item = item,
+                selectable = selectable,
+                citationUrls = citationUrls
+            )
+        }
+    }
+}
+
+@Composable
+private fun StepOrderedListItemRow(
+    number: Int,
+    item: ListItem,
+    selectable: Boolean,
+    citationUrls: Map<Int, String>
+) {
+    val bodyStyle = LocalNexlyProseStyle.current ?: MaterialTheme.typography.bodyMedium
+    val ink = bodyStyle.color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface
+    val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
+
+    // Detect "1. **Step Title** — Step description" pattern from Screenshot 3
+    val splitStep = remember(item.spans) {
+        val first = item.spans.firstOrNull()
+        if (first is InlineSpan.Bold && item.spans.size >= 2) {
+            val title = plainTextOfSpans(first.children).trim().trimEnd(':').trim()
+            val rest = item.spans.drop(1).toMutableList()
+            val second = rest.firstOrNull()
+            if (second is InlineSpan.Text) {
+                val stripped = second.text.replace(Regex("^\\s*[—–\\-:]\\s*"), "").trimStart()
+                if (stripped.isEmpty()) rest.removeAt(0) else rest[0] = InlineSpan.Text(stripped)
+            }
+            if (title.isNotEmpty() && rest.isNotEmpty()) title to rest else null
+        } else null
+    }
+
+    Column {
+        Row(verticalAlignment = Alignment.Top) {
+            Box(
+                modifier = Modifier
+                    .padding(top = 1.dp)
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFEDE5FF))
+                    .border(1.dp, Color(0xFFD5C6FF), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = number.toString(),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF5B3DF5)
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                if (splitStep != null) {
+                    val detailStyled = remember(splitStep.second, theme) {
+                        spansToAnnotatedString(splitStep.second, theme)
+                    }
+                    Text(
+                        text = splitStep.first,
+                        style = bodyStyle.copy(fontWeight = FontWeight.Bold),
+                        color = ink
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = detailStyled,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    val styled = remember(item.spans, theme) { spansToAnnotatedString(item.spans, theme) }
+                    val content = @Composable {
+                        Text(
+                            text = styled,
+                            style = bodyStyle,
+                            color = ink
+                        )
+                    }
+                    if (selectable) SelectionContainer { content() } else content()
+                }
+            }
+        }
+        if (item.children.isNotEmpty()) {
+            Column(
+                modifier = Modifier.padding(start = 34.dp, top = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                item.children.forEach { child -> NestedChildView(child, selectable, citationUrls) }
+            }
         }
     }
 }
@@ -712,21 +1053,24 @@ private fun ListItemRow(
     selectable: Boolean,
     citationUrls: Map<Int, String>
 ) {
-    val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize, citationUrls)
+    val compact = LocalNexlyProseStyle.current
+    val bodyStyle = compact ?: MaterialTheme.typography.bodyMedium
+    val ink = compact?.color ?: MaterialTheme.colorScheme.onSurface
+    val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
     val styled = remember(item.spans, theme) { spansToAnnotatedString(item.spans, theme) }
     Column {
-        Row {
+        Row(verticalAlignment = Alignment.Top) {
             Text(
                 text = marker,
-                style = MaterialTheme.typography.bodyMedium,
+                style = bodyStyle.copy(fontWeight = FontWeight.Bold),
                 color = markerColor,
-                modifier = Modifier.padding(end = 6.dp)
+                modifier = Modifier.padding(end = 7.dp)
             )
             val content = @Composable {
                 Text(
                     text = styled,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    style = bodyStyle,
+                    color = ink
                 )
             }
             if (selectable) SelectionContainer { content() } else content()
@@ -755,17 +1099,44 @@ private fun NestedChildView(block: Block, selectable: Boolean, citationUrls: Map
 
 @Composable
 private fun BlockQuoteView(block: Block.BlockQuote, selectable: Boolean, citationUrls: Map<Int, String>) {
+    val firstParagraph = block.blocks.firstOrNull() as? Block.Paragraph
+    val callout = remember(firstParagraph?.spans) {
+        firstParagraph?.let { detectCalloutFromSpans(it.spans) }
+    }
+    if (callout != null) {
+        val restBlocks = block.blocks.drop(1)
+        NexlyCalloutCard(
+            callout = callout,
+            citationUrls = citationUrls,
+            extraBlocks = if (restBlocks.isNotEmpty()) {
+                {
+                    restBlocks.forEach { inner ->
+                        NestedChildView(inner, selectable, citationUrls)
+                    }
+                }
+            } else null
+        )
+        return
+    }
+
     // IntrinsicSize.Min + fillMaxHeight: the accent bar spans the FULL quote
     // height (multi-line quotes keep one continuous bar), matching the iOS twin.
-    Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFF4EFFF).copy(alpha = 0.65f))
+            .height(IntrinsicSize.Min)
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    ) {
         Box(
             modifier = Modifier
                 .width(3.dp)
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(2.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.55f))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.65f))
         )
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(10.dp))
         Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
             block.blocks.forEach { inner -> NestedChildView(inner, selectable, citationUrls) }
         }
@@ -781,8 +1152,16 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
     val theme = rememberSpanTheme(MaterialTheme.typography.bodySmall.fontSize, citationUrls)
     val outline = MaterialTheme.colorScheme.outline
     val headers = remember(block.headers, theme) { block.headers.map { spansToAnnotatedString(it, theme) } }
-    val rows = remember(block.rows, theme) { block.rows.map { row -> row.map { spansToAnnotatedString(it, theme) } } }
+    val allRows = remember(block.rows, theme) { block.rows.map { row -> row.map { spansToAnnotatedString(it, theme) } } }
     val columns = maxOf(headers.size, block.aligns.size, 1)
+
+    var pageSize by remember(block) { mutableStateOf(5) }
+    var page by remember(block) { mutableStateOf(0) }
+    val totalPages = maxOf(1, (allRows.size + pageSize - 1) / pageSize)
+    val safePage = page.coerceIn(0, totalPages - 1)
+    val rows = remember(allRows, safePage, pageSize) {
+        allRows.drop(safePage * pageSize).take(pageSize)
+    }
 
     // A markdown table with a readable numeric column can also be a chart —
     // one tap, no waiting on the model to re-emit anything.
@@ -806,84 +1185,175 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
         return
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val minCell = 96.dp
-        val fits = minCell * columns <= maxWidth
-        val cellWidth = if (fits) maxWidth / columns else minCell
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = 0.72f))
+            .border(1.dp, outline.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+    ) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val minCell = 92.dp
+            val fits = minCell * columns <= maxWidth
+            val cellWidth = if (fits) maxWidth / columns else minCell
 
-        val table: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
-            headers.forEachIndexed { c, header ->
-                TableCell(
-                    text = header,
-                    width = cellWidth,
-                    align = block.aligns.getOrElse(c) { TableAlign.LEFT },
-                    emphasize = true
-                )
-            }
-        }
-
-        if (fits) {
-            SelectionContainer {
-                Column {
-                    Row(modifier = Modifier.fillMaxWidth(), content = table)
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(outline.copy(alpha = 0.5f))
+            val tableHeader: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+                headers.forEachIndexed { c, header ->
+                    TableCell(
+                        text = header,
+                        width = cellWidth,
+                        align = block.aligns.getOrElse(c) { TableAlign.LEFT },
+                        emphasize = true
                     )
-                    rows.forEachIndexed { r, row ->
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            (0 until columns).forEach { c ->
-                                TableCell(
-                                    text = row.getOrElse(c) { AnnotatedString("") },
-                                    width = cellWidth,
-                                    align = block.aligns.getOrElse(c) { TableAlign.LEFT },
-                                    emphasize = false
+                }
+            }
+
+            if (fits) {
+                SelectionContainer {
+                    Column {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFEDE6FF)),
+                            content = tableHeader
+                        )
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(outline.copy(alpha = 0.35f))
+                        )
+                        rows.forEachIndexed { r, row ->
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                (0 until columns).forEach { c ->
+                                    TableCell(
+                                        text = row.getOrElse(c) { AnnotatedString("") },
+                                        width = cellWidth,
+                                        align = block.aligns.getOrElse(c) { TableAlign.LEFT },
+                                        emphasize = false
+                                    )
+                                }
+                            }
+                            if (r != rows.lastIndex) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(1.dp)
+                                        .background(outline.copy(alpha = 0.2f))
                                 )
                             }
                         }
-                        if (r != rows.lastIndex) {
+                    }
+                }
+            } else {
+                SelectionContainer {
+                    Column(Modifier.horizontalScroll(rememberScrollState())) {
+                        Row(
+                            modifier = Modifier.background(Color(0xFFEDE6FF)),
+                            content = tableHeader
+                        )
+                        Box(
+                            Modifier
+                                .width(cellWidth * columns)
+                                .height(1.dp)
+                                .background(outline.copy(alpha = 0.35f))
+                        )
+                        rows.forEach { row ->
+                            Row {
+                                (0 until columns).forEach { c ->
+                                    TableCell(
+                                        text = row.getOrElse(c) { AnnotatedString("") },
+                                        width = cellWidth,
+                                        align = block.aligns.getOrElse(c) { TableAlign.LEFT },
+                                        emphasize = false
+                                    )
+                                }
+                            }
                             Box(
                                 Modifier
-                                    .fillMaxWidth()
+                                    .width(cellWidth * columns)
                                     .height(1.dp)
-                                    .background(outline.copy(alpha = 0.25f))
+                                    .background(outline.copy(alpha = 0.2f))
                             )
                         }
                     }
                 }
             }
-        } else {
-            // Wide table: the TABLE region scrolls horizontally; the
-            // conversation scroll is never hijacked (nested scroll is one-axis).
-            SelectionContainer {
-                Column(Modifier.horizontalScroll(rememberScrollState())) {
-                    Row(content = table)
-                    Box(
-                        Modifier
-                            .width(cellWidth * columns)
-                            .height(1.dp)
-                            .background(outline.copy(alpha = 0.5f))
+        }
+
+        if (allRows.size > 5) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFF6F2FF))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "‹",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(enabled = safePage > 0) { page = (safePage - 1).coerceAtLeast(0) }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     )
-                    rows.forEach { row ->
-                        Row {
-                            (0 until columns).forEach { c ->
-                                TableCell(
-                                    text = row.getOrElse(c) { AnnotatedString("") },
-                                    width = cellWidth,
-                                    align = block.aligns.getOrElse(c) { TableAlign.LEFT },
-                                    emphasize = false
-                                )
-                            }
-                        }
+                    (0 until totalPages).forEach { p ->
+                        val active = p == safePage
                         Box(
-                            Modifier
-                                .width(cellWidth * columns)
-                                .height(1.dp)
-                                .background(outline.copy(alpha = 0.25f))
-                        )
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .background(if (active) Color(0xFF6C4CF6) else Color.Transparent)
+                                .clickable { page = p },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = (p + 1).toString(),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
+                    Text(
+                        text = "›",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(enabled = safePage < totalPages - 1) { page = (safePage + 1).coerceAtMost(totalPages - 1) }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(Color.White.copy(alpha = 0.85f))
+                        .border(1.dp, outline.copy(alpha = 0.35f), RoundedCornerShape(7.dp))
+                        .clickable {
+                            pageSize = when (pageSize) {
+                                5 -> 10
+                                10 -> 25
+                                else -> 5
+                            }
+                            page = 0
+                        }
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = "Show: $pageSize ▾",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }
@@ -897,11 +1367,25 @@ private fun androidx.compose.foundation.layout.RowScope.TableCell(
     align: TableAlign,
     emphasize: Boolean
 ) {
+    val raw = text.text.trim()
+    val isTrend = !emphasize && Regex("^[↑↓↗↘+-]?\\s*[+-]?\\d+(?:\\.\\d+)?%$").matches(raw) &&
+        (raw.startsWith("+") || raw.startsWith("-") || raw.startsWith("↑") || raw.startsWith("↓") || raw.startsWith("↗") || raw.startsWith("↘"))
+    val isNegTrend = isTrend && (raw.contains("-") || raw.startsWith("↓") || raw.startsWith("↘"))
+    val displayText = if (isTrend) {
+        val stripped = raw.replace(Regex("^[↑↓↗↘\\s]+"), "")
+        AnnotatedString("${if (isNegTrend) "↓" else "↑"} $stripped")
+    } else text
+    val cellColor = when {
+        emphasize -> Color(0xFF221A47)
+        isTrend && isNegTrend -> Color(0xFFE04F5F)
+        isTrend -> Color(0xFF129A5A)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Text(
-        text = text,
+        text = displayText,
         style = if (emphasize) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodySmall,
-        fontWeight = if (emphasize) FontWeight.SemiBold else FontWeight.Normal,
-        color = if (emphasize) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+        fontWeight = if (emphasize || isTrend) FontWeight.Bold else FontWeight.Normal,
+        color = cellColor,
         textAlign = when (align) {
             TableAlign.LEFT -> TextAlign.Left
             TableAlign.CENTER -> TextAlign.Center
@@ -909,7 +1393,7 @@ private fun androidx.compose.foundation.layout.RowScope.TableCell(
         },
         modifier = Modifier
             .width(width)
-            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .padding(horizontal = 10.dp, vertical = 7.dp)
     )
 }
 
@@ -1210,48 +1694,119 @@ private fun CollapsibleBlockView(block: Block.CollapsibleBlock, citationUrls: Ma
 // Structured seams — citations & tool results (backend provides; never faked)
 // ---------------------------------------------------------------------------
 
+private fun isAcademicSourceDomain(domain: String, url: String): Boolean {
+    val hay = "$domain $url".lowercase()
+    return ".edu" in hay ||
+        "nature.com" in hay ||
+        "arxiv.org" in hay ||
+        "ieee.org" in hay ||
+        "acm.org" in hay ||
+        "springer." in hay ||
+        "sciencedirect." in hay ||
+        "oxford" in hay ||
+        "cambridge" in hay ||
+        "nih.gov" in hay ||
+        "pubmed" in hay
+}
+
 @Composable
 private fun CitationsBlockView(block: Block.CitationsBlock) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "Sources",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "🔗", fontSize = 13.sp, modifier = Modifier.padding(end = 5.dp))
+                Text(
+                    text = "Key Sources",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Text(
+                text = "${block.citations.size} ${if (block.citations.size == 1) "source" else "sources"}",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = Color(0xFF5B3DF5)
+            )
+        }
         block.citations.forEach { citation ->
-            Row(verticalAlignment = Alignment.Top) {
+            val academic = remember(citation.domain, citation.url) {
+                isAcademicSourceDomain(citation.domain, citation.url)
+            }
+            Row(
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.White.copy(alpha = 0.78f))
+                    .border(1.dp, Color(0xFFE3DCFA), RoundedCornerShape(14.dp))
+                    .clickable(enabled = citation.url.startsWith("http")) {
+                        com.grapsee.gsai.ui.components.GsLinks.openInApp(context, citation.url)
+                    }
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
                 Box(
                     modifier = Modifier
-                        .size(22.dp)
+                        .padding(top = 1.dp)
+                        .size(26.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                        .background(Color(0xFFEDE5FF))
+                        .border(1.dp, Color(0xFFD5C6FF), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = citation.number.toString(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF5B3DF5)
                     )
                 }
                 Spacer(Modifier.width(10.dp))
-                Column {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
                     Text(
                         text = citation.title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = citation.domain,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF1F1842)
                     )
                     if (citation.snippet.isNotBlank()) {
                         Text(
                             text = citation.snippet,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Color(0xFF4F4872),
                             maxLines = 2
                         )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "↗ ${citation.domain.ifBlank { citation.url }}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = Color(0xFF5B3DF5),
+                            maxLines = 1
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(if (academic) Color(0xFFEFEAFF) else Color(0xFFE6F9F0))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = if (academic) "🏛 Academic" else "✓ Trusted Source",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (academic) Color(0xFF5B3DF5) else Color(0xFF129A5A)
+                            )
+                        }
                     }
                 }
             }

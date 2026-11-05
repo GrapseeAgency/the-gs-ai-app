@@ -11,6 +11,7 @@ package com.grapsee.gsai.ui.chat.content
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -565,27 +566,80 @@ private fun LinkList(items: List<MediaItem>) {
 private fun CitationList(items: List<MediaItem>) {
     val c = GsTheme.colors
     val uri = LocalUriHandler.current
-    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items.take(20).forEachIndexed { i, item ->
-            Row(Modifier.fillMaxWidth().clickable { openUrl(uri, item.url) }) {
-                Text(
-                    "${i + 1}.",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = c.accent,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.width(22.dp)
-                )
-                Column(Modifier.weight(1f)) {
+            val domain = item.domain.ifBlank { item.url.substringAfter("://", "").substringBefore('/') }
+            val hay = "$domain ${item.url}".lowercase()
+            val academic = ".edu" in hay || "nature.com" in hay || "arxiv.org" in hay || "ieee.org" in hay || "acm.org" in hay
+            Row(
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.White.copy(alpha = 0.78f))
+                    .border(1.dp, Color(0xFFE3DCFA), RoundedCornerShape(14.dp))
+                    .clickable { openUrl(uri, item.url) }
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 1.dp)
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFEDE5FF))
+                        .border(1.dp, Color(0xFFD5C6FF), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "${i + 1}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF5B3DF5),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(
                         item.title.ifBlank { item.url },
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = c.textPrimary,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    val domain = item.domain.ifBlank { item.url.substringAfter("://", "").substringBefore('/') }
-                    if (domain.isNotBlank()) {
-                        Text(domain, style = MaterialTheme.typography.labelSmall, color = c.textTertiary)
+                    if (item.snippet.isNotBlank()) {
+                        Text(
+                            item.snippet,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = c.textSecondary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "↗ ${domain.ifBlank { item.url }}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = Color(0xFF5B3DF5),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(if (academic) Color(0xFFEFEAFF) else Color(0xFFE6F9F0))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = if (academic) "🏛 Academic" else "✓ Trusted Source",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = if (academic) Color(0xFF5B3DF5) else Color(0xFF129A5A)
+                            )
+                        }
                     }
                 }
             }

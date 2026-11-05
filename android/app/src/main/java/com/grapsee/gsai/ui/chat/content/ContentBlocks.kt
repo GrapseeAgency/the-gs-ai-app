@@ -187,7 +187,7 @@ fun containsNexlyPlan(content: String): Boolean {
 }
 
 /** Languages whose body is plausibly a bare widget payload. */
-private val JSONISH_LANGUAGES = setOf("json", "jsonc", "widget", "genui", "data")
+private val JSONISH_LANGUAGES = setOf("json", "jsonc", "widget", "genui", "data", "ui")
 
 /**
  * Fence languages a model naturally reaches for when it means the Nexly
@@ -213,13 +213,14 @@ private fun promoteBarePayload(block: Block): Block {
     val candidate = when (block) {
         is Block.Paragraph ->
             if (block.spans.size == 1) (block.spans.first() as? InlineSpan.TextSpan)?.text else null
-        is Block.CodeBlock ->
-            if (block.language == null || block.language.lowercase() in JSONISH_LANGUAGES) block.code else null
+        is Block.CodeBlock -> block.code
         else -> null
     } ?: return block
     val trimmed = candidate.trim()
     if (trimmed.length < 2 || trimmed.length > 64 * 1024) return block
-    if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return block
+    val isObj = trimmed.startsWith("{") && trimmed.endsWith("}")
+    val isArr = trimmed.startsWith("[") && trimmed.endsWith("]")
+    if (!isObj && !isArr) return block
     val kind = inferWidgetKind(trimmed) ?: return block
     if (kind == "plan") {
         val plan = parseNexlyPlanData(trimmed) ?: return block
@@ -240,7 +241,7 @@ private fun toLines(text: String): List<Line> {
 
 private val headingLineRegex = Regex("^(#{1,6})\\s+(.+?)\\s*#*\\s*$")
 private val hrLineRegex = Regex("^ {0,3}((\\* *){3,}|(- *){3,}|(_ *){3,})$")
-private val bulletItemRegex = Regex("^(\\s*)([-*+])\\s+(.*)$")
+private val bulletItemRegex = Regex("^(\\s*)([-*+•·])\\s+(.*)$")
 private val orderedItemRegex = Regex("^(\\s*)(\\d{1,9})[.)]\\s+(.*)$")
 private val quoteLineRegex = Regex("^\\s{0,3}>\\s?(.*)$")
 private val imageOnlyRegex = Regex("^!\\[([^\\]]*)\\]\\(([^)\\s]+)(?:\\s+\"[^\"]*\")?\\)\\s*$")
@@ -449,6 +450,9 @@ val WIDGET_LANGUAGES = setOf(
     "chart", "stat", "table", "compare", "progress", "timeline", "plan",
     "gauge", "quiz", "form", "carousel", "cards", "followups",
     "media", "actions", "panel", "voice", "calc", "app",
+    // v2 kinds
+    "tabs", "accordion", "steps", "menu", "chips", "rating",
+    "poll", "diff", "tree", "flashcards", "checklist",
     // v3 kinds
     "sim", "stage3d", "canvas", "editor", "terminal", "collab"
 )
@@ -494,12 +498,157 @@ val APP_LANGUAGE_ALIASES: Set<String> = APP_TYPES
 val CALC_LANGUAGE_ALIASES: Set<String> = CALC_TYPES
 val MEDIA_LANGUAGE_ALIASES: Set<String> = MEDIA_TYPES - "code" // ```code is source, never a widget
 
+private val CHART_SYNONYMS: Map<String, String> = mapOf(
+    "stackedarea" to "stackedArea",
+    "stacked_area" to "stackedArea",
+    "stacked-area" to "stackedArea",
+    "barchart" to "bar",
+    "bar_chart" to "bar",
+    "bar-chart" to "bar",
+    "column" to "bar",
+    "columns" to "bar",
+    "horizontalbar" to "hbar",
+    "horizontal_bar" to "hbar",
+    "horizontal-bar" to "hbar",
+    "linechart" to "line",
+    "line_chart" to "line",
+    "line-chart" to "line",
+    "areachart" to "area",
+    "area_chart" to "area",
+    "area-chart" to "area",
+    "piechart" to "pie",
+    "pie_chart" to "pie",
+    "pie-chart" to "pie",
+    "doughnut" to "donut",
+    "donutchart" to "donut",
+    "donut_chart" to "donut",
+    "scatterplot" to "scatter",
+    "scatter_plot" to "scatter",
+    "scatter-plot" to "scatter",
+    "bubblechart" to "bubble",
+    "bubble_chart" to "bubble",
+    "radarchart" to "radar",
+    "spider" to "radar",
+    "box" to "boxplot",
+    "box_plot" to "boxplot",
+    "box-plot" to "boxplot",
+    "candles" to "candlestick",
+    "ohlc" to "candlestick",
+    "kline" to "candlestick",
+    "word_cloud" to "wordcloud",
+    "word-cloud" to "wordcloud",
+    "graph" to "network",
+    "orderbook" to "depth",
+    "order_book" to "depth"
+)
+
+private val KIND_SYNONYMS: Map<String, String> = mapOf(
+    "charts" to "chart",
+    "plot" to "chart",
+    "stats" to "stat",
+    "kpi" to "stat",
+    "kpis" to "stat",
+    "metric" to "stat",
+    "metrics" to "stat",
+    "scorecard" to "stat",
+    "tables" to "table",
+    "datatable" to "table",
+    "data_table" to "table",
+    "comparison" to "compare",
+    "versus" to "compare",
+    "vs" to "compare",
+    "proscons" to "compare",
+    "pros_cons" to "compare",
+    "pros-cons" to "compare",
+    "progressbar" to "progress",
+    "progress_bar" to "progress",
+    "gauges" to "gauge",
+    "meter" to "gauge",
+    "dial" to "gauge",
+    "quizzes" to "quiz",
+    "trivia" to "quiz",
+    "mcq" to "quiz",
+    "forms" to "form",
+    "survey" to "form",
+    "slider" to "carousel",
+    "card" to "cards",
+    "followup" to "followups",
+    "follow_ups" to "followups",
+    "follow-ups" to "followups",
+    "suggestions" to "followups",
+    "action" to "actions",
+    "buttons" to "actions",
+    "callout" to "panel",
+    "alert" to "panel",
+    "banner" to "panel",
+    "notice" to "panel",
+    "admonition" to "panel",
+    "tts" to "voice",
+    "speech" to "voice",
+    "pronunciation" to "voice",
+    "calculator" to "calc",
+    "simulation" to "sim",
+    "physics" to "sim",
+    "3d" to "stage3d",
+    "shell" to "terminal",
+    "cli" to "terminal",
+    "console" to "terminal",
+    "faq" to "accordion",
+    "faqs" to "accordion",
+    "collapsible" to "accordion",
+    "details" to "accordion",
+    "stepper" to "steps",
+    "walkthrough" to "steps",
+    "howto" to "steps",
+    "how-to" to "steps",
+    "guide" to "steps",
+    "todos" to "checklist",
+    "todo-list" to "checklist",
+    "tasklist" to "checklist",
+    "task-list" to "checklist",
+    "flashcard" to "flashcards",
+    "study" to "flashcards",
+    "deck" to "flashcards",
+    "vocab" to "flashcards",
+    "ballot" to "poll",
+    "voting" to "poll",
+    "patch" to "diff",
+    "codediff" to "diff",
+    "code-diff" to "diff",
+    "hierarchy" to "tree",
+    "filetree" to "tree",
+    "file-tree" to "tree",
+    "orgchart" to "tree",
+    "org-chart" to "tree",
+    "taxonomy" to "tree",
+    "choices" to "menu",
+    "tags" to "chips",
+    "nps" to "rating",
+    "stars" to "rating",
+    "review" to "rating",
+    "roadmap" to "timeline",
+    "milestones" to "timeline",
+    "chronology" to "timeline",
+    "history" to "timeline",
+    "events" to "timeline",
+    "agenda" to "timeline",
+    "csv" to "table",
+    "tsv" to "table",
+    "grid" to "table",
+    "leaderboard" to "table"
+)
+
+private val SUBTYPED_KINDS: Set<String> = setOf(
+    "chart", "media", "calc", "app", "sim", "stage3d", "canvas", "editor", "collab"
+)
+
 /** Every fence language that opens a widget block (kinds + aliases). */
 val WIDGET_FENCE_LANGUAGES: Set<String> =
     WIDGET_LANGUAGES + CHART_LANGUAGE_ALIASES + EDITOR_LANGUAGE_ALIASES +
         SIM_LANGUAGE_ALIASES + STAGE3D_LANGUAGE_ALIASES + CANVAS_LANGUAGE_ALIASES +
         COLLAB_LANGUAGE_ALIASES + APP_LANGUAGE_ALIASES +
-        CALC_LANGUAGE_ALIASES + MEDIA_LANGUAGE_ALIASES
+        CALC_LANGUAGE_ALIASES + MEDIA_LANGUAGE_ALIASES +
+        CHART_SYNONYMS.keys + KIND_SYNONYMS.keys
 
 /**
  * Canonical widget kind for a fence language, or null when the language is not
@@ -509,10 +658,10 @@ val WIDGET_FENCE_LANGUAGES: Set<String> =
  * never disagree about what counts as a widget.
  */
 fun widgetKindOf(language: String?): String? {
-    val lang = language?.lowercase() ?: return null
+    val lang = language?.lowercase()?.trim() ?: return null
     return when {
         lang in WIDGET_LANGUAGES -> lang
-        lang in CHART_LANGUAGE_ALIASES -> "chart"
+        lang in CHART_LANGUAGE_ALIASES || lang in CHART_SYNONYMS -> "chart"
         // v3 sub-type families before media/app — several of their names
         // ("video", "audio", "site", "css") double as media types.
         lang in EDITOR_LANGUAGE_ALIASES -> "editor"
@@ -525,6 +674,7 @@ fun widgetKindOf(language: String?): String? {
         lang in MEDIA_LANGUAGE_ALIASES -> "media"
         lang in APP_LANGUAGE_ALIASES -> "app"
         lang in CALC_LANGUAGE_ALIASES -> "calc"
+        lang in KIND_SYNONYMS -> KIND_SYNONYMS[lang]
         else -> null
     }
 }
@@ -535,6 +685,7 @@ fun widgetKindOf(language: String?): String? {
  * the fence did.
  */
 internal fun injectWidgetType(json: String, alias: String, kind: String): String {
+    if (kind !in SUBTYPED_KINDS) return json
     if (json.contains("\"type\"")) return json
     val type = if (kind == "chart") canonicalChartType(alias) else alias.lowercase()
     val brace = json.indexOf('{')
@@ -542,9 +693,11 @@ internal fun injectWidgetType(json: String, alias: String, kind: String): String
     return json.substring(0, brace + 1) + "\"type\":\"" + type + "\"," + json.substring(brace + 1)
 }
 
-/** `stackedarea` → `stackedArea`; every other alias is already canonical. */
-internal fun canonicalChartType(alias: String): String =
-    if (alias.equals("stackedarea", ignoreCase = true)) "stackedArea" else alias
+/** `stackedarea` → `stackedArea`; every other alias maps to its canonical chart type. */
+internal fun canonicalChartType(alias: String): String {
+    val lower = alias.lowercase().trim()
+    return CHART_SYNONYMS[lower] ?: if (lower in CHART_LANGUAGE_ALIASES) lower else alias
+}
 
 /**
  * Inject the chart type implied by the fence into a payload that has none.
@@ -572,6 +725,20 @@ val HTML_LANGUAGES = setOf(
     "svg"
 )
 
+private val MERMAID_FENCE_ALIASES = setOf(
+    "mermaid", "flowchart", "sequence", "sequencediagram", "classdiagram",
+    "statediagram", "erdiagram", "gitgraph", "c4", "architecture", "diagram",
+    "mindmap", "gantt"
+)
+
+private val MAP_FENCE_ALIASES = setOf(
+    "map", "maps", "location", "locations", "places", "route", "directions", "geo", "geojson"
+)
+
+private val SANDBOX_FENCE_ALIASES = setOf(
+    "sandbox", "playground", "runnable", "livecode"
+)
+
 /** A closed fence in the mermaid language is a first-class diagram block;
  *  a widget-language fence is a first-class widget block (JSON parsed at render
  *  time, so a malformed payload degrades to a code block); an html-language
@@ -580,22 +747,21 @@ val HTML_LANGUAGES = setOf(
 private fun fenceToBlock(language: String?, code: String, open: Boolean, offset: Int): Block {
     val lang = language?.lowercase()
     val kind = widgetKindOf(lang)
-    val isJson = code.trimStart().startsWith("{")
+    val isJson = code.trimStart().let { it.startsWith("{") || it.startsWith("[") }
     val parsedPlan = if (!open && lang != null && lang in PLAN_FENCE_LANGUAGES) {
         parseNexlyPlanData(code)
     } else {
         null
     }
     return when {
-        // A mind map in a ```mindmap fence is mermaid syntax — the live model
-        // sends exactly that. Same for a ```gantt fence that holds mermaid's
-        // gantt syntax (dateFormat/section lines) instead of a JSON payload.
-        // Rendering either as source code wastes the fence.
-        (language.equals("mermaid", ignoreCase = true) ||
-            (language.equals("mindmap", ignoreCase = true) && !isJson) ||
-            (language.equals("gantt", ignoreCase = true) && !isJson)) && !open ->
+        // Mermaid diagrams — including ```mindmap, ```gantt, ```flowchart,
+        // ```sequence, ```architecture when holding Mermaid syntax rather than JSON.
+        (lang == "mermaid" || (lang != null && lang in MERMAID_FENCE_ALIASES && !isJson)) && !open ->
             Block.MermaidBlock(code, offset)
-        lang == "map" -> Block.HtmlBlock("map", code, open, offset)
+        lang != null && lang in MAP_FENCE_ALIASES && (isJson || open) ->
+            Block.HtmlBlock("map", code, open, offset)
+        lang != null && lang in SANDBOX_FENCE_ALIASES ->
+            Block.HtmlBlock("sandbox", code, open, offset)
         // `schedule`, `timetable`, `itinerary`, `routine` and `day` are natural
         // fence names for this card. Only a payload with timed rows becomes a
         // plan; a real interactive ```schedule app still routes to its widget.

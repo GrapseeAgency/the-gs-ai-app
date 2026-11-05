@@ -331,11 +331,41 @@ private fun scrub(code: String): String = code
     .replace(Regex("""(href|src)\s*=\s*["']?\s*javascript\s*:""", RegexOption.IGNORE_CASE), "$1=\"about:blank\" x-")
 
 @Serializable
-private data class MapPin(val lat: Double = 0.0, val lng: Double = 0.0, val label: String = "", val detail: String = "")
+private data class MapPin(
+    val lat: Double = Double.NaN,
+    val lng: Double = Double.NaN,
+    val latitude: Double = Double.NaN,
+    val longitude: Double = Double.NaN,
+    val lon: Double = Double.NaN,
+    val label: String = "",
+    val name: String = "",
+    val title: String = "",
+    val detail: String = "",
+    val description: String = "",
+    val address: String = ""
+) {
+    val resolvedLat: Double get() = if (!lat.isNaN()) lat else latitude
+    val resolvedLng: Double get() = when {
+        !lng.isNaN() -> lng
+        !lon.isNaN() -> lon
+        else -> longitude
+    }
+    val resolvedLabel: String get() = label.ifBlank { title.ifBlank { name } }
+    val resolvedDetail: String get() = detail.ifBlank { description.ifBlank { address } }
+}
 
 /** One turn-by-turn instruction. Used only when routing cannot be fetched. */
 @Serializable
-private data class MapStep(val instruction: String = "", val distance: String = "")
+private data class MapStep(
+    val instruction: String = "",
+    val text: String = "",
+    val step: String = "",
+    val distance: String = "",
+    val duration: String = ""
+) {
+    val resolvedInstruction: String get() = instruction.ifBlank { text.ifBlank { step } }
+    val resolvedDistance: String get() = distance.ifBlank { duration }
+}
 
 /** One map inside a side-by-side comparison. */
 @Serializable
@@ -353,23 +383,40 @@ private data class MapPayload(
     val center: List<Double> = emptyList(),
     val zoom: Int = 0,
     val pins: List<MapPin> = emptyList(),
+    val markers: List<MapPin> = emptyList(),
+    val locations: List<MapPin> = emptyList(),
+    val places: List<MapPin> = emptyList(),
     val route: List<List<Double>> = emptyList(),
     /** driving | walking | cycling — enables live OSRM routing between [stops]. */
     val mode: String = "",
     /** Ordered waypoints; 2+ turns the map into a routed itinerary. */
     val stops: List<MapPin> = emptyList(),
+    val waypoints: List<MapPin> = emptyList(),
+    val itinerary: List<MapPin> = emptyList(),
     /** Static turn list, shown until/unless OSRM answers. */
     val steps: List<MapStep> = emptyList(),
+    val directions: List<MapStep> = emptyList(),
     /** Group dense pins into counted bubbles. */
     val cluster: Boolean = false,
     /** Show the place-detail carousel under the map. */
     val cards: Boolean = false,
     /** Two or more panels render as a map comparison. */
     val compare: List<MapPanel> = emptyList(),
-    val height: Int = 0
+    val height: Int = 0,
+    // Single-pin top-level location support
+    val lat: Double = Double.NaN,
+    val lng: Double = Double.NaN,
+    val latitude: Double = Double.NaN,
+    val longitude: Double = Double.NaN,
+    val lon: Double = Double.NaN,
+    val label: String = "",
+    val address: String = "",
+    val detail: String = ""
 )
 
-private fun validPin(p: MapPin) = p.lat in -90.0..90.0 && p.lng in -180.0..180.0
+private fun validPin(p: MapPin) =
+    !p.resolvedLat.isNaN() && !p.resolvedLng.isNaN() &&
+        p.resolvedLat in -90.0..90.0 && p.resolvedLng in -180.0..180.0
 private fun validRoute(r: List<List<Double>>) = r.filter { it.size >= 2 && it[0] in -90.0..90.0 && it[1] in -180.0..180.0 }
 
 private fun buildMapDoc(code: String, textHex: String, accentHex: String): String? {
@@ -378,9 +425,19 @@ private fun buildMapDoc(code: String, textHex: String, accentHex: String): Strin
     } catch (_: Throwable) {
         null
     } ?: return null
-    val pins = payload.pins.filter(::validPin)
+    val rawPins = payload.pins.ifEmpty { payload.markers.ifEmpty { payload.locations.ifEmpty { payload.places } } }
+    val singlePin = MapPin(
+        lat = payload.lat, lng = payload.lng,
+        latitude = payload.latitude, longitude = payload.longitude, lon = payload.lon,
+        label = payload.label.ifBlank { payload.title },
+        detail = payload.detail.ifBlank { payload.address }
+    )
+    val pins = rawPins.filter(::validPin).ifEmpty {
+        if (validPin(singlePin)) listOf(singlePin) else emptyList()
+    }
     val route = validRoute(payload.route)
-    val stops = payload.stops.filter(::validPin)
+    val stops = payload.stops.ifEmpty { payload.waypoints.ifEmpty { payload.itinerary } }.filter(::validPin)
+    val stepsList = payload.steps.ifEmpty { payload.directions }
     val compare = payload.compare
         .filter { it.pins.any(::validPin) || validRoute(it.route).isNotEmpty() }
         .take(4)
@@ -396,13 +453,13 @@ private fun buildMapDoc(code: String, textHex: String, accentHex: String): Strin
     }
     val height = if (payload.height in 160..600) payload.height else 260
     val pinsJs = pins.joinToString(",") { p ->
-        "{lat:${p.lat},lng:${p.lng},label:'${jsString(p.label)}',detail:'${jsString(p.detail)}'}"
+        "{lat:${p.resolvedLat},lng:${p.resolvedLng},label:'${jsString(p.resolvedLabel)}',detail:'${jsString(p.resolvedDetail)}'}"
     }
     val stopsJs = stops.joinToString(",") { p ->
-        "{lat:${p.lat},lng:${p.lng},label:'${jsString(p.label)}',detail:'${jsString(p.detail)}'}"
+        "{lat:${p.resolvedLat},lng:${p.resolvedLng},label:'${jsString(p.resolvedLabel)}',detail:'${jsString(p.resolvedDetail)}'}"
     }
-    val stepsJs = payload.steps.take(40).joinToString(",") { s ->
-        "{text:'${jsString(s.instruction)}',dist:'${jsString(s.distance)}'}"
+    val stepsJs = stepsList.take(40).joinToString(",") { s ->
+        "{text:'${jsString(s.resolvedInstruction)}',dist:'${jsString(s.resolvedDistance)}'}"
     }
     val routeJs = route.joinToString(",") { "[${it[0]},${it[1]}]" }
     val titleHtml = if (payload.title.isEmpty()) "" else "<h3>${jsString(payload.title)}</h3>"
@@ -554,7 +611,7 @@ private fun buildCompareMapDoc(
         val pins = p.pins.filter(::validPin)
         val route = validRoute(p.route)
         val pinsJs = pins.joinToString(",") { q ->
-            "{lat:${q.lat},lng:${q.lng},label:'${jsString(q.label)}',detail:'${jsString(q.detail)}'}"
+            "{lat:${q.resolvedLat},lng:${q.resolvedLng},label:'${jsString(q.resolvedLabel)}',detail:'${jsString(q.resolvedDetail)}'}"
         }
         val routeJs = route.joinToString(",") { "[${it[0]},${it[1]}]" }
         val center = if (p.center.size >= 2) "[${p.center[0]},${p.center[1]}]" else "null"

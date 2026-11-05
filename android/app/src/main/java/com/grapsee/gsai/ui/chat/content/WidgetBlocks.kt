@@ -150,16 +150,38 @@ internal object PointListSerializer : KSerializer<List<List<Float>>> {
         is JsonArray -> {
             val numbers = item.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
             when {
-                numbers.size >= 2 -> listOf(numbers[0], numbers[1])
+                // Preserve up to 5 coordinates so 2D [x, y], 3D bubble [x, y, z],
+                // and 4D candlestick [o, h, l, c] all survive intact.
+                numbers.size >= 2 -> numbers.take(5)
                 numbers.size == 1 -> listOf(index.toFloat(), numbers[0])
                 else -> null
             }
         }
         is JsonObject -> {
-            val y = (item["y"] as? JsonPrimitive)?.floatOrNull
-                ?: (item["value"] as? JsonPrimitive)?.floatOrNull
-            if (y == null) null
-            else listOf((item["x"] as? JsonPrimitive)?.floatOrNull ?: index.toFloat(), y)
+            val o = (item["open"] as? JsonPrimitive)?.floatOrNull ?: (item["o"] as? JsonPrimitive)?.floatOrNull
+            val h = (item["high"] as? JsonPrimitive)?.floatOrNull ?: (item["h"] as? JsonPrimitive)?.floatOrNull
+            val l = (item["low"] as? JsonPrimitive)?.floatOrNull ?: (item["l"] as? JsonPrimitive)?.floatOrNull
+            val c = (item["close"] as? JsonPrimitive)?.floatOrNull ?: (item["c"] as? JsonPrimitive)?.floatOrNull
+            if (o != null && h != null && l != null && c != null) {
+                listOf(o, h, l, c)
+            } else {
+                val y = (item["y"] as? JsonPrimitive)?.floatOrNull
+                    ?: (item["value"] as? JsonPrimitive)?.floatOrNull
+                    ?: (item["val"] as? JsonPrimitive)?.floatOrNull
+                    ?: (item["v"] as? JsonPrimitive)?.floatOrNull
+                    ?: (item["score"] as? JsonPrimitive)?.floatOrNull
+                    ?: (item["count"] as? JsonPrimitive)?.floatOrNull
+                    ?: (item["amount"] as? JsonPrimitive)?.floatOrNull
+                if (y == null) null
+                else {
+                    val x = (item["x"] as? JsonPrimitive)?.floatOrNull ?: index.toFloat()
+                    val z = (item["z"] as? JsonPrimitive)?.floatOrNull
+                        ?: (item["size"] as? JsonPrimitive)?.floatOrNull
+                        ?: (item["r"] as? JsonPrimitive)?.floatOrNull
+                        ?: (item["radius"] as? JsonPrimitive)?.floatOrNull
+                    if (z != null) listOf(x, y, z) else listOf(x, y)
+                }
+            }
         }
         else -> null
     }
@@ -501,6 +523,17 @@ sealed interface Widget {
     data class Voice(val w: VoiceWidget) : Widget { override val title get() = w.title }
     data class Calc(val w: CalcWidget) : Widget { override val title get() = w.title }
     data class App(val w: AppWidget) : Widget { override val title get() = w.title }
+    data class Tabs(val w: TabsWidget) : Widget { override val title get() = w.title }
+    data class Accordion(val w: AccordionWidget) : Widget { override val title get() = w.title }
+    data class Steps(val w: StepsWidget) : Widget { override val title get() = w.title }
+    data class Menu(val w: MenuWidget) : Widget { override val title get() = w.title }
+    data class Chips(val w: ChipsWidget) : Widget { override val title get() = w.title }
+    data class Rating(val w: RatingWidget) : Widget { override val title get() = w.title }
+    data class Poll(val w: PollWidget) : Widget { override val title get() = w.title }
+    data class Diff(val w: DiffWidget) : Widget { override val title get() = w.title }
+    data class Tree(val w: TreeWidget) : Widget { override val title get() = w.title }
+    data class Flashcards(val w: FlashcardsWidget) : Widget { override val title get() = w.title }
+    data class Checklist(val w: ChecklistWidget) : Widget { override val title get() = w.title }
     data class Sim(val w: SimWidget) : Widget { override val title get() = w.title }
     data class Stage3D(val w: Stage3DWidget) : Widget { override val title get() = w.title }
     data class Canvas(val w: CanvasWidgetData) : Widget { override val title get() = w.title }
@@ -531,10 +564,12 @@ internal val widgetJson = Json {
  * caller renders the raw JSON as a code block, so the model can never break
  * the transcript with a bad widget.
  */
-fun parseWidget(kind: String, json: String): Widget? {
-    if (json.isBlank() || json.length > MAX_WIDGET_BYTES) return null
+fun parseWidget(kind: String, rawJson: String): Widget? {
+    if (rawJson.isBlank() || rawJson.length > MAX_WIDGET_BYTES) return null
+    val resolvedKind = widgetKindOf(kind) ?: kind.lowercase().trim()
+    val json = normalizeWidgetJson(resolvedKind, rawJson)
     return try {
-        when (kind) {
+        when (resolvedKind) {
             "chart" -> {
                 val w = widgetJson.decodeFromString<ChartWidget>(json)
                 // Pie/donut are documented as ONE SERIES PER SLICE with a
@@ -797,6 +832,51 @@ fun parseWidget(kind: String, json: String): Widget? {
                     .trim('-').take(48).ifEmpty { "lobby" }
                 Widget.Collab(w.copy(surface = surface, room = room, items = w.items.filter { it.isNotBlank() }.take(12)))
             }
+            // v2 — layout, navigation, and interactive controls.
+            "tabs" -> widgetJson.decodeFromString<TabsWidget>(json).let { w ->
+                val tabs = w.tabs.filter { it.label.isNotBlank() && (it.body.isNotBlank() || it.items.isNotEmpty()) }.take(8)
+                if (tabs.isEmpty()) null else Widget.Tabs(w.copy(tabs = tabs))
+            }
+            "accordion" -> widgetJson.decodeFromString<AccordionWidget>(json).let { w ->
+                val sections = w.sections.filter { it.label.isNotBlank() && it.body.isNotBlank() }.take(10)
+                if (sections.isEmpty()) null else Widget.Accordion(w.copy(sections = sections))
+            }
+            "steps" -> widgetJson.decodeFromString<StepsWidget>(json).let { w ->
+                val steps = w.steps.filter { it.title.isNotBlank() }.take(12)
+                if (steps.isEmpty()) null else Widget.Steps(w.copy(steps = steps))
+            }
+            "menu" -> widgetJson.decodeFromString<MenuWidget>(json).let { w ->
+                val options = w.options.filter { it.label.isNotBlank() }.take(12)
+                if (options.isEmpty()) null else Widget.Menu(w.copy(options = options))
+            }
+            "chips" -> widgetJson.decodeFromString<ChipsWidget>(json).let { w ->
+                val options = w.options.filter { it.label.isNotBlank() }.take(12)
+                if (options.isEmpty()) null else Widget.Chips(w.copy(options = options))
+            }
+            "rating" -> widgetJson.decodeFromString<RatingWidget>(json).let { w ->
+                val style = if (w.style in setOf("star", "heart", "thumb", "nps")) w.style else "star"
+                if (w.title.isBlank() && w.prompt.isBlank()) null else Widget.Rating(w.copy(style = style))
+            }
+            "poll" -> widgetJson.decodeFromString<PollWidget>(json).let { w ->
+                val options = w.options.filter { it.label.isNotBlank() }.take(12)
+                if (options.size < 2) null else Widget.Poll(w.copy(options = options))
+            }
+            "diff" -> widgetJson.decodeFromString<DiffWidget>(json).let { w ->
+                if (w.unified.isBlank() && w.before.isBlank() && w.after.isBlank()) null
+                else Widget.Diff(w)
+            }
+            "tree" -> widgetJson.decodeFromString<TreeWidget>(json).let { w ->
+                val roots = w.roots.filter { it.label.isNotBlank() }.take(8)
+                if (roots.isEmpty()) null else Widget.Tree(w.copy(roots = roots))
+            }
+            "flashcards" -> widgetJson.decodeFromString<FlashcardsWidget>(json).let { w ->
+                val cards = w.cards.filter { it.front.isNotBlank() && it.back.isNotBlank() }.take(20)
+                if (cards.isEmpty()) null else Widget.Flashcards(w.copy(cards = cards))
+            }
+            "checklist" -> widgetJson.decodeFromString<ChecklistWidget>(json).let { w ->
+                val items = w.items.filter { it.label.isNotBlank() }.take(30)
+                if (items.isEmpty()) null else Widget.Checklist(w.copy(items = items))
+            }
             else -> null
         }
     } catch (_: Throwable) {
@@ -848,30 +928,65 @@ private fun hasTimedRows(obj: JsonObject): Boolean {
 }
 
 fun inferWidgetKind(json: String): String? {
+    val normalized = normalizeWidgetJson("json", json)
     val obj = try {
-        widgetJson.parseToJsonElement(json) as? JsonObject
+        widgetJson.parseToJsonElement(normalized) as? JsonObject
     } catch (_: Throwable) {
         null
     } ?: return null
     val keys = obj.keys
     val candidates = buildList {
-        if ("series" in keys) add("chart")
-        if ("columns" in keys && "rows" in keys) add("table")
-        if ("cards" in keys) add("stat")
-        if ("entries" in keys) add("timeline")
+        // Explicit kind / sub-type discriminators
+        for (k in listOf("kind", "widget", "type", "sim", "view", "surface", "editor")) {
+            val raw = (obj[k] as? JsonPrimitive)?.contentOrNull?.trim() ?: continue
+            val mapped = widgetKindOf(raw)
+            if (mapped != null && mapped !in this) add(mapped)
+        }
+        // Structural signatures across all supported kinds
         if (("rows" in keys || "items" in keys) && hasTimedRows(obj)) add("plan")
+        if ("series" in keys || "nodes" in keys && "links" in keys || "words" in keys || "root" in keys || "axes" in keys) add("chart")
+        if ("columns" in keys && "rows" in keys) {
+            add("table"); add("editor"); add("app")
+        }
+        if ("tabs" in keys) add("tabs")
+        if ("sections" in keys) { add("accordion"); add("tabs") }
+        if ("roots" in keys || "tree" in keys) add("tree")
+        if ("unified" in keys || ("before" in keys && "after" in keys) || ("old" in keys && "new" in keys)) add("diff")
+        if ("cards" in keys) {
+            add("flashcards"); add("stat"); add("cards")
+        }
+        if ("left" in keys && "right" in keys) add("compare")
+        if ("entries" in keys) add("timeline")
         if ("questions" in keys) add("quiz")
         if ("fields" in keys) add("form")
+        if ("options" in keys || "choices" in keys) {
+            add("poll"); add("menu"); add("chips")
+        }
+        if ("style" in keys && ("max" in keys || "prompt" in keys)) add("rating")
         if ("prompts" in keys) add("followups")
         if ("buttons" in keys) add("actions")
-        if ("items" in keys) {
-            add("progress"); add("gauge"); add("carousel"); add("app"); add("media")
+        if ("phrases" in keys) add("voice")
+        if ("sliders" in keys || "outputs" in keys) add("calc")
+        if ("sim" in keys) add("sim")
+        if ("view" in keys || "bonds" in keys || "z" in keys) add("stage3d")
+        if ("surface" in keys) {
+            add("canvas"); add("collab")
+        }
+        if ("editor" in keys || "tracks" in keys || "cells" in keys || "blocks" in keys) add("editor")
+        if ("commands" in keys || "cwd" in keys) add("terminal")
+        if ("room" in keys) add("collab")
+        if ("steps" in keys) {
+            add("steps"); add("app")
+        }
+        if ("items" in keys || "tasks" in keys || "todos" in keys) {
+            add("checklist"); add("progress"); add("gauge"); add("carousel"); add("cards"); add("steps"); add("accordion"); add("menu"); add("chips"); add("app"); add("media"); add("collab")
         }
         if ("pages" in keys) add("media")
-        if ("steps" in keys || "groups" in keys) add("app")
+        if ("groups" in keys || "slots" in keys) add("app")
+        if ("body" in keys && ("title" in keys || "tone" in keys || "cta" in keys)) add("panel")
     }
     return candidates.firstOrNull {
-        if (it == "plan") parseNexlyPlanData(json) != null else parseWidget(it, json) != null
+        if (it == "plan") parseNexlyPlanData(normalized) != null else parseWidget(it, normalized) != null
     }
 }
 
@@ -989,7 +1104,10 @@ private val FAMILY_SLOTS = mapOf(
     "progress" to 4, "timeline" to 5, "table" to 6, "quiz" to 7,
     "form" to 8, "carousel" to 9, "cards" to 10, "followups" to 11,
     "media" to 3, "actions" to 2, "panel" to 1, "voice" to 8,
-    "calc" to 9, "app" to 4
+    "calc" to 9, "app" to 4,
+    "tabs" to 0, "accordion" to 5, "steps" to 4, "menu" to 8,
+    "chips" to 11, "rating" to 2, "poll" to 7, "diff" to 9,
+    "tree" to 10, "flashcards" to 6, "checklist" to 1
 )
 
 /**
@@ -1012,11 +1130,11 @@ internal fun widgetFamily(tag: String): String {
 }
 
 internal fun widgetTone(tag: String): CardTone = when (widgetFamily(tag)) {
-    "chart", "carousel" -> CardTone.Tinted
-    "stat", "gauge" -> CardTone.Hero
-    "form", "quiz", "calc", "app" -> CardTone.Inset
-    "timeline", "panel" -> CardTone.Editorial
-    "table", "cards", "media" -> CardTone.Plain
+    "chart", "carousel", "tabs", "flashcards" -> CardTone.Tinted
+    "stat", "gauge", "rating" -> CardTone.Hero
+    "form", "quiz", "calc", "app", "poll", "diff" -> CardTone.Inset
+    "timeline", "panel", "steps", "accordion" -> CardTone.Editorial
+    "table", "cards", "media", "tree", "checklist" -> CardTone.Plain
     else -> CardTone.Outline
 }
 
@@ -1224,7 +1342,10 @@ fun WidgetBlockView(block: Block.WidgetBlock, streaming: Boolean, onSendPrompt: 
         WidgetSkeleton(block.kind)
         return
     }
-    val widget = remember(block.kind, block.json) { parseWidget(block.kind, block.json) }
+    val widget = remember(block.kind, block.json) {
+        parseWidget(block.kind, block.json)
+            ?: inferWidgetKind(block.json)?.let { inferred -> parseWidget(inferred, block.json) }
+    }
     if (widget == null) {
         WidgetFallback(block)
         return
@@ -1261,6 +1382,17 @@ fun WidgetView(widget: Widget, onSendPrompt: ((String) -> Unit)? = null) {
         is Widget.Voice -> VoiceWidgetView(widget.w, onSendPrompt)
         is Widget.Calc -> CalcWidgetView(widget.w, onSendPrompt)
         is Widget.App -> AppWidgetView(widget.w, onSendPrompt)
+        is Widget.Tabs -> TabsWidgetView(widget.w)
+        is Widget.Accordion -> AccordionWidgetView(widget.w)
+        is Widget.Steps -> StepsWidgetView(widget.w)
+        is Widget.Menu -> MenuWidgetView(widget.w, onSendPrompt)
+        is Widget.Chips -> ChipsWidgetView(widget.w, onSendPrompt)
+        is Widget.Rating -> RatingWidgetView(widget.w, onSendPrompt)
+        is Widget.Poll -> PollWidgetView(widget.w, onSendPrompt)
+        is Widget.Diff -> DiffWidgetView(widget.w)
+        is Widget.Tree -> TreeWidgetView(widget.w)
+        is Widget.Flashcards -> FlashcardsWidgetView(widget.w)
+        is Widget.Checklist -> ChecklistWidgetView(widget.w)
         is Widget.Sim -> SimWidgetView(widget.w)
         is Widget.Stage3D -> Stage3DWidgetView(widget.w)
         is Widget.Canvas -> CanvasWidgetView(widget.w)
@@ -1295,50 +1427,119 @@ private val CHART_HUE_SLOTS = mapOf(
 /** Charts that read better as a figure than as a filled card. */
 private val EDITORIAL_CHARTS = setOf("line", "area", "stackedArea", "scatter", "bubble", "candlestick")
 
+private val SWITCHABLE_CHART_TYPES = setOf("line", "bar", "area", "pie", "donut")
+private val CHART_RANGE_LABELS = listOf("Last 7 Days", "Last 30 Days", "Last 6 Months", "Last 12 Months")
+
 @Composable
 private fun ChartWidgetView(w: ChartWidget) {
+    val isSwitchable = w.type in SWITCHABLE_CHART_TYPES && w.series.isNotEmpty()
+    var activeType by remember(w.type) { mutableStateOf(w.type) }
+    var rangeIndex by remember { mutableStateOf(2) }
+
     WidgetCardShell(
         w.title.ifEmpty { "Chart" },
         "chart",
-        hue = WidgetPalette.at(CHART_HUE_SLOTS[w.type] ?: 0),
-        tone = if (w.type in EDITORIAL_CHARTS) CardTone.Editorial else CardTone.Tinted
+        hue = WidgetPalette.at(CHART_HUE_SLOTS[activeType] ?: 0),
+        tone = if (activeType in EDITORIAL_CHARTS) CardTone.Editorial else CardTone.Tinted
     ) {
-        when (w.type) {
-            "bar", "histogram" -> BarChart(w)
-            "pie" -> PieChart(w)
-            "donut" -> DonutChart(w)
-            "hbar" -> HBarChart(w)
-            "stacked" -> StackedBarChart(w)
-            "stackedArea" -> StackedAreaChart(w)
-            "scatter" -> ScatterChart(w, bubble = false)
-            "bubble" -> ScatterChart(w, bubble = true)
-            "funnel" -> FunnelChart(w)
-            "radar" -> RadarChart(w)
-            "grouped" -> GroupedBarChart(w)
-            "boxplot" -> BoxPlotChart(w)
-            "heatmap" -> HeatmapChart(w)
-            "correlation" -> HeatmapChart(w, diverging = true)
-            "treemap" -> TreemapChart(w)
-            "waterfall" -> WaterfallChart(w)
-            "candlestick" -> CandlestickChart(w)
-            "gantt" -> GanttChart(w)
-            "chord" -> ChordChart(w)
-            // v3 parity (WidgetsCharts3.kt)
-            "sankey" -> SankeyChart(w)
-            "network" -> NetworkChart(w)
-            "force" -> ForceChart(w)
-            "wordcloud" -> WordcloudChart(w)
-            "sunburst" -> SunburstChart(w)
-            "bullet" -> BulletChart(w)
-            "quadrant" -> QuadrantChart(w)
-            "violin" -> ViolinChart(w)
-            "contour" -> ContourChart(w)
-            "parallel" -> ParallelChart(w)
-            "dendrogram" -> DendrogramChart(w)
-            "depth" -> DepthChart(w)
-            else -> LineChart(w, filled = w.type == "area")
+        if (isSwitchable) {
+            // 07. Interactive Charts: Type Switcher Pills + Range Selector (Screenshot 6)
+            val tabs = listOf(
+                Triple("line", "📈", "Line"),
+                Triple("bar", "📊", "Bar"),
+                Triple("area", "📉", "Area"),
+                Triple(if (w.type == "donut") "donut" else "pie", "◔", "Pie")
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFFEDE6FF))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    tabs.forEach { (id, icon, label) ->
+                        val selected = activeType == id || (id == "pie" && activeType == "donut")
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(if (selected) Color(0xFF6C4CF6) else Color.Transparent)
+                                .clickable { activeType = id }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "$icon $label",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selected) Color.White else Color(0xFF3E3666)
+                            )
+                        }
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White.copy(alpha = 0.8f))
+                        .border(1.dp, Color(0xFFDFD7FA), RoundedCornerShape(8.dp))
+                        .clickable { rangeIndex = (rangeIndex + 1) % CHART_RANGE_LABELS.size }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "📅 ${CHART_RANGE_LABELS[rangeIndex]} ▾",
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF433B6B)
+                    )
+                }
+            }
         }
-        if (w.series.size > 1 && w.type !in setOf(
+
+        val effectiveWidget = remember(w, activeType) {
+            if (activeType == w.type) w else w.copy(type = activeType)
+        }
+        when (effectiveWidget.type) {
+            "bar", "histogram" -> BarChart(effectiveWidget)
+            "pie" -> PieChart(effectiveWidget)
+            "donut" -> DonutChart(effectiveWidget)
+            "hbar" -> HBarChart(effectiveWidget)
+            "stacked" -> StackedBarChart(effectiveWidget)
+            "stackedArea" -> StackedAreaChart(effectiveWidget)
+            "scatter" -> ScatterChart(effectiveWidget, bubble = false)
+            "bubble" -> ScatterChart(effectiveWidget, bubble = true)
+            "funnel" -> FunnelChart(effectiveWidget)
+            "radar" -> RadarChart(effectiveWidget)
+            "grouped" -> GroupedBarChart(effectiveWidget)
+            "boxplot" -> BoxPlotChart(effectiveWidget)
+            "heatmap" -> HeatmapChart(effectiveWidget)
+            "correlation" -> HeatmapChart(effectiveWidget, diverging = true)
+            "treemap" -> TreemapChart(effectiveWidget)
+            "waterfall" -> WaterfallChart(effectiveWidget)
+            "candlestick" -> CandlestickChart(effectiveWidget)
+            "gantt" -> GanttChart(effectiveWidget)
+            "chord" -> ChordChart(effectiveWidget)
+            // v3 parity (WidgetsCharts3.kt)
+            "sankey" -> SankeyChart(effectiveWidget)
+            "network" -> NetworkChart(effectiveWidget)
+            "force" -> ForceChart(effectiveWidget)
+            "wordcloud" -> WordcloudChart(effectiveWidget)
+            "sunburst" -> SunburstChart(effectiveWidget)
+            "bullet" -> BulletChart(effectiveWidget)
+            "quadrant" -> QuadrantChart(effectiveWidget)
+            "violin" -> ViolinChart(effectiveWidget)
+            "contour" -> ContourChart(effectiveWidget)
+            "parallel" -> ParallelChart(effectiveWidget)
+            "dendrogram" -> DendrogramChart(effectiveWidget)
+            "depth" -> DepthChart(effectiveWidget)
+            else -> LineChart(effectiveWidget, filled = effectiveWidget.type == "area")
+        }
+        if (w.series.size > 1 && activeType !in setOf(
                 "pie", "donut", "funnel", "radar", "hbar", "chord",
                 "heatmap", "correlation", "treemap", "waterfall", "candlestick", "gantt",
                 "sankey", "network", "force", "wordcloud", "sunburst", "bullet",
@@ -1355,6 +1556,86 @@ private fun ChartWidgetView(w: ChartWidget) {
                             color = GsTheme.colors.textSecondary,
                             modifier = Modifier.padding(start = 5.dp)
                         )
+                    }
+                }
+            }
+        }
+
+        // 3-Card KPI Summary Strip below switchable charts (Screenshot 6)
+        if (isSwitchable) {
+            val kpiStats = remember(w.series, w.labels, w.unit) {
+                val pts = w.series.firstOrNull()?.data.orEmpty()
+                val ys = pts.map { it.getOrElse(1) { 0f } }
+                if (ys.size >= 2) {
+                    val total = ys.sum()
+                    val maxIdx = ys.indices.maxByOrNull { ys[it] } ?: 0
+                    val peakLabel = w.labels.getOrNull(maxIdx)?.takeIf { it.isNotBlank() } ?: "Peak"
+                    val peakVal = ys.getOrElse(maxIdx) { 0f }
+                    val first = ys.first().takeIf { it != 0f } ?: 1f
+                    val last = ys.last()
+                    val pct = ((last - first) / kotlin.math.abs(first)) * 100f
+                    Triple(
+                        axisLabel(total, w.unit),
+                        peakLabel to axisLabel(peakVal, w.unit),
+                        pct
+                    )
+                } else null
+            }
+            if (kpiStats != null) {
+                val (totalStr, peakPair, pct) = kpiStats
+                val pos = pct >= 0f
+                val pctStr = String.format(java.util.Locale.US, "%s%.1f%%", if (pos) "+" else "", pct)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color.White.copy(alpha = 0.72f))
+                            .border(1.dp, Color(0xFFE3DCFA), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 9.dp, vertical = 7.dp)
+                    ) {
+                        Text("Total", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.SemiBold)
+                        Text(totalStr, fontSize = 13.5.sp, color = GsTheme.colors.textPrimary, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "${if (pos) "↑" else "↓"} $pctStr",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (pos) Color(0xFF129A5A) else Color(0xFFE04F5F)
+                        )
+                    }
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color.White.copy(alpha = 0.72f))
+                            .border(1.dp, Color(0xFFE3DCFA), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 9.dp, vertical = 7.dp)
+                    ) {
+                        Text("Peak (${peakPair.first})", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text(peakPair.second, fontSize = 13.5.sp, color = GsTheme.colors.textPrimary, fontWeight = FontWeight.Bold)
+                        Text("★ Highest", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6C4CF6))
+                    }
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color.White.copy(alpha = 0.72f))
+                            .border(1.dp, Color(0xFFE3DCFA), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 9.dp, vertical = 7.dp)
+                    ) {
+                        Text("Trend", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = pctStr,
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (pos) Color(0xFF129A5A) else Color(0xFFE04F5F)
+                        )
+                        Text(CHART_RANGE_LABELS[rangeIndex], fontSize = 10.sp, color = GsTheme.colors.textTertiary, maxLines = 1)
                     }
                 }
             }
@@ -1908,12 +2189,35 @@ private fun StatWidgetView(w: StatWidget) {
 
 // --- table ------------------------------------------------------------------
 
+private fun tableEntityMonogram(raw: String): Triple<String, Color, Color>? {
+    val clean = raw.trim()
+    if (clean.isEmpty() || clean.length > 28 || clean.all { !it.isLetter() }) return null
+    val lower = clean.lowercase()
+    return when {
+        lower.startsWith("python") -> Triple("Py", Color(0xFFE0F2FE), Color(0xFF0284C7))
+        lower == "java" -> Triple("Jv", Color(0xFFFFEDD5), Color(0xFFEA580C))
+        lower.startsWith("c++") -> Triple("C+", Color(0xFFDBEAFE), Color(0xFF2563EB))
+        lower == "c" || lower == "c#" -> Triple(clean, Color(0xFFE0E7FF), Color(0xFF4F46E5))
+        lower.startsWith("javascript") -> Triple("JS", Color(0xFFFEF3C7), Color(0xFFD97706))
+        lower.startsWith("typescript") -> Triple("TS", Color(0xFFDBEAFE), Color(0xFF1D4ED8))
+        lower.startsWith("rust") -> Triple("Rs", Color(0xFFFEE2E2), Color(0xFFDC2626))
+        lower == "go" || lower == "golang" -> Triple("Go", Color(0xFFCFFAFE), Color(0xFF0891B2))
+        else -> {
+            val parts = clean.split(Regex("\\s+")).filter { it.isNotEmpty() }
+            val code = if (parts.size >= 2) "${parts[0].first()}${parts[1].first()}".uppercase()
+            else clean.take(2).uppercase()
+            Triple(code, Color(0xFFEDE5FF), Color(0xFF5B3DF5))
+        }
+    }
+}
+
 @Composable
 private fun TableWidgetView(w: TableWidget) {
     var sortCol by remember { mutableIntStateOf(-1) }
     var asc by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }
-    var expanded by remember { mutableStateOf(false) }
+    var pageSize by remember { mutableIntStateOf(5) }
+    var page by remember { mutableIntStateOf(0) }
     val clipboard = LocalClipboardManager.current
     val c = GsTheme.colors
 
@@ -1926,12 +2230,27 @@ private fun TableWidgetView(w: TableWidget) {
         else filtered.sortedWith { a, b ->
             val va = a.getOrNull(sortCol) ?: ""
             val vb = b.getOrNull(sortCol) ?: ""
-            val na = va.toFloatOrNull(); val nb = vb.toFloatOrNull()
+            val na = va.replace(Regex("[^\\d.-]"), "").toFloatOrNull()
+            val nb = vb.replace(Regex("[^\\d.-]"), "").toFloatOrNull()
             val cmp = if (na != null && nb != null) na.compareTo(nb) else va.compareTo(vb)
             if (asc) cmp else -cmp
         }
     }
-    val visible = remember(rows, expanded) { if (expanded) rows else rows.take(8) }
+    val totalPages = maxOf(1, (rows.size + pageSize - 1) / pageSize)
+    val safePage = page.coerceIn(0, totalPages - 1)
+    val visible = remember(rows, safePage, pageSize) {
+        rows.drop(safePage * pageSize).take(pageSize)
+    }
+    val primaryNameCol = remember(w.columns) {
+        val idx = w.columns.indexOfFirst {
+            it.contains("language", true) || it.contains("product", true) ||
+                it.contains("name", true) || it.contains("framework", true) ||
+                it.contains("model", true) || it.contains("company", true)
+        }
+        if (idx >= 0) idx
+        else if (w.columns.firstOrNull()?.trim() == "#" || w.columns.firstOrNull()?.contains("rank", true) == true) 1
+        else 0
+    }
     val csv = remember(w.columns, w.rows) {
         buildString {
             appendLine(w.columns.joinToString(",") { "\"${it.replace("\"", "\"\"")}\"" })
@@ -1960,68 +2279,206 @@ private fun TableWidgetView(w: TableWidget) {
         if (w.rows.size > 5) {
             OutlinedTextField(
                 value = query,
-                onValueChange = { query = it },
+                onValueChange = {
+                    query = it
+                    page = 0
+                },
                 placeholder = { Text("Filter…", style = MaterialTheme.typography.bodySmall) },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             )
         }
-        // A number that is not right-aligned cannot be compared down a column,
-        // and the contract promises the renderer does it. The column is numeric
-        // when most of its non-empty cells are, so one "n/a" does not break it.
         val numericCols = remember(w.columns, w.rows) {
             w.columns.indices.map { ci ->
                 val cells = w.rows.mapNotNull { it.getOrNull(ci) }.filter { it.isNotBlank() }
                 cells.isNotEmpty() && cells.count { NUMERIC_CELL.matches(it.trim()) } * 2 > cells.size
             }
         }
-        Column(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp)) {
-            Row {
-                w.columns.forEachIndexed { ci, col ->
-                    Text(
-                        if (w.sortable) "$col ${if (sortCol == ci) (if (asc) "▲" else "▼") else ""}" else col,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = GsTheme.colors.textTertiary,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = if (numericCols[ci]) TextAlign.End else TextAlign.Start,
-                        modifier = Modifier
-                            .width(140.dp)
-                            .then(if (w.sortable) Modifier.clickable {
-                                if (sortCol == ci) asc = !asc else { sortCol = ci; asc = true }
-                            } else Modifier)
-                            .padding(vertical = 6.dp)
-                    )
-                }
-            }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(GsTheme.colors.divider))
-            visible.forEach { row ->
-                Row {
-                    w.columns.indices.forEach { ci ->
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White.copy(alpha = 0.72f))
+                .border(1.dp, Color(0xFFE2DBFA), RoundedCornerShape(12.dp))
+        ) {
+            Column(Modifier.horizontalScroll(rememberScrollState())) {
+                Row(
+                    modifier = Modifier
+                        .background(Color(0xFFEDE6FF))
+                        .padding(horizontal = 10.dp)
+                ) {
+                    w.columns.forEachIndexed { ci, col ->
+                        val colWidth = if (col.trim() == "#" || col.equals("rank", true)) 52.dp else 132.dp
                         Text(
-                            row.getOrNull(ci) ?: "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = GsTheme.colors.textPrimary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = if (numericCols[ci]) TextAlign.End else TextAlign.Start,
-                            modifier = Modifier.width(140.dp).padding(vertical = 7.dp)
+                            if (w.sortable) "$col ${if (sortCol == ci) (if (asc) "▲" else "▼") else ""}" else col,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF221A47),
+                            fontWeight = FontWeight.Bold,
+                            textAlign = if (numericCols[ci] && ci > 0) TextAlign.End else TextAlign.Start,
+                            modifier = Modifier
+                                .width(colWidth)
+                                .then(if (w.sortable) Modifier.clickable {
+                                    if (sortCol == ci) asc = !asc else { sortCol = ci; asc = true }
+                                } else Modifier)
+                                .padding(vertical = 8.dp, horizontal = 4.dp)
                         )
                     }
                 }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(GsTheme.colors.divider.copy(alpha = 0.4f)))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(GsTheme.colors.divider))
+                visible.forEach { row ->
+                    Row(modifier = Modifier.padding(horizontal = 10.dp)) {
+                        w.columns.indices.forEach { ci ->
+                            val colName = w.columns[ci]
+                            val colWidth = if (colName.trim() == "#" || colName.equals("rank", true)) 52.dp else 132.dp
+                            val rawVal = (row.getOrNull(ci) ?: "").trim()
+                            val isTrend = Regex("^[↑↓↗↘+-]?\\s*[+-]?\\d+(?:\\.\\d+)?%$").matches(rawVal) &&
+                                (rawVal.startsWith("+") || rawVal.startsWith("-") || rawVal.startsWith("↑") || rawVal.startsWith("↓") || colName.contains("trend", true) || colName.contains("growth", true) || colName.contains("change", true))
+                            val isNeg = isTrend && (rawVal.contains("-") || rawVal.startsWith("↓") || rawVal.startsWith("↘"))
+
+                            if (ci == primaryNameCol) {
+                                val badge = tableEntityMonogram(rawVal)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .width(colWidth)
+                                        .padding(vertical = 7.dp, horizontal = 4.dp)
+                                ) {
+                                    if (badge != null) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(21.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(badge.second),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = badge.first,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = badge.third
+                                            )
+                                        }
+                                        Spacer(Modifier.width(7.dp))
+                                    }
+                                    Text(
+                                        text = rawVal,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                        color = GsTheme.colors.textPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            } else {
+                                val displayStr = if (isTrend) {
+                                    val cleanNum = rawVal.replace(Regex("^[↑↓↗↘\\s]+"), "")
+                                    "${if (isNeg) "↓" else "↑"} ${if (cleanNum.startsWith("+") || cleanNum.startsWith("-")) cleanNum else "${if (isNeg) "-" else "+"}$cleanNum"}"
+                                } else rawVal
+                                Text(
+                                    displayStr,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontWeight = if (isTrend || ci == 0) FontWeight.Bold else FontWeight.Normal
+                                    ),
+                                    color = when {
+                                        isTrend && isNeg -> Color(0xFFE04F5F)
+                                        isTrend -> Color(0xFF129A5A)
+                                        else -> GsTheme.colors.textPrimary
+                                    },
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = if (numericCols[ci] && ci > 0) TextAlign.End else TextAlign.Start,
+                                    modifier = Modifier
+                                        .width(colWidth)
+                                        .padding(vertical = 7.dp, horizontal = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(GsTheme.colors.divider.copy(alpha = 0.35f)))
+                }
             }
             if (rows.isEmpty()) {
                 Text(
                     "No matching rows",
                     style = MaterialTheme.typography.labelMedium,
                     color = GsTheme.colors.textTertiary,
-                    modifier = Modifier.padding(vertical = 10.dp)
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
                 )
             }
-            if (rows.size > 8) {
-                TextButton(onClick = { expanded = !expanded }, modifier = Modifier.padding(top = 2.dp)) {
-                    Text(if (expanded) "Show less" else "Show all (${rows.size})")
+            // Pagination & Display Controls Bar (Screenshot 5)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFF6F2FF))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "‹",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GsTheme.colors.textSecondary,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(enabled = safePage > 0) { page = (safePage - 1).coerceAtLeast(0) }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                    (0 until totalPages).forEach { p ->
+                        val active = p == safePage
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .background(if (active) Color(0xFF6C4CF6) else Color.Transparent)
+                                .clickable { page = p },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = (p + 1).toString(),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (active) Color.White else GsTheme.colors.textSecondary
+                            )
+                        }
+                    }
+                    Text(
+                        text = "›",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GsTheme.colors.textSecondary,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(enabled = safePage < totalPages - 1) { page = (safePage + 1).coerceAtMost(totalPages - 1) }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(Color.White.copy(alpha = 0.85f))
+                        .border(1.dp, Color(0xFFDFD7FA), RoundedCornerShape(7.dp))
+                        .clickable {
+                            pageSize = when (pageSize) {
+                                5 -> 10
+                                10 -> 25
+                                else -> 5
+                            }
+                            page = 0
+                        }
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = "Show: $pageSize ▾",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF3E3666)
+                    )
                 }
             }
         }
