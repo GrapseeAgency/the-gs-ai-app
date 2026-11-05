@@ -31,6 +31,7 @@ import {
 import { validateWidget } from '../src/lib/widgets/validate'
 import { rendererFor } from '../src/components/genui/registry'
 import { MapBlock } from '../src/components/genui/blocks/MapBlock'
+import { MessageContent } from '../src/components/genui/MessageContent'
 import {
   chartPayload,
   mediaPayload,
@@ -155,6 +156,101 @@ total++
     else pass++
   } catch (e) {
     holes.push(`map/MapBlock: RENDER THREW — ${e instanceof Error ? e.message : String(e)}`)
+  }
+}
+
+// Section 01 (01-05) & Section 02 (06-07) Ordinary-Response + Widget Proof
+total++
+{
+  try {
+    const ordinaryAndWidgetResponse = [
+      '# Your Product Launch Plan',
+      '',
+      '**Quick summary:** Focus on clear positioning, a smooth onboarding flow, and targeted outreach [1].',
+      '',
+      '## Key priorities',
+      '- Define your core target audience and value proposition',
+      '- Prepare landing page, demo video, and onboarding flow',
+      '',
+      '> **Important:** Start early, keep it simple, and focus on user feedback.',
+      '',
+      '## Step-by-step plan',
+      '1. **Validate & Prepare** — Confirm your value proposition and test the core user flow',
+      '2. **Set Up Launch Assets** — Finalize landing page, visuals, pricing, and onboarding',
+      '',
+      '## Next actions',
+      '- [ ] Finalize landing page copy',
+      '- [x] Record product demo video',
+      '',
+      '| # | Language | Popularity | Trend |',
+      '| --- | --- | --- | --- |',
+      '| 1 | Python | 28.11% | +0.62% |',
+      '| 2 | Java | 15.52% | -0.03% |',
+      '| 3 | C++ | 10.68% | +0.34% |',
+      '| 4 | C | 9.21% | -0.18% |',
+      '| 5 | JavaScript | 8.59% | +0.15% |',
+      '| 6 | TypeScript | 6.40% | +0.48% |',
+      '',
+      '```python',
+      'import pandas as pd',
+      'df = pd.DataFrame({"Revenue": [3200, 4500, 9642]})',
+      'print("Growth +201.3%")',
+      '```',
+      '',
+      '```chart',
+      '{"type":"line","title":"Sales Performance","unit":"$","labels":["Jan","Feb","Mar","Apr","May","Jun"],"series":[{"name":"Revenue","data":[[0,32000],[1,45000],[2,54000],[3,78400],[4,66000],[5,89000]]}],"insights":["Sales peaked in June at $89.0K"]}',
+      '```',
+    ].join('\n')
+
+    const html = renderToString(
+      createElement(MessageContent, {
+        text: ordinaryAndWidgetResponse,
+        dark: false,
+        citations: [
+          {
+            ordinal: 1,
+            title: 'IEA – Renewable Energy Market Update 2025',
+            url: 'https://www.iea.org/reports/renewable-energy-market-update',
+            domain: 'www.iea.org',
+            snippet: 'Global renewable capacity additions are set to soar by 107 gigawatts.',
+          },
+          {
+            ordinal: 2,
+            title: 'Nature Energy – Solar & Wind Growth Analysis',
+            url: 'https://www.nature.com/articles/s41560-025-001',
+            domain: 'nature.com',
+            snippet: 'Peer-reviewed study on global clean energy adoption.',
+          },
+        ],
+      })
+    )
+
+    const requiredMarkers = [
+      'Quick summary:', // 01 & 02: Callout card
+      'Important:', // 02: Warning callout card
+      '🎯', // 02: Key priorities section icon
+      '☰', // 02: Step-by-step plan section icon
+      'Validate &amp; Prepare', // 02: Split step bold title
+      'role="checkbox"', // 02: Interactive checklist
+      'Show: <!-- -->5<!-- --> ▾', // 06: Table pagination display control
+      'Run Code', // 04 & 05: Code block execution bar
+      'Line Chart', // 07: Interactive chart type switcher
+      'Bar Chart',
+      'Area Chart',
+      'Pie Chart',
+      'Last 6 Months', // 07: Chart date range selector
+      'Key Sources', // 03: Citations header
+      'Trusted Source', // 03: Trusted source green pill
+      'Academic', // 03: Academic source lavender pill
+    ]
+    const missing = requiredMarkers.filter((m) => !html.includes(m))
+    if (missing.length > 0) {
+      holes.push(`Section 01 & 02 proof: missing markers: ${missing.join(', ')}`)
+    } else {
+      pass++
+    }
+  } catch (e) {
+    holes.push(`Section 01 & 02 proof: RENDER THREW — ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 

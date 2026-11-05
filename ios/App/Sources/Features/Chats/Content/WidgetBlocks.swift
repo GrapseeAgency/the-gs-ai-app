@@ -663,74 +663,284 @@ private struct ChartBodyView: View {
     let obj: [String: Any]
     let accent: Color
 
+    @State private var activeType: String = ""
+    @State private var rangeIdx: Int = 2
+    @State private var selectedIdx: Int? = nil
+
+    private let rangeOptions = ["Last 7 Days", "Last 30 Days", "Last 6 Months", "Last 12 Months"]
+
     private struct BarPoint: Identifiable {
         let id = UUID()
+        let index: Int
         let seriesName: String
         let label: String
         let value: Double
         let color: Color
     }
 
+    private var initialChartType: String {
+        let raw = str(obj, "type", "chartType").lowercased()
+        if ["line", "bar", "area", "pie", "donut"].contains(raw) { return raw }
+        return "line"
+    }
+
+    private var currentType: String {
+        activeType.isEmpty ? initialChartType : activeType
+    }
+
     private var points: [BarPoint] {
         var out: [BarPoint] = []
+        let labels = (obj["labels"] as? [Any])?.map { "\($0)" } ?? []
         if let series = obj["series"] as? [[String: Any]] {
             for (sIdx, s) in series.prefix(8).enumerated() {
                 let sName = str(s, "name", "label")
                 let color = WidgetPalette.at(sIdx)
                 if let data = s["data"] as? [Any] {
                     for (pIdx, pt) in data.prefix(12).enumerated() {
+                        let fallbackLbl = pIdx < labels.count ? labels[pIdx] : "#\(pIdx + 1)"
                         if let pair = pt as? [Any], pair.count >= 2 {
-                            let lbl = "\(pair[0])"
+                            let lbl = pIdx < labels.count ? labels[pIdx] : "\(pair[0])"
                             let val = (pair[1] as? NSNumber)?.doubleValue ?? Double("\(pair[1])") ?? 0
-                            out.append(BarPoint(seriesName: sName, label: lbl, value: val, color: color))
+                            out.append(BarPoint(index: out.count, seriesName: sName, label: lbl, value: val, color: color))
+                        } else if let num = pt as? NSNumber {
+                            out.append(BarPoint(index: out.count, seriesName: sName, label: fallbackLbl, value: num.doubleValue, color: color))
                         } else if let d = pt as? [String: Any] {
                             let lbl = str(d, "label", "x", "name")
                             let val = dbl(d, "value", "y", "v")
-                            out.append(BarPoint(seriesName: sName, label: lbl.isEmpty ? "#\(pIdx + 1)" : lbl, value: val, color: color))
+                            out.append(BarPoint(index: out.count, seriesName: sName, label: lbl.isEmpty ? fallbackLbl : lbl, value: val, color: color))
                         }
                     }
                 }
             }
-        } else if let data = (obj["data"] ?? obj["items"] ?? obj["values"]) as? [[String: Any]] {
+        } else if let data = (obj["data"] ?? obj["items"] ?? obj["values"] ?? obj["slices"]) as? [[String: Any]] {
             for (idx, d) in data.prefix(12).enumerated() {
                 let lbl = str(d, "label", "name", "x", "category")
                 let val = dbl(d, "value", "y", "count", "score")
-                out.append(BarPoint(seriesName: "", label: lbl.isEmpty ? "#\(idx + 1)" : lbl, value: val, color: WidgetPalette.at(idx)))
+                out.append(BarPoint(index: idx, seriesName: "", label: lbl.isEmpty ? "#\(idx + 1)" : lbl, value: val, color: WidgetPalette.at(idx)))
             }
         }
         return out
     }
 
+    private func compactNumber(_ n: Double, unit: String) -> String {
+        let prefix = ["$", "€", "£"].contains(unit) ? unit : ""
+        let suffix = (!unit.isEmpty && prefix.isEmpty) ? unit : ""
+        let absVal = abs(n)
+        if absVal >= 1_000_000 { return String(format: "%@%.1fM%@", prefix, n / 1_000_000, suffix) }
+        if absVal >= 1_000 { return String(format: "%@%.1fK%@", prefix, n / 1_000, suffix) }
+        if n.rounded() == n { return String(format: "%@%.0f%@", prefix, n, suffix) }
+        return String(format: "%@%.1f%@", prefix, n, suffix)
+    }
+
     var body: some View {
         let pts = points
         let maxVal = max(pts.map { abs($0.value) }.max() ?? 1.0, 0.0001)
+        let totalVal = max(pts.map { max(0, $0.value) }.reduce(0, +), 0.0001)
         let unit = str(obj, "unit")
         let subtitle = str(obj, "subtitle")
-        VStack(alignment: .leading, spacing: 6) {
+        let peakIdx = pts.enumerated().max(by: { $0.element.value < $1.element.value })?.offset ?? 0
+        let activeIdx = min(max(0, selectedIdx ?? peakIdx), max(0, pts.count - 1))
+
+        VStack(alignment: .leading, spacing: 10) {
+            // 07. Interactive Charts: Type Switcher Pills + Range Selector (Screenshot 6)
+            HStack(spacing: 6) {
+                HStack(spacing: 3) {
+                    ForEach([("line", "📈 Line"), ("bar", "📊 Bar"), ("area", "📉 Area"), ("pie", "◔ Pie")], id: \.0) { (tabId, tabLabel) in
+                        let isSel = currentType == tabId || (tabId == "pie" && currentType == "donut")
+                        Button {
+                            GSHaptics.selection()
+                            withAnimation(.easeOut(duration: 0.18)) { activeType = tabId }
+                        } label: {
+                            Text(tabLabel)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(isSel ? Color.white : Color(red: 0.243, green: 0.212, blue: 0.400))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 7)
+                                        .fill(isSel ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.clear)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(3)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color(red: 0.929, green: 0.902, blue: 1.0)))
+
+                Spacer(minLength: 4)
+
+                Button {
+                    GSHaptics.selection()
+                    rangeIdx = (rangeIdx + 1) % rangeOptions.count
+                } label: {
+                    Text("📅 \(rangeOptions[rangeIdx]) ▾")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.263, green: 0.231, blue: 0.420))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.82)))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.875, green: 0.843, blue: 0.980), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+
             if !subtitle.isEmpty {
                 Text(subtitle).font(Aero.caption()).foregroundStyle(Aero.textSecondary)
             }
-            ForEach(pts) { pt in
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack {
-                        Text(pt.seriesName.isEmpty ? pt.label : "\(pt.label) · \(pt.seriesName)")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Aero.text)
-                            .lineLimit(1)
-                        Spacer()
-                        Text(String(format: "%.1f%@", pt.value, unit))
-                            .font(Aero.mono(11))
-                            .foregroundStyle(Aero.textSecondary)
+
+            // Floating Glass Tooltip for Selected / Peak Datum (Screenshot 6)
+            if !pts.isEmpty && activeIdx < pts.count {
+                let selPt = pts[activeIdx]
+                let prevVal = activeIdx > 0 ? pts[activeIdx - 1].value : pts.first?.value ?? selPt.value
+                let stepPct = prevVal != 0 ? ((selPt.value - prevVal) / abs(prevVal)) * 100.0 : 0.0
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color(red: 0.424, green: 0.298, blue: 0.965))
+                        .frame(width: 8, height: 8)
+                    Text(selPt.label)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Aero.textSecondary)
+                    Text(compactNumber(selPt.value, unit: unit))
+                        .font(.system(size: 13.5, weight: .bold))
+                        .foregroundStyle(Aero.text)
+                    Spacer()
+                    Text(String(format: "%@ %.1f%%", stepPct >= 0 ? "↑" : "↓", abs(stepPct)))
+                        .font(.system(size: 11.5, weight: .bold))
+                        .foregroundStyle(stepPct >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
+                }
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.86)))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.863, green: 0.827, blue: 0.980), lineWidth: 1))
+            }
+
+            // Chart Visualization Surface
+            if currentType == "bar" && pts.count >= 2 {
+                HStack(alignment: .bottom, spacing: 8) {
+                    ForEach(Array(pts.prefix(8).enumerated()), id: \.offset) { idx, pt in
+                        let isSel = idx == activeIdx
+                        let ratio = CGFloat(min(max(abs(pt.value) / maxVal, 0.08), 1.0))
+                        Button {
+                            GSHaptics.selection()
+                            selectedIdx = idx
+                        } label: {
+                            VStack(spacing: 4) {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(
+                                        isSel
+                                            ? Color(red: 0.424, green: 0.298, blue: 0.965)
+                                            : Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.45)
+                                    )
+                                    .frame(height: max(12, 110 * ratio))
+                                Text(pt.label)
+                                    .font(.system(size: 10, weight: isSel ? .bold : .medium))
+                                    .foregroundStyle(isSel ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
+                                    .lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Color.black.opacity(0.06))
-                            Capsule()
-                                .fill(pt.color)
-                                .frame(width: max(6, geo.size.width * CGFloat(min(abs(pt.value) / maxVal, 1.0))))
+                }
+                .frame(height: 132)
+                .padding(.top, 4)
+            } else {
+                ForEach(Array(pts.enumerated()), id: \.offset) { idx, pt in
+                    let isSel = idx == activeIdx
+                    let sharePct = (max(0, pt.value) / totalVal) * 100.0
+                    Button {
+                        GSHaptics.selection()
+                        selectedIdx = idx
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack {
+                                Text(pt.seriesName.isEmpty ? pt.label : "\(pt.label) · \(pt.seriesName)")
+                                    .font(.system(size: 12, weight: isSel ? .bold : .medium))
+                                    .foregroundStyle(Aero.text)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(
+                                    currentType == "pie" || currentType == "donut"
+                                        ? String(format: "%@ (%.0f%%)", compactNumber(pt.value, unit: unit), sharePct)
+                                        : compactNumber(pt.value, unit: unit)
+                                )
+                                .font(Aero.mono(11))
+                                .foregroundStyle(isSel ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
+                            }
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(Color.black.opacity(0.06))
+                                    Capsule()
+                                        .fill(isSel ? Color(red: 0.424, green: 0.298, blue: 0.965) : pt.color)
+                                        .frame(width: max(6, geo.size.width * CGFloat(min(abs(pt.value) / maxVal, 1.0))))
+                                }
+                            }
+                            .frame(height: isSel ? 9 : 7)
                         }
                     }
-                    .frame(height: 7)
+                    .buttonStyle(.plain)
+                }
+            }
+
+            // 3-Card KPI Summary Strip (Screenshot 6)
+            if pts.count >= 2 {
+                let firstVal = pts.first?.value ?? 1.0
+                let lastVal = pts.last?.value ?? 0.0
+                let growthPct = firstVal != 0 ? ((lastVal - firstVal) / abs(firstVal)) * 100.0 : 0.0
+                let peakPt = pts[peakIdx]
+                HStack(spacing: 7) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Total")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Aero.textSecondary)
+                        Text(compactNumber(totalVal, unit: unit))
+                            .font(.system(size: 13.5, weight: .bold))
+                            .foregroundStyle(Aero.text)
+                        Text(String(format: "%@ %.1f%%", growthPct >= 0 ? "↑" : "↓", abs(growthPct)))
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(growthPct >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 7)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.74)))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Peak (\(peakPt.label))")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Aero.textSecondary)
+                            .lineLimit(1)
+                        Text(compactNumber(peakPt.value, unit: unit))
+                            .font(.system(size: 13.5, weight: .bold))
+                            .foregroundStyle(Aero.text)
+                        Text("★ Highest")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Color(red: 0.424, green: 0.298, blue: 0.965))
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 7)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.74)))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Trend")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Aero.textSecondary)
+                        Text(String(format: "%@%.1f%%", growthPct >= 0 ? "+" : "", growthPct))
+                            .font(.system(size: 13.5, weight: .bold))
+                            .foregroundStyle(growthPct >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
+                        Text(rangeOptions[rangeIdx])
+                            .font(.system(size: 10))
+                            .foregroundStyle(Aero.textSecondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 7)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.74)))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
                 }
             }
         }
@@ -772,6 +982,22 @@ private struct StatBodyView: View {
     }
 }
 
+private func iosTableEntityMonogram(_ raw: String) -> (String, Color, Color)? {
+    let clean = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !clean.isEmpty, clean.count <= 28, clean.contains(where: { $0.isLetter }) else { return nil }
+    let lower = clean.lowercased()
+    if lower.hasPrefix("python") { return ("Py", Color(red: 0.878, green: 0.949, blue: 0.996), Color(red: 0.008, green: 0.518, blue: 0.780)) }
+    if lower == "java" { return ("Jv", Color(red: 1.0, green: 0.929, blue: 0.835), Color(red: 0.918, green: 0.345, blue: 0.047)) }
+    if lower.hasPrefix("c++") { return ("C+", Color(red: 0.859, green: 0.918, blue: 0.996), Color(red: 0.145, green: 0.388, blue: 0.922)) }
+    if lower == "c" || lower == "c#" { return (clean, Color(red: 0.878, green: 0.906, blue: 1.0), Color(red: 0.310, green: 0.275, blue: 0.898)) }
+    if lower.hasPrefix("javascript") { return ("JS", Color(red: 0.996, green: 0.953, blue: 0.780), Color(red: 0.851, green: 0.467, blue: 0.024)) }
+    if lower.hasPrefix("typescript") { return ("TS", Color(red: 0.859, green: 0.918, blue: 0.996), Color(red: 0.114, green: 0.306, blue: 0.847)) }
+    if lower.hasPrefix("rust") { return ("Rs", Color(red: 0.996, green: 0.886, blue: 0.886), Color(red: 0.863, green: 0.149, blue: 0.149)) }
+    let parts = clean.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+    let code = parts.count >= 2 ? "\(parts[0].prefix(1))\(parts[1].prefix(1))".uppercased() : String(clean.prefix(2)).uppercased()
+    return (code, Color(red: 0.929, green: 0.898, blue: 1.0), Color(red: 0.357, green: 0.239, blue: 0.961))
+}
+
 private struct TableBodyView: View {
     let obj: [String: Any]
     let accent: Color
@@ -779,6 +1005,8 @@ private struct TableBodyView: View {
     @State private var query = ""
     @State private var sortCol: Int? = nil
     @State private var sortAsc = true
+    @State private var pageSize: Int = 5
+    @State private var page: Int = 0
 
     var body: some View {
         let cols: [String] = ((obj["columns"] ?? obj["headers"]) as? [Any])?.map {
@@ -805,40 +1033,156 @@ private struct TableBodyView: View {
                 return sortAsc ? cmp : !cmp
             }
         }()
-        VStack(alignment: .leading, spacing: 6) {
+
+        let totalPages = max(1, (filteredRows.count + pageSize - 1) / pageSize)
+        let safePage = min(max(0, page), totalPages - 1)
+        let startIdx = safePage * pageSize
+        let visibleRows: [[String]] = startIdx < filteredRows.count
+            ? Array(filteredRows[startIdx..<min(filteredRows.count, startIdx + pageSize)])
+            : []
+        let primaryNameCol: Int = {
+            if let idx = cols.firstIndex(where: {
+                let l = $0.lowercased()
+                return l.contains("language") || l.contains("product") || l.contains("name") || l.contains("framework") || l.contains("model") || l.contains("company")
+            }) {
+                return idx
+            }
+            if cols.first?.trimmingCharacters(in: .whitespaces) == "#" || cols.first?.lowercased().contains("rank") == true {
+                return 1
+            }
+            return 0
+        }()
+
+        VStack(alignment: .leading, spacing: 8) {
             if normRows.count >= 4 {
                 TextField("Filter rows…", text: $query)
                     .font(.system(size: 12))
                     .padding(7)
                     .background(Color.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
             }
-            if !cols.isEmpty {
-                HStack(spacing: 8) {
-                    ForEach(Array(cols.prefix(6).enumerated()), id: \.offset) { ci, col in
-                        Button {
-                            if sortCol == ci { sortAsc.toggle() } else { sortCol = ci; sortAsc = true }
-                        } label: {
-                            Text(sortCol == ci ? "\(col) \(sortAsc ? "↑" : "↓")" : col)
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(accent)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 0) {
+                if !cols.isEmpty {
+                    HStack(spacing: 8) {
+                        ForEach(Array(cols.prefix(6).enumerated()), id: \.offset) { ci, col in
+                            Button {
+                                if sortCol == ci { sortAsc.toggle() } else { sortCol = ci; sortAsc = true }
+                            } label: {
+                                Text(sortCol == ci ? "\(col) \(sortAsc ? "↑" : "↓")" : col)
+                                    .font(.system(size: 11.5, weight: .bold))
+                                    .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
                         }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Color(red: 0.929, green: 0.902, blue: 1.0))
+
+                    Divider()
+                }
+
+                ForEach(Array(visibleRows.enumerated()), id: \.offset) { rIdx, row in
+                    HStack(spacing: 8) {
+                        ForEach(Array(row.prefix(6).enumerated()), id: \.offset) { ci, cell in
+                            let trimmed = cell.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let isTrend = trimmed.range(of: "^[↑↓↗↘+-]?\\s*[+-]?\\d+(?:\\.\\d+)?%$", options: .regularExpression) != nil &&
+                                (trimmed.hasPrefix("+") || trimmed.hasPrefix("-") || trimmed.hasPrefix("↑") || trimmed.hasPrefix("↓") || (ci < cols.count && cols[ci].lowercased().contains("trend")))
+                            let isNeg = isTrend && (trimmed.contains("-") || trimmed.hasPrefix("↓") || trimmed.hasPrefix("↘"))
+
+                            if ci == primaryNameCol, let badge = iosTableEntityMonogram(trimmed) {
+                                HStack(spacing: 6) {
+                                    Text(badge.0)
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(badge.2)
+                                        .frame(width: 21, height: 21)
+                                        .background(RoundedRectangle(cornerRadius: 6).fill(badge.1))
+                                    Text(trimmed)
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(Aero.text)
+                                        .lineLimit(1)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            } else if isTrend {
+                                let cleanNum = trimmed.replacingOccurrences(of: "^[↑↓↗↘\\s]+", with: "", options: .regularExpression)
+                                Text("\(isNeg ? "↓" : "↑") \(cleanNum)")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(isNeg ? Color(red: 0.878, green: 0.310, blue: 0.373) : Color(red: 0.071, green: 0.604, blue: 0.353))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } else {
+                                Text(trimmed)
+                                    .font(.system(size: 12, weight: ci == 0 ? .semibold : .regular))
+                                    .foregroundStyle(Aero.text)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+
+                    if rIdx != visibleRows.count - 1 {
+                        Divider().opacity(0.45)
+                    }
+                }
+
+                // Pagination & Display Controls Bar (Screenshot 5)
+                HStack {
+                    HStack(spacing: 4) {
+                        Button("‹") {
+                            page = max(0, safePage - 1)
+                        }
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Aero.textSecondary)
+                        .disabled(safePage == 0)
+                        .buttonStyle(.plain)
+
+                        ForEach(0..<totalPages, id: \.self) { p in
+                            let active = p == safePage
+                            Button {
+                                page = p
+                            } label: {
+                                Text("\(p + 1)")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(active ? Color.white : Aero.textSecondary)
+                                    .frame(width: 22, height: 22)
+                                    .background(Circle().fill(active ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.clear))
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Button("›") {
+                            page = min(totalPages - 1, safePage + 1)
+                        }
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Aero.textSecondary)
+                        .disabled(safePage >= totalPages - 1)
                         .buttonStyle(.plain)
                     }
-                }
-                Divider()
-            }
-            ForEach(Array(filteredRows.prefix(15).enumerated()), id: \.offset) { _, row in
-                HStack(spacing: 8) {
-                    ForEach(Array(row.prefix(6).enumerated()), id: \.offset) { _, cell in
-                        Text(cell)
-                            .font(.system(size: 12))
-                            .foregroundStyle(Aero.text)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Spacer()
+
+                    Button {
+                        pageSize = pageSize == 5 ? 10 : (pageSize == 10 ? 25 : 5)
+                        page = 0
+                    } label: {
+                        Text("Show: \(pageSize) ▾")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.243, green: 0.212, blue: 0.400))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.85)))
+                            .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color(red: 0.875, green: 0.843, blue: 0.980), lineWidth: 1))
                     }
+                    .buttonStyle(.plain)
                 }
-                .padding(.vertical, 2)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color(red: 0.965, green: 0.949, blue: 1.0))
             }
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.75)))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.886, green: 0.859, blue: 0.980), lineWidth: 1))
         }
     }
 }
@@ -1491,31 +1835,100 @@ private struct MediaBodyView: View {
     let accent: Color
 
     var body: some View {
-        let rawItems = ((obj["items"] ?? obj["cards"] ?? obj["slides"] ?? obj["results"] ?? obj["images"] ?? obj["files"] ?? obj["products"]) as? [[String: Any]]) ?? [obj]
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 10) {
-                ForEach(Array(rawItems.prefix(12).enumerated()), id: \.offset) { _, item in
-                    let title = str(item, "title", "name", "label", "filename")
-                    let sub = str(item, "subtitle", "author", "domain", "mime")
-                    let cap = str(item, "caption", "description", "snippet", "summary")
-                    let price = str(item, "price", "badge", "meta", "size")
-                    VStack(alignment: .leading, spacing: 4) {
-                        if !title.isEmpty {
-                            Text(title).font(.system(size: 13, weight: .bold)).foregroundStyle(Aero.text).lineLimit(2)
-                        }
-                        if !sub.isEmpty {
-                            Text(sub).font(.system(size: 11, weight: .medium)).foregroundStyle(accent).lineLimit(1)
-                        }
-                        if !cap.isEmpty {
-                            Text(cap).font(.system(size: 11)).foregroundStyle(Aero.textSecondary).lineLimit(3)
-                        }
-                        if !price.isEmpty {
-                            Text(price).font(Aero.mono(11)).foregroundStyle(Aero.text)
+        let mType = str(obj, "type").lowercased()
+        let rawItems = ((obj["items"] ?? obj["cards"] ?? obj["slides"] ?? obj["results"] ?? obj["sources"] ?? obj["citations"] ?? obj["images"] ?? obj["files"] ?? obj["products"]) as? [[String: Any]]) ?? [obj]
+        let isCitationLike = ["citation", "search", "link", "sources", "references"].contains(mType) ||
+            rawItems.contains { $0["domain"] != nil || $0["snippet"] != nil }
+
+        if isCitationLike {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(rawItems.prefix(8).enumerated()), id: \.offset) { idx, item in
+                    let title = str(item, "title", "name", "label")
+                    let url = str(item, "url", "href", "link")
+                    let domain = str(item, "domain", "source", "site", "publisher")
+                    let snippet = str(item, "snippet", "description", "caption", "summary")
+                    let hay = "\(domain) \(url)".lowercased()
+                    let academic = hay.contains(".edu") || hay.contains("nature.com") || hay.contains("arxiv.org") || hay.contains("ieee.org") || hay.contains("acm.org")
+
+                    HStack(alignment: .top, spacing: 10) {
+                        Text("\(idx + 1)")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                            .frame(width: 24, height: 24)
+                            .background(Circle().fill(Color(red: 0.929, green: 0.898, blue: 1.0)))
+                            .overlay(Circle().stroke(Color(red: 0.835, green: 0.776, blue: 1.0), lineWidth: 1))
+                            .padding(.top, 1)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            if !title.isEmpty {
+                                Text(title)
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(Aero.text)
+                                    .lineLimit(2)
+                            }
+                            if !snippet.isEmpty {
+                                Text(snippet)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Aero.textSecondary)
+                                    .lineLimit(2)
+                            }
+                            HStack {
+                                Text("↗ \(domain.isEmpty ? url : domain)")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(academic ? "🏛 Academic" : "✓ Trusted Source")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(
+                                        academic
+                                            ? Color(red: 0.357, green: 0.239, blue: 0.961)
+                                            : Color(red: 0.071, green: 0.604, blue: 0.353)
+                                    )
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        Capsule().fill(
+                                            academic
+                                                ? Color(red: 0.937, green: 0.918, blue: 1.0)
+                                                : Color(red: 0.902, green: 0.976, blue: 0.941)
+                                        )
+                                    )
+                            }
                         }
                     }
                     .padding(10)
-                    .frame(width: rawItems.count > 1 ? 180 : 250, alignment: .leading)
-                    .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.75)))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.886, green: 0.859, blue: 0.980), lineWidth: 1))
+                }
+            }
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 10) {
+                    ForEach(Array(rawItems.prefix(12).enumerated()), id: \.offset) { _, item in
+                        let title = str(item, "title", "name", "label", "filename")
+                        let sub = str(item, "subtitle", "author", "domain", "mime")
+                        let cap = str(item, "caption", "description", "snippet", "summary")
+                        let price = str(item, "price", "badge", "meta", "size")
+                        VStack(alignment: .leading, spacing: 4) {
+                            if !title.isEmpty {
+                                Text(title).font(.system(size: 13, weight: .bold)).foregroundStyle(Aero.text).lineLimit(2)
+                            }
+                            if !sub.isEmpty {
+                                Text(sub).font(.system(size: 11, weight: .medium)).foregroundStyle(accent).lineLimit(1)
+                            }
+                            if !cap.isEmpty {
+                                Text(cap).font(.system(size: 11)).foregroundStyle(Aero.textSecondary).lineLimit(3)
+                            }
+                            if !price.isEmpty {
+                                Text(price).font(Aero.mono(11)).foregroundStyle(Aero.text)
+                            }
+                        }
+                        .padding(10)
+                        .frame(width: rawItems.count > 1 ? 180 : 250, alignment: .leading)
+                        .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+                    }
                 }
             }
         }

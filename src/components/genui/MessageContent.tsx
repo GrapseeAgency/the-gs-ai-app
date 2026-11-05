@@ -14,7 +14,7 @@
  * glass glyphs.
  */
 
-import { Fragment, useMemo, type ReactNode } from 'react'
+import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { parseStream, type Segment } from './stream'
 import { WidgetRenderer } from './WidgetRenderer'
 import { Skeleton } from './primitives/Skeleton'
@@ -32,6 +32,7 @@ export interface Citation {
   title: string
   url: string
   domain?: string
+  snippet?: string
 }
 
 type Theme = ReturnType<typeof themeFor>
@@ -588,6 +589,361 @@ function renderInline(
   return out
 }
 
+type CalloutMatch = {
+  tone: 'summary' | 'warning' | 'fact'
+  icon: string
+  title: string
+  body: string
+}
+
+function matchCalloutText(raw: string): CalloutMatch | null {
+  const trimmed = raw.trim()
+  const alertMatch = trimmed.match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*([\s\S]*)$/i)
+  if (alertMatch) {
+    const kind = alertMatch[1].toUpperCase()
+    const body = alertMatch[2].trim()
+    if (kind === 'WARNING' || kind === 'CAUTION' || kind === 'IMPORTANT') {
+      return { tone: 'warning', icon: '⚠️', title: kind === 'IMPORTANT' ? 'Important' : 'Warning', body }
+    }
+    return { tone: 'fact', icon: '💡', title: kind === 'TIP' ? 'Key Insight' : 'Note', body }
+  }
+  const leadMatch = trimmed.match(
+    /^(?:(?:⚡|⚠️|💡|✦|📌)\s*)?\*\*(Quick summary|Summary|TL;DR|Important|Warning|Caution|Key Insights?|Quick Fact|Pro Tip|Tip|Note)\s*:?\*\*\s*:?\s*([\s\S]+)$/i
+  )
+  if (!leadMatch) return null
+  const label = leadMatch[1].trim()
+  const body = leadMatch[2].trim()
+  const lower = label.toLowerCase()
+  if (lower === 'important' || lower === 'warning' || lower === 'caution') {
+    return { tone: 'warning', icon: '⚠️', title: label, body }
+  }
+  if (lower.includes('fact') || lower.includes('insight') || lower.includes('tip') || lower === 'note') {
+    return { tone: 'fact', icon: '💡', title: label, body }
+  }
+  return { tone: 'summary', icon: '⚡', title: label, body }
+}
+
+function sectionBadgeForHeading(raw: string): string | null {
+  const clean = raw.replace(/[*_`~]/g, '').trim()
+  if (/^[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}✦⚡🎯☰☑️🔗📖📊💡⚠️]/u.test(clean)) return null
+  const lower = clean.toLowerCase()
+  if (lower.includes('priorit') || lower.includes('goal') || lower.includes('objective')) return '🎯'
+  if (lower.includes('step-by-step') || lower.includes('steps') || lower.includes('plan') || lower.includes('roadmap')) return '☰'
+  if (lower.includes('next action') || lower.includes('action item') || lower.includes('checklist') || lower.includes('todo')) return '☑️'
+  if (lower.includes('key source') || lower.includes('sources')) return '🔗'
+  if (lower.includes('reference') || lower.includes('citation') || lower.includes('further reading')) return '📖'
+  if (lower.includes('feature') || lower.includes('highlight') || lower.includes('benefit')) return '✦'
+  if (lower.startsWith('top ') || lower.includes('chart') || lower.includes('metric') || lower.includes('overview')) return '📊'
+  return null
+}
+
+function splitStepTitleAndDetail(raw: string): { title: string; detail: string } | null {
+  const match = raw.trim().match(/^\*\*([^*]+)\*\*\s*(?:[—–\-:]\s*|\n+)(.+)$/s)
+  if (!match) return null
+  return { title: match[1].trim(), detail: match[2].trim() }
+}
+
+function renderCalloutCard(
+  callout: CalloutMatch,
+  key: string | number,
+  theme: Theme,
+  accent: string,
+  citations?: Citation[],
+  extraBlocks?: ReactNode
+): ReactNode {
+  const isWarning = callout.tone === 'warning'
+  const bg = isWarning ? 'rgba(255, 244, 230, 0.92)' : 'rgba(242, 236, 255, 0.92)'
+  const border = isWarning ? 'rgba(245, 158, 11, 0.34)' : 'rgba(124, 92, 252, 0.28)'
+  const titleColor = isWarning ? '#7C3A0A' : '#241B4B'
+  const bodyColor = isWarning ? '#5C3412' : '#3B345F'
+  return (
+    <div
+      key={key}
+      style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 10,
+        padding: '12px 14px',
+        borderRadius: 14,
+        background: bg,
+        border: `1px solid ${border}`,
+        boxShadow: '0 4px 14px rgba(90, 65, 180, 0.06)',
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 24,
+          height: 24,
+          borderRadius: 8,
+          background: isWarning ? 'rgba(245, 158, 11, 0.18)' : 'rgba(124, 92, 252, 0.15)',
+          fontSize: 13,
+          flexShrink: 0,
+          marginTop: 1,
+        }}
+      >
+        {callout.icon}
+      </span>
+      <div style={{ flex: 1, minWidth: 0, color: bodyColor, fontSize: 13.5, lineHeight: 1.55 }}>
+        <div>
+          <strong style={{ fontWeight: 700, color: titleColor }}>{`${callout.title}: `}</strong>
+          {callout.body ? renderInline(callout.body, theme, accent, citations, `co-${key}`) : null}
+        </div>
+        {extraBlocks}
+      </div>
+    </div>
+  )
+}
+
+function InteractiveProseChecklistItem({
+  item,
+  idx,
+  j,
+  theme,
+  accent,
+  citations,
+}: {
+  item: ListItemNode
+  idx: number
+  j: number
+  theme: Theme
+  accent: string
+  citations?: Citation[]
+}) {
+  const [checked, setChecked] = useState(Boolean(item.checked))
+  return (
+    <li
+      onClick={() => setChecked((prev) => !prev)}
+      style={{
+        listStyleType: 'none',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 10,
+        padding: '5px 8px',
+        borderRadius: 10,
+        cursor: 'pointer',
+        background: checked ? 'rgba(124, 92, 252, 0.08)' : 'transparent',
+        transition: 'background 0.15s ease',
+      }}
+    >
+      <span
+        role="checkbox"
+        aria-checked={checked}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 18,
+          height: 18,
+          marginTop: 2,
+          borderRadius: 5,
+          border: checked ? 'none' : '1.5px solid rgba(124, 92, 252, 0.45)',
+          background: checked ? '#6C4CF6' : 'rgba(255, 255, 255, 0.85)',
+          color: '#FFFFFF',
+          fontSize: 11,
+          fontWeight: 800,
+          flexShrink: 0,
+        }}
+      >
+        {checked ? '✓' : ''}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ textDecoration: checked ? 'line-through' : 'none', opacity: checked ? 0.68 : 1 }}>
+          {renderInline(item.text, theme, accent, citations, `li${idx}-${j}`)}
+        </span>
+        {item.continuations.map((c, ci) => (
+          <div key={ci} style={{ marginTop: 2 }}>
+            {renderInline(c, theme, accent, citations, `lic${idx}-${j}-${ci}`)}
+          </div>
+        ))}
+      </div>
+    </li>
+  )
+}
+
+function ProseTableGrid({
+  block,
+  idx,
+  theme,
+  accent,
+  citations,
+}: {
+  block: Extract<ProseBlock, { kind: 'table' }>
+  idx: number
+  theme: Theme
+  accent: string
+  citations?: Citation[]
+}) {
+  const [pageSize, setPageSize] = useState<number>(5)
+  const [page, setPage] = useState<number>(0)
+  const totalPages = Math.max(1, Math.ceil(block.rows.length / pageSize))
+  const safePage = Math.min(page, totalPages - 1)
+  const visibleRows = block.rows.slice(safePage * pageSize, safePage * pageSize + pageSize)
+
+  const renderTrendCell = (raw: string, keyPrefix: string) => {
+    const clean = raw.replace(/[*_`]/g, '').trim()
+    const m = clean.match(/^([↑↓↗↘+-])?\s*([+-]?\d+(?:\.\d+)?%)$/)
+    if (!m) return renderInline(raw, theme, accent, citations, keyPrefix)
+    const isNeg = clean.startsWith('-') || clean.startsWith('↓') || clean.startsWith('↘')
+    const arrow = isNeg ? '↓' : '↑'
+    const num = m[2].startsWith('+') || m[2].startsWith('-') ? m[2] : `${isNeg ? '-' : '+'}${m[2]}`
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 3,
+          fontWeight: 700,
+          color: isNeg ? '#E04F5F' : '#129A5A',
+        }}
+      >
+        <span>{arrow}</span>
+        <span>{num}</span>
+      </span>
+    )
+  }
+
+  return (
+    <div
+      style={{
+        overflowX: 'auto',
+        borderRadius: 14,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+        boxShadow: '0 6px 18px rgba(70, 52, 150, 0.06)',
+      }}
+    >
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: TYPE.label }}>
+        <thead>
+          <tr style={{ background: 'rgba(124, 92, 252, 0.11)', borderBottom: `1px solid ${theme.border}` }}>
+            {block.headers.map((h, c) => (
+              <th
+                key={c}
+                style={{
+                  padding: '9px 12px',
+                  textAlign: block.aligns[c] ?? 'left',
+                  fontWeight: 700,
+                  color: theme.text,
+                }}
+              >
+                {renderInline(h, theme, accent, citations, `th${idx}-${c}`)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {visibleRows.map((row, r) => (
+            <tr key={r} style={{ borderTop: r > 0 ? `1px solid ${theme.border}` : undefined }}>
+              {row.map((cell, c) => (
+                <td
+                  key={c}
+                  style={{
+                    padding: '8px 12px',
+                    textAlign: block.aligns[c] ?? 'left',
+                    color: c === 0 ? theme.text : theme.text2,
+                    fontWeight: c === 0 ? 600 : 400,
+                  }}
+                >
+                  {renderTrendCell(cell, `td${idx}-${r}-${c}`)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {block.rows.length > 5 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '8px 12px',
+            borderTop: `1px solid ${theme.border}`,
+            fontSize: 12,
+            color: theme.text2,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button
+              type="button"
+              onClick={() => setPage(Math.max(0, safePage - 1))}
+              disabled={safePage === 0}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: theme.text2,
+                cursor: safePage === 0 ? 'default' : 'pointer',
+                opacity: safePage === 0 ? 0.4 : 1,
+                padding: '2px 6px',
+              }}
+            >
+              ‹
+            </button>
+            {Array.from({ length: totalPages }, (_, p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPage(p)}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 12,
+                  border: 'none',
+                  background: p === safePage ? '#6C4CF6' : 'transparent',
+                  color: p === safePage ? '#FFFFFF' : theme.text2,
+                  fontWeight: 700,
+                  fontSize: 11.5,
+                  cursor: 'pointer',
+                }}
+              >
+                {p + 1}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))}
+              disabled={safePage >= totalPages - 1}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: theme.text2,
+                cursor: safePage >= totalPages - 1 ? 'default' : 'pointer',
+                opacity: safePage >= totalPages - 1 ? 0.4 : 1,
+                padding: '2px 6px',
+              }}
+            >
+              ›
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const next = pageSize === 5 ? 10 : pageSize === 10 ? 25 : 5
+              setPageSize(next)
+              setPage(0)
+            }}
+            style={{
+              border: `1px solid ${theme.border}`,
+              background: 'rgba(124, 92, 252, 0.08)',
+              color: theme.text,
+              borderRadius: 8,
+              padding: '3px 8px',
+              fontSize: 11.5,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Show: {pageSize} ▾
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function renderProseBlock(
   block: ProseBlock,
   idx: number,
@@ -596,84 +952,198 @@ function renderProseBlock(
   citations?: Citation[]
 ): ReactNode {
   switch (block.kind) {
-    case 'paragraph':
+    case 'paragraph': {
+      const callout = matchCalloutText(block.text)
+      if (callout) {
+        return renderCalloutCard(callout, idx, theme, accent, citations)
+      }
       return (
         <div key={idx} style={{ color: theme.text, whiteSpace: 'pre-wrap' }}>
           {renderInline(block.text, theme, accent, citations, `b${idx}`)}
         </div>
       )
+    }
 
     case 'heading': {
-      const sizes: Record<number, number> = { 1: 21, 2: 18, 3: 16, 4: 15, 5: 14, 6: 13 }
+      const sizes: Record<number, number> = { 1: 21, 2: 17.5, 3: 15.5, 4: 14.5, 5: 13.5, 6: 13 }
       const Tag = (`h${Math.min(6, Math.max(1, block.level))}` as unknown) as 'h2'
+      const badge = block.level >= 2 && block.level <= 3 ? sectionBadgeForHeading(block.text) : null
       return (
         <Tag
           key={idx}
           style={{
-            margin: '4px 0 0',
+            margin: '6px 0 0',
             fontSize: sizes[block.level] ?? 15,
             fontWeight: 700,
             lineHeight: 1.35,
             color: block.level === 6 ? theme.text2 : theme.text,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 7,
           }}
         >
-          {renderInline(block.text, theme, accent, citations, `h${idx}`)}
+          {badge && (
+            <span aria-hidden style={{ fontSize: Math.max(13, (sizes[block.level] ?? 15) - 2) }}>
+              {badge}
+            </span>
+          )}
+          <span>{renderInline(block.text, theme, accent, citations, `h${idx}`)}</span>
         </Tag>
       )
     }
 
-    case 'bulletList':
     case 'orderedList': {
-      const isOrdered = block.kind === 'orderedList'
-      const ListTag = isOrdered ? 'ol' : 'ul'
       return (
-        <ListTag
+        <ol
           key={idx}
-          start={isOrdered ? block.start : undefined}
+          start={block.start}
           style={{
             margin: 0,
-            paddingLeft: 20,
+            paddingLeft: 0,
+            listStyleType: 'none',
             display: 'flex',
             flexDirection: 'column',
-            gap: 4,
+            gap: 8,
             color: theme.text,
-            listStyleType: isOrdered ? 'decimal' : 'disc',
           }}
         >
-          {block.items.map((item, j) => (
-            <li key={j} style={{ listStyleType: item.checked !== undefined ? 'none' : undefined }}>
-              {item.checked !== undefined && (
-                <input
-                  type="checkbox"
-                  checked={item.checked}
-                  readOnly
-                  style={{ marginRight: 6, accentColor: accent, verticalAlign: 'middle' }}
-                />
-              )}
-              <span>{renderInline(item.text, theme, accent, citations, `li${idx}-${j}`)}</span>
-              {item.continuations.map((c, ci) => (
-                <div key={ci} style={{ marginTop: 2 }}>
-                  {renderInline(c, theme, accent, citations, `lic${idx}-${j}-${ci}`)}
+          {block.items.map((item, j) => {
+            const stepNum = block.start + j
+            const split = splitStepTitleAndDetail(item.text)
+            return (
+              <li
+                key={j}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    background: 'rgba(124, 92, 252, 0.14)',
+                    border: '1px solid rgba(124, 92, 252, 0.26)',
+                    color: '#5B3DF5',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    flexShrink: 0,
+                    marginTop: 1,
+                  }}
+                >
+                  {stepNum}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {split ? (
+                    <>
+                      <div style={{ fontWeight: 700, color: theme.text, lineHeight: 1.35 }}>
+                        {renderInline(split.title, theme, accent, citations, `olt${idx}-${j}`)}
+                      </div>
+                      <div style={{ fontSize: 13, color: theme.text2, marginTop: 2, lineHeight: 1.45 }}>
+                        {renderInline(split.detail, theme, accent, citations, `old${idx}-${j}`)}
+                      </div>
+                    </>
+                  ) : (
+                    <span>{renderInline(item.text, theme, accent, citations, `li${idx}-${j}`)}</span>
+                  )}
+                  {item.continuations.map((c, ci) => (
+                    <div key={ci} style={{ marginTop: 2, fontSize: 13, color: theme.text2 }}>
+                      {renderInline(c, theme, accent, citations, `lic${idx}-${j}-${ci}`)}
+                    </div>
+                  ))}
+                  {item.children.length > 0 && (
+                    <div style={{ marginTop: 6 }}>
+                      {item.children.map((ch, chi) => renderProseBlock(ch, chi, theme, accent, citations))}
+                    </div>
+                  )}
                 </div>
-              ))}
-              {item.children.length > 0 && (
-                <div style={{ marginTop: 4 }}>
-                  {item.children.map((ch, chi) => renderProseBlock(ch, chi, theme, accent, citations))}
-                </div>
-              )}
-            </li>
-          ))}
-        </ListTag>
+              </li>
+            )
+          })}
+        </ol>
       )
     }
 
-    case 'blockquote':
+    case 'bulletList': {
+      const hasCheckboxes = block.items.some((it) => it.checked !== undefined)
+      return (
+        <ul
+          key={idx}
+          style={{
+            margin: 0,
+            paddingLeft: hasCheckboxes ? 0 : 20,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: hasCheckboxes ? 4 : 5,
+            color: theme.text,
+            listStyleType: hasCheckboxes ? 'none' : 'disc',
+          }}
+        >
+          {block.items.map((item, j) =>
+            item.checked !== undefined ? (
+              <InteractiveProseChecklistItem
+                key={j}
+                item={item}
+                idx={idx}
+                j={j}
+                theme={theme}
+                accent={accent}
+                citations={citations}
+              />
+            ) : (
+              <li key={j}>
+                <span>{renderInline(item.text, theme, accent, citations, `li${idx}-${j}`)}</span>
+                {item.continuations.map((c, ci) => (
+                  <div key={ci} style={{ marginTop: 2 }}>
+                    {renderInline(c, theme, accent, citations, `lic${idx}-${j}-${ci}`)}
+                  </div>
+                ))}
+                {item.children.length > 0 && (
+                  <div style={{ marginTop: 4 }}>
+                    {item.children.map((ch, chi) => renderProseBlock(ch, chi, theme, accent, citations))}
+                  </div>
+                )}
+              </li>
+            )
+          )}
+        </ul>
+      )
+    }
+
+    case 'blockquote': {
+      const firstBlock = block.blocks[0]
+      if (firstBlock?.kind === 'paragraph') {
+        const callout = matchCalloutText(firstBlock.text)
+        if (callout) {
+          const rest = block.blocks.slice(1)
+          return renderCalloutCard(
+            callout,
+            idx,
+            theme,
+            accent,
+            citations,
+            rest.length > 0 ? (
+              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {rest.map((inner, j) => renderProseBlock(inner, j, theme, accent, citations))}
+              </div>
+            ) : undefined
+          )
+        }
+      }
       return (
         <blockquote
           key={idx}
           style={{
             margin: 0,
-            padding: '4px 0 4px 12px',
+            padding: '10px 14px',
+            borderRadius: 12,
+            background: 'rgba(124, 92, 252, 0.08)',
             borderLeft: `3px solid ${accent}`,
             color: theme.text2,
             display: 'flex',
@@ -684,57 +1154,10 @@ function renderProseBlock(
           {block.blocks.map((inner, j) => renderProseBlock(inner, j, theme, accent, citations))}
         </blockquote>
       )
+    }
 
     case 'table':
-      return (
-        <div
-          key={idx}
-          style={{
-            overflowX: 'auto',
-            borderRadius: 10,
-            border: `1px solid ${theme.border}`,
-            background: theme.card,
-          }}
-        >
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: TYPE.label }}>
-            <thead>
-              <tr style={{ borderBottom: `1px solid ${theme.border}` }}>
-                {block.headers.map((h, c) => (
-                  <th
-                    key={c}
-                    style={{
-                      padding: '8px 10px',
-                      textAlign: block.aligns[c] ?? 'left',
-                      fontWeight: 650,
-                      color: theme.text,
-                    }}
-                  >
-                    {renderInline(h, theme, accent, citations, `th${idx}-${c}`)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {block.rows.map((row, r) => (
-                <tr key={r} style={{ borderTop: r > 0 ? `1px solid ${theme.border}` : undefined }}>
-                  {row.map((cell, c) => (
-                    <td
-                      key={c}
-                      style={{
-                        padding: '7px 10px',
-                        textAlign: block.aligns[c] ?? 'left',
-                        color: theme.text2,
-                      }}
-                    >
-                      {renderInline(cell, theme, accent, citations, `td${idx}-${r}-${c}`)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )
+      return <ProseTableGrid key={idx} block={block} idx={idx} theme={theme} accent={accent} citations={citations} />
 
     case 'divider':
       return <hr key={idx} style={{ border: 'none', borderTop: `1px solid ${theme.border}`, margin: '4px 0' }} />
@@ -815,6 +1238,150 @@ function Prose({
   )
 }
 
+function isAcademicCitationDomain(domain: string, url: string): boolean {
+  const hay = `${domain} ${url}`.toLowerCase()
+  return (
+    hay.includes('.edu') ||
+    hay.includes('nature.com') ||
+    hay.includes('arxiv.org') ||
+    hay.includes('ieee.org') ||
+    hay.includes('acm.org') ||
+    hay.includes('springer.') ||
+    hay.includes('sciencedirect.') ||
+    hay.includes('oxford') ||
+    hay.includes('cambridge') ||
+    hay.includes('nih.gov') ||
+    hay.includes('pubmed')
+  )
+}
+
+function CitationsSourceCards({ citations, theme }: { citations: Citation[]; theme: Theme }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: 13.5,
+          fontWeight: 700,
+          color: theme.text,
+        }}
+      >
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span aria-hidden>🔗</span>
+          <span>Key Sources</span>
+        </span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#6C4CF6' }}>
+          {citations.length} {citations.length === 1 ? 'source' : 'sources'}
+        </span>
+      </div>
+      {citations.map((src) => {
+        const domain =
+          src.domain ||
+          (() => {
+            try {
+              return new URL(src.url).hostname.replace(/^www\./, '')
+            } catch {
+              return src.url
+            }
+          })()
+        const academic = isAcademicCitationDomain(domain, src.url)
+        return (
+          <a
+            key={src.ordinal}
+            href={src.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 10,
+              padding: '11px 13px',
+              borderRadius: 14,
+              background: theme.card,
+              border: `1px solid ${theme.border}`,
+              textDecoration: 'none',
+              color: theme.text,
+              boxShadow: '0 4px 14px rgba(70, 52, 150, 0.05)',
+            }}
+          >
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 26,
+                height: 26,
+                borderRadius: 13,
+                background: 'rgba(124, 92, 252, 0.14)',
+                border: '1px solid rgba(124, 92, 252, 0.25)',
+                color: '#5B3DF5',
+                fontSize: 12,
+                fontWeight: 700,
+                flexShrink: 0,
+                marginTop: 1,
+              }}
+            >
+              {src.ordinal}
+            </span>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.text, lineHeight: 1.35 }}>
+                {src.title}
+              </div>
+              {src.snippet && (
+                <div style={{ fontSize: 12.5, color: theme.text2, lineHeight: 1.45 }}>
+                  {src.snippet}
+                </div>
+              )}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  marginTop: 2,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: '#5B3DF5',
+                  }}
+                >
+                  <span>↗</span>
+                  <span>{domain}</span>
+                </span>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    background: academic ? 'rgba(124, 92, 252, 0.14)' : 'rgba(18, 154, 90, 0.14)',
+                    color: academic ? '#5B3DF5' : '#129A5A',
+                  }}
+                >
+                  <span>{academic ? '🏛' : '✓'}</span>
+                  <span>{academic ? 'Academic' : 'Trusted Source'}</span>
+                </span>
+              </div>
+            </div>
+          </a>
+        )
+      })}
+    </div>
+  )
+}
+
 export function MessageContent({
   text,
   dark = true,
@@ -861,6 +1428,7 @@ export function MessageContent({
             return null
         }
       })}
+      {citations && citations.length > 0 && <CitationsSourceCards citations={citations} theme={theme} />}
     </div>
   )
 }
