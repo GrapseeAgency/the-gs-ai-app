@@ -296,3 +296,53 @@ recorded in the session; to be resolved before implementation.
 ## Cumulative research index (8 passes — saturation)
 
 1. Layers + SotA · 2. Streaming mechanics + judgment · 3. A2UI/OpenUI/SwiftUI SDUI · 4. A2UI internals + Artifacts + official renderer + SDUI veterans · 5. Tokens + DSL math + AG-UI + a11y · 6. Perf contracts + layout science + security · 7. M3 Expressive + Liquid Glass + reveal patterns + evidence base · 8. RTL/i18n + QA matrix + MCP Apps + offline.
+
+---
+
+# PASS 9 — Bangla script, list mechanics, and the science of sameness (2026-11-05)
+
+## Bangla (বাংলা) rendering — the market's script is a hard case, plan for it
+
+- Bangla is a complex script: **hundreds of conjunct ligatures** fuse consonants into single glyphs → character count barely predicts rendered width; boxes measured on Latin cap height **clip tall conjuncts**; the hasanta (্) is zero-width and invisible but changes surrounding letter shapes — dropping it silently corrupts words. Broken rendering ("letters drawn as separate pieces") = the chosen font lacks fused conjunct forms; Noto Sans Bengali carries them and is the reference face.
+- Modern Android/iOS system shapers (HarfBuzz/ICU lineage) handle Indic reordering natively — the old "Android can't render Bangla" era is gone; the remaining failure modes are FONT CHOICE, line-height/clipping (conjunct ascenders + matra line), and width estimation.
+- bn localization runs 10–20% longer than English → fixed-height text containers are a bug class; GSUI caps already allow multi-line, but renderer must size blocks from measured text, never estimated character counts.
+- GSUI renderer rules: bundle/declare a conjunct-complete Bengali face; extra line-height headroom on Bangla text styles; test fixtures MUST include Bangla strings (labels, stat values, timeline entries); numerals — platform-locale digits (০১২৩ vs 0123) formatted by the renderer, never pre-formatted by the model.
+
+## Chat-list mechanics for heavy blocks (the scroll path IS the product)
+
+- Compose: `Modifier.animateItem()` (1.7+) animates insert/remove/placement — requires **stable keys** (`items(key = { it.id })`), customizable to M3 springs (fadeInSpec/fadeOutSpec/placementSpec). Chat pattern: LazyColumn + rememberLazyListState + animateScrollToItem on new message.
+- SwiftUI — measured, not folklore (STRV lab, memory-intensive rows): **List (UITableView-backed) vs LazyVStack**: scroll time 5.53s vs 52.3s; hangs 4.6 vs 78; memory on scroll-back: List reverts (118MB) while LazyVStack keeps everything (152MB). At scale, LazyVStack = 1.2GB / sub-20fps at 100k rows; List holds 60fps at 45MB. LazyVStack does NOT recycle; List does.
+- Root causes of drop-frames (both platforms identical in kind): identity instability (unstable ForEach ids → full re-render on any change) and fat view bodies (row observing the whole model). Fix pattern: stable ids + rows take primitives.
+- GSUI decisions locked by this: iOS chat list = List-backed (or UICollectionView-composed) scrolling, not LazyVStack-in-ScrollView, for unbounded histories; GSUI block views take scalars/small view models, never the whole message object; block = one diffing boundary.
+
+## Anti-monotony is now an engineering requirement, not a taste (three independent studies)
+
+- CHI-track study (ACM 10.1145/3772318.3790758): AI-assisted UIs measured **more visually similar to each other** (LPIPS layout similarity + color convergence) than human-designed ones — generative assistance demonstrably narrows design space.
+- **Design Theater** benchmark (arXiv 2607.22928): generative-UI tools fail to implement **>25% of their own stated design reasoning** (34% for functional requirements); recognize only ~54% of implicit UX principles; same prompt → narrow layout/visual convergence across ALL tools (color varies most — meaning COLOR is where models naturally vary, LAYOUT is where they collapse).
+- **Design Creativity Bench** (arXiv 2610.11539): every frontier model produces designs more similar to other models' outputs than to human references; same model, two different domains → still similar (originality ≠ creative range; human distinctiveness on unrelated tasks 0.811 vs models ≤0.63).
+- Consequence for GSUI M4: prompting "be creative" is proven insufficient. The judgment layer needs a **structural rotation policy**: track the archetypes used in recent blocks (per conversation), bias the next block toward an unused composition; a small archetype inventory (hero-stat / split / timeline-flow / grid-cards / flow-diagram / dense-table...) is the control surface. This is the mechanism behind the user's anti-monotony rule.
+
+# PASS 10 — charts on device, draw-phase discipline, haptic language, diversity knobs (2026-11-05)
+
+## Chart rendering budgets (both platforms)
+
+- Swift Charts: smooth to 5–10k simple marks on modern iPhones, then lag. Playbook: **LTTB downsampling to ~500 visible points** (visually faithful), RectangleMark over BarMark (skips layout pass), `chartScrollableAxes` + `chartXVisibleDomain` for windowing. Swift Charts for ~95% of chart types — it is accessible BY DEFAULT (VoiceOver reads values); custom Canvas/Path only for radar/sankey/force-graph/per-stroke animation — and then YOU own a11y, gestures, animation.
+- SwiftUI Canvas: single rendering context — the production pattern for candlestick/real-time charts (hundreds of points, no per-point view hierarchy).
+- Compose: official perf skill — `drawWithCache` caches Path/Brush/Shader per size+state (chart grid = cached static layer, data = redrawn); animated values read inside `graphicsLayer{}`/`offset{}` lambdas (Draw-phase, no recomposition); **DrawScope runs 60–120×/s → zero allocations inside** (no `Path()` in draw blocks); `Path.rewind()` not `reset()` in hot loops.
+- These confirm and extend our existing 200-pt/16-series caps: the caps are right, and the LTTB option exists if we ever need density.
+
+## Haptics — a small token language, same discipline as color
+
+- Vocabulary: notification(success/error/warning) for outcomes, **selection tick** for value changes, light impact for presses — weight ∝ stakes. One-sentence rule: "if you can't say what a haptic confirms, it must not fire." Never the only signal; respect system settings/silent switch; `prepare()` generators ahead of the tap; reuse generator instances; nothing during scroll loops.
+- Treat as design-system tokens (success/error/warning/selection/long-press) with platform implementations (Core Haptics/AHAP + UIFeedbackGenerator; VibratorManager API 31+), synced with visual feedback in the same frame.
+- GSUI: action chips get selection/impact haptics; block-complete could get a single subtle success tick (budgeted like emphasis — restraint is the design).
+
+## Diversity knobs vs structural sameness (honest split)
+
+- Sampling knobs that help lexical variety on long output: temperature 0.7–1.3 for creative ranges (0.5–0.7 for reasoning-tuned models to avoid repetition loops), top_p 0.9–1.0, frequency_penalty 0.2–0.5 / presence_penalty 0.3–0.6 (the classic "Revenue increased in Q1/Q2/Q3" case was fixed by frequency_penalty 0.3 at temp 0.4 — accuracy AND variety coexist).
+- But per Design Creativity Bench, **structural/layout sameness survives high-temperature settings** — sampling knobs cannot be the anti-monotony mechanism. Mechanism = judgment-layer rotation + explicit "previous archetypes" context in the GSUI prompt + archetype examples in few-shots that demonstrate DIFFERENT compositions.
+- Prompt-side aid (research-backed): asking for varied formats/perspectives in the prompt adds diversity without raising temperature — our grammar examples should showcase compositional variety, not one house style.
+
+## Cumulative research index (10 passes)
+
+1. Layers + SotA · 2. Streaming + judgment · 3. A2UI/OpenUI/SwiftUI SDUI · 4. A2UI internals + Artifacts + official renderer + veterans · 5. Tokens + DSL math + AG-UI + a11y · 6. Perf contracts + layout science + security · 7. M3E + Liquid Glass + reveal + evidence · 8. RTL + QA + MCP Apps + offline · 9. Bangla + list mechanics + sameness science · 10. Chart budgets + draw discipline + haptics + diversity knobs.
