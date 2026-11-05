@@ -1,6 +1,7 @@
 package com.grapsee.gsai.ui.chat.content
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,11 +50,26 @@ fun CodeBlockCard(
     onCopyCode: (String) -> Unit
 ) {
     var copied by remember { mutableStateOf(false) }
+    var sandboxMode by remember { mutableStateOf(false) }
     LaunchedEffect(copied) {
         if (copied) {
             delay(1500)
             copied = false
         }
+    }
+    if (sandboxMode && !open && code.isNotBlank()) {
+        Column {
+            CodeSandboxView(code = code, language = language ?: "javascript")
+            Text(
+                text = "Close editor",
+                style = MaterialTheme.typography.labelSmall,
+                color = GsTheme.colors.codeComment,
+                modifier = Modifier
+                    .padding(top = 4.dp, start = 4.dp)
+                    .clickable { sandboxMode = false }
+            )
+        }
+        return
     }
     val colors = GsTheme.colors
     // Nexly assistant cards wrap code at the card width; other surfaces keep
@@ -91,6 +107,16 @@ fun CodeBlockCard(
                     color = GsTheme.colors.codeComment,
                     modifier = Modifier.weight(1f)
                 )
+                if (!open && code.isNotBlank()) {
+                    Text(
+                        text = "Edit / Run",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = GsTheme.colors.accent,
+                        modifier = Modifier
+                            .padding(end = 6.dp)
+                            .clickable { sandboxMode = true }
+                    )
+                }
                 IconButton(onClick = { onCopyCode(code); copied = true }, modifier = Modifier.size(28.dp)) {
                     Icon(
                         if (copied) GsIcons.Check else GsIcons.Copy,

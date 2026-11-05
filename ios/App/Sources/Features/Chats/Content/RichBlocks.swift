@@ -1,4 +1,5 @@
 import SwiftUI
+import JavaScriptCore
 
 /// STEP 5 renderer (iOS twin of RichBlocks.kt) — the consumer half of the
 /// message → blocks seam. iOS parses on FINALIZE only (the streaming bubble
@@ -532,21 +533,50 @@ struct CodeBlockCardView: View {
     let code: String
     var open: Bool = false
 
+    @State private var editing = false
+    @State private var editedCode: String? = nil
+    @State private var runOutput: String? = nil
+    @State private var errorOutput: String? = nil
+
+    private var currentCode: String { editedCode ?? code }
+    private var lang: String { (language ?? "code").lowercased().trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var canRun: Bool {
+        ["js", "javascript", "ts", "typescript", "json", "html", "htm", "svg"].contains(lang)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            HStack(spacing: 8) {
                 Text(language ?? "code")
                     .font(Aero.label())
                     .foregroundStyle(Aero.textMuted)
                 Spacer()
-                CodeCopyButton(text: code)
+                if !open && !code.isEmpty {
+                    Button(editing ? "Done" : "Edit") {
+                        if editedCode == nil { editedCode = code }
+                        editing.toggle()
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Aero.textSecondary)
+                    .buttonStyle(.plain)
+
+                    if canRun {
+                        Button(lang == "json" ? "Validate" : (["html", "htm", "svg"].contains(lang) ? "Preview" : "Run")) {
+                            executeCode()
+                        }
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Aero.accent)
+                        .buttonStyle(.plain)
+                    }
+                }
+                CodeCopyButton(text: currentCode)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Code block\(language.map { ", " + $0 } ?? "")")
 
-            if code.isEmpty {
+            if currentCode.isEmpty {
                 Text("…")
                     .font(.system(size: 12, weight: .regular, design: .monospaced))
                     .foregroundStyle(Aero.text)
@@ -554,15 +584,18 @@ struct CodeBlockCardView: View {
                     .padding(.horizontal, 12)
                     .padding(.bottom, 10)
                     .textSelection(.enabled)
+            } else if editing {
+                TextEditor(text: Binding(
+                    get: { editedCode ?? code },
+                    set: { editedCode = $0 }
+                ))
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                .foregroundStyle(Aero.codeText)
+                .frame(minHeight: 110, maxHeight: 260)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 8)
             } else {
-                // Both axes scroll inside the card; large code never grows the
-                // transcript item forever. Nexly cards opt into soft wrapping
-                // so a narrow glass card still shows every token.
                 if wrapCode {
-                    // The card grows to fit wrapped code. A nested vertical
-                    // ScrollView inside the transcript's scroll view was
-                    // collapsing to a short height and hiding lines in the
-                    // static render (and was awkward on a phone).
                     codeContent
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
@@ -579,6 +612,26 @@ struct CodeBlockCardView: View {
                     .frame(maxHeight: 340)
                 }
             }
+
+            if let out = runOutput, !out.isEmpty {
+                Divider()
+                Text(out)
+                    .font(.system(size: 11.5, weight: .regular, design: .monospaced))
+                    .foregroundStyle(Aero.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+            }
+
+            if let err = errorOutput ?? (["error", "stderr", "traceback", "exception"].contains(lang) ? currentCode : nil),
+               !err.isEmpty {
+                Divider()
+                Text(err)
+                    .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(Color.red.opacity(0.08))
+            }
         }
         .background(RoundedRectangle(cornerRadius: 12).fill(Aero.codeSurface))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline, lineWidth: 1))
@@ -588,13 +641,62 @@ struct CodeBlockCardView: View {
     private var codeContent: some View {
         Group {
             if open {
-                Text(code)
+                Text(currentCode)
                     .font(.system(size: 12, weight: .regular, design: .monospaced))
                     .foregroundStyle(Aero.codeText)
             } else {
-                highlightedCode(code, language: language)
+                highlightedCode(currentCode, language: language)
                     .foregroundStyle(Aero.codeText)
             }
+        }
+    }
+
+    private func executeCode() {
+        runOutput = nil
+        errorOutput = nil
+        let src = currentCode
+        if lang == "json" {
+            guard let data = src.data(using: .utf8) else { return }
+            do {
+                let obj = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+                let pretty = try JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys])
+                runOutput = String(data: pretty, encoding: .utf8)
+            } catch {
+                errorOutput = error.localizedDescription
+            }
+            return
+        }
+        if ["html", "htm", "svg"].contains(lang) {
+            let stripped = src
+                .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+                .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            runOutput = stripped.isEmpty ? "HTML/SVG preview ready (\(src.count) bytes)" : stripped
+            return
+        }
+        guard let ctx = JSContext() else { return }
+        var logs: [String] = []
+        var jsErr: String? = nil
+        ctx.exceptionHandler = { _, exception in
+            if let ex = exception?.toString() {
+                jsErr = ex
+            }
+        }
+        let logBlock: @convention(block) (JSValue) -> Void = { val in
+            logs.append(val.toString() ?? "")
+        }
+        ctx.setObject(logBlock, forKeyedSubscript: "__gsLog" as NSString)
+        _ = ctx.evaluateScript("var console = { log: __gsLog, info: __gsLog, warn: __gsLog, error: __gsLog };")
+        let result = ctx.evaluateScript(src)
+        if let err = jsErr {
+            errorOutput = err
+        } else if let result, !result.isUndefined {
+            logs.append("→ \(result.toString() ?? "")")
+        }
+        if !logs.isEmpty {
+            runOutput = logs.joined(separator: "\n")
+        } else if errorOutput == nil {
+            runOutput = "(executed with no console output)"
         }
     }
 }

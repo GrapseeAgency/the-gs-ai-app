@@ -11,6 +11,7 @@ import { EmptyState } from '../primitives/EmptyState'
 export function TableWidget({ payload }: { payload: TablePayload }) {
   const { accent, theme } = useWidgetIdentity()
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null)
+  const [query, setQuery] = useState('')
   const numericCols = useMemo(() => {
     const cols = new Set<number>()
     payload.columns.forEach((_, ci) => {
@@ -21,8 +22,12 @@ export function TableWidget({ payload }: { payload: TablePayload }) {
   }, [payload.columns, payload.rows])
 
   const rows = useMemo(() => {
-    if (!sort) return payload.rows
-    const sorted = [...payload.rows]
+    const q = query.trim().toLowerCase()
+    const filtered = q
+      ? payload.rows.filter((r) => r.some((cell) => String(cell ?? '').toLowerCase().includes(q)))
+      : payload.rows
+    if (!sort) return filtered
+    const sorted = [...filtered]
     sorted.sort((a, b) => {
       const av = a[sort.col] ?? ''
       const bv = b[sort.col] ?? ''
@@ -32,13 +37,34 @@ export function TableWidget({ payload }: { payload: TablePayload }) {
       return String(av).localeCompare(String(bv)) * sort.dir
     })
     return sorted
-  }, [payload.rows, sort])
+  }, [payload.rows, sort, query])
 
   if (!payload.columns.length || !payload.rows.length) return <EmptyState label="No rows" />
 
   return (
     <div>
       <TitleRow title={payload.title} />
+      {payload.rows.length >= 4 ? (
+        <div style={{ marginBottom: 8 }}>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter rows…"
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '6px 10px',
+              borderRadius: 8,
+              border: `1px solid ${theme.border}`,
+              background: theme.raised,
+              color: theme.text,
+              fontSize: TYPE.micro,
+              outline: 'none',
+            }}
+          />
+        </div>
+      ) : null}
       <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${theme.border}` }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: TYPE.label }}>
           <thead>

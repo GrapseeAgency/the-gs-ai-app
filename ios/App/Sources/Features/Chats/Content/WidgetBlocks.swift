@@ -514,14 +514,68 @@ struct HtmlBlockView: View {
             }
             if kind == "map", let obj = parseRelaxedJSONObject(kind: "map", raw: source) {
                 let title = str(obj, "title", "label", "name")
-                let lat = dbl(obj, "lat", "latitude")
-                let lng = dbl(obj, "lng", "lon", "longitude")
+                let mode = str(obj, "mode")
+                let rawPins = ((obj["pins"] ?? obj["markers"] ?? obj["locations"] ?? obj["places"]) as? [[String: Any]]) ?? []
+                let rawStops = ((obj["stops"] ?? obj["waypoints"] ?? obj["itinerary"]) as? [[String: Any]]) ?? []
+                let rawSteps = ((obj["steps"] ?? obj["directions"]) as? [Any]) ?? []
                 if !title.isEmpty {
-                    Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(Aero.text)
+                    HStack {
+                        Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(Aero.text)
+                        if !mode.isEmpty {
+                            Spacer()
+                            Text(mode.uppercased()).font(Aero.mono(10)).foregroundStyle(Aero.textSecondary)
+                        }
+                    }
                 }
-                Text(String(format: "Coordinates: %.4f, %.4f", lat, lng))
-                    .font(Aero.mono(12))
-                    .foregroundStyle(Aero.textSecondary)
+                let places = rawPins.isEmpty ? rawStops : rawPins
+                if !places.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(places.prefix(12).enumerated()), id: \.offset) { idx, p in
+                                let lbl = str(p, "label", "title", "name", "place")
+                                let det = str(p, "detail", "description", "address")
+                                let pLat = dbl(p, "lat", "latitude")
+                                let pLng = dbl(p, "lng", "lon", "longitude")
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(lbl.isEmpty ? "Stop \(idx + 1)" : lbl)
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(Aero.text)
+                                    if !det.isEmpty {
+                                        Text(det).font(.system(size: 11)).foregroundStyle(Aero.textSecondary).lineLimit(2)
+                                    }
+                                    Text(String(format: "%.4f, %.4f", pLat, pLng))
+                                        .font(Aero.mono(10))
+                                        .foregroundStyle(WidgetPalette.at(5))
+                                }
+                                .padding(9)
+                                .frame(minWidth: 140, alignment: .leading)
+                                .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 10))
+                            }
+                        }
+                    }
+                } else {
+                    let lat = dbl(obj, "lat", "latitude")
+                    let lng = dbl(obj, "lng", "lon", "longitude")
+                    Text(String(format: "Coordinates: %.4f, %.4f", lat, lng))
+                        .font(Aero.mono(12))
+                        .foregroundStyle(Aero.textSecondary)
+                }
+                if !rawSteps.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(rawSteps.prefix(15).enumerated()), id: \.offset) { idx, st in
+                            let instruction = (st as? String) ?? str((st as? [String: Any]) ?? [:], "instruction", "text", "step", "title")
+                            let dist = str((st as? [String: Any]) ?? [:], "distance", "dist", "duration")
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text("\(idx + 1).").font(.system(size: 11, weight: .bold)).foregroundStyle(WidgetPalette.at(5))
+                                Text(instruction).font(.system(size: 12)).foregroundStyle(Aero.text)
+                                Spacer()
+                                if !dist.isEmpty {
+                                    Text(dist).font(Aero.mono(10)).foregroundStyle(Aero.textSecondary)
+                                }
+                            }
+                        }
+                    }
+                }
             } else {
                 let stripped = source
                     .replacingOccurrences(of: "<style[^>]*>[\\s\\S]*?</style>", with: "", options: .regularExpression)
@@ -591,6 +645,14 @@ private struct WidgetBodyView: View {
             ChoicesBodyView(obj: obj, accent: accent)
         case "panel":
             PanelBodyView(obj: obj, accent: accent)
+        case "form":
+            FormBodyView(obj: obj, accent: accent)
+        case "calc":
+            CalcBodyView(obj: obj, accent: accent)
+        case "media", "carousel", "cards":
+            MediaBodyView(obj: obj, accent: accent)
+        case "app", "editor":
+            ProductivityBodyView(kind: kind, obj: obj, accent: accent)
         default:
             GenericStructuredBodyView(kind: kind, obj: obj, accent: accent)
         }
@@ -714,6 +776,10 @@ private struct TableBodyView: View {
     let obj: [String: Any]
     let accent: Color
 
+    @State private var query = ""
+    @State private var sortCol: Int? = nil
+    @State private var sortAsc = true
+
     var body: some View {
         let cols: [String] = ((obj["columns"] ?? obj["headers"]) as? [Any])?.map {
             if let s = $0 as? String { return s }
@@ -721,34 +787,54 @@ private struct TableBodyView: View {
             return "\($0)"
         } ?? []
         let rawRows = ((obj["rows"] ?? obj["data"]) as? [Any]) ?? []
+        let normRows: [[String]] = rawRows.map { row in
+            if let arr = row as? [Any] { return arr.map { "\($0)" } }
+            if let dict = row as? [String: Any] { return cols.map { str(dict, $0, $0.lowercased()) } }
+            return []
+        }
+        let filteredRows: [[String]] = {
+            let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let base = q.isEmpty ? normRows : normRows.filter { r in r.contains { $0.lowercased().contains(q) } }
+            guard let sc = sortCol else { return base }
+            return base.sorted { a, b in
+                let av = sc < a.count ? a[sc] : ""
+                let bv = sc < b.count ? b[sc] : ""
+                let an = Double(av.replacingOccurrences(of: "[^0-9.-]", with: "", options: .regularExpression))
+                let bn = Double(bv.replacingOccurrences(of: "[^0-9.-]", with: "", options: .regularExpression))
+                let cmp: Bool = (an != nil && bn != nil) ? (an! < bn!) : (av < bv)
+                return sortAsc ? cmp : !cmp
+            }
+        }()
         VStack(alignment: .leading, spacing: 6) {
+            if normRows.count >= 4 {
+                TextField("Filter rows…", text: $query)
+                    .font(.system(size: 12))
+                    .padding(7)
+                    .background(Color.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+            }
             if !cols.isEmpty {
                 HStack(spacing: 8) {
-                    ForEach(Array(cols.prefix(6).enumerated()), id: \.offset) { _, col in
-                        Text(col)
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(accent)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    ForEach(Array(cols.prefix(6).enumerated()), id: \.offset) { ci, col in
+                        Button {
+                            if sortCol == ci { sortAsc.toggle() } else { sortCol = ci; sortAsc = true }
+                        } label: {
+                            Text(sortCol == ci ? "\(col) \(sortAsc ? "↑" : "↓")" : col)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(accent)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 Divider()
             }
-            ForEach(Array(rawRows.prefix(15).enumerated()), id: \.offset) { _, row in
+            ForEach(Array(filteredRows.prefix(15).enumerated()), id: \.offset) { _, row in
                 HStack(spacing: 8) {
-                    if let arr = row as? [Any] {
-                        ForEach(Array(arr.prefix(6).enumerated()), id: \.offset) { _, cell in
-                            Text("\(cell)")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Aero.text)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    } else if let dict = row as? [String: Any] {
-                        ForEach(Array(cols.prefix(6).enumerated()), id: \.offset) { _, col in
-                            Text(str(dict, col, col.lowercased()))
-                                .font(.system(size: 12))
-                                .foregroundStyle(Aero.text)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                    ForEach(Array(row.prefix(6).enumerated()), id: \.offset) { _, cell in
+                        Text(cell)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Aero.text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .padding(.vertical, 2)
@@ -1287,6 +1373,194 @@ private struct GenericStructuredBodyView: View {
                     .background(Color.white.opacity(0.50), in: RoundedRectangle(cornerRadius: 8))
                 }
             }
+        }
+    }
+}
+
+private struct FormBodyView: View {
+    let obj: [String: Any]
+    let accent: Color
+    @State private var textValues: [Int: String] = [:]
+    @State private var numValues: [Int: Double] = [:]
+    @State private var boolValues: [Int: Bool] = [:]
+    @State private var submitted = false
+
+    var body: some View {
+        let fields = ((obj["fields"] ?? obj["inputs"] ?? obj["questions"]) as? [[String: Any]]) ?? []
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(fields.prefix(10).enumerated()), id: \.offset) { idx, f in
+                let label = str(f, "label", "title", "name", "key")
+                let fType = str(f, "type").lowercased()
+                VStack(alignment: .leading, spacing: 4) {
+                    if ["switch", "toggle", "checkbox", "boolean"].contains(fType) {
+                        Toggle(label, isOn: Binding(
+                            get: { boolValues[idx] ?? ((f["value"] as? Bool) ?? false) },
+                            set: { boolValues[idx] = $0 }
+                        ))
+                        .font(.system(size: 12, weight: .medium))
+                        .tint(accent)
+                    } else if ["slider", "range", "number"].contains(fType) {
+                        let minV = dbl(f, "min", fallback: 0)
+                        let maxV = max(dbl(f, "max", fallback: 100), minV + 1)
+                        let cur = numValues[idx] ?? dbl(f, "value", "default", fallback: minV)
+                        HStack {
+                            Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+                            Spacer()
+                            Text(String(format: "%.1f", cur)).font(Aero.mono(11)).foregroundStyle(accent)
+                        }
+                        Slider(value: Binding(
+                            get: { cur },
+                            set: { numValues[idx] = $0 }
+                        ), in: minV...maxV)
+                        .tint(accent)
+                    } else {
+                        Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+                        TextField(str(f, "placeholder", "hint"), text: Binding(
+                            get: { textValues[idx] ?? str(f, "value", "default") },
+                            set: { textValues[idx] = $0 }
+                        ))
+                        .font(.system(size: 12))
+                        .padding(7)
+                        .background(Color.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+            }
+            Button {
+                submitted = true
+            } label: {
+                Text(submitted ? "Submitted ✓" : (str(obj, "submitLabel").isEmpty ? "Submit" : str(obj, "submitLabel")))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(accent, in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+private struct CalcBodyView: View {
+    let obj: [String: Any]
+    let accent: Color
+    @State private var vals: [String: Double] = [:]
+
+    var body: some View {
+        let fields = ((obj["fields"] ?? obj["sliders"] ?? obj["inputs"]) as? [[String: Any]]) ?? []
+        let outputs = ((obj["outputs"] ?? obj["results"]) as? [[String: Any]]) ?? []
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(fields.prefix(8).enumerated()), id: \.offset) { idx, f in
+                let label = str(f, "label", "title", "name", "key")
+                let key = str(f, "key", "id", "name").isEmpty ? "x\(idx + 1)" : str(f, "key", "id", "name")
+                let minV = dbl(f, "min", fallback: 0)
+                let maxV = max(dbl(f, "max", fallback: 1000), minV + 1)
+                let cur = vals[key] ?? dbl(f, "value", "default", fallback: minV)
+                let unit = str(f, "unit")
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+                        Spacer()
+                        Text(String(format: "%.1f%@", cur, unit)).font(Aero.mono(11)).foregroundStyle(accent)
+                    }
+                    Slider(value: Binding(
+                        get: { cur },
+                        set: { vals[key] = $0 }
+                    ), in: minV...maxV)
+                    .tint(accent)
+                }
+            }
+            ForEach(Array(outputs.prefix(6).enumerated()), id: \.offset) { _, out in
+                HStack {
+                    Text(str(out, "label", "title", "name"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Aero.textSecondary)
+                    Spacer()
+                    Text(str(out, "value", "expr", "formula"))
+                        .font(Aero.mono(12))
+                        .foregroundStyle(accent)
+                }
+                .padding(8)
+                .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+}
+
+private struct MediaBodyView: View {
+    let obj: [String: Any]
+    let accent: Color
+
+    var body: some View {
+        let rawItems = ((obj["items"] ?? obj["cards"] ?? obj["slides"] ?? obj["results"] ?? obj["images"] ?? obj["files"] ?? obj["products"]) as? [[String: Any]]) ?? [obj]
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 10) {
+                ForEach(Array(rawItems.prefix(12).enumerated()), id: \.offset) { _, item in
+                    let title = str(item, "title", "name", "label", "filename")
+                    let sub = str(item, "subtitle", "author", "domain", "mime")
+                    let cap = str(item, "caption", "description", "snippet", "summary")
+                    let price = str(item, "price", "badge", "meta", "size")
+                    VStack(alignment: .leading, spacing: 4) {
+                        if !title.isEmpty {
+                            Text(title).font(.system(size: 13, weight: .bold)).foregroundStyle(Aero.text).lineLimit(2)
+                        }
+                        if !sub.isEmpty {
+                            Text(sub).font(.system(size: 11, weight: .medium)).foregroundStyle(accent).lineLimit(1)
+                        }
+                        if !cap.isEmpty {
+                            Text(cap).font(.system(size: 11)).foregroundStyle(Aero.textSecondary).lineLimit(3)
+                        }
+                        if !price.isEmpty {
+                            Text(price).font(Aero.mono(11)).foregroundStyle(Aero.text)
+                        }
+                    }
+                    .padding(10)
+                    .frame(width: rawItems.count > 1 ? 180 : 250, alignment: .leading)
+                    .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+                }
+            }
+        }
+    }
+}
+
+private struct ProductivityBodyView: View {
+    let kind: String
+    let obj: [String: Any]
+    let accent: Color
+
+    var body: some View {
+        let cols = (obj["columns"] ?? obj["lanes"] ?? obj["boards"]) as? [[String: Any]] ?? []
+        if !cols.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 8) {
+                    ForEach(Array(cols.prefix(4).enumerated()), id: \.offset) { cIdx, col in
+                        let colTitle = str(col, "title", "name", "label", "status")
+                        let colItems = (col["items"] ?? col["cards"] ?? col["tasks"]) as? [Any] ?? []
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(colTitle.uppercased())
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(WidgetPalette.at(cIdx))
+                            ForEach(Array(colItems.prefix(10).enumerated()), id: \.offset) { _, it in
+                                let lbl = (it as? String) ?? str((it as? [String: Any]) ?? [:], "title", "label", "text", "task", "name")
+                                let badge = str((it as? [String: Any]) ?? [:], "badge", "priority", "tag", "status")
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(lbl).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+                                    if !badge.isEmpty {
+                                        Text(badge).font(.system(size: 10, weight: .bold)).foregroundStyle(accent)
+                                    }
+                                }
+                                .padding(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+                            }
+                        }
+                        .frame(width: 135, alignment: .leading)
+                    }
+                }
+            }
+        } else if (obj["rows"] ?? obj["data"]) is [Any] {
+            TableBodyView(obj: obj, accent: accent)
+        } else {
+            GenericStructuredBodyView(kind: kind, obj: obj, accent: accent)
         }
     }
 }

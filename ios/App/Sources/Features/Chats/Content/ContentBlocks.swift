@@ -367,6 +367,16 @@ private func parseFence(_ lines: [GSLine], start: Int) -> (Block, Int) {
     return (fenceToBlock(language: language, code: openCode, open: true, offset: lines[start].offset), lines.count)
 }
 
+private let mermaidFenceAliases: Set<String> = [
+    "mermaid", "flowchart", "sequence", "sequencediagram", "classdiagram",
+    "statediagram", "erdiagram", "gitgraph", "c4", "architecture", "diagram",
+    "mindmap", "gantt"
+]
+
+private let mapFenceAliases: Set<String> = [
+    "map", "maps", "location", "locations", "places", "route", "directions", "geo", "geojson"
+]
+
 private func fenceToBlock(language: String?, code: String, open: Bool, offset: Int) -> Block {
     let lang = language?.lowercased()
     let kind = widgetKindOf(lang)
@@ -374,10 +384,10 @@ private func fenceToBlock(language: String?, code: String, open: Bool, offset: I
     let isJson = trimmedCode.hasPrefix("{") || trimmedCode.hasPrefix("[")
 
     if !open,
-       (lang == "mermaid" || ((lang == "mindmap" || lang == "gantt") && !isJson)) {
+       (lang == "mermaid" || (lang != nil && mermaidFenceAliases.contains(lang!) && !isJson)) {
         return .mermaid(source: code, sourceStart: offset)
     }
-    if lang == "map" {
+    if let lang, mapFenceAliases.contains(lang), (isJson || open) {
         return .html(kind: "map", source: code, open: open, sourceStart: offset)
     }
     if !open, let lang, nexlyPlanFenceLanguages.contains(lang), let plan = parseNexlyPlan(code) {

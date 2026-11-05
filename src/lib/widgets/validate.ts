@@ -62,7 +62,13 @@ const UNCLOSED_TAIL_FENCE = /(?:^|\r?\n)[ \t]{0,8}(?:```|~~~)([a-zA-Z0-9][\w+-]*
 const GENERIC_WIDGET_FENCES = new Set(['json', 'jsonc', 'widget', 'genui', 'data', 'ui', 'gsui', 'card_ui', 'block'])
 
 /** Non-widget visual fences handled by dedicated client renderers. */
-const NON_WIDGET_VISUAL_FENCES = new Set(['mermaid', 'html', 'htm', 'web', 'webapp', 'svg', 'map'])
+const NON_WIDGET_VISUAL_FENCES = new Set([
+  'mermaid', 'flowchart', 'sequence', 'sequencediagram', 'classdiagram',
+  'statediagram', 'erdiagram', 'gitgraph', 'c4', 'architecture', 'diagram',
+  'html', 'htm', 'web', 'webapp', 'svg',
+  'map', 'maps', 'location', 'locations', 'places', 'route', 'directions', 'geo', 'geojson',
+  'sandbox', 'playground', 'runnable', 'livecode',
+])
 
 /** Fences whose non-JSON body can be CSV / TSV / Markdown pipe rows for a table widget. */
 const TABULAR_FENCES = new Set(['table', 'tables', 'datatable', 'data_table', 'csv', 'tsv', 'grid', 'spreadsheet', 'leaderboard', 'matrix'])
@@ -1598,12 +1604,20 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     // A ```search fence carries `results` for the same list — the probe watched
     // the live server send it, and the validator called it empty.
     let rawItems = asArray(p.items)
-    if (rawItems.length === 0 && asArray(p.results ?? p.images ?? p.links ?? p.files ?? p.products).length > 0) {
-      rawItems = asArray(p.results ?? p.images ?? p.links ?? p.files ?? p.products)
+    if (rawItems.length === 0 && asArray(p.results ?? p.images ?? p.links ?? p.files ?? p.products ?? p.gallery ?? p.videos ?? p.tracks).length > 0) {
+      rawItems = asArray(p.results ?? p.images ?? p.links ?? p.files ?? p.products ?? p.gallery ?? p.videos ?? p.tracks)
       repaired = true
     }
     if (rawItems.length === 0 && asString(p.url ?? p.src ?? p.image)) {
       rawItems = [{ url: p.url ?? p.src ?? p.image, thumb: p.thumb, title: p.title, caption: p.caption }]
+    }
+    if (
+      rawItems.length === 0 &&
+      asString(p.name ?? p.title ?? p.label ?? p.filename) &&
+      asString(p.price ?? p.snippet ?? p.subtitle ?? p.caption ?? p.description ?? p.domain ?? p.meta ?? p.size ?? p.mime ?? p.author)
+    ) {
+      rawItems = [p]
+      repaired = true
     }
     const items = rawItems
       .map((i) => {
@@ -1612,17 +1626,17 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
         return {
           url: asString(o.url ?? o.src ?? o.image ?? o.href),
           thumb: asString(o.thumb ?? o.thumbnail),
-          title: asString(o.title ?? o.name ?? o.label),
-          subtitle: asString(o.subtitle ?? o.author),
+          title: asString(o.title ?? o.name ?? o.label ?? o.filename),
+          subtitle: asString(o.subtitle ?? o.author ?? o.artist),
           caption: asString(o.caption ?? o.description ?? o.alt),
-          meta: asString(o.meta),
+          meta: asString(o.meta ?? o.size ?? o.duration),
           prompt: asString(o.prompt),
           domain: asString(o.domain ?? o.source),
           snippet: asString(o.snippet ?? o.summary ?? o.text),
-          price: asString(o.price),
-          badge: asString(o.badge ?? o.tag),
-          rating: asString(o.rating),
-          mime: asString(o.mime),
+          price: asString(o.price ?? o.cost),
+          badge: asString(o.badge ?? o.tag ?? o.status),
+          rating: asString(o.rating ?? o.score),
+          mime: asString(o.mime ?? o.format),
         }
       })
       .slice(0, 20)
@@ -1787,14 +1801,68 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       type = 'wizard'
       repaired = true
     }
-    const rawItems = asArray(p.items).length > 0 ? asArray(p.items) : asArray(p.events ?? p.tasks ?? p.cards ?? p.files ?? p.metrics)
+    const normAppItem = (raw: unknown): Record<string, unknown> => {
+      if (typeof raw === 'string') {
+        repaired = true
+        return { title: raw, label: raw }
+      }
+      const o = isObj(raw) ? raw : {}
+      const title = asString(o.title ?? o.label ?? o.text ?? o.task ?? o.event ?? o.name)
+      const subtitle = asString(o.subtitle ?? o.description ?? o.detail ?? o.assignee ?? o.time)
+      const badge = asString(o.badge ?? o.priority ?? o.tag ?? o.status ?? o.value)
+      const date = asString(o.date ?? o.day ?? o.when)
+      return {
+        ...o,
+        ...(title ? { title } : {}),
+        ...(subtitle ? { subtitle } : {}),
+        ...(badge ? { badge } : {}),
+        ...(date ? { date } : {}),
+      }
+    }
+    const rawItems = asArray(p.items).length > 0 ? asArray(p.items) : asArray(p.events ?? p.tasks ?? p.cards ?? p.files ?? p.metrics ?? p.kpis ?? p.results)
     if (!Array.isArray(p.items) && rawItems.length > 0) repaired = true
+
+    let rawCols = asArray(p.columns ?? p.lanes ?? p.boards ?? p.headers)
+    if (rawCols.length === 0 && isObj(p.columns)) {
+      rawCols = Object.entries(p.columns).map(([title, list]) => ({ title, items: asArray(list) }))
+      repaired = true
+    }
+    if (rawCols.length === 0 && type === 'kanban' && (Array.isArray(p.todo) || Array.isArray(p.doing) || Array.isArray(p.in_progress) || Array.isArray(p.done))) {
+      const lanes: Array<Record<string, unknown>> = []
+      if (Array.isArray(p.todo)) lanes.push({ title: 'To Do', items: p.todo })
+      if (Array.isArray(p.in_progress ?? p.doing)) lanes.push({ title: 'In Progress', items: (p.in_progress ?? p.doing) as unknown[] })
+      if (Array.isArray(p.done)) lanes.push({ title: 'Done', items: p.done })
+      rawCols = lanes
+      repaired = true
+    }
+    const columns = rawCols.map((c) => {
+      if (typeof c === 'string') return c
+      const o = isObj(c) ? c : {}
+      const colTitle = asString(o.title ?? o.name ?? o.label ?? o.status ?? o.header)
+      const colItems = asArray(o.items ?? o.cards ?? o.tasks).map(normAppItem)
+      return {
+        ...o,
+        ...(colTitle ? { title: colTitle } : {}),
+        items: colItems,
+      }
+    })
+    const steps = asArray(p.steps ?? p.stages).map((s) => {
+      if (typeof s === 'string') {
+        repaired = true
+        return { title: s, body: '' }
+      }
+      const o = isObj(s) ? s : {}
+      const title = asString(o.title ?? o.label ?? o.name ?? o.step)
+      const body = asString(o.body ?? o.description ?? o.detail ?? o.text)
+      return { ...o, ...(title ? { title } : {}), ...(body ? { body } : {}) }
+    })
+
     const widget = {
       type,
       title: asString(p.title),
-      steps: asArray(p.steps ?? p.stages),
-      columns: asArray(p.columns ?? p.lanes ?? p.boards),
-      items: rawItems.slice(0, LIMITS.maxAppItems),
+      steps,
+      columns,
+      items: rawItems.map(normAppItem).slice(0, LIMITS.maxAppItems),
       groups: asArray(p.groups ?? p.sections ?? p.categories),
       rows: asArray(p.rows ?? p.data),
       slots: asArray(p.slots ?? p.times),
@@ -2188,18 +2256,47 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       editor = 'sheet'
       repaired = true
     }
+    const columns = asArray(p.columns ?? p.headers).map((c) => (isObj(c) ? asString(c.label ?? c.title ?? c.name ?? c.key) : asString(c))).filter(Boolean).slice(0, 12)
+    const rows = asArray(p.rows ?? (Array.isArray(p.data) ? p.data : undefined))
+      .map((r) => {
+        if (Array.isArray(r)) return r.map((x) => asString(x)).slice(0, 12)
+        if (isObj(r) && columns.length > 0) return columns.map((col) => asString(r[col] ?? r[col.toLowerCase()]))
+        return []
+      })
+      .filter((r) => r.length > 0)
+      .slice(0, 60)
+    const cells: Record<string, string> = {}
+    const rawCells = isObj(p.cells) ? p.cells : isObj(p.data) ? p.data : {}
+    for (const [k, v] of Object.entries(rawCells)) {
+      cells[k.toUpperCase()] = asString(v)
+    }
+    if (editor === 'sheet' && Object.keys(cells).length === 0 && (columns.length > 0 || rows.length > 0)) {
+      let rowOffset = 1
+      if (columns.length > 0) {
+        columns.slice(0, 12).forEach((col, ci) => {
+          cells[`${String.fromCharCode(65 + ci)}1`] = col
+        })
+        rowOffset = 2
+      }
+      rows.slice(0, 11).forEach((row, ri) => {
+        row.slice(0, 12).forEach((val, ci) => {
+          cells[`${String.fromCharCode(65 + ci)}${ri + rowOffset}`] = val
+        })
+      })
+      repaired = true
+    }
     const widget = {
       editor,
       title: asString(p.title),
       // sheet
-      columns: asArray(p.columns).map((c) => asString(c)).slice(0, 12),
-      cells: isObj(p.cells) ? p.cells : isObj(p.data) ? p.data : {},
+      columns,
+      cells,
       // nodes / site / pivot
       nodes: asArray(p.nodes).slice(0, LIMITS.maxCanvasNodes),
       edges: asArray(p.edges).slice(0, 120),
       blocks: asArray(p.blocks).slice(0, 20),
       groups: asArray(p.groups).slice(0, 8),
-      rows: asArray(p.rows).slice(0, 60),
+      rows,
       // timeline editors
       tracks: asArray(p.tracks).slice(0, LIMITS.maxTracks),
       duration: Math.min(600, Math.max(1, asNumber(p.duration) ?? 60)),

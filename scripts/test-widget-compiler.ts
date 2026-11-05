@@ -806,6 +806,48 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   check('5-widget dashboard with compound fence names compiles all 5 widgets without dropping', fiveWidgets.widgets === 5)
 }
 
+// 47. PASS 3 NINE-PILLAR CAPABILITY PROOF — Kanban object-map/string-item
+// normalization, Spreadsheet columns+rows->cells seeding, single-item media
+// cards without URLs, and Mermaid/Map fence aliases preserved intact.
+{
+  const kanbanMap = compileWidgets({
+    reply: '```kanban\n{"title":"Sprint Board","columns":{"To Do":["Design schema","Write parser"],"In Progress":[{"task":"Wire iOS","priority":"P0"}],"Done":["Audit parity"]}}\n```',
+    userPrompt: 'kanban board',
+  })
+  const kanbanVal = validateWidget('app', '{"type":"kanban","title":"Sprint","columns":{"To Do":["Design"],"Done":["Ship"]}}')
+  check(
+    'kanban with object-map columns and string cards normalizes to app/kanban',
+    kanbanMap.widgets === 1 &&
+      kanbanVal.ok &&
+      ((kanbanVal.widget.columns as Array<{ title: string; items: Array<{ title: string }> }>)[0]?.items[0]?.title === 'Design')
+  )
+
+  const sheetFromRows = validateWidget(
+    'editor',
+    '{"editor":"sheet","title":"Budget","headers":["Item","Cost"],"data":[["Hosting","120"],["API","80"],["Total","=SUM(B2:B3)"]]}'
+  )
+  const seededCells = (sheetFromRows.ok ? (sheetFromRows.widget.cells as Record<string, string>) : {}) ?? {}
+  check(
+    'spreadsheet with headers+data auto-populates A1/B1..B4 formula cells',
+    sheetFromRows.ok && seededCells.A1 === 'Item' && seededCells.B2 === '120' && seededCells.B4 === '=SUM(B2:B3)'
+  )
+
+  const singleProduct = compileWidgets({
+    reply: '```product\n{"name":"AirPods Pro 2","price":"$249","rating":"4.8","description":"Adaptive Audio + USB-C"}\n```',
+    userPrompt: 'product card',
+  })
+  check('single-item ```product without items[] or url compiles to ```media', singleProduct.widgets === 1 && singleProduct.text.startsWith('```media'))
+
+  const mermaidAndMapAliases = compileWidgets({
+    reply: '```flowchart\ngraph TD\n  A-->B\n```\n\n```location\n{"title":"Tokyo Tower","lat":35.6586,"lng":139.7454}\n```',
+    userPrompt: 'diagram and location',
+  })
+  check(
+    '```flowchart and ```location fences survive compiler untouched for client diagram/map renderers',
+    mermaidAndMapAliases.text.includes('```flowchart') && mermaidAndMapAliases.text.includes('```location')
+  )
+}
+
 console.log(`\n${passed} passed, ${failures.length} failed`)
 if (failures.length) {
   for (const f of failures) console.log(`  - ${f}`)

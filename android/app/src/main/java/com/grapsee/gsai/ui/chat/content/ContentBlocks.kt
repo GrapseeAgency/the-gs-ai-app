@@ -725,6 +725,20 @@ val HTML_LANGUAGES = setOf(
     "svg"
 )
 
+private val MERMAID_FENCE_ALIASES = setOf(
+    "mermaid", "flowchart", "sequence", "sequencediagram", "classdiagram",
+    "statediagram", "erdiagram", "gitgraph", "c4", "architecture", "diagram",
+    "mindmap", "gantt"
+)
+
+private val MAP_FENCE_ALIASES = setOf(
+    "map", "maps", "location", "locations", "places", "route", "directions", "geo", "geojson"
+)
+
+private val SANDBOX_FENCE_ALIASES = setOf(
+    "sandbox", "playground", "runnable", "livecode"
+)
+
 /** A closed fence in the mermaid language is a first-class diagram block;
  *  a widget-language fence is a first-class widget block (JSON parsed at render
  *  time, so a malformed payload degrades to a code block); an html-language
@@ -740,15 +754,14 @@ private fun fenceToBlock(language: String?, code: String, open: Boolean, offset:
         null
     }
     return when {
-        // A mind map in a ```mindmap fence is mermaid syntax — the live model
-        // sends exactly that. Same for a ```gantt fence that holds mermaid's
-        // gantt syntax (dateFormat/section lines) instead of a JSON payload.
-        // Rendering either as source code wastes the fence.
-        (language.equals("mermaid", ignoreCase = true) ||
-            (language.equals("mindmap", ignoreCase = true) && !isJson) ||
-            (language.equals("gantt", ignoreCase = true) && !isJson)) && !open ->
+        // Mermaid diagrams — including ```mindmap, ```gantt, ```flowchart,
+        // ```sequence, ```architecture when holding Mermaid syntax rather than JSON.
+        (lang == "mermaid" || (lang != null && lang in MERMAID_FENCE_ALIASES && !isJson)) && !open ->
             Block.MermaidBlock(code, offset)
-        lang == "map" -> Block.HtmlBlock("map", code, open, offset)
+        lang != null && lang in MAP_FENCE_ALIASES && (isJson || open) ->
+            Block.HtmlBlock("map", code, open, offset)
+        lang != null && lang in SANDBOX_FENCE_ALIASES ->
+            Block.HtmlBlock("sandbox", code, open, offset)
         // `schedule`, `timetable`, `itinerary`, `routine` and `day` are natural
         // fence names for this card. Only a payload with timed rows becomes a
         // plan; a real interactive ```schedule app still routes to its widget.

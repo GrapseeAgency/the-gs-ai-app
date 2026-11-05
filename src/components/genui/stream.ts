@@ -25,6 +25,20 @@ export type Segment =
 const GENERIC_WIDGET_FENCES = new Set(['json', 'jsonc', 'widget', 'genui', 'data', 'ui', 'gsui', 'card_ui', 'block'])
 const PLAN_FENCES = new Set(['plan', 'schedule', 'timetable', 'itinerary', 'routine', 'day'])
 const HTML_FENCES = new Set(['html', 'htm', 'web', 'webapp', 'page', 'interactive', 'miniapp'])
+const MERMAID_FENCES = new Set([
+  'mermaid', 'flowchart', 'sequence', 'sequencediagram', 'classdiagram',
+  'statediagram', 'erdiagram', 'gitgraph', 'c4', 'architecture', 'diagram',
+  'mindmap', 'gantt',
+])
+const MAP_FENCES = new Set(['map', 'maps', 'location', 'locations', 'places', 'route', 'directions', 'geo', 'geojson'])
+
+function isMapPayload(obj: Record<string, unknown> | null): boolean {
+  if (!obj) return false
+  if (Array.isArray(obj.pins ?? obj.markers ?? obj.waypoints)) return true
+  const lat = Number(obj.lat ?? obj.latitude)
+  const lng = Number(obj.lng ?? obj.lon ?? obj.longitude)
+  return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+}
 
 /** Parse a (possibly still-streaming) answer into segments. */
 export function parseStream(text: string): Segment[] {
@@ -86,9 +100,9 @@ export function parseStream(text: string): Segment[] {
     const trimmedBody = body.trim()
     let isJsonBody = trimmedBody.startsWith('{') || trimmedBody.startsWith('[')
 
-    // Mermaid diagrams, including ```mindmap or ```gantt when the body is
-    // Mermaid syntax rather than a JSON widget payload.
-    if (lower === 'mermaid' || ((lower === 'mindmap' || lower === 'gantt') && !isJsonBody && complete)) {
+    // Mermaid diagrams, including ```mindmap, ```gantt, ```flowchart, etc. when
+    // the body is Mermaid syntax rather than a JSON widget payload.
+    if (lower === 'mermaid' || (MERMAID_FENCES.has(lower) && !isJsonBody && complete)) {
       segments.push({ kind: 'mermaid', source: trimmedBody })
       continue
     }
@@ -100,7 +114,7 @@ export function parseStream(text: string): Segment[] {
       segments.push({ kind: 'html', source: trimmedBody })
       continue
     }
-    if (lower === 'map') {
+    if (MAP_FENCES.has(lower) && isJsonBody) {
       const payload = safeJson(body) ?? {}
       segments.push({ kind: 'map', payload })
       continue
@@ -121,6 +135,13 @@ export function parseStream(text: string): Segment[] {
     }
     if (!kind && isJsonBody && complete) {
       kind = inferWidgetKind(effectiveBody)
+      if (!kind) {
+        const parsed = safeJson(effectiveBody)
+        if (isMapPayload(parsed)) {
+          segments.push({ kind: 'map', payload: parsed ?? {} })
+          continue
+        }
+      }
     }
 
     if (kind && (isJsonBody || !complete)) {

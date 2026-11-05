@@ -1002,6 +1002,53 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
                 m["cards"] = JsonArray(normCards)
             }
         }
+        "app" -> {
+            fun normAppItem(el: JsonElement): JsonObject? = when (el) {
+                is JsonPrimitive -> el.contentOrNull?.let { JsonObject(mapOf("title" to JsonPrimitive(it))) }
+                is JsonObject -> {
+                    val im = el.toMutableMap()
+                    if ("title" !in im) (el["label"] ?: el["text"] ?: el["task"] ?: el["event"] ?: el["name"])?.let { im["title"] = it }
+                    if ("subtitle" !in im) (el["description"] ?: el["detail"] ?: el["assignee"] ?: el["time"])?.let { im["subtitle"] = it }
+                    if ("badge" !in im) (el["priority"] ?: el["tag"] ?: el["status"] ?: el["value"])?.let { im["badge"] = it }
+                    if ("date" !in im) (el["day"] ?: el["when"])?.let { im["date"] = it }
+                    JsonObject(im)
+                }
+                else -> null
+            }
+            val rawItems = (m["items"] ?: m["events"] ?: m["tasks"] ?: m["cards"] ?: m["files"] ?: m["metrics"] ?: m["kpis"]) as? JsonArray
+            if (rawItems != null) {
+                m["items"] = JsonArray(rawItems.mapNotNull(::normAppItem))
+            }
+            val rawColsEl = m["columns"] ?: m["lanes"] ?: m["boards"]
+            val rawCols: List<JsonObject>? = when (rawColsEl) {
+                is JsonObject -> rawColsEl.entries.map { (k, v) ->
+                    JsonObject(mapOf("title" to JsonPrimitive(k), "items" to (v as? JsonArray ?: JsonArray(emptyList()))))
+                }
+                is JsonArray -> rawColsEl.mapNotNull { ce ->
+                    when (ce) {
+                        is JsonPrimitive -> ce.contentOrNull?.let { JsonObject(mapOf("title" to JsonPrimitive(it))) }
+                        is JsonObject -> ce
+                        else -> null
+                    }
+                }
+                else -> null
+            }
+            if (rawCols != null) {
+                m["columns"] = JsonArray(rawCols.map { co ->
+                    val cm = co.toMutableMap()
+                    if ("title" !in cm) (co["name"] ?: co["label"] ?: co["status"] ?: co["header"])?.let { cm["title"] = it }
+                    val colItems = (co["items"] ?: co["cards"] ?: co["tasks"]) as? JsonArray
+                    if (colItems != null) {
+                        cm["items"] = JsonArray(colItems.mapNotNull(::normAppItem))
+                    }
+                    JsonObject(cm)
+                })
+            }
+        }
+        "editor" -> {
+            if ("columns" !in m && m["headers"] is JsonArray) m["columns"] = m["headers"]!!
+            if ("rows" !in m && m["data"] is JsonArray) m["rows"] = m["data"]!!
+        }
     }
 
     return JsonObject(m).toString()

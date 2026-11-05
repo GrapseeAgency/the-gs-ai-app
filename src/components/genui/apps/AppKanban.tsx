@@ -10,8 +10,23 @@ import { EmptyState } from '../primitives/EmptyState'
 /** Kanban — tap a card to advance it across the columns. */
 export function AppKanban({ payload }: { payload: AppPayload }) {
   const { accent, theme } = useWidgetIdentity()
-  const columns = (payload.columns ?? []).slice(0, 4)
-  const [lanes, setLanes] = useState(() => columns.map((c) => (c.items ?? []).map((it) => ({ ...it }))))
+  const columns = (payload.columns ?? []).slice(0, 4).map((rawCol, idx) => {
+    const c = (rawCol && typeof rawCol === 'object' ? rawCol : {}) as Record<string, unknown>
+    const title = String(c.title ?? c.name ?? c.label ?? c.status ?? `Column ${idx + 1}`)
+    const rawItems = Array.isArray(c.items ?? c.cards ?? c.tasks) ? (c.items ?? c.cards ?? c.tasks) as unknown[] : []
+    const items = rawItems.map((it) => {
+      if (typeof it === 'string') return { title: it, subtitle: undefined as unknown, badge: undefined as unknown }
+      const o = (it && typeof it === 'object' ? it : {}) as Record<string, unknown>
+      return {
+        ...o,
+        title: String(o.title ?? o.label ?? o.text ?? o.task ?? o.name ?? ''),
+        subtitle: o.subtitle ?? o.description ?? o.assignee ?? o.detail,
+        badge: o.badge ?? o.priority ?? o.tag ?? o.status,
+      }
+    })
+    return { title, items }
+  })
+  const [lanes, setLanes] = useState(() => columns.map((c) => c.items.map((it) => ({ ...it }))))
   if (!columns.length) return <EmptyState label="No columns" />
   const advance = (col: number, item: number) => {
     if (col >= lanes.length - 1) return

@@ -112,10 +112,29 @@ function rangeValues(a: string, b: string, get: (ref: string) => string, seen: S
 function SheetEditor({ payload }: { payload: EditorPayload }) {
   const { accent, theme } = useWidgetIdentity()
   const [cells, setCells] = useState<Record<string, string>>(() => {
-    const seed: Record<string, string> = { B1: '120', B2: '180', B3: '95', B4: '=SUM(B1:B3)', B5: '=AVG(B1:B3)', C1: '=B4*1.2' }
-    // apply model-seeded cells on top
-    if (payload.cells && typeof payload.cells === 'object') Object.assign(seed, payload.cells as Record<string, string>)
-    return seed
+    const providedCells = payload.cells && typeof payload.cells === 'object' ? (payload.cells as Record<string, string>) : {}
+    if (Object.keys(providedCells).length > 0) return { ...providedCells }
+    const cols = Array.isArray(payload.columns) ? payload.columns : []
+    const rows = Array.isArray(payload.rows) ? payload.rows : []
+    if (cols.length > 0 || rows.length > 0) {
+      const fromTable: Record<string, string> = {}
+      let rowOffset = 1
+      if (cols.length > 0) {
+        cols.slice(0, COLS).forEach((col, ci) => {
+          fromTable[`${colName(ci)}1`] = String(col ?? '')
+        })
+        rowOffset = 2
+      }
+      rows.slice(0, ROWS - rowOffset + 1).forEach((row, ri) => {
+        if (Array.isArray(row)) {
+          row.slice(0, COLS).forEach((val, ci) => {
+            fromTable[`${colName(ci)}${ri + rowOffset}`] = String(val ?? '')
+          })
+        }
+      })
+      return fromTable
+    }
+    return { B1: '120', B2: '180', B3: '95', B4: '=SUM(B1:B3)', B5: '=AVG(B1:B3)', C1: '=B4*1.2' }
   })
   const [editing, setEditing] = useState<string | null>(null)
   const get = (ref: string) => cells[ref] ?? ''
