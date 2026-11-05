@@ -238,3 +238,61 @@ recorded in the session; to be resolved before implementation.
 ## Cumulative research index (6 passes)
 
 1. Layers + SotA landscape · 2. Streaming mechanics + judgment matrix · 3. A2UI/OpenUI Lang/SwiftUI SDUI · 4. A2UI spec internals + Artifacts + official Compose renderer + SDUI veterans · 5. Design tokens + DSL math + AG-UI + a11y · 6. Compose/SwiftUI performance contracts + layout science + security.
+
+---
+
+# PASS 7 — the glass we render INTO + the reveal + the evidence (2026-11-05)
+
+## Material 3 Expressive (Android target API surface)
+
+- **MotionScheme spring physics replaces easing**: 6 tokens — `fastEffectsSpec` (~150ms, stiff, minimal overshoot: toggles/checkboxes), `defaultEffectsSpec` (~300ms: button presses), `slowEffectsSpec` (~500ms, gentle bounce: emphasis), and the spatial trio for position/size (navigation, sheets, hero transitions). Springs = (dampingRatio, stiffness); never `tween()` except color/opacity.
+- `MaterialExpressiveTheme` (NOT MaterialTheme), `expressiveLightColorScheme()/expressiveDarkColorScheme()`, everything behind `@OptIn(ExperimentalMaterial3ExpressiveApi::class)`. Dynamic color needs API 31+ — expressive scheme is the fallback.
+- Discipline from Google's own mistake list: **emphasized typography reserved for hero/CTA moments** (overuse defeats it); paired color roles only (container + onContainer); stable keys on lazy items; `graphicsLayer` not `scale()`/`offset()`; **reduced-motion → snap() fallback** (LocalReduceMotion).
+- GSUI renderer contract: every block reveal/transition goes through MotionScheme tokens, never ad-hoc durations; emphasis budget enforced in the judgment layer (≤1 emphasized moment per block).
+
+## iOS Liquid Glass (iOS 26+ API surface)
+
+- `glassEffect(.regular, in: shape)` — regular variant default, capsule default shape; `.clear` ONLY over media with a dimming layer (~35% dark); `.identity` opt-out. Apply LAST in modifier chain. `GlassEffectContainer(spacing:)` for blending/morphing of nearby glass — **glass cannot sample other glass**, ungrouped glass stacks incorrectly. `glassEffectID` + `@Namespace` for morph transitions; `.buttonStyle(.glass/.glassProminent)`; `.interactive()` for touch feedback; `.tint()` semantic-only; `ConcentricRectangle` for nested corners; `.scrollEdgeEffectStyle` keeps controls legible over scrolling content.
+- UIKit parity exists (UIGlassEffect, UIGlassContainerEffect, UIButton.Configuration.glass()).
+- HIG: **glass lives on the chrome/control layer, NOT the content layer** — legibility is the #1 criticism of iOS 26. Test under Reduce Transparency + Increase Contrast.
+- GSUI consequence: block bodies are content (solid/tonal surfaces); glass is reserved for block chrome, action chips, and floating controls. This matches our existing GsGlassControls direction and keeps 4.5:1 contrast enforceable.
+
+## Streaming reveal — the patterns for structured output
+
+- Do NOT token-stream structured output — partial JSON/DSL looks broken. Pattern: **structured skeleton** (empty shell of the expected block, shimmering) at fence-open, **swap content on first VALID parse**, not per token. A2UI 0.9 calls this "resilient streaming" (incremental parse-and-heal); Vercel speculative RSC renders the tool skeleton the moment the tool NAME parses, then optimistically hydrates as args stream.
+- Skeleton must match expected shape (<100ms appearance, subtle shimmer); phase-based status lines for tool gaps; stop button preserves partial; buffered re-parse of accumulated source each chunk (same trick our fence parser already uses); a11y: mark skeleton aria-busy/hidden, announce on swap (→ liveRegion from pass 5).
+- GSUI: our line grammar gives a natural unit — skeleton at fence-open (`gsui` + first component id), progressive per-line commit as each line parses, block-complete polish pass. Never re-flow already-committed lines (layout stability).
+
+## The evidence that this whole category is right (and where it wins/loses)
+
+- ACL 2026 Findings (arXiv 2508.19227), 428 human raters, 100 UIX prompts: **GenUI 84% / tie 4% / chat 12%** vs Claude 3.7 chat UI; aesthetics 89%, satisfaction 87%, usability +151%; biggest domain win: data analysis & visualization **93.8%**; weakest: advanced AI/ML text-heavy (50%) — GSUI judgment layer must keep text-dominant answers as prose. 380 real user queries: 50.8% win / 41.1% loss. **86.5% rated the SAME content as more credible/professional when structured** — layout itself manufactures trust. Ablation: static rubric −17%, no-iteration −14% → rubric quality > iteration count.
+- MLLM-as-UI-Judge (arXiv 2510.08783): multimodal LLMs predict human UI ratings within ±1 Likert point 72–77% (Claude best); reliable for coarse gates, not fine calls; models overestimate Ease-of-Use, underestimate Aesthetics/Comfort. → Our M4 self-judgment can use rubric-scored passes but human fixture review (M5) stays the arbiter.
+
+# PASS 8 — the operational last mile (2026-11-05)
+
+## RTL / i18n / bidirectional text
+
+- Rule: **logical start/end everywhere, never left/right** — layout mirrors for Arabic/Hebrew; Compose + SwiftUI do most of it automatically IF no directional hardcoding. Directional icons (back/forward) mirror; content glyphs (clocks, checkmarks, logos) never do.
+- Bidi isolation: LTR identifiers/URLs/numbers inside RTL text need isolation (Unicode FSI/PDI, platform-native spans) or punctuation "jumps" sides. Keep code/GSUI blocks directionally stable (LTR) while prose follows locale direction.
+- Test with pseudolocales: Android `ar-XB`, Xcode RTL pseudolanguage. Plan for 30–50% text expansion; charts/media don't auto-flip (axes stay LTR unless semantics demand otherwise).
+- GSUI: grammar already stores text as quoted strings → platform text stacks handle bidi; renderer-level rule: GSUI blocks lay out leading/trailing, never left/right; numbers/dates formatted by platform locale, never baked into strings by the model.
+
+## QA matrix reality (M5 planning)
+
+- 3-tier model: emulators in CI (every commit) → cloud device farm for release-candidate matrix → 2–3 local reference devices (current Pixel, current + older iPhone, one mid-range Android) for exploratory. Matrix built from analytics, reviewed quarterly, drop configs <2% share. Fixed 8-device matrix covering 90% of users is a proven pattern.
+- Visual regression: semantic/ perceptual diffing tools (Applitools/Percy class) beat pixel diffing across OEM skins; cost envelope $500–5k/mo for cloud farms.
+- For GSUI M5: fixture-driven three-way audit (parser TS ↔ Compose ↔ SwiftUI over the same corpus) is the cheap deterministic core; device matrix only for the chrome/glass layers.
+
+## MCP Apps (SEP-1865) — the external-exposure path, studied, not adopted
+
+- Final Jan 26 2026: first official MCP extension (`io.modelcontextprotocol/ui`), co-authored Anthropic + OpenAI. Server publishes a `ui://` resource (HTML, `text/html;profile=mcp-app`), tool links via `_meta.ui.resourceUri`; host renders in a MANDATORY sandboxed iframe; CSP built from server-declared domains, default = deny all network; JSON-RPC-over-postMessage bridge; `structuredContent` kept out of model context; tool ≠ UI; no persistence beyond session.
+- Takeaway: it's HTML-in-an-iframe because it must be cross-platform web — exactly the design we are NOT doing (native, no eval). But two of its contract ideas are ours to steal: (1) **tool result ≠ UI payload** — the model-facing text stays useful when the UI can't render (our honesty-labelling fallback); (2) **structured data channel kept out of the model's context** to save tokens. If GS ever exposes MCP tools externally, a GSUI block can be packaged as a ui:// resource that renders our DSL — the DSL is the durable artifact, the iframe would just be one more renderer.
+
+## Offline & caching — chat's natural advantage
+
+- SDUI literature: cache last-known-good UI config (SQLite keyed by screen), stale-while-revalidate, separate cacheable structure from volatile data; unknown-component policy = skip silently (non-critical) / placeholder / update-required.
+- GSUI's form is its own offline story: **the DSL source is the cache**. Message records already persist the raw fenced block; re-parse + re-render is deterministic offline with zero server. No component-URL hydration, no remote templates — the entire failure mode class of webview SDUI offline doesn't exist here. Renderer version drift is the only real risk → fixture corpus + version field in the fence header covers it.
+
+## Cumulative research index (8 passes — saturation)
+
+1. Layers + SotA · 2. Streaming mechanics + judgment · 3. A2UI/OpenUI/SwiftUI SDUI · 4. A2UI internals + Artifacts + official renderer + SDUI veterans · 5. Tokens + DSL math + AG-UI + a11y · 6. Perf contracts + layout science + security · 7. M3 Expressive + Liquid Glass + reveal patterns + evidence base · 8. RTL/i18n + QA matrix + MCP Apps + offline.
