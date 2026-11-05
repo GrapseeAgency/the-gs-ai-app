@@ -130,3 +130,50 @@ User is supplying the finished UI designs ("the perfect UI design we made") so
 the renderer and the judgment prompt can target the REAL design system rather
 than invented ones. Scope questions (surfaces, free-form vs catalog, staging)
 recorded in the session; to be resolved before implementation.
+
+---
+
+# PASS 4 — deep spec read: A2UI internals, Artifacts, official Compose renderer, SDUI veterans (2026-11-05)
+
+## A2UI v1.0 spec body (a2ui_protocol.md, read into §schemas)
+
+- **Transport contract (4 requirements):** ordered delivery (stateful updates corrupt out of order), explicit message framing (JSONL newlines / WS frames / SSE events), metadata channel (capabilities exchange + data-model sync), optional bidirectional return for `action`.
+- **Dynamic types are the core abstraction:** every bindable property is `Dynamic*` = literal | `{"@path": …}` (JSON-Pointer data binding) | `{"@call": …}` (function call). The renderer resolves them against the surface's data model — UI structure is SEPARATE from data.
+- **ChildList templates:** a container's children can be a static id array OR a template `{componentId, path}` that instantiates one component per data-model list item. (Server-driven list rendering without repeating nodes.)
+- **AccessibilityAttributes are protocol-level:** label, description, live (off/polite/assertive), hidden — attached to ANY component via ComponentCommon. Accessibility is not a per-platform afterthought in the spec.
+- **Catalog swappability:** the envelope `$ref`s `catalog.json#/$defs/anyComponent`; mapping that placeholder to the Basic Catalog OR your own file is the entire customization story. Same envelope, your design system.
+
+## Claude Artifacts — the OTHER philosophy (codegen in a sandbox)
+
+- Side panel; each artifact = single-file HTML/React running in a sandboxed iframe on a SEPARATE ORIGIN (claudeusercontent.com), CSP-locked network, frozen library set (React, Tailwind, Recharts, shadcn, Lucide, D3, Three.js, lodash, mathjs, Papaparse), host↔artifact via window.postMessage; artifacts API lets the artifact call Claude itself; 20 MB persistent storage on published artifacts; MCP connections since Oct 2025.
+- Mobile: smaller iframe inside the chat surface + fullscreen on demand.
+- GS is deliberately in the OTHER camp (declarative → native), which on mobile is the right camp: native perf, native accessibility, the glass design system, no webview flash. But Artifacts teach: auto-trigger heuristics (≈15+ lines, self-contained, reusable), iterate-in-place (natural-language edit re-renders), and the split-origin security story.
+
+## Official Jetpack Compose A2UI renderer (developer.android.com, Sept 2026) — CONCRETE API
+
+- `A2uiMessageParser()` + `A2uiMessageProcessor(catalogs=[…])` in a ViewModel; `processor.activeSurfaces: StateFlow`; render with `A2uiSurface(surfaceModel)` keyed by `surface.id`.
+- Component state machine: `Loading / Error / Success` per component; a **readiness evaluator** holds components until their dynamic data bindings resolve — progressive rendering is a first-class renderer feature.
+- `materialA2uiBasicCatalogV1()` ships Material 3; a custom catalog fills 5 slots with no Material default: **Image, Video, AudioPlayer, UrlOpener, MessageFormatter**. Custom components register alongside.
+- **`catalog.toJsonSchemaString()` → embedded in the system prompt.** The catalog IS the prompt (same as our widgets/prompt.ts discipline). joreilly.dev's working example: fenced ```a2ui JSONL array, flat component list, exactly one `id: "root"`, literal preformatted strings ("don't use ${} expressions"), button action = `{event: {name, context}}`.
+- Two-way: `A2uiActionInterceptor` + `outboundEvents` flow (button taps, client errors) back to the agent — the self-correction loop is officially wired.
+- IMPLICATION for GS: we COULD adopt Google's renderer as the Compose backbone (custom catalog = our glass components + widget composites) instead of a parallel parser/renderer. Decision point for the design phase — build-on vs build-parallel. Build-on buys maintenance + protocol credibility; parallel buys line-DSL token efficiency + full control.
+
+## SDUI veterans (Airbnb Ghost Platform, Lyft Canvas, DoorDash, Shopify, Netflix — and Spotify's corpse)
+
+- **Ship the fallback renderer FIRST** — before any real component. Unknown component/version without a fallback = crash on old clients (Shopify: "the server ships the fallback").
+- **Version negotiation lives on the SERVER:** client sends its max schema version; server downgrades/omits. Never bury compat logic client-side.
+- **Semantic component names win** (Lyft: RideOptionCard, PromoBanner — not Row/Column): more types, but they map to product concepts the model and the metrics understand. **Pure-generic primitives KILLED Spotify's HubFramework** — over-abstraction is a documented death cause. → GSUI's mix (generic primitives + semantic composites = our widget kinds) matches the survivors exactly.
+- **Sections are screen-independent** (Airbnb): the same PriceBreakdownSection renders on checkout and trip details. Our widget kinds + GSUI cards should behave the same — one definition, any layout slot.
+- **Observability before velocity** (Netflix): every unknown-component fallback, every validation failure, every clamp = a metric. Build the counters when the renderer lands, not after.
+- **Payload size is a feature:** Lyft chose protobuf for 40–60% smaller payloads; Airbnb paginates UI (deferred responses, above-the-fold first). Our line-DSL + caps serve the same goal inside the chat stream.
+- **QA is THE cost** (Lyft, Just Eat): server-driven variations need multi-device test matrices → our three-way fixture corpus + render-proof audits are the right muscle memory; keep them mandatory.
+- Adoption pattern: migrate ONE component behind a flag, ramp 1→10→100%, watch crash-free rate + render latency; add versioning before screen #2, observability before screen #3.
+
+## Design deltas this pass forces (recorded, not yet decided — awaiting user designs)
+
+1. Build-on-Compose-A2UI vs parallel GSUI renderer — now a real, researched fork.
+2. Accessibility fields belong in the DSL grammar (v1), mirroring A2UI ComponentCommon.
+3. The prompt embeds the machine-derived schema (catalog IS the prompt) — keep, deepen.
+4. Fallback/isolation renderer is milestone-zero, not an afterthought.
+5. Telemetry counters (drops, clamps, unknown components) ship WITH the renderer.
+6. Semantic+generic hybrid vocabulary confirmed as the survivor pattern.
