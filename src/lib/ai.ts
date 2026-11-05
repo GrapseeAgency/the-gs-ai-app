@@ -66,6 +66,8 @@ export const SYSTEM_PROMPT = `You are GS. Answer the user's actual request. Use 
 export { WIDGET_PROMPT } from './widgets/prompt'
 import { WIDGET_PROMPT } from './widgets/prompt'
 
+export { PROSE_PROMPT } from './prose-prompt'
+
 /**
  * PHASE 7 vision grounding, REWRITTEN by the operator's 2026-10-14 directive
  * (TASK 3). The old rule 2 literally taught the model to hedge ("mark it as
