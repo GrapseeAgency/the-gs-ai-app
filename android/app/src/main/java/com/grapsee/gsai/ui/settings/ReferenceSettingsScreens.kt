@@ -1061,7 +1061,15 @@ fun MemorySettingsScreen(
         }
 
         // ---- Recent Memories -------------------------------------------
-        RefGroupHeader("Recent Memories")
+        // "View all" is back, and it has somewhere to go: the Saved Library
+        // page. These four rows are the newest four of that same table, so
+        // each one opens its own item page instead of being a dead label —
+        // and the caption reaches the rest of them.
+        RefGroupHeader(
+            title = "Recent Memories",
+            caption = if (items.isEmpty()) null else "View all",
+            onCaptionClick = if (items.isEmpty()) null else ({ onNavigate(GsRoutes.LIBRARY) }),
+        )
         RefCard(role = GsGlassRole.CardLight) {
             if (items.isEmpty()) {
                 Row(
@@ -1086,6 +1094,9 @@ fun MemorySettingsScreen(
                     RefNavRow(
                         title = item.title,
                         subtitle = "\u201C" + item.content.take(48) + "\u2026\u201D",
+                        // A memory you can see but cannot open is the dead
+                        // end this page used to end in.
+                        onClick = { onNavigate(GsRoutes.libraryItem(item.id)) },
                         leading = { RefWellTile(kindGlyph(item.kind), kindTone(item.kind), 28.dp) },
                         trailing = {
                             Text(
@@ -1106,8 +1117,12 @@ fun MemorySettingsScreen(
         RefCard(role = GsGlassRole.CardLight) {
             RefNavRow(
                 title = "Edit what Nexly remembers",
-                subtitle = "Remove or update specific memories",
-                onClick = { showItems = true },
+                subtitle = "Open any memory to read or remove it",
+                // Editing a memory means opening it: the library page shows
+                // the whole text and deletes one row. It used to open the same
+                // dialog as the row below it, so two rows named two different
+                // verbs and did one identical thing.
+                onClick = { onNavigate(GsRoutes.LIBRARY) },
                 leading = { RefWellTile(GsIcons.PenLine, GsWellTone.Peach, 28.dp) },
             )
             RefRowDivider()

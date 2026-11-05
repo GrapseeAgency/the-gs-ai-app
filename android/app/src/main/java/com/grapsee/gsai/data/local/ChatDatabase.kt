@@ -310,6 +310,11 @@ interface SavedItemDao {
     @Query("SELECT * FROM saved_items ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<SavedItemEntity>>
 
+    /** The library item page: one row, by id, so a deep link or a row tap
+     *  renders the saved text itself rather than filtering the whole table. */
+    @Query("SELECT * FROM saved_items WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): SavedItemEntity?
+
     @Query("DELETE FROM saved_items WHERE id = :id")
     suspend fun delete(id: String)
 

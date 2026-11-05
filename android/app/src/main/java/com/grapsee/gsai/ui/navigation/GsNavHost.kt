@@ -46,6 +46,8 @@ import com.grapsee.gsai.ui.chat.ChatSearchScreen
 import com.grapsee.gsai.ui.chat.ChatsScreen
 import com.grapsee.gsai.ui.profile.ProfilePersonalizationScreen
 import com.grapsee.gsai.ui.profile.ProfileScreen
+import com.grapsee.gsai.ui.library.LibraryItemScreen
+import com.grapsee.gsai.ui.library.SavedLibraryScreen
 import com.grapsee.gsai.ui.settings.AboutSettingsScreen
 import com.grapsee.gsai.ui.settings.AccessibilitySettingsScreen
 import com.grapsee.gsai.ui.settings.AppPermissionsScreen
@@ -521,6 +523,22 @@ fun GsNavHost(
         composable(GsRoutes.SETTINGS_MEMORY) {
             MemorySettingsScreen(onBack = back, onNavigate = open)
         }
+        composable(GsRoutes.LIBRARY) {
+            SavedLibraryScreen(
+                onBack = back,
+                onOpenItem = { id -> open(GsRoutes.libraryItem(id)) },
+                onStartChat = { open(GsRoutes.chat(null)) },
+            )
+        }
+        composable(
+            route = GsRoutes.LIBRARY_ITEM,
+            arguments = listOf(navArgument(GsRoutes.ARG_ITEM) { type = NavType.StringType }),
+        ) { entry ->
+            LibraryItemScreen(
+                itemId = entry.arguments?.getString(GsRoutes.ARG_ITEM).orEmpty(),
+                onBack = back,
+            )
+        }
         composable(GsRoutes.SETTINGS_VOICE) {
             VoiceSettingsScreen(onBack = back, onNavigate = open)
         }
@@ -604,7 +622,7 @@ fun GsNavHost(
                 onBack = back,
                 onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) },
                 onOpenArchive = { open(GsRoutes.CHAT_ARCHIVE) },
-                onOpenSaved = { open(GsRoutes.SETTINGS_MEMORY) },
+                onOpenSaved = { open(GsRoutes.LIBRARY) },
                 onViewAllChats = { open(GsRoutes.CHATS) },
                 onNewChat = { open(GsRoutes.chat(null)) },
             )

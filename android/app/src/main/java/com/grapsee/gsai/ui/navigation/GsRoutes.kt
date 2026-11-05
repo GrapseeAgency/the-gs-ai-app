@@ -24,6 +24,13 @@ object GsRoutes {
     const val EXPLORE_TOOL = "explore/tool/{toolId}"
     const val ARG_TOOL = "toolId"
     const val CHATS = "chats"
+    /** Saved Library — every row `saveToLibrary` has ever written. Until this
+     *  page existed, saving was a one-way door: the rows were stored, exported
+     *  and cleared, but never shown. */
+    const val LIBRARY = "library"
+    /** One saved item, at full length. The list truncates at 72 characters. */
+    const val LIBRARY_ITEM = "library/{itemId}"
+    const val ARG_ITEM = "itemId"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
     // Reference settings architecture — each row in the hub is a real
@@ -108,6 +115,8 @@ object GsRoutes {
     fun collection(collectionId: String): String = "explore/collection/${Uri.encode(collectionId)}"
 
     fun tool(toolId: String): String = "explore/tool/${Uri.encode(toolId)}"
+
+    fun libraryItem(itemId: String): String = "library/${Uri.encode(itemId)}"
 
     /**
      * Open a conversation. [prompt] prefills the composer; [autoSend] sends it

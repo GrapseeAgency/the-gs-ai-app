@@ -52,7 +52,10 @@ struct ProfilePreferencesView: View {
                 }
                 divider
                 navRow("Language", "English (UK) — the only language this build ships", glyph: "language", tone: .mint, isLast: true) {
-                    router.path.append(.responseStyle)
+                    // The hub's Language row opens the Language page; this one
+                    // opened Response Style, so two rows with one name led to
+                    // two different places. The page that owns the answer wins.
+                    router.path.append(.settingsSection(.language))
                 }
             }
 

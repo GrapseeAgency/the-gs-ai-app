@@ -58,10 +58,8 @@ import com.grapsee.gsai.ui.theme.GsTheme
  * The mock's shape: identity card with the blossom bleed, the Upgrade card,
  * three captioned groups of destination rows (one glass card each, hairline
  * separators), and the standalone Log Out card. Every row keeps a real
- * destination — including Language, which has no dedicated page yet and
- * therefore opens Appearance (the closest existing surface) rather than a
- * dead end; a dedicated Language page is a follow-up, recorded in
- * docs/SETTINGS_REFERENCE_STATUS.md.
+ * destination. Language used to borrow Appearance because it had no page; it
+ * has one now (SETTINGS_LANGUAGE), and the row goes there.
  */
 @Composable
 fun SettingsHubScreen(

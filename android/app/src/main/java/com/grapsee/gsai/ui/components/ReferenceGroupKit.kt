@@ -232,6 +232,10 @@ fun RefNavRow(
     modifier: Modifier = Modifier,
     leading: (@Composable () -> Unit)? = null,
     trailing: @Composable () -> Unit = { DefaultChevron() },
+    /** Destructive rows (delete, remove, sign out) read in the error ink —
+     *  the same treatment Settings' ActionRow gives them. A trash glyph alone
+     *  is not a warning at 11sp. */
+    danger: Boolean = false,
 ) {
     val colors = GsTheme.colors
     val base = Modifier
@@ -267,7 +271,7 @@ fun RefNavRow(
                 lineHeight = 12.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = GsFonts.Product,
-                color = colors.textPrimary,
+                color = if (danger) colors.error else colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

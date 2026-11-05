@@ -5,11 +5,15 @@ import SwiftUI
 /// The mock's four "Recent Memories" rows are seed data; the app renders the
 /// REAL saved-library items (ConversationStore.savedLibraryItems) and an
 /// honest empty state instead. "Memory is ON" reads `SettingsStore.memory`.
-/// "View all" is omitted because there is no library destination yet — a row
-/// or an action with no destination is the dead end the repo keeps deleting.
+///
+/// "View all" is back, and it has somewhere to go: the Saved Library page.
+/// These four rows are the newest four of that same store, so each one opens
+/// its own item page instead of being a dead label — and the caption reaches
+/// the rest of them.
 struct MemoryManagementView: View {
     @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var store = ConversationStore.shared
+    @EnvironmentObject private var router: Router
     @Environment(\.dismiss) private var dismiss
 
     @State private var showClearAll = false
@@ -40,7 +44,11 @@ struct MemoryManagementView: View {
                 ])
             }
 
-            GsGroupHeader(title: "Recent Memories")
+            GsGroupHeader(
+                title: "Recent Memories",
+                caption: items.isEmpty ? nil : "View all",
+                action: items.isEmpty ? nil : { router.path.append(.library) }
+            )
             GsGroupCard {
                 if items.isEmpty {
                     emptyRows
@@ -54,8 +62,12 @@ struct MemoryManagementView: View {
 
             GsGroupHeader(title: "Manage Memory")
             GsGroupCard {
-                manageRow("Edit what Nexly remembers", "Remove or update specific memories",
-                          glyph: "pencil", tone: .peach) { showItemsSheet = true }
+                // Editing a memory means opening it: the library page shows
+                // the whole text and deletes one row. It used to open the same
+                // dialog as the row below it, so two rows named two different
+                // verbs and did one identical thing.
+                manageRow("Edit what Nexly remembers", "Open any memory to read or remove it",
+                          glyph: "pencil", tone: .peach) { router.path.append(.library) }
                 divider
                 manageRow("Clear specific memories", "Delete individual memories",
                           glyph: "trash", tone: .rose) { showItemsSheet = true }
@@ -174,35 +186,44 @@ struct MemoryManagementView: View {
     }
 
     private func itemRow(_ item: LibraryItem, isLast: Bool) -> some View {
-        HStack(spacing: 11) {
-            GsWellTile(glyph: kindGlyph(item.kind), tone: kindTone(item.kind), size: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
-                    .font(Aero.bodyMedium().weight(.medium))
-                    .foregroundStyle(Aero.text)
-                    .lineLimit(1)
-                Text("“\(String(item.content.prefix(48)))…”")
-                    .font(.custom(Aero.productName(.regular), size: 11, relativeTo: .caption2))
+        // A memory you can see but cannot open is the dead end this page used
+        // to end in.
+        Button {
+            router.path.append(.libraryItem(item.id))
+        } label: {
+            HStack(spacing: 11) {
+                GsWellTile(glyph: kindGlyph(item.kind), tone: kindTone(item.kind), size: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.title)
+                        .font(Aero.bodyMedium().weight(.medium))
+                        .foregroundStyle(Aero.text)
+                        .lineLimit(1)
+                    Text("“\(String(item.content.prefix(48)))…”")
+                        .font(.custom(Aero.productName(.regular), size: 11, relativeTo: .caption2))
+                        .foregroundStyle(Aero.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Text(dateLabel(item.createdAt))
+                    .font(.custom(Aero.productName(.regular), size: 10.5, relativeTo: .caption2))
                     .foregroundStyle(Aero.textTertiary)
-                    .lineLimit(1)
             }
-            Spacer(minLength: 8)
-            Text(dateLabel(item.createdAt))
-                .font(.custom(Aero.productName(.regular), size: 10.5, relativeTo: .caption2))
-                .foregroundStyle(Aero.textTertiary)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .frame(minHeight: 52)
-        .overlay(alignment: .bottom) {
-            if !isLast {
-                Rectangle()
-                    .fill(Aero.divider.opacity(0.7))
-                    .frame(height: 1.0 / 3.0)
-                    .padding(.leading, 50)
-                    .padding(.trailing, 12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .frame(minHeight: 52)
+            .contentShape(Rectangle())
+            .overlay(alignment: .bottom) {
+                if !isLast {
+                    Rectangle()
+                        .fill(Aero.divider.opacity(0.7))
+                        .frame(height: 1.0 / 3.0)
+                        .padding(.leading, 50)
+                        .padding(.trailing, 12)
+                }
             }
         }
+        .buttonStyle(KineticPressStyle())
+        .accessibilityLabel("\(item.title), open saved item")
     }
 
     private func manageRow(

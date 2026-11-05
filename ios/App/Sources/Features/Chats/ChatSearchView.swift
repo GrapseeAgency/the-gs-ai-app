@@ -476,7 +476,10 @@ struct ChatSearchView: View {
                 actionCard(HistoryAction(
                     id: "saved", glyph: "bookmark", tone: .lilac,
                     title: "Saved items", detail: "Your saved answers")) {
-                        router.path.append(.memory)
+                        // "Saved items" used to open Memory Management — a
+                        // page about what Nexly remembers, not about what you
+                        // saved. The library is the page this card names.
+                        router.path.append(.library)
                     }
                 actionCard(HistoryAction(
                     id: "export", glyph: "download", tone: .blue,

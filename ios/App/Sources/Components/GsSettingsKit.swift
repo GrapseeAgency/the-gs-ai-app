@@ -113,6 +113,10 @@ struct GsSettingsHeader: View {
 struct GsGroupHeader: View {
     let title: String
     var caption: String?
+    /// Turns the caption into a destination ("View all →"). A caption with no
+    /// action is a label; one with an action is the only way to reach a page
+    /// the group only previews.
+    var action: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -122,10 +126,25 @@ struct GsGroupHeader: View {
                 .accessibilityAddTraits(.isHeader)
             Spacer()
             if let caption {
-                Text(caption)
-                    .font(Aero.caption())
-                    .foregroundStyle(Aero.textTertiary)
-                    .lineLimit(1)
+                if let action {
+                    Button(action: action) {
+                        HStack(spacing: 4) {
+                            Text(caption)
+                                .font(Aero.caption())
+                                .foregroundStyle(Aero.textTertiary)
+                                .lineLimit(1)
+                            NexlyGlyph(name: "arrow-right", size: 11, color: Aero.textTertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(caption)
+                } else {
+                    Text(caption)
+                        .font(Aero.caption())
+                        .foregroundStyle(Aero.textTertiary)
+                        .lineLimit(1)
+                }
             }
         }
         .padding(.horizontal, 4)

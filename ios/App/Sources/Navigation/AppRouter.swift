@@ -43,6 +43,13 @@ enum AeroRoute: Hashable {
     /// Interests and the pinned tools (Android: `SETTINGS_PROFILE_PREFS`) —
     /// the two Profile rows that used to be static text with no editor.
     case profilePersonalization
+    /// Saved Library (Android: `LIBRARY`) — every row `saveToLibrary` has ever
+    /// written. Saving used to be a one-way door: the rows were stored,
+    /// exported and cleared, but never shown.
+    case library
+    /// One saved item, at full length (Android: `LIBRARY_ITEM`). The list
+    /// truncates at 72 characters.
+    case libraryItem(String)
     /// The six owner sheets (docs/reference/pending): settings alerts, the
     /// inbox's settings destination, account security, the plan, support and
     /// integrations. One case each so the drawer/hub can reach them without a
@@ -333,6 +340,8 @@ struct AeroDestinations: ViewModifier {
             case .tool(let id): ToolDetailView(toolID: id)
             case .responseStyle: ResponseStyleView()
             case .profilePersonalization: ProfilePersonalizationView()
+            case .library: SavedLibraryView()
+            case .libraryItem(let id): LibraryItemView(itemID: id)
             case .notificationsAlerts: NotificationsAlertsView()
             case .privacyDataControls: PrivacyDataControlsView()
             case .dataExportAccountDeletion: DataExportAccountDeletionView()

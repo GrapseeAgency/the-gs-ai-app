@@ -121,11 +121,15 @@ law), which is what makes "the card lost its glass" visible at all.
 3. **No dead chevrons.** Date of Birth, Location, Tone and Detail Level render
    "Not set" / their stored value with **no** chevron: the mock paints one on
    every row, and a chevron with no destination is a dead end.
-4. **Language has no page of its own yet.** The row is real and opens Appearance
-   (the closest existing surface) on Android and the Language detail page on iOS;
-   a dedicated page is a follow-up.
-5. **"View all" on Recent Memories is omitted** on iOS for the same dead-end
-   reason; there is no library destination to route to yet.
+4. **Language has a page of its own** (`settings/language` on Android, the
+   `.language` section on iOS). Both hub and Profile rows open it; the Profile
+   row used to borrow Response Style, which meant two rows with one name led to
+   two different places.
+5. **"View all" on Recent Memories is back, and reaches a real page.** The
+   Saved Library (`library` / `.library`) lists every row `saveToLibrary` has
+   written, with day headings, kind facets built from the data, and an item page
+   at full length. The four preview rows open their own item pages instead of
+   being labels.
 6. **Vertical ratios are not the mock's.** The mock canvas is 0.441 aspect
    against the device's 0.4613 — a 5.7 % vertical stretch — so only horizontal
    ratios were taken from it. The card inset (21.8 pt / 0.0554 W), card corner
@@ -136,5 +140,6 @@ law), which is what makes "the card lost its glass" visible at all.
 
 - Delete the dead 945-line `SettingsScreen.kt` in its own commit (zero call
   sites verified) rather than mixing it into this change.
-- A dedicated Language screen, and a library destination for "View all".
+- The library has no search field yet: facets cover three kinds, not 200 saved
+  rows. A filter over the whole text is the next step if libraries get large.
 - The first iOS CI run's numbers belong in the table above.

@@ -202,7 +202,10 @@ fun ProfileScreen(
             RefNavRow(
                 title = "Language",
                 subtitle = "English (UK) — the only language this build ships",
-                onClick = { onNavigate(GsRoutes.SETTINGS_RESPONSE_STYLE) },
+                // The hub's Language row opens the Language page; this one
+                // opened Response Style, so two rows with one name led to two
+                // different places. The page that owns the answer wins.
+                onClick = { onNavigate(GsRoutes.SETTINGS_LANGUAGE) },
                 leading = { RefWellTile(GsIcons.Languages, GsWellTone.Mint, 28.dp) },
             )
         }

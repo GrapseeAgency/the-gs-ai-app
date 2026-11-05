@@ -6061,3 +6061,28 @@ Work Log:
 Known, not done (stated rather than implied):
 - The three Featured journey cards still start their conversation directly. They are CTAs ("begin this journey"), not catalogue entries, so they were left alone deliberately — but a journey page listing its stops is the obvious next step if the carousel is meant to be browsed rather than started.
 - iOS remains uncompiled here: no Swift toolchain in this sandbox. Every Swift file touched was brace/paren balanced and every glyph name checked against Resources/nexly-icons.json; that is not a substitute for xcodebuild.
+
+---
+Task ID: build-0.86.25-saved-library
+Agent: main
+Task: the page behind every save — the audit turned up a write-only feature, four rows that looked tappable and were not, and two rows with one name leading to two places.
+
+Work Log:
+- THE DEFECT WAS NOT A MISSING DECORATION, IT WAS A MISSING DESTINATION. `ChatRepository.saveToLibrary` (Android) and `ConversationStore.saveToLibrary` (iOS) have been writing saved turns, studio images and drafts since the feature shipped. Nothing in either app could read them back: the only surface was Memory Management's four-row "Recent Memories" preview, which showed the newest four and offered no way to reach the rest. Export and "clear all" touched the table; the user never saw it. Saving was a one-way door.
+- New Android `ui/library/` (`SavedLibraryScreen`, `LibraryItemScreen`, `LibraryModel`) and iOS `Features/Library/` (`SavedLibraryView`, `LibraryItemView`, `SavedLibraryModel`). Route `library` / `.library`, item route `library/{itemId}` / `.libraryItem(String)`.
+- FACETS ARE BUILT FROM THE DATA, NOT FROM A FIXED LIST. `facetsOf` counts the kinds that exist; a kind with no items gets no chip, and an empty library gets no chips at all. A "Drafts 0" chip that filters to a blank page is the dead end this repo keeps deleting.
+- DAY HEADINGS instead of one flat column: Today / Yesterday / 3 Nov 2026, newest first. A row under a relative heading shows no date (the heading already said it); an absolute heading repeats the day. Unreadable timestamps fall under "Earlier" rather than being dropped — a row written by an older build still shows up.
+- THE ITEM PAGE is the reason the list can truncate at 72 characters: the full text, selectable, plus copy and delete. Delete asks first and states what stays ("The conversation it came from is untouched"). A stale id gets "This item is gone" and a way back, not a blank page under a header.
+- FOUR DEAD ROWS FOUND BY SCRIPT, NOT BY EYE: a balanced-paren scan of every `RefNavRow(` call in the Android tree returned exactly one with no `onClick` — the Recent Memories rows, which rendered a title, a snippet and a date and did nothing when tapped. They now open their item page; the group header's "View all" opens the library. The same four rows on iOS were a plain `HStack` with no gesture at all.
+- TWO ROWS NAMED ONE THING AND LED TO TWO PLACES. The hub's Language row opened the Language page; Profile's Language row opened Response Style. Both now open Language. Same fix on iOS.
+- "Edit what Nexly remembers" opened the same dialog as "Clear specific memories" — two different verbs, one identical action. Editing now opens the library (where a memory can be read in full and removed one at a time); clearing still opens the dialog.
+- Chat search's "Saved items — your saved answers" card opened Memory Management, a page about what Nexly *remembers*, not about what you *saved*. It opens the library on both platforms.
+- `RefNavRow` gained `danger: Boolean` (error ink for the title) so a delete row reads as destructive at 11sp instead of relying on a 14dp trash glyph.
+- Empty state is a page: what saving is, how to do it (long-press → Save), and the one action that produces a first save. The first capture showed "0 things kept" stacked above "Nothing saved yet" — two ways of saying one nothing — so the hero is suppressed when the library is empty.
+- Screenshot review changed two more things: the hero repeated the count in its own subtitle ("4 things kept / 4 items saved · …"), and the item card repeated the date the header already carried.
+- Tests: `LibraryModelTest` (8) — facets from data, unknown kinds kept, empty has no facets, All/kind filtering, day labelling and order, unreadable stamp kept under "Earlier", snippet collapses whitespace and cuts on a word boundary, singular/plural counts. `LibraryProbeTest` (4 renders against the real Room table, not a fixture): list light, list dark, item page, empty page.
+- versionCode 148 / 0.86.25. Android suite 490 tests, 0 failures (97 skipped are the gated screenshot probes). Release APK assembled and signed with `gs-live.keystore`.
+
+Known, not done (stated rather than implied):
+- No search inside the library. Facets cover three kinds; a 200-row library needs a text filter, and pretending three chips are navigation would be the same lie as a dead chevron.
+- iOS remains uncompiled here: no Swift toolchain in this sandbox. Every Swift file touched was brace/paren balanced and every glyph name checked against Resources/nexly-icons.json ("bookmark-x" does not exist there; "bookmark-off" does). That is not a substitute for xcodebuild.
