@@ -6167,3 +6167,19 @@ Work Log:
 
 Stage Summary:
 - ALL THREE DELIVERABLES DONE: (1) brand-new APK v0.86.25 (148) shipped via android-release 42257461385 + GitHub Release 436872117 with the 72MB asset; (2) iOS GREEN on main (42281486332); (3) release page updated (GitHub Release + download/README.md + update-manifest.json). Server live on 3a19636f with 35 keys, watchdog PPid=1, eval-monitor layer 5.
+
+---
+Task ID: messages-start-500
+Agent: main
+Task: Operator reported "Backend responded 500" — diagnosis and fix.
+
+Work Log:
+- Symptom: POST /api/v1/messages/start → 500, `TypeError: Cannot read properties of undefined (reading 'findUnique')` at turn-executor.ts:457 — `db.planProgress` undefined. Every other probed route was 200.
+- Root cause: after the 2M-line pull, the generated Prisma client in node_modules was STALE — prisma/schema.prisma gained `model PlanProgress` (line 435) upstream, but no `prisma generate` ran in this sandbox after `bun install` (model diff: schema 22 vs client 21, planProgress the only gap). The SQLite table itself already existed; only the client was behind.
+- Fix: `bun run db:push` (regenerates the client; table already in sync) → verified `get planProgress()` present in node_modules/.prisma/client.
+- SECOND bug, mine: the "restart" that should have loaded the new client was a no-op — `pkill -f "next dev\|next-server"` uses ERE where `\|` is a LITERAL pipe, so the pattern matched nothing; the node process (PID 1122) never died and my "revived" probe was the old process answering. Correct kill (`pkill -f "next dev"` + `pkill -f "next-server"`, PID confirmed dead) → watchdog respawned PID 5774.
+- Verified end-to-end: conversation 201 → messages/start 200 (streamId st-50b26edc…, runId run-b55871e…) → SSE stream delivered mode→delta→done with finalStatus=done, modelRoute=openrouter/gs-swift (keypool serving real turns).
+- NOTE FOR FUTURE SESSIONS: the 15-min webDevReview cron (job 510137) fired at 20:00 and committed db/custom.db locally with a UUID message (c3c3405c, unpushed) — dropped via `git reset HEAD~1` per the repo rule that sandbox db writes are not this machine's to ship (943bb7e2 precedent). If a UUID-message db-only commit appears ahead of origin, drop it the same way; never push it.
+
+Stage Summary:
+- messages/start green end-to-end on fresh client; full stack re-verified (keypool 35, primary ok, eval-monitor 200, watchdog PPid=1).
