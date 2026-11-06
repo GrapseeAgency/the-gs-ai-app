@@ -6086,3 +6086,19 @@ Work Log:
 Known, not done (stated rather than implied):
 - No search inside the library. Facets cover three kinds; a 200-row library needs a text filter, and pretending three chips are navigation would be the same lie as a dead chevron.
 - iOS remains uncompiled here: no Swift toolchain in this sandbox. Every Swift file touched was brace/paren balanced and every glyph name checked against Resources/nexly-icons.json ("bookmark-x" does not exist there; "bookmark-off" does). That is not a substitute for xcodebuild.
+
+---
+Task ID: restart-latest-v0869
+Agent: main
+Task: Pull ~2M new lines from GitHub (new PAT) and start server for mobile app reach.
+
+Work Log:
+- New PAT set; fetch pulled tags v0.83–v0.86.9. Local was 1443 commits behind origin/main (81fb4c9d, PR #12 merge). Divergence check: every remote branch already contained in main; local-only worklog commit fc792f7d force-backed-up to local/sandbox-worklog-backup.
+- Reset to 81fb4c9d (1254 files, +390,701 lines). Rollback repairs: chmod watchdog, bun install (3 pkgs). allowedDevOrigins already present upstream (3b561c3 survived).
+- Stack restart: killed all, orphan watchdog (PPid=1, pid 2085) → :3000 200 in ~10s, :3031 eval-monitor listening.
+- FOUND + FIXED: main shipped RED — src/lib/prose-prompt.ts line 38 had unescaped backticks inside the template literal ("Expression expected" parse failure). ai.ts imports it → EVERY /api route 500'd (health, v1/models, v1/assistants, v1/diagnostics). Escaped all backticks; bun parse OK; pushed as f9dfb1e8.
+- Verified live: /api/health 200 (primary z-ai ok, backgroundRuns true), /api/v1/assistants 200 with real data, /api/v1/diagnostics 200 → backendRevision 81fb4c9d, /api/v1/models 200 (models:[] is BY DESIGN per route comments — legacy UIs render empty harmlessly).
+
+Stage Summary:
+- Server LIVE on latest main (f9dfb1e8 = 81fb4c9d + hot-fix): homepage 200, full /api/v1 mobile surface reachable, watchdog PID-1 orphan, eval-monitor up. Mobile app can reach the backend.
+- Standing: OpenRouter keypool STILL empty (all layers wiped; operator has not re-pasted keys this round) — primary z-ai works; gs-free/OpenRouter models blocked until keys re-provisioned. Search: googleGroundedKeys=0, searxng=false.
