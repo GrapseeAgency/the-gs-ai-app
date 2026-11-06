@@ -40,7 +40,7 @@ WHAT EACH PROBE IS GATED ON
   rhythm   the card count, and — where the mock draws a list of equal cards —
            the cadence between consecutive card tops. Inbox: seven cards with
            four consecutive 70-78 pt steps (four Today + two Earlier + the
-           closing card). Connected Apps: six provider cards in five 78-84 pt
+           closing card). Connected Apps: six provider cards in five 82-88 pt
            steps. A fused group card cannot satisfy either.
 
   count    alerts / security / subscription / help assert their group-card
@@ -114,8 +114,15 @@ SCREENS = {
     "connected": dict(
         stem="ref-connected-apps",
         rims=6,
-        rim_window=(150.0, 620.0),
-        steps=(5, 78.0, 84.0),
+        # The header grew through the 0.86.x refinement passes, so card six's
+        # rim now lands at 623.7 pt on run 42247514133's capture — the old
+        # 620 pt window cut the page's last card out of the count and read
+        # five rims on a page that plainly draws six.
+        rim_window=(150.0, 650.0),
+        # Card pitch re-measured at a uniform 85.0 pt on the same capture
+        # (the 0.86.x craft passes added a point of card padding); the old
+        # 78-84 band is one point behind the deliberate layout.
+        steps=(5, 82.0, 88.0),
         note="six provider cards",
         # iOS: five uniform 71.3 pt steps on the same capture.
         rims_ios=6,
