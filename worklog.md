@@ -6129,3 +6129,26 @@ Work Log (the short version of a very long ladder):
 
 Stage Summary:
 - APK v0.86.25 (148) verified and shipping; final clean rebuild in flight; ios-native in flight on the Swift-complete head.
+
+---
+Task ID: postwipe-ios-green-and-release
+Agent: main
+Task: Sandbox wiped — pull everything, re-provision 35 keys, restart stack; make brand-new APK + iOS green and update the release page (operator: "you have a github action...").
+
+Work Log:
+- Post-wipe recovery: remote PAT was the dead ghp_pIX…; reset to new PAT; fetch pulled tags v0.86.7-9 + the full v0.86.25 release chain; local diverged worklog commit was a same-content duplicate of origin's — reset --hard to 52845cf4 (origin/main).
+- STATE FOUND ON MAIN: v0.86.25 (148) ALREADY SHIPPED via CI — android-release 42257461385 green on e3bc50c2, download/GS-AI-App.apk staged, update-manifest.json + README updated by 7bb2e574/52845cf4. Android job DONE before this session.
+- iOS was the gap: last ios.yml runs failed on 0d7aa5bf; no iOS run on the final head. 21 compile errors, 5 classes, all fixed at the source (331aa3d6):
+  1. 19× GSHaptics.selection() — a member the API never had; call sites now use the documented select().
+  2. 16× Aero.mono(size) — added to the design system: monospaced spec face, system mono design like code()/codeBlock(), caption2 curve default.
+  3. RichBlocks:401 ForEach — explicit (tab: String) closure param stops the Xcode 26 solver reaching for the Binding<C> overload.
+  4. RichBlocks code card — the ~280-line body (type-check timeout) split into six @ViewBuilder sections; verified anchors before the cut, braces balanced after.
+  5. PollBodyView — options parsed into a typed array outside the body, out of the Any-cast thicket.
+  Static gates both PASS on the fixed tree.
+- Keys: 35 OpenRouter keys re-provisioned into all three layers; /api/health keypool size=35; primary z-ai ok (394ms); OpenRouter probe 404 = the known-dead free slug, auth path fine.
+- Stack: bun install (108 pkgs), chmod +x watchdog, orphan start (PPid=1). :3000 200 in ~5s; /api/v1/assistants 200, /api/v1/models 200, /api/v1/diagnostics 200 backendRevision=331aa3d6; :3031 eval-monitor /health ok (layer 5).
+- RELEASE PAGE: GitHub Release v0.86.25 published (id 436872117) — "the Model Centre, and the glass redesign finished (versionCode 148)" — with GS-AI-App-v0.86.25.apk (72,366,000 bytes) uploaded; notes state the iOS tag-predates-fixes situation honestly. Previous latest release was v0.86.21.
+- iOS CI: attempt 1 on 331aa3d6 never got a macOS runner (no runner name, no steps, 15min queue then cancelled — infrastructure, not code); re-run as attempt 2, runner acquired, in flight at time of this entry.
+
+Stage Summary:
+- Server live on 331aa3d6 with 35 keys. Release page updated. Android shipped. iOS attempt 2 in flight; next session checks the verdict and climbs the next rung if any.
