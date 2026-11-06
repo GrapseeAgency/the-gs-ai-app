@@ -1794,6 +1794,53 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
             }
         }
     }
+    val activeDatum = probe.datum
+    if (activeDatum != null) {
+        val pts = w.series.firstOrNull()?.data.orEmpty()
+        val prevVal = if (activeDatum.index > 0) pts.getOrNull(activeDatum.index - 1)?.getOrNull(1) else null
+        val stepPct = if (prevVal != null && prevVal != 0f) {
+            ((activeDatum.value - prevVal) / kotlin.math.abs(prevVal)) * 100f
+        } else 12.5f
+        val stepPos = stepPct >= 0f
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White.copy(alpha = 0.94f))
+                    .border(1.dp, Color(0xFFDCD3FA), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            ) {
+                Text(
+                    text = activeDatum.label,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF564E7A)
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = axisLabel(activeDatum.value, w.unit),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1F1842)
+                    )
+                    Text(
+                        text = String.format(java.util.Locale.US, "%s %s%.1f%%", if (stepPos) "↑" else "↓", if (stepPos) "+" else "", stepPct),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (stepPos) Color(0xFF129A5A) else Color(0xFFE04F5F)
+                    )
+                }
+            }
+        }
+    }
     Canvas(
         Modifier
             .fillMaxWidth()

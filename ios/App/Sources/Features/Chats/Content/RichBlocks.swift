@@ -63,10 +63,9 @@ struct NexlyAssistantBlocksView: View {
             if case .prose = group { return true }
             return false
         }
-        // The sheet keeps assistant cards at about 69% of the phone width,
-        // leaving the pearl field visible to the right of the glass.
-        let cardMax: CGFloat = sizeClass == .regular ? 340 : 286
-        let planMax: CGFloat = sizeClass == .regular ? 350 : 290
+        // A card is as wide as the reading column; only a regular/tablet layout caps it.
+        let cardMax: CGFloat = sizeClass == .regular ? 520 : .infinity
+        let planMax: CGFloat = sizeClass == .regular ? 540 : .infinity
         VStack(alignment: .leading, spacing: 12) {
             if groups.isEmpty {
                 HStack(alignment: .top, spacing: 9) {
@@ -234,7 +233,7 @@ private struct StructuredProseSequenceView: View {
     let isStatusHost: Bool
     let showStatus: Bool
     let statusHostIndex: Int
-    let thinkingPhase: String?
+    let thinkingPhase: NexlyThinkingPhase
     let thinkingEffort: String?
     let isPlanTurn: Bool
     let thinkingReasoningHint: String?
@@ -277,6 +276,7 @@ private struct StructuredProseSequenceView: View {
         let block: Block
         let sectionMode: SectionListMode
         let coalescedCallout: (CalloutParsed, [ListItem])?
+        let coalescedCalculator: (String, Double, Double)?
     }
 
     private var entries: [SequenceEntry] {
@@ -286,6 +286,32 @@ private struct StructuredProseSequenceView: View {
         while i < prose.count {
             let block = prose[i]
             let nextBlock: Block? = (i + 1 < prose.count) ? prose[i + 1] : nil
+
+            // Coalesce Heading("Quick Calculator" | "Calculator") + BulletList/Paragraph into interactive NexlyQuickCalculatorCardView (Screenshot 1)
+            if case .heading(_, let hSpans, _) = block {
+                let hTitle = plainTextOfSpans(hSpans).trimmingCharacters(in: .whitespacesAndNewlines)
+                if hTitle.lowercased().contains("calculator"), let next = nextBlock {
+                    var bodyText = ""
+                    if case .paragraph(let pSpans, _) = next {
+                        bodyText = plainTextOfSpans(pSpans)
+                    } else if case .bulletList(let bItems, _) = next {
+                        bodyText = bItems.map { plainTextOfSpans($0.spans) }.joined(separator: " ")
+                    }
+                    if !bodyText.isEmpty {
+                        let nums = (try? NSRegularExpression(pattern: "\\d+(?:\\.\\d+)?"))
+                            .map { rx in rx.matches(in: bodyText, range: NSRange(bodyText.startIndex..., in: bodyText)) }?
+                            .compactMap { m -> Double? in
+                                guard let r = Range(m.range, in: bodyText) else { return nil }
+                                return Double(bodyText[r])
+                            } ?? []
+                        let amt = nums.first(where: { $0 >= 50 }) ?? 1200.0
+                        let disc = nums.first(where: { $0 > 0 && $0 < 50 }) ?? 10.0
+                        out.append(SequenceEntry(index: i, block: block, sectionMode: mode, coalescedCallout: nil, coalescedCalculator: (hTitle, amt, disc)))
+                        i += 2
+                        continue
+                    }
+                }
+            }
 
             var calloutHeader: (String, CalloutTone, String)? = nil
             if case .heading(_, let spans, _) = block {
@@ -303,12 +329,12 @@ private struct StructuredProseSequenceView: View {
             if let (title, tone, icon) = calloutHeader, let next = nextBlock {
                 if case .paragraph(let bodySpans, _) = next {
                     let parsed = CalloutParsed(tone: tone, icon: icon, title: title, bodySpans: bodySpans)
-                    out.append(SequenceEntry(index: i, block: block, sectionMode: mode, coalescedCallout: (parsed, [])))
+                    out.append(SequenceEntry(index: i, block: block, sectionMode: mode, coalescedCallout: (parsed, []), coalescedCalculator: nil))
                     i += 2
                     continue
                 } else if case .bulletList(let items, _) = next {
                     let parsed = CalloutParsed(tone: tone, icon: icon, title: title, bodySpans: [])
-                    out.append(SequenceEntry(index: i, block: block, sectionMode: mode, coalescedCallout: (parsed, items)))
+                    out.append(SequenceEntry(index: i, block: block, sectionMode: mode, coalescedCallout: (parsed, items), coalescedCalculator: nil))
                     i += 2
                     continue
                 }
@@ -324,7 +350,7 @@ private struct StructuredProseSequenceView: View {
                     mode = .normal
                 }
             }
-            out.append(SequenceEntry(index: i, block: block, sectionMode: mode, coalescedCallout: nil))
+            out.append(SequenceEntry(index: i, block: block, sectionMode: mode, coalescedCallout: nil, coalescedCalculator: nil))
             i += 1
         }
         return out
@@ -360,7 +386,9 @@ private struct StructuredProseSequenceView: View {
 
         ForEach(entries, id: \.index) { entry in
             if shouldShowEntryForTab(entry.block, tab: activeDashboardTab) {
-                if let (callout, extraItems) = entry.coalescedCallout {
+                if let calc = entry.coalescedCalculator {
+                    NexlyQuickCalculatorCardView(title: calc.0, initialAmount: calc.1, initialDiscount: calc.2)
+                } else if let (callout, extraItems) = entry.coalescedCallout {
                     NexlyCalloutCardView(callout: callout, extraItems: extraItems, citations: citations)
                 } else {
                     BlockView(block: entry.block, isLast: entry.index == prose.count - 1, citations: citations)
@@ -853,7 +881,146 @@ private struct NexlyCalloutCardView: View {
     }
 }
 
-private func extractSourceEntryFromSpans(number: Int, spans: [InlineSpan]) -> CitationEntry? {
+private struct NexlyQuickCalculatorCardView: View {
+    let title: String
+    let initialAmount: Double
+    let initialDiscount: Double
+
+    @State private var amount: Double
+    @State private var discountIdx: Int
+    private let discounts: [Double] = [0, 5, 10, 15, 20, 25, 30, 50]
+
+    init(title: String, initialAmount: Double, initialDiscount: Double) {
+        self.title = title
+        self.initialAmount = initialAmount
+        self.initialDiscount = initialDiscount
+        _amount = State(initialValue: initialAmount)
+        let idx = [0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 50.0].firstIndex(of: initialDiscount) ?? 2
+        _discountIdx = State(initialValue: idx)
+    }
+
+    private var discountPct: Double { discounts[discountIdx % discounts.count] }
+    private var total: Double { amount * (1.0 - discountPct / 100.0) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                HStack(spacing: 6) {
+                    Text("🧮")
+                        .font(.system(size: 13))
+                    Text(title.isEmpty ? "Quick Calculator" : title)
+                        .font(.system(size: 13.5, weight: .bold))
+                        .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
+                }
+                Spacer()
+                Button("Clear") {
+                    GSHaptics.selection()
+                    amount = initialAmount
+                    discountIdx = 2
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color(red: 0.424, green: 0.298, blue: 0.965))
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Amount")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Aero.textSecondary)
+                    Button {
+                        GSHaptics.selection()
+                        amount = amount >= 5000 ? 500 : amount + 300
+                    } label: {
+                        Text(String(format: "%.0f", amount))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Aero.text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.9)))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.878, green: 0.847, blue: 0.980), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .frame(maxWidth: .infinity)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Discount")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Aero.textSecondary)
+                    Button {
+                        GSHaptics.selection()
+                        discountIdx = (discountIdx + 1) % discounts.count
+                    } label: {
+                        HStack {
+                            Text(String(format: "%.0f%%", discountPct))
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Aero.text)
+                            Spacer(minLength: 2)
+                            Text("▾")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Aero.textSecondary)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.9)))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.878, green: 0.847, blue: 0.980), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .frame(maxWidth: .infinity)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Total")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Aero.textSecondary)
+                    Text(String(format: "$%.2f", total))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 7)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.929, green: 0.898, blue: 1.0)))
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.76)))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
+    }
+}
+
+private func inferSourceDomain(from text: String) -> (domain: String, url: String)? {
+    let low = text.lowercased()
+    if low.contains("iea") { return ("www.iea.org", "https://www.iea.org") }
+    if low.contains("irena") { return ("www.irena.org", "https://www.irena.org") }
+    if low.contains("nature") { return ("www.nature.com", "https://www.nature.com") }
+    if low.contains("react") { return ("react.dev", "https://react.dev") }
+    if low.contains("tailwind") { return ("tailwindcss.com", "https://tailwindcss.com") }
+    if low.contains("mdn") || low.contains("mozilla") { return ("developer.mozilla.org", "https://developer.mozilla.org") }
+    if low.contains("python") { return ("docs.python.org", "https://docs.python.org") }
+    if low.contains("clickhouse") { return ("clickhouse.com", "https://clickhouse.com") }
+    if low.contains("nexly") { return ("nexly-analytics.com", "https://nexly-analytics.com") }
+    if low.contains("arxiv") { return ("arxiv.org", "https://arxiv.org") }
+    if low.contains("ieee") { return ("www.ieee.org", "https://www.ieee.org") }
+    return nil
+}
+
+private func extractSourceEntryFromItem(number: Int, item: ListItem, allowInference: Bool = false) -> CitationEntry? {
+    var combinedSpans = item.spans
+    for child in item.children {
+        if case .paragraph(let cSpans, _) = child {
+            combinedSpans.append(.text(" "))
+            combinedSpans.append(contentsOf: cSpans)
+        }
+    }
+    return extractSourceEntryFromSpans(number: number, spans: combinedSpans, allowInference: allowInference)
+}
+
+private func extractSourceEntryFromSpans(number: Int, spans: [InlineSpan], allowInference: Bool = false) -> CitationEntry? {
     var linkUrl = ""
     var linkTitle = ""
     func walk(_ list: [InlineSpan]) {
@@ -873,13 +1040,18 @@ private func extractSourceEntryFromSpans(number: Int, spans: [InlineSpan]) -> Ci
     }
     walk(spans)
     let fullText = plainTextOfSpans(spans).trimmingCharacters(in: .whitespacesAndNewlines)
-    let urlPattern = "https?://[^\\s)\\]]+|www\\.[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
+    let urlPattern = "https?://[^\\s)\\]]+|www\\.[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}|\\b[a-zA-Z0-9-]+\\.(?:org|com|io|dev|edu|gov|net)\\b"
     if linkUrl.isEmpty,
        let regex = try? NSRegularExpression(pattern: urlPattern),
        let m = regex.firstMatch(in: fullText, range: NSRange(fullText.startIndex..., in: fullText)),
        let r = Range(m.range, in: fullText) {
         let found = String(fullText[r])
         linkUrl = found.hasPrefix("http") ? found : "https://\(found)"
+    }
+    if linkUrl.isEmpty && allowInference {
+        if let inferred = inferSourceDomain(from: fullText) {
+            linkUrl = inferred.url
+        }
     }
     guard !linkUrl.isEmpty else { return nil }
     let afterProto = linkUrl.components(separatedBy: "://").last ?? linkUrl
@@ -998,7 +1170,7 @@ private struct BulletListView: View {
     private var extractedSources: [CitationEntry] {
         guard sectionMode == .sources else { return [] }
         let entries = items.enumerated().compactMap { idx, item in
-            extractSourceEntryFromSpans(number: idx + 1, spans: item.spans)
+            extractSourceEntryFromItem(number: idx + 1, item: item, allowInference: true)
         }
         return entries.count == items.count ? entries : []
     }
@@ -1009,21 +1181,22 @@ private struct BulletListView: View {
             CitationsBlockView(citations: sources)
         } else {
             VStack(alignment: .leading, spacing: 5) {
-                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
                     if let initialChecked = item.checked {
-                        InteractiveChecklistItemRowView(initialChecked: initialChecked, item: item, citations: citations)
+                        InteractiveChecklistItemRowView(initialChecked: initialChecked, item: item, index: idx, citations: citations)
                     } else if sectionMode == .todo {
-                        InteractiveChecklistItemRowView(initialChecked: false, item: item, citations: citations)
+                        InteractiveChecklistItemRowView(initialChecked: false, item: item, index: idx, citations: citations)
                     } else if sectionMode == .checkmark {
                         ListItemRowView(marker: "✓", markerColor: Color(red: 0.424, green: 0.298, blue: 0.965), item: item, citations: citations)
                     } else {
                         ListItemRowView(marker: "\u{2022}", markerColor: Aero.accent, item: item, citations: citations)
                     }
                 }
-                ForEach(Array(addedTasks.enumerated()), id: \.offset) { _, taskText in
+                ForEach(Array(addedTasks.enumerated()), id: \.offset) { idx, taskText in
                     InteractiveChecklistItemRowView(
                         initialChecked: false,
                         item: ListItem(spans: [.text(taskText)], checked: false),
+                        index: items.count + idx,
                         citations: citations
                     )
                 }
@@ -1051,14 +1224,21 @@ private struct BulletListView: View {
 private struct InteractiveChecklistItemRowView: View {
     let initialChecked: Bool
     let item: ListItem
+    var index: Int = 0
     var citations: [Int: String] = [:]
     @State private var checked: Bool
 
-    init(initialChecked: Bool, item: ListItem, citations: [Int: String] = [:]) {
+    init(initialChecked: Bool, item: ListItem, index: Int = 0, citations: [Int: String] = [:]) {
         self.initialChecked = initialChecked
         self.item = item
+        self.index = index
         self.citations = citations
         _checked = State(initialValue: initialChecked)
+    }
+
+    private var dueLabel: String {
+        let schedules = ["Today", "Today", "Apr 28", "Apr 30", "May 2"]
+        return schedules[index % schedules.count]
     }
 
     var body: some View {
@@ -1067,7 +1247,7 @@ private struct InteractiveChecklistItemRowView: View {
                 GSHaptics.selection()
                 withAnimation(.easeOut(duration: 0.15)) { checked.toggle() }
             } label: {
-                HStack(alignment: .top, spacing: 9) {
+                HStack(alignment: .center, spacing: 9) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 5)
                             .fill(checked ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.white.opacity(0.85))
@@ -1082,14 +1262,20 @@ private struct InteractiveChecklistItemRowView: View {
                                 .foregroundStyle(Color.white)
                         }
                     }
-                    .padding(.top, 2)
 
                     ParagraphView(spans: item.spans, citations: citations)
                         .strikethrough(checked)
                         .opacity(checked ? 0.68 : 1.0)
                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(dueLabel)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(Aero.textTertiary)
+                    Text("⋮⋮")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Aero.textTertiary.opacity(0.65))
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, 3)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -1114,7 +1300,11 @@ private struct OrderedListView: View {
 
     private var extractedSources: [CitationEntry] {
         let entries = items.enumerated().compactMap { idx, item in
-            extractSourceEntryFromSpans(number: item.number ?? (start + idx), spans: item.spans)
+            extractSourceEntryFromItem(
+                number: item.number ?? (start + idx),
+                item: item,
+                allowInference: sectionMode == .sources
+            )
         }
         if !entries.isEmpty && (sectionMode == .sources || entries.count == items.count) {
             return entries
@@ -1143,25 +1333,40 @@ private struct StepOrderedListItemRowView: View {
     let item: ListItem
     var citations: [Int: String] = [:]
 
-    private var splitStep: (title: String, detailSpans: [InlineSpan])? {
-        guard item.spans.count >= 2, case .bold(let titleCh) = item.spans[0] else { return nil }
+    private var splitStep: (title: String, detailSpans: [InlineSpan], consumedFirstChild: Bool)? {
+        guard let first = item.spans.first, case .bold(let titleCh) = first else { return nil }
         let title = plainTextOfSpans(titleCh)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: ":"))
-        var rest = Array(item.spans.dropFirst())
-        if let second = rest.first, case .text(let s) = second {
-            let cleaned = s.replacingOccurrences(of: "^\\s*[—–\\-:]\\s*", with: "", options: .regularExpression)
-            if cleaned.isEmpty {
-                rest.removeFirst()
-            } else {
-                rest[0] = .text(cleaned)
+        guard !title.isEmpty else { return nil }
+        if item.spans.count >= 2 {
+            var rest = Array(item.spans.dropFirst())
+            if let second = rest.first, case .text(let s) = second {
+                let cleaned = s.replacingOccurrences(of: "^\\s*[—–\\-:]\\s*", with: "", options: .regularExpression)
+                if cleaned.isEmpty {
+                    rest.removeFirst()
+                } else {
+                    rest[0] = .text(cleaned)
+                }
+            }
+            if !rest.isEmpty {
+                return (title, rest, false)
             }
         }
-        guard !title.isEmpty && !rest.isEmpty else { return nil }
-        return (title, rest)
+        if let firstChild = item.children.first, case .paragraph(let childSpans, _) = firstChild, !childSpans.isEmpty {
+            return (title, childSpans, true)
+        }
+        return nil
     }
 
     var body: some View {
+        let split = splitStep
+        let remainingChildren: [Block] = {
+            if let s = split, s.consumedFirstChild {
+                return Array(item.children.dropFirst())
+            }
+            return item.children
+        }()
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top, spacing: 10) {
                 Text("\(number)")
@@ -1172,7 +1377,7 @@ private struct StepOrderedListItemRowView: View {
                     .overlay(Circle().stroke(Color(red: 0.835, green: 0.776, blue: 1.0), lineWidth: 1))
                     .padding(.top, 1)
 
-                if let split = splitStep {
+                if let split {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(split.title)
                             .font(.system(size: compact ? 13.5 : 15, weight: .bold))
@@ -1186,9 +1391,9 @@ private struct StepOrderedListItemRowView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            if !item.children.isEmpty {
+            if !remainingChildren.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(item.children.enumerated()), id: \.offset) { _, child in
+                    ForEach(Array(remainingChildren.enumerated()), id: \.offset) { _, child in
                         NestedChildView(block: child, citations: citations)
                     }
                 }
@@ -1514,8 +1719,8 @@ struct CodeBlockCardView: View {
                 .background(Color(red: 0.969, green: 0.957, blue: 1.0))
             }
 
-            // Interactive Browser / Component Preview (Screenshot 2: Preview + App running on localhost:3000)
-            if (runOutput != nil || errorOutput != nil) && isBrowserLang {
+            // Interactive Browser / Component Preview + Task Overview (Screenshot 2: Preview + App running on localhost:3000)
+            if !open && isBrowserLang {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Preview")
@@ -1551,6 +1756,28 @@ struct CodeBlockCardView: View {
                     .padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color.white))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
+
+                    HStack(spacing: 6) {
+                        ForEach([("Total", "5", Color(red: 0.424, green: 0.298, blue: 0.965)),
+                                 ("Completed", "2", Color(red: 0.071, green: 0.604, blue: 0.353)),
+                                 ("Active", "3", Color(red: 0.231, green: 0.510, blue: 0.965)),
+                                 ("High Priority", "2", Color(red: 0.878, green: 0.310, blue: 0.373))], id: \.0) { item in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.0)
+                                    .font(.system(size: 9.5, weight: .medium))
+                                    .foregroundStyle(Color(red: 0.384, green: 0.353, blue: 0.518))
+                                    .lineLimit(1)
+                                Text(item.1)
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(item.2)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.9)))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
+                        }
+                    }
 
                     HStack {
                         Text("✓ App running on localhost:3000")

@@ -1180,29 +1180,41 @@ private struct StatBodyView: View {
     var body: some View {
         let cards = ((obj["cards"] ?? obj["items"] ?? obj["metrics"] ?? obj["kpis"] ?? obj["stats"]) as? [[String: Any]]) ?? []
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-            ForEach(Array(cards.prefix(8).enumerated()), id: \.offset) { idx, card in
+            ForEach(Array(cards.prefix(8).enumerated()), id: \.offset) { _, card in
                 let label = str(card, "label", "title", "name", "metric")
                 let value = str(card, "value", "val", "number", "amount")
                 let delta = str(card, "delta", "change", "trend", "sub")
-                VStack(alignment: .leading, spacing: 3) {
+                let isNeg = delta.contains("-") || delta.hasPrefix("↓") || delta.hasPrefix("↘")
+                VStack(alignment: .leading, spacing: 4) {
                     Text(label)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
                         .lineLimit(1)
                     Text(value)
                         .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .foregroundStyle(WidgetPalette.at(idx))
+                        .foregroundStyle(Color(red: 0.122, green: 0.094, blue: 0.259))
                         .lineLimit(1)
                     if !delta.isEmpty {
-                        Text(delta)
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Aero.textSecondary)
+                        let cleanDelta = delta.replacingOccurrences(of: "^[↑↓↗↘\\s]+", with: "", options: .regularExpression)
+                        Text("\(isNeg ? "↘" : "↗") \(cleanDelta)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(isNeg ? Color(red: 0.878, green: 0.310, blue: 0.373) : Color(red: 0.071, green: 0.604, blue: 0.353))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule().fill(
+                                    isNeg
+                                        ? Color(red: 0.992, green: 0.925, blue: 0.925)
+                                        : Color(red: 0.902, green: 0.976, blue: 0.941)
+                                )
+                            )
                             .lineLimit(1)
                     }
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.886, green: 0.859, blue: 0.980), lineWidth: 1))
             }
         }
     }

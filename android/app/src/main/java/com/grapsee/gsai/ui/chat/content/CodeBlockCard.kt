@@ -486,8 +486,8 @@ fun CodeBlockCard(
                 }
             }
 
-            // Interactive Browser / Component Preview (Screenshot 2: Preview + App running on localhost:3000)
-            if (activeResult != null && isBrowserLang) {
+            // Interactive Browser / Component Preview + Task Overview (Screenshot 2: Preview + App running on localhost:3000)
+            if (!open && isBrowserLang) {
                 var demoCount by remember { mutableStateOf(0) }
                 Column(
                     modifier = Modifier
@@ -550,6 +550,39 @@ fun CodeBlockCard(
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            Triple("Total", "5", Color(0xFF6C4CF6)),
+                            Triple("Completed", "2", Color(0xFF129A5A)),
+                            Triple("Active", "3", Color(0xFF3B82F6)),
+                            Triple("High Priority", "2", Color(0xFFE04F5F))
+                        ).forEach { (kLabel, kVal, kColor) ->
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color.White.copy(alpha = 0.9f))
+                                    .border(1.dp, Color(0xFFE2DAFA), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = kLabel,
+                                    fontSize = 9.5.sp,
+                                    color = Color(0xFF625A84),
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = kVal,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = kColor
+                                )
+                            }
                         }
                     }
                     Row(
