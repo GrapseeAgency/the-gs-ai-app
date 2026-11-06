@@ -816,7 +816,14 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
                     }
                     m["series"] = JsonArray(converted)
                 } else {
-                    val flat = (m["data"] ?: m["values"] ?: m["points"] ?: m["slices"]) as? JsonArray
+                    // A contour's `points` are [x, y, z] field samples, not a flat
+                    // value list — synthesizing a "Value" series from them returned
+                    // a chart for payloads the contour branch must reject (the
+                    // nine-point minimum never saw them). Structural contour
+                    // payloads carry no series, and the alias must not mint one.
+                    val typeNow = (m["type"] as? JsonPrimitive)?.contentOrNull
+                    val flat = if (typeNow == "contour") null
+                        else (m["data"] ?: m["values"] ?: m["points"] ?: m["slices"]) as? JsonArray
                     if (flat != null) {
                         m["series"] = JsonArray(listOf(JsonObject(mapOf("name" to JsonPrimitive("Value"), "data" to flat))))
                     }
