@@ -200,9 +200,22 @@ final class SheetsUITests: XCTestCase {
             return
         }
         trip.tap()
+        // 0.86.24 gives every tool card its own page first ("every tool card
+        // gets a page", adb4bdea) — the trip planner included; its primary
+        // action on that page opens the Travel Agent screen rather than a
+        // seeded chat. The card no longer routes straight to the agent, so
+        // this test drives the page's own primary action.
+        let openTravelAgent = app.buttons["Open Travel Agent"].firstMatch
+        XCTAssertTrue(
+            openTravelAgent.waitForExistence(timeout: 15),
+            "the trip planner card did not open its tool page; screen: \(app.debugDescription)")
+        for _ in 0..<4 where !(openTravelAgent.exists && openTravelAgent.isHittable) {
+            app.swipeUp()
+        }
+        openTravelAgent.tap()
         XCTAssertTrue(
             app.staticTexts["Welcome to Travel Agent"].waitForExistence(timeout: 15),
-            "the trip planner opened something other than Travel Agent; screen: \(app.debugDescription)")
+            "the tool page's primary action did not open Travel Agent; screen: \(app.debugDescription)")
     }
 
     // MARK: helpers
