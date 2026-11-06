@@ -270,7 +270,18 @@ if IOS_CB.exists() and IOS_RB.exists():
     notes.append("iOS ContentBlocks.swift + RichBlocks.swift symbol & enum case consistency verified")
 
     # Section 01 (01–05) & Section 02 (06–07) feature parity across Android & iOS
-    ios_all = cb_sw + rb_sw + read(IOS_WB)
+    wb_sw = read(IOS_WB)
+    ios_all = cb_sw + rb_sw + wb_sw
+    for bad_wb, msg in [
+        (r"\bpeakPoint\b", "iOS WidgetBlocks.swift references undeclared `peakPoint` instead of `peakPt`"),
+        (r"\bformatChartMetric\b", "iOS WidgetBlocks.swift references undeclared `formatChartMetric` instead of `compactNumber`"),
+    ]:
+        if re.search(bad_wb, wb_sw):
+            failures.append(msg)
+    if "sourceStart: records[from].offset" not in cb_sw:
+        failures.append("iOS ContentBlocks.swift: buildList must set real `sourceStart: records[from].offset`")
+    if "extractCopyableProseSummary" not in rb_sw or "extractCopyableBlockSummary" not in kt_all:
+        failures.append("Copy/Share contextual action pill must extract real prose/citation summary instead of copying button label")
     SECTION_FEATURES = [
         ("NexlyCalloutCard", "02. Structured Answers: Callout cards (Quick summary / Important / Key Insights)"),
         ("NexlyQuickCalculatorCard", "01. Dashboard: Interactive Quick Calculator card from ordinary Markdown"),

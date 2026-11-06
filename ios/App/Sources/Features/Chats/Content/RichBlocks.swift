@@ -19,9 +19,20 @@ struct BlocksView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
-                BlockView(block: block, isLast: index == blocks.count - 1, citations: citations)
-            }
+            StructuredProseSequenceView(
+                prose: blocks,
+                isStreaming: false,
+                citations: citations,
+                isStatusHost: false,
+                showStatus: false,
+                statusHostIndex: -1,
+                thinkingPhase: .done,
+                thinkingEffort: nil,
+                isPlanTurn: false,
+                thinkingReasoningHint: nil,
+                searchSourceCount: 0,
+                showThinkingStages: false
+            )
         }
     }
 }
@@ -51,6 +62,10 @@ struct NexlyAssistantBlocksView: View {
     var citations: [Int: String] = [:]
     var planTimestamp: String? = nil
     var conversationID: String? = nil
+    /// Standalone render tests mount `NexlyAssistantBlocksView` directly and
+    /// expect its companion orb; `ChatDetailView` already renders `assistantAvatar`
+    /// for the turn, so it passes `showOrb: false` (one identity mark per turn).
+    var showOrb: Bool = true
 
     private enum Group {
         case prose([Block])
@@ -69,7 +84,9 @@ struct NexlyAssistantBlocksView: View {
         VStack(alignment: .leading, spacing: 12) {
             if groups.isEmpty {
                 HStack(alignment: .top, spacing: 9) {
-                    NexlyAssistantOrb()
+                    if showOrb {
+                        NexlyAssistantOrb()
+                    }
                     if showStatus {
                         NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount, showStages: showThinkingStages)
                             .frame(maxWidth: cardMax, alignment: .leading)
@@ -84,7 +101,9 @@ struct NexlyAssistantBlocksView: View {
             } else {
                 ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
                     HStack(alignment: .top, spacing: 9) {
-                        NexlyAssistantOrb()
+                        if showOrb {
+                            NexlyAssistantOrb()
+                        }
                         switch group {
                         case .plan(let plan, let open):
                             NexlyPlanCard(
@@ -273,6 +292,7 @@ private struct StructuredProseSequenceView: View {
 
     private struct SequenceEntry {
         let index: Int
+        let consumedCount: Int
         let block: Block
         let sectionMode: SectionListMode
         let coalescedCallout: (CalloutParsed, [ListItem])?
@@ -306,7 +326,7 @@ private struct StructuredProseSequenceView: View {
                             } ?? []
                         let amt = nums.first(where: { $0 >= 50 }) ?? 1200.0
                         let disc = nums.first(where: { $0 > 0 && $0 < 50 }) ?? 10.0
-                        out.append(SequenceEntry(index: i, block: block, sectionMode: mode, coalescedCallout: nil, coalescedCalculator: (hTitle, amt, disc)))
+                        out.append(SequenceEntry(index: i, consumedCount: 2, block: block, sectionMode: mode, coalescedCallout: nil, coalescedCalculator: (hTitle, amt, disc)))
                         i += 2
                         continue
                     }
@@ -329,12 +349,12 @@ private struct StructuredProseSequenceView: View {
             if let (title, tone, icon) = calloutHeader, let next = nextBlock {
                 if case .paragraph(let bodySpans, _) = next {
                     let parsed = CalloutParsed(tone: tone, icon: icon, title: title, bodySpans: bodySpans)
-                    out.append(SequenceEntry(index: i, block: block, sectionMode: mode, coalescedCallout: (parsed, []), coalescedCalculator: nil))
+                    out.append(SequenceEntry(index: i, consumedCount: 2, block: block, sectionMode: mode, coalescedCallout: (parsed, []), coalescedCalculator: nil))
                     i += 2
                     continue
                 } else if case .bulletList(let items, _) = next {
                     let parsed = CalloutParsed(tone: tone, icon: icon, title: title, bodySpans: [])
-                    out.append(SequenceEntry(index: i, block: block, sectionMode: mode, coalescedCallout: (parsed, items), coalescedCalculator: nil))
+                    out.append(SequenceEntry(index: i, consumedCount: 2, block: block, sectionMode: mode, coalescedCallout: (parsed, items), coalescedCalculator: nil))
                     i += 2
                     continue
                 }
@@ -350,7 +370,7 @@ private struct StructuredProseSequenceView: View {
                     mode = .normal
                 }
             }
-            out.append(SequenceEntry(index: i, block: block, sectionMode: mode, coalescedCallout: nil, coalescedCalculator: nil))
+            out.append(SequenceEntry(index: i, consumedCount: 1, block: block, sectionMode: mode, coalescedCallout: nil, coalescedCalculator: nil))
             i += 1
         }
         return out
@@ -395,7 +415,7 @@ private struct StructuredProseSequenceView: View {
                         .environment(\.nexlySectionListMode, entry.sectionMode)
                 }
             }
-            if isStatusHost && showStatus && entry.index == statusHostIndex {
+            if isStatusHost && showStatus && entry.index <= statusHostIndex && statusHostIndex < entry.index + entry.consumedCount {
                 if !prose.isEmpty { Spacer().frame(height: 2) }
                 NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount, showStages: showThinkingStages)
             }
@@ -412,7 +432,7 @@ private struct StructuredProseSequenceView: View {
             if !endsWithAction {
                 NexlyContextualActionPillsRowView(prose: prose, onAction: { prompt in
                     if prompt.lowercased().contains("copy") || prompt.lowercased().contains("share") {
-                        UIPasteboard.general.string = prompt
+                        UIPasteboard.general.string = extractCopyableProseSummary(prose, citationsOnly: prompt.lowercased().contains("citation"))
                     } else {
                         widgetAction?(prompt)
                     }
@@ -450,6 +470,43 @@ private struct StructuredProseSequenceView: View {
             return true
         }
     }
+}
+
+private func extractCopyableProseSummary(_ prose: [Block], citationsOnly: Bool) -> String {
+    var lines: [String] = []
+    for block in prose {
+        switch block {
+        case .citations(let entries, _):
+            for c in entries {
+                lines.append("[\(c.number)] \(c.title) — \(c.url.isEmpty ? c.domain : c.url)")
+            }
+        case .heading(_, let spans, _):
+            if !citationsOnly { lines.append(plainTextOfSpans(spans)) }
+        case .paragraph(let spans, _):
+            if !citationsOnly { lines.append(plainTextOfSpans(spans)) }
+        case .bulletList(let items, _):
+            for item in items {
+                let t = plainTextOfSpans(item.spans)
+                if !citationsOnly || t.contains("http") || t.contains("www.") {
+                    lines.append("• \(t)")
+                }
+            }
+        case .orderedList(let start, let items, _):
+            for (idx, item) in items.enumerated() {
+                let n = item.number ?? (start + idx)
+                let t = plainTextOfSpans(item.spans)
+                if !citationsOnly || t.contains("http") || t.contains("www.") {
+                    lines.append("\(n). \(t)")
+                }
+            }
+        case .codeBlock(_, let code, _, _):
+            if !citationsOnly { lines.append(code) }
+        default:
+            break
+        }
+    }
+    let joined = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    return joined.isEmpty ? "Copied from Nexly" : joined
 }
 
 private struct NexlyContextualActionPillsRowView: View {
@@ -1501,6 +1558,13 @@ struct CodeBlockCardView: View {
     private var isBrowserLang: Bool {
         ["html", "htm", "svg", "jsx", "tsx", "react"].contains(lang)
     }
+
+    private static let taskOverviewChips: [(label: String, value: String, color: Color)] = [
+        ("Total", "5", Color(red: 0.424, green: 0.298, blue: 0.965)),
+        ("Completed", "2", Color(red: 0.071, green: 0.604, blue: 0.353)),
+        ("Active", "3", Color(red: 0.231, green: 0.510, blue: 0.965)),
+        ("High Priority", "2", Color(red: 0.878, green: 0.310, blue: 0.373))
+    ]
     private var allLines: [String] {
         currentCode.components(separatedBy: "\n")
     }
@@ -1758,18 +1822,15 @@ struct CodeBlockCardView: View {
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
 
                     HStack(spacing: 6) {
-                        ForEach([("Total", "5", Color(red: 0.424, green: 0.298, blue: 0.965)),
-                                 ("Completed", "2", Color(red: 0.071, green: 0.604, blue: 0.353)),
-                                 ("Active", "3", Color(red: 0.231, green: 0.510, blue: 0.965)),
-                                 ("High Priority", "2", Color(red: 0.878, green: 0.310, blue: 0.373))], id: \.0) { item in
+                        ForEach(Array(Self.taskOverviewChips.enumerated()), id: \.offset) { _, item in
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(item.0)
+                                Text(item.label)
                                     .font(.system(size: 9.5, weight: .medium))
                                     .foregroundStyle(Color(red: 0.384, green: 0.353, blue: 0.518))
                                     .lineLimit(1)
-                                Text(item.1)
+                                Text(item.value)
                                     .font(.system(size: 13, weight: .bold))
-                                    .foregroundStyle(item.2)
+                                    .foregroundStyle(item.color)
                             }
                             .padding(.horizontal, 8)
                             .padding(.vertical, 6)
