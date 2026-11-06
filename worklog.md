@@ -6152,3 +6152,18 @@ Work Log:
 
 Stage Summary:
 - Server live on 331aa3d6 with 35 keys. Release page updated. Android shipped. iOS attempt 2 in flight; next session checks the verdict and climbs the next rung if any.
+
+---
+Task ID: postwipe-ios-green-and-release (continued)
+Agent: main
+Task: iOS green + release page — conclusion of the round.
+
+Work Log:
+- iOS attempt 1 (331aa3d6): compile GREEN — the five error classes were the whole compile story. Run failed only on infrastructure (macOS runner never assigned: no runner name, no steps, 15-min queue then cancelled). Re-run attempt 2: full suite ran.
+- Attempt 2 verdict: 47 steps executed, ONE failure — testTravelAgentOpensFromExploreSearch, "the trip planner opened something other than Travel Agent". Root cause: the test (Oct 30, 0dd1605f) predated adb4bdea (Nov 5, 0.86.24 "every tool card gets a page"), which interposed ToolDetailView between the card and the agent on BOTH platforms; sixteen compile-red runs since meant the stale expectation was never reached — the compile fixes UNMASKED it.
+- Fix 3a19636f: the test drives the honest path — card tap → tool page's "Open Travel Agent" primary action (scrolled into reach) → "Welcome to Travel Agent". Twin-verified against Android's ToolDetailScreen.kt:314 (same interposition, same primary action).
+- iOS RUN 42281486332 ON 3a19636f: **SUCCESS — 47/47 steps green** (compile, full XCTest suite incl. the fixed Travel Agent test, menu harness, renders, pixel measurements). First green ios.yml since the 0.86.24 craft series began compiling red.
+- Release notes v0.86.25 iOS paragraph rewritten honestly: green run cited (42281486332 / 3a19636f); build iOS from main, not the tag (tag tree predates the two follow-up commits); no IPA ships (no Apple signing in CI), XcodeGen source build per ios/README.md.
+
+Stage Summary:
+- ALL THREE DELIVERABLES DONE: (1) brand-new APK v0.86.25 (148) shipped via android-release 42257461385 + GitHub Release 436872117 with the 72MB asset; (2) iOS GREEN on main (42281486332); (3) release page updated (GitHub Release + download/README.md + update-manifest.json). Server live on 3a19636f with 35 keys, watchdog PPid=1, eval-monitor layer 5.
