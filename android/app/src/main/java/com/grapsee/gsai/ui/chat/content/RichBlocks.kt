@@ -478,7 +478,7 @@ private fun StructuredBlockSequenceView(
                 classifyCalloutHeaderTitle(hText)?.let { Triple(hText.trimEnd(':'), it.first, it.second) }
             }
             is Block.Paragraph -> {
-                if (block.spans.size == 1 && block.spans.first() is InlineSpan.Bold) {
+                if (block.spans.size == 1 && block.spans.first() is InlineSpan.BoldSpan) {
                     val bText = plainTextOfSpans(block.spans).trim()
                     classifyCalloutHeaderTitle(bText)?.let { Triple(bText.trimEnd(':'), it.first, it.second) }
                 } else null
@@ -936,14 +936,14 @@ private data class CalloutParsed(
 private fun plainTextOfSpans(spans: List<InlineSpan>): String = buildString {
     spans.forEach { span ->
         when (span) {
-            is InlineSpan.Text -> append(span.text)
-            is InlineSpan.Code -> append(span.code)
-            is InlineSpan.Math -> append(span.latex)
-            is InlineSpan.Citation -> append("[${span.index}]")
-            is InlineSpan.Bold -> append(plainTextOfSpans(span.children))
-            is InlineSpan.Italic -> append(plainTextOfSpans(span.children))
-            is InlineSpan.Strikethrough -> append(plainTextOfSpans(span.children))
-            is InlineSpan.Link -> append(plainTextOfSpans(span.children))
+            is InlineSpan.TextSpan -> append(span.text)
+            is InlineSpan.CodeSpan -> append(span.code)
+            is InlineSpan.MathSpan -> append(span.latex)
+            is InlineSpan.CitationSpan -> append("[${span.number}]")
+            is InlineSpan.BoldSpan -> append(plainTextOfSpans(span.children))
+            is InlineSpan.ItalicSpan -> append(plainTextOfSpans(span.children))
+            is InlineSpan.StrikeSpan -> append(plainTextOfSpans(span.children))
+            is InlineSpan.LinkSpan -> append(span.text)
         }
     }
 }
@@ -951,7 +951,7 @@ private fun plainTextOfSpans(spans: List<InlineSpan>): String = buildString {
 private fun detectCalloutFromSpans(spans: List<InlineSpan>): CalloutParsed? {
     if (spans.isEmpty()) return null
     val first = spans.first()
-    if (first is InlineSpan.Bold) {
+    if (first is InlineSpan.BoldSpan) {
         val rawTitle = plainTextOfSpans(first.children).trim().trimEnd(':').trim()
         val lower = rawTitle.lowercase()
         val toneAndIcon: Pair<CalloutTone, String>? = when {
@@ -967,9 +967,9 @@ private fun detectCalloutFromSpans(spans: List<InlineSpan>): CalloutParsed? {
             val rest = spans.drop(1).toMutableList()
             if (rest.isNotEmpty()) {
                 val head = rest.first()
-                if (head is InlineSpan.Text) {
+                if (head is InlineSpan.TextSpan) {
                     val cleaned = head.text.replace(Regex("^\\s*[:\\-—–]\\s*"), "")
-                    if (cleaned.isEmpty()) rest.removeAt(0) else rest[0] = InlineSpan.Text(cleaned)
+                    if (cleaned.isEmpty()) rest.removeAt(0) else rest[0] = InlineSpan.TextSpan(cleaned)
                 }
             }
             if (rest.isNotEmpty()) {
@@ -982,14 +982,14 @@ private fun detectCalloutFromSpans(spans: List<InlineSpan>): CalloutParsed? {
             }
         }
     }
-    if (first is InlineSpan.Text) {
+    if (first is InlineSpan.TextSpan) {
         val m = Regex("^\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)]\\s*(.*)$", RegexOption.IGNORE_CASE)
             .find(first.text)
         if (m != null) {
             val kind = m.groupValues[1].uppercase()
             val tail = m.groupValues[2]
             val rest = spans.drop(1).toMutableList()
-            if (tail.isNotBlank()) rest.add(0, InlineSpan.Text(tail))
+            if (tail.isNotBlank()) rest.add(0, InlineSpan.TextSpan(tail))
             val isWarn = kind in setOf("IMPORTANT", "WARNING", "CAUTION")
             return CalloutParsed(
                 tone = if (isWarn) CalloutTone.WARNING else CalloutTone.FACT,
@@ -1165,15 +1165,15 @@ private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>): Pa
     fun walk(list: List<InlineSpan>) {
         list.forEach { s ->
             when (s) {
-                is InlineSpan.Link -> {
+                is InlineSpan.LinkSpan -> {
                     if (linkUrl.isEmpty()) {
                         linkUrl = s.url
-                        linkTitle = plainTextOfSpans(s.children).trim()
+                        linkTitle = s.text.trim()
                     }
                 }
-                is InlineSpan.Bold -> walk(s.children)
-                is InlineSpan.Italic -> walk(s.children)
-                is InlineSpan.Strikethrough -> walk(s.children)
+                is InlineSpan.BoldSpan -> walk(s.children)
+                is InlineSpan.ItalicSpan -> walk(s.children)
+                is InlineSpan.StrikeSpan -> walk(s.children)
                 else -> {}
             }
         }
@@ -1190,7 +1190,7 @@ private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>): Pa
     }
     if (linkUrl.isEmpty()) return null
     val domain = linkUrl.substringAfter("://", linkUrl).substringBefore('/').removePrefix("www.")
-    val firstBold = (spans.firstOrNull() as? InlineSpan.Bold)?.let { plainTextOfSpans(it.children).trim() }.orEmpty()
+    val firstBold = (spans.firstOrNull() as? InlineSpan.BoldSpan)?.let { plainTextOfSpans(it.children).trim() }.orEmpty()
     val title = when {
         firstBold.isNotEmpty() -> firstBold.trimEnd(':', '-', '—', '–').trim()
         linkTitle.isNotEmpty() && !linkTitle.startsWith("http") -> linkTitle
@@ -1223,15 +1223,16 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
     if (sourceItems.isNotEmpty() && sourceItems.size == block.items.size) {
         CitationsBlockView(
             Block.CitationsBlock(
-                sourceItems.map {
+                citations = sourceItems.map {
                     CitationEntry(
                         number = it.number,
                         title = it.title,
-                        url = it.url,
                         domain = it.domain,
-                        snippet = it.snippet
+                        snippet = it.snippet,
+                        url = it.url
                     )
-                }
+                },
+                sourceStart = block.sourceStart
             )
         )
         return
@@ -1267,7 +1268,7 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
         addedTasks.forEachIndexed { idx, taskText ->
             InteractiveChecklistItemRow(
                 initialChecked = false,
-                item = ListItem(spans = listOf(InlineSpan.Text(taskText)), checked = false),
+                item = ListItem(spans = listOf(InlineSpan.TextSpan(taskText)), checked = false),
                 selectable = false,
                 citationUrls = citationUrls
             )
@@ -1374,15 +1375,16 @@ private fun OrderedListBlock(block: Block.OrderedList, selectable: Boolean, cita
     if (sourceItems.isNotEmpty()) {
         CitationsBlockView(
             Block.CitationsBlock(
-                sourceItems.map {
+                citations = sourceItems.map {
                     CitationEntry(
                         number = it.number,
                         title = it.title,
-                        url = it.url,
                         domain = it.domain,
-                        snippet = it.snippet
+                        snippet = it.snippet,
+                        url = it.url
                     )
-                }
+                },
+                sourceStart = block.sourceStart
             )
         )
         return
@@ -1415,13 +1417,13 @@ private fun StepOrderedListItemRow(
     // Detect "1. **Step Title** — Step description" pattern from Screenshot 3
     val splitStep = remember(item.spans) {
         val first = item.spans.firstOrNull()
-        if (first is InlineSpan.Bold && item.spans.size >= 2) {
+        if (first is InlineSpan.BoldSpan && item.spans.size >= 2) {
             val title = plainTextOfSpans(first.children).trim().trimEnd(':').trim()
             val rest = item.spans.drop(1).toMutableList()
             val second = rest.firstOrNull()
-            if (second is InlineSpan.Text) {
+            if (second is InlineSpan.TextSpan) {
                 val stripped = second.text.replace(Regex("^\\s*[—–\\-:]\\s*"), "").trimStart()
-                if (stripped.isEmpty()) rest.removeAt(0) else rest[0] = InlineSpan.Text(stripped)
+                if (stripped.isEmpty()) rest.removeAt(0) else rest[0] = InlineSpan.TextSpan(stripped)
             }
             if (title.isNotEmpty() && rest.isNotEmpty()) title to rest else null
         } else null

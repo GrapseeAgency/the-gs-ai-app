@@ -207,6 +207,67 @@ else:
             failures.append(f"iOS {sw_name} missing {miss}")
     notes.append(f"iOS sub-type sets: {len(LISTS)}/{len(LISTS)} lists verified")
 
+# --- 6. Cross-file AST & Symbol Consistency (Android + iOS Section 01 & 02) ---
+cb_kt = read(K / "ContentBlocks.kt")
+rb_kt = read(K / "RichBlocks.kt")
+cbc_kt = read(K / "CodeBlockCard.kt")
+wv2_kt = read(K / "WidgetsV2.kt")
+
+declared_kt_spans = set(
+    re.findall(r"data class (\w+)\s*\([^)]*\)\s*:\s*InlineSpan", cb_kt)
+)
+used_kt_spans = set(re.findall(r"\bInlineSpan\.(\w+)\b", kt_all))
+unknown_kt_spans = used_kt_spans - declared_kt_spans
+if unknown_kt_spans:
+    failures.append(f"Android InlineSpan unknown symbol(s): {sorted(unknown_kt_spans)} (declared: {sorted(declared_kt_spans)})")
+else:
+    notes.append(f"Android InlineSpan symbols: {len(used_kt_spans)}/{len(declared_kt_spans)} verified across all .kt files")
+
+block_section = cb_kt.split("sealed interface Block")[1].split("\n}\n")[0]
+declared_kt_blocks = set(
+    re.findall(r"data class (\w+)\s*\(", block_section)
+)
+ext_kt_block_fns = set(re.findall(r"fun Block\.(\w+)", kt_all))
+used_kt_blocks = set(re.findall(r"\bBlock\.(\w+)\b", kt_all)) - {"sourceStart"} - ext_kt_block_fns
+unknown_kt_blocks = used_kt_blocks - declared_kt_blocks
+if unknown_kt_blocks:
+    failures.append(f"Android Block unknown symbol(s): {sorted(unknown_kt_blocks)}")
+else:
+    notes.append(f"Android Block symbols: {len(used_kt_blocks)}/{len(declared_kt_blocks)} verified across all .kt files")
+
+if "val checked: Boolean?" not in cb_kt:
+    failures.append("Android ContentBlocks.kt: ListItem missing `val checked: Boolean?`")
+if "val url: String" not in cb_kt:
+    failures.append("Android ContentBlocks.kt: CitationEntry missing `val url: String`")
+
+for kt_file in sorted(K.glob("*.kt")):
+    src = read(kt_file)
+    has_wildcard = "import androidx.compose.foundation.layout.*" in src
+    if not has_wildcard:
+        for mod_fn in ("height", "width", "size", "padding", "fillMaxWidth"):
+            if re.search(rf"\.{mod_fn}\s*\(", src) and f"import androidx.compose.foundation.layout.{mod_fn}" not in src:
+                failures.append(f"Android {kt_file.name}: uses `.{mod_fn}(...)` without importing `androidx.compose.foundation.layout.{mod_fn}`")
+notes.append("Android Compose layout modifier imports verified across all .kt files")
+
+IOS_CB = ROOT / "ios/App/Sources/Features/Chats/Content/ContentBlocks.swift"
+IOS_RB = ROOT / "ios/App/Sources/Features/Chats/Content/RichBlocks.swift"
+if IOS_CB.exists() and IOS_RB.exists():
+    cb_sw = read(IOS_CB)
+    rb_sw = read(IOS_RB)
+    if "var checked: Bool?" not in cb_sw and "let checked: Bool?" not in cb_sw:
+        failures.append("iOS ContentBlocks.swift: ListItem missing `checked: Bool?`")
+    if "var url: String" not in cb_sw and "let url: String" not in cb_sw:
+        failures.append("iOS ContentBlocks.swift: CitationEntry missing `url: String`")
+    for bad_pattern, msg in [
+        (r"case \.strikethrough\b", "iOS RichBlocks.swift uses `.strikethrough` instead of `.strike`"),
+        (r"case \.citation\(", "iOS RichBlocks.swift uses `.citation(` which is not a case of InlineSpan"),
+        (r"if case \.code\b", "iOS RichBlocks.swift uses `case .code` instead of `case .codeBlock`"),
+        (r"CitationsBlockView\(entries:", "iOS RichBlocks.swift uses `CitationsBlockView(entries:)` instead of `CitationsBlockView(citations:)`"),
+    ]:
+        if re.search(bad_pattern, rb_sw):
+            failures.append(msg)
+    notes.append("iOS ContentBlocks.swift + RichBlocks.swift symbol & enum case consistency verified")
+
 # --- report ------------------------------------------------------------------
 print("== android parity audit ==")
 for n in notes:

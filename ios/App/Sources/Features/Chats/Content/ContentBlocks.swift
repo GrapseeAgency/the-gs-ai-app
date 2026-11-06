@@ -30,9 +30,10 @@ enum TableAlign: Equatable {
 }
 
 struct ListItem: Equatable {
-    let number: Int?
+    var number: Int? = nil
     let spans: [InlineSpan]
-    let children: [Block]
+    var children: [Block] = []
+    var checked: Bool? = nil
 }
 
 // MARK: - Blocks
@@ -91,6 +92,7 @@ struct CitationEntry: Equatable {
     let title: String
     let domain: String
     let snippet: String
+    var url: String = ""
 }
 
 struct ToolResultEntry: Equatable {
@@ -519,6 +521,8 @@ private func parseList(_ lines: [GSLine], start: Int) -> ([Block], Int) {
     return (blocks, i)
 }
 
+private let taskCheckboxRegex = try! NSRegularExpression(pattern: #"^\[([ xX✓☑])\]\s+(.*)$"#)
+
 private func buildList(_ records: [GSListRecord], from: Int, level: Int) -> (Block, Int) {
     let ordered = records[from].ordered
     var items: [ListItem] = []
@@ -537,10 +541,18 @@ private func buildList(_ records: [GSListRecord], from: Int, level: Int) -> (Blo
         if !childRecords.isEmpty {
             children.append(buildList(childRecords, from: 0, level: childRecords[0].level).0)
         }
+        var itemChecked: Bool? = nil
+        var itemText = record.text
+        if !record.ordered, let g = record.text.trimmed.captureGroups(taskCheckboxRegex), g.count >= 2 {
+            let mark = g[0]
+            itemChecked = (mark == "x" || mark == "X" || mark == "✓" || mark == "☑")
+            itemText = g[1]
+        }
         items.append(ListItem(
             number: record.ordered ? record.number : nil,
-            spans: parseInline(record.text),
-            children: children
+            spans: parseInline(itemText),
+            children: children,
+            checked: itemChecked
         ))
         i = j
     }
@@ -714,6 +726,7 @@ private func shiftItem(_ item: ListItem, by delta: Int) -> ListItem {
     ListItem(
         number: item.number,
         spans: item.spans,
-        children: item.children.map { shiftSource($0, by: delta) }
+        children: item.children.map { shiftSource($0, by: delta) },
+        checked: item.checked
     )
 }
