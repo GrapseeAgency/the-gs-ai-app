@@ -235,7 +235,13 @@ PROBES = {
 
 # A1/A3 thresholds, each derived from measured data with the margin stated.
 PAGE_LUMA_BAND = (235.0, 250.0)   # real 242.20 / 242.49 | black 0.00, white 255.00
-SPREAD_MAX = 5.0                  # real 0.21 / 2.36 | boundary-straddling 7.4..41.8
+SPREAD_MAX = 6.0                  # real 0.21 / 2.36 | boundary-straddling 7.4..41.8
+#                                    6.0 (was 5.0), 2026-11-06: the home craft series
+#                                    moved the suggestions row's measured interior
+#                                    spread to 5.51 (run 42253215961, VLM-verified:
+#                                    clean glass, no smearing, crisp text). The cap
+#                                    stays below the boundary-straddling band, so
+#                                    the genuinely-broken renders still fail red.
 
 # A2 and the rim are anchored to each probe's own measured value on the sheet,
 # NOT to a tolerance that happens to admit the current builds. The previous
