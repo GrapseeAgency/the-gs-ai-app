@@ -263,6 +263,7 @@ if IOS_CB.exists() and IOS_RB.exists():
         (r"case \.citation\(", "iOS RichBlocks.swift uses `.citation(` which is not a case of InlineSpan"),
         (r"if case \.code\b", "iOS RichBlocks.swift uses `case .code` instead of `case .codeBlock`"),
         (r"CitationsBlockView\(entries:", "iOS RichBlocks.swift uses `CitationsBlockView(entries:)` instead of `CitationsBlockView(citations:)`"),
+        (r"let thinkingPhase:\s*String\?", "iOS RichBlocks.swift uses `let thinkingPhase: String?` instead of `NexlyThinkingPhase`"),
     ]:
         if re.search(bad_pattern, rb_sw):
             failures.append(msg)
@@ -272,6 +273,7 @@ if IOS_CB.exists() and IOS_RB.exists():
     ios_all = cb_sw + rb_sw + read(IOS_WB)
     SECTION_FEATURES = [
         ("NexlyCalloutCard", "02. Structured Answers: Callout cards (Quick summary / Important / Key Insights)"),
+        ("NexlyQuickCalculatorCard", "01. Dashboard: Interactive Quick Calculator card from ordinary Markdown"),
         ("InteractiveChecklistItemRow", "02. Structured Answers: Interactive Next Actions / Todo checklists"),
         ("+ Add Task", "01/02. Interactive + Add Task button on Todo checklists"),
         ("StepOrderedListItemRow", "02. Structured Answers: Numbered step-by-step plan circles & bold step split"),
@@ -279,6 +281,7 @@ if IOS_CB.exists() and IOS_RB.exists():
         ("Run in Browser", "04/05. Code Blocks & Execution: Run in Browser / Run Code bar"),
         ("extractCodeSeriesPreview", "04/05. Code Blocks & Execution: Inline Revenue Trend bar chart preview"),
         ("localhost:3000", "05. Code Execution: Interactive Component localhost:3000 preview"),
+        ("High Priority", "05. Code Execution: Task Overview 4-KPI strip"),
         ("Show:", "06. Tables & Data Grids: Pagination & Show: N display controls"),
         ("Last 6 Months", "07. Interactive Charts: Date range selector"),
         ("Key Insights", "06/07. Tables & Charts: Key Insights summary card"),

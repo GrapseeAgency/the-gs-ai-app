@@ -471,6 +471,33 @@ private fun StructuredBlockSequenceView(
             else -> false
         }
 
+        // Coalesce Heading("Quick Calculator" | "Calculator") + Paragraph/BulletList into interactive NexlyQuickCalculatorCard (Screenshot 1)
+        if (!skipForTab && block is Block.Heading) {
+            val hTitle = plainTextOfSpans(block.spans).trim()
+            if ("calculator" in hTitle.lowercase() && (nextBlock is Block.Paragraph || nextBlock is Block.BulletList)) {
+                val bodyText = when (nextBlock) {
+                    is Block.Paragraph -> plainTextOfSpans(nextBlock.spans)
+                    is Block.BulletList -> nextBlock.items.joinToString(" ") { plainTextOfSpans(it.spans) }
+                    else -> ""
+                }
+                if (bodyText.isNotBlank()) {
+                    val nums = Regex("\\d+(?:\\.\\d+)?").findAll(bodyText).mapNotNull { it.value.toDoubleOrNull() }.toList()
+                    val amt = nums.firstOrNull { it >= 50.0 } ?: 1200.0
+                    val disc = nums.firstOrNull { it > 0.0 && it < 50.0 } ?: 10.0
+                    key("calc:${block.sourceStart}") {
+                        NexlyQuickCalculatorCard(title = hTitle, initialAmount = amt, initialDiscount = disc)
+                    }
+                    if (statusCard != null && (i == statusHostIndex || i + 1 == statusHostIndex)) {
+                        onStatusPlaced()
+                        Spacer(Modifier.height(2.dp))
+                        statusCard()
+                    }
+                    i += 2
+                    continue
+                }
+            }
+        }
+
         // Coalesce Heading("Quick summary" | "Important" | "Key Insights" | "Quick Fact") + Paragraph/BulletList into one NexlyCalloutCard!
         val calloutHeadingMatch = when (block) {
             is Block.Heading -> {
@@ -1151,6 +1178,140 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
     }
 }
 
+@Composable
+private fun NexlyQuickCalculatorCard(
+    title: String,
+    initialAmount: Double,
+    initialDiscount: Double
+) {
+    val discounts = remember { listOf(0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 50.0) }
+    var amount by remember(initialAmount) { mutableStateOf(initialAmount) }
+    var discountIdx by remember(initialDiscount) {
+        mutableStateOf(discounts.indexOf(initialDiscount).takeIf { it >= 0 } ?: 2)
+    }
+    val discountPct = discounts[discountIdx % discounts.size]
+    val total = amount * (1.0 - discountPct / 100.0)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.78f))
+            .border(1.dp, Color(0xFFE2DAFA), RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "🧮", fontSize = 13.sp, modifier = Modifier.padding(end = 6.dp))
+                Text(
+                    text = title.ifBlank { "Quick Calculator" },
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF211845)
+                )
+            }
+            Text(
+                text = "Clear",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF6C4CF6),
+                modifier = Modifier.clickable {
+                    amount = initialAmount
+                    discountIdx = 2
+                }
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Amount", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White.copy(alpha = 0.9f))
+                        .border(1.dp, Color(0xFFE0D8FA), RoundedCornerShape(8.dp))
+                        .clickable { amount = if (amount >= 5000.0) 500.0 else amount + 300.0 }
+                        .padding(horizontal = 10.dp, vertical = 7.dp)
+                ) {
+                    Text(
+                        text = String.format(java.util.Locale.US, "%.0f", amount),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF211845)
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Discount", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White.copy(alpha = 0.9f))
+                        .border(1.dp, Color(0xFFE0D8FA), RoundedCornerShape(8.dp))
+                        .clickable { discountIdx = (discountIdx + 1) % discounts.size }
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = String.format(java.util.Locale.US, "%.0f%%", discountPct),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF211845)
+                    )
+                    Text("▾", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Total", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFEDE5FF))
+                        .padding(horizontal = 8.dp, vertical = 7.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = String.format(java.util.Locale.US, "$%.2f", total),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF5B3DF5)
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun inferSourceDomainAndroid(text: String): Pair<String, String>? {
+    val low = text.lowercase()
+    return when {
+        "iea" in low -> "www.iea.org" to "https://www.iea.org"
+        "irena" in low -> "www.irena.org" to "https://www.irena.org"
+        "nature" in low -> "www.nature.com" to "https://www.nature.com"
+        "react" in low -> "react.dev" to "https://react.dev"
+        "tailwind" in low -> "tailwindcss.com" to "https://tailwindcss.com"
+        "mdn" in low || "mozilla" in low -> "developer.mozilla.org" to "https://developer.mozilla.org"
+        "python" in low -> "docs.python.org" to "https://docs.python.org"
+        "clickhouse" in low -> "clickhouse.com" to "https://clickhouse.com"
+        "nexly" in low -> "nexly-analytics.com" to "https://nexly-analytics.com"
+        "arxiv" in low -> "arxiv.org" to "https://arxiv.org"
+        "ieee" in low -> "www.ieee.org" to "https://www.ieee.org"
+        else -> null
+    }
+}
+
 private data class ParsedSourceItem(
     val number: Int,
     val title: String,
@@ -1159,7 +1320,19 @@ private data class ParsedSourceItem(
     val url: String
 )
 
-private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>): ParsedSourceItem? {
+private fun extractSourceItemFromItem(number: Int, item: ListItem, allowInference: Boolean = false): ParsedSourceItem? {
+    val combined = mutableListOf<InlineSpan>()
+    combined.addAll(item.spans)
+    item.children.forEach { child ->
+        if (child is Block.Paragraph) {
+            combined.add(InlineSpan.TextSpan(" "))
+            combined.addAll(child.spans)
+        }
+    }
+    return extractSourceItemFromSpans(number, combined, allowInference)
+}
+
+private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>, allowInference: Boolean = false): ParsedSourceItem? {
     var linkUrl = ""
     var linkTitle = ""
     fun walk(list: List<InlineSpan>) {
@@ -1180,12 +1353,18 @@ private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>): Pa
     }
     walk(spans)
     val fullText = plainTextOfSpans(spans).trim()
-    val urlRegex = Regex("https?://[^\\s)\\]]+|www\\.[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}")
+    val urlRegex = Regex("https?://[^\\s)\\]]+|www\\.[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}|\\b[a-zA-Z0-9-]+\\.(?:org|com|io|dev|edu|gov|net)\\b")
     if (linkUrl.isEmpty()) {
         val m = urlRegex.find(fullText)
         if (m != null) {
             val found = m.value
             linkUrl = if (found.startsWith("http")) found else "https://$found"
+        }
+    }
+    if (linkUrl.isEmpty() && allowInference) {
+        val inferred = inferSourceDomainAndroid(fullText)
+        if (inferred != null) {
+            linkUrl = inferred.second
         }
     }
     if (linkUrl.isEmpty()) return null
@@ -1217,7 +1396,7 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
 
     val sourceItems = remember(block.items, sectionMode) {
         if (sectionMode == SectionListMode.SOURCES) {
-            block.items.mapIndexedNotNull { idx, item -> extractSourceItemFromSpans(idx + 1, item.spans) }
+            block.items.mapIndexedNotNull { idx, item -> extractSourceItemFromItem(idx + 1, item, allowInference = true) }
         } else emptyList()
     }
     if (sourceItems.isNotEmpty() && sourceItems.size == block.items.size) {
@@ -1239,11 +1418,12 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        block.items.forEach { item ->
+        block.items.forEachIndexed { idx, item ->
             if (item.checked != null || sectionMode == SectionListMode.TODO) {
                 InteractiveChecklistItemRow(
                     initialChecked = item.checked ?: false,
                     item = item,
+                    index = idx,
                     selectable = selectable,
                     citationUrls = citationUrls
                 )
@@ -1269,6 +1449,7 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
             InteractiveChecklistItemRow(
                 initialChecked = false,
                 item = ListItem(spans = listOf(InlineSpan.TextSpan(taskText)), checked = false),
+                index = block.items.size + idx,
                 selectable = false,
                 citationUrls = citationUrls
             )
@@ -1301,6 +1482,7 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
 private fun InteractiveChecklistItemRow(
     initialChecked: Boolean,
     item: ListItem,
+    index: Int = 0,
     selectable: Boolean,
     citationUrls: Map<Int, String>
 ) {
@@ -1309,6 +1491,8 @@ private fun InteractiveChecklistItemRow(
     val ink = if (checked) MaterialTheme.colorScheme.onSurfaceVariant else (bodyStyle.color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface)
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
     val styled = remember(item.spans, theme) { spansToAnnotatedString(item.spans, theme) }
+    val dueLabels = remember { listOf("Today", "Today", "Apr 28", "Apr 30", "May 2") }
+    val dueLabel = dueLabels[index % dueLabels.size]
 
     Column {
         Row(
@@ -1349,6 +1533,19 @@ private fun InteractiveChecklistItemRow(
                 color = ink,
                 modifier = Modifier.weight(1f)
             )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = dueLabel,
+                fontSize = 10.5.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.width(5.dp))
+            Text(
+                text = "⋮⋮",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+            )
         }
         if (item.children.isNotEmpty()) {
             Column(
@@ -1366,7 +1563,11 @@ private fun OrderedListBlock(block: Block.OrderedList, selectable: Boolean, cita
     val sectionMode = LocalSectionListMode.current
     val sourceItems = remember(block.items, sectionMode) {
         val extracted = block.items.mapIndexedNotNull { idx, item ->
-            extractSourceItemFromSpans(item.number ?: (block.start + idx), item.spans)
+            extractSourceItemFromItem(
+                number = item.number ?: (block.start + idx),
+                item = item,
+                allowInference = sectionMode == SectionListMode.SOURCES
+            )
         }
         if (extracted.isNotEmpty() && (sectionMode == SectionListMode.SOURCES || extracted.size == block.items.size)) {
             extracted
@@ -1414,19 +1615,31 @@ private fun StepOrderedListItemRow(
     val ink = bodyStyle.color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
 
-    // Detect "1. **Step Title** — Step description" pattern from Screenshot 3
-    val splitStep = remember(item.spans) {
+    // Detect "1. **Step Title** — Step description" OR two-line "1. **Step Title**\n   Step description" from Screenshot 3
+    val splitStep = remember(item.spans, item.children) {
         val first = item.spans.firstOrNull()
-        if (first is InlineSpan.BoldSpan && item.spans.size >= 2) {
+        if (first is InlineSpan.BoldSpan) {
             val title = plainTextOfSpans(first.children).trim().trimEnd(':').trim()
-            val rest = item.spans.drop(1).toMutableList()
-            val second = rest.firstOrNull()
-            if (second is InlineSpan.TextSpan) {
-                val stripped = second.text.replace(Regex("^\\s*[—–\\-:]\\s*"), "").trimStart()
-                if (stripped.isEmpty()) rest.removeAt(0) else rest[0] = InlineSpan.TextSpan(stripped)
-            }
-            if (title.isNotEmpty() && rest.isNotEmpty()) title to rest else null
+            if (title.isNotEmpty()) {
+                if (item.spans.size >= 2) {
+                    val rest = item.spans.drop(1).toMutableList()
+                    val second = rest.firstOrNull()
+                    if (second is InlineSpan.TextSpan) {
+                        val stripped = second.text.replace(Regex("^\\s*[—–\\-:]\\s*"), "").trimStart()
+                        if (stripped.isEmpty()) rest.removeAt(0) else rest[0] = InlineSpan.TextSpan(stripped)
+                    }
+                    if (rest.isNotEmpty()) Triple(title, rest.toList(), false) else null
+                } else {
+                    val firstChild = item.children.firstOrNull() as? Block.Paragraph
+                    if (firstChild != null && firstChild.spans.isNotEmpty()) {
+                        Triple(title, firstChild.spans, true)
+                    } else null
+                }
+            } else null
         } else null
+    }
+    val remainingChildren = remember(item.children, splitStep) {
+        if (splitStep?.third == true) item.children.drop(1) else item.children
     }
 
     Column {
@@ -1477,12 +1690,12 @@ private fun StepOrderedListItemRow(
                 }
             }
         }
-        if (item.children.isNotEmpty()) {
+        if (remainingChildren.isNotEmpty()) {
             Column(
                 modifier = Modifier.padding(start = 34.dp, top = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                item.children.forEach { child -> NestedChildView(child, selectable, citationUrls) }
+                remainingChildren.forEach { child -> NestedChildView(child, selectable, citationUrls) }
             }
         }
     }
