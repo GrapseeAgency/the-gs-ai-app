@@ -44,6 +44,8 @@ import com.grapsee.gsai.ui.chat.ChatInfoScreen
 import com.grapsee.gsai.ui.chat.ChatScreen
 import com.grapsee.gsai.ui.chat.ChatSearchScreen
 import com.grapsee.gsai.ui.chat.ChatsScreen
+import com.grapsee.gsai.ui.models.ModelCentreScreen
+import com.grapsee.gsai.ui.models.ModelCompareScreen
 import com.grapsee.gsai.ui.profile.ProfilePersonalizationScreen
 import com.grapsee.gsai.ui.profile.ProfileScreen
 import com.grapsee.gsai.ui.library.LibraryItemScreen
@@ -321,7 +323,7 @@ fun GsNavHost(
                 onAttach = { navController.navigate(GsRoutes.chat(null, attach = true)) },
                 onOpenConversation = { id -> navController.navigate(GsRoutes.chat(id)) },
                 onOpenAllChats = { open(GsRoutes.CHATS) },
-                onOpenModels = { open(GsRoutes.MODEL_PICKER) },
+                onOpenModels = { open(GsRoutes.MODEL_CENTRE) },
                 onOpenMenu = { scope.launch { drawerState.open() } },
                 onOpenExplore = { open(GsRoutes.EXPLORE) },
                 seedPrompt = seedDraft,
@@ -332,6 +334,18 @@ fun GsNavHost(
             ModelSelectionScreen(
                 onBack = back,
                 onContinue = { navController.popBackStack() },
+            )
+        }
+        composable(GsRoutes.MODEL_CENTRE) {
+            // The Model Centre owns "Explore AI Models" — the picker above stays
+            // registered for any other surface that wants the bare selection list.
+            ModelCentreScreen(
+                onNavigate = open,
+            )
+        }
+        composable(GsRoutes.MODEL_COMPARE) {
+            ModelCompareScreen(
+                onBack = back,
             )
         }
         composable(GsRoutes.TRAVEL_AGENT) {

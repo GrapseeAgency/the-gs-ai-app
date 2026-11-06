@@ -72,6 +72,14 @@ enum AeroRoute: Hashable {
     /// Model Selection (model-selection-v2.png) — the picker the pre-chat page
     /// opens, distinct from the Settings AI page's model details.
     case modelPicker
+    /// Model Centre — the three-tier model browser the pre-chat page's
+    /// "Explore AI Models" card opens. Picking a tier member writes the same
+    /// UserDefaults key the chat send path reads; the spec-sheet comparison
+    /// (`modelCompare`) is demoted to the Advanced section.
+    case modelCentre
+    /// Compare models — the side-by-side spec sheet, reachable only from the
+    /// Model Centre's Advanced section.
+    case modelCompare
     /// Model Selection & Reasoning Effort. Its own case so the settings hub
     /// reaches it in one hop, like Android's `SETTINGS_AI` row — the Chat
     /// page's "AI Intelligence" link keeps working through its NavigationLink.
@@ -321,12 +329,16 @@ struct AeroDestinations: ViewModifier {
                 onAttach: { router.path.append(.chatAttach) },
                 onOpenConversation: { router.path.append(.chat($0)) },
                 onOpenAllChats: { router.path.append(.chats) },
-                onOpenModels: { router.path.append(.modelPicker) },
+                onOpenModels: { router.path.append(.modelCentre) },
                 onOpenMenu: { router.requestDrawer() },
                 onOpenExplore: { router.path.append(.explore) })
             case .modelPicker: ModelSelectionView(
                 onBack: { router.path.removeLast() },
                 onContinue: { router.path.removeLast() })
+            // The Model Centre owns "Explore AI Models" — the picker above stays
+            // routed for any other surface that wants the bare selection list.
+            case .modelCentre: ModelCentreView()
+            case .modelCompare: ModelCompareView()
             case .chatAutoSend(let prompt): ChatDetailView(conversationID: nil, prefill: prompt, autoSendPrefill: true)
             case .chatAttach: ChatDetailView(conversationID: nil, opensWithAttachments: true)
             case .settings: SettingsView(onRoute: { router.path.append($0) })
