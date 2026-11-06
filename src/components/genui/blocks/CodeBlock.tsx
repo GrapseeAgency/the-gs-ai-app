@@ -513,6 +513,83 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
           ) : null}
         </div>
       )}
+
+      {/* Visual Data Plot Preview (Screenshot 1: Revenue Trend mini purple bar chart) */}
+      {(() => {
+        const seriesPreview = extractCodeSeriesPreview(source)
+        if (!seriesPreview) return null
+        const maxVal = Math.max(1, ...seriesPreview.points.map((p) => p.value))
+        return (
+          <div
+            style={{
+              background: '#F7F4FF',
+              padding: '10px 14px',
+              borderTop: '1px solid rgba(124,92,252,0.22)',
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#221A47', marginBottom: 8 }}>
+              {seriesPreview.title}
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-end',
+                gap: 10,
+                height: 68,
+              }}
+            >
+              {seriesPreview.points.map((pt, idx) => {
+                const frac = Math.min(1, Math.max(0.15, pt.value / maxVal))
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '68%',
+                        height: Math.round(46 * frac),
+                        borderRadius: '5px 5px 0 0',
+                        background: '#6C4CF6',
+                      }}
+                    />
+                    <span style={{ fontSize: 10, color: '#5E5680' }}>{pt.label}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
+}
+
+function extractCodeSeriesPreview(
+  code: string
+): { title: string; points: Array<{ label: string; value: number }> } | null {
+  const labelMatch = code.match(/['"](?:Month|Label|Category|Quarter|Day|Year)s?['"]\s*:\s*\[([^\]]+)\]/i)
+  const valMatch = code.match(/['"](Revenue|Sales|Value|Score|Users|Growth|Amount)s?['"]\s*:\s*\[([^\]]+)\]/i)
+  if (!labelMatch || !valMatch) return null
+  const labels = labelMatch[1]
+    .split(',')
+    .map((s) => s.trim().replace(/^['"]|['"]$/g, ''))
+    .filter(Boolean)
+  const values = valMatch[2]
+    .split(',')
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isFinite(n))
+  if (labels.length < 2 || values.length < 2) return null
+  const count = Math.min(labels.length, values.length)
+  const seriesName = valMatch[1].charAt(0).toUpperCase() + valMatch[1].slice(1)
+  return {
+    title: `${seriesName} Trend`,
+    points: Array.from({ length: count }, (_, i) => ({ label: labels[i], value: values[i] })),
+  }
 }

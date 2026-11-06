@@ -815,7 +815,130 @@ private struct ChartBodyView: View {
             }
 
             // Chart Visualization Surface
-            if currentType == "bar" && pts.count >= 2 {
+            if (currentType == "line" || currentType == "area") && pts.count >= 2 {
+                // True 2D Smooth Cubic Bezier Line/Area Chart with Y-axis, X-axis, Gradient Fill, and Vertical Guide Line (Screenshot 6)
+                VStack(spacing: 4) {
+                    HStack(spacing: 6) {
+                        VStack(alignment: .trailing, spacing: 0) {
+                            ForEach([1.0, 0.66, 0.33, 0.0], id: \.self) { frac in
+                                Text(compactNumber(maxVal * frac, unit: unit))
+                                    .font(.system(size: 9.5, weight: .medium))
+                                    .foregroundStyle(Aero.textSecondary)
+                                if frac > 0 { Spacer() }
+                            }
+                        }
+                        .frame(width: 36, height: 132)
+
+                        GeometryReader { geo in
+                            let w = max(1, geo.size.width)
+                            let h = max(1, geo.size.height)
+                            let count = pts.count
+                            let coords: [CGPoint] = pts.enumerated().map { idx, pt in
+                                let x = count > 1 ? w * CGFloat(idx) / CGFloat(count - 1) : w * 0.5
+                                let y = h * (1.0 - CGFloat(min(max(pt.value / maxVal, 0.0), 1.0)))
+                                return CGPoint(x: x, y: y)
+                            }
+                            let linePath = Path { path in
+                                for (i, p) in coords.enumerated() {
+                                    if i == 0 {
+                                        path.move(to: p)
+                                    } else {
+                                        let prev = coords[i - 1]
+                                        let midX = (prev.x + p.x) * 0.5
+                                        path.addCurve(
+                                            to: p,
+                                            control1: CGPoint(x: midX, y: prev.y),
+                                            control2: CGPoint(x: midX, y: p.y)
+                                        )
+                                    }
+                                }
+                            }
+                            let areaPath = Path { path in
+                                path.addPath(linePath)
+                                if let last = coords.last, let first = coords.first {
+                                    path.addLine(to: CGPoint(x: last.x, y: h))
+                                    path.addLine(to: CGPoint(x: first.x, y: h))
+                                    path.closeSubpath()
+                                }
+                            }
+
+                            ZStack {
+                                // Horizontal gridlines
+                                ForEach([0.0, 0.33, 0.66, 1.0], id: \.self) { g in
+                                    Path { p in
+                                        let y = h * CGFloat(g)
+                                        p.move(to: CGPoint(x: 0, y: y))
+                                        p.addLine(to: CGPoint(x: w, y: y))
+                                    }
+                                    .stroke(Color.black.opacity(0.07), lineWidth: 1)
+                                }
+
+                                // Soft purple gradient fill underneath the curve
+                                areaPath.fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color(red: 0.424, green: 0.298, blue: 0.965).opacity(currentType == "area" ? 0.34 : 0.18),
+                                            Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.01)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+
+                                // Smooth cubic Bezier stroke
+                                linePath.stroke(
+                                    Color(red: 0.424, green: 0.298, blue: 0.965),
+                                    style: StrokeStyle(lineWidth: 2.8, lineCap: .round, lineJoin: .round)
+                                )
+
+                                // Selected datum vertical dashed guide line
+                                if activeIdx < coords.count {
+                                    let selCoord = coords[activeIdx]
+                                    Path { p in
+                                        p.move(to: CGPoint(x: selCoord.x, y: 0))
+                                        p.addLine(to: CGPoint(x: selCoord.x, y: h))
+                                    }
+                                    .stroke(
+                                        Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.45),
+                                        style: StrokeStyle(lineWidth: 1.2, dash: [4, 3])
+                                    )
+                                }
+
+                                // Interactive data points
+                                ForEach(Array(coords.enumerated()), id: \.offset) { idx, c in
+                                    let isSel = idx == activeIdx
+                                    Circle()
+                                        .fill(isSel ? Color.white : Color(red: 0.424, green: 0.298, blue: 0.965))
+                                        .frame(width: isSel ? 11 : 7, height: isSel ? 11 : 7)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color(red: 0.424, green: 0.298, blue: 0.965), lineWidth: isSel ? 3 : 0)
+                                        )
+                                        .position(c)
+                                        .onTapGesture {
+                                            GSHaptics.selection()
+                                            selectedIdx = idx
+                                        }
+                                }
+                            }
+                        }
+                        .frame(height: 132)
+                    }
+
+                    // X-axis labels row
+                    HStack(spacing: 0) {
+                        Spacer().frame(width: 42)
+                        ForEach(Array(pts.prefix(8).enumerated()), id: \.offset) { idx, pt in
+                            Text(pt.label)
+                                .font(.system(size: 10, weight: idx == activeIdx ? .bold : .regular))
+                                .foregroundStyle(idx == activeIdx ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
+                                .frame(maxWidth: .infinity)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+                .padding(.top, 4)
+            } else if currentType == "bar" && pts.count >= 2 {
                 HStack(alignment: .bottom, spacing: 8) {
                     ForEach(Array(pts.prefix(8).enumerated()), id: \.offset) { idx, pt in
                         let isSel = idx == activeIdx
@@ -844,6 +967,65 @@ private struct ChartBodyView: View {
                 }
                 .frame(height: 132)
                 .padding(.top, 4)
+            } else if (currentType == "pie" || currentType == "donut") && !pts.isEmpty {
+                // True 2D Donut Ring Chart with Center Total + Legend (Screenshots 1 & 6)
+                HStack(spacing: 16) {
+                    ZStack {
+                        Circle()
+                            .stroke(Color.black.opacity(0.06), lineWidth: 16)
+                            .frame(width: 96, height: 96)
+                        ForEach(Array(pts.prefix(6).enumerated()), id: \.offset) { idx, pt in
+                            let startSum = pts.prefix(idx).map { max(0, $0.value) }.reduce(0, +)
+                            let startFrac = CGFloat(startSum / totalVal)
+                            let endFrac = CGFloat((startSum + max(0, pt.value)) / totalVal)
+                            Circle()
+                                .trim(from: startFrac, to: max(startFrac + 0.005, endFrac - 0.008))
+                                .stroke(pt.color, style: StrokeStyle(lineWidth: idx == activeIdx ? 18 : 15, lineCap: .butt))
+                                .rotationEffect(.degrees(-90))
+                                .frame(width: 96, height: 96)
+                                .onTapGesture {
+                                    GSHaptics.selection()
+                                    selectedIdx = idx
+                                }
+                        }
+                        VStack(spacing: 1) {
+                            Text(compactNumber(totalVal, unit: unit))
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(Aero.text)
+                            Text("Total")
+                                .font(.system(size: 9.5, weight: .medium))
+                                .foregroundStyle(Aero.textSecondary)
+                        }
+                    }
+                    .padding(.leading, 4)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach(Array(pts.prefix(5).enumerated()), id: \.offset) { idx, pt in
+                            let sharePct = (max(0, pt.value) / totalVal) * 100.0
+                            Button {
+                                GSHaptics.selection()
+                                selectedIdx = idx
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Circle()
+                                        .fill(pt.color)
+                                        .frame(width: 8, height: 8)
+                                    Text(pt.label)
+                                        .font(.system(size: 11.5, weight: idx == activeIdx ? .bold : .medium))
+                                        .foregroundStyle(Aero.text)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Text(String(format: "%.0f%%", sharePct))
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundStyle(Aero.textSecondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .padding(.vertical, 6)
             } else {
                 ForEach(Array(pts.enumerated()), id: \.offset) { idx, pt in
                     let isSel = idx == activeIdx
@@ -882,65 +1064,89 @@ private struct ChartBodyView: View {
                 }
             }
 
-            // 3-Card KPI Summary Strip (Screenshot 6)
+            // 3-Card KPI Summary Strip with Top-Left Lavender Icon Badge & Bottom Green Pill (Screenshot 6)
             if pts.count >= 2 {
                 let firstVal = pts.first?.value ?? 1.0
                 let lastVal = pts.last?.value ?? 0.0
                 let growthPct = firstVal != 0 ? ((lastVal - firstVal) / abs(firstVal)) * 100.0 : 0.0
+                let pos = growthPct >= 0
+                let pillBg = pos ? Color(red: 0.902, green: 0.976, blue: 0.941) : Color(red: 0.992, green: 0.925, blue: 0.925)
+                let pillFg = pos ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373)
                 let peakPt = pts[peakIdx]
                 HStack(spacing: 7) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Total")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Aero.textSecondary)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("📊")
+                            .font(.system(size: 11))
+                            .frame(width: 22, height: 22)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.929, green: 0.902, blue: 1.0)))
                         Text(compactNumber(totalVal, unit: unit))
-                            .font(.system(size: 13.5, weight: .bold))
+                            .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(Aero.text)
-                        Text(String(format: "%@ %.1f%%", growthPct >= 0 ? "↑" : "↓", abs(growthPct)))
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(growthPct >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
+                        Text("Total")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Aero.textSecondary)
+                        Text(String(format: "%@ %@%.1f%%", pos ? "↑" : "↓", pos ? "+" : "", growthPct))
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundStyle(pillFg)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(pillBg))
                     }
                     .padding(.horizontal, 9)
-                    .padding(.vertical, 7)
+                    .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.74)))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.82)))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Peak (\(peakPt.label))")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Aero.textSecondary)
-                            .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("👥")
+                            .font(.system(size: 11))
+                            .frame(width: 22, height: 22)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.929, green: 0.902, blue: 1.0)))
                         Text(compactNumber(peakPt.value, unit: unit))
-                            .font(.system(size: 13.5, weight: .bold))
+                            .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(Aero.text)
-                        Text("★ Highest")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color(red: 0.424, green: 0.298, blue: 0.965))
-                    }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 7)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.74)))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Trend")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Aero.textSecondary)
-                        Text(String(format: "%@%.1f%%", growthPct >= 0 ? "+" : "", growthPct))
-                            .font(.system(size: 13.5, weight: .bold))
-                            .foregroundStyle(growthPct >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
-                        Text(rangeOptions[rangeIdx])
-                            .font(.system(size: 10))
+                        Text("Peak (\(peakPt.label))")
+                            .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(Aero.textSecondary)
                             .lineLimit(1)
+                        Text("★ Highest")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(Color(red: 0.937, green: 0.918, blue: 1.0)))
                     }
                     .padding(.horizontal, 9)
-                    .padding(.vertical, 7)
+                    .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.74)))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.82)))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("📈")
+                            .font(.system(size: 11))
+                            .frame(width: 22, height: 22)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.929, green: 0.902, blue: 1.0)))
+                        Text(String(format: "%@%.1f%%", pos ? "+" : "", growthPct))
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Aero.text)
+                        Text("Growth Rate")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Aero.textSecondary)
+                            .lineLimit(1)
+                        Text(String(format: "%@ %@%.1f%%", pos ? "↑" : "↓", pos ? "+" : "", growthPct))
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundStyle(pillFg)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(pillBg))
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.82)))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
                 }
             }
         }

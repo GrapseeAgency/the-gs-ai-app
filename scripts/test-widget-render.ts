@@ -179,8 +179,16 @@ total++
       '2. **Set Up Launch Assets** — Finalize landing page, visuals, pricing, and onboarding',
       '',
       '## Next actions',
-      '- [ ] Finalize landing page copy',
-      '- [x] Record product demo video',
+      '- Finalize landing page copy',
+      '- Record product demo video',
+      '',
+      '### Key Insights',
+      '- Python leads by a wide margin at 28.11% share',
+      '- C++ and JavaScript continue to show steady growth',
+      '',
+      '## Key Sources',
+      '1. **IEA – Renewable Energy Market Update** — Global renewable capacity additions are set to soar by 107 gigawatts. https://www.iea.org/reports/renewable-energy-market-update',
+      '2. **Nature Energy – Solar & Wind Growth Analysis** — Peer-reviewed study on global clean energy adoption. https://www.nature.com/articles/s41560-025-001',
       '',
       '| # | Language | Popularity | Trend |',
       '| --- | --- | --- | --- |',
@@ -189,11 +197,11 @@ total++
       '| 3 | C++ | 10.68% | +0.34% |',
       '| 4 | C | 9.21% | -0.18% |',
       '| 5 | JavaScript | 8.59% | +0.15% |',
-      '| 6 | TypeScript | 6.40% | +0.48% |',
       '',
       '```python',
       'import pandas as pd',
-      'df = pd.DataFrame({"Revenue": [3200, 4500, 9642]})',
+      "data = {'Month': ['Jan', 'Feb', 'Mar', 'Apr', 'May'], 'Revenue': [120, 150, 180, 210, 250]}",
+      'df = pd.DataFrame(data)',
       'print("Growth +201.3%")',
       '```',
       '',
@@ -206,42 +214,30 @@ total++
       createElement(MessageContent, {
         text: ordinaryAndWidgetResponse,
         dark: false,
-        citations: [
-          {
-            ordinal: 1,
-            title: 'IEA – Renewable Energy Market Update 2025',
-            url: 'https://www.iea.org/reports/renewable-energy-market-update',
-            domain: 'www.iea.org',
-            snippet: 'Global renewable capacity additions are set to soar by 107 gigawatts.',
-          },
-          {
-            ordinal: 2,
-            title: 'Nature Energy – Solar & Wind Growth Analysis',
-            url: 'https://www.nature.com/articles/s41560-025-001',
-            domain: 'nature.com',
-            snippet: 'Peer-reviewed study on global clean energy adoption.',
-          },
-        ],
       })
     )
 
     const requiredMarkers = [
-      'Quick summary:', // 01 & 02: Callout card
-      'Important:', // 02: Warning callout card
+      'Quick summary', // 01 & 02: Two-deck Callout card
+      'Important', // 02: Warning callout card
+      'Key Insights', // 06 & 07: Multi-block coalesced Key Insights callout card
       '🎯', // 02: Key priorities section icon
       '☰', // 02: Step-by-step plan section icon
       'Validate &amp; Prepare', // 02: Split step bold title
-      'role="checkbox"', // 02: Interactive checklist
-      'Show: <!-- -->5<!-- --> ▾', // 06: Table pagination display control
+      'role="checkbox"', // 02: Plain bullets under Next actions auto-elevated into interactive checkboxes
+      '+ Add Task', // 01 & 02: Add Task pill button on Todo / Next actions checklist
+      '🐍', // 06: Entity monogram badge in ordinary Markdown table
+      'Show: <!-- -->5<!-- --> ▾', // 06: Table pagination display control on 5-row table
       'Run Code', // 04 & 05: Code block execution bar
+      'Revenue Trend', // 04 & 05: Visual data series bar chart preview extracted from Python code
       'Line Chart', // 07: Interactive chart type switcher
       'Bar Chart',
       'Area Chart',
       'Pie Chart',
       'Last 6 Months', // 07: Chart date range selector
-      'Key Sources', // 03: Citations header
-      'Trusted Source', // 03: Trusted source green pill
-      'Academic', // 03: Academic source lavender pill
+      'Trusted Source', // 03: Ordinary Markdown source list elevated to Trusted Source green pill
+      'Academic', // 03: Ordinary Markdown source list elevated to Academic lavender pill
+      'Ask follow-up', // 01-07: Bottom contextual action pills
     ]
     const missing = requiredMarkers.filter((m) => !html.includes(m))
     if (missing.length > 0) {
