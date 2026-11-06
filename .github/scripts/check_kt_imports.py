@@ -54,15 +54,32 @@ ANY_IMPORT = re.compile(r"^import\s+([\w.]+)(?:\s+as\s+(\w+))?\s*$")
 # `internal inline fun`, `suspend fun` and `@Composable` all have to be skipped
 # before the declared name. A tight list is what made gsHaptic and
 # GS_SESSION_HEADER look undeclared.
+#
+# TWO RULES BEYOND THE MODIFIERS, both learned from run 42241529739 failing on a
+# valid import:
+#
+#   1. COLUMN 0 ONLY. `^`, not `^\s*`. The docstring of declared_names promises
+#      "every TOP-LEVEL name", and an indented declaration is a class/object
+#      MEMBER. The first version indexed members as package symbols, so the
+#      private member `fun luminance(color: Color)` in a ui.chat TEST gave the
+#      false "'luminance' is declared in: com.grapsee.gsai.ui.chat" that flagged
+#      a perfectly valid `com.grapsee.gsai.ui.orbs.luminance` extension import.
+#   2. RECEIVER-QUALIFIED EXTENSIONS ARE DECLARED BY THEIR NAME. `val
+#      OrbPhase.luminance` and `fun ChatDatabase.insert` declare the symbols
+#      `luminance` and `insert` -- the receiver is not the name. The first
+#      version indexed `OrbPhase` and left the real symbol invisible, which is
+#      the "extensions the regex misses" blind spot the comments below already
+#      apologised for. It stops being a blind spot here.
 DECL = re.compile(
-    r"^\s*(?:@\w+(?:\([^)]*\))?\s*)*"
+    r"^(?:@\w+(?:\([^)]*\))?\s*)*"
     r"(?:(?:public|internal|private|protected|open|abstract|sealed|data|value|inline|"
     r"suspend|operator|infix|const|lateinit|expect|actual|external|override|tailrec|"
     r"companion|annotation|enum|inner|final|suspend)\s+)*"
     r"(?:class|interface|object|fun|val|var|typealias)\s+"
+    r"(?:[A-Za-z_]\w*\.)?"
     r"([A-Za-z_]\w*)"
 )
-FUN_CONST = re.compile(r"^\s*(?:[a-z]+\s+)*?(?:const\s+)?val\s+([A-Za-z_]\w*)")
+FUN_CONST = re.compile(r"^(?:[a-z]+\s+)*?(?:const\s+)?val\s+([A-Za-z_]\w*)")
 
 # Non-java.lang types that are used bare often enough that forgetting the import
 # is a realistic mistake, and whose absence is a COMPILE ERROR rather than an
