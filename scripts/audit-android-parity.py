@@ -268,6 +268,29 @@ if IOS_CB.exists() and IOS_RB.exists():
             failures.append(msg)
     notes.append("iOS ContentBlocks.swift + RichBlocks.swift symbol & enum case consistency verified")
 
+    # Section 01 (01–05) & Section 02 (06–07) feature parity across Android & iOS
+    ios_all = cb_sw + rb_sw + read(IOS_WB)
+    SECTION_FEATURES = [
+        ("NexlyCalloutCard", "02. Structured Answers: Callout cards (Quick summary / Important / Key Insights)"),
+        ("InteractiveChecklistItemRow", "02. Structured Answers: Interactive Next Actions / Todo checklists"),
+        ("+ Add Task", "01/02. Interactive + Add Task button on Todo checklists"),
+        ("StepOrderedListItemRow", "02. Structured Answers: Numbered step-by-step plan circles & bold step split"),
+        ("Trusted Source", "03. Citations & References: Trusted Source / Academic pills"),
+        ("Run in Browser", "04/05. Code Blocks & Execution: Run in Browser / Run Code bar"),
+        ("extractCodeSeriesPreview", "04/05. Code Blocks & Execution: Inline Revenue Trend bar chart preview"),
+        ("localhost:3000", "05. Code Execution: Interactive Component localhost:3000 preview"),
+        ("Show:", "06. Tables & Data Grids: Pagination & Show: N display controls"),
+        ("Last 6 Months", "07. Interactive Charts: Date range selector"),
+        ("Key Insights", "06/07. Tables & Charts: Key Insights summary card"),
+        ("Ask follow-up", "01–07. Bottom contextual action pills row"),
+    ]
+    for token, desc in SECTION_FEATURES:
+        if token not in kt_all:
+            failures.append(f"Android missing '{token}' ({desc})")
+        if token not in ios_all:
+            failures.append(f"iOS missing '{token}' ({desc})")
+    notes.append(f"Section 01 & 02 feature parity: {len(SECTION_FEATURES)}/{len(SECTION_FEATURES)} features verified on both Android and iOS")
+
 # --- report ------------------------------------------------------------------
 print("== android parity audit ==")
 for n in notes:

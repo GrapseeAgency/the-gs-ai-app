@@ -665,17 +665,19 @@ internal fun FlashcardsWidgetView(w: FlashcardsWidget) {
 internal fun ChecklistWidgetView(w: ChecklistWidget) {
     val c = GsTheme.colors
     val accent = seriesColor(0)
+    var addedTasks by remember(w.items) { mutableStateOf(listOf<ChecklistItem>()) }
+    val allItems = remember(w.items, addedTasks) { w.items + addedTasks }
     val checked = remember(w.items) {
         mutableStateMapOf<Int, Boolean>().apply {
             w.items.forEachIndexed { idx, item -> put(idx, item.done) }
         }
     }
-    val doneCount = w.items.indices.count { checked[it] == true }
-    val total = w.items.size.coerceAtLeast(1)
-    WidgetCardShell(w.title.ifEmpty { "Checklist" }, "checklist") {
+    val doneCount = allItems.indices.count { checked[it] == true }
+    val total = allItems.size.coerceAtLeast(1)
+    WidgetCardShell(w.title.ifEmpty { "Your Todo List" }, "checklist") {
         Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("$doneCount of ${w.items.size} completed", style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
+                Text("$doneCount of ${allItems.size} completed", style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
                 Text("${((doneCount.toFloat() / total.toFloat()) * 100f).toInt()}%", style = MaterialTheme.typography.labelSmall, color = accent)
             }
             LinearProgressIndicator(
@@ -687,7 +689,7 @@ internal fun ChecklistWidgetView(w: ChecklistWidget) {
                 color = accent,
                 trackColor = c.border.copy(alpha = 0.25f)
             )
-            w.items.forEachIndexed { idx, item ->
+            allItems.forEachIndexed { idx, item ->
                 val isDone = checked[idx] == true
                 Row(
                     Modifier
@@ -712,6 +714,26 @@ internal fun ChecklistWidgetView(w: ChecklistWidget) {
                         }
                     }
                 }
+            }
+            Row(
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color.White.copy(alpha = 0.8f))
+                    .border(1.dp, Color(0xFFE0D8FA), RoundedCornerShape(999.dp))
+                    .clickable {
+                        val nextIdx = allItems.size
+                        addedTasks = addedTasks + ChecklistItem(label = "Follow-up task #${nextIdx + 1}", done = false)
+                        checked[nextIdx] = false
+                    }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "+ Add Task",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = Color(0xFF5B3DF5)
+                )
             }
         }
     }

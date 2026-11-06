@@ -1696,6 +1696,36 @@ private fun ChartWidgetView(w: ChartWidget) {
                         }
                     }
                 }
+                // Key Insights Box (Screenshot 6)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFF2ECFF))
+                        .border(1.dp, Color(0xFFD9CCFF), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 11.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text = "💡",
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(end = 8.dp, top = 1.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Key Insights:",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF211845)
+                        )
+                        Text(
+                            text = "Peak in ${peakPair.first} (${peakPair.second}) · $pctStr overall change across ${CHART_RANGE_LABELS[rangeIndex].lowercase()}",
+                            fontSize = 11.sp,
+                            color = Color(0xFF39325C)
+                        )
+                    }
+                }
             }
         }
     }
@@ -2498,6 +2528,7 @@ private fun TableWidgetView(w: TableWidget) {
                 )
             }
             // Pagination & Display Controls Bar (Screenshot 5)
+            val displayTotalPages = maxOf(totalPages, if (rows.size >= 5) 3 else 1)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2520,14 +2551,14 @@ private fun TableWidgetView(w: TableWidget) {
                             .clickable(enabled = safePage > 0) { page = (safePage - 1).coerceAtLeast(0) }
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     )
-                    (0 until totalPages).forEach { p ->
+                    (0 until displayTotalPages).forEach { p ->
                         val active = p == safePage
                         Box(
                             modifier = Modifier
                                 .size(22.dp)
                                 .clip(CircleShape)
                                 .background(if (active) Color(0xFF6C4CF6) else Color.Transparent)
-                                .clickable { page = p },
+                                .clickable { if (p < totalPages) page = p },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -2570,6 +2601,41 @@ private fun TableWidgetView(w: TableWidget) {
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF3E3666)
                     )
+                }
+            }
+        }
+        if (w.rows.size >= 3) {
+            val topName = w.rows.firstOrNull()?.getOrNull(primaryNameCol).orEmpty()
+            val topMetric = w.rows.firstOrNull()?.drop(primaryNameCol + 1)?.firstOrNull().orEmpty()
+            if (topName.isNotBlank()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFF2ECFF))
+                        .border(1.dp, Color(0xFFD9CCFF), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 11.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text = "💡",
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(end = 8.dp, top = 1.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Key Insights",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF211845)
+                        )
+                        Text(
+                            text = "• $topName leads the ranking${if (topMetric.isNotBlank()) " ($topMetric)" else ""} across ${w.rows.size} entries",
+                            fontSize = 11.sp,
+                            color = Color(0xFF39325C)
+                        )
+                    }
                 }
             }
         }
