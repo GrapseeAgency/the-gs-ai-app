@@ -732,6 +732,13 @@ private struct ChartBodyView: View {
         return String(format: "%@%.1f%@", prefix, n, suffix)
     }
 
+    private static let chartTypeTabs: [(id: String, label: String)] = [
+        ("line", "📈 Line"),
+        ("bar", "📊 Bar"),
+        ("area", "📉 Area"),
+        ("pie", "◔ Pie")
+    ]
+
     var body: some View {
         let pts = points
         let maxVal = max(pts.map { abs($0.value) }.max() ?? 1.0, 0.0001)
@@ -745,7 +752,9 @@ private struct ChartBodyView: View {
             // 07. Interactive Charts: Type Switcher Pills + Range Selector (Screenshot 6)
             HStack(spacing: 6) {
                 HStack(spacing: 3) {
-                    ForEach([("line", "📈 Line"), ("bar", "📊 Bar"), ("area", "📉 Area"), ("pie", "◔ Pie")], id: \.0) { (tabId, tabLabel) in
+                    ForEach(Array(Self.chartTypeTabs.enumerated()), id: \.offset) { _, tab in
+                        let tabId = tab.id
+                        let tabLabel = tab.label
                         let isSel = currentType == tabId || (tabId == "pie" && currentType == "donut")
                         Button {
                             GSHaptics.selection()
@@ -1158,7 +1167,7 @@ private struct ChartBodyView: View {
                         Text("Key Insights:")
                             .font(.system(size: 11.5, weight: .bold))
                             .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
-                        Text(String(format: "Peak in %@ (%@) · %@%.1f%% overall change across %@", peakPoint.label, formatChartMetric(peakPoint.value, unit: unit), pos ? "+" : "", growthPct, rangeOptions[rangeIdx].lowercased()))
+                        Text(String(format: "Peak in %@ (%@) · %@%.1f%% overall change across %@", peakPt.label, compactNumber(peakPt.value, unit: unit), pos ? "+" : "", growthPct, rangeOptions[rangeIdx].lowercased()))
                             .font(.system(size: 11))
                             .foregroundStyle(Color(red: 0.224, green: 0.196, blue: 0.361))
                     }

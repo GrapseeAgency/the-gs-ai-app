@@ -483,7 +483,8 @@ private struct GSListRecord {
     let ordered: Bool
     let number: Int
     let text: String
-    var continuation: [String] = []
+    let offset: Int
+    var continuation: [(offset: Int, text: String)] = []
 }
 
 private func parseList(_ lines: [GSLine], start: Int) -> ([Block], Int) {
@@ -493,16 +494,16 @@ private func parseList(_ lines: [GSLine], start: Int) -> ([Block], Int) {
         let text = lines[i].text
         if let g = text.captureGroups(bulletItemRegex) {
             let indent = g[0].filter { $0 == " " }.count + g[0].filter { $0 == "\t" }.count * 2
-            records.append(GSListRecord(level: indent / 2, ordered: false, number: 0, text: g[2]))
+            records.append(GSListRecord(level: indent / 2, ordered: false, number: 0, text: g[2], offset: lines[i].offset))
             i += 1
         } else if let g = text.captureGroups(orderedItemRegex) {
             let indent = g[0].filter { $0 == " " }.count + g[0].filter { $0 == "\t" }.count * 2
-            records.append(GSListRecord(level: indent / 2, ordered: true, number: Int(g[1]) ?? 0, text: g[2]))
+            records.append(GSListRecord(level: indent / 2, ordered: true, number: Int(g[1]) ?? 0, text: g[2], offset: lines[i].offset))
             i += 1
         } else if !text.trimmed.isEmpty, let last = records.last {
             let required = String(repeating: " ", count: max(last.level * 2 + 2, 1))
             if text.hasPrefix(required) {
-                records[records.count - 1].continuation.append(text.trimmed)
+                records[records.count - 1].continuation.append((offset: lines[i].offset, text: text.trimmed))
                 i += 1
             } else {
                 break
@@ -537,7 +538,7 @@ private func buildList(_ records: [GSListRecord], from: Int, level: Int) -> (Blo
             childRecords.append(records[j])
             j += 1
         }
-        var children: [Block] = record.continuation.map { .paragraph(spans: parseInline($0), sourceStart: 0) }
+        var children: [Block] = record.continuation.map { .paragraph(spans: parseInline($0.text), sourceStart: $0.offset) }
         if !childRecords.isEmpty {
             children.append(buildList(childRecords, from: 0, level: childRecords[0].level).0)
         }
@@ -557,8 +558,8 @@ private func buildList(_ records: [GSListRecord], from: Int, level: Int) -> (Blo
         i = j
     }
     let block: Block = ordered
-        ? .orderedList(start: records[from].number, items: items, sourceStart: 0)
-        : .bulletList(items: items, sourceStart: 0)
+        ? .orderedList(start: records[from].number, items: items, sourceStart: records[from].offset)
+        : .bulletList(items: items, sourceStart: records[from].offset)
     return (block, i - from)
 }
 

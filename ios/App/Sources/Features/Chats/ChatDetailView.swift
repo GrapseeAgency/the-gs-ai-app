@@ -1442,7 +1442,8 @@ struct MessageBubble: View, Equatable {
                 statusAtEnd: hasPlan,
                 citations: citationLinks,
                 planTimestamp: message.createdAt,
-                conversationID: conversationID
+                conversationID: conversationID,
+                showOrb: false
             )
             .padding(.horizontal, 14)
             .padding(.vertical, 12)

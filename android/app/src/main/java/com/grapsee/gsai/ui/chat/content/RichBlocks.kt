@@ -26,7 +26,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -35,7 +34,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -221,21 +219,16 @@ fun BlocksContent(
             if (isStreaming && blocks.isEmpty()) {
                 StreamingCaret()
             }
-            blocks.forEachIndexed { index, block ->
-                key(streamBlockKey(block, index)) {
-                    val blockContent: @Composable () -> Unit = {
-                        BlockView(
-                            block = block,
-                            isLast = index == blocks.lastIndex,
-                            isStreaming = isStreaming,
-                            onCopyCode = onCopyCode,
-                            citationUrls = citationUrls,
-                            onSendPrompt = onSendPrompt
-                        )
-                    }
-                    if (block.isProseBlock()) SelectionContainer { blockContent() } else blockContent()
-                }
-            }
+            StructuredBlockSequenceView(
+                blocks = blocks,
+                isStreaming = isStreaming,
+                onCopyCode = onCopyCode,
+                citationUrls = citationUrls,
+                onSendPrompt = onSendPrompt,
+                statusCard = statusCard,
+                statusAtEnd = statusAtEnd,
+                onStatusPlaced = {}
+            )
         }
     }
 }
@@ -666,7 +659,12 @@ private fun NexlyContextualActionPillsRow(
                     .border(1.dp, Color(0xFFE1DAFA), RoundedCornerShape(999.dp))
                     .clickable {
                         if (label.contains("Copy", ignoreCase = true) || label.contains("Share", ignoreCase = true)) {
-                            onCopyCode(label)
+                            onCopyCode(
+                                extractCopyableBlockSummary(
+                                    blocks = blocks,
+                                    citationsOnly = label.contains("Citation", ignoreCase = true)
+                                )
+                            )
                         } else {
                             onSendPrompt?.invoke(label)
                         }
@@ -689,6 +687,41 @@ private fun NexlyContextualActionPillsRow(
             }
         }
     }
+}
+
+private fun extractCopyableBlockSummary(blocks: List<Block>, citationsOnly: Boolean): String {
+    val lines = mutableListOf<String>()
+    for (block in blocks) {
+        when (block) {
+            is Block.CitationsBlock -> {
+                block.citations.forEach { c ->
+                    lines += "[${c.number}] ${c.title} — ${c.url.ifBlank { c.domain }}"
+                }
+            }
+            is Block.Heading -> if (!citationsOnly) lines += plainTextOfSpans(block.spans)
+            is Block.Paragraph -> if (!citationsOnly) lines += plainTextOfSpans(block.spans)
+            is Block.BulletList -> {
+                block.items.forEach { item ->
+                    val t = plainTextOfSpans(item.spans)
+                    if (!citationsOnly || "http" in t || "www." in t) {
+                        lines += "• $t"
+                    }
+                }
+            }
+            is Block.OrderedList -> {
+                block.items.forEachIndexed { idx, item ->
+                    val n = item.number ?: (block.start + idx)
+                    val t = plainTextOfSpans(item.spans)
+                    if (!citationsOnly || "http" in t || "www." in t) {
+                        lines += "$n. $t"
+                    }
+                }
+            }
+            is Block.CodeBlock -> if (!citationsOnly) lines += block.code
+            else -> {}
+        }
+    }
+    return lines.joinToString("\n").trim().ifEmpty { "Copied from Nexly" }
 }
 
 /**
