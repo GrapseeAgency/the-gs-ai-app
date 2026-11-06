@@ -1445,6 +1445,13 @@ struct MessageBubble: View, Equatable {
                 conversationID: conversationID,
                 showOrb: false
             )
+            // The contextual action pills' non-copy prompts ("Ask follow-up",
+            // "Show me a detailed report", ...) send as a normal user turn —
+            // the same gated send path the clarify chips and the composer use.
+            .environment(\.gsWidgetAction) { prompt in
+                userIsReading = false
+                vm.sendClarifyChoice(prompt)
+            }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             // The reference answer sits in a lit glass card, not raw on the

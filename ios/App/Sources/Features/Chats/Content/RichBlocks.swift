@@ -244,6 +244,24 @@ private func classifySectionListMode(_ headingText: String) -> SectionListMode {
     return .normal
 }
 
+/// The contextual action pills send their prompt through this handler — the
+/// twin of Android's `onSendPrompt` on `NexlyContextualActionPillsRow`. Copy
+/// and share are handled inline (pasteboard); everything else ("Ask
+/// follow-up", "Show me a detailed report", ...) is a real turn and goes
+/// through the chat's send path. `ChatDetailView` injects it where it hosts
+/// the assistant bubble; standalone render tests get the nil default and the
+/// optional call is a no-op.
+private struct GsWidgetActionKey: EnvironmentKey {
+    static let defaultValue: ((String) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var gsWidgetAction: ((String) -> Void)? {
+        get { self[GsWidgetActionKey.self] }
+        set { self[GsWidgetActionKey.self] = newValue }
+    }
+}
+
 private struct StructuredProseSequenceView: View {
     @Environment(\.gsWidgetAction) private var widgetAction
     let prose: [Block]
