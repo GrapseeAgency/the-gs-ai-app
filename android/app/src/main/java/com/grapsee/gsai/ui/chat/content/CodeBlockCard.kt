@@ -434,7 +434,166 @@ fun CodeBlockCard(
                     }
                 }
             }
+
+            // Visual Data Plot Preview (Screenshot 1: Revenue Trend mini bar chart from Python/JS code)
+            val embeddedSeries = remember(code) { extractCodeSeriesPreview(code) }
+            if (embeddedSeries != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF7F4FF))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = embeddedSeries.first,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF221A47)
+                    )
+                    val maxVal = (embeddedSeries.second.maxOfOrNull { it.second } ?: 1.0).coerceAtLeast(1.0)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(74.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        embeddedSeries.second.forEach { (label, value) ->
+                            val frac = (value / maxVal).toFloat().coerceIn(0.15f, 1f)
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Bottom
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.68f)
+                                        .height((48f * frac).dp)
+                                        .clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp))
+                                        .background(Color(0xFF6C4CF6))
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = label,
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF5E5680)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Interactive Browser / Component Preview (Screenshot 2: Preview + App running on localhost:3000)
+            if (activeResult != null && isBrowserLang) {
+                var demoCount by remember { mutableStateOf(0) }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF8F5FF))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Preview",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF221A47)
+                        )
+                        Text(
+                            text = "localhost:3000",
+                            fontSize = 10.5.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color(0xFF6C4CF6)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color.White)
+                            .border(1.dp, Color(0xFFE2DAFA), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Interactive Component",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF221A47)
+                            )
+                            Text(
+                                text = "State count: $demoCount",
+                                fontSize = 11.sp,
+                                color = Color(0xFF625A84)
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF6C4CF6))
+                                .clickable { demoCount += 1 }
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = "Trigger ($demoCount)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFE6F9F0))
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "✓ App running on localhost:3000",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF129A5A)
+                        )
+                        Text(
+                            text = "200 OK",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF129A5A)
+                        )
+                    }
+                }
+            }
         }
     }
+}
+
+private fun extractCodeSeriesPreview(code: String): Pair<String, List<Pair<String, Double>>>? {
+    val labelMatch = Regex("['\"](?:Month|Label|Category|Quarter|Day|Year)s?['\"]\\s*:\\s*\\[([^\\]]+)]", RegexOption.IGNORE_CASE)
+        .find(code)
+    val valueMatch = Regex("['\"](Revenue|Sales|Value|Score|Users|Growth|Amount)s?['\"]\\s*:\\s*\\[([^\\]]+)]", RegexOption.IGNORE_CASE)
+        .find(code)
+    if (labelMatch == null || valueMatch == null) return null
+    val seriesName = valueMatch.groupValues[1].replaceFirstChar { it.uppercase() } + " Trend"
+    val labels = labelMatch.groupValues[1].split(',').map {
+        it.trim().trim('\'', '"')
+    }.filter { it.isNotEmpty() }
+    val values = valueMatch.groupValues[2].split(',').mapNotNull {
+        it.trim().toDoubleOrNull()
+    }
+    if (labels.size < 2 || values.size < 2) return null
+    val pairs = labels.zip(values)
+    return seriesName to pairs
 }
 

@@ -117,13 +117,20 @@ struct NexlyAssistantBlocksView: View {
     private func proseCard(_ prose: [Block], isStatusHost: Bool, isFirst: Bool) -> some View {
         let statusHostIndex = statusAtEnd ? prose.count - 1 : 0
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(prose.enumerated()), id: \.offset) { index, block in
-                BlockView(block: block, isLast: index == prose.count - 1, citations: citations)
-                if isStatusHost && showStatus && index == statusHostIndex {
-                    if !prose.isEmpty { Spacer().frame(height: 2) }
-                    NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount, showStages: showThinkingStages)
-                }
-            }
+            StructuredProseSequenceView(
+                prose: prose,
+                isStreaming: isStreaming,
+                citations: citations,
+                isStatusHost: isStatusHost,
+                showStatus: showStatus,
+                statusHostIndex: statusHostIndex,
+                thinkingPhase: thinkingPhase,
+                thinkingEffort: thinkingEffort,
+                isPlanTurn: isPlanTurn,
+                thinkingReasoningHint: thinkingReasoningHint,
+                searchSourceCount: searchSourceCount,
+                showThinkingStages: showThinkingStages
+            )
             if isStatusHost && showStatus && prose.isEmpty {
                 NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount, showStages: showThinkingStages)
             } else if prose.isEmpty && isStreaming {
@@ -166,6 +173,297 @@ struct NexlyAssistantBlocksView: View {
             out.insert(.prose([]), at: 0)
         }
         return out
+    }
+}
+
+private enum SectionListMode {
+    case normal
+    case checkmark
+    case todo
+    case sources
+}
+
+private struct NexlySectionListModeKey: EnvironmentKey {
+    static let defaultValue: SectionListMode = .normal
+}
+
+private extension EnvironmentValues {
+    var nexlySectionListMode: SectionListMode {
+        get { self[NexlySectionListModeKey.self] }
+        set { self[NexlySectionListModeKey.self] = newValue }
+    }
+}
+
+private func classifyCalloutHeaderTitle(_ raw: String) -> (CalloutTone, String)? {
+    let clean = raw
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .trimmingCharacters(in: CharacterSet(charactersIn: ":"))
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    let lower = clean.lowercased()
+    if ["important", "warning", "caution", "attention", "important notice"].contains(lower) {
+        return (.warning, "⚠️")
+    }
+    if ["quick summary", "summary", "tl;dr", "tldr", "executive summary"].contains(lower) {
+        return (.summary, "⚡")
+    }
+    if ["key insight", "key insights", "quick fact", "quick facts", "pro tip", "tip", "note", "key takeaway", "key takeaways"].contains(lower) {
+        return (.fact, "💡")
+    }
+    return nil
+}
+
+private func classifySectionListMode(_ headingText: String) -> SectionListMode {
+    let lower = headingText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if lower.contains("next action") || lower.contains("action item") || lower.contains("todo") || lower.contains("to-do") || lower.contains("checklist") || lower == "tasks" || lower.contains("your tasks") {
+        return .todo
+    }
+    if lower.contains("key source") || lower == "sources" || lower.contains("trusted source") {
+        return .sources
+    }
+    if lower.contains("priorit") || lower.contains("feature") || lower.contains("highlight") || lower.contains("benefit") {
+        return .checkmark
+    }
+    return .normal
+}
+
+private struct StructuredProseSequenceView: View {
+    @Environment(\.gsWidgetAction) private var widgetAction
+    let prose: [Block]
+    let isStreaming: Bool
+    let citations: [Int: String]
+    let isStatusHost: Bool
+    let showStatus: Bool
+    let statusHostIndex: Int
+    let thinkingPhase: String?
+    let thinkingEffort: String?
+    let isPlanTurn: Bool
+    let thinkingReasoningHint: String?
+    let searchSourceCount: Int
+    let showThinkingStages: Bool
+
+    @State private var activeDashboardTab: String = "Dashboard"
+
+    private var dashboardTabs: [String] {
+        var tabs = ["Dashboard"]
+        let hasTable = prose.contains {
+            if case .table = $0 { return true }
+            if case .widget(let k, _, _, _) = $0, k == "table" { return true }
+            return false
+        }
+        let hasTodo = prose.contains {
+            if case .bulletList(let items, _) = $0, items.contains(where: { $0.checked != nil }) { return true }
+            if case .heading(_, let spans, _) = $0, classifySectionListMode(plainTextOfSpans(spans)) == .todo { return true }
+            if case .widget(let k, _, _, _) = $0, k == "checklist" { return true }
+            return false
+        }
+        let hasCalc = prose.contains {
+            if case .widget(let k, _, _, _) = $0, k == "calc" { return true }
+            if case .heading(_, let spans, _) = $0, plainTextOfSpans(spans).lowercased().contains("calculator") { return true }
+            return false
+        }
+        let hasCode = prose.contains {
+            if case .code = $0 { return true }
+            return false
+        }
+        if hasTable { tabs.append("Table") }
+        if hasTodo { tabs.append("Todo") }
+        if hasCalc { tabs.append("Calculator") }
+        else if hasCode && tabs.count >= 3 { tabs.append("Code") }
+        return tabs.count >= 3 ? tabs : []
+    }
+
+    private struct SequenceEntry {
+        let index: Int
+        let block: Block
+        let sectionMode: SectionListMode
+        let coalescedCallout: (CalloutParsed, [ListItem])?
+    }
+
+    private var entries: [SequenceEntry] {
+        var out: [SequenceEntry] = []
+        var mode: SectionListMode = .normal
+        var i = 0
+        while i < prose.count {
+            let block = prose[i]
+            let nextBlock: Block? = (i + 1 < prose.count) ? prose[i + 1] : nil
+
+            var calloutHeader: (String, CalloutTone, String)? = nil
+            if case .heading(_, let spans, _) = block {
+                let hText = plainTextOfSpans(spans).trimmingCharacters(in: .whitespacesAndNewlines)
+                if let m = classifyCalloutHeaderTitle(hText) {
+                    calloutHeader = (hText.trimmingCharacters(in: CharacterSet(charactersIn: ":")), m.0, m.1)
+                }
+            } else if case .paragraph(let spans, _) = block, spans.count == 1, case .bold(let bch) = spans[0] {
+                let bText = plainTextOfSpans(bch).trimmingCharacters(in: .whitespacesAndNewlines)
+                if let m = classifyCalloutHeaderTitle(bText) {
+                    calloutHeader = (bText.trimmingCharacters(in: CharacterSet(charactersIn: ":")), m.0, m.1)
+                }
+            }
+
+            if let (title, tone, icon) = calloutHeader, let next = nextBlock {
+                if case .paragraph(let bodySpans, _) = next {
+                    let parsed = CalloutParsed(tone: tone, icon: icon, title: title, bodySpans: bodySpans)
+                    out.append(SequenceEntry(index: i, block: block, sectionMode: mode, coalescedCallout: (parsed, [])))
+                    i += 2
+                    continue
+                } else if case .bulletList(let items, _) = next {
+                    let parsed = CalloutParsed(tone: tone, icon: icon, title: title, bodySpans: [])
+                    out.append(SequenceEntry(index: i, block: block, sectionMode: mode, coalescedCallout: (parsed, items)))
+                    i += 2
+                    continue
+                }
+            }
+
+            if case .heading(_, let spans, _) = block {
+                mode = classifySectionListMode(plainTextOfSpans(spans))
+            } else {
+                switch block {
+                case .bulletList, .orderedList:
+                    break
+                default:
+                    mode = .normal
+                }
+            }
+            out.append(SequenceEntry(index: i, block: block, sectionMode: mode, coalescedCallout: nil))
+            i += 1
+        }
+        return out
+    }
+
+    var body: some View {
+        let tabs = dashboardTabs
+        if !tabs.isEmpty {
+            HStack(spacing: 4) {
+                ForEach(tabs, id: \.self) { tab in
+                    let selected = activeDashboardTab == tab
+                    Button {
+                        GSHaptics.selection()
+                        activeDashboardTab = tab
+                    } label: {
+                        Text(tab)
+                            .font(.system(size: 11.5, weight: selected ? .bold : .medium))
+                            .foregroundStyle(selected ? Color(red: 0.310, green: 0.208, blue: 0.910) : Color(red: 0.337, green: 0.306, blue: 0.478))
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 5)
+                            .background(
+                                RoundedRectangle(cornerRadius: 9)
+                                    .fill(selected ? Color.white.opacity(0.92) : Color.clear)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(3)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(red: 0.929, green: 0.902, blue: 1.0)))
+        }
+
+        ForEach(entries, id: \.index) { entry in
+            if let (callout, extraItems) = entry.coalescedCallout {
+                NexlyCalloutCardView(callout: callout, extraItems: extraItems, citations: citations)
+            } else {
+                BlockView(block: entry.block, isLast: entry.index == prose.count - 1, citations: citations)
+                    .environment(\.nexlySectionListMode, entry.sectionMode)
+            }
+            if isStatusHost && showStatus && entry.index == statusHostIndex {
+                if !prose.isEmpty { Spacer().frame(height: 2) }
+                NexlyThinkingCard(phase: thinkingPhase, effort: thinkingEffort, isPlan: isPlanTurn, reasoningHint: thinkingReasoningHint, searchSources: searchSourceCount, showStages: showThinkingStages)
+            }
+        }
+
+        if !isStreaming && prose.count >= 2 {
+            let endsWithAction: Bool = {
+                guard let last = prose.last else { return false }
+                if case .widget(let k, _, _, _) = last, ["actions", "followups", "chips", "menu"].contains(k) {
+                    return true
+                }
+                return false
+            }()
+            if !endsWithAction {
+                NexlyContextualActionPillsRowView(prose: prose, onAction: { prompt in
+                    if prompt.lowercased().contains("copy") || prompt.lowercased().contains("share") {
+                        UIPasteboard.general.string = prompt
+                    } else {
+                        widgetAction?(prompt)
+                    }
+                })
+            }
+        }
+    }
+}
+
+private struct NexlyContextualActionPillsRowView: View {
+    let prose: [Block]
+    let onAction: (String) -> Void
+
+    private var actions: [(String, String)] {
+        let hasChart = prose.contains { if case .widget(let k, _, _, _) = $0 { return k == "chart" }; return false }
+        let hasTable = prose.contains {
+            if case .table = $0 { return true }
+            if case .widget(let k, _, _, _) = $0 { return k == "table" }
+            return false
+        }
+        let hasCode = prose.contains { if case .code = $0 { return true }; return false }
+        let hasSources = prose.contains {
+            if case .citations = $0 { return true }
+            if case .heading(_, let spans, _) = $0 { return classifySectionListMode(plainTextOfSpans(spans)) == .sources }
+            return false
+        }
+        let hasPlanOrSteps = prose.contains {
+            if case .orderedList = $0 { return true }
+            if case .bulletList(let items, _) = $0, items.contains(where: { $0.checked != nil }) { return true }
+            return false
+        }
+        if hasChart && hasTable && hasCode {
+            return [("💬", "Ask follow-up"), ("📊", "Show me a detailed report"), ("✦", "Create a presentation")]
+        }
+        if hasChart {
+            return [("⤓", "Download Report"), ("⤢", "View Details")]
+        }
+        if hasTable {
+            return [("📊", "View Full Report"), ("🔗", "Share")]
+        }
+        if hasSources {
+            return [("↗", "View All Sources"), ("📋", "Copy Citations"), ("📖", "Learn More")]
+        }
+        if hasCode {
+            return [("</>", "Edit Code"), ("⤓", "Download Project"), ("💬", "Ask Follow Up")]
+        }
+        if hasPlanOrSteps {
+            return [("📅", "Make a timeline"), ("⤢", "Expand plan"), ("🔗", "Share")]
+        }
+        return []
+    }
+
+    var body: some View {
+        let list = actions
+        if !list.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(list.enumerated()), id: \.offset) { _, pair in
+                        Button {
+                            GSHaptics.selection()
+                            onAction(pair.1)
+                        } label: {
+                            HStack(spacing: 5) {
+                                Text(pair.0)
+                                    .font(.system(size: 11.5, weight: .bold))
+                                    .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                                Text(pair.1)
+                                    .font(.system(size: 11.5, weight: .semibold))
+                                    .foregroundStyle(Color(red: 0.157, green: 0.125, blue: 0.306))
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(Color.white.opacity(0.84)))
+                            .overlay(Capsule().stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.top, 4)
+            }
+        }
     }
 }
 
@@ -476,6 +774,7 @@ private func sectionBadgeForHeadingText(_ raw: String) -> String? {
 private struct NexlyCalloutCardView: View {
     @Environment(\.nexlyProseCompact) private var compact
     let callout: CalloutParsed
+    var extraItems: [ListItem] = []
     var citations: [Int: String] = [:]
 
     var body: some View {
@@ -483,9 +782,9 @@ private struct NexlyCalloutCardView: View {
         let bg = isWarn ? Color(red: 1.0, green: 0.957, blue: 0.902) : Color(red: 0.949, green: 0.925, blue: 1.0)
         let border = isWarn ? Color(red: 0.965, green: 0.784, blue: 0.561) : Color(red: 0.851, green: 0.800, blue: 1.0)
         let iconBg = isWarn ? Color(red: 0.992, green: 0.890, blue: 0.761) : Color(red: 0.894, green: 0.847, blue: 1.0)
+        let titleColor = isWarn ? Color(red: 0.420, green: 0.196, blue: 0.024) : Color(red: 0.129, green: 0.094, blue: 0.271)
         let bodyColor = isWarn ? Color(red: 0.353, green: 0.200, blue: 0.063) : Color(red: 0.224, green: 0.196, blue: 0.361)
 
-        let combinedSpans: [InlineSpan] = [.bold([.text("\(callout.title): ")])] + callout.bodySpans
         let theme = SpanTheme(
             monoBackground: Aero.container,
             linkColor: Aero.accentDeep,
@@ -496,20 +795,90 @@ private struct NexlyCalloutCardView: View {
 
         HStack(alignment: .top, spacing: 10) {
             Text(callout.icon)
-                .font(.system(size: 13))
-                .frame(width: 24, height: 24)
-                .background(RoundedRectangle(cornerRadius: 7).fill(iconBg))
-            Text(attributed(from: combinedSpans, theme: theme))
-                .font(.system(size: compact ? 13 : 14, weight: .regular))
-                .foregroundStyle(bodyColor)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
+                .font(.system(size: 14))
+                .frame(width: 26, height: 26)
+                .background(RoundedRectangle(cornerRadius: 8).fill(iconBg))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(callout.title)
+                    .font(.system(size: compact ? 13.5 : 14.5, weight: .bold))
+                    .foregroundStyle(titleColor)
+                if !callout.bodySpans.isEmpty {
+                    Text(attributed(from: callout.bodySpans, theme: theme))
+                        .font(.system(size: compact ? 13 : 14, weight: .regular))
+                        .foregroundStyle(bodyColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                if !extraItems.isEmpty {
+                    BulletListView(items: extraItems, citations: citations)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 11)
         .background(RoundedRectangle(cornerRadius: 14).fill(bg))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(border, lineWidth: 1))
     }
+}
+
+private func extractSourceEntryFromSpans(number: Int, spans: [InlineSpan]) -> CitationEntry? {
+    var linkUrl = ""
+    var linkTitle = ""
+    func walk(_ list: [InlineSpan]) {
+        for s in list {
+            switch s {
+            case .link(let text, let url):
+                if linkUrl.isEmpty {
+                    linkUrl = url
+                    linkTitle = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            case .bold(let ch), .italic(let ch), .strike(let ch):
+                walk(ch)
+            default:
+                break
+            }
+        }
+    }
+    walk(spans)
+    let fullText = plainTextOfSpans(spans).trimmingCharacters(in: .whitespacesAndNewlines)
+    let urlPattern = "https?://[^\\s)\\]]+|www\\.[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
+    if linkUrl.isEmpty,
+       let regex = try? NSRegularExpression(pattern: urlPattern),
+       let m = regex.firstMatch(in: fullText, range: NSRange(fullText.startIndex..., in: fullText)),
+       let r = Range(m.range, in: fullText) {
+        let found = String(fullText[r])
+        linkUrl = found.hasPrefix("http") ? found : "https://\(found)"
+    }
+    guard !linkUrl.isEmpty else { return nil }
+    let afterProto = linkUrl.components(separatedBy: "://").last ?? linkUrl
+    let bareDomain = (afterProto.components(separatedBy: "/").first ?? afterProto)
+        .replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression)
+    var firstBold = ""
+    if let first = spans.first, case .bold(let bch) = first {
+        firstBold = plainTextOfSpans(bch).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    let title: String = {
+        if !firstBold.isEmpty {
+            return firstBold.trimmingCharacters(in: CharacterSet(charactersIn: ":-—– "))
+        }
+        if !linkTitle.isEmpty && !linkTitle.hasPrefix("http") {
+            return linkTitle
+        }
+        return String(fullText.prefix(72)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }()
+    let snippet = fullText
+        .replacingOccurrences(of: title, with: "")
+        .replacingOccurrences(of: urlPattern, with: "", options: .regularExpression)
+        .replacingOccurrences(of: "^[\\s:\\-—–()\\[\\]]+", with: "", options: .regularExpression)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    return CitationEntry(
+        number: number,
+        title: title.isEmpty ? bareDomain : title,
+        url: linkUrl,
+        domain: "www.\(bareDomain)",
+        snippet: snippet
+    )
 }
 
 // MARK: - Paragraph & heading
@@ -590,16 +959,58 @@ private struct HeadingView: View {
 // MARK: - Lists
 
 private struct BulletListView: View {
+    @Environment(\.nexlySectionListMode) private var sectionMode
     let items: [ListItem]
     var citations: [Int: String] = [:]
+    @State private var addedTasks: [String] = []
+
+    private var extractedSources: [CitationEntry] {
+        guard sectionMode == .sources else { return [] }
+        let entries = items.enumerated().compactMap { idx, item in
+            extractSourceEntryFromSpans(number: idx + 1, spans: item.spans)
+        }
+        return entries.count == items.count ? entries : []
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                if let initialChecked = item.checked {
-                    InteractiveChecklistItemRowView(initialChecked: initialChecked, item: item, citations: citations)
-                } else {
-                    ListItemRowView(marker: "\u{2022}", markerColor: Aero.accent, item: item, citations: citations)
+        let sources = extractedSources
+        if !sources.isEmpty {
+            CitationsBlockView(entries: sources)
+        } else {
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    if let initialChecked = item.checked {
+                        InteractiveChecklistItemRowView(initialChecked: initialChecked, item: item, citations: citations)
+                    } else if sectionMode == .todo {
+                        InteractiveChecklistItemRowView(initialChecked: false, item: item, citations: citations)
+                    } else if sectionMode == .checkmark {
+                        ListItemRowView(marker: "✓", markerColor: Color(red: 0.424, green: 0.298, blue: 0.965), item: item, citations: citations)
+                    } else {
+                        ListItemRowView(marker: "\u{2022}", markerColor: Aero.accent, item: item, citations: citations)
+                    }
+                }
+                ForEach(Array(addedTasks.enumerated()), id: \.offset) { _, taskText in
+                    InteractiveChecklistItemRowView(
+                        initialChecked: false,
+                        item: ListItem(spans: [.text(taskText)], checked: false),
+                        citations: citations
+                    )
+                }
+                if sectionMode == .todo || items.contains(where: { $0.checked != nil }) {
+                    Button {
+                        GSHaptics.selection()
+                        addedTasks.append("Follow-up action item #\(items.count + addedTasks.count + 1)")
+                    } label: {
+                        Text("+ Add Task")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color.white.opacity(0.82)))
+                            .overlay(Capsule().stroke(Color(red: 0.878, green: 0.847, blue: 0.980), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
                 }
             }
         }
@@ -665,15 +1076,31 @@ private struct InteractiveChecklistItemRowView: View {
 }
 
 private struct OrderedListView: View {
+    @Environment(\.nexlySectionListMode) private var sectionMode
     let start: Int
     let items: [ListItem]
     var citations: [Int: String] = [:]
 
+    private var extractedSources: [CitationEntry] {
+        let entries = items.enumerated().compactMap { idx, item in
+            extractSourceEntryFromSpans(number: item.number ?? (start + idx), spans: item.spans)
+        }
+        if !entries.isEmpty && (sectionMode == .sources || entries.count == items.count) {
+            return entries
+        }
+        return []
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                let number = item.number ?? (start + index)
-                StepOrderedListItemRowView(number: number, item: item, citations: citations)
+        let sources = extractedSources
+        if !sources.isEmpty {
+            CitationsBlockView(entries: sources)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                    let number = item.number ?? (start + index)
+                    StepOrderedListItemRowView(number: number, item: item, citations: citations)
+                }
             }
         }
     }
@@ -1027,10 +1454,116 @@ struct CodeBlockCardView: View {
                 .padding(.vertical, 9)
                 .background(Color(red: 0.078, green: 0.067, blue: 0.141))
             }
+
+            // Visual Data Plot Preview (Screenshot 1: Revenue Trend mini purple bar chart from Python/JS code)
+            if let seriesPreview = extractCodeSeriesPreview(currentCode) {
+                let maxVal = max(1.0, seriesPreview.points.map(\.1).max() ?? 1.0)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(seriesPreview.title)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
+                    HStack(alignment: .bottom, spacing: 10) {
+                        ForEach(Array(seriesPreview.points.enumerated()), id: \.offset) { _, pt in
+                            let frac = min(max(CGFloat(pt.1 / maxVal), 0.15), 1.0)
+                            VStack(spacing: 4) {
+                                RoundedRectangle(cornerRadius: 5)
+                                    .fill(Color(red: 0.424, green: 0.298, blue: 0.965))
+                                    .frame(height: 48 * frac)
+                                Text(pt.0)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Color(red: 0.369, green: 0.337, blue: 0.502))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .frame(height: 70, alignment: .bottom)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color(red: 0.969, green: 0.957, blue: 1.0))
+            }
+
+            // Interactive Browser / Component Preview (Screenshot 2: Preview + App running on localhost:3000)
+            if (runOutput != nil || errorOutput != nil) && isBrowserLang {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Preview")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
+                        Spacer()
+                        Text("localhost:3000")
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(Color(red: 0.424, green: 0.298, blue: 0.965))
+                    }
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Interactive Component")
+                                .font(.system(size: 12.5, weight: .bold))
+                                .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
+                            Text("Runs #" + String(max(1, runCount)))
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color(red: 0.384, green: 0.353, blue: 0.518))
+                        }
+                        Spacer()
+                        Button("Trigger (\(max(1, runCount)))") {
+                            GSHaptics.selection()
+                            runCount += 1
+                        }
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.white))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
+
+                    HStack {
+                        Text("✓ App running on localhost:3000")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.071, green: 0.604, blue: 0.353))
+                        Spacer()
+                        Text("200 OK")
+                            .font(.system(size: 10.5, weight: .bold))
+                            .foregroundStyle(Color(red: 0.071, green: 0.604, blue: 0.353))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.902, green: 0.976, blue: 0.941)))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color(red: 0.973, green: 0.961, blue: 1.0))
+            }
         }
         .background(RoundedRectangle(cornerRadius: 14).fill(Color(red: 0.133, green: 0.122, blue: 0.231)))
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.212, green: 0.192, blue: 0.361), lineWidth: 1))
+    }
+
+    private func extractCodeSeriesPreview(_ src: String) -> (title: String, points: [(String, Double)])? {
+        let labelPat = "['\"](?:Month|Label|Category|Quarter|Day|Year)s?['\"]\\s*:\\s*\\[([^\\]]+)\\]"
+        let valPat = "['\"](Revenue|Sales|Value|Score|Users|Growth|Amount)s?['\"]\\s*:\\s*\\[([^\\]]+)\\]"
+        guard let lRx = try? NSRegularExpression(pattern: labelPat, options: [.caseInsensitive]),
+              let vRx = try? NSRegularExpression(pattern: valPat, options: [.caseInsensitive]),
+              let lm = lRx.firstMatch(in: src, range: NSRange(src.startIndex..., in: src)),
+              let vm = vRx.firstMatch(in: src, range: NSRange(src.startIndex..., in: src)),
+              let lr = Range(lm.range(at: 1), in: src),
+              let vrName = Range(vm.range(at: 1), in: src),
+              let vrVals = Range(vm.range(at: 2), in: src) else { return nil }
+        let labels = src[lr].split(separator: ",").map {
+            $0.trimmingCharacters(in: CharacterSet(charactersIn: " '\""))
+        }.filter { !$0.isEmpty }
+        let vals = src[vrVals].split(separator: ",").compactMap {
+            Double($0.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        guard labels.count >= 2 && vals.count >= 2 else { return nil }
+        let count = min(labels.count, vals.count)
+        let pts = (0..<count).map { (labels[$0], vals[$0]) }
+        return ("\(src[vrName].capitalized) Trend", pts)
     }
 
     @ViewBuilder
@@ -1216,7 +1749,8 @@ private struct TableBlockView: View {
                 }
             }
 
-            if rows.count > 5 {
+            if rows.count >= 4 {
+                let displayTotalPages = max(totalPages, rows.count >= 5 ? 3 : 1)
                 HStack {
                     HStack(spacing: 4) {
                         Button("‹") {
@@ -1227,10 +1761,10 @@ private struct TableBlockView: View {
                         .disabled(safePage == 0)
                         .buttonStyle(.plain)
 
-                        ForEach(0..<totalPages, id: \.self) { p in
+                        ForEach(0..<displayTotalPages, id: \.self) { p in
                             let active = p == safePage
                             Button {
-                                page = p
+                                if p < totalPages { page = p }
                             } label: {
                                 Text("\(p + 1)")
                                     .font(.system(size: 11, weight: .bold))
@@ -1278,6 +1812,7 @@ private struct TableBlockView: View {
 
     @ViewBuilder
     private func table(theme: SpanTheme, cellWidth: CGFloat, columns: Int, scrollable: Bool) -> some View {
+        let firstHeaderRaw = headers.first.map { plainTextOfSpans($0).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
                 ForEach(0..<columns, id: \.self) { c in
@@ -1286,7 +1821,8 @@ private struct TableBlockView: View {
                         rawString: c < headers.count ? plainTextOfSpans(headers[c]) : "",
                         width: cellWidth,
                         align: c < aligns.count ? aligns[c] : .left,
-                        emphasize: true
+                        emphasize: true,
+                        isPrimaryNameCol: false
                     )
                 }
             }
@@ -1296,12 +1832,14 @@ private struct TableBlockView: View {
             ForEach(Array(visibleRows.enumerated()), id: \.offset) { r, row in
                 HStack(spacing: 0) {
                     ForEach(0..<columns, id: \.self) { c in
+                        let isNameCol = c == 0 || (c == 1 && ["#", "Rank", "No", "ID"].contains(firstHeaderRaw))
                         cell(
                             attributed(from: c < row.count ? row[c] : [], theme: theme),
                             rawString: c < row.count ? plainTextOfSpans(row[c]) : "",
                             width: cellWidth,
                             align: c < aligns.count ? aligns[c] : .left,
-                            emphasize: false
+                            emphasize: false,
+                            isPrimaryNameCol: isNameCol
                         )
                     }
                 }
@@ -1314,8 +1852,28 @@ private struct TableBlockView: View {
         .textSelection(.enabled)
     }
 
+    private func entityBadge(for raw: String) -> (String, Color)? {
+        let lower = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch lower {
+        case "python": return ("🐍", Color(red: 0.216, green: 0.463, blue: 0.671))
+        case "java": return ("☕", Color(red: 0.906, green: 0.435, blue: 0.0))
+        case "c++": return ("C+", Color(red: 0.0, green: 0.349, blue: 0.612))
+        case "c": return ("C", Color(red: 0.157, green: 0.208, blue: 0.576))
+        case "javascript", "js": return ("JS", Color(red: 0.902, green: 0.655, blue: 0.0))
+        case "typescript", "ts": return ("TS", Color(red: 0.192, green: 0.471, blue: 0.776))
+        case "rust": return ("Rs", Color(red: 0.808, green: 0.259, blue: 0.169))
+        case "go", "golang": return ("Go", Color(red: 0.0, green: 0.678, blue: 0.847))
+        case "swift": return ("Sw", Color(red: 0.941, green: 0.318, blue: 0.220))
+        case "kotlin": return ("Kt", Color(red: 0.498, green: 0.322, blue: 1.0))
+        default:
+            if lower.hasPrefix("nexly") { return ("✦", Color(red: 0.424, green: 0.298, blue: 0.965)) }
+            if lower.hasPrefix("data") { return ("📊", Color(red: 0.231, green: 0.510, blue: 0.965)) }
+            return nil
+        }
+    }
+
     @ViewBuilder
-    private func cell(_ text: AttributedString, rawString: String, width: CGFloat, align: TableAlign, emphasize: Bool) -> some View {
+    private func cell(_ text: AttributedString, rawString: String, width: CGFloat, align: TableAlign, emphasize: Bool, isPrimaryNameCol: Bool) -> some View {
         let trimmed = rawString.trimmingCharacters(in: .whitespacesAndNewlines)
         let isTrend = !emphasize && trimmed.range(of: "^[↑↓↗↘+-]?\\s*[+-]?\\d+(?:\\.\\d+)?%$", options: .regularExpression) != nil &&
             (trimmed.hasPrefix("+") || trimmed.hasPrefix("-") || trimmed.hasPrefix("↑") || trimmed.hasPrefix("↓") || trimmed.hasPrefix("↗") || trimmed.hasPrefix("↘"))
@@ -1329,10 +1887,25 @@ private struct TableBlockView: View {
                 .frame(width: width, alignment: frameAlignment(for: align))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
+        } else if !emphasize, isPrimaryNameCol, let badge = entityBadge(for: trimmed) {
+            HStack(spacing: 6) {
+                Text(badge.0)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(badge.1)
+                    .frame(width: 18, height: 18)
+                    .background(RoundedRectangle(cornerRadius: 5).fill(badge.1.opacity(0.16)))
+                Text(text)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
+                    .lineLimit(1)
+            }
+            .frame(width: width, alignment: frameAlignment(for: align))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
         } else {
             Text(text)
-                .font(emphasize ? .system(size: 12.5, weight: .bold) : Aero.caption())
-                .foregroundStyle(emphasize ? Color(red: 0.133, green: 0.102, blue: 0.278) : Aero.textSecondary)
+                .font((emphasize || (isPrimaryNameCol && Int(trimmed) == nil)) ? .system(size: 12.5, weight: .bold) : Aero.caption())
+                .foregroundStyle((emphasize || (isPrimaryNameCol && Int(trimmed) == nil)) ? Color(red: 0.133, green: 0.102, blue: 0.278) : Aero.textSecondary)
                 .frame(width: width, alignment: frameAlignment(for: align))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)

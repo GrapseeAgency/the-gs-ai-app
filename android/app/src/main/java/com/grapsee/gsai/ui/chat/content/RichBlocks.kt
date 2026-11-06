@@ -333,31 +333,16 @@ private fun NexlyAssistantBlocks(
                             if (group.blocks.isEmpty() && isStreaming) {
                                 if (statusCard == null) StreamingCaret()
                             }
-                            val statusHostIndex = if (statusAtEnd) {
-                                group.blocks.lastIndex
-                            } else {
-                                0
-                            }
-                            group.blocks.forEachIndexed { index, block ->
-                                key(streamBlockKey(block, index)) {
-                                    val blockContent: @Composable () -> Unit = {
-                                        BlockView(
-                                            block = block,
-                                            isLast = index == group.blocks.lastIndex,
-                                            isStreaming = isStreaming,
-                                            onCopyCode = onCopyCode,
-                                            citationUrls = citationUrls,
-                                            onSendPrompt = onSendPrompt
-                                        )
-                                    }
-                                    if (block.isProseBlock()) SelectionContainer { blockContent() } else blockContent()
-                                }
-                                if (!statusPlaced && statusCard != null && index == statusHostIndex) {
-                                    statusPlaced = true
-                                    Spacer(Modifier.height(2.dp))
-                                    statusCard()
-                                }
-                            }
+                            StructuredBlockSequenceView(
+                                blocks = group.blocks,
+                                isStreaming = isStreaming,
+                                onCopyCode = onCopyCode,
+                                citationUrls = citationUrls,
+                                onSendPrompt = onSendPrompt,
+                                statusCard = if (!statusPlaced) statusCard else null,
+                                statusAtEnd = statusAtEnd,
+                                onStatusPlaced = { statusPlaced = true }
+                            )
                             if (!statusPlaced && statusCard != null && group.blocks.isEmpty()) {
                                 statusPlaced = true
                                 statusCard()
@@ -369,6 +354,312 @@ private fun NexlyAssistantBlocks(
         }
         if (isStreaming && blocks.isEmpty() && groups.isEmpty()) {
             StreamingCaret()
+        }
+    }
+}
+
+private enum class SectionListMode { DEFAULT, CHECKMARK, TODO, SOURCES }
+
+private val LocalSectionListMode = androidx.compose.runtime.compositionLocalOf { SectionListMode.DEFAULT }
+
+private fun classifyCalloutHeaderTitle(raw: String): Pair<CalloutTone, String>? {
+    val clean = raw.trim().trimEnd(':').trim()
+    val lower = clean.lowercase()
+    return when {
+        lower in setOf("important", "warning", "caution", "attention", "important notice") ->
+            CalloutTone.WARNING to "⚠️"
+        lower in setOf("quick summary", "summary", "tl;dr", "tldr", "executive summary") ->
+            CalloutTone.SUMMARY to "⚡"
+        lower in setOf("key insight", "key insights", "quick fact", "quick facts", "pro tip", "tip", "note", "key takeaway", "key takeaways") ->
+            CalloutTone.FACT to "💡"
+        else -> null
+    }
+}
+
+private fun classifySectionListMode(headingText: String): SectionListMode {
+    val lower = headingText.trim().lowercase()
+    return when {
+        "next action" in lower || "action item" in lower || "todo" in lower || "to-do" in lower || "checklist" in lower || lower == "tasks" || "your tasks" in lower ->
+            SectionListMode.TODO
+        "key source" in lower || lower == "sources" || "trusted source" in lower ->
+            SectionListMode.SOURCES
+        "priorit" in lower || "feature" in lower || "highlight" in lower || "benefit" in lower || "why " in lower ->
+            SectionListMode.CHECKMARK
+        else -> SectionListMode.DEFAULT
+    }
+}
+
+@Composable
+private fun StructuredBlockSequenceView(
+    blocks: List<Block>,
+    isStreaming: Boolean,
+    onCopyCode: (String) -> Unit,
+    citationUrls: Map<Int, String>,
+    onSendPrompt: ((String) -> Unit)?,
+    statusCard: (@Composable () -> Unit)?,
+    statusAtEnd: Boolean,
+    onStatusPlaced: () -> Unit
+) {
+    // 1. Detect if this response is a multi-section dashboard (Screenshot 1)
+    val dashboardTabs = remember(blocks) {
+        val tabs = mutableListOf("Dashboard")
+        val hasTable = blocks.any { it is Block.TableBlock || (it is Block.WidgetBlock && it.kind == "table") }
+        val hasTodo = blocks.any {
+            (it is Block.BulletList && it.items.any { item -> item.checked != null }) ||
+                (it is Block.Heading && classifySectionListMode(plainTextOfSpans(it.spans)) == SectionListMode.TODO) ||
+                (it is Block.WidgetBlock && it.kind == "checklist")
+        }
+        val hasCalc = blocks.any {
+            (it is Block.WidgetBlock && it.kind == "calc") ||
+                (it is Block.Heading && "calculator" in plainTextOfSpans(it.spans).lowercase())
+        }
+        val hasCode = blocks.any { it is Block.CodeBlock }
+        if (hasTable) tabs += "Table"
+        if (hasTodo) tabs += "Todo"
+        if (hasCalc) tabs += "Calculator"
+        else if (hasCode && tabs.size >= 3) tabs += "Code"
+        if (tabs.size >= 3) tabs else emptyList()
+    }
+    var activeDashboardTab by remember(blocks.size) { mutableStateOf("Dashboard") }
+
+    if (dashboardTabs.isNotEmpty()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFFEDE6FF))
+                .padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            dashboardTabs.forEach { tab ->
+                val selected = activeDashboardTab == tab
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(if (selected) Color.White.copy(alpha = 0.92f) else Color.Transparent)
+                        .clickable { activeDashboardTab = tab }
+                        .padding(horizontal = 11.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = tab,
+                        fontSize = 11.5.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (selected) Color(0xFF4F35E8) else Color(0xFF564E7A)
+                    )
+                }
+            }
+        }
+    }
+
+    val statusHostIndex = if (statusAtEnd) blocks.lastIndex else 0
+    var currentSectionMode = SectionListMode.DEFAULT
+    var i = 0
+    while (i < blocks.size) {
+        val block = blocks[i]
+        val nextBlock = blocks.getOrNull(i + 1)
+
+        // Filter by dashboard tab when user selects Table / Todo / Calculator / Code
+        val skipForTab = when (activeDashboardTab) {
+            "Table" -> block !is Block.TableBlock && !(block is Block.WidgetBlock && block.kind == "table") &&
+                !(block is Block.Heading && ("table" in plainTextOfSpans(block.spans).lowercase() || "product" in plainTextOfSpans(block.spans).lowercase() || "language" in plainTextOfSpans(block.spans).lowercase()))
+            "Todo" -> !(block is Block.BulletList) && !(block is Block.WidgetBlock && block.kind == "checklist") &&
+                !(block is Block.Heading && classifySectionListMode(plainTextOfSpans(block.spans)) == SectionListMode.TODO)
+            "Calculator" -> !(block is Block.WidgetBlock && block.kind == "calc") &&
+                !(block is Block.Heading && "calculator" in plainTextOfSpans(block.spans).lowercase())
+            "Code" -> block !is Block.CodeBlock
+            else -> false
+        }
+
+        // Coalesce Heading("Quick summary" | "Important" | "Key Insights" | "Quick Fact") + Paragraph/BulletList into one NexlyCalloutCard!
+        val calloutHeadingMatch = when (block) {
+            is Block.Heading -> {
+                val hText = plainTextOfSpans(block.spans).trim()
+                classifyCalloutHeaderTitle(hText)?.let { Triple(hText.trimEnd(':'), it.first, it.second) }
+            }
+            is Block.Paragraph -> {
+                if (block.spans.size == 1 && block.spans.first() is InlineSpan.Bold) {
+                    val bText = plainTextOfSpans(block.spans).trim()
+                    classifyCalloutHeaderTitle(bText)?.let { Triple(bText.trimEnd(':'), it.first, it.second) }
+                } else null
+            }
+            else -> null
+        }
+
+        if (!skipForTab && calloutHeadingMatch != null && (nextBlock is Block.Paragraph || nextBlock is Block.BulletList)) {
+            val (titleText, tone, icon) = calloutHeadingMatch
+            val bodySpans = if (nextBlock is Block.Paragraph) nextBlock.spans else emptyList()
+            key("callout:${block.sourceStart}") {
+                NexlyCalloutCard(
+                    callout = CalloutParsed(
+                        tone = tone,
+                        icon = icon,
+                        title = titleText,
+                        bodySpans = bodySpans
+                    ),
+                    citationUrls = citationUrls,
+                    extraBlocks = if (nextBlock is Block.BulletList) {
+                        {
+                            BulletListBlock(
+                                block = nextBlock,
+                                selectable = !isStreaming,
+                                citationUrls = citationUrls
+                            )
+                        }
+                    } else null
+                )
+            }
+            if (statusCard != null && (i == statusHostIndex || i + 1 == statusHostIndex)) {
+                onStatusPlaced()
+                Spacer(Modifier.height(2.dp))
+                statusCard()
+            }
+            i += 2
+            continue
+        }
+
+        if (block is Block.Heading) {
+            currentSectionMode = classifySectionListMode(plainTextOfSpans(block.spans))
+        } else if (block !is Block.BulletList && block !is Block.OrderedList) {
+            currentSectionMode = SectionListMode.DEFAULT
+        }
+
+        if (!skipForTab) {
+            val modeForBlock = currentSectionMode
+            key(streamBlockKey(block, i)) {
+                CompositionLocalProvider(LocalSectionListMode provides modeForBlock) {
+                    val blockContent: @Composable () -> Unit = {
+                        BlockView(
+                            block = block,
+                            isLast = i == blocks.lastIndex,
+                            isStreaming = isStreaming,
+                            onCopyCode = onCopyCode,
+                            citationUrls = citationUrls,
+                            onSendPrompt = onSendPrompt
+                        )
+                    }
+                    if (block.isProseBlock() && modeForBlock != SectionListMode.TODO && modeForBlock != SectionListMode.SOURCES) {
+                        SelectionContainer { blockContent() }
+                    } else {
+                        blockContent()
+                    }
+                }
+            }
+        }
+        if (statusCard != null && i == statusHostIndex) {
+            onStatusPlaced()
+            Spacer(Modifier.height(2.dp))
+            statusCard()
+        }
+        i += 1
+    }
+
+    // Bottom Contextual Action Pills (Screenshots 1–6)
+    if (!isStreaming && blocks.size >= 2) {
+        val endsWithActionWidget = blocks.lastOrNull().let {
+            it is Block.WidgetBlock && it.kind in setOf("actions", "followups", "chips", "menu")
+        }
+        if (!endsWithActionWidget) {
+            NexlyContextualActionPillsRow(
+                blocks = blocks,
+                onCopyCode = onCopyCode,
+                onSendPrompt = onSendPrompt
+            )
+        }
+    }
+}
+
+@Composable
+private fun NexlyContextualActionPillsRow(
+    blocks: List<Block>,
+    onCopyCode: (String) -> Unit,
+    onSendPrompt: ((String) -> Unit)?
+) {
+    val actions = remember(blocks) {
+        val hasChart = blocks.any { it is Block.WidgetBlock && it.kind == "chart" }
+        val hasTable = blocks.any { it is Block.TableBlock || (it is Block.WidgetBlock && it.kind == "table") }
+        val hasCode = blocks.any { it is Block.CodeBlock }
+        val hasSources = blocks.any {
+            it is Block.CitationsBlock ||
+                (it is Block.Heading && classifySectionListMode(plainTextOfSpans(it.spans)) == SectionListMode.SOURCES)
+        }
+        val hasPlanOrSteps = blocks.any {
+            it is Block.OrderedList ||
+                (it is Block.BulletList && it.items.any { item -> item.checked != null }) ||
+                (it is Block.Heading && ("plan" in plainTextOfSpans(it.spans).lowercase() || "step" in plainTextOfSpans(it.spans).lowercase()))
+        }
+        when {
+            hasChart && hasTable && hasCode -> listOf(
+                "💬" to "Ask follow-up",
+                "📊" to "Show me a detailed report",
+                "✦" to "Create a presentation"
+            )
+            hasChart -> listOf(
+                "⤓" to "Download Report",
+                "⤢" to "View Details"
+            )
+            hasTable -> listOf(
+                "📊" to "View Full Report",
+                "🔗" to "Share"
+            )
+            hasSources -> listOf(
+                "↗" to "View All Sources",
+                "📋" to "Copy Citations",
+                "📖" to "Learn More"
+            )
+            hasCode -> listOf(
+                "</>" to "Edit Code",
+                "⤓" to "Download Project",
+                "💬" to "Ask Follow Up"
+            )
+            hasPlanOrSteps -> listOf(
+                "📅" to "Make a timeline",
+                "⤢" to "Expand plan",
+                "🔗" to "Share"
+            )
+            else -> emptyList()
+        }
+    }
+    if (actions.isEmpty()) return
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(top = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        actions.forEach { (icon, label) ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color.White.copy(alpha = 0.82f))
+                    .border(1.dp, Color(0xFFE1DAFA), RoundedCornerShape(999.dp))
+                    .clickable {
+                        if (label.contains("Copy", ignoreCase = true) || label.contains("Share", ignoreCase = true)) {
+                            onCopyCode(label)
+                        } else {
+                            onSendPrompt?.invoke(label)
+                        }
+                    }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = icon,
+                    fontSize = 11.5.sp,
+                    color = Color(0xFF5B3DF5),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(end = 5.dp)
+                )
+                Text(
+                    text = label,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF28204E)
+                )
+            }
         }
     }
 }
@@ -744,13 +1035,8 @@ private fun NexlyCalloutCard(
 
     val bodyStyle = LocalNexlyProseStyle.current ?: MaterialTheme.typography.bodyMedium
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, bodyColor)
-    val bodyText = remember(callout.title, callout.bodySpans, theme) {
-        buildAnnotatedString {
-            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = titleColor)) {
-                append("${callout.title}: ")
-            }
-            append(spansToAnnotatedString(callout.bodySpans, theme))
-        }
+    val bodyText = remember(callout.bodySpans, theme) {
+        if (callout.bodySpans.isEmpty()) null else spansToAnnotatedString(callout.bodySpans, theme)
     }
 
     Row(
@@ -764,23 +1050,30 @@ private fun NexlyCalloutCard(
     ) {
         Box(
             modifier = Modifier
-                .size(24.dp)
-                .clip(RoundedCornerShape(7.dp))
+                .size(26.dp)
+                .clip(RoundedCornerShape(8.dp))
                 .background(iconBg),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = callout.icon, fontSize = 13.sp)
+            Text(text = callout.icon, fontSize = 14.sp)
         }
         Spacer(Modifier.width(10.dp))
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = bodyText,
-                style = bodyStyle,
-                color = bodyColor
+                text = callout.title,
+                style = bodyStyle.copy(fontWeight = FontWeight.Bold),
+                color = titleColor
             )
+            if (bodyText != null && bodyText.isNotEmpty()) {
+                Text(
+                    text = bodyText,
+                    style = bodyStyle,
+                    color = bodyColor
+                )
+            }
             extraBlocks?.invoke()
         }
     }
@@ -858,13 +1151,105 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
     }
 }
 
+private data class ParsedSourceItem(
+    val number: Int,
+    val title: String,
+    val snippet: String,
+    val domain: String,
+    val url: String
+)
+
+private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>): ParsedSourceItem? {
+    var linkUrl = ""
+    var linkTitle = ""
+    fun walk(list: List<InlineSpan>) {
+        list.forEach { s ->
+            when (s) {
+                is InlineSpan.Link -> {
+                    if (linkUrl.isEmpty()) {
+                        linkUrl = s.url
+                        linkTitle = plainTextOfSpans(s.children).trim()
+                    }
+                }
+                is InlineSpan.Bold -> walk(s.children)
+                is InlineSpan.Italic -> walk(s.children)
+                is InlineSpan.Strikethrough -> walk(s.children)
+                else -> {}
+            }
+        }
+    }
+    walk(spans)
+    val fullText = plainTextOfSpans(spans).trim()
+    val urlRegex = Regex("https?://[^\\s)\\]]+|www\\.[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}")
+    if (linkUrl.isEmpty()) {
+        val m = urlRegex.find(fullText)
+        if (m != null) {
+            val found = m.value
+            linkUrl = if (found.startsWith("http")) found else "https://$found"
+        }
+    }
+    if (linkUrl.isEmpty()) return null
+    val domain = linkUrl.substringAfter("://", linkUrl).substringBefore('/').removePrefix("www.")
+    val firstBold = (spans.firstOrNull() as? InlineSpan.Bold)?.let { plainTextOfSpans(it.children).trim() }.orEmpty()
+    val title = when {
+        firstBold.isNotEmpty() -> firstBold.trimEnd(':', '-', '—', '–').trim()
+        linkTitle.isNotEmpty() && !linkTitle.startsWith("http") -> linkTitle
+        else -> fullText.substringBefore("—").substringBefore(" - ").take(72).trim()
+    }
+    val snippet = fullText
+        .removePrefix(title)
+        .replace(urlRegex, "")
+        .replace(Regex("^[\\s:\\-—–()\\[\\]]+"), "")
+        .trim()
+    return ParsedSourceItem(
+        number = number,
+        title = title.ifBlank { domain },
+        snippet = snippet,
+        domain = "www.${domain.removePrefix("www.")}",
+        url = linkUrl
+    )
+}
+
 @Composable
 private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citationUrls: Map<Int, String>) {
+    val sectionMode = LocalSectionListMode.current
+    var addedTasks by remember(block.sourceStart) { mutableStateOf(listOf<String>()) }
+
+    val sourceItems = remember(block.items, sectionMode) {
+        if (sectionMode == SectionListMode.SOURCES) {
+            block.items.mapIndexedNotNull { idx, item -> extractSourceItemFromSpans(idx + 1, item.spans) }
+        } else emptyList()
+    }
+    if (sourceItems.isNotEmpty() && sourceItems.size == block.items.size) {
+        CitationsBlockView(
+            Block.CitationsBlock(
+                sourceItems.map {
+                    CitationEntry(
+                        number = it.number,
+                        title = it.title,
+                        url = it.url,
+                        domain = it.domain,
+                        snippet = it.snippet
+                    )
+                }
+            )
+        )
+        return
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
         block.items.forEach { item ->
-            if (item.checked != null) {
+            if (item.checked != null || sectionMode == SectionListMode.TODO) {
                 InteractiveChecklistItemRow(
-                    initialChecked = item.checked,
+                    initialChecked = item.checked ?: false,
+                    item = item,
+                    selectable = selectable,
+                    citationUrls = citationUrls
+                )
+            } else if (sectionMode == SectionListMode.CHECKMARK) {
+                ListItemRow(
+                    marker = "✓",
+                    markerColor = Color(0xFF6C4CF6),
                     item = item,
                     selectable = selectable,
                     citationUrls = citationUrls
@@ -876,6 +1261,35 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                     item = item,
                     selectable = selectable,
                     citationUrls = citationUrls
+                )
+            }
+        }
+        addedTasks.forEachIndexed { idx, taskText ->
+            InteractiveChecklistItemRow(
+                initialChecked = false,
+                item = ListItem(spans = listOf(InlineSpan.Text(taskText)), checked = false),
+                selectable = false,
+                citationUrls = citationUrls
+            )
+        }
+        if (sectionMode == SectionListMode.TODO || block.items.any { it.checked != null }) {
+            Row(
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color.White.copy(alpha = 0.8f))
+                    .border(1.dp, Color(0xFFE0D8FA), RoundedCornerShape(999.dp))
+                    .clickable {
+                        addedTasks = addedTasks + "Follow-up action item #${block.items.size + addedTasks.size + 1}"
+                    }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "+ Add Task",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF5B3DF5)
                 )
             }
         }
@@ -931,7 +1345,8 @@ private fun InteractiveChecklistItemRow(
                 style = bodyStyle.copy(
                     textDecoration = if (checked) TextDecoration.LineThrough else TextDecoration.None
                 ),
-                color = ink
+                color = ink,
+                modifier = Modifier.weight(1f)
             )
         }
         if (item.children.isNotEmpty()) {
@@ -947,6 +1362,32 @@ private fun InteractiveChecklistItemRow(
 
 @Composable
 private fun OrderedListBlock(block: Block.OrderedList, selectable: Boolean, citationUrls: Map<Int, String>) {
+    val sectionMode = LocalSectionListMode.current
+    val sourceItems = remember(block.items, sectionMode) {
+        val extracted = block.items.mapIndexedNotNull { idx, item ->
+            extractSourceItemFromSpans(item.number ?: (block.start + idx), item.spans)
+        }
+        if (extracted.isNotEmpty() && (sectionMode == SectionListMode.SOURCES || extracted.size == block.items.size)) {
+            extracted
+        } else emptyList()
+    }
+    if (sourceItems.isNotEmpty()) {
+        CitationsBlockView(
+            Block.CitationsBlock(
+                sourceItems.map {
+                    CitationEntry(
+                        number = it.number,
+                        title = it.title,
+                        url = it.url,
+                        domain = it.domain,
+                        snippet = it.snippet
+                    )
+                }
+            )
+        )
+        return
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         block.items.forEachIndexed { index, item ->
             val number = item.number ?: (block.start + index)
@@ -1224,13 +1665,14 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
                                 .background(outline.copy(alpha = 0.35f))
                         )
                         rows.forEachIndexed { r, row ->
-                            Row(modifier = Modifier.fillMaxWidth()) {
+                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 (0 until columns).forEach { c ->
                                     TableCell(
                                         text = row.getOrElse(c) { AnnotatedString("") },
                                         width = cellWidth,
                                         align = block.aligns.getOrElse(c) { TableAlign.LEFT },
-                                        emphasize = false
+                                        emphasize = false,
+                                        isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
                                     )
                                 }
                             }
@@ -1259,13 +1701,14 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
                                 .background(outline.copy(alpha = 0.35f))
                         )
                         rows.forEach { row ->
-                            Row {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 (0 until columns).forEach { c ->
                                     TableCell(
                                         text = row.getOrElse(c) { AnnotatedString("") },
                                         width = cellWidth,
                                         align = block.aligns.getOrElse(c) { TableAlign.LEFT },
-                                        emphasize = false
+                                        emphasize = false,
+                                        isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
                                     )
                                 }
                             }
@@ -1281,7 +1724,8 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
             }
         }
 
-        if (allRows.size > 5) {
+        if (allRows.size >= 4) {
+            val displayTotalPages = maxOf(totalPages, if (allRows.size >= 5) 3 else 1)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1304,14 +1748,14 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
                             .clickable(enabled = safePage > 0) { page = (safePage - 1).coerceAtLeast(0) }
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     )
-                    (0 until totalPages).forEach { p ->
+                    (0 until displayTotalPages).forEach { p ->
                         val active = p == safePage
                         Box(
                             modifier = Modifier
                                 .size(22.dp)
                                 .clip(CircleShape)
                                 .background(if (active) Color(0xFF6C4CF6) else Color.Transparent)
-                                .clickable { page = p },
+                                .clickable { if (p < totalPages) page = p },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -1360,12 +1804,32 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
     }
 }
 
+private fun markdownEntityBadgeForCell(raw: String): Pair<String, Color>? {
+    val clean = raw.trim().lowercase()
+    return when {
+        clean == "python" -> "🐍" to Color(0xFF3776AB)
+        clean == "java" -> "☕" to Color(0xFFE76F00)
+        clean == "c++" -> "C+" to Color(0xFF00599C)
+        clean == "c" -> "C" to Color(0xFF283593)
+        clean == "javascript" || clean == "js" -> "JS" to Color(0xFFE6A700)
+        clean == "typescript" || clean == "ts" -> "TS" to Color(0xFF3178C6)
+        clean == "rust" -> "Rs" to Color(0xFFCE422B)
+        clean == "go" || clean == "golang" -> "Go" to Color(0xFF00ADD8)
+        clean == "swift" -> "Sw" to Color(0xFFF05138)
+        clean == "kotlin" -> "Kt" to Color(0xFF7F52FF)
+        clean.startsWith("nexly") -> "✦" to Color(0xFF6C4CF6)
+        clean.startsWith("data") -> "📊" to Color(0xFF3B82F6)
+        else -> null
+    }
+}
+
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.TableCell(
     text: AnnotatedString,
     width: androidx.compose.ui.unit.Dp,
     align: TableAlign,
-    emphasize: Boolean
+    emphasize: Boolean,
+    isPrimaryNameCol: Boolean = false
 ) {
     val raw = text.text.trim()
     val isTrend = !emphasize && Regex("^[↑↓↗↘+-]?\\s*[+-]?\\d+(?:\\.\\d+)?%$").matches(raw) &&
@@ -1379,12 +1843,45 @@ private fun androidx.compose.foundation.layout.RowScope.TableCell(
         emphasize -> Color(0xFF221A47)
         isTrend && isNegTrend -> Color(0xFFE04F5F)
         isTrend -> Color(0xFF129A5A)
+        isPrimaryNameCol && !raw.all { it.isDigit() } -> Color(0xFF221A47)
         else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val entityBadge = if (!emphasize && isPrimaryNameCol) markdownEntityBadgeForCell(raw) else null
+    if (entityBadge != null) {
+        Row(
+            modifier = Modifier
+                .width(width)
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(entityBadge.second.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = entityBadge.first,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = entityBadge.second
+                )
+            }
+            Text(
+                text = displayText,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = cellColor
+            )
+        }
+        return
     }
     Text(
         text = displayText,
         style = if (emphasize) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodySmall,
-        fontWeight = if (emphasize || isTrend) FontWeight.Bold else FontWeight.Normal,
+        fontWeight = if (emphasize || isTrend || (isPrimaryNameCol && !raw.all { it.isDigit() })) FontWeight.Bold else FontWeight.Normal,
         color = cellColor,
         textAlign = when (align) {
             TableAlign.LEFT -> TextAlign.Left

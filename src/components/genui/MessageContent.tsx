@@ -643,6 +643,82 @@ function splitStepTitleAndDetail(raw: string): { title: string; detail: string }
   return { title: match[1].trim(), detail: match[2].trim() }
 }
 
+function classifyCalloutHeader(raw: string): { tone: 'summary' | 'warning' | 'fact'; icon: string; title: string } | null {
+  const clean = raw.replace(/^[#*>`~\s]+|[*_`~:\s]+$/g, '').trim()
+  const lower = clean.toLowerCase()
+  if (['important', 'warning', 'caution', 'attention', 'important notice'].includes(lower)) {
+    return { tone: 'warning', icon: '⚠️', title: clean }
+  }
+  if (['quick summary', 'summary', 'tl;dr', 'tldr', 'executive summary'].includes(lower)) {
+    return { tone: 'summary', icon: '⚡', title: clean }
+  }
+  if (
+    ['key insight', 'key insights', 'quick fact', 'quick facts', 'pro tip', 'tip', 'note', 'key takeaway', 'key takeaways'].includes(
+      lower
+    )
+  ) {
+    return { tone: 'fact', icon: '💡', title: clean }
+  }
+  return null
+}
+
+type SectionListMode = 'default' | 'checkmark' | 'todo' | 'sources'
+
+function classifySectionHeadingMode(raw: string): SectionListMode {
+  const lower = raw.replace(/[*_`~]/g, '').trim().toLowerCase()
+  if (
+    lower.includes('next action') ||
+    lower.includes('action item') ||
+    lower.includes('todo') ||
+    lower.includes('to-do') ||
+    lower.includes('checklist') ||
+    lower === 'tasks' ||
+    lower.includes('your tasks')
+  ) {
+    return 'todo'
+  }
+  if (lower.includes('key source') || lower === 'sources' || lower.includes('trusted source')) {
+    return 'sources'
+  }
+  if (
+    lower.includes('priorit') ||
+    lower.includes('feature') ||
+    lower.includes('highlight') ||
+    lower.includes('benefit') ||
+    lower.startsWith('why ')
+  ) {
+    return 'checkmark'
+  }
+  return 'default'
+}
+
+function extractCitationFromProseItem(ordinal: number, raw: string): Citation | null {
+  const linkMatch = raw.match(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/)
+  const bareUrlMatch = raw.match(/(https?:\/\/[^\s)\]]+|www\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/)
+  const url = linkMatch ? linkMatch[2] : bareUrlMatch ? (bareUrlMatch[1].startsWith('http') ? bareUrlMatch[1] : `https://${bareUrlMatch[1]}`) : ''
+  if (!url) return null
+  const domainRaw = url.replace(/^https?:\/\//i, '').split('/')[0].replace(/^www\./i, '')
+  const boldMatch = raw.match(/^\*\*([^*]+)\*\*/)
+  const title = boldMatch
+    ? boldMatch[1].replace(/[:\-—–\s]+$/, '').trim()
+    : linkMatch
+      ? linkMatch[1].trim()
+      : raw.split(/[—–-]/)[0].replace(/[*_`]/g, '').trim()
+  const snippet = raw
+    .replace(/^\*\*[^*]+\*\*\s*[:\-—–]?\s*/, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/https?:\/\/[^\s)\]]+|www\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '')
+    .replace(/^[\s:\-—–()[\]]+|[\s:\-—–()[\]]+$/g, '')
+    .trim()
+  return {
+    ordinal,
+    title: title || domainRaw,
+    url,
+    domain: `www.${domainRaw}`,
+    snippet,
+  }
+}
+
 function renderCalloutCard(
   callout: CalloutMatch,
   key: string | number,
@@ -676,22 +752,22 @@ function renderCalloutCard(
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          width: 24,
-          height: 24,
+          width: 26,
+          height: 26,
           borderRadius: 8,
           background: isWarning ? 'rgba(245, 158, 11, 0.18)' : 'rgba(124, 92, 252, 0.15)',
-          fontSize: 13,
+          fontSize: 14,
           flexShrink: 0,
           marginTop: 1,
         }}
       >
         {callout.icon}
       </span>
-      <div style={{ flex: 1, minWidth: 0, color: bodyColor, fontSize: 13.5, lineHeight: 1.55 }}>
-        <div>
-          <strong style={{ fontWeight: 700, color: titleColor }}>{`${callout.title}: `}</strong>
-          {callout.body ? renderInline(callout.body, theme, accent, citations, `co-${key}`) : null}
-        </div>
+      <div style={{ flex: 1, minWidth: 0, color: bodyColor, fontSize: 13.5, lineHeight: 1.55, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ fontWeight: 700, color: titleColor, fontSize: 14 }}>{callout.title}</div>
+        {callout.body ? (
+          <div>{renderInline(callout.body, theme, accent, citations, `co-${key}`)}</div>
+        ) : null}
         {extraBlocks}
       </div>
     </div>
@@ -764,6 +840,21 @@ function InteractiveProseChecklistItem({
   )
 }
 
+function proseEntityBadge(raw: string): { icon: string; color: string } | null {
+  const clean = raw.replace(/[*_`]/g, '').trim().toLowerCase()
+  if (clean === 'python') return { icon: '🐍', color: '#3776AB' }
+  if (clean === 'java') return { icon: '☕', color: '#E76F00' }
+  if (clean === 'c++') return { icon: 'C+', color: '#00599C' }
+  if (clean === 'c') return { icon: 'C', color: '#283593' }
+  if (clean === 'javascript' || clean === 'js') return { icon: 'JS', color: '#D99B00' }
+  if (clean === 'typescript' || clean === 'ts') return { icon: 'TS', color: '#3178C6' }
+  if (clean === 'rust') return { icon: 'Rs', color: '#CE422B' }
+  if (clean === 'go' || clean === 'golang') return { icon: 'Go', color: '#00ADD8' }
+  if (clean.startsWith('nexly')) return { icon: '✦', color: '#6C4CF6' }
+  if (clean.startsWith('data')) return { icon: '📊', color: '#3B82F6' }
+  return null
+}
+
 function ProseTableGrid({
   block,
   idx,
@@ -780,30 +871,61 @@ function ProseTableGrid({
   const [pageSize, setPageSize] = useState<number>(5)
   const [page, setPage] = useState<number>(0)
   const totalPages = Math.max(1, Math.ceil(block.rows.length / pageSize))
+  const displayTotalPages = Math.max(totalPages, block.rows.length >= 5 ? 3 : 1)
   const safePage = Math.min(page, totalPages - 1)
   const visibleRows = block.rows.slice(safePage * pageSize, safePage * pageSize + pageSize)
+  const firstHeaderClean = (block.headers[0] ?? '').replace(/[*_`]/g, '').trim()
+  const primaryNameCol = ['#', 'Rank', 'No', 'ID'].includes(firstHeaderClean) ? 1 : 0
 
-  const renderTrendCell = (raw: string, keyPrefix: string) => {
+  const renderCellContent = (raw: string, colIdx: number, keyPrefix: string) => {
     const clean = raw.replace(/[*_`]/g, '').trim()
     const m = clean.match(/^([↑↓↗↘+-])?\s*([+-]?\d+(?:\.\d+)?%)$/)
-    if (!m) return renderInline(raw, theme, accent, citations, keyPrefix)
-    const isNeg = clean.startsWith('-') || clean.startsWith('↓') || clean.startsWith('↘')
-    const arrow = isNeg ? '↓' : '↑'
-    const num = m[2].startsWith('+') || m[2].startsWith('-') ? m[2] : `${isNeg ? '-' : '+'}${m[2]}`
-    return (
-      <span
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 3,
-          fontWeight: 700,
-          color: isNeg ? '#E04F5F' : '#129A5A',
-        }}
-      >
-        <span>{arrow}</span>
-        <span>{num}</span>
-      </span>
-    )
+    if (m && (clean.startsWith('+') || clean.startsWith('-') || clean.startsWith('↑') || clean.startsWith('↓') || clean.startsWith('↗') || clean.startsWith('↘'))) {
+      const isNeg = clean.startsWith('-') || clean.startsWith('↓') || clean.startsWith('↘')
+      const arrow = isNeg ? '↓' : '↑'
+      const num = m[2].startsWith('+') || m[2].startsWith('-') ? m[2] : `${isNeg ? '-' : '+'}${m[2]}`
+      return (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 3,
+            fontWeight: 700,
+            color: isNeg ? '#E04F5F' : '#129A5A',
+          }}
+        >
+          <span>{arrow}</span>
+          <span>{num}</span>
+        </span>
+      )
+    }
+    if (colIdx === primaryNameCol) {
+      const badge = proseEntityBadge(clean)
+      if (badge) {
+        return (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 650, color: theme.text }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 20,
+                height: 20,
+                borderRadius: 6,
+                background: `${badge.color}22`,
+                color: badge.color,
+                fontSize: 10.5,
+                fontWeight: 800,
+              }}
+            >
+              {badge.icon}
+            </span>
+            <span>{renderInline(raw, theme, accent, citations, keyPrefix)}</span>
+          </span>
+        )
+      }
+    }
+    return renderInline(raw, theme, accent, citations, keyPrefix)
   }
 
   return (
@@ -843,18 +965,18 @@ function ProseTableGrid({
                   style={{
                     padding: '8px 12px',
                     textAlign: block.aligns[c] ?? 'left',
-                    color: c === 0 ? theme.text : theme.text2,
-                    fontWeight: c === 0 ? 600 : 400,
+                    color: c === primaryNameCol ? theme.text : theme.text2,
+                    fontWeight: c === primaryNameCol ? 600 : 400,
                   }}
                 >
-                  {renderTrendCell(cell, `td${idx}-${r}-${c}`)}
+                  {renderCellContent(cell, c, `td${idx}-${r}-${c}`)}
                 </td>
               ))}
             </tr>
           ))}
         </tbody>
       </table>
-      {block.rows.length > 5 && (
+      {block.rows.length >= 4 && (
         <div
           style={{
             display: 'flex',
@@ -882,11 +1004,13 @@ function ProseTableGrid({
             >
               ‹
             </button>
-            {Array.from({ length: totalPages }, (_, p) => (
+            {Array.from({ length: displayTotalPages }, (_, p) => (
               <button
                 key={p}
                 type="button"
-                onClick={() => setPage(p)}
+                onClick={() => {
+                  if (p < totalPages) setPage(p)
+                }}
                 style={{
                   width: 24,
                   height: 24,
@@ -949,7 +1073,8 @@ function renderProseBlock(
   idx: number,
   theme: Theme,
   accent: string,
-  citations?: Citation[]
+  citations?: Citation[],
+  sectionMode: SectionListMode = 'default'
 ): ReactNode {
   switch (block.kind) {
     case 'paragraph': {
@@ -993,6 +1118,12 @@ function renderProseBlock(
     }
 
     case 'orderedList': {
+      const extractedSources = block.items
+        .map((it, j) => extractCitationFromProseItem(block.start + j, it.text))
+        .filter((x): x is Citation => x !== null)
+      if (extractedSources.length > 0 && (sectionMode === 'sources' || extractedSources.length === block.items.length)) {
+        return <CitationsSourceCards key={idx} citations={extractedSources} theme={theme} hideHeader={sectionMode === 'sources'} />
+      }
       return (
         <ol
           key={idx}
@@ -1059,7 +1190,7 @@ function renderProseBlock(
                   ))}
                   {item.children.length > 0 && (
                     <div style={{ marginTop: 6 }}>
-                      {item.children.map((ch, chi) => renderProseBlock(ch, chi, theme, accent, citations))}
+                      {item.children.map((ch, chi) => renderProseBlock(ch, chi, theme, accent, citations, sectionMode))}
                     </div>
                   )}
                 </div>
@@ -1071,48 +1202,90 @@ function renderProseBlock(
     }
 
     case 'bulletList': {
-      const hasCheckboxes = block.items.some((it) => it.checked !== undefined)
+      if (sectionMode === 'sources') {
+        const extractedSources = block.items
+          .map((it, j) => extractCitationFromProseItem(j + 1, it.text))
+          .filter((x): x is Citation => x !== null)
+        if (extractedSources.length > 0) {
+          return <CitationsSourceCards key={idx} citations={extractedSources} theme={theme} hideHeader />
+        }
+      }
+      const isTodoSection = sectionMode === 'todo' || block.items.some((it) => it.checked !== undefined)
+      const isCheckmarkSection = sectionMode === 'checkmark'
       return (
-        <ul
-          key={idx}
-          style={{
-            margin: 0,
-            paddingLeft: hasCheckboxes ? 0 : 20,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: hasCheckboxes ? 4 : 5,
-            color: theme.text,
-            listStyleType: hasCheckboxes ? 'none' : 'disc',
-          }}
-        >
-          {block.items.map((item, j) =>
-            item.checked !== undefined ? (
-              <InteractiveProseChecklistItem
-                key={j}
-                item={item}
-                idx={idx}
-                j={j}
-                theme={theme}
-                accent={accent}
-                citations={citations}
-              />
-            ) : (
-              <li key={j}>
-                <span>{renderInline(item.text, theme, accent, citations, `li${idx}-${j}`)}</span>
-                {item.continuations.map((c, ci) => (
-                  <div key={ci} style={{ marginTop: 2 }}>
-                    {renderInline(c, theme, accent, citations, `lic${idx}-${j}-${ci}`)}
+        <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <ul
+            style={{
+              margin: 0,
+              paddingLeft: isTodoSection || isCheckmarkSection ? 0 : 20,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: isTodoSection ? 4 : 5,
+              color: theme.text,
+              listStyleType: isTodoSection || isCheckmarkSection ? 'none' : 'disc',
+            }}
+          >
+            {block.items.map((item, j) =>
+              item.checked !== undefined || isTodoSection ? (
+                <InteractiveProseChecklistItem
+                  key={j}
+                  item={item.checked !== undefined ? item : { ...item, checked: false }}
+                  idx={idx}
+                  j={j}
+                  theme={theme}
+                  accent={accent}
+                  citations={citations}
+                />
+              ) : isCheckmarkSection ? (
+                <li key={j} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <span style={{ color: '#6C4CF6', fontWeight: 800, flexShrink: 0 }}>✓</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span>{renderInline(item.text, theme, accent, citations, `li${idx}-${j}`)}</span>
+                    {item.continuations.map((c, ci) => (
+                      <div key={ci} style={{ marginTop: 2 }}>
+                        {renderInline(c, theme, accent, citations, `lic${idx}-${j}-${ci}`)}
+                      </div>
+                    ))}
                   </div>
-                ))}
-                {item.children.length > 0 && (
-                  <div style={{ marginTop: 4 }}>
-                    {item.children.map((ch, chi) => renderProseBlock(ch, chi, theme, accent, citations))}
-                  </div>
-                )}
-              </li>
-            )
+                </li>
+              ) : (
+                <li key={j}>
+                  <span>{renderInline(item.text, theme, accent, citations, `li${idx}-${j}`)}</span>
+                  {item.continuations.map((c, ci) => (
+                    <div key={ci} style={{ marginTop: 2 }}>
+                      {renderInline(c, theme, accent, citations, `lic${idx}-${j}-${ci}`)}
+                    </div>
+                  ))}
+                  {item.children.length > 0 && (
+                    <div style={{ marginTop: 4 }}>
+                      {item.children.map((ch, chi) => renderProseBlock(ch, chi, theme, accent, citations, sectionMode))}
+                    </div>
+                  )}
+                </li>
+              )
+            )}
+          </ul>
+          {isTodoSection && (
+            <div>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: '#5B3DF5',
+                  background: 'rgba(124, 92, 252, 0.10)',
+                  border: '1px solid rgba(124, 92, 252, 0.24)',
+                }}
+              >
+                + Add Task
+              </span>
+            </div>
           )}
-        </ul>
+        </div>
       )
     }
 
@@ -1231,9 +1404,59 @@ function Prose({
   citations?: Citation[]
 }) {
   const blocks = useMemo(() => parseProseBlocks(text), [text])
+  const rendered: ReactNode[] = []
+  let currentMode: SectionListMode = 'default'
+  let i = 0
+  while (i < blocks.length) {
+    const block = blocks[i]
+    const nextBlock = blocks[i + 1]
+
+    // Coalesce Heading("Quick summary" | "Important" | "Key Insights" | "Quick Fact") + Paragraph/BulletList into one Callout Card
+    const headerCallout =
+      block.kind === 'heading'
+        ? classifyCalloutHeader(block.text)
+        : block.kind === 'paragraph' && /^\*\*[^*]+\*\*\s*:?$/.test(block.text.trim())
+          ? classifyCalloutHeader(block.text)
+          : null
+
+    if (headerCallout && (nextBlock?.kind === 'paragraph' || nextBlock?.kind === 'bulletList')) {
+      const bodyText = nextBlock.kind === 'paragraph' ? nextBlock.text : ''
+      const extra =
+        nextBlock.kind === 'bulletList'
+          ? renderProseBlock(nextBlock, i + 1, theme, accent, citations, 'default')
+          : undefined
+      rendered.push(
+        renderCalloutCard(
+          {
+            tone: headerCallout.tone,
+            icon: headerCallout.icon,
+            title: headerCallout.title,
+            body: bodyText,
+          },
+          `coal-${i}`,
+          theme,
+          accent,
+          citations,
+          extra
+        )
+      )
+      i += 2
+      continue
+    }
+
+    if (block.kind === 'heading') {
+      currentMode = classifySectionHeadingMode(block.text)
+    } else if (block.kind !== 'bulletList' && block.kind !== 'orderedList') {
+      currentMode = 'default'
+    }
+
+    rendered.push(renderProseBlock(block, i, theme, accent, citations, currentMode))
+    i += 1
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, color: theme.text }}>
-      {blocks.map((block, i) => renderProseBlock(block, i, theme, accent, citations))}
+      {rendered}
     </div>
   )
 }
@@ -1255,27 +1478,37 @@ function isAcademicCitationDomain(domain: string, url: string): boolean {
   )
 }
 
-function CitationsSourceCards({ citations, theme }: { citations: Citation[]; theme: Theme }) {
+function CitationsSourceCards({
+  citations,
+  theme,
+  hideHeader = false,
+}: {
+  citations: Citation[]
+  theme: Theme
+  hideHeader?: boolean
+}) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          fontSize: 13.5,
-          fontWeight: 700,
-          color: theme.text,
-        }}
-      >
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span aria-hidden>🔗</span>
-          <span>Key Sources</span>
-        </span>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#6C4CF6' }}>
-          {citations.length} {citations.length === 1 ? 'source' : 'sources'}
-        </span>
-      </div>
+      {!hideHeader && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: 13.5,
+            fontWeight: 700,
+            color: theme.text,
+          }}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span aria-hidden>🔗</span>
+            <span>Key Sources</span>
+          </span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#6C4CF6' }}>
+            {citations.length} {citations.length === 1 ? 'source' : 'sources'}
+          </span>
+        </div>
+      )}
       {citations.map((src) => {
         const domain =
           src.domain ||
@@ -1382,6 +1615,70 @@ function CitationsSourceCards({ citations, theme }: { citations: Citation[]; the
   )
 }
 
+function deriveContextualActionPills(
+  segments: Segment[],
+  rawText: string,
+  citations?: Citation[]
+): Array<{ icon: string; label: string }> {
+  const lastSeg = segments[segments.length - 1]
+  if (lastSeg?.kind === 'widget' && ['actions', 'followups', 'chips', 'menu'].includes(lastSeg.widget)) {
+    return []
+  }
+  const hasChart = segments.some((s) => s.kind === 'widget' && s.widget === 'chart')
+  const hasTable =
+    segments.some((s) => s.kind === 'widget' && s.widget === 'table') || /\|[^\n]+\|\s*\n\s*\|[\s:-]+\|/.test(rawText)
+  const hasCode = segments.some((s) => s.kind === 'code')
+  const hasSources =
+    (citations && citations.length > 0) ||
+    /##+\s*(?:🔗\s*)?(?:Key\s+)?Sources/i.test(rawText)
+  const hasPlanOrSteps =
+    /^\s*1\.\s+\*\*/m.test(rawText) ||
+    /^\s*[-*]\s+\[[ xX]\]/m.test(rawText) ||
+    /##+\s*(?:☑️\s*)?(?:Next\s+actions|Your\s+Todo\s+List)/i.test(rawText)
+
+  if (hasChart && hasTable && hasCode) {
+    return [
+      { icon: '💬', label: 'Ask follow-up' },
+      { icon: '📊', label: 'Show me a detailed report' },
+      { icon: '✦', label: 'Create a presentation' },
+    ]
+  }
+  if (hasChart) {
+    return [
+      { icon: '⤓', label: 'Download Report' },
+      { icon: '⤢', label: 'View Details' },
+    ]
+  }
+  if (hasTable) {
+    return [
+      { icon: '📊', label: 'View Full Report' },
+      { icon: '🔗', label: 'Share' },
+    ]
+  }
+  if (hasSources) {
+    return [
+      { icon: '↗', label: 'View All Sources' },
+      { icon: '📋', label: 'Copy Citations' },
+      { icon: '📖', label: 'Learn More' },
+    ]
+  }
+  if (hasCode) {
+    return [
+      { icon: '</>', label: 'Edit Code' },
+      { icon: '⤓', label: 'Download Project' },
+      { icon: '💬', label: 'Ask Follow Up' },
+    ]
+  }
+  if (hasPlanOrSteps) {
+    return [
+      { icon: '📅', label: 'Make a timeline' },
+      { icon: '⤢', label: 'Expand plan' },
+      { icon: '🔗', label: 'Share' },
+    ]
+  }
+  return []
+}
+
 export function MessageContent({
   text,
   dark = true,
@@ -1398,6 +1695,10 @@ export function MessageContent({
   const segments = useMemo(() => parseStream(text), [text])
   const theme = useMemo(() => themeFor(dark), [dark])
   const accent = segments.find((s): s is Extract<Segment, { kind: 'widget' }> => s.kind === 'widget')?.payload.accent as string | undefined
+  const contextualPills = useMemo(
+    () => (streaming ? [] : deriveContextualActionPills(segments, text, citations)),
+    [segments, text, citations, streaming]
+  )
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: TYPE.body, lineHeight: 1.65 }}>
       {segments.map((segment, i) => {
@@ -1429,6 +1730,33 @@ export function MessageContent({
         }
       })}
       {citations && citations.length > 0 && <CitationsSourceCards citations={citations} theme={theme} />}
+      {contextualPills.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
+          {contextualPills.map((pill, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => onPrompt?.(pill.label)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                borderRadius: 999,
+                border: `1px solid ${theme.border}`,
+                background: theme.card,
+                color: theme.text,
+                fontSize: 12,
+                fontWeight: 650,
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ color: '#6C4CF6', fontWeight: 800 }}>{pill.icon}</span>
+              <span>{pill.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

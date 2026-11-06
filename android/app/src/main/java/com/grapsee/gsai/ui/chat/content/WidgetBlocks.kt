@@ -1585,6 +1585,8 @@ private fun ChartWidgetView(w: ChartWidget) {
                 val (totalStr, peakPair, pct) = kpiStats
                 val pos = pct >= 0f
                 val pctStr = String.format(java.util.Locale.US, "%s%.1f%%", if (pos) "+" else "", pct)
+                val pillBg = if (pos) Color(0xFFE6F9F0) else Color(0xFFFDECEC)
+                val pillFg = if (pos) Color(0xFF129A5A) else Color(0xFFE04F5F)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1594,48 +1596,104 @@ private fun ChartWidgetView(w: ChartWidget) {
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White.copy(alpha = 0.72f))
-                            .border(1.dp, Color(0xFFE3DCFA), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 9.dp, vertical = 7.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.82f))
+                            .border(1.dp, Color(0xFFE3DCFA), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 9.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Text("Total", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.SemiBold)
-                        Text(totalStr, fontSize = 13.5.sp, color = GsTheme.colors.textPrimary, fontWeight = FontWeight.Bold)
-                        Text(
-                            text = "${if (pos) "↑" else "↓"} $pctStr",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (pos) Color(0xFF129A5A) else Color(0xFFE04F5F)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFEDE6FF)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("📊", fontSize = 11.sp)
+                        }
+                        Text(totalStr, fontSize = 14.sp, color = GsTheme.colors.textPrimary, fontWeight = FontWeight.Bold)
+                        Text("Total", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.Medium)
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(pillBg)
+                                .padding(horizontal = 6.dp, vertical = 1.5.dp)
+                        ) {
+                            Text(
+                                text = "${if (pos) "↑" else "↓"} $pctStr",
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = pillFg
+                            )
+                        }
                     }
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White.copy(alpha = 0.72f))
-                            .border(1.dp, Color(0xFFE3DCFA), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 9.dp, vertical = 7.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.82f))
+                            .border(1.dp, Color(0xFFE3DCFA), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 9.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Text("Peak (${peakPair.first})", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                        Text(peakPair.second, fontSize = 13.5.sp, color = GsTheme.colors.textPrimary, fontWeight = FontWeight.Bold)
-                        Text("★ Highest", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6C4CF6))
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFEDE6FF)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("👥", fontSize = 11.sp)
+                        }
+                        Text(peakPair.second, fontSize = 14.sp, color = GsTheme.colors.textPrimary, fontWeight = FontWeight.Bold)
+                        Text("Peak (${peakPair.first})", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.Medium, maxLines = 1)
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Color(0xFFEFEAFF))
+                                .padding(horizontal = 6.dp, vertical = 1.5.dp)
+                        ) {
+                            Text("★ Highest", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF5B3DF5))
+                        }
                     }
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White.copy(alpha = 0.72f))
-                            .border(1.dp, Color(0xFFE3DCFA), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 9.dp, vertical = 7.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.82f))
+                            .border(1.dp, Color(0xFFE3DCFA), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 9.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Text("Trend", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.SemiBold)
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFEDE6FF)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("📈", fontSize = 11.sp)
+                        }
                         Text(
                             text = pctStr,
-                            fontSize = 13.5.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (pos) Color(0xFF129A5A) else Color(0xFFE04F5F)
+                            color = GsTheme.colors.textPrimary
                         )
-                        Text(CHART_RANGE_LABELS[rangeIndex], fontSize = 10.sp, color = GsTheme.colors.textTertiary, maxLines = 1)
+                        Text("Growth Rate", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.Medium, maxLines = 1)
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(pillBg)
+                                .padding(horizontal = 6.dp, vertical = 1.5.dp)
+                        ) {
+                            Text(
+                                text = "${if (pos) "↑" else "↓"} $pctStr",
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = pillFg
+                            )
+                        }
                     }
                 }
             }
@@ -1685,6 +1743,26 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
         val count = w.series.maxOfOrNull { it.data.size } ?: 0
         if (w.labels.size >= count && count > 0) w.labels.take(count)
         else List(count) { w.series.firstOrNull()?.data?.getOrNull(it)?.getOrNull(0)?.toInt()?.toString() ?: "" }
+    }
+    // Auto-select the peak point on initial mount so the floating tooltip + guide line
+    // from Screenshot 6 ("Apr · $78.4K · ↑ +12.5%") are visible immediately.
+    LaunchedEffect(w.series, xLabels) {
+        if (probe.datum == null) {
+            val firstSeries = w.series.firstOrNull()
+            val pts = firstSeries?.data.orEmpty()
+            if (pts.size >= 2) {
+                val maxIdx = pts.indices.maxByOrNull { pts[it].getOrElse(1) { 0f } } ?: 0
+                val pt = pts[maxIdx]
+                probe.select(
+                    ChartDatum(
+                        label = xLabels.getOrElse(maxIdx) { pt.getOrElse(0) { 0f }.toInt().toString() },
+                        value = pt.getOrElse(1) { 0f },
+                        series = firstSeries?.name,
+                        index = maxIdx
+                    )
+                )
+            }
+        }
     }
     Canvas(
         Modifier
@@ -1756,12 +1834,17 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
             }
             if (pts.size < 2) return@forEachIndexed
             val visible = (pts.size * progress).toInt().coerceAtLeast(1)
-            // Draw only fully-arrived points; the partial segment is appended
-            // next. Taking visible+1 here overshot and then jumped back, which
-            // showed as the line doubling over itself during the draw-in.
             val drawn = pts.take(visible)
             val path = Path()
-            drawn.forEachIndexed { i, p -> if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y) }
+            drawn.forEachIndexed { i, p ->
+                if (i == 0) {
+                    path.moveTo(p.x, p.y)
+                } else {
+                    val prev = drawn[i - 1]
+                    val midX = (prev.x + p.x) * 0.5f
+                    path.cubicTo(midX, prev.y, midX, p.y, p.x, p.y)
+                }
+            }
             var endX = drawn.last().x
             if (visible < pts.size) {
                 val frac = pts.size * progress - visible
@@ -1769,15 +1852,23 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
                 endX = a.x + (b.x - a.x) * frac
                 path.lineTo(endX, a.y + (b.y - a.y) * frac)
             }
-            if (filled) {
-                val fillPath = Path().apply {
-                    addPath(path)
-                    lineTo(endX, base)
-                    lineTo(pts.first().x, base)
-                    close()
-                }
-                drawPath(fillPath, col.copy(alpha = 0.15f))
+            val fillPath = Path().apply {
+                addPath(path)
+                lineTo(endX, base)
+                lineTo(pts.first().x, base)
+                close()
             }
+            drawPath(
+                fillPath,
+                Brush.verticalGradient(
+                    colors = listOf(
+                        col.copy(alpha = if (filled) 0.30f else 0.16f),
+                        col.copy(alpha = 0.01f)
+                    ),
+                    startY = padT,
+                    endY = base
+                )
+            )
             drawPath(path, col, style = Stroke(width = 3.dp.toPx()))
             if (progress >= 1f) pts.forEach { drawCircle(col, radius = 3.dp.toPx(), center = it) }
             // The selected datum gets a ring and a guide line, so "which point"
