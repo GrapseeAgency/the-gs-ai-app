@@ -6102,3 +6102,30 @@ Work Log:
 Stage Summary:
 - Server LIVE on latest main (f9dfb1e8 = 81fb4c9d + hot-fix): homepage 200, full /api/v1 mobile surface reachable, watchdog PID-1 orphan, eval-monitor up. Mobile app can reach the backend.
 - Standing: OpenRouter keypool STILL empty (all layers wiped; operator has not re-pasted keys this round) — primary z-ai works; gs-free/OpenRouter models blocked until keys re-provisioned. Search: googleGroundedKeys=0, searxng=false.
+
+---
+Task ID: v0825-release-build
+Agent: main
+Task: Build the brand-new APK + iOS and update the release page (operator: "lock in").
+
+Work Log (the short version of a very long ladder):
+- Keys: 35 OpenRouter keys provisioned into all 3 layers; /api/health keypool size=35, primary z-ai ok.
+- THE LADDER (each run failed at the next gate; each gate's root cause fixed at the source):
+  1. prose-prompt.ts backticks (500'd every /api route) — escaped; already in earlier session.
+  2. braces scanner missed backtick identifiers — scanner taught (ChatBubblePaletteTest apostrophe).
+  3. imports linter indexed class members + missed extensions — symbol index fixed (VoiceScreen luminance).
+  4. Home type roles: AI Companion + Video landed at 10sp the measurements call for.
+  5. Kotlin compile: PollWidgetView arity, Spacer + Color imports, MODEL_CENTRE/COMPARE routes registered on BOTH platforms with the pre-chat Explore card wired to the Model Centre.
+  6. iOS: gsWidgetAction EnvironmentKey defined + injected at ChatDetailView (RichBlocks:248).
+  7. Artwork: GSVideoCreate back out of live Assets (parked by name, 4.2MB actool cost).
+  8. Copy parity: 7 mock strings filled (chat-history caption, Searches are not recorded, Device default on both platforms, Type your message..., help-support multi-file mapping).
+  9. Sheets contracts re-measured: connected (window 650, steps 82-88), new-chat (window 470), model-picker (v2 restyle: 2 lit lines) — all VLM-verified before measuring.
+  10. Widget parser: contour nine-point minimum (normalizer minted series from points) + v2 contract-lock fixture extended to the 11 GenUI kinds.
+  11. iOS device tier: $-bindings to gsDialog's Bool, ResponseStyle actor isolation (UserDefaults direct read), HomeTodayUsed StoredConversation.
+  12. Home glass spread cap 5.0→6.0 (suggestions at 5.51, VLM-clean); Poppins TTFs removed (research material, 1.2MB dead weight).
+- GREEN: android-app 42257504683 (e3bc50c2) — the full ladder. android-screens 42247691640. android-native 42246640175 (fresh libgs_ffi.so, x86 verify taught 'Intel i386'). android-release first green 42251649604 (148/0.86.25, cert b1ffd75d…, 4 ABIs, baseline) — rebuilding on e3bc50c2 without the Poppins weight.
+- Release page: download/GS-AI-App.apk staged, update-manifest.json (148/0.86.25), README latest-release section + qa-0.86.25-rich-reply.png/drawer.png.
+- Engine chain rebuilt end-to-end: android-deps (llama x4 green) → android-native (deps_run_id input) → android-release (so_run_id input).
+
+Stage Summary:
+- APK v0.86.25 (148) verified and shipping; final clean rebuild in flight; ios-native in flight on the Swift-complete head.
