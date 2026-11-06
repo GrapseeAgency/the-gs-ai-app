@@ -293,7 +293,7 @@ fun CodeBlockCard(
                             fontFamily = FontFamily.Monospace,
                             lineHeight = 19.sp
                         ),
-                        color = Color(0xFFEFEFF).takeIf { false } ?: Color(0xFFEEEBFF),
+                        color = Color(0xFFEEEBFF),
                         softWrap = wrapCode,
                         modifier = Modifier
                             .weight(1f)

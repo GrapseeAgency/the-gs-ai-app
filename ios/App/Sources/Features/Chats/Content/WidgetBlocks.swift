@@ -1148,6 +1148,26 @@ private struct ChartBodyView: View {
                     .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.82)))
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
                 }
+
+                // Key Insights Box (Screenshot 6)
+                HStack(alignment: .top, spacing: 8) {
+                    Text("💡")
+                        .font(.system(size: 13))
+                        .padding(.top, 1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Key Insights:")
+                            .font(.system(size: 11.5, weight: .bold))
+                            .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
+                        Text(String(format: "Peak in %@ (%@) · %@%.1f%% overall change across %@", peakPoint.label, formatChartMetric(peakPoint.value, unit: unit), pos ? "+" : "", growthPct, rangeOptions[rangeIdx].lowercased()))
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color(red: 0.224, green: 0.196, blue: 0.361))
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 11)
+                .padding(.vertical, 9)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color(red: 0.949, green: 0.925, blue: 1.0)))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.851, green: 0.800, blue: 1.0), lineWidth: 1))
             }
         }
     }
@@ -1333,6 +1353,7 @@ private struct TableBodyView: View {
                 }
 
                 // Pagination & Display Controls Bar (Screenshot 5)
+                let displayTotalPages = max(totalPages, filteredRows.count >= 5 ? 3 : 1)
                 HStack {
                     HStack(spacing: 4) {
                         Button("‹") {
@@ -1343,10 +1364,10 @@ private struct TableBodyView: View {
                         .disabled(safePage == 0)
                         .buttonStyle(.plain)
 
-                        ForEach(0..<totalPages, id: \.self) { p in
+                        ForEach(0..<displayTotalPages, id: \.self) { p in
                             let active = p == safePage
                             Button {
-                                page = p
+                                if p < totalPages { page = p }
                             } label: {
                                 Text("\(p + 1)")
                                     .font(.system(size: 11, weight: .bold))
@@ -1389,6 +1410,31 @@ private struct TableBodyView: View {
             .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.75)))
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.886, green: 0.859, blue: 0.980), lineWidth: 1))
+
+            if normRows.count >= 3, let firstRow = normRows.first, primaryNameCol < firstRow.count {
+                let topName = firstRow[primaryNameCol].trimmingCharacters(in: .whitespacesAndNewlines)
+                let topMetric = (primaryNameCol + 1 < firstRow.count) ? firstRow[primaryNameCol + 1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+                if !topName.isEmpty {
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("💡")
+                            .font(.system(size: 13))
+                            .padding(.top, 1)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Key Insights")
+                                .font(.system(size: 11.5, weight: .bold))
+                                .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
+                            Text("• \(topName) leads the ranking\(topMetric.isEmpty ? "" : " (\(topMetric))") across \(normRows.count) entries")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color(red: 0.224, green: 0.196, blue: 0.361))
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 9)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(red: 0.949, green: 0.925, blue: 1.0)))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.851, green: 0.800, blue: 1.0), lineWidth: 1))
+                }
+            }
         }
     }
 }
@@ -1824,28 +1870,59 @@ private struct ChecklistBodyView: View {
     let obj: [String: Any]
     let accent: Color
     @State private var toggled: Set<Int> = []
+    @State private var addedTasks: [String] = []
 
     var body: some View {
         let items = ((obj["items"] ?? obj["tasks"] ?? obj["todos"]) as? [Any]) ?? []
+        let allItems: [Any] = items + addedTasks
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(items.enumerated()), id: \.offset) { idx, raw in
+            ForEach(Array(allItems.enumerated()), id: \.offset) { idx, raw in
                 let dict = raw as? [String: Any] ?? [:]
                 let label = (raw as? String) ?? str(dict, "label", "title", "text", "task", "name")
                 let initialDone = (dict["done"] as? Bool) ?? (dict["checked"] as? Bool) ?? false
                 let isDone = toggled.contains(idx) ? !initialDone : initialDone
                 Button {
+                    GSHaptics.selection()
                     if toggled.contains(idx) { toggled.remove(idx) } else { toggled.insert(idx) }
                 } label: {
-                    HStack(spacing: 8) {
-                        Text(isDone ? "☑" : "☐").foregroundStyle(isDone ? accent : Aero.textSecondary)
+                    HStack(spacing: 9) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(isDone ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.white.opacity(0.85))
+                                .frame(width: 18, height: 18)
+                            if !isDone {
+                                RoundedRectangle(cornerRadius: 5)
+                                    .stroke(Color(red: 0.612, green: 0.533, blue: 0.973), lineWidth: 1.5)
+                                    .frame(width: 18, height: 18)
+                            } else {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(Color.white)
+                            }
+                        }
                         Text(label)
                             .font(.system(size: 13))
                             .strikethrough(isDone)
                             .foregroundStyle(isDone ? Aero.textSecondary : Aero.text)
                     }
+                    .padding(.vertical, 2)
                 }
                 .buttonStyle(.plain)
             }
+            Button {
+                GSHaptics.selection()
+                addedTasks.append("Follow-up task #\(allItems.count + 1)")
+            } label: {
+                Text("+ Add Task")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color.white.opacity(0.82)))
+                    .overlay(Capsule().stroke(Color(red: 0.878, green: 0.847, blue: 0.980), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 2)
         }
     }
 }
