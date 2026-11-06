@@ -383,7 +383,7 @@ struct HomeDashboardView: View {
         let onNewChat: () -> Void
         @ObservedObject private var store = ConversationStore.shared
 
-        private var todayRows: [Conversation] {
+        private var todayRows: [StoredConversation] {
             let today = Calendar.current.startOfDay(for: Date())
             return store.activeConversations
                 .filter { conversation in
