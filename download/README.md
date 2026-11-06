@@ -1,6 +1,56 @@
 Here are all the generated files.
 
-## Latest release: v0.86.2 — chat sheets are solid surfaces (versionCode 125)
+## Latest release: v0.86.25 — the Model Centre, and the glass redesign finished (versionCode 148)
+
+    file    GS-AI-App.apk
+    size    72366032 bytes
+    sha256  2aeda43fcc4236a46230e1865ae09090383b5fa09b753d31bcf77cc46e6f46d2
+
+![rich reply](qa-0.86.25-rich-reply.png)
+
+What landed in this build (584 commits since v0.86.2 — the GenUI passes, the
+0.86.3–0.86.25 craft series, and the Model Centre):
+
+1. **The Model Centre.** The pre-chat "Explore AI Models" card opens a real
+   browser now: three plain tiers — Fast / Everyday / Best for difficult
+   questions — where a single tap writes the same preference key the chat send
+   path reads. Everything technical (context windows, speed dots, capability
+   chips, reasoning modes) stays collapsed inside per-model "Advanced
+   details", and the spec-sheet comparison view is demoted to the Advanced
+   section, off the consumer path. Twin-parity on iOS, from the same commit.
+2. **Three GenUI passes: model freedom, 36-kind widget parity.** Key Insights
+   cards, checklist +Add Task, the Quick Calculator with multi-line steps and
+   source elevation, the rich-prose PROSE_PROMPT contract (flowing prose is
+   the default, structure arrives when it genuinely helps), and Section 01-02
+   screenshot parity verified across Android, iOS and Web.
+3. **The 0.86.3–0.86.25 craft series finished the reference redesign.** The
+   pre-chat lotus-orb hero and redesigned model picker, the Dreamy Pastel
+   reference shells, Archived/Shared Conversations and Conversation Details,
+   Data Export & Account Deletion, the identity editor, a real Language page,
+   Travel Agent reachable, dead screens removed, overlays that are menus that
+   hang off their buttons (not pages), settings rows that finally open pages,
+   the library page behind every save, the dock fade — and the last stock
+   dialog on either platform is gone.
+4. **Action pills send real turns.** The contextual pills under an answer
+   ("Ask follow-up", "Show me a detailed report", ...) now dispatch their
+   prompt through the chat's gated send path on both platforms — the twin of
+   the clarify chips, not a dead button.
+5. **Six shipped-red fixes this round.** The PROSE_PROMPT template literal
+   that broke parsing of every /api route, the VoiceScreen luminance import,
+   the braces scanner's backtick blind spot, the imports linter's symbol
+   index, the widget contour nine-point minimum the normalizer bypassed, and
+   the eleven v2 widget kinds the contract-lock fixture never met. All
+   verified green in CI before this APK shipped.
+
+Fresh native engine: `libgs_ffi.so` rebuilt for all four ABIs (android-native
+run 42246640175). `versionCode 148` installs over 125 without uninstalling.
+Release build verified on CI: not-debuggable, signed with the shipping cert
+(b1ffd75d…), baseline profile packaged (`android-release` run 42251649604).
+Design screenshots captured from the same revision by `android-screens`
+(run 42247691640; the pair above, plus the drawer in
+`qa-0.86.25-drawer.png`).
+
+## Previous shipped release: v0.86.2 — chat sheets are solid surfaces (versionCode 125)
 
     file    GS-AI-App.apk
     size    66270856 bytes
