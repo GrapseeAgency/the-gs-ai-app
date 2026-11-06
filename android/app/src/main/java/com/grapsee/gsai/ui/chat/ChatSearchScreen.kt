@@ -336,7 +336,8 @@ fun ChatSearchScreen(
                     tone = GsWellTone.Peach,
                     label = "Total Conversations",
                     value = (totals.activeCount + totals.archivedCount).toString(),
-                    caption = "${totals.activeCount} active · ${totals.archivedCount} archived",
+                    // The mock's caption, twin-identical with iOS's historyStat.
+                    caption = "Your chat history with Nexly",
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(10.dp))

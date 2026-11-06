@@ -79,7 +79,9 @@ struct VoiceSpeechView: View {
         }
     }
 
-    /// "Natural · device synthesizer", or the reader's chosen step.
+    /// "Device default" at the middle step (the mock's value row), or the
+    /// informative "Natural · device synthesizer" summary once the reader
+    /// moves a control.
     private var engineSummary: String {
         // `object(forKey:)` rather than `integer(forKey:)`: the latter returns 0
         // for an unset key, which would make a fresh install report "Slower"
@@ -87,6 +89,9 @@ struct VoiceSpeechView: View {
         // "Natural". An unset key means the middle step on both pages.
         let speed = UserDefaults.standard.object(forKey: "gs.tts.rateStep") as? Int ?? 1
         let pitch = UserDefaults.standard.object(forKey: "gs.tts.pitchStep") as? Int ?? 1
+        if speed == 1 && pitch == 1 {
+            return "Device default"
+        }
         let speedLabel = ["Slower", "Natural", "Faster"][min(max(speed, 0), 2)]
         let pitchLabel = ["lower pitch", "natural pitch", "higher pitch"][min(max(pitch, 0), 2)]
         return "\(speedLabel) · \(pitchLabel) · device synthesizer"

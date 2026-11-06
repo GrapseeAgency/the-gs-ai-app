@@ -192,7 +192,15 @@ SCREENS = {
         ],
     ),
     "help-support": dict(
-        android="android/app/src/main/java/com/grapsee/gsai/ui/support/HelpSupportScreen.kt",
+        # The category labels render from the HelpCategory enum, which lives in
+        # HelpCatalog.kt one file over. The scanner reads the CATALOG FIRST so
+        # the mock's reading order holds: the six category labels come before
+        # the screen's lower sections ("Popular Help Topics", "Still need
+        # help?"), the same order the rendered page reads.
+        android=[
+            "android/app/src/main/java/com/grapsee/gsai/ui/support/HelpCatalog.kt",
+            "android/app/src/main/java/com/grapsee/gsai/ui/support/HelpSupportScreen.kt",
+        ],
         ios="ios/App/Sources/Features/Support/HelpSupportView.swift",
         copy=[
             "Help & Support",
@@ -517,13 +525,19 @@ def run(extra=None, forbidden_extra=None):
         if forbidden_extra:
             forbidden.append(forbidden_extra)
         for platform in ("android", "ios"):
-            path = spec[platform]
-            text = read(path)
+            # A page's strings may legitimately live in more than one file (the
+            # help-support category labels render from the HelpCategory enum
+            # in HelpCatalog.kt while the sheet lives in HelpSupportScreen.kt),
+            # so the mapping accepts a single path or a list of them.
+            paths = spec[platform]
+            if isinstance(paths, str):
+                paths = [paths]
+            text = "\n".join(read(p) for p in paths)
             absent = missing_in(text, copy)
             stale = [item for item in forbidden if item in text]
             moved = out_of_order(text, spec.get("order", []))
             if absent or stale or moved:
-                problems.append((screen, platform, path, absent, stale, moved))
+                problems.append((screen, platform, ", ".join(paths), absent, stale, moved))
     return problems
 
 

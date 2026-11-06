@@ -299,8 +299,10 @@ fun PrivacySettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit = {})
             RefRowDivider()
             RefNavRow(
                 title = "Search History",
+                // The mock's policy line, shown while nothing has been searched;
+                // once there is history the row carries the real count instead.
                 subtitle = if (SettingsStore.searchHistory.isEmpty()) {
-                    "No searches recorded yet"
+                    "Searches are not recorded"
                 } else {
                     "${SettingsStore.searchHistory.size} recent ${if (SettingsStore.searchHistory.size == 1) "search" else "searches"}"
                 },
@@ -1326,11 +1328,18 @@ fun VoiceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
             // one tap away now, and those controls are wired to the synthesizer.
             RefRow(
                 title = "Speech engine",
-                subtitle = buildString {
-                    append(if (SettingsStore.ttsRate == 1.0f) "Natural" else if (SettingsStore.ttsRate < 1f) "Slower" else "Faster")
-                    append(" · ")
-                    append(if (SettingsStore.ttsPitch == 1.0f) "natural pitch" else if (SettingsStore.ttsPitch < 1f) "lower pitch" else "higher pitch")
-                    append(" · device synthesizer")
+                // The mock's default-state value reads "Device default"; once
+                // the reader moves a control off the middle step the row
+                // carries the informative summary instead.
+                subtitle = if (SettingsStore.ttsRate == 1.0f && SettingsStore.ttsPitch == 1.0f) {
+                    "Device default"
+                } else {
+                    buildString {
+                        append(if (SettingsStore.ttsRate == 1.0f) "Natural" else if (SettingsStore.ttsRate < 1f) "Slower" else "Faster")
+                        append(" · ")
+                        append(if (SettingsStore.ttsPitch == 1.0f) "natural pitch" else if (SettingsStore.ttsPitch < 1f) "lower pitch" else "higher pitch")
+                        append(" · device synthesizer")
+                    }
                 },
                 icon = GsIcons.AudioLines,
                 onClick = { onNavigate(GsRoutes.SETTINGS_VOICE_ENGINE) }
