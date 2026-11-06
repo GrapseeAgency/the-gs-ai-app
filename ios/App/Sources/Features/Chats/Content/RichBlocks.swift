@@ -398,10 +398,10 @@ private struct StructuredProseSequenceView: View {
         let tabs = dashboardTabs
         if !tabs.isEmpty {
             HStack(spacing: 4) {
-                ForEach(tabs, id: \.self) { tab in
+                ForEach(tabs, id: \.self) { (tab: String) in
                     let selected = activeDashboardTab == tab
                     Button {
-                        GSHaptics.selection()
+                        GSHaptics.select()
                         activeDashboardTab = tab
                     } label: {
                         Text(tab)
@@ -577,7 +577,7 @@ private struct NexlyContextualActionPillsRowView: View {
                 HStack(spacing: 8) {
                     ForEach(Array(list.enumerated()), id: \.offset) { _, pair in
                         Button {
-                            GSHaptics.selection()
+                            GSHaptics.select()
                             onAction(pair.1)
                         } label: {
                             HStack(spacing: 5) {
@@ -989,7 +989,7 @@ private struct NexlyQuickCalculatorCardView: View {
                 }
                 Spacer()
                 Button("Clear") {
-                    GSHaptics.selection()
+                    GSHaptics.select()
                     amount = initialAmount
                     discountIdx = 2
                 }
@@ -1004,7 +1004,7 @@ private struct NexlyQuickCalculatorCardView: View {
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
                     Button {
-                        GSHaptics.selection()
+                        GSHaptics.select()
                         amount = amount >= 5000 ? 500 : amount + 300
                     } label: {
                         Text(String(format: "%.0f", amount))
@@ -1025,7 +1025,7 @@ private struct NexlyQuickCalculatorCardView: View {
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
                     Button {
-                        GSHaptics.selection()
+                        GSHaptics.select()
                         discountIdx = (discountIdx + 1) % discounts.count
                     } label: {
                         HStack {
@@ -1277,7 +1277,7 @@ private struct BulletListView: View {
                 }
                 if sectionMode == .todo || items.contains(where: { $0.checked != nil }) {
                     Button {
-                        GSHaptics.selection()
+                        GSHaptics.select()
                         addedTasks.append("Follow-up action item #\(items.count + addedTasks.count + 1)")
                     } label: {
                         Text("+ Add Task")
@@ -1319,7 +1319,7 @@ private struct InteractiveChecklistItemRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Button {
-                GSHaptics.selection()
+                GSHaptics.select()
                 withAnimation(.easeOut(duration: 0.15)) { checked.toggle() }
             } label: {
                 HStack(alignment: .center, spacing: 9) {
@@ -1602,283 +1602,318 @@ struct CodeBlockCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header bar
-            HStack(spacing: 8) {
-                Text("</>")
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Color(red: 0.620, green: 0.525, blue: 1.0))
-                Text((language ?? "code").capitalized)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color(red: 0.902, green: 0.882, blue: 1.0))
-                Spacer()
-                if !open && isCollapsible && !editing {
-                    Button(expanded ? "Collapse" : "Expand (\(allLines.count))") {
-                        withAnimation(.easeOut(duration: 0.18)) { expanded.toggle() }
-                    }
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.773, green: 0.737, blue: 1.0))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
-                    .buttonStyle(.plain)
-                }
-                if !open && !code.isEmpty {
-                    Button(editing ? "Done" : "Edit") {
-                        if editedCode == nil { editedCode = code }
-                        editing.toggle()
-                    }
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.773, green: 0.737, blue: 1.0))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
-                    .buttonStyle(.plain)
-                }
-                CodeCopyButton(text: currentCode)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(Color(red: 0.106, green: 0.094, blue: 0.188))
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Code block\(language.map { ", " + $0 } ?? "")")
+            codeHeaderBar
+            codeEditorSurface
+            codeExecutionBar
+            codeOutputDrawer
+            codeSeriesPreview
+            browserPreviewSection
+        }
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color(red: 0.133, green: 0.122, blue: 0.231)))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.212, green: 0.192, blue: 0.361), lineWidth: 1))
+    }
 
-            // Code surface with line numbers gutter
-            if currentCode.isEmpty {
-                Text("…")
-                    .font(.system(size: 12, weight: .regular, design: .monospaced))
-                    .foregroundStyle(Color(red: 0.925, green: 0.910, blue: 1.0))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .textSelection(.enabled)
-            } else if editing {
-                TextEditor(text: Binding(
-                    get: { editedCode ?? code },
-                    set: { editedCode = $0 }
-                ))
+    // MARK: - Code card sections. The body was one ~280-line expression that
+    // no longer type-checked in reasonable time on the CI Xcode; each section
+    // below is an independent expression the solver can handle on its own.
+
+    /// the language chip, expand/edit controls, copy.
+    @ViewBuilder
+    private var codeHeaderBar: some View {
+        // Header bar
+        HStack(spacing: 8) {
+            Text("</>")
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(Color(red: 0.620, green: 0.525, blue: 1.0))
+            Text((language ?? "code").capitalized)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Color(red: 0.902, green: 0.882, blue: 1.0))
+            Spacer()
+            if !open && isCollapsible && !editing {
+                Button(expanded ? "Collapse" : "Expand (\(allLines.count))") {
+                    withAnimation(.easeOut(duration: 0.18)) { expanded.toggle() }
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color(red: 0.773, green: 0.737, blue: 1.0))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
+                .buttonStyle(.plain)
+            }
+            if !open && !code.isEmpty {
+                Button(editing ? "Done" : "Edit") {
+                    if editedCode == nil { editedCode = code }
+                    editing.toggle()
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color(red: 0.773, green: 0.737, blue: 1.0))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
+                .buttonStyle(.plain)
+            }
+            CodeCopyButton(text: currentCode)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(Color(red: 0.106, green: 0.094, blue: 0.188))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Code block\(language.map { ", " + $0 } ?? "")")
+    }
+
+    /// the code surface — empty placeholder, editor, or the line-numbered read-only view.
+    @ViewBuilder
+    private var codeEditorSurface: some View {
+        // Code surface with line numbers gutter
+        if currentCode.isEmpty {
+            Text("…")
                 .font(.system(size: 12, weight: .regular, design: .monospaced))
                 .foregroundStyle(Color(red: 0.925, green: 0.910, blue: 1.0))
-                .frame(minHeight: 110, maxHeight: 260)
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .textSelection(.enabled)
+        } else if editing {
+            TextEditor(text: Binding(
+                get: { editedCode ?? code },
+                set: { editedCode = $0 }
+            ))
+            .font(.system(size: 12, weight: .regular, design: .monospaced))
+            .foregroundStyle(Color(red: 0.925, green: 0.910, blue: 1.0))
+            .frame(minHeight: 110, maxHeight: 260)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
+        } else {
+            if wrapCode {
+                codeSurfaceWithLineNumbers
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 10)
+                    .textSelection(.enabled)
             } else {
-                if wrapCode {
+                ScrollView([.horizontal, .vertical]) {
                     codeSurfaceWithLineNumbers
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 10)
                         .textSelection(.enabled)
-                } else {
-                    ScrollView([.horizontal, .vertical]) {
-                        codeSurfaceWithLineNumbers
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 10)
-                            .textSelection(.enabled)
-                    }
-                    .frame(maxHeight: 320)
                 }
-            }
-
-            // Bottom Execution Action Bar (Screenshots 1 & 2)
-            if !open && !currentCode.isEmpty {
-                HStack(spacing: 8) {
-                    Button {
-                        GSHaptics.selection()
-                        executeCode()
-                    } label: {
-                        HStack(spacing: 5) {
-                            Text("▷")
-                                .font(.system(size: 11, weight: .bold))
-                            Text(isBrowserLang ? "Run in Browser" : (lang == "json" ? "Validate JSON" : "Run Code"))
-                                .font(.system(size: 11.5, weight: .bold))
-                        }
-                        .foregroundStyle(Color.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    if runOutput != nil || errorOutput != nil {
-                        let hasError = errorOutput != nil
-                        Text(hasError ? "● Error" : "● Success")
-                            .font(.system(size: 10.5, weight: .bold))
-                            .foregroundStyle(hasError ? Color(red: 0.988, green: 0.647, blue: 0.647) : Color(red: 0.525, green: 0.937, blue: 0.675))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(
-                                Capsule().fill(
-                                    hasError ? Color.red.opacity(0.2) : Color.green.opacity(0.2)
-                                )
-                            )
-                        Button("↻ Rerun") {
-                            GSHaptics.selection()
-                            executeCode()
-                        }
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.773, green: 0.737, blue: 1.0))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
-                        .buttonStyle(.plain)
-                    }
-
-                    Text("\(allLines.count) lines")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(red: 0.557, green: 0.537, blue: 0.706))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(Color(red: 0.106, green: 0.094, blue: 0.188))
-            }
-
-            // Terminal-style Execution Output Drawer (05. Code Execution)
-            if runOutput != nil || errorOutput != nil || ["error", "stderr", "traceback", "exception"].contains(lang) {
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack {
-                        Text("$ run \(lang) (run #\(max(1, runCount)))")
-                            .font(.system(size: 10.5, design: .monospaced))
-                            .foregroundStyle(Color(red: 0.557, green: 0.537, blue: 0.706))
-                        Spacer()
-                        Button("✕ Clear") {
-                            runOutput = nil
-                            errorOutput = nil
-                        }
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(Color(red: 0.557, green: 0.537, blue: 0.706))
-                        .buttonStyle(.plain)
-                    }
-
-                    if let out = runOutput, !out.isEmpty {
-                        Text(out)
-                            .font(.system(size: 11.5, weight: .regular, design: .monospaced))
-                            .foregroundStyle(Color(red: 0.847, green: 0.953, blue: 0.863))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    if let err = errorOutput ?? (["error", "stderr", "traceback", "exception"].contains(lang) ? currentCode : nil),
-                       !err.isEmpty {
-                        Text(err)
-                            .font(.system(size: 11.5, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Color(red: 0.988, green: 0.647, blue: 0.647))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(8)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Color.red.opacity(0.14)))
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(Color(red: 0.078, green: 0.067, blue: 0.141))
-            }
-
-            // Visual Data Plot Preview (Screenshot 1: Revenue Trend mini purple bar chart from Python/JS code)
-            if let seriesPreview = extractCodeSeriesPreview(currentCode) {
-                let maxVal = max(1.0, seriesPreview.points.map(\.1).max() ?? 1.0)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(seriesPreview.title)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
-                    HStack(alignment: .bottom, spacing: 10) {
-                        ForEach(Array(seriesPreview.points.enumerated()), id: \.offset) { _, pt in
-                            let frac = min(max(CGFloat(pt.1 / maxVal), 0.15), 1.0)
-                            VStack(spacing: 4) {
-                                RoundedRectangle(cornerRadius: 5)
-                                    .fill(Color(red: 0.424, green: 0.298, blue: 0.965))
-                                    .frame(height: 48 * frac)
-                                Text(pt.0)
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(Color(red: 0.369, green: 0.337, blue: 0.502))
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .frame(height: 70, alignment: .bottom)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(Color(red: 0.969, green: 0.957, blue: 1.0))
-            }
-
-            // Interactive Browser / Component Preview + Task Overview (Screenshot 2: Preview + App running on localhost:3000)
-            if !open && isBrowserLang {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Preview")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
-                        Spacer()
-                        Text("localhost:3000")
-                            .font(.system(size: 10.5, design: .monospaced))
-                            .foregroundStyle(Color(red: 0.424, green: 0.298, blue: 0.965))
-                    }
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Interactive Component")
-                                .font(.system(size: 12.5, weight: .bold))
-                                .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
-                            Text("Runs #" + String(max(1, runCount)))
-                                .font(.system(size: 11))
-                                .foregroundStyle(Color(red: 0.384, green: 0.353, blue: 0.518))
-                        }
-                        Spacer()
-                        Button("Trigger (\(max(1, runCount)))") {
-                            GSHaptics.selection()
-                            runCount += 1
-                        }
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Color.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.white))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
-
-                    HStack(spacing: 6) {
-                        ForEach(Array(Self.taskOverviewChips.enumerated()), id: \.offset) { _, item in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.label)
-                                    .font(.system(size: 9.5, weight: .medium))
-                                    .foregroundStyle(Color(red: 0.384, green: 0.353, blue: 0.518))
-                                    .lineLimit(1)
-                                Text(item.value)
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundStyle(item.color)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.9)))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
-                        }
-                    }
-
-                    HStack {
-                        Text("✓ App running on localhost:3000")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Color(red: 0.071, green: 0.604, blue: 0.353))
-                        Spacer()
-                        Text("200 OK")
-                            .font(.system(size: 10.5, weight: .bold))
-                            .foregroundStyle(Color(red: 0.071, green: 0.604, blue: 0.353))
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.902, green: 0.976, blue: 0.941)))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(Color(red: 0.973, green: 0.961, blue: 1.0))
+                .frame(maxHeight: 320)
             }
         }
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color(red: 0.133, green: 0.122, blue: 0.231)))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.212, green: 0.192, blue: 0.361), lineWidth: 1))
+    }
+
+    /// the bottom action bar — run, status pill, rerun, line count.
+    @ViewBuilder
+    private var codeExecutionBar: some View {
+        // Bottom Execution Action Bar (Screenshots 1 & 2)
+        if !open && !currentCode.isEmpty {
+            HStack(spacing: 8) {
+                Button {
+                    GSHaptics.select()
+                    executeCode()
+                } label: {
+                    HStack(spacing: 5) {
+                        Text("▷")
+                            .font(.system(size: 11, weight: .bold))
+                        Text(isBrowserLang ? "Run in Browser" : (lang == "json" ? "Validate JSON" : "Run Code"))
+                            .font(.system(size: 11.5, weight: .bold))
+                    }
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                if runOutput != nil || errorOutput != nil {
+                    let hasError = errorOutput != nil
+                    Text(hasError ? "● Error" : "● Success")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundStyle(hasError ? Color(red: 0.988, green: 0.647, blue: 0.647) : Color(red: 0.525, green: 0.937, blue: 0.675))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule().fill(
+                                hasError ? Color.red.opacity(0.2) : Color.green.opacity(0.2)
+                            )
+                        )
+                    Button("↻ Rerun") {
+                        GSHaptics.select()
+                        executeCode()
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.773, green: 0.737, blue: 1.0))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
+                    .buttonStyle(.plain)
+                }
+
+                Text("\(allLines.count) lines")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(red: 0.557, green: 0.537, blue: 0.706))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(Color(red: 0.106, green: 0.094, blue: 0.188))
+        }
+    }
+
+    /// the terminal-style output drawer and error surface.
+    @ViewBuilder
+    private var codeOutputDrawer: some View {
+        // Terminal-style Execution Output Drawer (05. Code Execution)
+        if runOutput != nil || errorOutput != nil || ["error", "stderr", "traceback", "exception"].contains(lang) {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Text("$ run \(lang) (run #\(max(1, runCount)))")
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.557, green: 0.537, blue: 0.706))
+                    Spacer()
+                    Button("✕ Clear") {
+                        runOutput = nil
+                        errorOutput = nil
+                    }
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Color(red: 0.557, green: 0.537, blue: 0.706))
+                    .buttonStyle(.plain)
+                }
+
+                if let out = runOutput, !out.isEmpty {
+                    Text(out)
+                        .font(.system(size: 11.5, weight: .regular, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.847, green: 0.953, blue: 0.863))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if let err = errorOutput ?? (["error", "stderr", "traceback", "exception"].contains(lang) ? currentCode : nil),
+                   !err.isEmpty {
+                    Text(err)
+                        .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.988, green: 0.647, blue: 0.647))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.red.opacity(0.14)))
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Color(red: 0.078, green: 0.067, blue: 0.141))
+        }
+    }
+
+    /// the data plot preview minted from the code itself.
+    @ViewBuilder
+    private var codeSeriesPreview: some View {
+        // Visual Data Plot Preview (Screenshot 1: Revenue Trend mini purple bar chart from Python/JS code)
+        if let seriesPreview = extractCodeSeriesPreview(currentCode) {
+            let maxVal = max(1.0, seriesPreview.points.map(\.1).max() ?? 1.0)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(seriesPreview.title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
+                HStack(alignment: .bottom, spacing: 10) {
+                    ForEach(Array(seriesPreview.points.enumerated()), id: \.offset) { _, pt in
+                        let frac = min(max(CGFloat(pt.1 / maxVal), 0.15), 1.0)
+                        VStack(spacing: 4) {
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(Color(red: 0.424, green: 0.298, blue: 0.965))
+                                .frame(height: 48 * frac)
+                            Text(pt.0)
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color(red: 0.369, green: 0.337, blue: 0.502))
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                .frame(height: 70, alignment: .bottom)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(red: 0.969, green: 0.957, blue: 1.0))
+        }
+    }
+
+    /// the interactive browser preview and task overview chips.
+    @ViewBuilder
+    private var browserPreviewSection: some View {
+        // Interactive Browser / Component Preview + Task Overview (Screenshot 2: Preview + App running on localhost:3000)
+        if !open && isBrowserLang {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Preview")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
+                    Spacer()
+                    Text("localhost:3000")
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.424, green: 0.298, blue: 0.965))
+                }
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Interactive Component")
+                            .font(.system(size: 12.5, weight: .bold))
+                            .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
+                        Text("Runs #" + String(max(1, runCount)))
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color(red: 0.384, green: 0.353, blue: 0.518))
+                    }
+                    Spacer()
+                    Button("Trigger (\(max(1, runCount)))") {
+                        GSHaptics.select()
+                        runCount += 1
+                    }
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.white))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
+
+                HStack(spacing: 6) {
+                    ForEach(Array(Self.taskOverviewChips.enumerated()), id: \.offset) { _, item in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.label)
+                                .font(.system(size: 9.5, weight: .medium))
+                                .foregroundStyle(Color(red: 0.384, green: 0.353, blue: 0.518))
+                                .lineLimit(1)
+                            Text(item.value)
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(item.color)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.9)))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
+                    }
+                }
+
+                HStack {
+                    Text("✓ App running on localhost:3000")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.071, green: 0.604, blue: 0.353))
+                    Spacer()
+                    Text("200 OK")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundStyle(Color(red: 0.071, green: 0.604, blue: 0.353))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.902, green: 0.976, blue: 0.941)))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(red: 0.973, green: 0.961, blue: 1.0))
+        }
     }
 
     private func extractCodeSeriesPreview(_ src: String) -> (title: String, points: [(String, Double)])? {
