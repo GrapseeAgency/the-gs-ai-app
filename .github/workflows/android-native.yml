@@ -1066,7 +1066,11 @@ jobs:
             arm64-v8a)   ARCH="aarch64" ;;
             armeabi-v7a) ARCH="ARM" ;;
             x86_64)      ARCH="x86-64" ;;
-            x86)         ARCH="Intel 80386" ;;
+            # file(1) prints "Intel 80386" on older libmagic and "Intel i386"
+            # on the ubuntu-26.04 runner image (run 42243724304 verified a
+            # perfectly good 32-bit x86 .so as "not x86"). Both names mean
+            # the same architecture; accept either.
+            x86)         ARCH="Intel 80386\|Intel i386" ;;
           esac
           file "$SO" | grep -q "$ARCH" || {
             echo "FAIL: $ARCH not in: $(file "$SO")"; exit 1; }
