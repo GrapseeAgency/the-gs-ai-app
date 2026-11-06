@@ -44,9 +44,10 @@ sealed interface InlineSpan {
 enum class TableAlign { LEFT, CENTER, RIGHT }
 
 data class ListItem(
-    val number: Int?,
+    val number: Int? = null,
     val spans: List<InlineSpan>,
-    val children: List<Block>
+    val children: List<Block> = emptyList(),
+    val checked: Boolean? = null
 )
 
 // ---------------------------------------------------------------------------
@@ -142,7 +143,8 @@ data class CitationEntry(
     val number: Int,
     val title: String,
     val domain: String,
-    val snippet: String
+    val snippet: String,
+    val url: String = ""
 )
 
 data class ToolResultEntry(
@@ -893,6 +895,8 @@ private fun parseList(lines: List<Line>, start: Int): Pair<List<Block>, Int> {
     return Pair(blocks, i)
 }
 
+private val TASK_CHECKBOX_PREFIX = Regex("""^\[([ xX✓☑])\]\s+(.*)$""")
+
 private fun buildList(records: List<ListRecord>, from: Int, level: Int): Pair<Block, Int> {
     val ordered = records[from].ordered
     val items = mutableListOf<ListItem>()
@@ -912,10 +916,17 @@ private fun buildList(records: List<ListRecord>, from: Int, level: Int): Pair<Bl
         if (childRecords.isNotEmpty()) {
             children += buildList(childRecords, 0, childRecords.first().level).first
         }
+        val taskMatch = if (!record.ordered) TASK_CHECKBOX_PREFIX.find(record.text.trimStart()) else null
+        val itemChecked: Boolean? = taskMatch?.let { m ->
+            val mark = m.groupValues[1]
+            mark == "x" || mark == "X" || mark == "✓" || mark == "☑"
+        }
+        val itemText = taskMatch?.groupValues?.get(2) ?: record.text
         items += ListItem(
             number = if (record.ordered) record.number else null,
-            spans = parseInline(record.text),
-            children = children
+            spans = parseInline(itemText),
+            children = children,
+            checked = itemChecked
         )
         i = j
     }

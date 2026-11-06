@@ -262,7 +262,7 @@ private struct StructuredProseSequenceView: View {
             return false
         }
         let hasCode = prose.contains {
-            if case .code = $0 { return true }
+            if case .codeBlock = $0 { return true }
             return false
         }
         if hasTable { tabs.append("Table") }
@@ -359,11 +359,13 @@ private struct StructuredProseSequenceView: View {
         }
 
         ForEach(entries, id: \.index) { entry in
-            if let (callout, extraItems) = entry.coalescedCallout {
-                NexlyCalloutCardView(callout: callout, extraItems: extraItems, citations: citations)
-            } else {
-                BlockView(block: entry.block, isLast: entry.index == prose.count - 1, citations: citations)
-                    .environment(\.nexlySectionListMode, entry.sectionMode)
+            if shouldShowEntryForTab(entry.block, tab: activeDashboardTab) {
+                if let (callout, extraItems) = entry.coalescedCallout {
+                    NexlyCalloutCardView(callout: callout, extraItems: extraItems, citations: citations)
+                } else {
+                    BlockView(block: entry.block, isLast: entry.index == prose.count - 1, citations: citations)
+                        .environment(\.nexlySectionListMode, entry.sectionMode)
+                }
             }
             if isStatusHost && showStatus && entry.index == statusHostIndex {
                 if !prose.isEmpty { Spacer().frame(height: 2) }
@@ -390,6 +392,36 @@ private struct StructuredProseSequenceView: View {
             }
         }
     }
+    private func shouldShowEntryForTab(_ block: Block, tab: String) -> Bool {
+        switch tab {
+        case "Table":
+            if case .table = block { return true }
+            if case .widget(let k, _, _, _) = block, k == "table" { return true }
+            if case .heading(_, let spans, _) = block {
+                let low = plainTextOfSpans(spans).lowercased()
+                return low.contains("table") || low.contains("product") || low.contains("language")
+            }
+            return false
+        case "Todo":
+            if case .bulletList = block { return true }
+            if case .widget(let k, _, _, _) = block, k == "checklist" { return true }
+            if case .heading(_, let spans, _) = block {
+                return classifySectionListMode(plainTextOfSpans(spans)) == .todo
+            }
+            return false
+        case "Calculator":
+            if case .widget(let k, _, _, _) = block, k == "calc" { return true }
+            if case .heading(_, let spans, _) = block {
+                return plainTextOfSpans(spans).lowercased().contains("calculator")
+            }
+            return false
+        case "Code":
+            if case .codeBlock = block { return true }
+            return false
+        default:
+            return true
+        }
+    }
 }
 
 private struct NexlyContextualActionPillsRowView: View {
@@ -403,7 +435,7 @@ private struct NexlyContextualActionPillsRowView: View {
             if case .widget(let k, _, _, _) = $0 { return k == "table" }
             return false
         }
-        let hasCode = prose.contains { if case .code = $0 { return true }; return false }
+        let hasCode = prose.contains { if case .codeBlock = $0 { return true }; return false }
         let hasSources = prose.contains {
             if case .citations = $0 { return true }
             if case .heading(_, let spans, _) = $0 { return classifySectionListMode(plainTextOfSpans(spans)) == .sources }
@@ -689,11 +721,10 @@ private func plainTextOfSpans(_ spans: [InlineSpan]) -> String {
         case .text(let s): out += s
         case .code(let c): out += c
         case .math(let m): out += m
-        case .citation(let n): out += "[\(n)]"
-        case .bold(let ch), .italic(let ch), .strikethrough(let ch):
+        case .bold(let ch), .italic(let ch), .strike(let ch):
             out += plainTextOfSpans(ch)
-        case .link(_, let ch):
-            out += plainTextOfSpans(ch)
+        case .link(let text, _):
+            out += text
         }
     }
     return out
@@ -875,9 +906,9 @@ private func extractSourceEntryFromSpans(number: Int, spans: [InlineSpan]) -> Ci
     return CitationEntry(
         number: number,
         title: title.isEmpty ? bareDomain : title,
-        url: linkUrl,
         domain: "www.\(bareDomain)",
-        snippet: snippet
+        snippet: snippet,
+        url: linkUrl
     )
 }
 
@@ -975,7 +1006,7 @@ private struct BulletListView: View {
     var body: some View {
         let sources = extractedSources
         if !sources.isEmpty {
-            CitationsBlockView(entries: sources)
+            CitationsBlockView(citations: sources)
         } else {
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
@@ -1094,7 +1125,7 @@ private struct OrderedListView: View {
     var body: some View {
         let sources = extractedSources
         if !sources.isEmpty {
-            CitationsBlockView(entries: sources)
+            CitationsBlockView(citations: sources)
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
