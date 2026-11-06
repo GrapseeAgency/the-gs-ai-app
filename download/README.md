@@ -3,8 +3,8 @@ Here are all the generated files.
 ## Latest release: v0.86.25 — the Model Centre, and the glass redesign finished (versionCode 148)
 
     file    GS-AI-App.apk
-    size    72366032 bytes
-    sha256  2aeda43fcc4236a46230e1865ae09090383b5fa09b753d31bcf77cc46e6f46d2
+    size    72366000 bytes
+    sha256  e4d1120c9e3de01da79994146890d1cf4526de3c39c1bba5f86d3ccfbb4625d8
 
 ![rich reply](qa-0.86.25-rich-reply.png)
 
@@ -45,7 +45,7 @@ What landed in this build (584 commits since v0.86.2 — the GenUI passes, the
 Fresh native engine: `libgs_ffi.so` rebuilt for all four ABIs (android-native
 run 42246640175). `versionCode 148` installs over 125 without uninstalling.
 Release build verified on CI: not-debuggable, signed with the shipping cert
-(b1ffd75d…), baseline profile packaged (`android-release` run 42251649604).
+(b1ffd75d…), baseline profile packaged (`android-release` run 42257461385).
 Design screenshots captured from the same revision by `android-screens`
 (run 42247691640; the pair above, plus the drawer in
 `qa-0.86.25-drawer.png`).
