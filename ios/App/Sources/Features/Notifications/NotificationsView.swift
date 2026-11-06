@@ -118,7 +118,7 @@ struct NotificationsView: View {
         }
         // The filter was a half-height sheet — a menu wearing a page's clothes.
         // It is a glass chooser now, and a notice is a pushed page.
-        .gsDialog(isPresented: $showFilter) {
+        .gsDialog(isPresented: showFilter) {
             GsChoiceDialog(
                 title: "Filter notifications",
                 subtitle: "Five kinds, counted from what was actually sent",
