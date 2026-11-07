@@ -281,9 +281,8 @@ internal fun formatCalc(value: Double, format: String, unit: String): String {
 internal fun CalcWidgetView(w: CalcWidget, onSendPrompt: ((String) -> Unit)? = null) {
     val c = GsTheme.colors
     val fields = w.fields.take(10).filter { it.key.isNotBlank() }
-    val values = remember(w) { mutableStateMapOf<String, Double>().apply {
-        fields.forEach { put(it.key, if (it.value.isFinite()) it.value else it.choices.firstOrNull()?.value ?: Double.NaN) }
-    } }
+    val defaults = fields.associate { it.key to (if (it.value.isFinite()) it.value else it.choices.firstOrNull()?.value ?: Double.NaN) }
+    val values = remember(w) { mutableStateMapOf<String, Double>().apply { putAll(defaults) } }
     val drafts = remember(w) { mutableStateMapOf<String, String>() }
 
     WidgetCardShell(w.title.ifEmpty { "Calculator" }, w.type) {
@@ -371,7 +370,7 @@ internal fun CalcWidgetView(w: CalcWidget, onSendPrompt: ((String) -> Unit)? = n
                 }
             }
 
-            val hasChanged = fields.any { abs((values[it.key] ?: it.value) - it.value) > 1e-6 }
+            val hasChanged = fields.any { values[it.key]?.toBits() != defaults[it.key]?.toBits() }
             if (hasChanged) {
                 Row(
                     Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -381,8 +380,8 @@ internal fun CalcWidgetView(w: CalcWidget, onSendPrompt: ((String) -> Unit)? = n
                         Modifier.clip(RoundedCornerShape(999.dp))
                             .background(c.surface)
                             .clickable {
-                                fields.forEach { values[it.key] = if (it.value.isFinite()) it.value else it.choices.firstOrNull()?.value ?: Double.NaN }
-                            drafts.clear()
+                                values.putAll(defaults)
+                                drafts.clear()
                             }
                             .padding(horizontal = 10.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -399,8 +398,13 @@ internal fun CalcWidgetView(w: CalcWidget, onSendPrompt: ((String) -> Unit)? = n
                 }
             }
 
+            val invalidInput = fields.any { f ->
+                val v = values[f.key] ?: Double.NaN
+                !v.isFinite() || (f.min != null && v < f.min) || (f.max != null && v > f.max)
+            }
+            if (invalidInput) Text("Enter valid numbers within the supplied limits", color = c.textSecondary)
             val outputs = w.outputs.take(8).map { out ->
-                out to CalcExpr.eval(out.expr, values)
+                out to if (invalidInput) null else CalcExpr.eval(out.expr, values)
             }
             Column(
                 Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(10.dp))
