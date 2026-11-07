@@ -3290,6 +3290,11 @@ enum CalcExprIOS {
     }
 }
 
+/// Percent format takes ratios; a '%' unit without that format takes points.
+func calcPercentDisplayIOS(_ value: Double, format: String) -> Double {
+    ["percent", "pct"].contains(format.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)) ? value * 100 : value
+}
+
 private struct CalcBodyView: View {
     let obj: [String: Any]
     let accent: Color
@@ -3311,7 +3316,7 @@ private struct CalcBodyView: View {
             if isCurrency || unit.isEmpty { return "" }
             return " \(unit)"
         }()
-        let displayNum = (isPercent && ["percent", "pct"].contains(fLow) && abs(n) <= 1.0) ? n * 100.0 : n
+        let displayNum = calcPercentDisplayIOS(n, format: fLow)
         let formatted: String = {
             if displayNum.truncatingRemainder(dividingBy: 1.0) == 0 && !isCurrency {
                 return String(format: "%.0f", displayNum)
