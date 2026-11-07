@@ -11,6 +11,7 @@ import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { CopyChip } from '../primitives/CopyChip'
 import { GlassIcon } from '@/components/nexly/GlassIcon'
 import { arithmeticPreview } from '@/lib/code/arithmetic-preview'
+import { javascriptSandboxDocument } from '@/lib/code/javascript-sandbox'
 
 const KEYWORD_RE =
   /\b(const|let|var|function|return|if|else|for|while|switch|case|break|continue|new|class|extends|import|from|export|default|async|await|try|catch|finally|throw|typeof|instanceof|in|of|def|elif|lambda|yield|with|as|pass|raise|True|False|None|fun|val|when|object|interface|struct|enum|guard|protocol|impl|pub|fn|match|mut|use|SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|GROUP|BY|ORDER|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|LIMIT)\b/g
@@ -158,34 +159,11 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
       if (sim.output) setOutput(sim.output)
       return
     }
-    const logs: string[] = []
-    const fmt = (v: unknown): string => {
-      if (typeof v === 'string') return v
-      try {
-        return JSON.stringify(v)
-      } catch {
-        return String(v)
-      }
+    if (['ts', 'typescript', 'jsx', 'tsx'].includes(lang)) {
+      setErrorText('Not executed: no TypeScript/React compiler is available here. Use a self-contained HTML/JavaScript sandbox for a live preview.')
+      return
     }
-    const mockConsole = {
-      log: (...args: unknown[]) => logs.push(args.map(fmt).join(' ')),
-      info: (...args: unknown[]) => logs.push(args.map(fmt).join(' ')),
-      warn: (...args: unknown[]) => logs.push('[warn] ' + args.map(fmt).join(' ')),
-      error: (...args: unknown[]) => logs.push('[error] ' + args.map(fmt).join(' ')),
-    }
-    try {
-      const syncSetTimeout = (cb: unknown) => {
-        if (typeof cb === 'function') cb()
-        return 1
-      }
-      const fn = new Function('console', 'setTimeout', `"use strict";\n${source}`)
-      const ret = fn(mockConsole, syncSetTimeout)
-      if (ret !== undefined) logs.push(`→ ${fmt(ret)}`)
-      setOutput(logs.length > 0 ? logs.join('\n') : 'Completed (no console output)')
-    } catch (err) {
-      if (logs.length > 0) setOutput(logs.join('\n'))
-      setErrorText(err instanceof Error ? `${err.name}: ${err.message}` : String(err))
-    }
+    setHtmlPreview(javascriptSandboxDocument(source))
   }
 
   const chipStyle = {
