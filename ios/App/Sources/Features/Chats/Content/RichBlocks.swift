@@ -1244,7 +1244,7 @@ private struct NexlyQuickCalculatorCardView: View {
 
                 HStack {
                     HStack(spacing: 4) {
-                        ForEach(presets, id: \.self) { p in
+                        ForEach(presets, id: \.self) { (p: Double) in
                             let selected = abs(rateVal - p) < 0.05
                             Button {
                                 GSHaptics.select()
@@ -1522,7 +1522,7 @@ private struct BulletListView: View {
         let baseDone = items.enumerated().filter { idx, item in
             checkedStates[idx] ?? (item.checked ?? false)
         }.count
-        let addedDone = addedTasks.filter(\.checked).count
+        let addedDone = addedTasks.filter { $0.checked }.count
         return baseDone + addedDone
     }
 
@@ -1532,141 +1532,155 @@ private struct BulletListView: View {
             CitationsBlockView(citations: sources)
         } else {
             VStack(alignment: .leading, spacing: 5) {
-                if isChecklist && totalTasks > 0 {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            HStack(spacing: 6) {
-                                NexlyGlyph(
-                                    name: "list-check",
-                                    size: 13,
-                                    color: Color(red: 0.357, green: 0.239, blue: 0.961)
-                                )
-                                Text("\(completedTasks)/\(totalTasks) completed")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(Color(red: 0.290, green: 0.251, blue: 0.451))
-                            }
-                            Spacer()
-                            Text("\(Int(round(Double(completedTasks) / Double(max(1, totalTasks)) * 100)))%")
-                                .font(.system(size: 10.5, weight: .bold))
-                                .foregroundStyle(
-                                    completedTasks == totalTasks
-                                        ? Color(red: 0.071, green: 0.604, blue: 0.353)
-                                        : Color(red: 0.357, green: 0.239, blue: 0.961)
-                                )
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 2)
-                                .background(
-                                    Capsule().fill(
-                                        completedTasks == totalTasks
-                                            ? Color(red: 0.902, green: 0.976, blue: 0.941)
-                                            : Color(red: 0.933, green: 0.910, blue: 1.0)
-                                    )
-                                )
-                        }
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule()
-                                    .fill(Color(red: 0.898, green: 0.871, blue: 0.988))
-                                    .frame(height: 5)
-                                Capsule()
-                                    .fill(
-                                        completedTasks == totalTasks
-                                            ? Color(red: 0.071, green: 0.604, blue: 0.353)
-                                            : Color(red: 0.424, green: 0.298, blue: 0.965)
-                                    )
-                                    .frame(
-                                        width: geo.size.width * CGFloat(completedTasks) / CGFloat(max(1, totalTasks)),
-                                        height: 5
-                                    )
-                            }
-                        }
-                        .frame(height: 5)
-                    }
-                    .padding(.bottom, 2)
-                }
+                checklistProgressHeader
+                bulletItemsList
+                checklistAddTaskSection
+            }
+        }
+    }
 
-                ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
-                    if item.checked != nil || sectionMode == .todo {
-                        let currentChecked = checkedStates[idx] ?? (item.checked ?? false)
-                        InteractiveChecklistItemRowView(
-                            checked: currentChecked,
-                            onToggle: { checkedStates[idx] = !currentChecked },
-                            onDelete: nil,
-                            item: item,
-                            citations: citations
+    @ViewBuilder
+    private var checklistProgressHeader: some View {
+        if isChecklist && totalTasks > 0 {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    HStack(spacing: 6) {
+                        NexlyGlyph(
+                            name: "list-check",
+                            size: 13,
+                            color: Color(red: 0.357, green: 0.239, blue: 0.961)
                         )
-                    } else if sectionMode == .checkmark {
-                        ListItemRowView(marker: "✓", markerColor: Color(red: 0.424, green: 0.298, blue: 0.965), item: item, citations: citations)
-                    } else {
-                        ListItemRowView(marker: "\u{2022}", markerColor: Aero.accent, item: item, citations: citations)
+                        Text("\(completedTasks)/\(totalTasks) completed")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.290, green: 0.251, blue: 0.451))
+                    }
+                    Spacer()
+                    Text("\(Int(round(Double(completedTasks) / Double(max(1, totalTasks)) * 100)))%")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundStyle(
+                            completedTasks == totalTasks
+                                ? Color(red: 0.071, green: 0.604, blue: 0.353)
+                                : Color(red: 0.357, green: 0.239, blue: 0.961)
+                        )
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule().fill(
+                                completedTasks == totalTasks
+                                    ? Color(red: 0.902, green: 0.976, blue: 0.941)
+                                    : Color(red: 0.933, green: 0.910, blue: 1.0)
+                            )
+                        )
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color(red: 0.898, green: 0.871, blue: 0.988))
+                            .frame(height: 5)
+                        Capsule()
+                            .fill(
+                                completedTasks == totalTasks
+                                    ? Color(red: 0.071, green: 0.604, blue: 0.353)
+                                    : Color(red: 0.424, green: 0.298, blue: 0.965)
+                            )
+                            .frame(
+                                width: geo.size.width * CGFloat(completedTasks) / CGFloat(max(1, totalTasks)),
+                                height: 5
+                            )
                     }
                 }
-                ForEach(Array(addedTasks.enumerated()), id: \.offset) { idx, taskPair in
-                    InteractiveChecklistItemRowView(
-                        checked: taskPair.checked,
-                        onToggle: { addedTasks[idx].checked.toggle() },
-                        onDelete: { addedTasks.remove(at: idx) },
-                        item: ListItem(spans: [.text(taskPair.text)], checked: taskPair.checked),
-                        citations: citations
-                    )
-                }
-                if isChecklist {
-                    if addingTask {
-                        HStack(spacing: 6) {
-                            TextField("Type a new task…", text: $newTaskText)
-                                .font(.system(size: 12.5))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.92)))
-                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.847, green: 0.808, blue: 0.976), lineWidth: 1))
-                            Button("Add") {
-                                let trimmed = newTaskText.trimmingCharacters(in: .whitespacesAndNewlines)
-                                if !trimmed.isEmpty {
-                                    addedTasks.append((trimmed, false))
-                                    newTaskText = ""
-                                    addingTask = false
-                                }
-                            }
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(Color.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
-                            .buttonStyle(.plain)
+                .frame(height: 5)
+            }
+            .padding(.bottom, 2)
+        }
+    }
 
-                            Button {
-                                newTaskText = ""
-                                addingTask = false
-                            } label: {
-                                NexlyGlyph(name: "x", size: 13, color: Aero.textSecondary)
-                            }
-                            .buttonStyle(.plain)
+    @ViewBuilder
+    private var bulletItemsList: some View {
+        ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
+            if item.checked != nil || sectionMode == .todo {
+                let currentChecked = checkedStates[idx] ?? (item.checked ?? false)
+                InteractiveChecklistItemRowView(
+                    checked: currentChecked,
+                    onToggle: { checkedStates[idx] = !currentChecked },
+                    onDelete: nil,
+                    item: item,
+                    citations: citations
+                )
+            } else if sectionMode == .checkmark {
+                ListItemRowView(marker: "✓", markerColor: Color(red: 0.424, green: 0.298, blue: 0.965), item: item, citations: citations)
+            } else {
+                ListItemRowView(marker: "\u{2022}", markerColor: Aero.accent, item: item, citations: citations)
+            }
+        }
+        ForEach(Array(addedTasks.enumerated()), id: \.offset) { idx, taskPair in
+            InteractiveChecklistItemRowView(
+                checked: taskPair.checked,
+                onToggle: { addedTasks[idx].checked.toggle() },
+                onDelete: { addedTasks.remove(at: idx) },
+                item: ListItem(spans: [.text(taskPair.text)], checked: taskPair.checked),
+                citations: citations
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var checklistAddTaskSection: some View {
+        if isChecklist {
+            if addingTask {
+                HStack(spacing: 6) {
+                    TextField("Type a new task…", text: $newTaskText)
+                        .font(.system(size: 12.5))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.92)))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.847, green: 0.808, blue: 0.976), lineWidth: 1))
+                    Button("Add") {
+                        let trimmed = newTaskText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            addedTasks.append((trimmed, false))
+                            newTaskText = ""
+                            addingTask = false
                         }
-                        .padding(.top, 2)
-                    } else {
-                        Button {
-                            GSHaptics.select()
-                            addingTask = true
-                        } label: {
-                            HStack(spacing: 5) {
-                                NexlyGlyph(
-                                    name: "plus",
-                                    size: 11,
-                                    color: Color(red: 0.357, green: 0.239, blue: 0.961)
-                                )
-                                Text("Add Task")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Capsule().fill(Color.white.opacity(0.82)))
-                            .overlay(Capsule().stroke(Color(red: 0.878, green: 0.847, blue: 0.980), lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.top, 2)
                     }
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
+                    .buttonStyle(.plain)
+
+                    Button {
+                        newTaskText = ""
+                        addingTask = false
+                    } label: {
+                        NexlyGlyph(name: "x", size: 13, color: Aero.textSecondary)
+                    }
+                    .buttonStyle(.plain)
                 }
+                .padding(.top, 2)
+            } else {
+                Button {
+                    GSHaptics.select()
+                    addingTask = true
+                } label: {
+                    HStack(spacing: 5) {
+                        NexlyGlyph(
+                            name: "plus",
+                            size: 11,
+                            color: Color(red: 0.357, green: 0.239, blue: 0.961)
+                        )
+                        Text("Add Task")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color.white.opacity(0.82)))
+                    .overlay(Capsule().stroke(Color(red: 0.878, green: 0.847, blue: 0.980), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
             }
         }
     }
@@ -2284,7 +2298,7 @@ struct CodeBlockCardView: View {
     @ViewBuilder
     private var codeSeriesPreview: some View {
         if let seriesPreview = extractCodeSeriesPreview(currentCode) {
-            let maxVal = max(1.0, seriesPreview.points.map(\.1).max() ?? 1.0)
+            let maxVal = max(1.0, seriesPreview.points.map { $0.1 }.max() ?? 1.0)
             VStack(alignment: .leading, spacing: 8) {
                 Text(seriesPreview.title)
                     .font(.system(size: 12, weight: .bold))
@@ -2567,7 +2581,7 @@ struct CodeBlockCardView: View {
                 }
             }
             if let series = extractCodeSeriesPreview(src) {
-                let vals = series.points.map(\.1)
+                let vals = series.points.map { $0.1 }
                 let sum = vals.reduce(0, +)
                 let avg = sum / Double(max(1, vals.count))
                 lines.append(String(format: "%@: %d rows · sum=%.1f · mean=%.1f", series.title, series.points.count, sum, avg))
@@ -2803,7 +2817,7 @@ private struct TableBlockView: View {
                         .disabled(safePage == 0)
                         .buttonStyle(.plain)
 
-                        ForEach(0..<totalPages, id: \.self) { p in
+                        ForEach(0..<totalPages, id: \.self) { (p: Int) in
                             let active = p == safePage
                             Button {
                                 page = p
