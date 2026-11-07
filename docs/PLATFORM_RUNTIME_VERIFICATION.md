@@ -34,8 +34,17 @@ notice records. It does not simulate an OS delivery acknowledgment.
 
 - Prior Android workflow 42393087049 and iOS workflow 42393404031 both finished
   **successfully**. These predate the new runtime tests and do not certify them.
-- New device tests must be judged by their own CI run; adding this document or
-  passing static validation is not a runtime pass. See PR #26 for live results.
+- iOS runtime run **42396930975** on source **4ab6b88** finished **successfully**.
+  Both the XCTest step and the named-platform-runtime-pass gate succeeded:
+  background OS delivery and disabled gates, long-press pin persistence across
+  relaunch, and UIKit haptic dispatch/gating all executed. This is simulator
+  evidence, not a physical-device sensation or scheduled-wake claim.
+- The first Android runtime run **42396931145** failed a notification-state wait;
+  gesture and haptic tests passed. The test's direct background PendingIntent
+  launch was replaced with a real notification-shade tap (Android 14 restricts
+  background activity launches). Named-stage and JUnit-stack diagnostics now
+  distinguish the exact failing observation. Its successor must pass before
+  Android notification behavior is claimed. See PR #26 for live results.
 - Local Swift structure/static checks and the six report-gate self-tests pass.
   No Android SDK or Xcode runtime is available in the editing sandbox.
 
