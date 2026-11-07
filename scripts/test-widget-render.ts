@@ -227,7 +227,9 @@ total++
       'role="checkbox"', // 02: Plain bullets under Next actions auto-elevated into interactive checkboxes
       '#gs-plus', // 01 & 02: Add Task custom glassy icon on Todo / Next actions checklist
       'Add Task', // 01 & 02: Add Task pill button on Todo / Next actions checklist
-      '>Py<', // 06: Entity monogram badge in ordinary Markdown table (zero emoji)
+      '#gs-brand-python', // 06: Custom 3D glassy icon badge for Python in Markdown table (zero emoji)
+      '#gs-coffee', // 06: Custom 3D glassy icon badge for Java in Markdown table
+      '0/2 completed', // 01 & 02: Live checklist completion counter on Todo / Next actions checklist
       'Show: <!-- -->All<!-- --> ▾', // 06: Table pagination display control on 5-row table
       'Run Code', // 04 & 05: Code block execution bar
       'Revenue Trend', // 04 & 05: Visual data series bar chart preview extracted from Python code

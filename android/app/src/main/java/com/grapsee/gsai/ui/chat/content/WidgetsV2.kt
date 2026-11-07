@@ -1286,7 +1286,8 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
     }
 
     val rawKeysPreserved = setOf("code", "html", "svg", "url", "src", "href", "unified", "before", "after", "formula", "expression", "expr", "z", "pattern", "regex", "query", "sql")
-    val iconTokenKeys = if (kind in setOf("followups", "actions", "menu", "chips")) setOf("label", "title", "text", "name") else emptySet()
+    val iconNameKeys = setOf("icon", "closingIcon")
+    val iconTokenKeys = setOf("title") + (if (kind in setOf("followups", "actions", "menu", "chips")) setOf("label", "text", "name") else emptySet())
 
     fun sanitizeJsonElement(el: JsonElement, keyHint: String? = null): JsonElement = when (el) {
         is JsonPrimitive -> {
@@ -1295,6 +1296,7 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
                 val rawStr = el.content
                 when {
                     keyHint in rawKeysPreserved -> el
+                    keyHint in iconNameKeys -> JsonPrimitive(NexlyIcons.extractLeadingIcon(rawStr).first ?: NexlyIcons.resolve(rawStr))
                     keyHint in iconTokenKeys -> JsonPrimitive(NexlyIcons.normalize(rawStr).trim())
                     else -> JsonPrimitive(NexlyIcons.cleanPlainText(rawStr))
                 }

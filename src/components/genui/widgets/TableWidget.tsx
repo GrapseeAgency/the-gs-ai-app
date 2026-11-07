@@ -7,22 +7,36 @@ import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { TitleRow } from '../primitives/TitleRow'
 import { EmptyState } from '../primitives/EmptyState'
 import { GlassIcon } from '@/components/nexly/GlassIcon'
+import { cleanPlainText, semanticIconFor, type GlassTone } from '@/lib/nexly/icons'
 
-function monogramBadgeForCell(value: string): { code: string; bg: string; fg: string } | null {
-  const clean = value.trim()
-  if (!clean || /^[\d#$€£%+↑↓.\-\s]+$/.test(clean) || clean.length > 28) return null
+function iconBadgeForCell(value: string): { icon: string; tone: GlassTone } | null {
+  const clean = cleanPlainText(value)
+  if (!clean || /^[\d#$€£%+↑↓.\-\s]+$/.test(clean) || clean.length > 32) return null
   const lower = clean.toLowerCase()
-  if (lower.startsWith('python')) return { code: 'Py', bg: '#E0F2FE', fg: '#0284C7' }
-  if (lower === 'java') return { code: 'Jv', bg: '#FFEDD5', fg: '#EA580C' }
-  if (lower.startsWith('c++')) return { code: 'C+', bg: '#DBEAFE', fg: '#2563EB' }
-  if (lower === 'c' || lower === 'c#') return { code: clean, bg: '#E0E7FF', fg: '#4F46E5' }
-  if (lower.startsWith('javascript')) return { code: 'JS', bg: '#FEF3C7', fg: '#D97706' }
-  if (lower.startsWith('typescript')) return { code: 'TS', bg: '#DBEAFE', fg: '#1D4ED8' }
-  if (lower.startsWith('rust')) return { code: 'Rs', bg: '#FEE2E2', fg: '#DC2626' }
-  if (lower === 'go' || lower === 'golang') return { code: 'Go', bg: '#CFFAFE', fg: '#0891B2' }
-  const words = clean.split(/\s+/).filter(Boolean)
-  const code = words.length >= 2 ? `${words[0][0]}${words[1][0]}`.toUpperCase() : clean.slice(0, 2).toUpperCase()
-  return { code, bg: 'rgba(124, 92, 252, 0.14)', fg: '#5B3DF5' }
+  if (lower.startsWith('python')) return { icon: 'brand-python', tone: 'blue' }
+  if (lower === 'java') return { icon: 'coffee', tone: 'amber' }
+  if (lower.startsWith('c++') || lower === 'cpp') return { icon: 'brand-cpp', tone: 'blue' }
+  if (lower === 'c' || lower === 'c#') return { icon: 'code', tone: 'lavender' }
+  if (lower.startsWith('javascript') || lower === 'js') return { icon: 'brand-javascript', tone: 'amber' }
+  if (lower.startsWith('typescript') || lower === 'ts') return { icon: 'brand-typescript', tone: 'blue' }
+  if (lower.startsWith('rust')) return { icon: 'brand-rust', tone: 'peach' }
+  if (lower === 'go' || lower === 'golang') return { icon: 'brand-golang', tone: 'mint' }
+  if (lower.startsWith('swift')) return { icon: 'brand-apple', tone: 'lavender' }
+  if (lower.startsWith('kotlin') || lower.startsWith('android')) return { icon: 'brand-android', tone: 'green' }
+  return semanticIconFor(value, 'sparkles')
+}
+
+function parseNumericCellWeb(raw: unknown): number | null {
+  const str = String(raw ?? '').trim()
+  if (!str) return null
+  const m = str.match(/^[↑↓↗↘+-]?\s*[$€£¥₹৳]?\s*([+-]?\d+(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmMbBtT%])?$/)
+  if (!m) return null
+  const base = Number(m[1].replace(/,/g, ''))
+  if (!Number.isFinite(base)) return null
+  const suffix = (m[2] ?? '').toLowerCase()
+  const mult = suffix === 'k' ? 1e3 : suffix === 'm' ? 1e6 : suffix === 'b' ? 1e9 : suffix === 't' ? 1e12 : 1
+  const sign = (str.startsWith('-') || str.startsWith('↓') || str.startsWith('↘')) && base > 0 ? -1 : 1
+  return base * mult * sign
 }
 
 /** Sortable data grid with ranking badges, trend coloring, pagination, and Key Insights (Screenshot 5). */
@@ -37,7 +51,7 @@ export function TableWidget({ payload }: { payload: TablePayload }) {
     const cols = new Set<number>()
     payload.columns.forEach((_, ci) => {
       const values = payload.rows.map((r) => r[ci]).filter(Boolean)
-      if (values.length > 0 && values.every((v) => /^[↑↓↗↘+-]?\s*[$€£¥₹]?\s*[+-]?[\d,.]+%?$/.test(String(v).trim()))) cols.add(ci)
+      if (values.length > 0 && values.every((v) => parseNumericCellWeb(v) !== null)) cols.add(ci)
     })
     return cols
   }, [payload.columns, payload.rows])
@@ -58,9 +72,9 @@ export function TableWidget({ payload }: { payload: TablePayload }) {
     sorted.sort((a, b) => {
       const av = a[sort.col] ?? ''
       const bv = b[sort.col] ?? ''
-      const an = Number(String(av).replace(/[^\d.-]/g, ''))
-      const bn = Number(String(bv).replace(/[^\d.-]/g, ''))
-      if (Number.isFinite(an) && Number.isFinite(bn) && String(av).trim() !== '' && String(bv).trim() !== '') return (an - bn) * sort.dir
+      const an = parseNumericCellWeb(av)
+      const bn = parseNumericCellWeb(bv)
+      if (an !== null && bn !== null) return (an - bn) * sort.dir
       return String(av).localeCompare(String(bv)) * sort.dir
     })
     return sorted
@@ -105,29 +119,12 @@ export function TableWidget({ payload }: { payload: TablePayload }) {
     }
 
     if (ci === primaryNameCol) {
-      const badge = monogramBadgeForCell(text)
+      const badge = iconBadgeForCell(text)
       if (badge) {
         return (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <span
-              aria-hidden
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 22,
-                height: 22,
-                borderRadius: 6,
-                background: badge.bg,
-                color: badge.fg,
-                fontSize: 10.5,
-                fontWeight: 800,
-                flexShrink: 0,
-              }}
-            >
-              {badge.code}
-            </span>
-            <span style={{ fontWeight: 600, color: theme.text }}>{text}</span>
+            <GlassIcon name={badge.icon} tone={badge.tone} size={22} />
+            <span style={{ fontWeight: 600, color: theme.text }}>{cleanPlainText(text)}</span>
           </span>
         )
       }

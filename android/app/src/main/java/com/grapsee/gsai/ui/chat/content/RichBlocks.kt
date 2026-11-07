@@ -182,6 +182,8 @@ fun BlocksContent(
     /** Conversation that owns the plan, for durable checklist progress. */
     planConversationId: String? = null
 ) {
+    val context = LocalContext.current
+    NexlyIcons.ensureLoaded(context)
     val cache = remember { StreamBlockCache() }
     // Recovery must be decided BEFORE parsing, because a successful recovery
     // also removes the model's false "I can't render" sentence from the prose.
@@ -636,7 +638,7 @@ private fun StructuredBlockSequenceView(
         i += 1
     }
 
-    // Automatic interactive calculator when prose contains currency/rate/percentage signals without an explicit Calculator heading
+    // Automatic interactive calculator when prose contains financial, loan, budget, macro, or rate signals
     if (!isStreaming && !renderedExplicitCalc && normalizedBlocks.none { it is Block.WidgetBlock && it.kind == "calc" }) {
         val fullProse = remember(normalizedBlocks) {
             normalizedBlocks.mapNotNull { b ->
@@ -650,19 +652,30 @@ private fun StructuredBlockSequenceView(
         }
         val hasCalcSignal = remember(fullProse) {
             val low = fullProse.lowercase()
-            (fullProse.contains('$') || fullProse.contains('€') || fullProse.contains('£')) &&
-                fullProse.contains('%') &&
-                ("discount" in low || "tax" in low || "interest" in low || "margin" in low || "roi" in low || "price" in low || "cost" in low || "save" in low || "loan" in low || "compound" in low || "invest" in low)
+            val hasCurrency = fullProse.contains('$') || fullProse.contains('€') || fullProse.contains('£')
+            val hasPct = fullProse.contains('%') || "percent" in low
+            val hasNumber = Regex("\\b\\d{2,}\\b").containsMatchIn(fullProse)
+            val isFinOrMath = (hasCurrency && hasPct && ("discount" in low || "tax" in low || "interest" in low || "margin" in low || "roi" in low || "price" in low || "cost" in low || "save" in low || "loan" in low || "mortgage" in low || "compound" in low || "invest" in low || "budget" in low || "salary" in low)) ||
+                (hasNumber && ("mortgage" in low || "amortiz" in low || "compound interest" in low || ("loan" in low && ("apr" in low || "monthly" in low)) || ("budget" in low && "50/30/20" in low) || ("calorie" in low && "protein" in low)))
+            isFinOrMath
         }
         if (hasCalcSignal) {
             val (amt, disc, yrs) = remember(fullProse) { extractQuickCalcParams(fullProse) }
             NexlyQuickCalculatorCard(
-                title = "Quick Calculator",
+                title = "Interactive Simulator",
                 initialAmount = amt,
                 initialDiscount = disc,
                 initialYears = yrs,
                 contextHint = fullProse
             )
+        }
+    }
+
+    // Spontaneous Interactive Quantitative Explorer when prose lists 3+ numeric items without a chart or table
+    if (!isStreaming && normalizedBlocks.none { it is Block.TableBlock || (it is Block.WidgetBlock && it.kind in setOf("chart", "table", "stat", "progress", "gauge")) }) {
+        val extractedMetrics = remember(normalizedBlocks) { extractSpontaneousMetricsFromBlocks(normalizedBlocks) }
+        if (extractedMetrics.size >= 3) {
+            NexlyQuantitativeExplorerCard(items = extractedMetrics)
         }
     }
 
@@ -1342,11 +1355,14 @@ private fun NexlyQuickCalculatorCard(
     contextHint: String = ""
 ) {
     val lowerHint = remember(title, contextHint) { "$title $contextHint".lowercase() }
+    // Modes: 0 = Discount (-%), 1 = Tax/Tip (+%), 2 = Compound (Yr), 3 = Loan/EMI, 4 = Budget 50/30/20, 5 = Macros/TDEE
     val initialMode = remember(lowerHint) {
         when {
-            "compound" in lowerHint || "roi" in lowerHint || "invest" in lowerHint || "annual" in lowerHint || "loan" in lowerHint || "mortgage" in lowerHint -> 3
-            "tax" in lowerHint || "interest" in lowerHint || "growth" in lowerHint || "markup" in lowerHint || "tip" in lowerHint || "return" in lowerHint -> 1
-            "share" in lowerHint || "commission" in lowerHint || "allocation" in lowerHint || "portion" in lowerHint -> 2
+            "loan" in lowerHint || "mortgage" in lowerHint || "emi" in lowerHint || "amortiz" in lowerHint || "apr" in lowerHint -> 3
+            "compound" in lowerHint || "roi" in lowerHint || "invest" in lowerHint || "portfolio" in lowerHint || "apy" in lowerHint || "wealth" in lowerHint -> 2
+            "budget" in lowerHint || "50/30/20" in lowerHint || "salary" in lowerHint || "income" in lowerHint -> 4
+            "calorie" in lowerHint || "protein" in lowerHint || "macro" in lowerHint || "tdee" in lowerHint || "bmi" in lowerHint -> 5
+            "tax" in lowerHint || "markup" in lowerHint || "tip" in lowerHint || "vat" in lowerHint -> 1
             else -> 0
         }
     }
@@ -1358,39 +1374,74 @@ private fun NexlyQuickCalculatorCard(
             else -> "$"
         }
     }
-    var mode by remember(initialMode) { mutableStateOf(initialMode) } // 0 = Discount (-%), 1 = Markup (+%), 2 = Share (% of), 3 = Compound (Yr)
-    var years by remember(initialYears) { mutableStateOf(initialYears.coerceIn(1, 40)) }
-    var amountText by remember(initialAmount) {
+    var mode by remember(initialMode) { mutableStateOf(initialMode) }
+    var years by remember(initialYears, initialMode) {
+        mutableStateOf(if (initialMode == 3 && initialYears == 5) 30 else initialYears.coerceIn(1, 40))
+    }
+    var amountText by remember(initialAmount, initialMode) {
+        val seedAmt = if (initialMode == 5 && initialAmount > 300.0) 75.0 else initialAmount
         mutableStateOf(
-            if (initialAmount % 1.0 == 0.0) initialAmount.toLong().toString()
-            else String.format(java.util.Locale.US, "%.2f", initialAmount)
+            if (seedAmt % 1.0 == 0.0) seedAmt.toLong().toString()
+            else String.format(java.util.Locale.US, "%.2f", seedAmt)
         )
     }
-    var rateText by remember(initialDiscount) {
+    var rateText by remember(initialDiscount, initialMode) {
+        val seedRate = if (initialMode == 5 && initialDiscount > 5.0) 2.0 else initialDiscount
         mutableStateOf(
-            if (initialDiscount % 1.0 == 0.0) initialDiscount.toLong().toString()
-            else String.format(java.util.Locale.US, "%.1f", initialDiscount)
+            if (seedRate % 1.0 == 0.0) seedRate.toLong().toString()
+            else String.format(java.util.Locale.US, "%.1f", seedRate)
         )
     }
     val amount = amountText.replace(",", "").toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
     val ratePct = rateText.replace("%", "").toDoubleOrNull()?.coerceIn(0.0, 100.0) ?: 0.0
+
+    val monthlyLoanPayment = remember(amount, ratePct, years) {
+        val n = (years * 12).coerceAtLeast(1)
+        val r = (ratePct / 100.0) / 12.0
+        if (r <= 0.000001) amount / n
+        else {
+            val factor = Math.pow(1.0 + r, n.toDouble())
+            amount * (r * factor) / (factor - 1.0)
+        }
+    }
+    val totalLoanPaid = monthlyLoanPayment * years * 12
+    val totalLoanInterest = (totalLoanPaid - amount).coerceAtLeast(0.0)
+
     val total = when (mode) {
         1 -> amount * (1.0 + ratePct / 100.0)
-        2 -> amount * (ratePct / 100.0)
-        3 -> amount * Math.pow(1.0 + ratePct / 100.0, years.toDouble())
+        2 -> amount * Math.pow(1.0 + ratePct / 100.0, years.toDouble())
+        3 -> monthlyLoanPayment
+        4 -> amount * (ratePct / 100.0)
+        5 -> amount * 33.0
         else -> amount * (1.0 - ratePct / 100.0)
     }
     val deltaVal = kotlin.math.abs(total - amount)
-    val modeLabels = listOf("Discount (-%)", "Markup (+%)", "Share (% of)", "Compound (Yr)")
+    val modeLabels = listOf("Discount (-%)", "Tax / Tip (+%)", "Compound (Yr)", "Loan / EMI", "Budget Plan", "Macros / TDEE")
+    val baseLabel = when (mode) {
+        3 -> "Principal ($currency)"
+        4 -> "Monthly Income ($currency)"
+        5 -> "Weight (kg)"
+        else -> "Amount ($currency)"
+    }
     val rateLabel = when (mode) {
         1 -> "Rate (+%)"
-        2 -> "Share (%)"
-        3 -> "Annual (%)"
+        2 -> "Annual APY (%)"
+        3 -> "Annual APR (%)"
+        4 -> "Savings Rate (%)"
+        5 -> "Protein (g/kg)"
         else -> "Discount (-%)"
     }
     val resultLabel = when (mode) {
-        3 -> "${years}-Yr Total"
+        2 -> "${years}-Yr Value"
+        3 -> "Monthly EMI"
+        4 -> "Saved / Mo"
+        5 -> "Daily Target"
         else -> "Result"
+    }
+    val formattedResult = when (mode) {
+        3 -> String.format(java.util.Locale.US, "%s%.0f/mo", currency, total)
+        5 -> String.format(java.util.Locale.US, "%.0f kcal", total)
+        else -> String.format(java.util.Locale.US, "%s%.2f", currency, total)
     }
 
     Column(
@@ -1409,8 +1460,19 @@ private fun NexlyQuickCalculatorCard(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 NexlyGlassGlyphTile(
-                    name = "calculator",
-                    toneName = "blue",
+                    name = when (mode) {
+                        3 -> "building-bank"
+                        2 -> "trending-up"
+                        4 -> "coin"
+                        5 -> "barbell"
+                        else -> "calculator"
+                    },
+                    toneName = when (mode) {
+                        2 -> "green"
+                        4 -> "amber"
+                        5 -> "peach"
+                        else -> "blue"
+                    },
                     size = 26.dp,
                     glyphSize = 15.dp
                 )
@@ -1443,7 +1505,7 @@ private fun NexlyQuickCalculatorCard(
                     color = Color(0xFF6C4CF6),
                     modifier = Modifier.clickable {
                         mode = initialMode
-                        years = initialYears.coerceIn(1, 40)
+                        years = if (initialMode == 3 && initialYears == 5) 30 else initialYears.coerceIn(1, 40)
                         amountText = if (initialAmount % 1.0 == 0.0) initialAmount.toLong().toString()
                         else String.format(java.util.Locale.US, "%.2f", initialAmount)
                         rateText = if (initialDiscount % 1.0 == 0.0) initialDiscount.toLong().toString()
@@ -1458,7 +1520,7 @@ private fun NexlyQuickCalculatorCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Amount ($currency)", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(baseLabel, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1522,7 +1584,7 @@ private fun NexlyQuickCalculatorCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = String.format(java.util.Locale.US, "%s%.2f", currency, total),
+                        text = formattedResult,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF5B3DF5),
@@ -1531,15 +1593,15 @@ private fun NexlyQuickCalculatorCard(
                 }
             }
         }
-        if (mode == 3) {
+        if (mode == 2 || mode == 3) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Compounding Horizon", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (mode == 3) "Loan Term" else "Compounding Horizon", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf(1, 3, 5, 10, 20).forEach { yr ->
+                    (if (mode == 3) listOf(5, 10, 15, 20, 30) else listOf(1, 3, 5, 10, 20)).forEach { yr ->
                         val active = years == yr
                         Box(
                             modifier = Modifier
@@ -1560,11 +1622,12 @@ private fun NexlyQuickCalculatorCard(
             }
         }
         Slider(
-            value = ratePct.toFloat(),
+            value = ratePct.toFloat().coerceIn(0f, if (mode == 5) 4f else 100f),
             onValueChange = { v ->
-                rateText = String.format(java.util.Locale.US, "%.0f", v)
+                rateText = if (mode == 5 || mode == 3) String.format(java.util.Locale.US, "%.1f", v)
+                else String.format(java.util.Locale.US, "%.0f", v)
             },
-            valueRange = 0f..100f,
+            valueRange = if (mode == 5) 0.8f..3.5f else if (mode == 3) 1f..20f else 0f..100f,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(22.dp)
@@ -1575,7 +1638,12 @@ private fun NexlyQuickCalculatorCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf(5, 10, 15, 20, 25, 50).forEach { preset ->
+                val presets = when (mode) {
+                    3 -> listOf(4, 5, 6, 7, 8, 10)
+                    5 -> listOf(1, 2, 3)
+                    else -> listOf(5, 10, 15, 20, 25, 50)
+                }
+                presets.forEach { preset ->
                     val active = kotlin.math.abs(ratePct - preset) < 0.5
                     Box(
                         modifier = Modifier
@@ -1585,7 +1653,7 @@ private fun NexlyQuickCalculatorCard(
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = "$preset%",
+                            text = if (mode == 5) "${preset}g/kg" else "$preset%",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (active) Color.White else Color(0xFF4F35E8)
@@ -1596,12 +1664,227 @@ private fun NexlyQuickCalculatorCard(
             Text(
                 text = when (mode) {
                     1 -> "+${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
-                    2 -> "${String.format(java.util.Locale.US, "%.1f%%", ratePct)} of base"
-                    3 -> "Gain +${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
+                    2 -> "Gain +${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
+                    3 -> "Interest ${String.format(java.util.Locale.US, "%s%.0f · Total %s%.0f", currency, totalLoanInterest, currency, totalLoanPaid)}"
+                    4 -> "Needs ${String.format(java.util.Locale.US, "%s%.0f · Annual +%s%.0f", currency, amount * 0.5, currency, total * 12)}"
+                    5 -> "Protein ${String.format(java.util.Locale.US, "%.0fg · Water %.1fL", amount * ratePct.coerceAtLeast(1.2), amount * 0.035)}"
                     else -> "Saved ${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
                 },
                 fontSize = 10.5.sp,
                 fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF5B3DF5)
+            )
+        }
+    }
+}
+
+private data class SpontaneousMetricItem(
+    val label: String,
+    val value: Double,
+    val unit: String,
+    val icon: String,
+    val tone: String
+)
+
+private fun extractSpontaneousMetricsFromBlocks(blocks: List<Block>): List<SpontaneousMetricItem> {
+    val items = mutableListOf<SpontaneousMetricItem>()
+    val itemRegex = Regex("""^([A-Za-z][A-Za-z0-9\s/+.#&-]{1,28})\s*(?:—|–|-|:)\s*([$€£¥])?\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmMbB%])?""")
+    blocks.forEach { b ->
+        val rawItems = when (b) {
+            is Block.BulletList -> if (b.items.all { it.checked == null }) b.items else emptyList()
+            is Block.OrderedList -> b.items
+            else -> emptyList()
+        }
+        rawItems.forEach { li ->
+            val plain = NexlyIcons.cleanPlainText(plainTextOfSpans(li.spans))
+            val m = itemRegex.find(plain)
+            if (m != null) {
+                val label = m.groupValues[1].trim()
+                val curr = m.groupValues[2]
+                val num = m.groupValues[3].replace(",", "").toDoubleOrNull()
+                val suf = m.groupValues[4]
+                if (num != null && num > 0.0 && num !in 1990.0..2035.0) {
+                    val mult = when (suf.lowercase()) {
+                        "k" -> 1_000.0
+                        "m" -> 1_000_000.0
+                        "b" -> 1_000_000_000.0
+                        else -> 1.0
+                    }
+                    val unit = if (curr.isNotEmpty()) curr else if (suf == "%") "%" else ""
+                    val (icon, tone) = NexlyIcons.semanticIconFor(label, "chart-bar")
+                    items += SpontaneousMetricItem(label, num * mult, unit, icon, tone)
+                }
+            }
+        }
+    }
+    return items.distinctBy { it.label.lowercase() }.take(8)
+}
+
+@Composable
+private fun NexlyQuantitativeExplorerCard(items: List<SpontaneousMetricItem>) {
+    var scale by remember { mutableStateOf(1.0) }
+    var sortDesc by remember { mutableStateOf(true) }
+    var selectedIdx by remember { mutableStateOf(0) }
+    val sorted = remember(items, sortDesc) {
+        if (sortDesc) items.sortedByDescending { it.value } else items
+    }
+    val maxVal = remember(sorted, scale) {
+        (sorted.maxOfOrNull { it.value * scale } ?: 1.0).coerceAtLeast(0.0001)
+    }
+    val totalVal = remember(sorted, scale) {
+        sorted.sumOf { it.value * scale }.coerceAtLeast(0.0001)
+    }
+    val activeItem = sorted.getOrElse(selectedIdx.coerceIn(0, sorted.lastIndex)) { sorted.first() }
+    val unit = activeItem.unit
+
+    fun fmtVal(v: Double): String {
+        val prefix = if (unit in listOf("$", "€", "£", "¥")) unit else ""
+        val suffix = if (unit == "%") "%" else ""
+        return when {
+            v >= 1_000_000 -> String.format(java.util.Locale.US, "%s%.1fM%s", prefix, v / 1_000_000.0, suffix)
+            v >= 1_000 -> String.format(java.util.Locale.US, "%s%.1fK%s", prefix, v / 1_000.0, suffix)
+            v % 1.0 == 0.0 -> String.format(java.util.Locale.US, "%s%.0f%s", prefix, v, suffix)
+            else -> String.format(java.util.Locale.US, "%s%.1f%s", prefix, v, suffix)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.80f))
+            .border(1.dp, Color(0xFFE2DAFA), RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                NexlyGlassGlyphTile(
+                    name = "chart-bar",
+                    toneName = "lavender",
+                    size = 25.dp,
+                    glyphSize = 14.dp
+                )
+                Text(
+                    text = "Interactive Data Explorer",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF211845)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                listOf(0.5 to "0.5×", 1.0 to "1×", 1.5 to "1.5×", 2.0 to "2×").forEach { (mult, lbl) ->
+                    val isSel = scale == mult
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (isSel) Color(0xFF6C4CF6) else Color(0xFFF3EEFF))
+                            .clickable { scale = mult }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = lbl,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSel) Color.White else Color(0xFF4F35E8)
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFFEDE5FF))
+                        .clickable { sortDesc = !sortDesc }
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = if (sortDesc) "Rank ↓" else "Original",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF5B3DF5)
+                    )
+                }
+            }
+        }
+        sorted.forEachIndexed { idx, item ->
+            val scaledVal = item.value * scale
+            val sharePct = (scaledVal / totalVal) * 100.0
+            val isSel = idx == selectedIdx.coerceIn(0, sorted.lastIndex)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(if (isSel) Color(0xFFF3EEFF) else Color.Transparent)
+                    .clickable { selectedIdx = idx }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        NexlyGlassGlyphTile(
+                            name = item.icon,
+                            toneName = item.tone,
+                            size = 19.dp,
+                            glyphSize = 11.dp
+                        )
+                        Text(
+                            text = item.label,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.SemiBold,
+                            color = Color(0xFF211845)
+                        )
+                    }
+                    Text(
+                        text = "${fmtVal(scaledVal)} (${String.format(java.util.Locale.US, "%.0f%%", sharePct)})",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSel) Color(0xFF5B3DF5) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color(0xFFEAE3FC))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth((scaledVal / maxVal).toFloat().coerceIn(0.05f, 1f))
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(if (isSel) Color(0xFF5B3DF5) else Color(0xFF8C72F8))
+                    )
+                }
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(9.dp))
+                .background(Color(0xFFF6F2FF))
+                .padding(horizontal = 9.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Selected: ${activeItem.label} (${fmtVal(activeItem.value * scale)})",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF211845)
+            )
+            Text(
+                text = "Total: ${fmtVal(totalVal)}",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
                 color = Color(0xFF5B3DF5)
             )
         }
@@ -1709,6 +1992,12 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
     var addedTasks by remember(block.sourceStart) { mutableStateOf(listOf<String>()) }
     var isAddingTask by remember(block.sourceStart) { mutableStateOf(false) }
     var draftTaskText by remember(block.sourceStart) { mutableStateOf("") }
+    val isChecklist = sectionMode == SectionListMode.TODO || block.items.any { it.checked != null }
+    var checkedMap by remember(block.sourceStart, block.items.size) {
+        mutableStateOf(
+            block.items.mapIndexed { idx, item -> idx to (item.checked ?: false) }.toMap()
+        )
+    }
 
     val sourceItems = remember(block.items, sectionMode) {
         if (sectionMode == SectionListMode.SOURCES) {
@@ -1733,15 +2022,52 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
         return
     }
 
+    val totalTaskCount = block.items.size + addedTasks.size
+    val completedTaskCount = (0 until totalTaskCount).count { checkedMap[it] == true }
+    val completionPct = if (totalTaskCount > 0) (completedTaskCount * 100) / totalTaskCount else 0
+
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        if (isChecklist && totalTaskCount >= 2) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFF3EEFF))
+                    .padding(horizontal = 9.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    NexlyGlassGlyphTile(
+                        name = if (completedTaskCount == totalTaskCount) "trophy" else "list-check",
+                        toneName = if (completedTaskCount == totalTaskCount) "green" else "lavender",
+                        size = 18.dp,
+                        glyphSize = 11.dp
+                    )
+                    Text(
+                        text = "$completedTaskCount of $totalTaskCount completed",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF211845)
+                    )
+                }
+                Text(
+                    text = "$completionPct%",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (completedTaskCount == totalTaskCount) Color(0xFF129A5A) else Color(0xFF5B3DF5)
+                )
+            }
+        }
         block.items.forEachIndexed { idx, item ->
             if (item.checked != null || sectionMode == SectionListMode.TODO) {
                 InteractiveChecklistItemRow(
-                    initialChecked = item.checked ?: false,
+                    initialChecked = checkedMap[idx] ?: (item.checked ?: false),
                     item = item,
                     index = idx,
                     selectable = selectable,
-                    citationUrls = citationUrls
+                    citationUrls = citationUrls,
+                    onCheckedChange = { next -> checkedMap = checkedMap + (idx to next) }
                 )
             } else if (sectionMode == SectionListMode.CHECKMARK) {
                 ListItemRow(
@@ -1762,12 +2088,14 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
             }
         }
         addedTasks.forEachIndexed { idx, taskText ->
+            val taskIdx = block.items.size + idx
             InteractiveChecklistItemRow(
-                initialChecked = false,
+                initialChecked = checkedMap[taskIdx] ?: false,
                 item = ListItem(spans = listOf(InlineSpan.TextSpan(taskText)), checked = false),
-                index = block.items.size + idx,
+                index = taskIdx,
                 selectable = false,
                 citationUrls = citationUrls,
+                onCheckedChange = { next -> checkedMap = checkedMap + (taskIdx to next) },
                 onRemove = {
                     addedTasks = addedTasks.filterIndexed { i, _ -> i != idx }
                 }
@@ -1878,11 +2206,12 @@ private fun InteractiveChecklistItemRow(
     index: Int = 0,
     selectable: Boolean,
     citationUrls: Map<Int, String>,
+    onCheckedChange: ((Boolean) -> Unit)? = null,
     onRemove: (() -> Unit)? = null
 ) {
     var checked by remember(item.spans, initialChecked) { mutableStateOf(initialChecked) }
-    var priorityIdx by remember(item.spans, index) { mutableStateOf(0) }
-    val priorityLabels = remember { listOf("Todo", "In Progress", "High") }
+    var statusIdx by remember(item.spans, index) { mutableStateOf(0) }
+    val statusOptions = remember { listOf("Todo", "In Progress") }
     val bodyStyle = LocalNexlyProseStyle.current ?: MaterialTheme.typography.bodyMedium
     val ink = if (checked) MaterialTheme.colorScheme.onSurfaceVariant else (bodyStyle.color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface)
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
@@ -1891,7 +2220,7 @@ private fun InteractiveChecklistItemRow(
     val statusLabel = when {
         checked -> "Done"
         explicitTag != null -> explicitTag
-        else -> priorityLabels[priorityIdx % priorityLabels.size]
+        else -> statusOptions[statusIdx % statusOptions.size]
     }
 
     Column {
@@ -1900,7 +2229,11 @@ private fun InteractiveChecklistItemRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(9.dp))
-                .clickable { checked = !checked }
+                .clickable {
+                    val next = !checked
+                    checked = next
+                    onCheckedChange?.invoke(next)
+                }
                 .padding(vertical = 3.dp, horizontal = 2.dp)
         ) {
             Box(
@@ -1940,12 +2273,13 @@ private fun InteractiveChecklistItemRow(
                     .background(
                         when {
                             checked -> Color(0xFFE6F9F0)
-                            statusLabel == "High" -> Color(0xFFFDECEC)
+                            statusLabel.equals("High", true) || statusLabel.equals("Urgent", true) -> Color(0xFFFDECEC)
+                            statusLabel == "In Progress" -> Color(0xFFFEF3C7)
                             else -> Color(0xFFF3EEFF)
                         }
                     )
                     .clickable(enabled = !checked && explicitTag == null) {
-                        priorityIdx = (priorityIdx + 1) % priorityLabels.size
+                        statusIdx = (statusIdx + 1) % statusOptions.size
                     }
                     .padding(horizontal = 7.dp, vertical = 2.dp)
             ) {
@@ -1955,7 +2289,8 @@ private fun InteractiveChecklistItemRow(
                     fontWeight = FontWeight.SemiBold,
                     color = when {
                         checked -> Color(0xFF129A5A)
-                        statusLabel == "High" -> Color(0xFFE04F5F)
+                        statusLabel.equals("High", true) || statusLabel.equals("Urgent", true) -> Color(0xFFE04F5F)
+                        statusLabel == "In Progress" -> Color(0xFFB45309)
                         else -> Color(0xFF5B3DF5)
                     }
                 )
@@ -2020,14 +2355,48 @@ private fun OrderedListBlock(block: Block.OrderedList, selectable: Boolean, cita
         return
     }
 
+    var completedSet by remember(block.sourceStart, block.items.size) {
+        mutableStateOf(
+            block.items.mapIndexedNotNull { idx, item -> if (item.checked == true) idx else null }.toSet()
+        )
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (completedSet.isNotEmpty() && block.items.size >= 2) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFF3EEFF))
+                    .padding(horizontal = 9.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${completedSet.size} of ${block.items.size} steps completed",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF5B3DF5)
+                )
+                Text(
+                    text = "${(completedSet.size * 100) / block.items.size}%",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (completedSet.size == block.items.size) Color(0xFF129A5A) else Color(0xFF5B3DF5)
+                )
+            }
+        }
         block.items.forEachIndexed { index, item ->
             val number = item.number ?: (block.start + index)
             StepOrderedListItemRow(
                 number = number,
                 item = item,
                 selectable = selectable,
-                citationUrls = citationUrls
+                citationUrls = citationUrls,
+                isCompleted = index in completedSet,
+                onToggleCompleted = {
+                    completedSet = if (index in completedSet) completedSet - index else completedSet + index
+                }
             )
         }
     }
@@ -2038,9 +2407,12 @@ private fun StepOrderedListItemRow(
     number: Int,
     item: ListItem,
     selectable: Boolean,
-    citationUrls: Map<Int, String>
+    citationUrls: Map<Int, String>,
+    isCompleted: Boolean = false,
+    onToggleCompleted: (() -> Unit)? = null
 ) {
-    var completed by remember(item.spans, number) { mutableStateOf(item.checked ?: false) }
+    var localCompleted by remember(item.spans, number) { mutableStateOf(item.checked ?: false) }
+    val completed = if (onToggleCompleted != null) isCompleted else localCompleted
     val bodyStyle = LocalNexlyProseStyle.current ?: MaterialTheme.typography.bodyMedium
     val ink = if (completed) MaterialTheme.colorScheme.onSurfaceVariant else (bodyStyle.color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface)
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
@@ -2050,7 +2422,7 @@ private fun StepOrderedListItemRow(
         val first = item.spans.firstOrNull()
         if (first is InlineSpan.BoldSpan) {
             val rawTitle = plainTextOfSpans(first.children).trim().trimEnd(':').trim()
-            val (_, cleanedTitle) = NexlyIcons.extractLeadingIcon(rawTitle)
+            val (leadIcon, cleanedTitle) = NexlyIcons.extractLeadingIcon(rawTitle)
             val title = NexlyIcons.cleanPlainText(cleanedTitle.ifEmpty { rawTitle }).trim()
             if (title.isNotEmpty()) {
                 if (item.spans.size >= 2) {
@@ -2060,11 +2432,11 @@ private fun StepOrderedListItemRow(
                         val stripped = second.text.replace(Regex("^\\s*[—–\\-:]\\s*"), "").trimStart()
                         if (stripped.isEmpty()) rest.removeAt(0) else rest[0] = InlineSpan.TextSpan(stripped)
                     }
-                    if (rest.isNotEmpty()) Triple(title, rest.toList(), false) else null
+                    if (rest.isNotEmpty()) Triple(leadIcon to title, rest.toList(), false) else null
                 } else {
                     val firstChild = item.children.firstOrNull() as? Block.Paragraph
                     if (firstChild != null && firstChild.spans.isNotEmpty()) {
-                        Triple(title, firstChild.spans, true)
+                        Triple(leadIcon to title, firstChild.spans, true)
                     } else null
                 }
             } else null
@@ -2080,7 +2452,10 @@ private fun StepOrderedListItemRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
-                .clickable { completed = !completed }
+                .clickable {
+                    if (onToggleCompleted != null) onToggleCompleted()
+                    else localCompleted = !localCompleted
+                }
                 .padding(vertical = 2.dp)
         ) {
             Box(
@@ -2113,14 +2488,25 @@ private fun StepOrderedListItemRow(
                     val detailStyled = remember(splitStep.second, theme) {
                         spansToAnnotatedString(splitStep.second, theme)
                     }
-                    Text(
-                        text = splitStep.first,
-                        style = bodyStyle.copy(
-                            fontWeight = FontWeight.Bold,
-                            textDecoration = if (completed) TextDecoration.LineThrough else TextDecoration.None
-                        ),
-                        color = ink
-                    )
+                    val stepIcon = splitStep.first.first
+                    val stepTitle = splitStep.first.second
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        if (stepIcon != null) {
+                            NexlyGlassGlyphTile(
+                                name = stepIcon,
+                                size = 18.dp,
+                                glyphSize = 11.dp
+                            )
+                        }
+                        Text(
+                            text = stepTitle,
+                            style = bodyStyle.copy(
+                                fontWeight = FontWeight.Bold,
+                                textDecoration = if (completed) TextDecoration.LineThrough else TextDecoration.None
+                            ),
+                            color = ink
+                        )
+                    }
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = detailStyled,
@@ -2177,7 +2563,10 @@ private fun ListItemRow(
                     if (icon != null) {
                         val newBold = InlineSpan.BoldSpan(listOf(InlineSpan.TextSpan(stripped)) + first.children.drop(1))
                         icon to (listOf(newBold) + item.spans.drop(1))
-                    } else null to item.spans
+                    } else {
+                        val (semIcon, _) = NexlyIcons.semanticIconFor(innerFirst.text, "")
+                        (semIcon.takeIf { it.isNotBlank() && it != "sparkles" }) to item.spans
+                    }
                 } else null to item.spans
             }
             else -> null to item.spans

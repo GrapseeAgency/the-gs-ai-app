@@ -2462,25 +2462,22 @@ private fun StatWidgetView(w: StatWidget) {
 
 // --- table ------------------------------------------------------------------
 
-private fun tableEntityMonogram(raw: String): Triple<String, Color, Color>? {
-    val clean = raw.trim()
-    if (clean.isEmpty() || clean.length > 28 || clean.all { !it.isLetter() }) return null
+private fun tableEntityIconBadge(raw: String): Pair<String, String>? {
+    val clean = NexlyIcons.cleanPlainText(raw)
+    if (clean.isEmpty() || clean.length > 32 || clean.all { !it.isLetter() }) return null
     val lower = clean.lowercase()
     return when {
-        lower.startsWith("python") -> Triple("Py", Color(0xFFE0F2FE), Color(0xFF0284C7))
-        lower == "java" -> Triple("Jv", Color(0xFFFFEDD5), Color(0xFFEA580C))
-        lower.startsWith("c++") -> Triple("C+", Color(0xFFDBEAFE), Color(0xFF2563EB))
-        lower == "c" || lower == "c#" -> Triple(clean, Color(0xFFE0E7FF), Color(0xFF4F46E5))
-        lower.startsWith("javascript") -> Triple("JS", Color(0xFFFEF3C7), Color(0xFFD97706))
-        lower.startsWith("typescript") -> Triple("TS", Color(0xFFDBEAFE), Color(0xFF1D4ED8))
-        lower.startsWith("rust") -> Triple("Rs", Color(0xFFFEE2E2), Color(0xFFDC2626))
-        lower == "go" || lower == "golang" -> Triple("Go", Color(0xFFCFFAFE), Color(0xFF0891B2))
-        else -> {
-            val parts = clean.split(Regex("\\s+")).filter { it.isNotEmpty() }
-            val code = if (parts.size >= 2) "${parts[0].first()}${parts[1].first()}".uppercase()
-            else clean.take(2).uppercase()
-            Triple(code, Color(0xFFEDE5FF), Color(0xFF5B3DF5))
-        }
+        lower.startsWith("python") -> "brand-python" to "blue"
+        lower == "java" -> "coffee" to "amber"
+        lower.startsWith("c++") || lower == "cpp" -> "brand-cpp" to "blue"
+        lower == "c" || lower == "c#" -> "code" to "lavender"
+        lower.startsWith("javascript") || lower == "js" -> "brand-javascript" to "amber"
+        lower.startsWith("typescript") || lower == "ts" -> "brand-typescript" to "blue"
+        lower.startsWith("rust") -> "brand-rust" to "peach"
+        lower == "go" || lower == "golang" -> "brand-golang" to "mint"
+        lower.startsWith("swift") -> "brand-apple" to "lavender"
+        lower.startsWith("kotlin") || lower.startsWith("android") -> "brand-android" to "green"
+        else -> NexlyIcons.semanticIconFor(raw, "sparkles")
     }
 }
 
@@ -2503,8 +2500,8 @@ private fun TableWidgetView(w: TableWidget) {
         else filtered.sortedWith { a, b ->
             val va = a.getOrNull(sortCol) ?: ""
             val vb = b.getOrNull(sortCol) ?: ""
-            val na = va.replace(Regex("[^\\d.-]"), "").toFloatOrNull()
-            val nb = vb.replace(Regex("[^\\d.-]"), "").toFloatOrNull()
+            val na = parseNumericCell(va)
+            val nb = parseNumericCell(vb)
             val cmp = if (na != null && nb != null) na.compareTo(nb) else va.compareTo(vb)
             if (asc) cmp else -cmp
         }
@@ -2613,7 +2610,8 @@ private fun TableWidgetView(w: TableWidget) {
                             val isNeg = isTrend && (rawVal.contains("-") || rawVal.startsWith("↓") || rawVal.startsWith("↘"))
 
                             if (ci == primaryNameCol) {
-                                val badge = tableEntityMonogram(rawVal)
+                                val badge = tableEntityIconBadge(rawVal)
+                                val displayLabel = NexlyIcons.cleanPlainText(rawVal)
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
@@ -2621,24 +2619,17 @@ private fun TableWidgetView(w: TableWidget) {
                                         .padding(vertical = 7.dp, horizontal = 4.dp)
                                 ) {
                                     if (badge != null) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(21.dp)
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(badge.second),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = badge.first,
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = badge.third
-                                            )
-                                        }
+                                        NexlyGlassGlyphTile(
+                                            name = badge.first,
+                                            tone = badge.second,
+                                            size = 21.dp,
+                                            corner = 6.dp,
+                                            fontSize = 12.sp
+                                        )
                                         Spacer(Modifier.width(7.dp))
                                     }
                                     Text(
-                                        text = rawVal,
+                                        text = displayLabel,
                                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                                         color = GsTheme.colors.textPrimary,
                                         maxLines = 1,

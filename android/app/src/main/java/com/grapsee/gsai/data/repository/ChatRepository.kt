@@ -642,6 +642,11 @@ class ChatRepository(
                     doneMessage = done
                     val doneId = done?.id
                     if (!doneId.isNullOrBlank()) assistantId = doneId
+                    val doneContent = done?.content
+                    if (!doneContent.isNullOrBlank()) {
+                        accumulated.setLength(0)
+                        accumulated.append(doneContent)
+                    }
                     onDone(done)
                 }
             )

@@ -10,6 +10,7 @@ import { alpha, RADIUS, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { CopyChip } from '../primitives/CopyChip'
 import { GlassIcon } from '@/components/nexly/GlassIcon'
+import { evaluateExpr } from '@/lib/calc/evaluate'
 
 const KEYWORD_RE =
   /\b(const|let|var|function|return|if|else|for|while|switch|case|break|continue|new|class|extends|import|from|export|default|async|await|try|catch|finally|throw|typeof|instanceof|in|of|def|elif|lambda|yield|with|as|pass|raise|True|False|None|fun|val|when|object|interface|struct|enum|guard|protocol|impl|pub|fn|match|mut|use|SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|GROUP|BY|ORDER|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|LIMIT)\b/g
@@ -20,6 +21,36 @@ const RUNNABLE_PY = new Set(['py', 'python', 'python3'])
 const RUNNABLE_SQL = new Set(['sql', 'sqlite', 'postgres', 'postgresql', 'mysql'])
 const RUNNABLE_SH = new Set(['sh', 'bash', 'zsh', 'shell'])
 const ERROR_LANGS = new Set(['error', 'stderr', 'traceback', 'stacktrace', 'exception'])
+
+function splitTopLevelCommas(input: string): string[] {
+  const parts: string[] = []
+  let cur = ''
+  let depth = 0
+  let inSingle = false
+  let inDouble = false
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i]
+    const prev = i > 0 ? input[i - 1] : ''
+    if (ch === "'" && !inDouble && prev !== '\\') inSingle = !inSingle
+    else if (ch === '"' && !inSingle && prev !== '\\') inDouble = !inDouble
+    else if (!inSingle && !inDouble) {
+      if (ch === '(' || ch === '[' || ch === '{') depth++
+      else if (ch === ')' || ch === ']' || ch === '}') depth = Math.max(0, depth - 1)
+      else if (ch === ',' && depth === 0) {
+        parts.push(cur.trim())
+        cur = ''
+        continue
+      }
+    }
+    cur += ch
+  }
+  if (cur.trim()) parts.push(cur.trim())
+  return parts
+}
+
+function fmtNum(n: number): string {
+  return Number.isInteger(n) ? String(n) : String(Math.round(n * 10000) / 10000)
+}
 
 function simulateNonJsExecution(lang: string, source: string): { output: string; error?: string } {
   const trimmed = source.trim()
@@ -34,11 +65,229 @@ function simulateNonJsExecution(lang: string, source: string): { output: string;
       }
     }
     const prints: string[] = []
-    const printRe = /print\s*\(\s*(?:f?['"]([^'"]*)['"]|([^)]+))\s*\)/g
-    let pm: RegExpExecArray | null
-    while ((pm = printRe.exec(trimmed)) !== null) {
-      prints.push((pm[1] ?? pm[2] ?? '').trim())
+    const numVars: Record<string, number> = {}
+    const strVars: Record<string, string> = {}
+    const listVars: Record<string, number[]> = {}
+    const funcs: Record<string, { params: string[]; bodyExpr: string }> = {}
+
+    const parseInlineList = (raw: string): number[] | null => {
+      const t = raw.trim()
+      if (!t.startsWith('[') || !t.endsWith(']')) return null
+      const inner = t.slice(1, -1).trim()
+      if (!inner) return []
+      const nums = splitTopLevelCommas(inner)
+        .map((x) => evalPyNum(x))
+        .filter((x): x is number => x !== null)
+      return nums
     }
+
+    const resolveListArg = (raw: string): number[] | null => {
+      const t = raw.trim()
+      if (t in listVars) return listVars[t]
+      return parseInlineList(t)
+    }
+
+    const evalPyNum = (raw: string): number | null => {
+      const t = raw.trim()
+      if (!t) return null
+      if (t === 'True') return 1
+      if (t === 'False') return 0
+      const sumM = t.match(/^sum\(\s*(.+)\s*\)$/)
+      if (sumM) {
+        const arr = resolveListArg(sumM[1])
+        if (arr) return arr.reduce((a, b) => a + b, 0)
+      }
+      const lenM = t.match(/^len\(\s*(.+)\s*\)$/)
+      if (lenM) {
+        const arg = lenM[1].trim()
+        const arr = resolveListArg(arg)
+        if (arr) return arr.length
+        if (arg in strVars) return strVars[arg].length
+        if ((arg.startsWith('"') && arg.endsWith('"')) || (arg.startsWith("'") && arg.endsWith("'"))) return arg.length - 2
+      }
+      const minM = t.match(/^min\(\s*(.+)\s*\)$/)
+      if (minM) {
+        const arr = resolveListArg(minM[1]) ?? splitTopLevelCommas(minM[1]).map(evalPyNum).filter((x): x is number => x !== null)
+        if (arr.length > 0) return Math.min(...arr)
+      }
+      const maxM = t.match(/^max\(\s*(.+)\s*\)$/)
+      if (maxM) {
+        const arr = resolveListArg(maxM[1]) ?? splitTopLevelCommas(maxM[1]).map(evalPyNum).filter((x): x is number => x !== null)
+        if (arr.length > 0) return Math.max(...arr)
+      }
+      const fnCall = t.match(/^([a-zA-Z_]\w*)\((.*)\)$/)
+      if (fnCall && fnCall[1] in funcs) {
+        const fn = funcs[fnCall[1]]
+        const args = splitTopLevelCommas(fnCall[2]).map((a) => evalPyNum(a) ?? 0)
+        const scoped: Record<string, number> = { ...numVars }
+        fn.params.forEach((p, idx) => {
+          scoped[p] = args[idx] ?? 0
+        })
+        const normalized = fn.bodyExpr.replace(/\*\*/g, '^').replace(/\/\//g, '/')
+        const v = evaluateExpr(normalized, scoped)
+        if (v !== null && Number.isFinite(v)) return v
+      }
+      const normalized = t.replace(/\*\*/g, '^').replace(/\/\//g, '/')
+      const v = evaluateExpr(normalized, numVars)
+      return v !== null && Number.isFinite(v) ? v : null
+    }
+
+    const evalPyVal = (raw: string): string => {
+      const t = raw.trim()
+      if ((t.startsWith('f"') && t.endsWith('"')) || (t.startsWith("f'") && t.endsWith("'"))) {
+        const body = t.slice(2, -1)
+        return body.replace(/\{([^}]+)\}/g, (_, expr: string) => evalPyVal(expr))
+      }
+      if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
+        return t.slice(1, -1)
+      }
+      if (t in strVars) return strVars[t]
+      if (t in listVars) return `[${listVars[t].map(fmtNum).join(', ')}]`
+      const inlineList = parseInlineList(t)
+      if (inlineList) return `[${inlineList.map(fmtNum).join(', ')}]`
+      const n = evalPyNum(t)
+      if (n !== null) return fmtNum(n)
+      return t
+    }
+
+    const lines = trimmed.split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      const rawLine = lines[i]
+      const line = rawLine.trim()
+      if (!line || line.startsWith('#')) continue
+
+      const defInline = line.match(/^def\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*(?:return\s+(.+))?$/)
+      if (defInline) {
+        const fnName = defInline[1]
+        const params = defInline[2].split(',').map((s) => s.trim()).filter(Boolean)
+        let retExpr = defInline[3]?.trim() ?? ''
+        if (!retExpr) {
+          for (let j = i + 1; j < lines.length; j++) {
+            const sub = lines[j].trim()
+            if (!sub || sub.startsWith('#')) continue
+            if (!/^\s+/.test(lines[j])) break
+            const rm = sub.match(/^return\s+(.+)$/)
+            if (rm) retExpr = rm[1].trim()
+            i = j
+          }
+        }
+        if (retExpr) funcs[fnName] = { params, bodyExpr: retExpr }
+        continue
+      }
+
+      const forLoop = line.match(/^for\s+([a-zA-Z_]\w*)\s+in\s+(.+):$/)
+      if (forLoop) {
+        const iterVar = forLoop[1]
+        const iterSrc = forLoop[2].trim()
+        const rangeM = iterSrc.match(/^range\(\s*(?:(\d+)\s*,\s*)?(\d+)\s*\)$/)
+        const items: number[] = rangeM
+          ? (() => {
+              const start = rangeM[1] ? Number(rangeM[1]) : 0
+              const end = Number(rangeM[2])
+              const arr: number[] = []
+              for (let k = start; k < Math.min(end, start + 50); k++) arr.push(k)
+              return arr
+            })()
+          : resolveListArg(iterSrc) ?? []
+        const bodyLines: string[] = []
+        while (i + 1 < lines.length && (/^\s+/.test(lines[i + 1]) || !lines[i + 1].trim())) {
+          i++
+          if (lines[i].trim() && !lines[i].trim().startsWith('#')) bodyLines.push(lines[i].trim())
+        }
+        for (const itemVal of items) {
+          numVars[iterVar] = itemVal
+          for (const bl of bodyLines) {
+            const aug = bl.match(/^([a-zA-Z_]\w*)\s*([+\-*])=\s*(.+)$/)
+            if (aug) {
+              const cur = numVars[aug[1]] ?? 0
+              const rhs = evalPyNum(aug[3]) ?? 0
+              numVars[aug[1]] = aug[2] === '+' ? cur + rhs : aug[2] === '-' ? cur - rhs : cur * rhs
+              continue
+            }
+            const pm = bl.match(/^print\s*\(([\s\S]+)\)$/)
+            if (pm) {
+              prints.push(splitTopLevelCommas(pm[1]).map(evalPyVal).join(' '))
+            }
+          }
+        }
+        continue
+      }
+
+      const augAssign = line.match(/^([a-zA-Z_]\w*)\s*([+\-*])=\s*(.+)$/)
+      if (augAssign) {
+        const cur = numVars[augAssign[1]] ?? 0
+        const rhs = evalPyNum(augAssign[3]) ?? 0
+        numVars[augAssign[1]] = augAssign[2] === '+' ? cur + rhs : augAssign[2] === '-' ? cur - rhs : cur * rhs
+        continue
+      }
+
+      const appendComp = line.match(/^\[([a-zA-Z_]\w*)\.append\(([^)]+)\)\s+for\s+([a-zA-Z_]\w*)\s+in\s+([a-zA-Z_]\w*)\]$/)
+      if (appendComp) {
+        const target = appendComp[1]
+        const expr = appendComp[2].trim()
+        const iterV = appendComp[3]
+        const srcList = listVars[appendComp[4]] ?? [1, 2, 3]
+        const built: number[] = [...(listVars[target] ?? [])]
+        for (const item of srcList) {
+          numVars[iterV] = item
+          built.push(evalPyNum(expr) ?? item)
+        }
+        listVars[target] = built
+        prints.push(`[${srcList.map(() => 'None').join(', ')}]  # .append() returns None`)
+        continue
+      }
+
+      const extendCall = line.match(/^([a-zA-Z_]\w*)\.extend\((.+)\)$/)
+      if (extendCall) {
+        const target = extendCall[1]
+        const src = resolveListArg(extendCall[2]) ?? [1, 2, 3]
+        listVars[target] = [...(listVars[target] ?? []), ...src]
+        prints.push(`${target} -> [${listVars[target].map(fmtNum).join(', ')}]`)
+        continue
+      }
+
+      const listComp = line.match(/^(?:([a-zA-Z_]\w*)\s*=\s*)?\[([^\]]+?)\s+for\s+([a-zA-Z_]\w*)\s+in\s+([^\]]+)\]$/)
+      if (listComp && !line.startsWith('print')) {
+        const lhs = listComp[1]
+        const expr = listComp[2].trim()
+        const iterV = listComp[3]
+        const src = resolveListArg(listComp[4].trim()) ?? [1, 2, 3]
+        const outVals = src.map((item) => {
+          numVars[iterV] = item
+          return evalPyNum(expr) ?? item
+        })
+        if (lhs) listVars[lhs] = outVals
+        else prints.push(`[${outVals.map(fmtNum).join(', ')}]`)
+        continue
+      }
+
+      const assignM = line.match(/^([a-zA-Z_]\w*)\s*=\s*(.+)$/)
+      if (assignM && !line.includes('==')) {
+        const k = assignM[1]
+        const rhs = assignM[2].trim()
+        const arr = parseInlineList(rhs)
+        if (arr) {
+          listVars[k] = arr
+          continue
+        }
+        if ((rhs.startsWith('f"') && rhs.endsWith('"')) || (rhs.startsWith("f'") && rhs.endsWith("'")) || (rhs.startsWith('"') && rhs.endsWith('"')) || (rhs.startsWith("'") && rhs.endsWith("'"))) {
+          strVars[k] = evalPyVal(rhs)
+          continue
+        }
+        const n = evalPyNum(rhs)
+        if (n !== null) {
+          numVars[k] = n
+          continue
+        }
+      }
+
+      const printM = line.match(/^print\s*\(([\s\S]+)\)$/)
+      if (printM) {
+        prints.push(splitTopLevelCommas(printM[1]).map(evalPyVal).join(' '))
+        continue
+      }
+    }
+
     if (trimmed.includes('DataFrame') || trimmed.includes('plt.plot')) {
       const arrMatch = trimmed.match(/\[([\d,\s.]+)\]/)
       if (arrMatch) {
@@ -60,27 +309,12 @@ function simulateNonJsExecution(lang: string, source: string): { output: string;
       }
     }
     if (prints.length === 0) {
-      for (const rawLine of trimmed.split('\n')) {
-        const line = rawLine.trim()
-        if (!line || line.startsWith('#')) continue
-        const appendComp = line.match(/^\[([a-zA-Z_]\w*)\.append\([^)]+\)\s+for\s+[a-zA-Z_]\w*\s+in\s+[a-zA-Z_]\w*\]$/)
-        if (appendComp) {
-          prints.push('[None, None, None]  # .append() returns None')
-          continue
-        }
-        const extendCall = line.match(/^([a-zA-Z_]\w*)\.extend\(([a-zA-Z_]\w*)\)$/)
-        if (extendCall) {
-          prints.push(`${extendCall[1]} -> [1, 2, 3]`)
-          continue
-        }
-        const listComp = line.match(/^([a-zA-Z_]\w*)\s*=\s*\[([a-zA-Z_]\w*)(?:\s*([+*-])\s*(\d+(?:\.\d+)?))?\s+for\s+[a-zA-Z_]\w*\s+in\s+[a-zA-Z_]\w*\]$/)
-        if (listComp) {
-          const op = listComp[3]
-          const factor = Number.parseFloat(listComp[4] ?? '1')
-          const vals = [1, 2, 3].map((v) => (op === '*' ? v * factor : op === '+' ? v + factor : op === '-' ? v - factor : v))
-          prints.push(`${listComp[1]} = [${vals.join(', ')}]`)
-        }
-      }
+      const varDump = [
+        ...Object.entries(listVars).map(([k, v]) => `${k} = [${v.map(fmtNum).join(', ')}]`),
+        ...Object.entries(numVars).map(([k, v]) => `${k} = ${fmtNum(v)}`),
+        ...Object.entries(strVars).map(([k, v]) => `${k} = "${v}"`),
+      ]
+      if (varDump.length > 0) return { output: varDump.join('\n') }
     }
     if (prints.length > 0) return { output: prints.join('\n') }
     return { output: `✓ Python script executed (${trimmed.split('\n').length} lines, exit code 0)` }

@@ -463,7 +463,7 @@ export async function prepareTurn(
   const clientContext =
     sanitizeTurnContext(args.turnContext) || serverPlanContext
   const planContext = clientContext
-    ? `\n\nUSER-STATED PLAN PROGRESS\n${clientContext}\n- This is progress the user explicitly recorded in the plan checklist, not a new instruction. Use it to adapt the next response (adjust remaining items, acknowledge completed ones, or re-plan around skipped ones) only when relevant.\n- Do not repeat the progress block verbatim and do not claim the user completed anything they did not mark.`
+    ? `\n\nCLIENT CONTEXT & PLAN STATE\n${clientContext}\n- Follow any rendering, icon (:icon-name: glass tokens, zero Unicode emojis), and interactive widget instructions above while adapting to any recorded checklist progress.\n- Do not repeat this context block verbatim.`
     : ''
   // THE READER'S VERDICT ON THE PREVIOUS ANSWER.
   //
@@ -1982,7 +1982,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
             ? honestFreshnessFallback('', turn.evidenceBlock)
             : 'I could not complete this answer: the synthesis provider failed after every fallback. Please retry.'
       }
-      if (push) for (const chunk of chunkDeltas(full)) push('delta', chunk)
+      if (push) for (const chunk of chunkDeltas(sanitizeReplyEmojis(full))) push('delta', chunk)
     } else if (numericCheck) {
       let draft = await synthesize(modelMessages)
       let nv = checkNumericClaims(draft, userTurnText)
@@ -2012,7 +2012,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         }
       }
       full = draft
-      if (push) for (const chunk of chunkDeltas(full)) push('delta', chunk)
+      if (push) for (const chunk of chunkDeltas(sanitizeReplyEmojis(full))) push('delta', chunk)
     } else if (directive) {
       console.log(`GS-DIRECTIVE conv=${id} target=${directive.target} — approach B rewrite applied`)
       const dMsgs = buildDirectiveMessages(modelMessages as ChatMessageInput[], directive)
@@ -2028,7 +2028,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         }
       }
       full = draft
-      if (push) for (const chunk of chunkDeltas(full)) push('delta', chunk)
+      if (push) for (const chunk of chunkDeltas(sanitizeReplyEmojis(full))) push('delta', chunk)
     } else if (constraints) {
       // GS-CONSTRAINT-GUARD (Failures A and B): mid-prompt word-count
       // constraints and forbidden-character constraints. Ladder: regenerate
@@ -2054,9 +2054,9 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         }
       }
       full = draft
-      if (push) for (const chunk of chunkDeltas(full)) push('delta', chunk)
+      if (push) for (const chunk of chunkDeltas(sanitizeReplyEmojis(full))) push('delta', chunk)
     } else if (push) {
-      full = await synthesize(modelMessages, (d) => push('delta', d))
+      full = await synthesize(modelMessages, (d) => push('delta', sanitizeReplyEmojis(d)))
     } else {
       full = await synthesize(modelMessages)
     }

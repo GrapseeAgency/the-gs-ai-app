@@ -303,6 +303,28 @@ object NexlyIcons {
         "🧹" to "brush", "🧯" to "fire-extinguisher",
         "🔴" to "circle-dot", "🟠" to "circle-dot", "🟡" to "circle-dot",
         "🟢" to "circle-dot", "🔵" to "circle-dot", "🟣" to "circle-dot",
+        "⚫" to "circle-dot", "⚪" to "circle-dot", "🟤" to "circle-dot",
+        "⬛" to "square", "⬜" to "square", "▪️" to "square", "▫️" to "square",
+        "◾" to "square", "◽" to "square", "◼️" to "square", "◻️" to "square",
+        "🔶" to "diamond", "🔷" to "diamond", "🔸" to "diamond", "🔹" to "diamond",
+        "🔺" to "triangle", "🔻" to "triangle-inverted",
+        "▶️" to "player-play", "▶" to "player-play", "◀️" to "player-skip-back", "◀" to "player-skip-back",
+        "⏩" to "player-track-next", "⏪" to "player-track-prev", "⏸️" to "player-pause", "⏹️" to "player-stop",
+        "🔄" to "refresh", "🔁" to "repeat", "🔀" to "arrows-shuffle",
+        "➡️" to "arrow-right", "⬅️" to "arrow-left", "⬆️" to "arrow-up", "⬇️" to "arrow-down",
+        "↗️" to "arrow-up-right", "↘️" to "arrow-down-right", "↙️" to "arrow-down-left", "↖️" to "arrow-up-left",
+        "↔️" to "arrows-left-right", "↕️" to "arrows-up-down", "↩️" to "arrow-back-up", "↪️" to "arrow-forward-up",
+        "⤴️" to "arrow-ramp-right", "⤵️" to "arrow-ramp-left",
+        "➕" to "plus", "➖" to "minus", "➗" to "divide", "✖️" to "x", "✖" to "x",
+        "♾️" to "infinity", "♾" to "infinity", "💲" to "currency-dollar", "💱" to "arrows-exchange",
+        "™️" to "trademark", "™" to "trademark", "©️" to "copyright", "©" to "copyright",
+        "®️" to "registered", "®" to "registered", "♻️" to "recycle", "♻" to "recycle",
+        "‼️" to "alert-circle", "⁉️" to "help-circle", "〰️" to "wave-sine", "〽️" to "chart-line",
+        "❇️" to "sparkles", "✳️" to "asterisk", "✴️" to "star",
+        "⚖️" to "scale", "⚖" to "scale", "⚗️" to "flask", "⚛️" to "atom", "⚛" to "atom",
+        "0️⃣" to "number-0", "1️⃣" to "number-1", "2️⃣" to "number-2", "3️⃣" to "number-3",
+        "4️⃣" to "number-4", "5️⃣" to "number-5", "6️⃣" to "number-6", "7️⃣" to "number-7",
+        "8️⃣" to "number-8", "9️⃣" to "number-9", "🔟" to "numbers",
         "🤔" to "brain", "❌" to "circle-x", "❓" to "help-circle", "❗" to "alert-circle",
         "ℹ️" to "info-circle", "ℹ" to "info-circle"
     )
@@ -323,8 +345,21 @@ object NexlyIcons {
             val pictograph = cp in 0x1F000..0x1FAFF ||
                 cp in 0x2600..0x27BF ||
                 cp in 0x2300..0x23FF ||
+                cp in 0x2194..0x21AA ||
+                cp in 0x25AA..0x25FE ||
+                cp in 0x2934..0x2935 ||
+                cp in 0x2B05..0x2B07 ||
+                cp in 0x2B1B..0x2B1C ||
+                cp == 0x203C ||
+                cp == 0x2049 ||
+                cp == 0x2122 ||
+                cp == 0x2139 ||
                 cp == 0x2B50 ||
                 cp == 0x2B55 ||
+                cp == 0x3030 ||
+                cp == 0x303D ||
+                cp == 0x3297 ||
+                cp == 0x3299 ||
                 cp in 0xFE00..0xFE0F ||
                 cp == 0x200D ||
                 cp == 0x20E3 ||
@@ -335,19 +370,104 @@ object NexlyIcons {
         return filtered.toString()
     }
 
-    /** Extract a leading `:icon:` or emoji token as (iconName, remainingCleanText) and strip any raw emojis. */
+    /** Extract a leading `:icon:` or emoji token (even inside leading `**bold**`) as (iconName, remainingCleanText). */
     fun extractLeadingIcon(text: String): Pair<String?, String> {
         val norm = normalize(text).trim()
-        val m = Regex("^:([a-z0-9][a-z0-9-]{1,42}):\\s*(.*)$").find(norm)
+        val m = Regex("^(\\*{1,3}|_{1,3})?\\s*:([a-z0-9][a-z0-9-]{1,42}):\\s*([\\s\\S]*)$").find(norm)
         if (m != null) {
-            return resolve(m.groupValues[1]) to m.groupValues[2].replace(tokenRegex, "").trim()
+            val prefix = m.groupValues[1]
+            val rawIcon = m.groupValues[2]
+            val tail = m.groupValues[3].replace(tokenRegex, "").trim()
+            return resolve(rawIcon) to "$prefix$tail"
         }
-        return null to norm.replace(tokenRegex, "").replace(Regex("\\s+"), " ").trim()
+        return null to norm.replace(tokenRegex, "").trim()
     }
 
     /** Plain string with all emojis and `:icon:` tokens stripped cleanly. */
     fun cleanPlainText(text: String): String =
         normalize(text).replace(tokenRegex, "").replace(Regex("\\s+"), " ").trim()
+
+    private val semanticKeywords: List<Triple<Regex, String, String>> = listOf(
+        Triple(Regex("\\b(python|django|flask|pandas|numpy|pytorch)\\b", RegexOption.IGNORE_CASE), "brand-python", "blue"),
+        Triple(Regex("\\b(java|spring|jvm|maven|coffee|cafe|espresso)\\b", RegexOption.IGNORE_CASE), "coffee", "peach"),
+        Triple(Regex("\\b(javascript|node\\.?js|express|npm|v8)\\b", RegexOption.IGNORE_CASE), "brand-javascript", "amber"),
+        Triple(Regex("\\b(typescript|tsx|deno)\\b", RegexOption.IGNORE_CASE), "brand-typescript", "blue"),
+        Triple(Regex("\\b(react|next\\.?js|jsx|redux)\\b", RegexOption.IGNORE_CASE), "brand-react", "blue"),
+        Triple(Regex("\\b(swift|swiftui|ios|xcode|apple)\\b", RegexOption.IGNORE_CASE), "brand-apple", "lavender"),
+        Triple(Regex("\\b(android|kotlin|jetpack|gradle)\\b", RegexOption.IGNORE_CASE), "brand-android", "green"),
+        Triple(Regex("\\b(rust|cargo)\\b", RegexOption.IGNORE_CASE), "brand-rust", "peach"),
+        Triple(Regex("\\b(golang|go\\b)", RegexOption.IGNORE_CASE), "brand-golang", "mint"),
+        Triple(Regex("(?:^|\\b)(c\\+\\+|cpp|clang)(?:\\b|$)", RegexOption.IGNORE_CASE), "brand-cpp", "blue"),
+        Triple(Regex("^(c|c#|csharp)$", RegexOption.IGNORE_CASE), "code", "blue"),
+        Triple(Regex("\\b(docker|container|kubernetes|k8s)\\b", RegexOption.IGNORE_CASE), "brand-docker", "blue"),
+        Triple(Regex("\\b(git|github|commit|branch|pull request)\\b", RegexOption.IGNORE_CASE), "brand-github", "lavender"),
+        Triple(Regex("\\b(database|sql|postgres|mysql|sqlite|redis|mongodb|schema|query)\\b", RegexOption.IGNORE_CASE), "database", "blue"),
+        Triple(Regex("\\b(cloud|aws|azure|gcp|serverless|cdn|deploy)\\b", RegexOption.IGNORE_CASE), "cloud-computing", "blue"),
+        Triple(Regex("\\b(security|auth|jwt|oauth|encrypt|password|privacy|shield|safe)\\b", RegexOption.IGNORE_CASE), "shield-check", "green"),
+        Triple(Regex("\\b(performance|speed|fast|latency|throughput|optimize|cache|bolt)\\b", RegexOption.IGNORE_CASE), "bolt", "amber"),
+        Triple(Regex("\\b(api|webhook|endpoint|rest|graphql|http|network|socket)\\b", RegexOption.IGNORE_CASE), "plug-connected", "mint"),
+        Triple(Regex("\\b(bug|error|issue|warning|risk|pitfall|caution|alert|fail)\\b", RegexOption.IGNORE_CASE), "alert-triangle", "amber"),
+        Triple(Regex("\\b(test|qa|verify|validation|check|assert|pass)\\b", RegexOption.IGNORE_CASE), "circle-check", "green"),
+        Triple(Regex("\\b(loan|mortgage|apr|emi|amortiz|bank|debt|interest rate)\\b", RegexOption.IGNORE_CASE), "building-bank", "blue"),
+        Triple(Regex("\\b(invest|compound|portfolio|dividend|stock|etf|roi|wealth|return|growth|profit)\\b", RegexOption.IGNORE_CASE), "trending-up", "green"),
+        Triple(Regex("\\b(budget|salary|income|saving|expense|cost|price|revenue|money|payment|tax|fee)\\b", RegexOption.IGNORE_CASE), "coin", "amber"),
+        Triple(Regex("\\b(formula|equation|math|calculate|calculator|sum|ratio|average)\\b", RegexOption.IGNORE_CASE), "calculator", "amber"),
+        Triple(Regex("\\b(chart|metric|analytics|stat|benchmark|trend|data|distribution)\\b", RegexOption.IGNORE_CASE), "chart-bar", "lavender"),
+        Triple(Regex("\\b(calorie|protein|macro|nutrition|diet|meal|food|vitamin|carbs|fat)\\b", RegexOption.IGNORE_CASE), "salad", "green"),
+        Triple(Regex("\\b(workout|exercise|gym|fitness|strength|cardio|muscle|training|run)\\b", RegexOption.IGNORE_CASE), "barbell", "peach"),
+        Triple(Regex("\\b(health|medical|heart|sleep|recovery|wellness|symptom|doctor)\\b", RegexOption.IGNORE_CASE), "heartbeat", "pink"),
+        Triple(Regex("\\b(study|learn|course|book|read|exam|lesson|education|concept)\\b", RegexOption.IGNORE_CASE), "book-2", "lavender"),
+        Triple(Regex("\\b(time|schedule|timeline|deadline|duration|hour|minute|morning|daily)\\b", RegexOption.IGNORE_CASE), "clock", "amber"),
+        Triple(Regex("\\b(date|calendar|week|month|year|quarter|roadmap|milestone)\\b", RegexOption.IGNORE_CASE), "calendar", "blue"),
+        Triple(Regex("\\b(travel|flight|trip|hotel|airport|vacation|tour)\\b", RegexOption.IGNORE_CASE), "plane", "blue"),
+        Triple(Regex("\\b(location|map|city|country|region|route|address|global|world)\\b", RegexOption.IGNORE_CASE), "world", "mint"),
+        Triple(Regex("\\b(ai|llm|neural|model|machine learning|gpt|agent|brain|smart)\\b", RegexOption.IGNORE_CASE), "brain", "lavender"),
+        Triple(Regex("\\b(code|function|algorithm|class|module|compile|syntax|script)\\b", RegexOption.IGNORE_CASE), "code", "lavender"),
+        Triple(Regex("\\b(user|team|customer|client|people|community|audience|member)\\b", RegexOption.IGNORE_CASE), "users", "blue"),
+        Triple(Regex("\\b(goal|target|objective|focus|mission|priority|kpi)\\b", RegexOption.IGNORE_CASE), "target", "pink"),
+        Triple(Regex("\\b(winner|best|top|rank|award|champion|leader|advantage)\\b", RegexOption.IGNORE_CASE), "trophy", "amber"),
+        Triple(Regex("\\b(launch|start|ship|release|scale|boost|upgrade|future)\\b", RegexOption.IGNORE_CASE), "rocket", "peach"),
+        Triple(Regex("\\b(setting|config|setup|install|tool|environment|option)\\b", RegexOption.IGNORE_CASE), "settings", "mint"),
+        Triple(Regex("\\b(why|tip|insight|idea|note|summary|takeaway|key|pro tip)\\b", RegexOption.IGNORE_CASE), "bulb", "amber")
+    )
+
+    /**
+     * Resolve any heading, bullet label, step title, or table entity to a semantic
+     * custom glassy icon + tone from the 5,247 Tabler registry.
+     */
+    fun semanticIconFor(raw: String, fallbackIcon: String = "sparkles"): Pair<String, String> {
+        val (explicit, clean) = extractLeadingIcon(raw)
+        if (explicit != null) {
+            val resolved = resolve(explicit)
+            return resolved to toneFor(resolved)
+        }
+        val plain = cleanPlainText(clean)
+        for ((re, icon, tone) in semanticKeywords) {
+            if (re.containsMatchIn(plain)) {
+                val resolved = resolve(icon)
+                return resolved to tone
+            }
+        }
+        val map = codepoints
+        val words = plain.lowercase(Locale.US)
+            .replace(Regex("[^a-z0-9\\s-]"), " ")
+            .split(Regex("\\s+"))
+            .filter { it.length >= 3 }
+        for (w in words) {
+            val brand = "brand-$w"
+            if (map != null && map.containsKey(brand)) return brand to toneFor(brand)
+            aliases[w]?.let { a -> return resolve(a) to toneFor(a) }
+            if (map != null && map.containsKey(w)) return w to toneFor(w)
+            if (w.endsWith("s") && w.length > 3) {
+                val sing = w.dropLast(1)
+                aliases[sing]?.let { a -> return resolve(a) to toneFor(a) }
+                if (map != null && map.containsKey(sing)) return sing to toneFor(sing)
+            }
+        }
+        if (fallbackIcon.isEmpty()) return "" to "lavender"
+        val fb = resolve(fallbackIcon)
+        return fb to toneFor(fb)
+    }
 
     /** Split a run on the inline `:icon:` grammar. Letter-initial tokens are
      * always resolved to a valid icon glyph so raw `:icon:` syntax never leaks. */
