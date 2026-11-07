@@ -13,7 +13,9 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertEqual(app.sliders.count, 0, "Unbounded model field invented a slider range")
         XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "©")).count, 0)
         XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "😀")).count, 0)
-        field.tap()
+        // A centre tap can place the caret BEFORE right-aligned text. Move
+        // it to the trailing edge explicitly before issuing backspaces.
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
         let initial = field.value as? String ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: initial.count) + "12.3456")
         XCTAssertEqual(field.value as? String, "12.3456", "Typed input was rounded or reformatted")
