@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 import SwiftUI
 import WebKit
 
@@ -959,6 +960,30 @@ func chartHeightFractionIOS(_ value: Double, domain: (lower: Double, upper: Doub
 
 func chartSignedTotalIOS(_ values: [Double]) -> Double { values.reduce(0, +) }
 
+// Numeric failures are not measurements of zero. Keep this parser shared
+// by validation and drawing so a missing/invalid point cannot fabricate KPIs.
+func chartValueIOS(_ raw: Any?) -> Double? {
+    let number: Double?
+    if let value = raw as? NSNumber {
+        guard CFGetTypeID(value) != CFBooleanGetTypeID() else { return nil }
+        number = value.doubleValue
+    } else if let value = raw as? String {
+        number = Double(value.trimmingCharacters(in: .whitespacesAndNewlines))
+    } else { return nil }
+    guard let number, number.isFinite else { return nil }
+    return number
+}
+
+func chartObservationValueIOS(_ raw: Any) -> Double? {
+    if let pair = raw as? [Any] {
+        return pair.count >= 2 ? chartValueIOS(pair[1]) : nil
+    }
+    if let point = raw as? [String: Any] {
+        return chartValueIOS(point["value"] ?? point["y"] ?? point["v"] ?? point["count"] ?? point["score"])
+    }
+    return chartValueIOS(raw)
+}
+
 private struct ChartBodyView: View {
     let obj: [String: Any]
     let accent: Color
@@ -993,6 +1018,19 @@ private struct ChartBodyView: View {
         activeType.isEmpty ? initialChartType : activeType
     }
 
+    private var hasInvalidObservations: Bool {
+        if let series = obj["series"] as? [[String: Any]] {
+            let selected = min(selectedSeriesIndex, max(0, series.count - 1))
+            for (index, item) in series.enumerated() where isSliceSeries || index == selected {
+                guard let data = item["data"] as? [Any] else { return true }
+                if data.contains(where: { chartObservationValueIOS($0) == nil }) { return true }
+            }
+            return false
+        }
+        guard let data = (obj["data"] ?? obj["items"] ?? obj["values"] ?? obj["slices"]) as? [Any] else { return false }
+        return data.contains { chartObservationValueIOS($0) == nil }
+    }
+
     private var allPoints: [BarPoint] {
         var out: [BarPoint] = []
         let labels = (obj["labels"] as? [Any])?.map { "\($0)" } ?? []
@@ -1006,13 +1044,13 @@ private struct ChartBodyView: View {
                         let fallbackLbl = pIdx < labels.count ? labels[pIdx] : "#\(pIdx + 1)"
                         if let pair = pt as? [Any], pair.count >= 2 {
                             let lbl = pIdx < labels.count ? labels[pIdx] : "\(pair[0])"
-                            let val = (pair[1] as? NSNumber)?.doubleValue ?? Double("\(pair[1])") ?? 0
+                            guard let val = chartObservationValueIOS(pt) else { continue }
                             out.append(BarPoint(index: out.count, seriesName: sName, label: lbl, value: val, color: color))
-                        } else if let num = pt as? NSNumber {
-                            out.append(BarPoint(index: out.count, seriesName: sName, label: fallbackLbl, value: num.doubleValue, color: color))
+                        } else if let val = chartValueIOS(pt) {
+                            out.append(BarPoint(index: out.count, seriesName: sName, label: fallbackLbl, value: val, color: color))
                         } else if let d = pt as? [String: Any] {
                             let lbl = str(d, "label", "x", "name")
-                            let val = dbl(d, "value", "y", "v")
+                            guard let val = chartObservationValueIOS(d) else { continue }
                             out.append(BarPoint(index: out.count, seriesName: sName, label: lbl.isEmpty ? fallbackLbl : lbl, value: val, color: color))
                         }
                     }
@@ -1021,7 +1059,7 @@ private struct ChartBodyView: View {
         } else if let data = (obj["data"] ?? obj["items"] ?? obj["values"] ?? obj["slices"]) as? [[String: Any]] {
             for (idx, d) in data.enumerated() {
                 let lbl = str(d, "label", "name", "x", "category")
-                let val = dbl(d, "value", "y", "count", "score")
+                guard let val = chartObservationValueIOS(d) else { continue }
                 out.append(BarPoint(index: idx, seriesName: "", label: lbl.isEmpty ? "#\(idx + 1)" : lbl, value: val, color: WidgetPalette.at(idx)))
             }
         }
@@ -1091,9 +1129,16 @@ private struct ChartBodyView: View {
             if !subtitle.isEmpty {
                 Text(subtitle).font(Aero.caption()).foregroundStyle(Aero.textSecondary)
             }
-            chartTooltipRow(pts: pts, activeIdx: activeIdx, totalVal: totalVal, unit: unit)
-            chartVisualizationSurface(pts: pts, activeIdx: activeIdx, maxVal: maxVal, totalVal: totalVal, unit: unit)
-            chartSummaryFooter(pts: pts, peakIdx: peakIdx, totalVal: totalVal, unit: unit, rangeLabel: rangeLabel)
+            if hasInvalidObservations {
+                Text("Chart unavailable: an observation is missing or is not a finite number. Correct the source data; no zero values or summary have been invented.")
+                    .font(Aero.caption()).foregroundStyle(Aero.textSecondary)
+            } else if pts.isEmpty {
+                Text("No observations in this range.").font(Aero.caption()).foregroundStyle(Aero.textSecondary)
+            } else {
+                chartTooltipRow(pts: pts, activeIdx: activeIdx, totalVal: totalVal, unit: unit)
+                chartVisualizationSurface(pts: pts, activeIdx: activeIdx, maxVal: maxVal, totalVal: totalVal, unit: unit)
+                chartSummaryFooter(pts: pts, peakIdx: peakIdx, totalVal: totalVal, unit: unit, rangeLabel: rangeLabel)
+            }
         }
     }
 
