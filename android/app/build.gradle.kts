@@ -9,6 +9,8 @@ plugins {
 
 android {
     namespace = "com.grapsee.gsai"
+    // Shared display policy is bundled locally; previews never fetch it.
+    sourceSets.getByName("main").assets.srcDir(rootProject.file("../shared-contracts"))
     compileSdk = 35
     // Decision 1: RECONNECTED. The module now uses com.android.dynamic-feature
     // (it was com.android.library, which is why the variant never matched) and
