@@ -120,6 +120,15 @@ struct GSApp: App {
                     }
                 }
             }
+            .overlay {
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("-gs_test_platform_runtime") {
+                    PlatformRuntimeProbe()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.white)
+                }
+                #endif
+            }
             .preferredColorScheme(Self.colorScheme(for: settings.theme))
             .gsDynamicTypeSize(Self.dynamicTypeSize(for: settings.fontScale))
             // The banner dispatcher's delegate and the once-per-version product
