@@ -5,6 +5,19 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun rangeDoesNotRestoreShortSeriesOutsideWindow() {
+        val chart = ChartWidget(labels = (0..7).map { "P$it" }, series = listOf(
+            ChartSeries("long", (0..7).map { listOf(it.toFloat(), (it * 10).toFloat()) }),
+            ChartSeries("short", (0..4).map { listOf(it.toFloat(), (100 + it).toFloat()) })
+        ))
+        val (tail, _) = sliceChartByRange(chart, 2)
+        assertEquals(listOf("P4", "P5", "P6", "P7"), tail.labels)
+        assertEquals(listOf(40f, 50f, 60f, 70f), tail.series[0].data.map { it[1] })
+        assertEquals(listOf(104f), tail.series[1].data.map { it[1] })
+        val (withoutOldData, _) = sliceChartByRange(chart.copy(series = chart.series + ChartSeries("absent", listOf(listOf(0f, 9f)))), 2)
+        assertEquals(listOf("long", "short"), withoutOldData.series.map { it.name })
+    }
+
     @Test fun tableAllIsNotCappedAtTwentyFive() {
         assertEquals(73, widgetTablePageSizeAndroid(-1, 73))
         assertEquals(2, widgetTablePageSizeAndroid(-1, 2))
