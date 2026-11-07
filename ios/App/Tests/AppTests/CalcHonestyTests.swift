@@ -1,7 +1,68 @@
 import XCTest
+import SwiftUI
+import WebKit
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testSignedChartDomainPreservesZeroNegativeAndAllObservations() {
+        let values: [Double] = [-20, 0, 10]
+        let domain = chartDomainIOS(values)
+        XCTAssertEqual(domain.lower, -20)
+        XCTAssertEqual(domain.upper, 10)
+        XCTAssertEqual(chartHeightFractionIOS(-20, domain: domain), 1, accuracy: 1e-9)
+        XCTAssertEqual(chartHeightFractionIOS(0, domain: domain), 1.0 / 3, accuracy: 1e-9)
+        XCTAssertEqual(chartHeightFractionIOS(10, domain: domain), 0, accuracy: 1e-9)
+        XCTAssertEqual(chartSignedTotalIOS(values), -10)
+        XCTAssertEqual(chartSignedTotalIOS(Array(repeating: 1, count: 31)), 31)
+        let zero = chartDomainIOS([0, 0])
+        XCTAssertEqual(chartHeightFractionIOS(0, domain: zero), 1)
+        XCTAssertEqual(chartDomainIOS([-5, -2]).upper, 0)
+    }
+
+    @MainActor
+    func testGeneratedHtmlExecutesAndCleansDynamicEmojiInProductionWebView() async throws {
+        XCTAssertNotNil(DOMDisplayPolicyIOS.script, "The shared policy must be packaged in the actual app bundle")
+        let source = #"<button id="run" title="Increase &#x1F600;">Increase &#x1F600;</button><output id="result">0</output><svg data-custom-glass="true"><path d="M0 0L8 8"/></svg><script>window.marker=String.fromCodePoint(0x1F600);window.count=0;document.getElementById('run').onclick=function(){window.count++;document.getElementById('result').textContent=window.count+window.marker;};</script>"#
+        let host = UIHostingController(rootView: HtmlBlockView(kind: "html", source: source, open: false))
+        let oldKeyWindow = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }.first { $0.isKeyWindow }
+        let window: UIWindow
+        if let scene = oldKeyWindow?.windowScene { window = UIWindow(windowScene: scene) }
+        else { window = UIWindow(frame: UIScreen.main.bounds) }
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; oldKeyWindow?.makeKeyAndVisible() }
+        func findWebView(_ view: UIView) -> WKWebView? {
+            if let web = view as? WKWebView { return web }
+            for child in view.subviews { if let web = findWebView(child) { return web } }
+            return nil
+        }
+        var loadedWeb: WKWebView?
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline {
+            host.view.layoutIfNeeded()
+            if let web = findWebView(host.view),
+               let ready = try? await web.evaluateJavaScript("document.readyState === 'complete' && typeof window.marker === 'string'"),
+               (ready as? Bool) == true {
+                loadedWeb = web
+                break
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        let web = try XCTUnwrap(loadedWeb, "The production HtmlBlock must load and execute its real document")
+        let initial = try await web.evaluateJavaScript("window.__gsDisplayEmojiPolicy === true && document.getElementById('run').textContent === 'Increase ' && document.getElementById('run').title === 'Increase '")
+        XCTAssertEqual(initial as? Bool, true)
+        // Real DOM event execution in WKWebView (not a mocked evaluator).
+        // An OS-level pointer tap is covered separately on Android.
+        _ = try await web.evaluateJavaScript("document.getElementById('run').click(); true")
+        let afterClick = try await web.evaluateJavaScript("window.count === 1 && document.getElementById('result').textContent === '1'")
+        XCTAssertEqual(afterClick as? Bool, true)
+        let marker = try await web.evaluateJavaScript("window.marker.codePointAt(0)")
+        XCTAssertEqual((marker as? NSNumber)?.intValue, 128512)
+        let vector = try await web.evaluateJavaScript("!!document.querySelector('svg[data-custom-glass] path')")
+        XCTAssertEqual(vector as? Bool, true)
+    }
+
     func testAllRowsAndStrictDescendingTableSort() {
         XCTAssertEqual(widgetTablePageSizeIOS(selection: -1, rowCount: 73), 73)
         XCTAssertEqual(widgetTablePageSizeIOS(selection: -1, rowCount: 2), 2)
