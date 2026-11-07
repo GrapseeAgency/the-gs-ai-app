@@ -2251,10 +2251,11 @@ private fun BarChart(w: ChartWidget) {
  * and shape 2 rendered as a single slice because the renderer only read
  * `series`. Both are real, so normalise here instead of guessing upstream.
  */
-internal fun pieSlices(w: ChartWidget): List<Pair<String, Float>> =
-    w.series.flatMapIndexed { seriesIndex, series ->
+internal fun pieSlices(w: ChartWidget): List<Pair<String, Float>> {
+    val categorySeries = w.series.all { it.data.size <= 1 }
+    return w.series.flatMapIndexed { seriesIndex, series ->
         series.data.mapIndexed { pointIndex, point ->
-            val label = if (series.data.size == 1) {
+            val label = if (categorySeries) {
                 series.name.ifEmpty { w.labels.getOrNull(seriesIndex) ?: "Slice ${seriesIndex + 1}" }
             } else {
                 val pointLabel = w.labels.getOrNull(pointIndex) ?: "Slice ${pointIndex + 1}"
@@ -2263,6 +2264,7 @@ internal fun pieSlices(w: ChartWidget): List<Pair<String, Float>> =
             label to point.getOrElse(1) { point.lastOrNull() ?: Float.NaN }
         }
     }
+}
 
 internal fun pieSourceProblemAndroid(w: ChartWidget): String? {
     val slices = pieSlices(w)
