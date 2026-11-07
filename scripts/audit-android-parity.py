@@ -292,7 +292,7 @@ if IOS_CB.exists() and IOS_RB.exists():
         ("Trusted Source", "03. Citations & References: Trusted Source / Academic pills"),
         ("Run in Browser", "04/05. Code Blocks & Execution: Run in Browser / Run Code bar"),
         ("extractCodeSeriesPreview", "04/05. Code Blocks & Execution: Inline Revenue Trend bar chart preview"),
-        ("parseReactPreviewSpec", "05. Code Execution: Dynamic React/JSX interactive component preview parser"),
+        ("Arithmetic preview (not a Python runtime)", "05. Code Execution: Explicitly limited, real arithmetic evaluation"),
         ("CalcExpr", "01/05. Calculator & Code Execution: Recursive-descent math expression evaluator"),
         ("Show:", "06. Tables & Data Grids: Pagination & Show: N display controls"),
         ("sliced", "07. Interactive Charts: Date range selector with dataset slicing"),
@@ -307,6 +307,14 @@ if IOS_CB.exists() and IOS_RB.exists():
         if token not in ios_all:
             failures.append(f"iOS missing '{token}' ({desc})")
     notes.append(f"Section 01 & 02 feature parity: {len(SECTION_FEATURES)}/{len(SECTION_FEATURES)} features verified on both Android and iOS")
+
+    # These previously passed the symbol-presence audit while fabricating
+    # execution. Runtime checks now live in test-interaction-honesty.cjs and
+    # native CalcHonesty tests; retain an explicit anti-regression sweep here.
+    for source, label in [(kt_all, "Android"), (rb_sw, "iOS"), (read(ROOT / "src/components/genui/blocks/CodeBlock.tsx"), "Web")]:
+        for forbidden in ["parseReactPreviewSpec", "Strict Mode: Run #1 aborted", "Ava Chen", "Matplotlib figure rendered", "exit code 0", "useEffect lifecycle verified"]:
+            if forbidden in source:
+                failures.append(f"{label}: fabricated execution sentinel returned: {forbidden}")
 
     # Zero-emoji enforcement gate across Android, iOS, and Web
     emoji_pat = re.compile(r"[\U0001F300-\U0001FAFF]")
