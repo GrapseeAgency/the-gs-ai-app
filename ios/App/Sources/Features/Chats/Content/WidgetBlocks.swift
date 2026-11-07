@@ -914,466 +914,469 @@ private struct ChartBodyView: View {
         let activeIdx = min(max(0, selectedIdx ?? peakIdx), max(0, pts.count - 1))
 
         VStack(alignment: .leading, spacing: 10) {
-            // 07. Interactive Charts: Type Switcher Pills + Range Selector (Screenshot 6)
-            HStack(spacing: 6) {
-                HStack(spacing: 3) {
-                    ForEach(Array(Self.chartTypeTabs.enumerated()), id: \.offset) { _, tab in
-                        let tabId = tab.id
-                        let isSel = currentType == tabId || (tabId == "pie" && currentType == "donut")
-                        Button {
-                            GSHaptics.select()
-                            withAnimation(.easeOut(duration: 0.18)) { activeType = tabId }
-                        } label: {
-                            HStack(spacing: 4) {
-                                NexlyGlyph(
-                                    name: tab.icon,
-                                    size: 12,
-                                    color: isSel ? .white : Color(red: 0.243, green: 0.212, blue: 0.400)
-                                )
-                                Text(tab.label)
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(isSel ? Color.white : Color(red: 0.243, green: 0.212, blue: 0.400))
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                RoundedRectangle(cornerRadius: 7)
-                                    .fill(isSel ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.clear)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(3)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color(red: 0.929, green: 0.902, blue: 1.0)))
-
-                Spacer(minLength: 4)
-
-                Button {
-                    GSHaptics.select()
-                    rangeIdx = (rangeIdx + 1) % 4
-                    selectedIdx = nil
-                } label: {
-                    HStack(spacing: 4) {
-                        NexlyGlyph(
-                            name: "calendar",
-                            size: 12,
-                            color: Color(red: 0.263, green: 0.231, blue: 0.420)
-                        )
-                        Text("\(rangeLabel) ▾")
-                            .font(.system(size: 10.5, weight: .semibold))
-                            .foregroundStyle(Color(red: 0.263, green: 0.231, blue: 0.420))
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.82)))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.875, green: 0.843, blue: 0.980), lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-            }
-
+            chartHeaderBar(rangeLabel: rangeLabel)
             if !subtitle.isEmpty {
                 Text(subtitle).font(Aero.caption()).foregroundStyle(Aero.textSecondary)
             }
+            chartTooltipRow(pts: pts, activeIdx: activeIdx, totalVal: totalVal, unit: unit)
+            chartVisualizationSurface(pts: pts, activeIdx: activeIdx, maxVal: maxVal, totalVal: totalVal, unit: unit)
+            chartSummaryFooter(pts: pts, peakIdx: peakIdx, totalVal: totalVal, unit: unit, rangeLabel: rangeLabel)
+        }
+    }
 
-            // Floating Glass Tooltip for Selected / Peak Datum (Screenshot 6)
-            if !pts.isEmpty && activeIdx < pts.count {
-                let selPt = pts[activeIdx]
-                let avgVal = totalVal / Double(max(1, pts.count))
-                let prevVal = activeIdx > 0 ? pts[activeIdx - 1].value : avgVal
-                let stepPct = prevVal != 0 ? ((selPt.value - prevVal) / abs(prevVal)) * 100.0 : 0.0
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(Color(red: 0.424, green: 0.298, blue: 0.965))
-                        .frame(width: 8, height: 8)
-                    Text(selPt.label)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Aero.textSecondary)
-                    Text(compactNumber(selPt.value, unit: unit))
-                        .font(.system(size: 13.5, weight: .bold))
-                        .foregroundStyle(Aero.text)
-                    Spacer()
-                    Text(String(format: "%@ %.1f%%", stepPct >= 0 ? "↑" : "↓", abs(stepPct)))
-                        .font(.system(size: 11.5, weight: .bold))
-                        .foregroundStyle(stepPct >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
-                }
-                .padding(.horizontal, 11)
-                .padding(.vertical, 7)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.86)))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.863, green: 0.827, blue: 0.980), lineWidth: 1))
-            }
-
-            // Chart Visualization Surface
-            if (currentType == "line" || currentType == "area") && pts.count >= 2 {
-                // True 2D Smooth Cubic Bezier Line/Area Chart with Y-axis, X-axis, Gradient Fill, and Vertical Guide Line (Screenshot 6)
-                VStack(spacing: 4) {
-                    HStack(spacing: 6) {
-                        VStack(alignment: .trailing, spacing: 0) {
-                            ForEach([1.0, 0.66, 0.33, 0.0], id: \.self) { frac in
-                                Text(compactNumber(maxVal * frac, unit: unit))
-                                    .font(.system(size: 9.5, weight: .medium))
-                                    .foregroundStyle(Aero.textSecondary)
-                                if frac > 0 { Spacer() }
-                            }
-                        }
-                        .frame(width: 36, height: 132)
-
-                        GeometryReader { geo in
-                            let w = max(1, geo.size.width)
-                            let h = max(1, geo.size.height)
-                            let count = pts.count
-                            let coords: [CGPoint] = pts.enumerated().map { idx, pt in
-                                let x = count > 1 ? w * CGFloat(idx) / CGFloat(count - 1) : w * 0.5
-                                let y = h * (1.0 - CGFloat(min(max(pt.value / maxVal, 0.0), 1.0)))
-                                return CGPoint(x: x, y: y)
-                            }
-                            let linePath = Path { path in
-                                for (i, p) in coords.enumerated() {
-                                    if i == 0 {
-                                        path.move(to: p)
-                                    } else {
-                                        let prev = coords[i - 1]
-                                        let midX = (prev.x + p.x) * 0.5
-                                        path.addCurve(
-                                            to: p,
-                                            control1: CGPoint(x: midX, y: prev.y),
-                                            control2: CGPoint(x: midX, y: p.y)
-                                        )
-                                    }
-                                }
-                            }
-                            let areaPath = Path { path in
-                                path.addPath(linePath)
-                                if let last = coords.last, let first = coords.first {
-                                    path.addLine(to: CGPoint(x: last.x, y: h))
-                                    path.addLine(to: CGPoint(x: first.x, y: h))
-                                    path.closeSubpath()
-                                }
-                            }
-
-                            ZStack {
-                                // Horizontal gridlines
-                                ForEach([0.0, 0.33, 0.66, 1.0], id: \.self) { g in
-                                    Path { p in
-                                        let y = h * CGFloat(g)
-                                        p.move(to: CGPoint(x: 0, y: y))
-                                        p.addLine(to: CGPoint(x: w, y: y))
-                                    }
-                                    .stroke(Color.black.opacity(0.07), lineWidth: 1)
-                                }
-
-                                // Soft purple gradient fill underneath the curve
-                                areaPath.fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color(red: 0.424, green: 0.298, blue: 0.965).opacity(currentType == "area" ? 0.34 : 0.18),
-                                            Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.01)
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-
-                                // Smooth cubic Bezier stroke
-                                linePath.stroke(
-                                    Color(red: 0.424, green: 0.298, blue: 0.965),
-                                    style: StrokeStyle(lineWidth: 2.8, lineCap: .round, lineJoin: .round)
-                                )
-
-                                // Selected datum vertical dashed guide line
-                                if activeIdx < coords.count {
-                                    let selCoord = coords[activeIdx]
-                                    Path { p in
-                                        p.move(to: CGPoint(x: selCoord.x, y: 0))
-                                        p.addLine(to: CGPoint(x: selCoord.x, y: h))
-                                    }
-                                    .stroke(
-                                        Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.45),
-                                        style: StrokeStyle(lineWidth: 1.2, dash: [4, 3])
-                                    )
-                                }
-
-                                // Interactive data points
-                                ForEach(Array(coords.enumerated()), id: \.offset) { idx, c in
-                                    let isSel = idx == activeIdx
-                                    Circle()
-                                        .fill(isSel ? Color.white : Color(red: 0.424, green: 0.298, blue: 0.965))
-                                        .frame(width: isSel ? 11 : 7, height: isSel ? 11 : 7)
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color(red: 0.424, green: 0.298, blue: 0.965), lineWidth: isSel ? 3 : 0)
-                                        )
-                                        .position(c)
-                                        .onTapGesture {
-                                            GSHaptics.select()
-                                            selectedIdx = idx
-                                        }
-                                }
-                            }
-                        }
-                        .frame(height: 132)
-                    }
-
-                    // X-axis labels row
-                    HStack(spacing: 0) {
-                        Spacer().frame(width: 42)
-                        ForEach(Array(pts.prefix(8).enumerated()), id: \.offset) { idx, pt in
-                            Text(pt.label)
-                                .font(.system(size: 10, weight: idx == activeIdx ? .bold : .regular))
-                                .foregroundStyle(idx == activeIdx ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
-                                .frame(maxWidth: .infinity)
-                                .lineLimit(1)
-                        }
-                    }
-                }
-                .padding(.top, 4)
-            } else if currentType == "bar" && pts.count >= 2 {
-                HStack(alignment: .bottom, spacing: 8) {
-                    ForEach(Array(pts.prefix(8).enumerated()), id: \.offset) { idx, pt in
-                        let isSel = idx == activeIdx
-                        let ratio = CGFloat(min(max(abs(pt.value) / maxVal, 0.08), 1.0))
-                        Button {
-                            GSHaptics.select()
-                            selectedIdx = idx
-                        } label: {
-                            VStack(spacing: 4) {
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(
-                                        isSel
-                                            ? Color(red: 0.424, green: 0.298, blue: 0.965)
-                                            : Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.45)
-                                    )
-                                    .frame(height: max(12, 110 * ratio))
-                                Text(pt.label)
-                                    .font(.system(size: 10, weight: isSel ? .bold : .medium))
-                                    .foregroundStyle(isSel ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
-                                    .lineLimit(1)
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .frame(height: 132)
-                .padding(.top, 4)
-            } else if (currentType == "pie" || currentType == "donut") && !pts.isEmpty {
-                // True 2D Donut Ring Chart with Center Total + Legend (Screenshots 1 & 6)
-                HStack(spacing: 16) {
-                    ZStack {
-                        Circle()
-                            .stroke(Color.black.opacity(0.06), lineWidth: 16)
-                            .frame(width: 96, height: 96)
-                        ForEach(Array(pts.prefix(6).enumerated()), id: \.offset) { idx, pt in
-                            let startSum = pts.prefix(idx).map { max(0, $0.value) }.reduce(0, +)
-                            let startFrac = CGFloat(startSum / totalVal)
-                            let endFrac = CGFloat((startSum + max(0, pt.value)) / totalVal)
-                            Circle()
-                                .trim(from: startFrac, to: max(startFrac + 0.005, endFrac - 0.008))
-                                .stroke(pt.color, style: StrokeStyle(lineWidth: idx == activeIdx ? 18 : 15, lineCap: .butt))
-                                .rotationEffect(.degrees(-90))
-                                .frame(width: 96, height: 96)
-                                .onTapGesture {
-                                    GSHaptics.select()
-                                    selectedIdx = idx
-                                }
-                        }
-                        VStack(spacing: 1) {
-                            Text(compactNumber(totalVal, unit: unit))
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(Aero.text)
-                            Text("Total")
-                                .font(.system(size: 9.5, weight: .medium))
-                                .foregroundStyle(Aero.textSecondary)
-                        }
-                    }
-                    .padding(.leading, 4)
-
-                    VStack(alignment: .leading, spacing: 5) {
-                        ForEach(Array(pts.prefix(5).enumerated()), id: \.offset) { idx, pt in
-                            let sharePct = (max(0, pt.value) / totalVal) * 100.0
-                            Button {
-                                GSHaptics.select()
-                                selectedIdx = idx
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Circle()
-                                        .fill(pt.color)
-                                        .frame(width: 8, height: 8)
-                                    Text(pt.label)
-                                        .font(.system(size: 11.5, weight: idx == activeIdx ? .bold : .medium))
-                                        .foregroundStyle(Aero.text)
-                                        .lineLimit(1)
-                                    Spacer()
-                                    Text(String(format: "%.0f%%", sharePct))
-                                        .font(.system(size: 11, weight: .bold))
-                                        .foregroundStyle(Aero.textSecondary)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .padding(.vertical, 6)
-            } else {
-                ForEach(Array(pts.enumerated()), id: \.offset) { idx, pt in
-                    let isSel = idx == activeIdx
-                    let sharePct = (max(0, pt.value) / totalVal) * 100.0
+    @ViewBuilder
+    private func chartHeaderBar(rangeLabel: String) -> some View {
+        HStack(spacing: 6) {
+            HStack(spacing: 3) {
+                ForEach(Array(Self.chartTypeTabs.enumerated()), id: \.offset) { _, tab in
+                    let tabId = tab.id
+                    let isSel = currentType == tabId || (tabId == "pie" && currentType == "donut")
                     Button {
                         GSHaptics.select()
-                        selectedIdx = idx
+                        withAnimation(.easeOut(duration: 0.18)) { activeType = tabId }
                     } label: {
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack {
-                                Text(pt.seriesName.isEmpty ? pt.label : "\(pt.label) · \(pt.seriesName)")
-                                    .font(.system(size: 12, weight: isSel ? .bold : .medium))
-                                    .foregroundStyle(Aero.text)
-                                    .lineLimit(1)
-                                Spacer()
-                                Text(
-                                    currentType == "pie" || currentType == "donut"
-                                        ? String(format: "%@ (%.0f%%)", compactNumber(pt.value, unit: unit), sharePct)
-                                        : compactNumber(pt.value, unit: unit)
-                                )
-                                .font(Aero.mono(11))
-                                .foregroundStyle(isSel ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
-                            }
-                            GeometryReader { geo in
-                                ZStack(alignment: .leading) {
-                                    Capsule().fill(Color.black.opacity(0.06))
-                                    Capsule()
-                                        .fill(isSel ? Color(red: 0.424, green: 0.298, blue: 0.965) : pt.color)
-                                        .frame(width: max(6, geo.size.width * CGFloat(min(abs(pt.value) / maxVal, 1.0))))
-                                }
-                            }
-                            .frame(height: isSel ? 9 : 7)
+                        HStack(spacing: 4) {
+                            NexlyGlyph(
+                                name: tab.icon,
+                                size: 12,
+                                color: isSel ? .white : Color(red: 0.243, green: 0.212, blue: 0.400)
+                            )
+                            Text(tab.label)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(isSel ? Color.white : Color(red: 0.243, green: 0.212, blue: 0.400))
                         }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7)
+                                .fill(isSel ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.clear)
+                        )
                     }
                     .buttonStyle(.plain)
                 }
             }
+            .padding(3)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(red: 0.929, green: 0.902, blue: 1.0)))
 
-            // 3-Card KPI Summary Strip with Top-Left Lavender Icon Badge & Bottom Green Pill (Screenshot 6)
-            if pts.count >= 2 {
-                let firstVal = pts.first?.value ?? 1.0
-                let lastVal = pts.last?.value ?? 0.0
-                let growthPct = firstVal != 0 ? ((lastVal - firstVal) / abs(firstVal)) * 100.0 : 0.0
-                let pos = growthPct >= 0
-                let pillBg = pos ? Color(red: 0.902, green: 0.976, blue: 0.941) : Color(red: 0.992, green: 0.925, blue: 0.925)
-                let pillFg = pos ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373)
-                let peakPt = pts[peakIdx]
-                HStack(spacing: 7) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        NexlyGlassGlyphTile(
-                            name: "chart-bar",
-                            tone: .lavender,
-                            size: 24,
-                            glyphSize: 14
-                        )
-                        Text(compactNumber(totalVal, unit: unit))
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Aero.text)
-                        Text("Total")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(Aero.textSecondary)
-                        Text(String(format: "%@ %@%.1f%%", pos ? "↑" : "↓", pos ? "+" : "", growthPct))
-                            .font(.system(size: 9.5, weight: .bold))
-                            .foregroundStyle(pillFg)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(pillBg))
-                    }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.82)))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
+            Spacer(minLength: 4)
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        NexlyGlassGlyphTile(
-                            name: "trophy",
-                            tone: .amber,
-                            size: 24,
-                            glyphSize: 14
-                        )
-                        Text(compactNumber(peakPt.value, unit: unit))
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Aero.text)
-                        Text("Peak (\(peakPt.label))")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(Aero.textSecondary)
-                            .lineLimit(1)
-                        HStack(spacing: 3) {
-                            NexlyGlyph(
-                                name: "star",
-                                size: 10,
-                                color: Color(red: 0.357, green: 0.239, blue: 0.961)
-                            )
-                            Text("Highest")
-                                .font(.system(size: 9.5, weight: .bold))
-                                .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+            Button {
+                GSHaptics.select()
+                rangeIdx = (rangeIdx + 1) % 4
+                selectedIdx = nil
+            } label: {
+                HStack(spacing: 4) {
+                    NexlyGlyph(
+                        name: "calendar",
+                        size: 12,
+                        color: Color(red: 0.263, green: 0.231, blue: 0.420)
+                    )
+                    Text("\(rangeLabel) ▾")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.263, green: 0.231, blue: 0.420))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.82)))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.875, green: 0.843, blue: 0.980), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private func chartTooltipRow(pts: [BarPoint], activeIdx: Int, totalVal: Double, unit: String) -> some View {
+        if !pts.isEmpty && activeIdx < pts.count {
+            let selPt = pts[activeIdx]
+            let avgVal = totalVal / Double(max(1, pts.count))
+            let prevVal = activeIdx > 0 ? pts[activeIdx - 1].value : avgVal
+            let stepPct = prevVal != 0 ? ((selPt.value - prevVal) / abs(prevVal)) * 100.0 : 0.0
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color(red: 0.424, green: 0.298, blue: 0.965))
+                    .frame(width: 8, height: 8)
+                Text(selPt.label)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Aero.textSecondary)
+                Text(compactNumber(selPt.value, unit: unit))
+                    .font(.system(size: 13.5, weight: .bold))
+                    .foregroundStyle(Aero.text)
+                Spacer()
+                Text(String(format: "%@ %.1f%%", stepPct >= 0 ? "↑" : "↓", abs(stepPct)))
+                    .font(.system(size: 11.5, weight: .bold))
+                    .foregroundStyle(stepPct >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.86)))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.863, green: 0.827, blue: 0.980), lineWidth: 1))
+        }
+    }
+
+    @ViewBuilder
+    private func chartVisualizationSurface(pts: [BarPoint], activeIdx: Int, maxVal: Double, totalVal: Double, unit: String) -> some View {
+        if (currentType == "line" || currentType == "area") && pts.count >= 2 {
+            VStack(spacing: 4) {
+                HStack(spacing: 6) {
+                    VStack(alignment: .trailing, spacing: 0) {
+                        ForEach([1.0, 0.66, 0.33, 0.0], id: \.self) { (frac: Double) in
+                            Text(compactNumber(maxVal * frac, unit: unit))
+                                .font(.system(size: 9.5, weight: .medium))
+                                .foregroundStyle(Aero.textSecondary)
+                            if frac > 0 { Spacer() }
                         }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(Color(red: 0.937, green: 0.918, blue: 1.0)))
                     }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.82)))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
+                    .frame(width: 36, height: 132)
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        NexlyGlassGlyphTile(
-                            name: "trending-up",
-                            tone: .green,
-                            size: 24,
-                            glyphSize: 14
-                        )
-                        Text(String(format: "%@%.1f%%", pos ? "+" : "", growthPct))
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Aero.text)
-                        Text("Growth Rate")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(Aero.textSecondary)
-                            .lineLimit(1)
-                        Text(String(format: "%@ %@%.1f%%", pos ? "↑" : "↓", pos ? "+" : "", growthPct))
-                            .font(.system(size: 9.5, weight: .bold))
-                            .foregroundStyle(pillFg)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(pillBg))
+                    GeometryReader { geo in
+                        let w = max(1, geo.size.width)
+                        let h = max(1, geo.size.height)
+                        let count = pts.count
+                        let coords: [CGPoint] = pts.enumerated().map { idx, pt in
+                            let x = count > 1 ? w * CGFloat(idx) / CGFloat(count - 1) : w * 0.5
+                            let y = h * (1.0 - CGFloat(min(max(pt.value / maxVal, 0.0), 1.0)))
+                            return CGPoint(x: x, y: y)
+                        }
+                        let linePath = Path { path in
+                            for (i, p) in coords.enumerated() {
+                                if i == 0 {
+                                    path.move(to: p)
+                                } else {
+                                    let prev = coords[i - 1]
+                                    let midX = (prev.x + p.x) * 0.5
+                                    path.addCurve(
+                                        to: p,
+                                        control1: CGPoint(x: midX, y: prev.y),
+                                        control2: CGPoint(x: midX, y: p.y)
+                                    )
+                                }
+                            }
+                        }
+                        let areaPath = Path { path in
+                            path.addPath(linePath)
+                            if let last = coords.last, let first = coords.first {
+                                path.addLine(to: CGPoint(x: last.x, y: h))
+                                path.addLine(to: CGPoint(x: first.x, y: h))
+                                path.closeSubpath()
+                            }
+                        }
+
+                        ZStack {
+                            ForEach([0.0, 0.33, 0.66, 1.0], id: \.self) { (g: Double) in
+                                Path { p in
+                                    let y = h * CGFloat(g)
+                                    p.move(to: CGPoint(x: 0, y: y))
+                                    p.addLine(to: CGPoint(x: w, y: y))
+                                }
+                                .stroke(Color.black.opacity(0.07), lineWidth: 1)
+                            }
+
+                            areaPath.fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 0.424, green: 0.298, blue: 0.965).opacity(currentType == "area" ? 0.34 : 0.18),
+                                        Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.01)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+
+                            linePath.stroke(
+                                Color(red: 0.424, green: 0.298, blue: 0.965),
+                                style: StrokeStyle(lineWidth: 2.8, lineCap: .round, lineJoin: .round)
+                            )
+
+                            if activeIdx < coords.count {
+                                let selCoord = coords[activeIdx]
+                                Path { p in
+                                    p.move(to: CGPoint(x: selCoord.x, y: 0))
+                                    p.addLine(to: CGPoint(x: selCoord.x, y: h))
+                                }
+                                .stroke(
+                                    Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.45),
+                                    style: StrokeStyle(lineWidth: 1.2, dash: [4, 3])
+                                )
+                            }
+
+                            ForEach(Array(coords.enumerated()), id: \.offset) { idx, c in
+                                let isSel = idx == activeIdx
+                                Circle()
+                                    .fill(isSel ? Color.white : Color(red: 0.424, green: 0.298, blue: 0.965))
+                                    .frame(width: isSel ? 11 : 7, height: isSel ? 11 : 7)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(Color(red: 0.424, green: 0.298, blue: 0.965), lineWidth: isSel ? 3 : 0)
+                                    )
+                                    .position(c)
+                                    .onTapGesture {
+                                        GSHaptics.select()
+                                        selectedIdx = idx
+                                    }
+                            }
+                        }
                     }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.82)))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
+                    .frame(height: 132)
                 }
 
-                // Key Insights Box (Screenshot 6)
-                HStack(alignment: .top, spacing: 8) {
+                HStack(spacing: 0) {
+                    Spacer().frame(width: 42)
+                    ForEach(Array(pts.prefix(8).enumerated()), id: \.offset) { idx, pt in
+                        Text(pt.label)
+                            .font(.system(size: 10, weight: idx == activeIdx ? .bold : .regular))
+                            .foregroundStyle(idx == activeIdx ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
+                            .frame(maxWidth: .infinity)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .padding(.top, 4)
+        } else if currentType == "bar" && pts.count >= 2 {
+            HStack(alignment: .bottom, spacing: 8) {
+                ForEach(Array(pts.prefix(8).enumerated()), id: \.offset) { idx, pt in
+                    let isSel = idx == activeIdx
+                    let ratio = CGFloat(min(max(abs(pt.value) / maxVal, 0.08), 1.0))
+                    Button {
+                        GSHaptics.select()
+                        selectedIdx = idx
+                    } label: {
+                        VStack(spacing: 4) {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(
+                                    isSel
+                                        ? Color(red: 0.424, green: 0.298, blue: 0.965)
+                                        : Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.45)
+                                )
+                                .frame(height: max(12, 110 * ratio))
+                            Text(pt.label)
+                                .font(.system(size: 10, weight: isSel ? .bold : .medium))
+                                .foregroundStyle(isSel ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(height: 132)
+            .padding(.top, 4)
+        } else if (currentType == "pie" || currentType == "donut") && !pts.isEmpty {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.black.opacity(0.06), lineWidth: 16)
+                        .frame(width: 96, height: 96)
+                    ForEach(Array(pts.prefix(6).enumerated()), id: \.offset) { idx, pt in
+                        let startSum = pts.prefix(idx).map { max(0, $0.value) }.reduce(0, +)
+                        let startFrac = CGFloat(startSum / totalVal)
+                        let endFrac = CGFloat((startSum + max(0, pt.value)) / totalVal)
+                        Circle()
+                            .trim(from: startFrac, to: max(startFrac + 0.005, endFrac - 0.008))
+                            .stroke(pt.color, style: StrokeStyle(lineWidth: idx == activeIdx ? 18 : 15, lineCap: .butt))
+                            .rotationEffect(.degrees(-90))
+                            .frame(width: 96, height: 96)
+                            .onTapGesture {
+                                GSHaptics.select()
+                                selectedIdx = idx
+                            }
+                    }
+                    VStack(spacing: 1) {
+                        Text(compactNumber(totalVal, unit: unit))
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Aero.text)
+                        Text("Total")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundStyle(Aero.textSecondary)
+                    }
+                }
+                .padding(.leading, 4)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(Array(pts.prefix(5).enumerated()), id: \.offset) { idx, pt in
+                        let sharePct = (max(0, pt.value) / totalVal) * 100.0
+                        Button {
+                            GSHaptics.select()
+                            selectedIdx = idx
+                        } label: {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(pt.color)
+                                    .frame(width: 8, height: 8)
+                                Text(pt.label)
+                                    .font(.system(size: 11.5, weight: idx == activeIdx ? .bold : .medium))
+                                    .foregroundStyle(Aero.text)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(String(format: "%.0f%%", sharePct))
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(Aero.textSecondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .padding(.vertical, 6)
+        } else {
+            ForEach(Array(pts.enumerated()), id: \.offset) { idx, pt in
+                let isSel = idx == activeIdx
+                let sharePct = (max(0, pt.value) / totalVal) * 100.0
+                Button {
+                    GSHaptics.select()
+                    selectedIdx = idx
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            Text(pt.seriesName.isEmpty ? pt.label : "\(pt.label) · \(pt.seriesName)")
+                                .font(.system(size: 12, weight: isSel ? .bold : .medium))
+                                .foregroundStyle(Aero.text)
+                                .lineLimit(1)
+                            Spacer()
+                            Text(
+                                currentType == "pie" || currentType == "donut"
+                                    ? String(format: "%@ (%.0f%%)", compactNumber(pt.value, unit: unit), sharePct)
+                                    : compactNumber(pt.value, unit: unit)
+                            )
+                            .font(Aero.mono(11))
+                            .foregroundStyle(isSel ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
+                        }
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.black.opacity(0.06))
+                                Capsule()
+                                    .fill(isSel ? Color(red: 0.424, green: 0.298, blue: 0.965) : pt.color)
+                                    .frame(width: max(6, geo.size.width * CGFloat(min(abs(pt.value) / maxVal, 1.0))))
+                            }
+                        }
+                        .frame(height: isSel ? 9 : 7)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func chartSummaryFooter(pts: [BarPoint], peakIdx: Int, totalVal: Double, unit: String, rangeLabel: String) -> some View {
+        if pts.count >= 2 {
+            let firstVal = pts.first?.value ?? 1.0
+            let lastVal = pts.last?.value ?? 0.0
+            let growthPct = firstVal != 0 ? ((lastVal - firstVal) / abs(firstVal)) * 100.0 : 0.0
+            let pos = growthPct >= 0
+            let pillBg = pos ? Color(red: 0.902, green: 0.976, blue: 0.941) : Color(red: 0.992, green: 0.925, blue: 0.925)
+            let pillFg = pos ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373)
+            let peakPt = pts[peakIdx]
+            HStack(spacing: 7) {
+                VStack(alignment: .leading, spacing: 3) {
                     NexlyGlassGlyphTile(
-                        name: "bulb",
+                        name: "chart-bar",
+                        tone: .lavender,
+                        size: 24,
+                        glyphSize: 14
+                    )
+                    Text(compactNumber(totalVal, unit: unit))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Aero.text)
+                    Text("Total")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Aero.textSecondary)
+                    Text(String(format: "%@ %@%.1f%%", pos ? "↑" : "↓", pos ? "+" : "", growthPct))
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundStyle(pillFg)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(pillBg))
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.82)))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    NexlyGlassGlyphTile(
+                        name: "trophy",
                         tone: .amber,
                         size: 24,
                         glyphSize: 14
                     )
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Key Insights:")
-                            .font(.system(size: 11.5, weight: .bold))
-                            .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
-                        Text(String(format: "Peak in %@ (%@) · %@%.1f%% overall change across %@", peakPt.label, compactNumber(peakPt.value, unit: unit), pos ? "+" : "", growthPct, rangeLabel.lowercased()))
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color(red: 0.224, green: 0.196, blue: 0.361))
+                    Text(compactNumber(peakPt.value, unit: unit))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Aero.text)
+                    Text("Peak (\(peakPt.label))")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Aero.textSecondary)
+                        .lineLimit(1)
+                    HStack(spacing: 3) {
+                        NexlyGlyph(
+                            name: "star",
+                            size: 10,
+                            color: Color(red: 0.357, green: 0.239, blue: 0.961)
+                        )
+                        Text("Highest")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
                     }
-                    Spacer(minLength: 0)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(Color(red: 0.937, green: 0.918, blue: 1.0)))
                 }
-                .padding(.horizontal, 11)
-                .padding(.vertical, 9)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Color(red: 0.949, green: 0.925, blue: 1.0)))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.851, green: 0.800, blue: 1.0), lineWidth: 1))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.82)))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    NexlyGlassGlyphTile(
+                        name: "trending-up",
+                        tone: .green,
+                        size: 24,
+                        glyphSize: 14
+                    )
+                    Text(String(format: "%@%.1f%%", pos ? "+" : "", growthPct))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Aero.text)
+                    Text("Growth Rate")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Aero.textSecondary)
+                        .lineLimit(1)
+                    Text(String(format: "%@ %@%.1f%%", pos ? "↑" : "↓", pos ? "+" : "", growthPct))
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundStyle(pillFg)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(pillBg))
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.82)))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
             }
+
+            HStack(alignment: .top, spacing: 8) {
+                NexlyGlassGlyphTile(
+                    name: "bulb",
+                    tone: .amber,
+                    size: 24,
+                    glyphSize: 14
+                )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Key Insights:")
+                        .font(.system(size: 11.5, weight: .bold))
+                        .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
+                    Text(String(format: "Peak in %@ (%@) · %@%.1f%% overall change across %@", peakPt.label, compactNumber(peakPt.value, unit: unit), pos ? "+" : "", growthPct, rangeLabel.lowercased()))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(red: 0.224, green: 0.196, blue: 0.361))
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(red: 0.949, green: 0.925, blue: 1.0)))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.851, green: 0.800, blue: 1.0), lineWidth: 1))
         }
     }
 }
@@ -1624,7 +1627,7 @@ private struct TableBodyView: View {
                         .disabled(safePage == 0)
                         .buttonStyle(.plain)
 
-                        ForEach(0..<totalPages, id: \.self) { p in
+                        ForEach(0..<totalPages, id: \.self) { (p: Int) in
                             let active = p == safePage
                             Button {
                                 page = p
@@ -2129,7 +2132,7 @@ private struct RatingBodyView: View {
                 Text(prompt).font(.system(size: 12)).foregroundStyle(Aero.textSecondary)
             }
             HStack(spacing: 6) {
-                ForEach(1...maxR, id: \.self) { n in
+                ForEach(1...maxR, id: \.self) { (n: Int) in
                     let active = (chosen ?? 0) >= n
                     Button {
                         GSHaptics.select()
@@ -3022,21 +3025,28 @@ private struct ProductivityBodyView: View {
     let accent: Color
     @State private var columnOverrides: [String: Int] = [:]
 
+    private struct KanbanCardItem: Identifiable {
+        let id: String
+        let origCol: Int
+        let label: String
+        let badge: String
+    }
+
     var body: some View {
         let cols = (obj["columns"] ?? obj["lanes"] ?? obj["boards"]) as? [[String: Any]] ?? []
         if !cols.isEmpty {
             let numCols = min(cols.count, 4)
-            let allCards: [(id: String, origCol: Int, label: String, badge: String)] = cols.prefix(4).enumerated().flatMap { cIdx, col -> [(String, Int, String, String)] in
+            let allCards: [KanbanCardItem] = cols.prefix(4).enumerated().flatMap { cIdx, col -> [KanbanCardItem] in
                 let colItems = (col["items"] ?? col["cards"] ?? col["tasks"]) as? [Any] ?? []
                 return colItems.prefix(10).enumerated().map { iIdx, it in
                     let lbl = NexlyIcons.cleanPlainText((it as? String) ?? str((it as? [String: Any]) ?? [:], "title", "label", "text", "task", "name"))
                     let badge = NexlyIcons.cleanPlainText(str((it as? [String: Any]) ?? [:], "badge", "priority", "tag", "status"))
-                    return ("c\(cIdx)_\(iIdx)", cIdx, lbl, badge)
+                    return KanbanCardItem(id: "c\(cIdx)_\(iIdx)", origCol: cIdx, label: lbl, badge: badge)
                 }
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 8) {
-                    ForEach(0..<numCols, id: \.self) { cIdx in
+                    ForEach(0..<numCols, id: \.self) { (cIdx: Int) in
                         let col = cols[cIdx]
                         let colTitle = NexlyIcons.cleanPlainText(str(col, "title", "name", "label", "status"))
                         let colCards = allCards.filter { (columnOverrides[$0.id] ?? $0.origCol) == cIdx }
@@ -3044,7 +3054,7 @@ private struct ProductivityBodyView: View {
                             Text("\(colTitle.uppercased()) (\(colCards.count))")
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundStyle(WidgetPalette.at(cIdx))
-                            ForEach(colCards, id: \.id) { card in
+                            ForEach(colCards) { (card: KanbanCardItem) in
                                 Button {
                                     guard numCols > 1 else { return }
                                     GSHaptics.select()

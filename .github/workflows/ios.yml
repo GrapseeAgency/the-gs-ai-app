@@ -253,7 +253,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p ios/build
-          xcodebuild build \
+          if ! xcodebuild build \
             -project "$PROJECT_FILE" \
             -scheme "$SCHEME" \
             -configuration Debug \
@@ -261,7 +261,12 @@ jobs:
             -derivedDataPath "$DERIVED_DATA" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            2>&1 | tee ios/build/xcodebuild-build.log
+            2>&1 | tee ios/build/xcodebuild-build.log; then
+            grep -E 'error:' ios/build/xcodebuild-build.log | head -n 35 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 65
+          fi
 
       - name: Test (XCTest unit tests on iOS simulator)
         run: |
