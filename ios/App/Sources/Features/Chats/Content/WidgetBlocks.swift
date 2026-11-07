@@ -1479,15 +1479,7 @@ private struct ChartBodyView: View {
                             .font(Aero.mono(11))
                             .foregroundStyle(isSel ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
                         }
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule().fill(Color.black.opacity(0.06))
-                                Capsule()
-                                    .fill(isSel ? Color(red: 0.424, green: 0.298, blue: 0.965) : pt.color)
-                                    .frame(width: max(6, geo.size.width * CGFloat(min(abs(pt.value) / maxVal, 1.0))))
-                            }
-                        }
-                        .frame(height: isSel ? 9 : 7)
+
                     }
                 }
                 .buttonStyle(.plain)
