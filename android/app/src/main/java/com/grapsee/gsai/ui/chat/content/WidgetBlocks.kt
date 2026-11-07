@@ -2486,6 +2486,9 @@ private fun tableEntityIconBadge(raw: String): Pair<String, String>? {
     }
 }
 
+internal fun widgetTablePageSizeAndroid(selection: Int, rowCount: Int): Int =
+    if (selection == -1) maxOf(1, rowCount) else maxOf(1, selection)
+
 @Composable
 private fun TableWidgetView(w: TableWidget) {
     var sortCol by remember { mutableIntStateOf(-1) }
@@ -2512,7 +2515,7 @@ private fun TableWidgetView(w: TableWidget) {
         }
     }
     // -1 means the entire filtered dataset, not a disguised 25-row cap.
-    val effectivePageSize = if (pageSize == -1) maxOf(1, rows.size) else pageSize
+    val effectivePageSize = widgetTablePageSizeAndroid(pageSize, rows.size)
     val totalPages = maxOf(1, (rows.size + effectivePageSize - 1) / effectivePageSize)
     val safePage = page.coerceIn(0, totalPages - 1)
     val visible = remember(rows, safePage, effectivePageSize) {
