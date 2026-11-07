@@ -4,6 +4,14 @@ import WebKit
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testPollNeverInventsAnInitialVoteOrCrashesOnInvalidCounts() {
+        XCTAssertEqual(pollSourceVotesIOS("First option"), 0)
+        XCTAssertEqual(pollSourceVotesIOS(["label": "Second option"]), 0)
+        XCTAssertEqual(pollSourceVotesIOS(["label": "Source", "votes": 12]), 12)
+        let invalid: [Any] = [-1, 1.5, true, "invalid", Double.infinity, Double.nan]
+        for value in invalid { XCTAssertNil(pollSourceVotesIOS(["votes": value])) }
+    }
+
     func testChartNumbersRejectMissingBooleanAndNonFiniteMeasurements() {
         let invalidValues: [Any] = [NSNull(), true, false, "", "missing", "NaN", "Infinity", Double.infinity, Double.nan]
         for invalid in invalidValues {
