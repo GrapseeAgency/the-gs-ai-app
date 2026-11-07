@@ -11,6 +11,7 @@ struct PlatformRuntimeProbe: View {
     @State private var status = "idle"
     @State private var showCalculator = false
     @State private var showTable = false
+    @State private var ordinaryTable = false
     @State private var title = ""
     @State private var armed = false
     @State private var accepted: Bool?
@@ -32,9 +33,15 @@ struct PlatformRuntimeProbe: View {
             }
         }
         .sheet(isPresented: $showTable) {
-            ScrollView {
-                WidgetBlockView(kind: "table", json: Self.tableJSON, open: false)
-                    .padding()
+            VStack {
+                Button("Use ordinary Markdown") { ordinaryTable = true }
+                ScrollView {
+                    if ordinaryTable {
+                        BlocksView(blocks: parseBlocks(Self.tableMarkdown)).padding()
+                    } else {
+                        WidgetBlockView(kind: "table", json: Self.tableJSON, open: false).padding()
+                    }
+                }
             }
         }
         .onAppear {
@@ -61,6 +68,11 @@ struct PlatformRuntimeProbe: View {
                 status = "callback-complete"
             }
         }
+    }
+
+    private static var tableMarkdown: String {
+        "`😀` [😀](https://example.org)\n\n| Name | Amount |\n| --- | --- |\n" +
+            (1...31).map { "| Item \($0) | \($0) |" }.joined(separator: "\n")
     }
 
     private static var tableJSON: String {
