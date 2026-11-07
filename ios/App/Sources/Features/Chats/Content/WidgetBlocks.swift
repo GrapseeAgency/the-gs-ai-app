@@ -3161,11 +3161,11 @@ enum CalcExprIOS {
                 else if op == "/" {
                     pos += 1
                     let r = parseUnary()
-                    left = r == 0.0 ? 0.0 : left / r
+                    left = r == 0.0 ? Double.nan : left / r
                 } else if op == "%" {
                     pos += 1
                     let r = parseUnary()
-                    left = r == 0.0 ? 0.0 : left.truncatingRemainder(dividingBy: r)
+                    left = r == 0.0 ? Double.nan : left.truncatingRemainder(dividingBy: r)
                 } else { break }
             }
             return left
@@ -3229,7 +3229,7 @@ enum CalcExprIOS {
                     let a = args.first ?? Double.nan
                     let b = args.count > 1 ? args[1] : 0.0
                     switch ident.lowercased() {
-                    case "sqrt": return a >= 0 ? sqrt(a) : 0.0
+                    case "sqrt": return a >= 0 ? sqrt(a) : Double.nan
                     case "abs": return abs(a)
                     case "round": return round(a)
                     case "floor": return floor(a)
@@ -3237,7 +3237,8 @@ enum CalcExprIOS {
                     case "min": return args.min() ?? Double.nan
                     case "max": return args.max() ?? Double.nan
                     case "pow": return pow(a, b)
-                    case "log": return a > 0 ? log(a) : 0.0
+                    case "ln": return a > 0 ? log(a) : Double.nan
+                    case "log", "log10": return a > 0 ? log10(a) : Double.nan
                     case "exp": return exp(a)
                     case "sin": return sin(a)
                     case "cos": return cos(a)
