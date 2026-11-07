@@ -5,6 +5,15 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun tableAllIsNotCappedAtTwentyFive() {
+        assertEquals(73, widgetTablePageSizeAndroid(-1, 73))
+        assertEquals(2, widgetTablePageSizeAndroid(-1, 2))
+        assertEquals(1, widgetTablePageSizeAndroid(-1, 0))
+        assertEquals(3, widgetTablePageSizeAndroid(3, 73))
+        val rows = (1..73).toList()
+        assertEquals(rows, rows.take(widgetTablePageSizeAndroid(-1, rows.size)))
+    }
+
     @Test fun tooltipDeltaRequiresAnActualPriorPoint() {
         assertNull(chartStepPercentAndroid(listOf(20.0, 30.0), 0))
         assertNull(chartStepPercentAndroid(listOf(0.0, 30.0), 1))
