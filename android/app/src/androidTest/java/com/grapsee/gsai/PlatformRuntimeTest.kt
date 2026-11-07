@@ -8,6 +8,7 @@ import android.os.Looper
 import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -192,6 +193,33 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("Enter valid numbers within the supplied limits").assertExists()
         compose.onNodeWithText("Reset").performClick()
         compose.onNodeWithText("200").assertExists()
+    }
+
+    @Test fun generatedChartRangeAndPieSwitchUseOnlyActualWindowObservations() {
+        val long = (0..7).joinToString(",") { "[$it,${it + 1}]" }
+        val short = (0..4).joinToString(",") { "[$it,${100 + it}]" }
+        val labels = (0..7).joinToString(",") { "\"P$it\"" }
+        val source = """{"type":"line","labels":[$labels],"series":[{"name":"Long","data":[$long]},{"name":"Short","data":[$short]},{"name":"Absent","data":[[0,9]]}]}"""
+        val widget = parseWidget("chart", source) as Widget.Chart
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.foundation.layout.Column(
+                    Modifier.then(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()))) {
+                    com.grapsee.gsai.ui.chat.content.WidgetView(widget)
+                }
+            }
+        }
+        compose.onNodeWithText("All (8 pts) ▾").performClick()
+        compose.onNodeWithText("Last 6 pts ▾").performClick()
+        compose.onNodeWithText("Last 4 pts ▾").assertExists()
+        compose.onNodeWithText("Pie").performClick()
+        compose.onNodeWithText("Long: P7").assertExists()
+        compose.onNodeWithText("Short: P4").assertExists()
+        compose.onNodeWithText("Short: P0").assertDoesNotExist()
+        compose.onNodeWithText("Absent").assertDoesNotExist()
+        compose.onNodeWithText("N/A (slice values)", substring = true).assertExists()
+        compose.onNodeWithText("Line").performClick()
+        compose.onNodeWithText("Last 4 pts ▾").assertExists()
     }
 
     @Test fun generatedHtmlRunsRealButtonLogicAndSuppressesDynamicEmoji() {
