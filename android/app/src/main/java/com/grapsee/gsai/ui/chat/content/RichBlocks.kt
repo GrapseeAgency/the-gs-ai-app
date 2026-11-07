@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
@@ -3119,7 +3120,7 @@ private fun BlockQuoteView(block: Block.BlockQuote, selectable: Boolean, citatio
 // Table
 // ---------------------------------------------------------------------------
 
-private fun parseSortableNumberAndroid(raw: String): Double? {
+internal fun parseSortableNumberAndroid(raw: String): Double? {
     val clean = raw.replace(Regex("[,$€£¥%↑↓↗↘+\\s]"), "").trim()
     if (clean.isEmpty()) return null
     val mult = when (clean.last().lowercaseChar()) {
