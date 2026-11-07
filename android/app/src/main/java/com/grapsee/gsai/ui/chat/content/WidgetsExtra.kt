@@ -141,6 +141,11 @@ internal fun SeriesLegend(w: ChartWidget) {
 
 @Composable
 internal fun DonutChart(w: ChartWidget) {
+    pieSourceProblemAndroid(w)?.let { problem ->
+        Text(problem, style = MaterialTheme.typography.bodySmall, color = GsTheme.colors.textSecondary)
+        return
+    }
+
     var animate by remember { mutableStateOf(false) }
     LaunchedEffect(w) { animate = true }
     val progress by animateFloatAsState(if (animate) 1f else 0f, tween(700), label = "donut")

@@ -8,6 +8,7 @@ import android.os.Looper
 import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -192,6 +193,89 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("Enter valid numbers within the supplied limits").assertExists()
         compose.onNodeWithText("Reset").performClick()
         compose.onNodeWithText("200").assertExists()
+    }
+
+    @Test fun generatedChartRangeAndPieSwitchUseOnlyActualWindowObservations() {
+        val long = (0..7).joinToString(",") { "[$it,${it + 1}]" }
+        val short = (0..4).joinToString(",") { "[$it,${100 + it}]" }
+        val labels = (0..7).joinToString(",") { "\"P$it\"" }
+        val source = """{"type":"line","labels":[$labels],"series":[{"name":"Long","data":[$long]},{"name":"Short","data":[$short]},{"name":"Absent","data":[[0,9]]}]}"""
+        val widget = parseWidget("chart", source) as Widget.Chart
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.foundation.layout.Column(
+                    Modifier.then(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()))) {
+                    com.grapsee.gsai.ui.chat.content.WidgetView(widget)
+                }
+            }
+        }
+        compose.onNodeWithText("All (8 pts) ▾").performClick()
+        compose.onNodeWithText("Last 6 pts ▾").performClick()
+        compose.onNodeWithText("Last 4 pts ▾").assertExists()
+        compose.onNodeWithText("Pie").performClick()
+        compose.onNodeWithText("Long: P7 — 6%").assertExists()
+        compose.onNodeWithText("Short: P4 — 80%").assertExists()
+        compose.onAllNodes(hasText("Short: P0", substring = true)).assertCountEquals(0)
+        compose.onAllNodes(hasText("Absent", substring = true)).assertCountEquals(0)
+        compose.onNodeWithText("N/A (slice values)").assertExists()
+        compose.onNodeWithText("Line").performClick()
+        compose.onNodeWithText("Last 4 pts ▾").assertExists()
+    }
+
+    @Test fun generatedHtmlRunsRealButtonLogicAndSuppressesDynamicEmoji() {
+        val source = """<button id="run" title="Increase &#x1F600;">Increase &#x1F600;</button><output id="result">0</output><svg data-custom-glass="true"><path d="M0 0L8 8"/></svg><script>window.marker=String.fromCodePoint(0x1F600);window.count=0;document.getElementById('run').onclick=function(){window.count++;document.getElementById('result').textContent=window.count+window.marker;};</script>"""
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                com.grapsee.gsai.ui.chat.content.HtmlBlockView(
+                    com.grapsee.gsai.ui.chat.content.Block.HtmlBlock("html", source, false, 0), false)
+            }
+        }
+        fun findWebView(view: View): android.webkit.WebView? {
+            if (view is android.webkit.WebView) return view
+            if (view is android.view.ViewGroup) {
+                for (i in 0 until view.childCount) findWebView(view.getChildAt(i))?.let { return it }
+            }
+            return null
+        }
+        var web: android.webkit.WebView? = null
+        awaitObserved("production HtmlBlock creates a WebView") {
+            instrumentation.runOnMainSync { web = findWebView(compose.activity.window.decorView) }
+            web != null
+        }
+        fun evaluate(script: String): String? {
+            val done = CountDownLatch(1)
+            var value: String? = null
+            instrumentation.runOnMainSync {
+                web!!.evaluateJavascript(script) { value = it; done.countDown() }
+            }
+            assertTrue("WebView JavaScript callback must execute", done.await(5, TimeUnit.SECONDS))
+            return value
+        }
+        awaitObserved("authored script executes with bundled display policy") {
+            evaluate("window.__gsDisplayEmojiPolicy === true && typeof window.marker === 'string'") == "true"
+        }
+        assertEquals("true", evaluate("document.getElementById('run').textContent === 'Increase ' && document.getElementById('run').title === 'Increase '"))
+        val device = UiDevice.getInstance(instrumentation)
+        // Tap the real rendered button centre through UiDevice. Accessibility
+        // text caching in Android WebView is asynchronous and is not the DOM
+        // execution contract under test. Coordinates come from its actual
+        // layout, never a guessed screen position or a JavaScript click.
+        val encoded = evaluate("(function(){var r=document.getElementById('run').getBoundingClientRect();return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,vw:innerWidth});})()")
+        val bounds = org.json.JSONObject(org.json.JSONTokener(encoded!!).nextValue() as String)
+        val position = IntArray(2)
+        var scale = 1.0
+        instrumentation.runOnMainSync {
+            web!!.getLocationOnScreen(position)
+            scale = web!!.width / bounds.getDouble("vw")
+        }
+        assertTrue("Rendered HTML button must receive an actual OS pointer tap", device.click(
+            (position[0] + bounds.getDouble("x") * scale).toInt(),
+            (position[1] + bounds.getDouble("y") * scale).toInt()))
+        awaitObserved("OS tap runs authored logic and cleans dynamic output") {
+            evaluate("window.count === 1 && document.getElementById('result').textContent === '1'") == "true"
+        }
+        assertEquals("128512", evaluate("window.marker.codePointAt(0)"))
+        assertEquals("true", evaluate("!!document.querySelector('svg[data-custom-glass] path')"))
     }
 
     @Test fun hapticDispatchUsesPlatformConstantsAndHonorsToggle() {

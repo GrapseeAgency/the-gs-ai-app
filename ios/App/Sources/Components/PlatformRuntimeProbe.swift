@@ -11,6 +11,7 @@ struct PlatformRuntimeProbe: View {
     @State private var status = "idle"
     @State private var showCalculator = false
     @State private var showTable = false
+    @State private var showChart = false
     @State private var ordinaryTable = false
     @State private var title = ""
     @State private var armed = false
@@ -28,6 +29,7 @@ struct PlatformRuntimeProbe: View {
             Button("Restore runtime settings") { Task { await restore() } }
             Button("Open generated calculator") { showCalculator = true }
             Button("Open generated table") { showTable = true }
+            Button("Open generated chart") { showChart = true }
             if showCalculator {
                 WidgetBlockView(kind: "calc", json: #"{"title":"\ud83d\ude80 Growth","fields":[{"key":"amount","label":"Amount \u00a9\ufe0f \ud83d\ude00","value":100}],"outputs":[{"label":"Double","expr":"amount*2"}]}"#, open: false)
             }
@@ -43,6 +45,9 @@ struct PlatformRuntimeProbe: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showChart) {
+            ScrollView { WidgetBlockView(kind: "chart", json: Self.chartJSON, open: false).padding() }
         }
         .onAppear {
             let settings = SettingsStore.shared
@@ -68,6 +73,17 @@ struct PlatformRuntimeProbe: View {
                 status = "callback-complete"
             }
         }
+    }
+
+    private static var chartJSON: String {
+        let data: [String: Any] = ["type": "line", "labels": (1...31).map { "P\($0)" },
+            "series": [
+                ["name": "Primary", "data": (0..<31).map { [$0, $0 - 15] }],
+                ["name": "Secondary", "data": [[0, 2], [1, 4], [2, 6]]]
+            ]]
+        guard let encoded = try? JSONSerialization.data(withJSONObject: data),
+              let json = String(data: encoded, encoding: .utf8) else { return "{}" }
+        return json
     }
 
     private static var tableMarkdown: String {

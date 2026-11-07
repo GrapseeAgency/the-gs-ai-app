@@ -61,14 +61,52 @@ widget correctness.
   Android also exercises filtering while All is selected. These cases must run;
   unit/SSR results alone do not certify them.
 
+## Current follow-up: dynamic HTML and honest chart/poll semantics
+
+The renewed audit found HTML entity and post-load JavaScript emoji bypasses.
+One shared display-only DOM policy now runs in the actual Web iframe, Android
+WebView and iOS WKWebView, preserving executable source, machine state and
+custom vector icons. Native resource loading fails visibly closed. This is not
+a hostile-code security boundary; canvas pixels, CSS pseudo-content and shadow
+roots are outside its guarantee.
+
+Additional source corrections:
+- Android ranges no longer restore short series that have no observations in
+  the selected window. Web range counts use the longest actual series.
+- iOS charts select rather than concatenate independent series, preserve signed
+  totals/domains/zero baselines, stop truncating observations, preserve category
+  labels, and reject missing, boolean or nonfinite numeric measurements instead
+  of silently fabricating zero. Lone observations have no fake minimum mark.
+- Web pie switching preserves all supplied observations and rejects negative or
+  nonpositive-total datasets rather than silently dropping signed data.
+- Pie slice differences are not labeled as growth. Web metrics explicitly name
+  their source series; a generic sum is not presented as revenue or volume.
+- iOS polls no longer start with an invented vote per option; invalid vote
+  counts are rejected. Web polls show zero actual local votes, add one on a
+  real selection, and reset when options change. Both disclose local semantics
+  rather than claiming a live audience poll.
+
 ## Evidence
 
-Local: 65 behavioral interaction checks; existing renderer 170, catalogue 208,
-pipeline 24 and compiler 146 checks pass. Web CI 42405021335 passed. Android
-CI 42405021263 passed all four mandatory device cases before the additional
-zero-baseline chart correction; its successor must establish the final source.
-The iOS final-source runtime result is still pending. Swift static/structure checks and the runtime-result
-checker self-test pass. These local checks do not substitute for native runtime.
+Current local checks: **79 interaction checks**, renderer **170**, catalogue
+**208**, pipeline **24**, compiler **146**. The interaction suite executes the
+actual iframe srcDoc and its button handler, observes later DOM mutations,
+checks preserved executable state/vector paths, and clicks real poll/chart
+controls. JSDOM checks do not prove rasterized layout or browser containment.
+Swift static/structure checks and the runtime-result checker self-test pass;
+they are supplementary, not native execution proof.
+
+PR #28 adds a UiDevice tap on the production Android HTML WebView and a hosted
+production WKWebView test on iOS. Both check real authored JavaScript, entity
+and dynamic emoji removal, preserved state and SVG paths. The CI gates reject
+missing/skipped named cases. Android workflow **42420103461** passed on earlier
+revision **e4b1963**, including the new mandatory HTML WebView case. Final-source
+native CI results must still be established; that earlier pass is not a final
+revision acceptance claim.
+
+Historical PR #27 final checks all passed before merge (Android 42411253871,
+iOS 42411253869, Web 42411253861, eval 42411253865). Those bounded checks did not
+prove the renewed defects absent or establish exhaustive GenUI acceptance.
 
 Added mandatory device cases:
 - Android: parse an escaped-emoji calculator, mount the real CalcWidgetView,

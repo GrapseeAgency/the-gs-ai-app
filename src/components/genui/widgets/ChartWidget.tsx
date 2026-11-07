@@ -92,12 +92,16 @@ function dispatchChartView(activeType: ChartPayload['type'], payload: ChartPaylo
 }
 
 export function ChartWidget({ payload }: { payload: ChartPayload }) {
+  return <ChartControls key={JSON.stringify(payload)} payload={payload} />
+}
+
+function ChartControls({ payload }: { payload: ChartPayload }) {
   const { theme } = useWidgetIdentity()
   const isSwitchable = SWITCHABLE_TYPES.has(payload.type)
   const [activeType, setActiveType] = useState<ChartPayload['type']>(payload.type)
   const [rangeIdx, setRangeIdx] = useState<number>(3)
 
-  const range = useMemo(() => chartRange(payload.labels ?? [], Math.max(payload.series?.[0]?.data?.length ?? 0, payload.labels?.length ?? 0), rangeIdx), [payload, rangeIdx])
+  const range = useMemo(() => chartRange(payload.labels ?? [], Math.max(0, ...(payload.series ?? []).map((series) => series.data?.length ?? 0), payload.labels?.length ?? 0), rangeIdx), [payload, rangeIdx])
   const RANGE_OPTIONS = range.options
   const slicedPayload = useMemo<ChartPayload>(() => ({
     ...payload,
@@ -108,7 +112,8 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
   const summary = useMemo(() => {
     const firstSeries = slicedPayload.series?.[0]?.data ?? []
     if (firstSeries.length < 2) return null
-    const vals = firstSeries.map((pt) => Number(pt[1] ?? pt[0] ?? 0) || 0)
+    const vals = firstSeries.map((pt) => pt[pt.length - 1])
+    if (vals.some(value => !Number.isFinite(value))) return null
     const total = vals.reduce((a, b) => a + b, 0)
     let peakIdx = 0
     let minIdx = 0
@@ -118,20 +123,23 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
     })
     const first = vals[0]
     const last = vals[vals.length - 1] ?? 0
-    const growthPct = first === 0 ? null : ((last - first) / Math.abs(first)) * 100
+    const slices = activeType === 'pie' || activeType === 'donut'
+    const growthPct = slices || first === 0 ? null : ((last - first) / Math.abs(first)) * 100
     const peakLabel = slicedPayload.labels?.[peakIdx] ?? String(firstSeries[peakIdx]?.[0] ?? `#${peakIdx + 1}`)
     const minLabel = slicedPayload.labels?.[minIdx] ?? String(firstSeries[minIdx]?.[0] ?? `#${minIdx + 1}`)
     return {
+      seriesName: slicedPayload.series?.[0]?.name || 'Series 1',
       total: formatCompactMetric(total, slicedPayload.unit),
       peakLabel,
       peakVal: formatCompactMetric(vals[peakIdx] ?? 0, slicedPayload.unit),
       minLabel,
       minVal: formatCompactMetric(vals[minIdx] ?? 0, slicedPayload.unit),
-      growthPct: growthPct === null ? 'N/A (zero baseline)' : `${growthPct >= 0 ? '+' : ''}${growthPct.toFixed(1)}%`,
+      growthPct: growthPct === null ? (slices ? 'N/A (slice values)' : 'N/A (zero baseline)') : `${growthPct >= 0 ? '+' : ''}${growthPct.toFixed(1)}%`,
       growthPos: growthPct !== null && growthPct >= 0,
+      growthDefined: growthPct !== null,
       pointCount: vals.length,
     }
-  }, [slicedPayload.series, slicedPayload.labels, slicedPayload.unit])
+  }, [slicedPayload.series, slicedPayload.labels, slicedPayload.unit, activeType])
 
   const rawPayload = payload as unknown as Record<string, unknown>
   const explicitInsights: string[] = Array.isArray(rawPayload.insights)
@@ -156,8 +164,8 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
   const computedInsights =
     summary
       ? [
-          `${summary.peakLabel} recorded the highest value (${summary.peakVal}) across ${summary.pointCount} points (${RANGE_OPTIONS[rangeIdx]}).`,
-          `Net trajectory is ${summary.growthPct} with cumulative volume ${summary.total} (low: ${summary.minLabel} at ${summary.minVal}).`,
+          `${summary.seriesName}: ${summary.peakLabel} recorded the highest value (${summary.peakVal}) across ${summary.pointCount} points (${RANGE_OPTIONS[rangeIdx]}).`,
+          `First-to-last change for ${summary.seriesName} is ${summary.growthPct}; sum of observations is ${summary.total} (low: ${summary.minLabel} at ${summary.minVal}).`,
         ]
       : rangeIdx === 3 ? explicitInsights : []
 
@@ -238,6 +246,7 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
       {/* Active Chart Canvas */}
       {range.indices.length ? dispatchChartView(activeType, { ...slicedPayload, type: activeType }) : <div>No observations in this range.</div>}
 
+      {summary && <div style={{ fontSize: 11, color: theme.text2 }}>Summary: {summary.seriesName}</div>}
       {/* 3-Card KPI Summary Strip (Screenshot 6) */}
       {summary && (
         <div
@@ -255,10 +264,10 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
               border: `1px solid ${theme.border}`,
             }}
           >
-            <div style={{ fontSize: 10.5, color: theme.text3, fontWeight: 600 }}>Total</div>
+            <div style={{ fontSize: 10.5, color: theme.text3, fontWeight: 600 }}>Sum</div>
             <div style={{ fontSize: 14, fontWeight: 800, color: theme.text, marginTop: 2 }}>{summary.total}</div>
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: summary.growthPos ? '#129A5A' : '#E04F5F', marginTop: 2 }}>
-              {summary.growthPos ? '↑' : '↓'} {summary.growthPct}
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: !summary.growthDefined ? theme.text3 : summary.growthPos ? '#129A5A' : '#E04F5F', marginTop: 2 }}>
+              {summary.growthDefined ? (summary.growthPos ? '↑' : '↓') : ''} {summary.growthPct}
             </div>
           </div>
           <div
@@ -289,7 +298,7 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
               style={{
                 fontSize: 14,
                 fontWeight: 800,
-                color: summary.growthPos ? '#129A5A' : '#E04F5F',
+                color: !summary.growthDefined ? theme.text3 : summary.growthPos ? '#129A5A' : '#E04F5F',
                 marginTop: 2,
               }}
             >

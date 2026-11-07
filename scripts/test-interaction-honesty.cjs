@@ -30,6 +30,10 @@ const { chartRange } = from('lib/nexly/chart-range')
 const { ChecklistWidget } = from('components/genui/widgets/ChecklistWidget')
 const { TableWidget } = from('components/genui/widgets/TableWidget')
 const { TitleRow } = from('components/genui/primitives/TitleRow')
+const { HtmlBlock } = from('components/genui/blocks/HtmlBlock')
+const { ChartWidget } = from('components/genui/widgets/ChartWidget')
+const { PollWidget } = from('components/genui/widgets/PollWidget')
+const { pieData, PieChartView } = from('components/genui/charts/PieChart')
 const h = React.createElement
 const text = '- **Mitosis**: A cell divides into two genetically identical cells.\n- **Meiosis**: A cell divides to produce four genetically distinct cells.\n- **Osmosis**: Water moves through a selectively permeable membrane.'
 const concepts = extractConceptDeck(text)
@@ -37,6 +41,37 @@ let checks = 0
 function check(name, fn) { fn(); checks++; console.log('PASS', name) }
 
 async function main() {
+  // Execute the exact iframe srcDoc, including the shared policy, not a mock
+  // sanitizer. JSDOM exercises DOM events/MutationObserver, not pixel layout.
+  const source = `<button id="run" title="Increase &#x1F600;">Increase &#x1F600;</button><output id="result">0</output><svg data-custom-glass="true"><path d="M0 0L8 8"/></svg><script>window.marker=String.fromCodePoint(0x1F600);window.count=0;document.getElementById('run').onclick=function(){window.count++;document.getElementById('result').textContent=window.count+window.marker;};</script>`
+  const frameHTML = renderToString(h(HtmlBlock, { source }))
+  const wrapper = new JSDOM(frameHTML)
+  const previewDocument = wrapper.window.document.querySelector('iframe').getAttribute('srcDoc')
+  const preview = new JSDOM(previewDocument, { runScripts: 'dangerously' })
+  await new Promise(resolve => preview.window.setTimeout(resolve, 0))
+  check('HTML entity emoji do not bypass the actual preview DOM', () => {
+    assert.equal(preview.window.document.getElementById('run').textContent, 'Increase ')
+    assert.equal(preview.window.document.getElementById('run').getAttribute('title'), 'Increase ')
+  })
+  check('DOM display policy preserves machine state and custom vector glyphs', () => {
+    assert.equal(preview.window.marker.codePointAt(0), 0x1F600)
+    assert.ok(preview.window.document.querySelector('svg[data-custom-glass] path'))
+  })
+  preview.window.document.getElementById('run').click()
+  await new Promise(resolve => preview.window.setTimeout(resolve, 0))
+  check('actual HTML button runs its own logic without rendering dynamic emoji', () => {
+    assert.equal(preview.window.count, 1)
+    assert.equal(preview.window.document.getElementById('result').textContent, '1')
+  })
+  preview.window.document.getElementById('result').firstChild.nodeValue = '2' + preview.window.marker
+  preview.window.document.getElementById('run').setAttribute('aria-label', 'Increase ' + preview.window.marker)
+  await new Promise(resolve => preview.window.setTimeout(resolve, 0))
+  check('late character and accessibility label mutations use the same policy', () => {
+    assert.equal(preview.window.document.getElementById('result').textContent, '2')
+    assert.equal(preview.window.document.getElementById('run').getAttribute('aria-label'), 'Increase ')
+  })
+  preview.window.close(); wrapper.window.close()
+
   check('real arithmetic uses the actual inputs', () => assert.match(arithmeticPreview('price = 240\ntax = 0.15\nprint(price * (1 + tax))').output, /276/))
   for (const source of ['import pandas as pd\nprint(42)', 'for i in range(3):\n print(i)', 'print(missing)', 'print(1 / 0)', 'print(2 3)', 'x = 1\nunknown(x)', 'print(sum([1, nope, 3]))', 'print(3 // 2)', 'print("a" + "b")']) {
     check('unsupported preview fails closed: ' + source.split('\n')[0], () => {
@@ -119,6 +154,68 @@ async function main() {
   async function mount(element) { await act(async () => root.render(element)) }
   async function click(button) { assert.ok(button, 'button exists'); await act(async () => button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))) }
   const buttons = () => [...document.querySelectorAll('button')]
+  check('pie switching retains all observations and their source labels', () => {
+    const data = pieData({ type: 'pie', labels: ['Jan', 'Feb', 'Mar'], series: [{ name: 'Actual', data: [[0, 10], [1, 20], [2, 30]] }] })
+    assert.deepEqual(data, [{ name: 'Jan', value: 10 }, { name: 'Feb', value: 20 }, { name: 'Mar', value: 30 }])
+    assert.deepEqual(pieData({ type: 'pie', series: [{ name: 'A', data: [[0, 10]] }, { name: 'B', data: [[0, 20]] }] }).map(p => p.value), [10, 20])
+    const mixed = pieData({ type: 'pie', labels: ['P4', 'P5'], series: [
+      { name: 'Long', data: [[0, 7], [1, 8]] }, { name: 'Short', data: [[0, 104]] }
+    ] })
+    assert.deepEqual(mixed.map(point => point.name), ['Long: P4', 'Long: P5', 'Short: P4'])
+  })
+  check('pie does not silently discard negative or zero-total source data', () => {
+    for (const values of [[-10, 20], [0, 0]]) {
+      const html = renderToString(h(PieChartView, { payload: { type: 'pie', series: [{ name: 'Actual', data: values.map((value, i) => [i, value]) }] } }))
+      assert.match(html, /positive total/)
+    }
+  })
+  await mount(h(PollWidget, { payload: { title: 'Preference', options: [{ label: 'A' }, { label: 'B' }] } }))
+  check('a new poll has zero real local votes, not a fabricated denominator vote', () => {
+    assert.match(document.body.textContent, /0 local votes/)
+    assert.match(document.body.textContent, /not a live audience vote/)
+  })
+  await click(buttons().find(button => button.textContent.trim() === 'A'))
+  check('a poll click adds one actual local vote and computes its percentage', () => {
+    assert.match(document.body.textContent, /1 local vote/)
+    assert.match(document.body.textContent, /100%/)
+  })
+  await click(buttons().find(button => button.textContent.includes('B')))
+  check('a repeated vote cannot inflate a local poll', () => {
+    assert.match(document.body.textContent, /1 local vote/)
+    assert.doesNotMatch(document.body.textContent, /2 local votes/)
+  })
+  await mount(h(PollWidget, { payload: { title: 'Different preference', options: [{ label: 'C' }, { label: 'D' }] } }))
+  check('changed poll options reset the previous poll selection and tally', () => {
+    assert.match(document.body.textContent, /0 local votes/)
+    assert.doesNotMatch(document.body.textContent, /100%/)
+  })
+  // Chart metrics/controls are tested in a DOM. ResizeObserver is a layout
+  // platform stub; these assertions do not claim a rasterized chart test.
+  global.ResizeObserver = class { observe() {} disconnect() {} unobserve() {} }
+  await mount(h(ChartWidget, { payload: { type: 'line', series: [{ name: 'Zero baseline', data: [[0,0],[1,10]] }] } }))
+  check('undefined chart growth has no invented downward trend arrow', () => {
+    assert.match(document.body.textContent, /N\/A \(zero baseline\)/)
+    assert.doesNotMatch(document.body.textContent, /↓\s*N\/A/)
+  })
+  await click(buttons().find(button => button.textContent.includes('Pie Chart')))
+  check('pie category comparisons do not masquerade as a growth rate', () => {
+    assert.match(document.body.textContent, /N\/A \(slice values\)/)
+    assert.doesNotMatch(document.body.textContent, /zero baseline/)
+  })
+  await mount(h(ChartWidget, { payload: { type: 'line', series: [
+    { name: 'Short', data: [[0,10],[1,20]] },
+    { name: 'Long', data: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]] }
+  ] } }))
+  check('multi-series chart metrics explicitly identify their actual scope', () => {
+    assert.match(document.body.textContent, /Summary: Short/)
+    assert.match(document.body.textContent, /sum of observations is 30/)
+    assert.doesNotMatch(document.body.textContent, /cumulative volume/)
+  })
+  await click(buttons().find(b => b.textContent.includes('All')))
+  check('range uses longest series and does not restore short out-of-window history', () => {
+    assert.match(document.body.textContent, /Last 3 points/)
+    assert.doesNotMatch(document.body.textContent, /sum of observations|zero baseline/)
+  })
   await mount(h(SpontaneousConceptDeck, { concepts, dark: false }))
   await click(buttons().find((b) => b.textContent.includes('tap to flip')))
   check('flashcard flip reveals actual definition', () => assert.ok(document.body.textContent.includes(concepts[0].definition)))

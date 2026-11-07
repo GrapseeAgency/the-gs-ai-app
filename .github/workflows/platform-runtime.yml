@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - 'android/app/**'
+      - 'shared-contracts/emoji-dom-policy.json'
       - '.github/workflows/platform-runtime.yml'
       - 'scripts/check_platform_runtime_results.py'
   push:
     branches: [main]
     paths:
       - 'android/app/**'
+      - 'shared-contracts/emoji-dom-policy.json'
       - '.github/workflows/platform-runtime.yml'
       - 'scripts/check_platform_runtime_results.py'
   workflow_dispatch:

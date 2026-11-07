@@ -9,6 +9,10 @@ import { EmptyState } from '../primitives/EmptyState'
 
 /** Poll — vote once, bars animate to the new tally. */
 export function PollWidget({ payload }: { payload: PollPayload }) {
+  return <PollControls key={JSON.stringify(payload)} payload={payload} />
+}
+
+function PollControls({ payload }: { payload: PollPayload }) {
   const { accent, theme } = useWidgetIdentity()
   const [voted, setVoted] = useState<number | null>(null)
   const [counts, setCounts] = useState<number[]>(() => (payload.options ?? []).map((o) => o.votes ?? 0))
@@ -18,16 +22,19 @@ export function PollWidget({ payload }: { payload: PollPayload }) {
     setVoted(i)
     setCounts((c) => c.map((v, ci) => (ci === i ? v + 1 : v)))
   }
-  const total = counts.reduce((a, b) => a + b, 0) || 1
+  if (counts.some(count => !Number.isSafeInteger(count) || count < 0)) return <EmptyState label="Poll needs nonnegative whole-number source counts" />
+  const total = counts.reduce((a, b) => a + b, 0)
+  const hasSourceCounts = (payload.options ?? []).some(option => option.votes !== undefined)
   return (
     <div>
-      <TitleRow title={payload.title} right={`${total} vote${total === 1 ? '' : 's'}`} />
+      <TitleRow title={payload.title} right={`${total} ${hasSourceCounts ? 'source + local' : 'local'} vote${total === 1 ? '' : 's'}`} />
+      <div style={{ fontSize: TYPE.micro, color: theme.text3, marginBottom: 8 }}>Your choice is local, not a live audience vote.</div>
       {payload.question ? (
         <div style={{ fontSize: TYPE.body, fontWeight: 600, color: theme.text, marginBottom: 10 }}>{payload.question}</div>
       ) : null}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {(payload.options ?? []).map((opt, i) => {
-          const pct = Math.round((counts[i] / total) * 100)
+          const pct = total > 0 ? Math.round((counts[i] / total) * 100) : 0
           const mine = voted === i
           return (
             <button

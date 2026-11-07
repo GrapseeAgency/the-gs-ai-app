@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 import SwiftUI
 import WebKit
 
@@ -580,6 +581,16 @@ private func widgetTagGlassIconIOS(_ tag: String) -> (icon: String, tone: NexlyG
     }
 }
 
+enum DOMDisplayPolicyIOS {
+    static let script: String? = {
+        guard let url = Bundle.main.url(forResource: "emoji-dom-policy", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return object["script"] as? String
+    }()
+}
+
 private struct HtmlSandboxWebView: UIViewRepresentable {
     let html: String
     @Binding var dynamicHeight: CGFloat
@@ -590,6 +601,10 @@ private struct HtmlSandboxWebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        if let policy = DOMDisplayPolicyIOS.script {
+            config.userContentController.addUserScript(WKUserScript(
+                source: policy, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+        }
         config.userContentController.add(context.coordinator, name: "gsResize")
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
@@ -601,6 +616,8 @@ private struct HtmlSandboxWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        let displayHTML = DOMDisplayPolicyIOS.script == nil
+            ? "<p>Interactive preview unavailable: display policy could not be loaded.</p>" : html
         let wrapped = """
         <!doctype html>
         <html>
@@ -635,7 +652,7 @@ private struct HtmlSandboxWebView: UIViewRepresentable {
         </style>
         </head>
         <body>
-        \(html)
+        \(displayHTML)
         <script>
         function reportHeight() {
           var h = Math.max(document.body.scrollHeight || 0, document.documentElement.scrollHeight || 0, 80);
@@ -931,6 +948,47 @@ func chartStepPercentIOS(values: [Double], index: Int) -> Double? {
     return chartGrowthPercentIOS(first: values[index - 1], last: values[index])
 }
 
+func chartDomainIOS(_ values: [Double]) -> (lower: Double, upper: Double) {
+    let lower = min(0, values.min() ?? 0)
+    let upper = max(0, values.max() ?? 0)
+    return (lower, upper == lower ? lower + 1 : upper)
+}
+
+func chartHeightFractionIOS(_ value: Double, domain: (lower: Double, upper: Double)) -> Double {
+    (domain.upper - value) / (domain.upper - domain.lower)
+}
+
+func chartSignedTotalIOS(_ values: [Double]) -> Double { values.reduce(0, +) }
+
+// Numeric failures are not measurements of zero. Keep this parser shared
+// by validation and drawing so a missing/invalid point cannot fabricate KPIs.
+func chartValueIOS(_ raw: Any?) -> Double? {
+    let number: Double?
+    if let value = raw as? NSNumber {
+        guard CFGetTypeID(value) != CFBooleanGetTypeID() else { return nil }
+        number = value.doubleValue
+    } else if let value = raw as? String {
+        number = Double(value.trimmingCharacters(in: .whitespacesAndNewlines))
+    } else { return nil }
+    guard let number, number.isFinite else { return nil }
+    return number
+}
+
+func chartObservationValueIOS(_ raw: Any) -> Double? {
+    if let pair = raw as? [Any] {
+        return pair.count >= 2 ? chartValueIOS(pair[1]) : nil
+    }
+    if let point = raw as? [String: Any] {
+        return chartValueIOS(point["value"] ?? point["y"] ?? point["v"] ?? point["count"] ?? point["score"])
+    }
+    return chartValueIOS(raw)
+}
+
+func chartSliceLabelIOS(name: String, labels: [String], seriesIndex: Int) -> String {
+    if !name.isEmpty { return name }
+    return seriesIndex < labels.count ? labels[seriesIndex] : "Series \(seriesIndex + 1)"
+}
+
 private struct ChartBodyView: View {
     let obj: [String: Any]
     let accent: Color
@@ -938,6 +996,13 @@ private struct ChartBodyView: View {
     @State private var activeType: String = ""
     @State private var rangeIdx: Int = 0
     @State private var selectedIdx: Int? = nil
+    @State private var selectedSeriesIndex = 0
+
+    private var isSliceSeries: Bool {
+        guard currentType == "pie" || currentType == "donut",
+              let series = obj["series"] as? [[String: Any]] else { return false }
+        return series.allSatisfy { (($0["data"] as? [Any])?.count ?? 0) <= 1 }
+    }
 
     private struct BarPoint: Identifiable {
         let id = UUID()
@@ -958,34 +1023,49 @@ private struct ChartBodyView: View {
         activeType.isEmpty ? initialChartType : activeType
     }
 
+    private var hasInvalidObservations: Bool {
+        if let series = obj["series"] as? [[String: Any]] {
+            let selected = min(selectedSeriesIndex, max(0, series.count - 1))
+            for (index, item) in series.enumerated() where isSliceSeries || index == selected {
+                guard let data = item["data"] as? [Any] else { return true }
+                if data.contains(where: { chartObservationValueIOS($0) == nil }) { return true }
+            }
+            return false
+        }
+        guard let data = (obj["data"] ?? obj["items"] ?? obj["values"] ?? obj["slices"]) as? [Any] else { return false }
+        return data.contains { chartObservationValueIOS($0) == nil }
+    }
+
     private var allPoints: [BarPoint] {
         var out: [BarPoint] = []
         let labels = (obj["labels"] as? [Any])?.map { "\($0)" } ?? []
         if let series = obj["series"] as? [[String: Any]] {
-            for (sIdx, s) in series.prefix(8).enumerated() {
+            for (sIdx, s) in series.enumerated() {
+                if !isSliceSeries && sIdx != min(selectedSeriesIndex, max(0, series.count - 1)) { continue }
                 let sName = str(s, "name", "label")
                 let color = WidgetPalette.at(sIdx)
                 if let data = s["data"] as? [Any] {
-                    for (pIdx, pt) in data.prefix(12).enumerated() {
-                        let fallbackLbl = pIdx < labels.count ? labels[pIdx] : "#\(pIdx + 1)"
+                    for (pIdx, pt) in data.enumerated() {
+                        let sliceLabel = chartSliceLabelIOS(name: sName, labels: labels, seriesIndex: sIdx)
+                        let fallbackLbl = isSliceSeries ? sliceLabel : (pIdx < labels.count ? labels[pIdx] : "#\(pIdx + 1)")
                         if let pair = pt as? [Any], pair.count >= 2 {
-                            let lbl = pIdx < labels.count ? labels[pIdx] : "\(pair[0])"
-                            let val = (pair[1] as? NSNumber)?.doubleValue ?? Double("\(pair[1])") ?? 0
+                            let lbl = isSliceSeries ? sliceLabel : (pIdx < labels.count ? labels[pIdx] : "\(pair[0])")
+                            guard let val = chartObservationValueIOS(pt) else { continue }
                             out.append(BarPoint(index: out.count, seriesName: sName, label: lbl, value: val, color: color))
-                        } else if let num = pt as? NSNumber {
-                            out.append(BarPoint(index: out.count, seriesName: sName, label: fallbackLbl, value: num.doubleValue, color: color))
+                        } else if let val = chartValueIOS(pt) {
+                            out.append(BarPoint(index: out.count, seriesName: sName, label: fallbackLbl, value: val, color: color))
                         } else if let d = pt as? [String: Any] {
-                            let lbl = str(d, "label", "x", "name")
-                            let val = dbl(d, "value", "y", "v")
+                            let lbl = isSliceSeries ? sliceLabel : str(d, "label", "x", "name")
+                            guard let val = chartObservationValueIOS(d) else { continue }
                             out.append(BarPoint(index: out.count, seriesName: sName, label: lbl.isEmpty ? fallbackLbl : lbl, value: val, color: color))
                         }
                     }
                 }
             }
         } else if let data = (obj["data"] ?? obj["items"] ?? obj["values"] ?? obj["slices"]) as? [[String: Any]] {
-            for (idx, d) in data.prefix(12).enumerated() {
+            for (idx, d) in data.enumerated() {
                 let lbl = str(d, "label", "name", "x", "category")
-                let val = dbl(d, "value", "y", "count", "score")
+                guard let val = chartObservationValueIOS(d) else { continue }
                 out.append(BarPoint(index: idx, seriesName: "", label: lbl.isEmpty ? "#\(idx + 1)" : lbl, value: val, color: WidgetPalette.at(idx)))
             }
         }
@@ -1031,7 +1111,7 @@ private struct ChartBodyView: View {
     var body: some View {
         let (pts, rangeLabel) = slicedRange
         let maxVal = max(pts.map { abs($0.value) }.max() ?? 1.0, 0.0001)
-        let totalVal = max(pts.map { max(0, $0.value) }.reduce(0, +), 0.0001)
+        let totalVal = chartSignedTotalIOS(pts.map { $0.value })
         let unit = str(obj, "unit")
         let subtitle = str(obj, "subtitle")
         let peakIdx = pts.enumerated().max(by: { $0.element.value < $1.element.value })?.offset ?? 0
@@ -1039,12 +1119,32 @@ private struct ChartBodyView: View {
 
         VStack(alignment: .leading, spacing: 10) {
             chartHeaderBar(rangeLabel: rangeLabel)
+            if let series = obj["series"] as? [[String: Any]], series.count > 1, !isSliceSeries {
+                Menu {
+                    ForEach(series.indices, id: \.self) { index in
+                        Button(str(series[index], "name", "label").ifEmptyIOS("Series \(index + 1)")) {
+                            selectedSeriesIndex = index
+                            selectedIdx = nil
+                            rangeIdx = 0
+                        }
+                    }
+                } label: {
+                    Text("Series: \(str(series[min(selectedSeriesIndex, series.count - 1)], "name", "label").ifEmptyIOS("Series \(selectedSeriesIndex + 1)"))")
+                }
+            }
             if !subtitle.isEmpty {
                 Text(subtitle).font(Aero.caption()).foregroundStyle(Aero.textSecondary)
             }
-            chartTooltipRow(pts: pts, activeIdx: activeIdx, totalVal: totalVal, unit: unit)
-            chartVisualizationSurface(pts: pts, activeIdx: activeIdx, maxVal: maxVal, totalVal: totalVal, unit: unit)
-            chartSummaryFooter(pts: pts, peakIdx: peakIdx, totalVal: totalVal, unit: unit, rangeLabel: rangeLabel)
+            if hasInvalidObservations {
+                Text("Chart unavailable: an observation is missing or is not a finite number. Correct the source data; no zero values or summary have been invented.")
+                    .font(Aero.caption()).foregroundStyle(Aero.textSecondary)
+            } else if pts.isEmpty {
+                Text("No observations in this range.").font(Aero.caption()).foregroundStyle(Aero.textSecondary)
+            } else {
+                chartTooltipRow(pts: pts, activeIdx: activeIdx, totalVal: totalVal, unit: unit)
+                chartVisualizationSurface(pts: pts, activeIdx: activeIdx, maxVal: maxVal, totalVal: totalVal, unit: unit)
+                chartSummaryFooter(pts: pts, peakIdx: peakIdx, totalVal: totalVal, unit: unit, rangeLabel: rangeLabel)
+            }
         }
     }
 
@@ -1112,8 +1212,9 @@ private struct ChartBodyView: View {
     private func chartTooltipRow(pts: [BarPoint], activeIdx: Int, totalVal: Double, unit: String) -> some View {
         if !pts.isEmpty && activeIdx < pts.count {
             let selPt = pts[activeIdx]
-            let stepPct = chartStepPercentIOS(values: pts.map { $0.value }, index: activeIdx)
-            let stepText = stepPct.map { String(format: "%@ %.1f%%", $0 >= 0 ? "↑" : "↓", abs($0)) } ?? "N/A (no prior baseline)"
+            let slices = currentType == "pie" || currentType == "donut"
+            let stepPct = slices ? nil : chartStepPercentIOS(values: pts.map { $0.value }, index: activeIdx)
+            let stepText = stepPct.map { String(format: "%@ %.1f%%", $0 >= 0 ? "↑" : "↓", abs($0)) } ?? (slices ? "N/A (slice values)" : "N/A (no prior baseline)")
             let stepColor = stepPct == nil ? Aero.textSecondary : ((stepPct ?? 0) >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
             HStack(spacing: 8) {
                 Circle()
@@ -1139,12 +1240,17 @@ private struct ChartBodyView: View {
 
     @ViewBuilder
     private func chartVisualizationSurface(pts: [BarPoint], activeIdx: Int, maxVal: Double, totalVal: Double, unit: String) -> some View {
-        if (currentType == "line" || currentType == "area") && pts.count >= 2 {
+        let domain = chartDomainIOS(pts.map { $0.value })
+        if (currentType == "pie" || currentType == "donut") &&
+            (pts.contains { $0.value < 0 } || totalVal <= 0) {
+            Text("Pie shares require nonnegative values and a positive total. Choose Line or Bar for this dataset.")
+                .font(Aero.caption()).foregroundStyle(Aero.textSecondary)
+        } else if (currentType == "line" || currentType == "area") && pts.count >= 2 {
             VStack(spacing: 4) {
                 HStack(spacing: 6) {
                     VStack(alignment: .trailing, spacing: 0) {
                         ForEach([1.0, 0.66, 0.33, 0.0], id: \.self) { (frac: Double) in
-                            Text(compactNumber(maxVal * frac, unit: unit))
+                            Text(compactNumber(domain.lower + (domain.upper - domain.lower) * frac, unit: unit))
                                 .font(.system(size: 9.5, weight: .medium))
                                 .foregroundStyle(Aero.textSecondary)
                             if frac > 0 { Spacer() }
@@ -1158,7 +1264,7 @@ private struct ChartBodyView: View {
                         let count = pts.count
                         let coords: [CGPoint] = pts.enumerated().map { idx, pt in
                             let x = count > 1 ? w * CGFloat(idx) / CGFloat(count - 1) : w * 0.5
-                            let y = h * (1.0 - CGFloat(min(max(pt.value / maxVal, 0.0), 1.0)))
+                            let y = h * CGFloat(chartHeightFractionIOS(pt.value, domain: domain))
                             return CGPoint(x: x, y: y)
                         }
                         let linePath = Path { path in
@@ -1179,8 +1285,9 @@ private struct ChartBodyView: View {
                         let areaPath = Path { path in
                             path.addPath(linePath)
                             if let last = coords.last, let first = coords.first {
-                                path.addLine(to: CGPoint(x: last.x, y: h))
-                                path.addLine(to: CGPoint(x: first.x, y: h))
+                                let zeroY = h * CGFloat(chartHeightFractionIOS(0, domain: domain))
+                                path.addLine(to: CGPoint(x: last.x, y: zeroY))
+                                path.addLine(to: CGPoint(x: first.x, y: zeroY))
                                 path.closeSubpath()
                             }
                         }
@@ -1245,7 +1352,7 @@ private struct ChartBodyView: View {
 
                 HStack(spacing: 0) {
                     Spacer().frame(width: 42)
-                    ForEach(Array(pts.prefix(8).enumerated()), id: \.offset) { idx, pt in
+                    ForEach(Array(pts.enumerated()), id: \.offset) { idx, pt in
                         Text(pt.label)
                             .font(.system(size: 10, weight: idx == activeIdx ? .bold : .regular))
                             .foregroundStyle(idx == activeIdx ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
@@ -1255,23 +1362,30 @@ private struct ChartBodyView: View {
                 }
             }
             .padding(.top, 4)
-        } else if currentType == "bar" && pts.count >= 2 {
+        } else if currentType == "bar" && !pts.isEmpty {
             HStack(alignment: .bottom, spacing: 8) {
-                ForEach(Array(pts.prefix(8).enumerated()), id: \.offset) { idx, pt in
+                ForEach(Array(pts.enumerated()), id: \.offset) { idx, pt in
                     let isSel = idx == activeIdx
-                    let ratio = CGFloat(min(max(abs(pt.value) / maxVal, 0.08), 1.0))
+
                     Button {
                         GSHaptics.select()
                         selectedIdx = idx
                     } label: {
                         VStack(spacing: 4) {
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(
-                                    isSel
-                                        ? Color(red: 0.424, green: 0.298, blue: 0.965)
-                                        : Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.45)
-                                )
-                                .frame(height: max(12, 110 * ratio))
+                            GeometryReader { geo in
+                                let zeroY = geo.size.height * CGFloat(chartHeightFractionIOS(0, domain: domain))
+                                let valueY = geo.size.height * CGFloat(chartHeightFractionIOS(pt.value, domain: domain))
+                                ZStack {
+                                    Path { path in
+                                        path.move(to: CGPoint(x: 0, y: zeroY))
+                                        path.addLine(to: CGPoint(x: geo.size.width, y: zeroY))
+                                    }.stroke(Color.gray.opacity(0.4), lineWidth: 1)
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(Color(red: 0.424, green: 0.298, blue: 0.965).opacity(isSel ? 1 : 0.45))
+                                        .frame(width: geo.size.width, height: abs(valueY - zeroY))
+                                        .position(x: geo.size.width / 2, y: (valueY + zeroY) / 2)
+                                }
+                            }.frame(height: 110)
                             Text(pt.label)
                                 .font(.system(size: 10, weight: isSel ? .bold : .medium))
                                 .foregroundStyle(isSel ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
@@ -1290,12 +1404,12 @@ private struct ChartBodyView: View {
                     Circle()
                         .stroke(Color.black.opacity(0.06), lineWidth: 16)
                         .frame(width: 96, height: 96)
-                    ForEach(Array(pts.prefix(6).enumerated()), id: \.offset) { idx, pt in
+                    ForEach(Array(pts.enumerated()), id: \.offset) { idx, pt in
                         let startSum = pts.prefix(idx).map { max(0, $0.value) }.reduce(0, +)
                         let startFrac = CGFloat(startSum / totalVal)
                         let endFrac = CGFloat((startSum + max(0, pt.value)) / totalVal)
                         Circle()
-                            .trim(from: startFrac, to: max(startFrac + 0.005, endFrac - 0.008))
+                            .trim(from: startFrac, to: endFrac)
                             .stroke(pt.color, style: StrokeStyle(lineWidth: idx == activeIdx ? 18 : 15, lineCap: .butt))
                             .rotationEffect(.degrees(-90))
                             .frame(width: 96, height: 96)
@@ -1316,7 +1430,7 @@ private struct ChartBodyView: View {
                 .padding(.leading, 4)
 
                 VStack(alignment: .leading, spacing: 5) {
-                    ForEach(Array(pts.prefix(5).enumerated()), id: \.offset) { idx, pt in
+                    ForEach(Array(pts.enumerated()), id: \.offset) { idx, pt in
                         let sharePct = (max(0, pt.value) / totalVal) * 100.0
                         Button {
                             GSHaptics.select()
@@ -1365,15 +1479,7 @@ private struct ChartBodyView: View {
                             .font(Aero.mono(11))
                             .foregroundStyle(isSel ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
                         }
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule().fill(Color.black.opacity(0.06))
-                                Capsule()
-                                    .fill(isSel ? Color(red: 0.424, green: 0.298, blue: 0.965) : pt.color)
-                                    .frame(width: max(6, geo.size.width * CGFloat(min(abs(pt.value) / maxVal, 1.0))))
-                            }
-                        }
-                        .frame(height: isSel ? 9 : 7)
+
                     }
                 }
                 .buttonStyle(.plain)
@@ -1384,9 +1490,10 @@ private struct ChartBodyView: View {
     @ViewBuilder
     private func chartSummaryFooter(pts: [BarPoint], peakIdx: Int, totalVal: Double, unit: String, rangeLabel: String) -> some View {
         if pts.count >= 2 {
-            let growthPct = chartGrowthPercentIOS(first: pts[0].value, last: pts[pts.count - 1].value)
+            let slices = currentType == "pie" || currentType == "donut"
+            let growthPct = slices ? nil : chartGrowthPercentIOS(first: pts[0].value, last: pts[pts.count - 1].value)
             let pos = (growthPct ?? -1) >= 0
-            let growthText = growthPct.map { String(format: "%@%.1f%%", pos ? "+" : "", $0) } ?? "N/A (zero baseline)"
+            let growthText = growthPct.map { String(format: "%@%.1f%%", pos ? "+" : "", $0) } ?? (slices ? "N/A (slice values)" : "N/A (zero baseline)")
             let deltaText = growthPct == nil ? "No defined baseline" : "\(pos ? "↑" : "↓") \(growthText)"
             let pillBg = growthPct == nil ? Color.gray.opacity(0.1) : (pos ? Color(red: 0.902, green: 0.976, blue: 0.941) : Color(red: 0.992, green: 0.925, blue: 0.925))
             let pillFg = growthPct == nil ? Aero.textSecondary : (pos ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
@@ -1462,7 +1569,7 @@ private struct ChartBodyView: View {
                     Text(growthText)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Aero.text)
-                    Text("Growth Rate")
+                    Text(slices ? "Slice values" : "First–last change")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
                         .lineLimit(1)
@@ -2282,45 +2389,59 @@ private struct StepsBodyView: View {
     }
 }
 
+func pollSourceVotesIOS(_ option: Any) -> Int? {
+    guard let dict = option as? [String: Any] else { return option is String ? 0 : nil }
+    guard let raw = dict["votes"] ?? dict["count"] ?? dict["value"] else { return 0 }
+    guard let value = chartValueIOS(raw), value >= 0 else { return nil }
+    return Int(exactly: value)
+}
+
 private struct PollBodyView: View {
     @Environment(\.gsWidgetAction) private var widgetAction
     let obj: [String: Any]
     let accent: Color
     @State private var voted: Int? = nil
 
-    private var parsedOptions: [(label: String, votes: Int)] {
+    private var parsedOptions: [(label: String, votes: Int?)] {
         let raw = ((obj["options"] ?? obj["choices"] ?? obj["items"]) as? [Any]) ?? []
         return raw.map { opt in
-            if let plain = opt as? String { return (NexlyIcons.cleanPlainText(plain), 1) }
+            if let plain = opt as? String { return (NexlyIcons.cleanPlainText(plain), 0) }
             let dict = opt as? [String: Any] ?? [:]
             return (
                 NexlyIcons.cleanPlainText(str(dict, "label", "title", "name", "text")),
-                Int(dbl(dict, "votes", "count", "value", fallback: 1))
+                pollSourceVotesIOS(dict)
             )
         }
     }
 
     var body: some View {
         let opts = parsedOptions
-        let totalBase = opts.reduce(0) { $0 + $1.votes } + (voted != nil ? 1 : 0)
+        let totalBase = opts.reduce(0.0) { $0 + Double($1.votes ?? 0) } + (voted != nil ? 1 : 0)
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(opts.enumerated()), id: \.offset) { idx, opt in
-                let votes = opt.votes + (voted == idx ? 1 : 0)
-                let pct = totalBase > 0 ? Int(round(Double(votes) / Double(totalBase) * 100.0)) : 0
-                Button {
-                    GSHaptics.select()
-                    voted = idx
-                    widgetAction?(opt.label)
-                } label: {
-                    HStack {
-                        Text(opt.label).font(.system(size: 12, weight: voted == idx ? .bold : .regular)).foregroundStyle(Aero.text)
-                        Spacer()
-                        Text("\(votes) (\(pct)%)").font(Aero.mono(11)).foregroundStyle(accent)
+            Text("Source counts, if supplied, plus your local choice. Not a live audience poll.")
+                .font(Aero.caption()).foregroundStyle(Aero.textSecondary)
+            if opts.contains(where: { $0.votes == nil }) {
+                Text("Poll unavailable: supplied vote counts must be nonnegative whole numbers.")
+                    .font(Aero.caption()).foregroundStyle(Aero.textSecondary)
+            } else {
+                ForEach(Array(opts.enumerated()), id: \.offset) { idx, opt in
+                    let votes = Double(opt.votes ?? 0) + (voted == idx ? 1 : 0)
+                    let pct = totalBase > 0 ? Int(round(votes / totalBase * 100.0)) : 0
+                    Button {
+                        GSHaptics.select()
+                        voted = idx
+                        widgetAction?(opt.label)
+                    } label: {
+                        HStack {
+                            Text(opt.label).font(.system(size: 12, weight: voted == idx ? .bold : .regular)).foregroundStyle(Aero.text)
+                            Spacer()
+                            Text("\(String(format: "%.0f", votes)) (\(pct)%)").font(Aero.mono(11)).foregroundStyle(accent)
+                        }
+                        .padding(9)
+                        .background(voted == idx ? accent.opacity(0.16) : Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 10))
                     }
-                    .padding(9)
-                    .background(voted == idx ? accent.opacity(0.16) : Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 10))
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
     }
