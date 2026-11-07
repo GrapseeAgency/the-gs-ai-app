@@ -32,6 +32,7 @@ const { TableWidget } = from('components/genui/widgets/TableWidget')
 const { TitleRow } = from('components/genui/primitives/TitleRow')
 const { HtmlBlock } = from('components/genui/blocks/HtmlBlock')
 const { ChartWidget } = from('components/genui/widgets/ChartWidget')
+const { PollWidget } = from('components/genui/widgets/PollWidget')
 const { pieData, PieChartView } = from('components/genui/charts/PieChart')
 const h = React.createElement
 const text = '- **Mitosis**: A cell divides into two genetically identical cells.\n- **Meiosis**: A cell divides to produce four genetically distinct cells.\n- **Osmosis**: Water moves through a selectively permeable membrane.'
@@ -163,6 +164,26 @@ async function main() {
       const html = renderToString(h(PieChartView, { payload: { type: 'pie', series: [{ name: 'Actual', data: values.map((value, i) => [i, value]) }] } }))
       assert.match(html, /positive total/)
     }
+  })
+  await mount(h(PollWidget, { payload: { title: 'Preference', options: [{ label: 'A' }, { label: 'B' }] } }))
+  check('a new poll has zero real local votes, not a fabricated denominator vote', () => {
+    assert.match(document.body.textContent, /0 local votes/)
+    assert.match(document.body.textContent, /not a live audience vote/)
+  })
+  await click(buttons().find(button => button.textContent.trim() === 'A'))
+  check('a poll click adds one actual local vote and computes its percentage', () => {
+    assert.match(document.body.textContent, /1 local vote/)
+    assert.match(document.body.textContent, /100%/)
+  })
+  await click(buttons().find(button => button.textContent.includes('B')))
+  check('a repeated vote cannot inflate a local poll', () => {
+    assert.match(document.body.textContent, /1 local vote/)
+    assert.doesNotMatch(document.body.textContent, /2 local votes/)
+  })
+  await mount(h(PollWidget, { payload: { title: 'Different preference', options: [{ label: 'C' }, { label: 'D' }] } }))
+  check('changed poll options reset the previous poll selection and tally', () => {
+    assert.match(document.body.textContent, /0 local votes/)
+    assert.doesNotMatch(document.body.textContent, /100%/)
   })
   // Chart metrics/controls are tested in a DOM. ResizeObserver is a layout
   // platform stub; these assertions do not claim a rasterized chart test.
