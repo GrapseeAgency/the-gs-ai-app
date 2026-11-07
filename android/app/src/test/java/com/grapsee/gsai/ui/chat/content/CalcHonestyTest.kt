@@ -5,6 +5,12 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun zeroBaselineGrowthIsUndefinedRatherThanFabricated() {
+        assertNull(chartGrowthPercentAndroid(0.0, 25.0))
+        assertNull(chartGrowthPercentAndroid(0.0, 0.0))
+        assertEquals(50.0, chartGrowthPercentAndroid(20.0, 30.0)!!, 1e-9)
+        assertEquals(50.0, chartGrowthPercentAndroid(-20.0, -10.0)!!, 1e-9)
+    }
     @Test fun percentagesHaveOneMeaningAcrossMagnitudeBoundary() {
         assertEquals("99.00%", formatCalc(0.99, "percent", ""))
         assertEquals("100.00%", formatCalc(1.0, "percent", ""))
