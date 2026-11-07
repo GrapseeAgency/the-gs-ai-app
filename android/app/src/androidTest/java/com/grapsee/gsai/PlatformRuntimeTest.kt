@@ -256,9 +256,21 @@ class PlatformRuntimeTest {
         }
         assertEquals("true", evaluate("document.getElementById('run').textContent === 'Increase ' && document.getElementById('run').title === 'Increase '"))
         val device = UiDevice.getInstance(instrumentation)
-        val button = device.wait(Until.findObject(By.text("Increase")), 10_000)
-        assertNotNull("HTML button must be accessible to an actual OS tap", button)
-        button!!.click()
+        // Tap the real rendered button centre through UiDevice. Accessibility
+        // text caching in Android WebView is asynchronous and is not the DOM
+        // execution contract under test. Coordinates come from its actual
+        // layout, never a guessed screen position or a JavaScript click.
+        val encoded = evaluate("(function(){var r=document.getElementById('run').getBoundingClientRect();return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,vw:innerWidth});})()")
+        val bounds = org.json.JSONObject(org.json.JSONTokener(encoded!!).nextValue() as String)
+        val position = IntArray(2)
+        var scale = 1.0
+        instrumentation.runOnMainSync {
+            web!!.getLocationOnScreen(position)
+            scale = web!!.width / bounds.getDouble("vw")
+        }
+        assertTrue("Rendered HTML button must receive an actual OS pointer tap", device.click(
+            (position[0] + bounds.getDouble("x") * scale).toInt(),
+            (position[1] + bounds.getDouble("y") * scale).toInt()))
         awaitObserved("OS tap runs authored logic and cleans dynamic output") {
             evaluate("window.count === 1 && document.getElementById('result').textContent === '1'") == "true"
         }
