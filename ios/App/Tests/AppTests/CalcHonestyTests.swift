@@ -4,6 +4,20 @@ import WebKit
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testChartNumbersRejectMissingBooleanAndNonFiniteMeasurements() {
+        for invalid: Any in [NSNull(), true, false, "", "missing", "NaN", "Infinity", Double.infinity, Double.nan] {
+            XCTAssertNil(chartValueIOS(invalid), "\(invalid)")
+        }
+        XCTAssertNil(chartValueIOS(nil))
+        XCTAssertNil(chartObservationValueIOS(["label": "Missing"]))
+        XCTAssertNil(chartObservationValueIOS([1]))
+        XCTAssertNil(chartObservationValueIOS([1, "invalid"]))
+        XCTAssertEqual(chartValueIOS(0), 0)
+        XCTAssertEqual(chartValueIOS("-3.5"), -3.5)
+        XCTAssertEqual(chartObservationValueIOS([1, -20]), -20)
+        XCTAssertEqual(chartObservationValueIOS(["label": "Real", "value": 12.5]), 12.5)
+    }
+
     func testSignedChartDomainPreservesZeroNegativeAndAllObservations() {
         let values: [Double] = [-20, 0, 10]
         let domain = chartDomainIOS(values)
