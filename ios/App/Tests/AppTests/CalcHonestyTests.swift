@@ -2,6 +2,12 @@ import XCTest
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testTooltipDeltaRequiresAnActualPriorPoint() {
+        XCTAssertNil(chartStepPercentIOS(values: [20, 30], index: 0))
+        XCTAssertNil(chartStepPercentIOS(values: [0, 30], index: 1))
+        XCTAssertNil(chartStepPercentIOS(values: [20], index: 5))
+        XCTAssertEqual(chartStepPercentIOS(values: [20, 30], index: 1)!, 50, accuracy: 1e-9)
+    }
     func testZeroBaselineChartGrowthIsUndefined() {
         XCTAssertNil(chartGrowthPercentIOS(first: 0, last: 25))
         XCTAssertNil(chartGrowthPercentIOS(first: 0, last: 0))
