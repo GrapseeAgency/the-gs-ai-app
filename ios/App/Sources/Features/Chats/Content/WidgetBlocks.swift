@@ -1631,6 +1631,19 @@ private func parseWidgetTableNumIOS(_ raw: String) -> Double? {
     return (raw.contains("-") || raw.hasPrefix("↓") || raw.hasPrefix("↘")) && v > 0 ? -v * mult : v * mult
 }
 
+// A strict comparator must return false for equal cells in BOTH directions.
+func widgetTablePrecedesIOS(_ left: String, _ right: String, ascending: Bool) -> Bool {
+    if let a = parseWidgetTableNumIOS(left), let b = parseWidgetTableNumIOS(right) {
+        return ascending ? a < b : a > b
+    }
+    return ascending ? left < right : left > right
+}
+
+func widgetTablePageSizeIOS(selection: Int, rowCount: Int) -> Int {
+    if selection == -1 { return max(1, rowCount) }
+    return selection > 0 ? selection : ((4...5).contains(rowCount) ? 3 : 5)
+}
+
 private struct TableBodyView: View {
     let obj: [String: Any]
     let accent: Color
@@ -1660,14 +1673,11 @@ private struct TableBodyView: View {
             return base.sorted { a, b in
                 let av = sc < a.count ? a[sc] : ""
                 let bv = sc < b.count ? b[sc] : ""
-                let an = parseWidgetTableNumIOS(av)
-                let bn = parseWidgetTableNumIOS(bv)
-                let cmp: Bool = (an != nil && bn != nil) ? (an! < bn!) : (av < bv)
-                return sortAsc ? cmp : !cmp
+                return widgetTablePrecedesIOS(av, bv, ascending: sortAsc)
             }
         }()
 
-        let effPageSize = pageSize > 0 ? pageSize : ((4...5).contains(normRows.count) ? 3 : 5)
+        let effPageSize = widgetTablePageSizeIOS(selection: pageSize, rowCount: pageSize == 0 ? normRows.count : filteredRows.count)
         let totalPages = max(1, (filteredRows.count + effPageSize - 1) / effPageSize)
         let safePage = min(max(0, page), totalPages - 1)
         let startIdx = safePage * effPageSize
@@ -1805,15 +1815,15 @@ private struct TableBodyView: View {
                     Spacer()
 
                     Button {
-                        switch effPageSize {
+                        switch pageSize == 0 ? effPageSize : pageSize {
                         case 3: pageSize = 5
                         case 5: pageSize = 10
-                        case 10: pageSize = 25
+                        case 10: pageSize = -1
                         default: pageSize = 3
                         }
                         page = 0
                     } label: {
-                        Text("Show: \(effPageSize) ▾")
+                        Text("Show: \(pageSize == -1 ? "All" : String(effPageSize)) ▾")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(Color(red: 0.243, green: 0.212, blue: 0.400))
                             .padding(.horizontal, 8)
