@@ -3151,20 +3151,20 @@ enum CalcExprIOS {
         }
 
         func parseMulDiv() -> Double {
-            var left = parsePower()
+            var left = parseUnary()
             while true {
                 skipWs()
                 guard pos < chars.count else { break }
                 if pos + 1 < chars.count && chars[pos] == "*" && chars[pos + 1] == "*" { break }
                 let op = chars[pos]
-                if op == "*" { pos += 1; left *= parsePower() }
+                if op == "*" { pos += 1; left *= parseUnary() }
                 else if op == "/" {
                     pos += 1
-                    let r = parsePower()
+                    let r = parseUnary()
                     left = r == 0.0 ? 0.0 : left / r
                 } else if op == "%" {
                     pos += 1
-                    let r = parsePower()
+                    let r = parseUnary()
                     left = r == 0.0 ? 0.0 : left.truncatingRemainder(dividingBy: r)
                 } else { break }
             }
@@ -3172,15 +3172,15 @@ enum CalcExprIOS {
         }
 
         func parsePower() -> Double {
-            let base = parseUnary()
+            let base = parsePrimary()
             skipWs()
             if pos < chars.count && chars[pos] == "^" {
                 pos += 1
-                return pow(base, parsePower())
+                return pow(base, parseUnary())
             }
             if pos + 1 < chars.count && chars[pos] == "*" && chars[pos + 1] == "*" {
                 pos += 2
-                return pow(base, parsePower())
+                return pow(base, parseUnary())
             }
             return base
         }
@@ -3189,23 +3189,23 @@ enum CalcExprIOS {
             skipWs()
             if pos < chars.count && chars[pos] == "-" { pos += 1; return -parseUnary() }
             if pos < chars.count && chars[pos] == "+" { pos += 1; return parseUnary() }
-            return parsePrimary()
+            return parsePower()
         }
 
         func parsePrimary() -> Double {
             skipWs()
-            guard pos < chars.count else { return 0.0 }
+            guard pos < chars.count else { return Double.nan }
             if chars[pos] == "(" {
                 pos += 1
                 let v = parseAddSub()
                 skipWs()
-                if pos < chars.count && chars[pos] == ")" { pos += 1 }
+                guard pos < chars.count && chars[pos] == ")" else { return Double.nan }; pos += 1
                 return v
             }
             if chars[pos].isNumber || chars[pos] == "." {
                 let start = pos
                 while pos < chars.count && (chars[pos].isNumber || chars[pos] == ".") { pos += 1 }
-                return Double(String(chars[start..<pos])) ?? 0.0
+                return Double(String(chars[start..<pos])) ?? Double.nan
             }
             if chars[pos].isLetter || chars[pos] == "_" {
                 let start = pos
@@ -3225,8 +3225,8 @@ enum CalcExprIOS {
                             skipWs()
                         }
                     }
-                    if pos < chars.count && chars[pos] == ")" { pos += 1 }
-                    let a = args.first ?? 0.0
+                    guard pos < chars.count && chars[pos] == ")" else { return Double.nan }; pos += 1
+                    let a = args.first ?? Double.nan
                     let b = args.count > 1 ? args[1] : 0.0
                     switch ident.lowercased() {
                     case "sqrt": return a >= 0 ? sqrt(a) : 0.0
@@ -3234,27 +3234,29 @@ enum CalcExprIOS {
                     case "round": return round(a)
                     case "floor": return floor(a)
                     case "ceil": return ceil(a)
-                    case "min": return args.min() ?? 0.0
-                    case "max": return args.max() ?? 0.0
+                    case "min": return args.min() ?? Double.nan
+                    case "max": return args.max() ?? Double.nan
                     case "pow": return pow(a, b)
                     case "log": return a > 0 ? log(a) : 0.0
                     case "exp": return exp(a)
                     case "sin": return sin(a)
                     case "cos": return cos(a)
                     case "tan": return tan(a)
-                    default: return a
+                    default: return Double.nan
                     }
                 }
                 if ident.lowercased() == "pi" { return Double.pi }
                 if ident.lowercased() == "e" { return M_E }
-                return vars[ident] ?? vars[ident.lowercased()] ?? 0.0
+                return vars[ident] ?? vars[ident.lowercased()] ?? Double.nan
             }
             pos += 1
-            return 0.0
+            return Double.nan
         }
 
         let res = parseAddSub()
-        return res.isFinite ? res : 0.0
+        skipWs()
+        guard pos == chars.count else { return Double.nan }
+        return res.isFinite ? res : Double.nan
     }
 }
 

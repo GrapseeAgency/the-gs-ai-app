@@ -2836,75 +2836,6 @@ private struct BlockQuoteView: View {
 
 // MARK: - Code block (04. Code Blocks & 05. Code Execution — Screenshots 1 & 2)
 
-private struct ReactPreviewSpecIOS {
-    let componentName: String
-    let stateName: String
-    let initialNumber: Int
-    let buttonLabels: [String]
-    let isEffectHook: Bool
-    let effectEndpoint: String
-}
-
-private func parseReactPreviewSpecIOS(_ code: String) -> ReactPreviewSpecIOS {
-    var compName = "Component"
-    if let rx = try? NSRegularExpression(pattern: "(?:function|const|class)\\s+([A-Z][a-zA-Z0-9_]*)"),
-       let m = rx.firstMatch(in: code, range: NSRange(code.startIndex..., in: code)),
-       let r = Range(m.range(at: 1), in: code) {
-        compName = String(code[r])
-    }
-    let hasUseState = code.range(of: "\\buseState\\b", options: .regularExpression) != nil
-    let hasUseEffect = code.range(of: "\\buseEffect\\b", options: .regularExpression) != nil
-    if hasUseEffect && !hasUseState {
-        var endpoint = "/api/data"
-        if let rx = try? NSRegularExpression(pattern: "fetch\\(\\s*['\"`]([^'\"`]+)['\"`]"),
-           let m = rx.firstMatch(in: code, range: NSRange(code.startIndex..., in: code)),
-           let r = Range(m.range(at: 1), in: code) {
-            endpoint = String(code[r])
-        } else if code.contains("userId") {
-            endpoint = "/api/users/{userId}"
-        }
-        return ReactPreviewSpecIOS(
-            componentName: compName == "Component" ? "EffectLifecycle" : compName,
-            stateName: "effectStatus",
-            initialNumber: 1,
-            buttonLabels: ["Mount", "Strict Remount", "Abort"],
-            isEffectHook: true,
-            effectEndpoint: endpoint
-        )
-    }
-    var stateName = "count"
-    var initNum = 0
-    if let rx = try? NSRegularExpression(pattern: "const\\s*\\[\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*,\\s*set[a-zA-Z0-9_]*\\s*\\]\\s*=\\s*useState\\(([^)]*)\\)"),
-       let m = rx.firstMatch(in: code, range: NSRange(code.startIndex..., in: code)),
-       let r1 = Range(m.range(at: 1), in: code),
-       let r2 = Range(m.range(at: 2), in: code) {
-        stateName = String(code[r1])
-        initNum = Int(code[r2].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-    }
-    var btns: [String] = []
-    if let rx = try? NSRegularExpression(pattern: "<button[^>]*>([^<]+)</button>", options: [.caseInsensitive]) {
-        for m in rx.matches(in: code, range: NSRange(code.startIndex..., in: code)) {
-            if let r = Range(m.range(at: 1), in: code) {
-                let s = code[r]
-                    .replacingOccurrences(of: "\\{[^}]*\\}", with: "", options: .regularExpression)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if !s.isEmpty && !btns.contains(s) && btns.count < 3 {
-                    btns.append(s)
-                }
-            }
-        }
-    }
-    if btns.isEmpty { btns = ["Increment", "Reset"] }
-    return ReactPreviewSpecIOS(
-        componentName: compName,
-        stateName: stateName,
-        initialNumber: initNum,
-        buttonLabels: btns,
-        isEffectHook: false,
-        effectEndpoint: ""
-    )
-}
-
 struct CodeBlockCardView: View {
     @Environment(\.nexlyCodeWrap) private var wrapCode
     let language: String?
@@ -2917,7 +2848,6 @@ struct CodeBlockCardView: View {
     @State private var runOutput: String? = nil
     @State private var errorOutput: String? = nil
     @State private var runCount: Int = 0
-    @State private var reactStateVal: Int? = nil
 
     private var currentCode: String { editedCode ?? code }
     private var lang: String { (language ?? "code").lowercased().trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -3183,74 +3113,9 @@ struct CodeBlockCardView: View {
                 .padding(8)
                 .background(Color(red: 0.973, green: 0.961, blue: 1.0))
         } else if !open && ["jsx", "tsx", "react"].contains(lang) {
-            let spec = parseReactPreviewSpecIOS(currentCode)
-            let currentVal = reactStateVal ?? spec.initialNumber
-            let statusLine: String = {
-                guard spec.isEffectHook else { return "\(spec.stateName): \(currentVal)" }
-                switch currentVal {
-                case 2: return "Strict Mode: Run #1 aborted -> Run #2 200 OK"
-                case 3: return "Cleanup: controller.abort() · ignore = true"
-                default: return "Mounted: GET \(spec.effectEndpoint) -> 200 OK"
-                }
-            }()
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(spec.isEffectHook ? "React Effect Lifecycle Simulator" : "<\(spec.componentName) /> Preview")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
-                    Spacer()
-                    Text(spec.isEffectHook ? "useEffect Hook" : "Interactive State")
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.424, green: 0.298, blue: 0.965))
-                }
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(spec.componentName)
-                            .font(.system(size: 12.5, weight: .bold))
-                            .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
-                        Text(statusLine)
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(Color(red: 0.384, green: 0.353, blue: 0.518))
-                    }
-                    Spacer()
-                    HStack(spacing: 6) {
-                        ForEach(spec.buttonLabels, id: \.self) { (btnLabel: String) in
-                            let lowerBtn = btnLabel.lowercased()
-                            Button(btnLabel) {
-                                GSHaptics.select()
-                                if spec.isEffectHook {
-                                    if lowerBtn.contains("strict") || lowerBtn.contains("remount") {
-                                        reactStateVal = 2
-                                    } else if lowerBtn.contains("abort") || lowerBtn.contains("clean") {
-                                        reactStateVal = 3
-                                    } else {
-                                        reactStateVal = 1
-                                    }
-                                } else if lowerBtn.contains("reset") || lowerBtn.contains("clear") {
-                                    reactStateVal = spec.initialNumber
-                                } else if lowerBtn.contains("-") || lowerBtn.contains("dec") || lowerBtn.contains("sub") {
-                                    reactStateVal = currentVal - 1
-                                } else {
-                                    reactStateVal = currentVal + 1
-                                }
-                            }
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(Color.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color.white))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color(red: 0.973, green: 0.961, blue: 1.0))
+            Text("React source only: this view has no React/TypeScript compiler. No component has been executed. Use a self-contained HTML/JavaScript sandbox for a live preview.")
+                .font(.system(size: 12))
+                .padding(12)
         }
     }
 
@@ -3409,8 +3274,6 @@ struct CodeBlockCardView: View {
               warn: function() { __gsLog(Array.prototype.slice.call(arguments).join(' ')); },
               error: function() { __gsLog(Array.prototype.slice.call(arguments).join(' ')); }
             };
-            var setTimeout = function(fn) { if (typeof fn === 'function') fn(); return 1; };
-            var clearTimeout = function() {};
             """)
         let jsSource: String = {
             guard ["ts", "typescript"].contains(lang) else { return src }
