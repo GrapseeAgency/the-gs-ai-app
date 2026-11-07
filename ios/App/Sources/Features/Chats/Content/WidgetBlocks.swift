@@ -580,6 +580,16 @@ private func widgetTagGlassIconIOS(_ tag: String) -> (icon: String, tone: NexlyG
     }
 }
 
+enum DOMDisplayPolicyIOS {
+    static let script: String? = {
+        guard let url = Bundle.main.url(forResource: "emoji-dom-policy", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return object["script"] as? String
+    }()
+}
+
 private struct HtmlSandboxWebView: UIViewRepresentable {
     let html: String
     @Binding var dynamicHeight: CGFloat
@@ -590,6 +600,10 @@ private struct HtmlSandboxWebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        if let policy = DOMDisplayPolicyIOS.script {
+            config.userContentController.addUserScript(WKUserScript(
+                source: policy, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+        }
         config.userContentController.add(context.coordinator, name: "gsResize")
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
@@ -601,6 +615,8 @@ private struct HtmlSandboxWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        let displayHTML = DOMDisplayPolicyIOS.script == nil
+            ? "<p>Interactive preview unavailable: display policy could not be loaded.</p>" : html
         let wrapped = """
         <!doctype html>
         <html>
@@ -635,7 +651,7 @@ private struct HtmlSandboxWebView: UIViewRepresentable {
         </style>
         </head>
         <body>
-        \(html)
+        \(displayHTML)
         <script>
         function reportHeight() {
           var h = Math.max(document.body.scrollHeight || 0, document.documentElement.scrollHeight || 0, 80);
@@ -931,6 +947,18 @@ func chartStepPercentIOS(values: [Double], index: Int) -> Double? {
     return chartGrowthPercentIOS(first: values[index - 1], last: values[index])
 }
 
+func chartDomainIOS(_ values: [Double]) -> (lower: Double, upper: Double) {
+    let lower = min(0, values.min() ?? 0)
+    let upper = max(0, values.max() ?? 0)
+    return (lower, upper == lower ? lower + 1 : upper)
+}
+
+func chartHeightFractionIOS(_ value: Double, domain: (lower: Double, upper: Double)) -> Double {
+    (domain.upper - value) / (domain.upper - domain.lower)
+}
+
+func chartSignedTotalIOS(_ values: [Double]) -> Double { values.reduce(0, +) }
+
 private struct ChartBodyView: View {
     let obj: [String: Any]
     let accent: Color
@@ -938,6 +966,13 @@ private struct ChartBodyView: View {
     @State private var activeType: String = ""
     @State private var rangeIdx: Int = 0
     @State private var selectedIdx: Int? = nil
+    @State private var selectedSeriesIndex = 0
+
+    private var isSliceSeries: Bool {
+        guard currentType == "pie" || currentType == "donut",
+              let series = obj["series"] as? [[String: Any]] else { return false }
+        return series.allSatisfy { (($0["data"] as? [Any])?.count ?? 0) <= 1 }
+    }
 
     private struct BarPoint: Identifiable {
         let id = UUID()
@@ -962,11 +997,12 @@ private struct ChartBodyView: View {
         var out: [BarPoint] = []
         let labels = (obj["labels"] as? [Any])?.map { "\($0)" } ?? []
         if let series = obj["series"] as? [[String: Any]] {
-            for (sIdx, s) in series.prefix(8).enumerated() {
+            for (sIdx, s) in series.enumerated() {
+                if !isSliceSeries && sIdx != min(selectedSeriesIndex, max(0, series.count - 1)) { continue }
                 let sName = str(s, "name", "label")
                 let color = WidgetPalette.at(sIdx)
                 if let data = s["data"] as? [Any] {
-                    for (pIdx, pt) in data.prefix(12).enumerated() {
+                    for (pIdx, pt) in data.enumerated() {
                         let fallbackLbl = pIdx < labels.count ? labels[pIdx] : "#\(pIdx + 1)"
                         if let pair = pt as? [Any], pair.count >= 2 {
                             let lbl = pIdx < labels.count ? labels[pIdx] : "\(pair[0])"
@@ -983,7 +1019,7 @@ private struct ChartBodyView: View {
                 }
             }
         } else if let data = (obj["data"] ?? obj["items"] ?? obj["values"] ?? obj["slices"]) as? [[String: Any]] {
-            for (idx, d) in data.prefix(12).enumerated() {
+            for (idx, d) in data.enumerated() {
                 let lbl = str(d, "label", "name", "x", "category")
                 let val = dbl(d, "value", "y", "count", "score")
                 out.append(BarPoint(index: idx, seriesName: "", label: lbl.isEmpty ? "#\(idx + 1)" : lbl, value: val, color: WidgetPalette.at(idx)))
@@ -1031,7 +1067,7 @@ private struct ChartBodyView: View {
     var body: some View {
         let (pts, rangeLabel) = slicedRange
         let maxVal = max(pts.map { abs($0.value) }.max() ?? 1.0, 0.0001)
-        let totalVal = max(pts.map { max(0, $0.value) }.reduce(0, +), 0.0001)
+        let totalVal = chartSignedTotalIOS(pts.map { $0.value })
         let unit = str(obj, "unit")
         let subtitle = str(obj, "subtitle")
         let peakIdx = pts.enumerated().max(by: { $0.element.value < $1.element.value })?.offset ?? 0
@@ -1039,6 +1075,19 @@ private struct ChartBodyView: View {
 
         VStack(alignment: .leading, spacing: 10) {
             chartHeaderBar(rangeLabel: rangeLabel)
+            if let series = obj["series"] as? [[String: Any]], series.count > 1, !isSliceSeries {
+                Menu {
+                    ForEach(series.indices, id: \.self) { index in
+                        Button(str(series[index], "name", "label").ifEmptyIOS("Series \(index + 1)")) {
+                            selectedSeriesIndex = index
+                            selectedIdx = nil
+                            rangeIdx = 0
+                        }
+                    }
+                } label: {
+                    Text("Series: \(str(series[min(selectedSeriesIndex, series.count - 1)], "name", "label").ifEmptyIOS("Series \(selectedSeriesIndex + 1)"))")
+                }
+            }
             if !subtitle.isEmpty {
                 Text(subtitle).font(Aero.caption()).foregroundStyle(Aero.textSecondary)
             }
@@ -1139,12 +1188,17 @@ private struct ChartBodyView: View {
 
     @ViewBuilder
     private func chartVisualizationSurface(pts: [BarPoint], activeIdx: Int, maxVal: Double, totalVal: Double, unit: String) -> some View {
-        if (currentType == "line" || currentType == "area") && pts.count >= 2 {
+        let domain = chartDomainIOS(pts.map { $0.value })
+        if (currentType == "pie" || currentType == "donut") &&
+            (pts.contains { $0.value < 0 } || totalVal <= 0) {
+            Text("Pie shares require nonnegative values and a positive total. Choose Line or Bar for this dataset.")
+                .font(Aero.caption()).foregroundStyle(Aero.textSecondary)
+        } else if (currentType == "line" || currentType == "area") && pts.count >= 2 {
             VStack(spacing: 4) {
                 HStack(spacing: 6) {
                     VStack(alignment: .trailing, spacing: 0) {
                         ForEach([1.0, 0.66, 0.33, 0.0], id: \.self) { (frac: Double) in
-                            Text(compactNumber(maxVal * frac, unit: unit))
+                            Text(compactNumber(domain.lower + (domain.upper - domain.lower) * frac, unit: unit))
                                 .font(.system(size: 9.5, weight: .medium))
                                 .foregroundStyle(Aero.textSecondary)
                             if frac > 0 { Spacer() }
@@ -1158,7 +1212,7 @@ private struct ChartBodyView: View {
                         let count = pts.count
                         let coords: [CGPoint] = pts.enumerated().map { idx, pt in
                             let x = count > 1 ? w * CGFloat(idx) / CGFloat(count - 1) : w * 0.5
-                            let y = h * (1.0 - CGFloat(min(max(pt.value / maxVal, 0.0), 1.0)))
+                            let y = h * CGFloat(chartHeightFractionIOS(pt.value, domain: domain))
                             return CGPoint(x: x, y: y)
                         }
                         let linePath = Path { path in
@@ -1179,8 +1233,9 @@ private struct ChartBodyView: View {
                         let areaPath = Path { path in
                             path.addPath(linePath)
                             if let last = coords.last, let first = coords.first {
-                                path.addLine(to: CGPoint(x: last.x, y: h))
-                                path.addLine(to: CGPoint(x: first.x, y: h))
+                                let zeroY = h * CGFloat(chartHeightFractionIOS(0, domain: domain))
+                                path.addLine(to: CGPoint(x: last.x, y: zeroY))
+                                path.addLine(to: CGPoint(x: first.x, y: zeroY))
                                 path.closeSubpath()
                             }
                         }
@@ -1245,7 +1300,7 @@ private struct ChartBodyView: View {
 
                 HStack(spacing: 0) {
                     Spacer().frame(width: 42)
-                    ForEach(Array(pts.prefix(8).enumerated()), id: \.offset) { idx, pt in
+                    ForEach(Array(pts.enumerated()), id: \.offset) { idx, pt in
                         Text(pt.label)
                             .font(.system(size: 10, weight: idx == activeIdx ? .bold : .regular))
                             .foregroundStyle(idx == activeIdx ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
@@ -1257,21 +1312,28 @@ private struct ChartBodyView: View {
             .padding(.top, 4)
         } else if currentType == "bar" && pts.count >= 2 {
             HStack(alignment: .bottom, spacing: 8) {
-                ForEach(Array(pts.prefix(8).enumerated()), id: \.offset) { idx, pt in
+                ForEach(Array(pts.enumerated()), id: \.offset) { idx, pt in
                     let isSel = idx == activeIdx
-                    let ratio = CGFloat(min(max(abs(pt.value) / maxVal, 0.08), 1.0))
+
                     Button {
                         GSHaptics.select()
                         selectedIdx = idx
                     } label: {
                         VStack(spacing: 4) {
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(
-                                    isSel
-                                        ? Color(red: 0.424, green: 0.298, blue: 0.965)
-                                        : Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.45)
-                                )
-                                .frame(height: max(12, 110 * ratio))
+                            GeometryReader { geo in
+                                let zeroY = geo.size.height * CGFloat(chartHeightFractionIOS(0, domain: domain))
+                                let valueY = geo.size.height * CGFloat(chartHeightFractionIOS(pt.value, domain: domain))
+                                ZStack {
+                                    Path { path in
+                                        path.move(to: CGPoint(x: 0, y: zeroY))
+                                        path.addLine(to: CGPoint(x: geo.size.width, y: zeroY))
+                                    }.stroke(Color.gray.opacity(0.4), lineWidth: 1)
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(Color(red: 0.424, green: 0.298, blue: 0.965).opacity(isSel ? 1 : 0.45))
+                                        .frame(width: geo.size.width, height: abs(valueY - zeroY))
+                                        .position(x: geo.size.width / 2, y: (valueY + zeroY) / 2)
+                                }
+                            }.frame(height: 110)
                             Text(pt.label)
                                 .font(.system(size: 10, weight: isSel ? .bold : .medium))
                                 .foregroundStyle(isSel ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
@@ -1290,12 +1352,12 @@ private struct ChartBodyView: View {
                     Circle()
                         .stroke(Color.black.opacity(0.06), lineWidth: 16)
                         .frame(width: 96, height: 96)
-                    ForEach(Array(pts.prefix(6).enumerated()), id: \.offset) { idx, pt in
+                    ForEach(Array(pts.enumerated()), id: \.offset) { idx, pt in
                         let startSum = pts.prefix(idx).map { max(0, $0.value) }.reduce(0, +)
                         let startFrac = CGFloat(startSum / totalVal)
                         let endFrac = CGFloat((startSum + max(0, pt.value)) / totalVal)
                         Circle()
-                            .trim(from: startFrac, to: max(startFrac + 0.005, endFrac - 0.008))
+                            .trim(from: startFrac, to: endFrac)
                             .stroke(pt.color, style: StrokeStyle(lineWidth: idx == activeIdx ? 18 : 15, lineCap: .butt))
                             .rotationEffect(.degrees(-90))
                             .frame(width: 96, height: 96)
@@ -1316,7 +1378,7 @@ private struct ChartBodyView: View {
                 .padding(.leading, 4)
 
                 VStack(alignment: .leading, spacing: 5) {
-                    ForEach(Array(pts.prefix(5).enumerated()), id: \.offset) { idx, pt in
+                    ForEach(Array(pts.enumerated()), id: \.offset) { idx, pt in
                         let sharePct = (max(0, pt.value) / totalVal) * 100.0
                         Button {
                             GSHaptics.select()
