@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { RADIUS, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { Skeleton } from '../primitives/Skeleton'
+import emojiDOMPolicy from '../../../../shared-contracts/emoji-dom-policy.json'
 
 export function HtmlBlock({ source, fallbackHeight = 320 }: { source: string; fallbackHeight?: number }) {
   const { accent, theme } = useWidgetIdentity()
@@ -31,14 +32,15 @@ export function HtmlBlock({ source, fallbackHeight = 320 }: { source: string; fa
       html,body { margin:0; padding:12px; background:transparent; color:var(--gs-text);
         font-family:-apple-system,'SF Pro Text','Segoe UI',Roboto,sans-serif; font-size:14px; }
       * { box-sizing:border-box; max-width:100%; }
-    </style></head><body>${source}</body></html>`
+    </style><script>${emojiDOMPolicy.script}</script></head><body>${source}</body></html>`
     return { doc, hueVars }
   }, [source, accent, theme])
 
   useEffect(() => {
     const m = /data-gs-height="(\d+)px"/.exec(source)
-    if (m) setHeight(Math.min(900, Math.max(80, Number(m[1]))))
-  }, [source])
+    setLoaded(false)
+    setHeight(m ? Math.min(900, Math.max(80, Number(m[1]))) : fallbackHeight)
+  }, [source, fallbackHeight])
 
   return (
     <div style={{ position: 'relative' }}>
