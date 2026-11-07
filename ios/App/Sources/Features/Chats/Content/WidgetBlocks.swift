@@ -263,6 +263,39 @@ private func recoverPlainTextWidgetIOS(kind: String, raw: String) -> [String: An
     }
 }
 
+private let RAW_KEYS_PRESERVED_IOS: Set<String> = [
+    "code", "html", "svg", "url", "src", "href", "unified", "before", "after",
+    "formula", "expression", "expr", "z", "pattern", "regex", "query", "sql"
+]
+private let ICON_NAME_KEYS_IOS: Set<String> = ["icon", "closingIcon"]
+
+private func sanitizeJSONValueIOS(kind: String, value: Any, keyHint: String? = nil) -> Any {
+    if let s = value as? String {
+        if let k = keyHint, RAW_KEYS_PRESERVED_IOS.contains(k) { return s }
+        if let k = keyHint, ICON_NAME_KEYS_IOS.contains(k) {
+            return NexlyIcons.extractLeadingIcon(s).0 ?? NexlyIcons.resolve(s)
+        }
+        let allowIconTokens = keyHint == "title"
+            || (["followups", "actions", "menu", "chips"].contains(kind) && ["label", "text", "name"].contains(keyHint ?? ""))
+        if allowIconTokens {
+            return NexlyIcons.normalize(s).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return NexlyIcons.cleanPlainText(s)
+    }
+    if let arr = value as? [Any] {
+        return arr.map { sanitizeJSONValueIOS(kind: kind, value: $0, keyHint: keyHint) }
+    }
+    if let obj = value as? [String: Any] {
+        var out: [String: Any] = [:]
+        out.reserveCapacity(obj.count)
+        for (k, v) in obj {
+            out[k] = sanitizeJSONValueIOS(kind: kind, value: v, keyHint: k)
+        }
+        return out
+    }
+    return value
+}
+
 private func normalizeJSONRoot(kind: String, value: Any) -> [String: Any]? {
     if let arr = value as? [Any] {
         guard !arr.isEmpty else { return nil }
@@ -284,7 +317,7 @@ private func normalizeJSONRoot(kind: String, value: Any) -> [String: Any]? {
         case "terminal": key = "commands"
         default: key = "items"
         }
-        return [key: arr]
+        return sanitizeJSONValueIOS(kind: kind, value: [key: arr]) as? [String: Any]
     }
     guard var dict = value as? [String: Any] else { return nil }
     // Unwrap single-key envelope {"widget": {...}}, {"data": {...}}, {"<kind>": {...}}
@@ -296,7 +329,7 @@ private func normalizeJSONRoot(kind: String, value: Any) -> [String: Any]? {
             break
         }
     }
-    return dict
+    return sanitizeJSONValueIOS(kind: kind, value: dict) as? [String: Any]
 }
 
 func inferWidgetKind(_ raw: String) -> String? {
@@ -1542,20 +1575,42 @@ private struct StatBodyView: View {
     }
 }
 
-private func iosTableEntityMonogram(_ raw: String) -> (String, Color, Color)? {
-    let clean = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !clean.isEmpty, clean.count <= 28, clean.contains(where: { $0.isLetter }) else { return nil }
+private func iosTableEntityIconBadge(_ raw: String) -> (icon: String, tone: NexlyGlassTone)? {
+    let clean = NexlyIcons.cleanPlainText(raw)
+    guard !clean.isEmpty, clean.count <= 32, clean.contains(where: { $0.isLetter }) else { return nil }
     let lower = clean.lowercased()
-    if lower.hasPrefix("python") { return ("Py", Color(red: 0.878, green: 0.949, blue: 0.996), Color(red: 0.008, green: 0.518, blue: 0.780)) }
-    if lower == "java" { return ("Jv", Color(red: 1.0, green: 0.929, blue: 0.835), Color(red: 0.918, green: 0.345, blue: 0.047)) }
-    if lower.hasPrefix("c++") { return ("C+", Color(red: 0.859, green: 0.918, blue: 0.996), Color(red: 0.145, green: 0.388, blue: 0.922)) }
-    if lower == "c" || lower == "c#" { return (clean, Color(red: 0.878, green: 0.906, blue: 1.0), Color(red: 0.310, green: 0.275, blue: 0.898)) }
-    if lower.hasPrefix("javascript") { return ("JS", Color(red: 0.996, green: 0.953, blue: 0.780), Color(red: 0.851, green: 0.467, blue: 0.024)) }
-    if lower.hasPrefix("typescript") { return ("TS", Color(red: 0.859, green: 0.918, blue: 0.996), Color(red: 0.114, green: 0.306, blue: 0.847)) }
-    if lower.hasPrefix("rust") { return ("Rs", Color(red: 0.996, green: 0.886, blue: 0.886), Color(red: 0.863, green: 0.149, blue: 0.149)) }
-    let parts = clean.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
-    let code = parts.count >= 2 ? "\(parts[0].prefix(1))\(parts[1].prefix(1))".uppercased() : String(clean.prefix(2)).uppercased()
-    return (code, Color(red: 0.929, green: 0.898, blue: 1.0), Color(red: 0.357, green: 0.239, blue: 0.961))
+    if lower.hasPrefix("python") { return ("brand-python", .blue) }
+    if lower == "java" { return ("coffee", .amber) }
+    if lower.hasPrefix("c++") || lower == "cpp" { return ("brand-cpp", .blue) }
+    if lower == "c" || lower == "c#" { return ("code", .lavender) }
+    if lower.hasPrefix("javascript") || lower == "js" { return ("brand-javascript", .amber) }
+    if lower.hasPrefix("typescript") || lower == "ts" { return ("brand-typescript", .blue) }
+    if lower.hasPrefix("rust") { return ("brand-rust", .peach) }
+    if lower == "go" || lower == "golang" { return ("brand-golang", .mint) }
+    if lower.hasPrefix("swift") { return ("brand-apple", .lavender) }
+    if lower.hasPrefix("kotlin") || lower.hasPrefix("android") { return ("brand-android", .green) }
+    return NexlyIcons.semanticIcon(for: raw, fallback: "sparkles")
+}
+
+private func parseWidgetTableNumIOS(_ raw: String) -> Double? {
+    let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        .replacingOccurrences(of: "^[↑↓↗↘+-]?\\s*[$€£¥₹৳]?\\s*", with: "", options: .regularExpression)
+        .replacingOccurrences(of: "[%$,\\s]+$", with: "", options: .regularExpression)
+        .replacingOccurrences(of: ",", with: "")
+    guard !s.isEmpty else { return nil }
+    var mult = 1.0
+    var numPart = s
+    if let last = s.last?.lowercased() {
+        switch last {
+        case "k": mult = 1_000.0; numPart = String(s.dropLast())
+        case "m": mult = 1_000_000.0; numPart = String(s.dropLast())
+        case "b": mult = 1_000_000_000.0; numPart = String(s.dropLast())
+        case "t": mult = 1_000_000_000_000.0; numPart = String(s.dropLast())
+        default: break
+        }
+    }
+    guard let v = Double(numPart.trimmingCharacters(in: .whitespaces)) else { return nil }
+    return (raw.contains("-") || raw.hasPrefix("↓") || raw.hasPrefix("↘")) && v > 0 ? -v * mult : v * mult
 }
 
 private struct TableBodyView: View {
@@ -1570,13 +1625,13 @@ private struct TableBodyView: View {
 
     var body: some View {
         let cols: [String] = ((obj["columns"] ?? obj["headers"]) as? [Any])?.map {
-            if let s = $0 as? String { return s }
+            if let s = $0 as? String { return NexlyIcons.cleanPlainText(s) }
             if let d = $0 as? [String: Any] { return str(d, "label", "title", "name", "key") }
-            return "\($0)"
+            return NexlyIcons.cleanPlainText("\($0)")
         } ?? []
         let rawRows = ((obj["rows"] ?? obj["data"]) as? [Any]) ?? []
         let normRows: [[String]] = rawRows.map { row in
-            if let arr = row as? [Any] { return arr.map { "\($0)" } }
+            if let arr = row as? [Any] { return arr.map { NexlyIcons.cleanPlainText("\($0)") } }
             if let dict = row as? [String: Any] { return cols.map { str(dict, $0, $0.lowercased()) } }
             return []
         }
@@ -1587,8 +1642,8 @@ private struct TableBodyView: View {
             return base.sorted { a, b in
                 let av = sc < a.count ? a[sc] : ""
                 let bv = sc < b.count ? b[sc] : ""
-                let an = Double(av.replacingOccurrences(of: "[^0-9.-]", with: "", options: .regularExpression))
-                let bn = Double(bv.replacingOccurrences(of: "[^0-9.-]", with: "", options: .regularExpression))
+                let an = parseWidgetTableNumIOS(av)
+                let bn = parseWidgetTableNumIOS(bv)
                 let cmp: Bool = (an != nil && bn != nil) ? (an! < bn!) : (av < bv)
                 return sortAsc ? cmp : !cmp
             }
@@ -1654,14 +1709,15 @@ private struct TableBodyView: View {
                                 (trimmed.hasPrefix("+") || trimmed.hasPrefix("-") || trimmed.hasPrefix("↑") || trimmed.hasPrefix("↓") || (ci < cols.count && cols[ci].lowercased().contains("trend")))
                             let isNeg = isTrend && (trimmed.contains("-") || trimmed.hasPrefix("↓") || trimmed.hasPrefix("↘"))
 
-                            if ci == primaryNameCol, let badge = iosTableEntityMonogram(trimmed) {
+                            if ci == primaryNameCol, let badge = iosTableEntityIconBadge(trimmed) {
                                 HStack(spacing: 6) {
-                                    Text(badge.0)
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(badge.2)
-                                        .frame(width: 21, height: 21)
-                                        .background(RoundedRectangle(cornerRadius: 6).fill(badge.1))
-                                    Text(trimmed)
+                                    NexlyGlassGlyphTile(
+                                        name: badge.icon,
+                                        tone: badge.tone,
+                                        size: 21,
+                                        glyphSize: 12
+                                    )
+                                    Text(NexlyIcons.cleanPlainText(trimmed))
                                         .font(.system(size: 12, weight: .semibold))
                                         .foregroundStyle(Aero.text)
                                         .lineLimit(1)

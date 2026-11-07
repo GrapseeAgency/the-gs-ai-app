@@ -382,6 +382,28 @@ enum NexlyIcons {
         "🧹": "brush", "🧯": "fire-extinguisher",
         "🔴": "circle-dot", "🟠": "circle-dot", "🟡": "circle-dot",
         "🟢": "circle-dot", "🔵": "circle-dot", "🟣": "circle-dot",
+        "⚫": "circle-dot", "⚪": "circle-dot", "🟤": "circle-dot",
+        "⬛": "square", "⬜": "square", "▪️": "square", "▫️": "square",
+        "◾": "square", "◽": "square", "◼️": "square", "◻️": "square",
+        "🔶": "diamond", "🔷": "diamond", "🔸": "diamond", "🔹": "diamond",
+        "🔺": "triangle", "🔻": "triangle-inverted",
+        "▶️": "player-play", "▶": "player-play", "◀️": "player-skip-back", "◀": "player-skip-back",
+        "⏩": "player-track-next", "⏪": "player-track-prev", "⏸️": "player-pause", "⏹️": "player-stop",
+        "🔄": "refresh", "🔁": "repeat", "🔀": "arrows-shuffle",
+        "➡️": "arrow-right", "⬅️": "arrow-left", "⬆️": "arrow-up", "⬇️": "arrow-down",
+        "↗️": "arrow-up-right", "↘️": "arrow-down-right", "↙️": "arrow-down-left", "↖️": "arrow-up-left",
+        "↔️": "arrows-left-right", "↕️": "arrows-up-down", "↩️": "arrow-back-up", "↪️": "arrow-forward-up",
+        "⤴️": "arrow-ramp-right", "⤵️": "arrow-ramp-left",
+        "➕": "plus", "➖": "minus", "➗": "divide", "✖️": "x", "✖": "x",
+        "♾️": "infinity", "♾": "infinity", "💲": "currency-dollar", "💱": "arrows-exchange",
+        "™️": "trademark", "™": "trademark", "©️": "copyright", "©": "copyright",
+        "®️": "registered", "®": "registered", "♻️": "recycle", "♻": "recycle",
+        "‼️": "alert-circle", "⁉️": "help-circle", "〰️": "wave-sine", "〽️": "chart-line",
+        "❇️": "sparkles", "✳️": "asterisk", "✴️": "star",
+        "⚖️": "scale", "⚖": "scale", "⚗️": "flask", "⚛️": "atom", "⚛": "atom",
+        "0️⃣": "number-0", "1️⃣": "number-1", "2️⃣": "number-2", "3️⃣": "number-3",
+        "4️⃣": "number-4", "5️⃣": "number-5", "6️⃣": "number-6", "7️⃣": "number-7",
+        "8️⃣": "number-8", "9️⃣": "number-9", "🔟": "numbers",
         "🤔": "brain", "❌": "circle-x", "❓": "help-circle", "❗": "alert-circle",
         "ℹ️": "info-circle", "ℹ": "info-circle"
     ]
@@ -477,8 +499,21 @@ enum NexlyIcons {
             let pictograph = (0x1F000...0x1FAFF).contains(value)
                 || (0x2600...0x27BF).contains(value)
                 || (0x2300...0x23FF).contains(value)
+                || (0x2194...0x21AA).contains(value)
+                || (0x25AA...0x25FE).contains(value)
+                || (0x2934...0x2935).contains(value)
+                || (0x2B05...0x2B07).contains(value)
+                || (0x2B1B...0x2B1C).contains(value)
+                || value == 0x203C
+                || value == 0x2049
+                || value == 0x2122
+                || value == 0x2139
                 || value == 0x2B50
                 || value == 0x2B55
+                || value == 0x3030
+                || value == 0x303D
+                || value == 0x3297
+                || value == 0x3299
                 || (0xFE00...0xFE0F).contains(value)
                 || value == 0x200D
                 || value == 0x20E3
@@ -488,21 +523,22 @@ enum NexlyIcons {
         return String(filtered)
     }
 
-    /// Extract a leading `:icon:` or emoji token as (iconName, remainingCleanText).
+    /// Extract a leading `:icon:` or emoji token (even inside leading `**bold**`) as (iconName, remainingCleanText).
     static func extractLeadingIcon(_ text: String) -> (String?, String) {
         let norm = emojiToIconTokens(text).trimmingCharacters(in: .whitespacesAndNewlines)
         let ns = norm as NSString
-        if let m = try? NSRegularExpression(pattern: "^:([a-z0-9][a-z0-9-]{1,42}):\\s*(.*)$")
-            .firstMatch(in: norm, range: NSRange(location: 0, length: ns.length)) {
-            let rawIcon = ns.substring(with: m.range(at: 1))
-            let tail = ns.substring(with: m.range(at: 2))
+        if let m = try? NSRegularExpression(
+            pattern: "^(\\*{1,3}|_{1,3})?\\s*:([a-z0-9][a-z0-9-]{1,42}):\\s*([\\s\\S]*)$"
+        ).firstMatch(in: norm, range: NSRange(location: 0, length: ns.length)) {
+            let prefix = m.range(at: 1).location != NSNotFound ? ns.substring(with: m.range(at: 1)) : ""
+            let rawIcon = ns.substring(with: m.range(at: 2))
+            let tail = ns.substring(with: m.range(at: 3))
                 .replacingOccurrences(of: ":([a-z0-9][a-z0-9-]{1,42}):", with: "", options: .regularExpression)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            return (resolve(rawIcon), tail)
+            return (resolve(rawIcon), "\(prefix)\(tail)")
         }
         let cleaned = norm
             .replacingOccurrences(of: ":([a-z0-9][a-z0-9-]{1,42}):", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return (nil, cleaned)
     }
@@ -513,6 +549,91 @@ enum NexlyIcons {
             .replacingOccurrences(of: ":([a-z0-9][a-z0-9-]{1,42}):", with: "", options: .regularExpression)
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static let semanticKeywords: [(pattern: String, icon: String, tone: NexlyGlassTone)] = [
+        ("\\b(python|django|flask|pandas|numpy|pytorch)\\b", "brand-python", .blue),
+        ("\\b(java|spring|jvm|maven|coffee|cafe|espresso)\\b", "coffee", .peach),
+        ("\\b(javascript|node\\.?js|express|npm|v8)\\b", "brand-javascript", .amber),
+        ("\\b(typescript|tsx|deno)\\b", "brand-typescript", .blue),
+        ("\\b(react|next\\.?js|jsx|redux)\\b", "brand-react", .blue),
+        ("\\b(swift|swiftui|ios|xcode|apple)\\b", "brand-apple", .lavender),
+        ("\\b(android|kotlin|jetpack|gradle)\\b", "brand-android", .green),
+        ("\\b(rust|cargo)\\b", "brand-rust", .peach),
+        ("\\b(golang|go\\b)", "brand-golang", .mint),
+        ("(?:^|\\b)(c\\+\\+|cpp|clang)(?:\\b|$)", "brand-cpp", .blue),
+        ("^(c|c#|csharp)$", "code", .blue),
+        ("\\b(docker|container|kubernetes|k8s)\\b", "brand-docker", .blue),
+        ("\\b(git|github|commit|branch|pull request)\\b", "brand-github", .lavender),
+        ("\\b(database|sql|postgres|mysql|sqlite|redis|mongodb|schema|query)\\b", "database", .blue),
+        ("\\b(cloud|aws|azure|gcp|serverless|cdn|deploy)\\b", "cloud-computing", .blue),
+        ("\\b(security|auth|jwt|oauth|encrypt|password|privacy|shield|safe)\\b", "shield-check", .green),
+        ("\\b(performance|speed|fast|latency|throughput|optimize|cache|bolt)\\b", "bolt", .amber),
+        ("\\b(api|webhook|endpoint|rest|graphql|http|network|socket)\\b", "plug-connected", .mint),
+        ("\\b(bug|error|issue|warning|risk|pitfall|caution|alert|fail)\\b", "alert-triangle", .amber),
+        ("\\b(test|qa|verify|validation|check|assert|pass)\\b", "circle-check", .green),
+        ("\\b(loan|mortgage|apr|emi|amortiz|bank|debt|interest rate)\\b", "building-bank", .blue),
+        ("\\b(invest|compound|portfolio|dividend|stock|etf|roi|wealth|return|growth|profit)\\b", "trending-up", .green),
+        ("\\b(budget|salary|income|saving|expense|cost|price|revenue|money|payment|tax|fee)\\b", "coin", .amber),
+        ("\\b(formula|equation|math|calculate|calculator|sum|ratio|average)\\b", "calculator", .amber),
+        ("\\b(chart|metric|analytics|stat|benchmark|trend|data|distribution)\\b", "chart-bar", .lavender),
+        ("\\b(calorie|protein|macro|nutrition|diet|meal|food|vitamin|carbs|fat)\\b", "salad", .green),
+        ("\\b(workout|exercise|gym|fitness|strength|cardio|muscle|training|run)\\b", "barbell", .peach),
+        ("\\b(health|medical|heart|sleep|recovery|wellness|symptom|doctor)\\b", "heartbeat", .pink),
+        ("\\b(study|learn|course|book|read|exam|lesson|education|concept)\\b", "book-2", .lavender),
+        ("\\b(time|schedule|timeline|deadline|duration|hour|minute|morning|daily)\\b", "clock", .amber),
+        ("\\b(date|calendar|week|month|year|quarter|roadmap|milestone)\\b", "calendar", .blue),
+        ("\\b(travel|flight|trip|hotel|airport|vacation|tour)\\b", "plane", .blue),
+        ("\\b(location|map|city|country|region|route|address|global|world)\\b", "world", .mint),
+        ("\\b(ai|llm|neural|model|machine learning|gpt|agent|brain|smart)\\b", "brain", .lavender),
+        ("\\b(code|function|algorithm|class|module|compile|syntax|script)\\b", "code", .lavender),
+        ("\\b(user|team|customer|client|people|community|audience|member)\\b", "users", .blue),
+        ("\\b(goal|target|objective|focus|mission|priority|kpi)\\b", "target", .pink),
+        ("\\b(winner|best|top|rank|award|champion|leader|advantage)\\b", "trophy", .amber),
+        ("\\b(launch|start|ship|release|scale|boost|upgrade|future)\\b", "rocket", .peach),
+        ("\\b(setting|config|setup|install|tool|environment|option)\\b", "settings", .mint),
+        ("\\b(why|tip|insight|idea|note|summary|takeaway|key|pro tip)\\b", "bulb", .amber)
+    ]
+
+    /// Resolve any heading, bullet label, step title, or table entity to a semantic
+    /// custom glassy icon + tone from the 5,247 Tabler registry.
+    static func semanticIcon(for raw: String, fallback: String = "sparkles") -> (icon: String, tone: NexlyGlassTone) {
+        let (explicit, clean) = extractLeadingIcon(raw)
+        if let explicit {
+            let resolved = resolve(explicit)
+            return (resolved, tone(for: resolved))
+        }
+        let plain = cleanPlainText(clean)
+        for rule in semanticKeywords {
+            if plain.range(of: rule.pattern, options: [.regularExpression, .caseInsensitive]) != nil {
+                let resolved = resolve(rule.icon)
+                return (resolved, rule.tone)
+            }
+        }
+        let words = plain.lowercased()
+            .replacingOccurrences(of: "[^a-z0-9\\s-]", with: " ", options: .regularExpression)
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { $0.count >= 3 }
+        for w in words {
+            let brand = "brand-\(w)"
+            if codepoints[brand] != nil { return (brand, tone(for: brand)) }
+            if let a = aliases[w] {
+                let resolved = resolve(a)
+                return (resolved, tone(for: resolved))
+            }
+            if codepoints[w] != nil { return (w, tone(for: w)) }
+            if w.hasSuffix("s") && w.count > 3 {
+                let sing = String(w.dropLast())
+                if let a = aliases[sing] {
+                    let resolved = resolve(a)
+                    return (resolved, tone(for: resolved))
+                }
+                if codepoints[sing] != nil { return (sing, tone(for: sing)) }
+            }
+        }
+        if fallback.isEmpty { return ("", .lavender) }
+        let fb = resolve(fallback)
+        return (fb, tone(for: fb))
     }
 
     enum InlinePart {

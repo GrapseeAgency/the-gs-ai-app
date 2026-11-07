@@ -234,8 +234,10 @@ private func classifyCalloutHeaderTitle(_ raw: String) -> (CalloutTone, String)?
 private enum QuickCalcMode: String, CaseIterable {
     case discount = "-%"
     case markup = "+%"
-    case percentOf = "% of"
-    case compound = "Yr"
+    case percentOf = "Budget %"
+    case compound = "Compound"
+    case loan = "Loan / EMI"
+    case macros = "Macros"
 }
 
 private struct NexlyCalculatorSpec {
@@ -312,16 +314,55 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
         }
         return ""
     }()
-    if combined.contains("compound") || combined.contains("roi") || combined.contains("invest") || combined.contains("annual") || combined.contains("loan") || combined.contains("mortgage") {
+    if combined.contains("loan") || combined.contains("mortgage") || combined.contains("emi") || combined.contains("amortiz") || combined.contains("apr") {
+        return NexlyCalculatorSpec(
+            title: cleanTitle.isEmpty ? "Loan & EMI Simulator" : cleanTitle,
+            amountLabel: "Principal",
+            rateLabel: "APR (%)",
+            resultLabel: "Monthly EMI",
+            initialAmount: amt,
+            initialRate: rate,
+            initialYears: yearsVal == 5 ? 30 : yearsVal,
+            mode: .loan,
+            currency: currency.isEmpty ? "$" : currency
+        )
+    }
+    if combined.contains("calorie") || combined.contains("protein") || combined.contains("macro") || combined.contains("tdee") || combined.contains("bmi") {
+        return NexlyCalculatorSpec(
+            title: cleanTitle.isEmpty ? "Macro & TDEE Estimator" : cleanTitle,
+            amountLabel: "Weight (kg)",
+            rateLabel: "Protein (g/kg)",
+            resultLabel: "Daily Target",
+            initialAmount: amt > 300 ? 75.0 : amt,
+            initialRate: rate > 5 ? 2.0 : rate,
+            initialYears: yearsVal,
+            mode: .macros,
+            currency: ""
+        )
+    }
+    if combined.contains("compound") || combined.contains("roi") || combined.contains("invest") || combined.contains("annual") || combined.contains("portfolio") || combined.contains("apy") {
         return NexlyCalculatorSpec(
             title: cleanTitle.isEmpty ? "Quick Calculator" : cleanTitle,
             amountLabel: "Principal",
-            rateLabel: "Rate (%)",
-            resultLabel: "\(yearsVal)-Yr Total",
+            rateLabel: "APY (%)",
+            resultLabel: "\(yearsVal)-Yr Value",
             initialAmount: amt,
             initialRate: rate,
             initialYears: yearsVal,
             mode: .compound,
+            currency: currency.isEmpty ? "$" : currency
+        )
+    }
+    if combined.contains("budget") || combined.contains("50/30/20") || combined.contains("salary") || combined.contains("income") {
+        return NexlyCalculatorSpec(
+            title: cleanTitle.isEmpty ? "Budget & Savings Planner" : cleanTitle,
+            amountLabel: "Income",
+            rateLabel: "Save (%)",
+            resultLabel: "Saved / Mo",
+            initialAmount: amt,
+            initialRate: rate,
+            initialYears: yearsVal,
+            mode: .percentOf,
             currency: currency.isEmpty ? "$" : currency
         )
     }
@@ -588,12 +629,27 @@ private struct StructuredProseSequenceView: View {
             }
             if !hasExplicitCalc && (activeDashboardTab == "Dashboard" || activeDashboardTab == "Calculator") {
                 let proseText = extractCopyableProseSummary(normalizedProse, citationsOnly: false)
+                let lowProse = proseText.lowercased()
                 let hasCurrency = proseText.range(of: "[$€£]\\s*\\d", options: .regularExpression) != nil
                 let hasPercent = proseText.range(of: "\\b\\d+(?:\\.\\d+)?\\s*%", options: .regularExpression) != nil
-                if hasCurrency && hasPercent {
+                let hasNum = proseText.range(of: "\\b\\d{2,}\\b", options: .regularExpression) != nil
+                let hasDomainSignal = hasNum && (lowProse.contains("mortgage") || lowProse.contains("amortiz") || lowProse.contains("compound interest") || (lowProse.contains("loan") && (lowProse.contains("apr") || lowProse.contains("monthly"))) || (lowProse.contains("budget") && lowProse.contains("50/30/20")) || (lowProse.contains("calorie") && lowProse.contains("protein")))
+                if (hasCurrency && hasPercent) || hasDomainSignal {
                     NexlyQuickCalculatorCardView(
                         spec: parseQuickCalculatorSpec(titleRaw: "Interactive Scenario Calculator", bodyText: proseText)
                     )
+                }
+            }
+
+            let hasVisualDataBlock = normalizedProse.contains {
+                if case .table = $0 { return true }
+                if case .widget(let k, _, _, _) = $0, ["chart", "table", "stat", "progress", "gauge"].contains(k) { return true }
+                return false
+            }
+            if !hasVisualDataBlock && activeDashboardTab == "Dashboard" {
+                let spontaneousMetrics = extractSpontaneousMetricsFromBlocksIOS(normalizedProse)
+                if spontaneousMetrics.count >= 3 {
+                    NexlyQuantitativeExplorerCardIOS(items: spontaneousMetrics)
                 }
             }
 
@@ -1161,12 +1217,30 @@ private struct NexlyQuickCalculatorCardView: View {
         min(max(0, Double(rateText.replacingOccurrences(of: ",", with: "")) ?? 0), 1000)
     }
 
+    private var monthlyLoanPayment: Double {
+        let n = Double(max(1, years * 12))
+        let r = (rateVal / 100.0) / 12.0
+        if r <= 0.000001 { return amountVal / n }
+        let factor = pow(1.0 + r, n)
+        return amountVal * (r * factor) / (factor - 1.0)
+    }
+
+    private var totalLoanPaid: Double {
+        monthlyLoanPayment * Double(max(1, years * 12))
+    }
+
+    private var totalLoanInterest: Double {
+        max(0, totalLoanPaid - amountVal)
+    }
+
     private var total: Double {
         switch mode {
         case .discount: return amountVal * (1.0 - rateVal / 100.0)
         case .markup: return amountVal * (1.0 + rateVal / 100.0)
         case .percentOf: return amountVal * (rateVal / 100.0)
         case .compound: return amountVal * pow(1.0 + rateVal / 100.0, Double(years))
+        case .loan: return monthlyLoanPayment
+        case .macros: return amountVal * 33.0
         }
     }
 
@@ -1174,13 +1248,21 @@ private struct NexlyQuickCalculatorCardView: View {
         abs(total - amountVal)
     }
 
+    private var formattedResultText: String {
+        switch mode {
+        case .loan: return String(format: "%@%.0f/mo", spec.currency.isEmpty ? "$" : spec.currency, total)
+        case .macros: return String(format: "%.0f kcal", total)
+        default: return String(format: "%@%.2f", spec.currency, total)
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
                 HStack(spacing: 8) {
                     NexlyGlassGlyphTile(
-                        name: "calculator",
-                        tone: .lavender,
+                        name: mode == .loan ? "building-bank" : (mode == .compound ? "trending-up" : (mode == .macros ? "barbell" : "calculator")),
+                        tone: mode == .compound ? .green : (mode == .macros ? .peach : .lavender),
                         size: 26,
                         glyphSize: 15
                     )
@@ -1224,11 +1306,11 @@ private struct NexlyQuickCalculatorCardView: View {
 
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(spec.amountLabel)
+                    Text(mode == .loan ? "Principal" : (mode == .macros ? "Weight (kg)" : spec.amountLabel))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
                     HStack(spacing: 2) {
-                        if !spec.currency.isEmpty {
+                        if !spec.currency.isEmpty && mode != .macros {
                             Text(spec.currency)
                                 .font(.system(size: 12.5, weight: .semibold))
                                 .foregroundStyle(Aero.textSecondary)
@@ -1246,7 +1328,7 @@ private struct NexlyQuickCalculatorCardView: View {
                 .frame(maxWidth: .infinity)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(spec.rateLabel)
+                    Text(mode == .loan ? "APR (%)" : (mode == .macros ? "Protein (g/kg)" : spec.rateLabel))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
                     HStack(spacing: 2) {
@@ -1254,7 +1336,7 @@ private struct NexlyQuickCalculatorCardView: View {
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(Aero.text)
                             .keyboardType(.decimalPad)
-                        Text("%")
+                        Text(mode == .macros ? "g" : "%")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(Aero.textSecondary)
                     }
@@ -1266,10 +1348,10 @@ private struct NexlyQuickCalculatorCardView: View {
                 .frame(maxWidth: .infinity)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(mode == .compound ? "\(years)-Yr Value" : spec.resultLabel)
+                    Text(mode == .compound ? "\(years)-Yr Value" : (mode == .loan ? "Monthly EMI" : (mode == .macros ? "Daily Target" : spec.resultLabel)))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
-                    Text(String(format: "%@%.2f", spec.currency, total))
+                    Text(formattedResultText)
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
                         .lineLimit(1)
@@ -1281,14 +1363,14 @@ private struct NexlyQuickCalculatorCardView: View {
                 .frame(maxWidth: .infinity)
             }
 
-            if mode == .compound {
+            if mode == .compound || mode == .loan {
                 HStack {
-                    Text("Compounding Horizon")
+                    Text(mode == .loan ? "Loan Term" : "Compounding Horizon")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
                     Spacer()
                     HStack(spacing: 4) {
-                        ForEach([1, 3, 5, 10, 20], id: \.self) { (yr: Int) in
+                        ForEach(mode == .loan ? [5, 10, 15, 20, 30] : [1, 3, 5, 10, 20], id: \.self) { (yr: Int) in
                             let active = years == yr
                             Button {
                                 GSHaptics.select()
@@ -1313,11 +1395,11 @@ private struct NexlyQuickCalculatorCardView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Slider(
                     value: Binding(
-                        get: { min(max(0, rateVal), 100) },
-                        set: { rateText = String(format: "%.0f", $0) }
+                        get: { min(max(0, rateVal), mode == .macros ? 4 : (mode == .loan ? 20 : 100)) },
+                        set: { rateText = mode == .macros || mode == .loan ? String(format: "%.1f", $0) : String(format: "%.0f", $0) }
                     ),
-                    in: 0...100,
-                    step: 1
+                    in: 0...(mode == .macros ? 4 : (mode == .loan ? 20 : 100)),
+                    step: mode == .macros || mode == .loan ? 0.5 : 1
                 )
                 .tint(Color(red: 0.424, green: 0.298, blue: 0.965))
 
@@ -1344,9 +1426,13 @@ private struct NexlyQuickCalculatorCardView: View {
                     }
                     Spacer(minLength: 4)
                     Text(
-                        mode == .discount
-                            ? String(format: "Saves %@%.2f", spec.currency, delta)
-                            : (mode == .markup ? String(format: "+%@%.2f", spec.currency, delta) : String(format: "Δ %@%.2f", spec.currency, delta))
+                        mode == .loan
+                            ? String(format: "Interest %@%.0f · Total %@%.0f", spec.currency.isEmpty ? "$" : spec.currency, totalLoanInterest, spec.currency.isEmpty ? "$" : spec.currency, totalLoanPaid)
+                            : (mode == .macros
+                                ? String(format: "Protein %.0fg · Water %.1fL", amountVal * max(1.2, rateVal), amountVal * 0.035)
+                                : (mode == .discount
+                                    ? String(format: "Saves %@%.2f", spec.currency, delta)
+                                    : (mode == .markup ? String(format: "+%@%.2f", spec.currency, delta) : String(format: "Δ %@%.2f", spec.currency, delta))))
                     )
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(Color(red: 0.071, green: 0.604, blue: 0.353))
@@ -1356,6 +1442,186 @@ private struct NexlyQuickCalculatorCardView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.76)))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
+    }
+}
+
+private struct SpontaneousMetricItemIOS {
+    let label: String
+    let value: Double
+    let unit: String
+    let icon: String
+    let tone: NexlyGlassTone
+}
+
+private func extractSpontaneousMetricsFromBlocksIOS(_ blocks: [Block]) -> [SpontaneousMetricItemIOS] {
+    var out: [SpontaneousMetricItemIOS] = []
+    var seen = Set<String>()
+    guard let rx = try? NSRegularExpression(pattern: "^([A-Za-z][A-Za-z0-9\\s/+.#&-]{1,28})\\s*(?:—|–|-|:)\\s*([$€£¥])?\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)\\s*([kKmMbB%])?") else {
+        return []
+    }
+    for b in blocks {
+        let items: [ListItem]
+        switch b {
+        case .bulletList(let list, _):
+            items = list.allSatisfy({ $0.checked == nil }) ? list : []
+        case .orderedList(_, let list, _):
+            items = list
+        default:
+            items = []
+        }
+        for li in items {
+            let plain = NexlyIcons.cleanPlainText(plainTextOfSpans(li.spans))
+            let ns = plain as NSString
+            guard let m = rx.firstMatch(in: plain, range: NSRange(location: 0, length: ns.length)) else { continue }
+            let label = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let curr = m.range(at: 2).location != NSNotFound ? ns.substring(with: m.range(at: 2)) : ""
+            let numStr = ns.substring(with: m.range(at: 3)).replacingOccurrences(of: ",", with: "")
+            let suf = m.range(at: 4).location != NSNotFound ? ns.substring(with: m.range(at: 4)) : ""
+            guard let num = Double(numStr), num > 0, !(num >= 1990 && num <= 2035) else { continue }
+            let key = label.lowercased()
+            if seen.contains(key) { continue }
+            seen.insert(key)
+            let mult: Double = {
+                switch suf.lowercased() {
+                case "k": return 1_000.0
+                case "m": return 1_000_000.0
+                case "b": return 1_000_000_000.0
+                default: return 1.0
+                }
+            }()
+            let unit = !curr.isEmpty ? curr : (suf == "%" ? "%" : "")
+            let sem = NexlyIcons.semanticIcon(for: label, fallback: "chart-bar")
+            out.append(SpontaneousMetricItemIOS(label: label, value: num * mult, unit: unit, icon: sem.icon, tone: sem.tone))
+            if out.count >= 8 { break }
+        }
+    }
+    return out
+}
+
+private struct NexlyQuantitativeExplorerCardIOS: View {
+    let items: [SpontaneousMetricItemIOS]
+    @State private var scale: Double = 1.0
+    @State private var sortDesc: Bool = true
+    @State private var selectedIdx: Int = 0
+
+    private var sorted: [SpontaneousMetricItemIOS] {
+        sortDesc ? items.sorted(by: { $0.value > $1.value }) : items
+    }
+
+    private func fmtVal(_ v: Double, unit: String) -> String {
+        let prefix = ["$", "€", "£", "¥"].contains(unit) ? unit : ""
+        let suffix = unit == "%" ? "%" : ""
+        if v >= 1_000_000 { return String(format: "%@%.1fM%@", prefix, v / 1_000_000.0, suffix) }
+        if v >= 1_000 { return String(format: "%@%.1fK%@", prefix, v / 1_000.0, suffix) }
+        if v.truncatingRemainder(dividingBy: 1.0) == 0 { return String(format: "%@%.0f%@", prefix, v, suffix) }
+        return String(format: "%@%.1f%@", prefix, v, suffix)
+    }
+
+    var body: some View {
+        let rows = sorted
+        let maxVal = max(0.0001, (rows.map { $0.value * scale }.max() ?? 1.0))
+        let totalVal = max(0.0001, rows.reduce(0.0) { $0 + $1.value * scale })
+        let safeIdx = min(max(0, selectedIdx), max(0, rows.count - 1))
+        let activeItem = rows[safeIdx]
+        let unit = activeItem.unit
+
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                HStack(spacing: 7) {
+                    NexlyGlassGlyphTile(name: "chart-bar", tone: .lavender, size: 25, glyphSize: 14)
+                    Text("Interactive Data Explorer")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
+                }
+                Spacer()
+                HStack(spacing: 4) {
+                    ForEach([0.5, 1.0, 1.5, 2.0], id: \.self) { (mult: Double) in
+                        let isSel = abs(scale - mult) < 0.05
+                        Button {
+                            GSHaptics.select()
+                            scale = mult
+                        } label: {
+                            Text(mult == 1.0 ? "1×" : (mult == 2.0 ? "2×" : String(format: "%.1f×", mult)))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(isSel ? Color.white : Color(red: 0.310, green: 0.208, blue: 0.910))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(isSel ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color(red: 0.953, green: 0.933, blue: 1.0))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Button {
+                        GSHaptics.select()
+                        sortDesc.toggle()
+                    } label: {
+                        Text(sortDesc ? "Rank ↓" : "Original")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.929, green: 0.898, blue: 1.0)))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            ForEach(Array(rows.enumerated()), id: \.offset) { idx, item in
+                let scaled = item.value * scale
+                let sharePct = (scaled / totalVal) * 100.0
+                let isSel = idx == safeIdx
+                Button {
+                    GSHaptics.select()
+                    selectedIdx = idx
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            NexlyGlassGlyphTile(name: item.icon, tone: item.tone, size: 19, glyphSize: 11)
+                            Text(item.label)
+                                .font(.system(size: 12, weight: isSel ? .bold : .semibold))
+                                .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
+                                .lineLimit(1)
+                            Spacer()
+                            Text(String(format: "%@ (%.0f%%)", fmtVal(scaled, unit: unit), sharePct))
+                                .font(.system(size: 11.5, weight: .bold))
+                                .foregroundStyle(isSel ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
+                        }
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color(red: 0.918, green: 0.890, blue: 0.988))
+                                Capsule()
+                                    .fill(isSel ? Color(red: 0.357, green: 0.239, blue: 0.961) : Color(red: 0.549, green: 0.447, blue: 0.973))
+                                    .frame(width: max(8, geo.size.width * CGFloat(min(1.0, scaled / maxVal))))
+                            }
+                        }
+                        .frame(height: 6)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 9).fill(isSel ? Color(red: 0.953, green: 0.933, blue: 1.0) : Color.clear))
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack {
+                Text("Selected: \(activeItem.label) (\(fmtVal(activeItem.value * scale, unit: unit)))")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
+                Spacer()
+                Text("Total: \(fmtVal(totalVal, unit: unit))")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 9).fill(Color(red: 0.965, green: 0.949, blue: 1.0)))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.80)))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
     }
 }
@@ -1855,6 +2121,7 @@ private struct OrderedListView: View {
     let start: Int
     let items: [ListItem]
     var citations: [Int: String] = [:]
+    @State private var completedSet: Set<Int> = []
 
     private var extractedSources: [CitationEntry] {
         let entries = items.enumerated().compactMap { idx, item in
@@ -1876,9 +2143,39 @@ private struct OrderedListView: View {
             CitationsBlockView(citations: sources)
         } else {
             VStack(alignment: .leading, spacing: 8) {
+                if !completedSet.isEmpty && items.count >= 2 {
+                    HStack {
+                        Text("\(completedSet.count) of \(items.count) steps completed")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                        Spacer()
+                        Text("\(Int(round(Double(completedSet.count) / Double(max(1, items.count)) * 100)))%")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(
+                                completedSet.count == items.count
+                                    ? Color(red: 0.071, green: 0.604, blue: 0.353)
+                                    : Color(red: 0.357, green: 0.239, blue: 0.961)
+                            )
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.953, green: 0.933, blue: 1.0)))
+                }
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                     let number = item.number ?? (start + index)
-                    StepOrderedListItemRowView(number: number, item: item, citations: citations)
+                    StepOrderedListItemRowView(
+                        number: number,
+                        item: item,
+                        citations: citations,
+                        isCompleted: completedSet.contains(index),
+                        onToggle: {
+                            if completedSet.contains(index) {
+                                completedSet.remove(index)
+                            } else {
+                                completedSet.insert(index)
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -1890,14 +2187,20 @@ private struct StepOrderedListItemRowView: View {
     let number: Int
     let item: ListItem
     var citations: [Int: String] = [:]
-    @State private var completed: Bool = false
+    var isCompleted: Bool = false
+    var onToggle: (() -> Void)? = nil
+    @State private var localCompleted: Bool = false
 
-    private var splitStep: (title: String, detailSpans: [InlineSpan], consumedFirstChild: Bool)? {
+    private var completed: Bool {
+        onToggle != nil ? isCompleted : localCompleted
+    }
+
+    private var splitStep: (icon: String?, title: String, detailSpans: [InlineSpan], consumedFirstChild: Bool)? {
         guard let first = item.spans.first, case .bold(let titleCh) = first else { return nil }
         let rawTitle = plainTextOfSpans(titleCh)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: ":"))
-        let (_, strippedTitle) = NexlyIcons.extractLeadingIcon(rawTitle)
+        let (leadIcon, strippedTitle) = NexlyIcons.extractLeadingIcon(rawTitle)
         let cleanTitle = NexlyIcons.cleanPlainText(strippedTitle.isEmpty ? rawTitle : strippedTitle)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let title = cleanTitle.isEmpty ? rawTitle : cleanTitle
@@ -1913,11 +2216,11 @@ private struct StepOrderedListItemRowView: View {
                 }
             }
             if !rest.isEmpty {
-                return (title, rest, false)
+                return (leadIcon, title, rest, false)
             }
         }
         if let firstChild = item.children.first, case .paragraph(let childSpans, _) = firstChild, !childSpans.isEmpty {
-            return (title, childSpans, true)
+            return (leadIcon, title, childSpans, true)
         }
         return nil
     }
@@ -1933,7 +2236,7 @@ private struct StepOrderedListItemRowView: View {
         VStack(alignment: .leading, spacing: 4) {
             Button {
                 GSHaptics.select()
-                completed.toggle()
+                if let onToggle { onToggle() } else { localCompleted.toggle() }
             } label: {
                 HStack(alignment: .top, spacing: 10) {
                     ZStack {
@@ -1955,10 +2258,15 @@ private struct StepOrderedListItemRowView: View {
 
                     if let split {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(split.title)
-                                .font(.system(size: compact ? 13.5 : 15, weight: .bold))
-                                .strikethrough(completed)
-                                .foregroundStyle(completed ? Aero.textSecondary : (compact ? NexlyInk.prose : Aero.text))
+                            HStack(spacing: 5) {
+                                if let stepIcon = split.icon {
+                                    NexlyGlassGlyphTile(name: stepIcon, tone: .lavender, size: 18, glyphSize: 11)
+                                }
+                                Text(split.title)
+                                    .font(.system(size: compact ? 13.5 : 15, weight: .bold))
+                                    .strikethrough(completed)
+                                    .foregroundStyle(completed ? Aero.textSecondary : (compact ? NexlyInk.prose : Aero.text))
+                            }
                             ParagraphView(spans: split.detailSpans, citations: citations)
                                 .opacity(completed ? 0.65 : 0.86)
                         }
@@ -1992,14 +2300,19 @@ private struct ListItemRowView: View {
     var body: some View {
         let rawText = plainTextOfSpans(item.spans)
         let (extractedIcon, _) = NexlyIcons.extractLeadingIcon(rawText)
-        let leadingIcon = extractedIcon ?? (marker == "✓" ? "circle-check" : nil)
+        let boldSemanticIcon: String? = {
+            guard extractedIcon == nil, let first = item.spans.first, case .bold(let bch) = first else { return nil }
+            let sem = NexlyIcons.semanticIcon(for: plainTextOfSpans(bch), fallback: "")
+            return sem.icon.isEmpty || sem.icon == "sparkles" ? nil : sem.icon
+        }()
+        let leadingIcon = extractedIcon ?? boldSemanticIcon ?? (marker == "✓" ? "circle-check" : nil)
         let displaySpans = extractedIcon != nil ? stripLeadingIconFromSpans(item.spans) : item.spans
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: leadingIcon != nil ? .top : .firstTextBaseline, spacing: 8) {
                 if let leadingIcon {
                     NexlyGlassGlyphTile(
                         name: leadingIcon,
-                        tone: marker == "✓" ? .green : .lavender,
+                        tone: marker == "✓" ? .green : NexlyIcons.tone(for: leadingIcon),
                         size: 20,
                         glyphSize: 12
                     )
@@ -2639,37 +2952,101 @@ struct CodeBlockCardView: View {
                         numVars[varName] = d
                     } else if (rhs.hasPrefix("'") && rhs.hasSuffix("'")) || (rhs.hasPrefix("\"") && rhs.hasSuffix("\"")) {
                         strVars[varName] = String(rhs.dropFirst().dropLast())
+                    } else {
+                        var expandedRhs = rhs.replacingOccurrences(of: "**", with: "^")
+                        for (k, lv) in listVars {
+                            expandedRhs = expandedRhs.replacingOccurrences(of: "sum(\(k))", with: "\(lv.reduce(0, +))")
+                            expandedRhs = expandedRhs.replacingOccurrences(of: "len(\(k))", with: "\(lv.count)")
+                            expandedRhs = expandedRhs.replacingOccurrences(of: "min(\(k))", with: "\(lv.min() ?? 0)")
+                            expandedRhs = expandedRhs.replacingOccurrences(of: "max(\(k))", with: "\(lv.max() ?? 0)")
+                        }
+                        if let evalVal = CalcExprIOS.eval(expandedRhs, vars: numVars) {
+                            numVars[varName] = evalVal
+                        } else {
+                            strVars[varName] = rhs
+                        }
                     }
                 }
                 if let rx = try? NSRegularExpression(pattern: "print\\s*\\((.+)\\)$"),
                    let m = rx.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
                    let r = Range(m.range(at: 1), in: line) {
-                    var arg = String(line[r]).trimmingCharacters(in: .whitespacesAndNewlines)
-                    if (arg.hasPrefix("f'") && arg.hasSuffix("'")) || (arg.hasPrefix("f\"") && arg.hasSuffix("\"")) {
-                        var body = String(arg.dropFirst(2).dropLast())
-                        for (k, v) in numVars {
-                            let s = v.truncatingRemainder(dividingBy: 1.0) == 0 ? String(format: "%.0f", v) : String(format: "%.2f", v)
-                            body = body.replacingOccurrences(of: "{\(k)}", with: s)
-                        }
-                        for (k, v) in strVars {
-                            body = body.replacingOccurrences(of: "{\(k)}", with: v)
-                        }
-                        lines.append(body)
-                    } else if (arg.hasPrefix("'") && arg.hasSuffix("'")) || (arg.hasPrefix("\"") && arg.hasSuffix("\"")) {
-                        lines.append(String(arg.dropFirst().dropLast()))
-                    } else if let v = strVars[arg] {
-                        lines.append(v)
-                    } else if let v = numVars[arg] {
-                        lines.append(v.truncatingRemainder(dividingBy: 1.0) == 0 ? String(format: "%.0f", v) : String(format: "%.2f", v))
-                    } else if let lv = listVars[arg] {
-                        lines.append("[\(lv.map { $0.truncatingRemainder(dividingBy: 1.0) == 0 ? String(format: "%.0f", $0) : String(format: "%.2f", $0) }.joined(separator: ", "))]")
-                    } else {
-                        for (k, lv) in listVars {
-                            arg = arg.replacingOccurrences(of: "sum(\(k))", with: String(format: "%.2f", lv.reduce(0, +)))
-                            arg = arg.replacingOccurrences(of: "len(\(k))", with: "\(lv.count)")
-                        }
-                        lines.append(arg)
+                    let arg = String(line[r]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    func fmtNumPy(_ v: Double) -> String {
+                        v.truncatingRemainder(dividingBy: 1.0) == 0 ? String(format: "%.0f", v) : String(format: "%.2f", v)
                     }
+                    func evalSinglePy(_ rawExpr: String) -> String {
+                        var e = rawExpr.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if (e.hasPrefix("f'") && e.hasSuffix("'")) || (e.hasPrefix("f\"") && e.hasSuffix("\"")) {
+                            let body = String(e.dropFirst(2).dropLast())
+                            let ns = body as NSString
+                            guard let braceRx = try? NSRegularExpression(pattern: "\\{([^}]+)\\}") else { return body }
+                            var result = ""
+                            var lastLoc = 0
+                            for match in braceRx.matches(in: body, range: NSRange(location: 0, length: ns.length)) {
+                                result += ns.substring(with: NSRange(location: lastLoc, length: match.range.location - lastLoc))
+                                let innerExpr = ns.substring(with: match.range(at: 1)).components(separatedBy: ":").first ?? ""
+                                result += evalSinglePy(innerExpr)
+                                lastLoc = match.range.location + match.range.length
+                            }
+                            result += ns.substring(from: lastLoc)
+                            return result
+                        }
+                        if (e.hasPrefix("'") && e.hasSuffix("'")) || (e.hasPrefix("\"") && e.hasSuffix("\"")) {
+                            return String(e.dropFirst().dropLast())
+                        }
+                        if let sv = strVars[e] { return sv }
+                        if let nv = numVars[e] { return fmtNumPy(nv) }
+                        if let lv = listVars[e] {
+                            return "[\(lv.map(fmtNumPy).joined(separator: ", "))]"
+                        }
+                        for (k, lv) in listVars {
+                            e = e.replacingOccurrences(of: "sum(\(k))", with: "\(lv.reduce(0, +))")
+                            e = e.replacingOccurrences(of: "len(\(k))", with: "\(lv.count)")
+                            e = e.replacingOccurrences(of: "min(\(k))", with: "\(lv.min() ?? 0)")
+                            e = e.replacingOccurrences(of: "max(\(k))", with: "\(lv.max() ?? 0)")
+                        }
+                        if let inlineSum = try? NSRegularExpression(pattern: "^(sum|len|min|max)\\s*\\(\\s*\\[([0-9.,\\s+-]+)\\]\\s*\\)$"),
+                           let im = inlineSum.firstMatch(in: e, range: NSRange(e.startIndex..., in: e)),
+                           let fnR = Range(im.range(at: 1), in: e),
+                           let arrR = Range(im.range(at: 2), in: e) {
+                            let fn = String(e[fnR])
+                            let nums = String(e[arrR]).split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+                            if !nums.isEmpty {
+                                switch fn {
+                                case "sum": return fmtNumPy(nums.reduce(0, +))
+                                case "len": return "\(nums.count)"
+                                case "min": return fmtNumPy(nums.min() ?? 0)
+                                default: return fmtNumPy(nums.max() ?? 0)
+                                }
+                            }
+                        }
+                        let normMath = e.replacingOccurrences(of: "**", with: "^")
+                        if let v = CalcExprIOS.eval(normMath, vars: numVars) {
+                            return fmtNumPy(v)
+                        }
+                        return e
+                    }
+                    var parts: [String] = []
+                    var cur = ""
+                    var depth = 0
+                    var inSingle = false
+                    var inDouble = false
+                    for ch in arg {
+                        if ch == "'" && !inDouble { inSingle.toggle() }
+                        else if ch == "\"" && !inSingle { inDouble.toggle() }
+                        else if !inSingle && !inDouble {
+                            if ch == "(" || ch == "[" || ch == "{" { depth += 1 }
+                            else if ch == ")" || ch == "]" || ch == "}" { depth = max(0, depth - 1) }
+                            else if ch == "," && depth == 0 {
+                                parts.append(cur)
+                                cur = ""
+                                continue
+                            }
+                        }
+                        cur.append(ch)
+                    }
+                    if !cur.trimmingCharacters(in: .whitespaces).isEmpty { parts.append(cur) }
+                    lines.append(parts.map(evalSinglePy).joined(separator: " "))
                 }
             }
             if let series = extractCodeSeriesPreview(src) {

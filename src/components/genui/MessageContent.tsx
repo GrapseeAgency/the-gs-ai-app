@@ -23,7 +23,7 @@ import { HtmlBlock } from './blocks/HtmlBlock'
 import { SvgBlock } from './blocks/SvgBlock'
 import { CodeBlock } from './blocks/CodeBlock'
 import { themeFor, TYPE } from './theme/tokens'
-import { canonicalIconName, emojiToIconTokens, ICON_TOKEN_RE, extractLeadingIcon, cleanPlainText } from '@/lib/nexly/icons'
+import { canonicalIconName, emojiToIconTokens, ICON_TOKEN_RE, extractLeadingIcon, cleanPlainText, semanticIconFor } from '@/lib/nexly/icons'
 import { GlassIcon } from '@/components/nexly/GlassIcon'
 
 /** A persisted citation the host knows about — [N] markers resolve to these. */
@@ -643,7 +643,7 @@ function sectionBadgeForHeading(raw: string): { icon: string; tone: string } | n
   if (lower.includes('bottom line') || lower.includes('conclusion') || lower.includes('verdict') || lower.includes('takeaway')) return { icon: 'circle-check', tone: 'green' }
   if (lower.includes('difference') || lower.includes('compare') || lower.includes('optional') || lower.includes('alternative')) return { icon: 'arrows-diff', tone: 'blue' }
   if (lower.includes('code') || lower.includes('implementation') || lower.includes('snippet') || lower.includes('sql') || lower.includes('query')) return { icon: 'code', tone: 'slate' }
-  return { icon: 'sparkles', tone: 'lavender' }
+  return semanticIconFor(clean, 'sparkles')
 }
 
 function splitStepTitleAndDetail(raw: string): { title: string; detail: string } | null {
@@ -788,6 +788,8 @@ function InteractiveProseChecklistItem({
   theme,
   accent,
   citations,
+  checkedOverride,
+  onToggleOverride,
 }: {
   item: ListItemNode
   idx: number
@@ -795,11 +797,14 @@ function InteractiveProseChecklistItem({
   theme: Theme
   accent: string
   citations?: Citation[]
+  checkedOverride?: boolean
+  onToggleOverride?: () => void
 }) {
-  const [checked, setChecked] = useState(Boolean(item.checked))
+  const [localChecked, setLocalChecked] = useState(Boolean(item.checked))
+  const checked = checkedOverride !== undefined ? checkedOverride : localChecked
   return (
     <li
-      onClick={() => setChecked((prev) => !prev)}
+      onClick={() => (onToggleOverride ? onToggleOverride() : setLocalChecked((prev) => !prev))}
       style={{
         listStyleType: 'none',
         display: 'flex',
@@ -847,21 +852,6 @@ function InteractiveProseChecklistItem({
   )
 }
 
-function proseEntityBadge(raw: string): { icon: string; color: string; glassIcon?: string } | null {
-  const clean = raw.replace(/[*_`]/g, '').trim().toLowerCase()
-  if (clean === 'python') return { icon: 'Py', color: '#3776AB', glassIcon: 'brand-python' }
-  if (clean === 'java') return { icon: 'Jv', color: '#E76F00', glassIcon: 'coffee' }
-  if (clean === 'c++') return { icon: 'C+', color: '#00599C', glassIcon: 'code' }
-  if (clean === 'c') return { icon: 'C', color: '#283593', glassIcon: 'code' }
-  if (clean === 'javascript' || clean === 'js') return { icon: 'JS', color: '#D99B00', glassIcon: 'code' }
-  if (clean === 'typescript' || clean === 'ts') return { icon: 'TS', color: '#3178C6', glassIcon: 'code' }
-  if (clean === 'rust') return { icon: 'Rs', color: '#CE422B', glassIcon: 'code' }
-  if (clean === 'go' || clean === 'golang') return { icon: 'Go', color: '#00ADD8', glassIcon: 'code' }
-  if (clean.startsWith('nexly')) return { icon: 'Nx', color: '#6C4CF6', glassIcon: 'sparkles' }
-  if (clean.startsWith('data')) return { icon: 'Dt', color: '#3B82F6', glassIcon: 'chart-bar' }
-  return null
-}
-
 function ProseTableGrid({
   block,
   idx,
@@ -884,8 +874,13 @@ function ProseTableGrid({
     if (sortCol === null) return block.rows
     const parseSortableNum = (cell: string): number | null => {
       const cleaned = cell.replace(/[*_`~,$%€£¥₹↑↓↗↘+,\s]/g, '').trim()
-      const n = Number(cleaned)
-      return cleaned && Number.isFinite(n) ? n : null
+      const m = cleaned.match(/^(-?\d+(?:\.\d+)?)([kKmMbBtT])?$/)
+      if (!m) return null
+      const base = Number(m[1])
+      if (!Number.isFinite(base)) return null
+      const suf = (m[2] ?? '').toLowerCase()
+      const mult = suf === 'k' ? 1e3 : suf === 'm' ? 1e6 : suf === 'b' ? 1e9 : suf === 't' ? 1e12 : 1
+      return base * mult
     }
     return [...block.rows].sort((a, b) => {
       const ca = (a[sortCol] ?? '').replace(/[*_`~]/g, '').trim()
@@ -926,27 +921,14 @@ function ProseTableGrid({
       )
     }
     if (colIdx === primaryNameCol) {
-      const badge = proseEntityBadge(clean)
-      if (badge) {
+      const { icon: leadTok, rest: strippedCell } = extractLeadingIcon(clean)
+      const entityName = cleanPlainText(strippedCell || clean).trim()
+      const sem = leadTok ? { icon: leadTok, tone: 'lavender' } : semanticIconFor(entityName, '')
+      if (sem.icon) {
         return (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 650, color: theme.text }}>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 20,
-                height: 20,
-                borderRadius: 6,
-                background: `${badge.color}22`,
-                color: badge.color,
-                fontSize: 10.5,
-                fontWeight: 800,
-              }}
-            >
-              {badge.icon}
-            </span>
-            <span>{renderInline(raw, theme, accent, citations, keyPrefix)}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontWeight: 650, color: theme.text }}>
+            <GlassIcon name={sem.icon} tone={sem.tone as never} size={22} glyph={13} />
+            <span>{renderInline(leadTok ? strippedCell : raw, theme, accent, citations, keyPrefix)}</span>
           </span>
         )
       }
@@ -1124,12 +1106,41 @@ function InteractiveProseTodoList({
   accent: string
   citations?: Citation[]
 }) {
+  const [checkedMap, setCheckedMap] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {}
+    block.items.forEach((it, j) => {
+      init[`base-${j}`] = Boolean(it.checked)
+    })
+    return init
+  })
   const [extraTasks, setExtraTasks] = useState<string[]>([])
   const [isAdding, setIsAdding] = useState(false)
   const [newTaskText, setNewTaskText] = useState('')
 
+  const totalCount = block.items.length + extraTasks.length
+  const completedCount =
+    block.items.reduce((acc, it, j) => acc + ((checkedMap[`base-${j}`] ?? Boolean(it.checked)) ? 1 : 0), 0) +
+    extraTasks.reduce((acc, _, ti) => acc + (checkedMap[`extra-${ti}`] ? 1 : 0), 0)
+  const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {totalCount > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: 11,
+            fontWeight: 650,
+            color: theme.text2,
+            padding: '2px 4px',
+          }}
+        >
+          <span>{`${completedCount}/${totalCount} completed`}</span>
+          <span style={{ color: completedCount === totalCount ? '#129A5A' : '#5B3DF5', fontWeight: 700 }}>{pct}%</span>
+        </div>
+      )}
       <ul
         style={{
           margin: 0,
@@ -1141,28 +1152,38 @@ function InteractiveProseTodoList({
           listStyleType: 'none',
         }}
       >
-        {block.items.map((item, j) => (
-          <InteractiveProseChecklistItem
-            key={j}
-            item={item.checked !== undefined ? item : { ...item, checked: false }}
-            idx={idx}
-            j={j}
-            theme={theme}
-            accent={accent}
-            citations={citations}
-          />
-        ))}
-        {extraTasks.map((task, ti) => (
-          <InteractiveProseChecklistItem
-            key={`extra-${ti}`}
-            item={{ checked: false, text: task, continuations: [], children: [] }}
-            idx={idx}
-            j={block.items.length + ti}
-            theme={theme}
-            accent={accent}
-            citations={citations}
-          />
-        ))}
+        {block.items.map((item, j) => {
+          const isC = checkedMap[`base-${j}`] ?? Boolean(item.checked)
+          return (
+            <InteractiveProseChecklistItem
+              key={j}
+              item={item.checked !== undefined ? item : { ...item, checked: false }}
+              idx={idx}
+              j={j}
+              theme={theme}
+              accent={accent}
+              citations={citations}
+              checkedOverride={isC}
+              onToggleOverride={() => setCheckedMap((prev) => ({ ...prev, [`base-${j}`]: !isC }))}
+            />
+          )
+        })}
+        {extraTasks.map((task, ti) => {
+          const isC = Boolean(checkedMap[`extra-${ti}`])
+          return (
+            <InteractiveProseChecklistItem
+              key={`extra-${ti}`}
+              item={{ checked: false, text: task, continuations: [], children: [] }}
+              idx={idx}
+              j={block.items.length + ti}
+              theme={theme}
+              accent={accent}
+              citations={citations}
+              checkedOverride={isC}
+              onToggleOverride={() => setCheckedMap((prev) => ({ ...prev, [`extra-${ti}`]: !isC }))}
+            />
+          )
+        })}
       </ul>
       {isAdding ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
@@ -1411,43 +1432,48 @@ function renderProseBlock(
           <ul
             style={{
               margin: 0,
-              paddingLeft: isCheckmarkSection ? 0 : 20,
+              paddingLeft: 0,
               display: 'flex',
               flexDirection: 'column',
-              gap: 5,
+              gap: 6,
               color: theme.text,
-              listStyleType: isCheckmarkSection ? 'none' : 'disc',
+              listStyleType: 'none',
             }}
           >
-            {block.items.map((item, j) =>
-              isCheckmarkSection ? (
+            {block.items.map((item, j) => {
+              const { icon: leadTok, rest: stripped } = extractLeadingIcon(item.text)
+              const boldLeadMatch = !leadTok ? item.text.trim().match(/^\*\*([^*]+)\*\*/) : null
+              const sem = leadTok
+                ? { icon: leadTok, tone: 'lavender' }
+                : boldLeadMatch
+                  ? semanticIconFor(boldLeadMatch[1], '')
+                  : { icon: '', tone: 'lavender' }
+              const resolvedIcon = isCheckmarkSection ? (leadTok || sem.icon || 'circle-check') : (leadTok || (sem.icon && sem.icon !== 'sparkles' ? sem.icon : ''))
+              const resolvedTone = isCheckmarkSection && !leadTok && !sem.icon ? 'green' : sem.tone
+              const bodyStr = leadTok ? stripped : item.text
+              return (
                 <li key={j} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <GlassIcon name="circle-check" tone="lavender" size={18} glyph={11} style={{ marginTop: 2, flexShrink: 0 }} />
+                  {resolvedIcon ? (
+                    <GlassIcon name={resolvedIcon} tone={resolvedTone as never} size={20} glyph={12} style={{ marginTop: 2, flexShrink: 0 }} />
+                  ) : (
+                    <span style={{ color: accent, fontWeight: 800, marginTop: 1, flexShrink: 0 }}>•</span>
+                  )}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <span>{renderInline(item.text, theme, accent, citations, `li${idx}-${j}`)}</span>
+                    <span>{renderInline(bodyStr, theme, accent, citations, `li${idx}-${j}`)}</span>
                     {item.continuations.map((c, ci) => (
                       <div key={ci} style={{ marginTop: 2 }}>
                         {renderInline(c, theme, accent, citations, `lic${idx}-${j}-${ci}`)}
                       </div>
                     ))}
+                    {item.children.length > 0 && (
+                      <div style={{ marginTop: 4 }}>
+                        {item.children.map((ch, chi) => renderProseBlock(ch, chi, theme, accent, citations, sectionMode))}
+                      </div>
+                    )}
                   </div>
                 </li>
-              ) : (
-                <li key={j}>
-                  <span>{renderInline(item.text, theme, accent, citations, `li${idx}-${j}`)}</span>
-                  {item.continuations.map((c, ci) => (
-                    <div key={ci} style={{ marginTop: 2 }}>
-                      {renderInline(c, theme, accent, citations, `lic${idx}-${j}-${ci}`)}
-                    </div>
-                  ))}
-                  {item.children.length > 0 && (
-                    <div style={{ marginTop: 4 }}>
-                      {item.children.map((ch, chi) => renderProseBlock(ch, chi, theme, accent, citations, sectionMode))}
-                    </div>
-                  )}
-                </li>
               )
-            )}
+            })}
           </ul>
         </div>
       )

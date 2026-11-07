@@ -56,11 +56,57 @@ private fun formatNumValue(d: Double): String =
     if (d % 1.0 == 0.0) d.toLong().toString()
     else String.format(java.util.Locale.US, "%.4f", d).trimEnd('0').trimEnd('.')
 
+private fun splitTopLevelCommasKt(input: String): List<String> {
+    val parts = mutableListOf<String>()
+    val cur = StringBuilder()
+    var depth = 0
+    var inSingle = false
+    var inDouble = false
+    for (i in input.indices) {
+        val ch = input[i]
+        val prev = if (i > 0) input[i - 1] else ' '
+        if (ch == '\'' && !inDouble && prev != '\\') inSingle = !inSingle
+        else if (ch == '"' && !inSingle && prev != '\\') inDouble = !inDouble
+        else if (!inSingle && !inDouble) {
+            when (ch) {
+                '(', '[', '{' -> depth++
+                ')', ']', '}' -> depth = (depth - 1).coerceAtLeast(0)
+                ',' -> if (depth == 0) {
+                    val s = cur.toString().trim()
+                    if (s.isNotEmpty()) parts += s
+                    cur.setLength(0)
+                    continue
+                }
+            }
+        }
+        cur.append(ch)
+    }
+    val tail = cur.toString().trim()
+    if (tail.isNotEmpty()) parts += tail
+    return parts
+}
+
+private fun parseInlineNumberListKt(
+    raw: String,
+    numVars: Map<String, Double>,
+    strVars: Map<String, String>,
+    listVars: Map<String, List<Double>>
+): List<Double>? {
+    val t = raw.trim()
+    if (!t.startsWith("[") || !t.endsWith("]")) return null
+    val inner = t.drop(1).dropLast(1).trim()
+    if (inner.isEmpty()) return emptyList()
+    return splitTopLevelCommasKt(inner).mapNotNull {
+        evalCodeExpression(it, numVars, strVars, listVars).toDoubleOrNull()
+    }
+}
+
 private fun evalCodeExpression(
     rawExpr: String,
     numVars: Map<String, Double>,
     strVars: Map<String, String>,
-    listVars: Map<String, List<Double>>
+    listVars: Map<String, List<Double>>,
+    funcs: Map<String, Pair<List<String>, String>> = emptyMap()
 ): String {
     val expr = rawExpr.trim()
     if (expr.isEmpty()) return ""
@@ -72,7 +118,7 @@ private fun evalCodeExpression(
         val inner = if (expr.startsWith("f")) expr.drop(2).dropLast(1) else expr.drop(1).dropLast(1)
         return Regex("\\$\\{([^}]+)}|\\{([^}]+)}").replace(inner) { m ->
             val sub = m.groupValues[1].ifBlank { m.groupValues[2] }.trim().substringBefore(':')
-            evalCodeExpression(sub, numVars, strVars, listVars)
+            evalCodeExpression(sub, numVars, strVars, listVars, funcs)
         }
     }
     if ((expr.startsWith("\"") && expr.endsWith("\"")) || (expr.startsWith("'") && expr.endsWith("'"))) {
@@ -82,12 +128,31 @@ private fun evalCodeExpression(
     listVars[expr]?.let { list ->
         return "[" + list.joinToString(", ") { formatNumValue(it) } + "]"
     }
-    // Aggregate functions over list variables: sum(arr), len(arr), min(arr), max(arr), avg(arr)
-    val aggMatch = Regex("^(sum|len|min|max|avg|mean)\\s*\\(\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\)$").find(expr)
+    parseInlineNumberListKt(expr, numVars, strVars, listVars)?.let { list ->
+        return "[" + list.joinToString(", ") { formatNumValue(it) } + "]"
+    }
+    // User-defined function call fn(a, b)
+    val fnMatch = Regex("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\((.*)\\)$").find(expr)
+    if (fnMatch != null) {
+        val fnName = fnMatch.groupValues[1]
+        val fnSpec = funcs[fnName]
+        if (fnSpec != null) {
+            val argVals = splitTopLevelCommasKt(fnMatch.groupValues[2]).map {
+                evalCodeExpression(it, numVars, strVars, listVars, funcs).toDoubleOrNull() ?: 0.0
+            }
+            val scoped = numVars.toMutableMap()
+            fnSpec.first.forEachIndexed { idx, p -> scoped[p] = argVals.getOrElse(idx) { 0.0 } }
+            return evalCodeExpression(fnSpec.second, scoped, strVars, listVars, funcs)
+        }
+    }
+    // Aggregate functions over list variables or inline lists: sum(arr), len(arr), min(arr), max(arr), avg(arr)
+    val aggMatch = Regex("^(sum|len|min|max|avg|mean)\\s*\\(\\s*(.+)\\s*\\)$").find(expr)
     if (aggMatch != null) {
         val fn = aggMatch.groupValues[1]
-        val vName = aggMatch.groupValues[2]
-        val list = listVars[vName]
+        val argStr = aggMatch.groupValues[2].trim()
+        val list = listVars[argStr]
+            ?: parseInlineNumberListKt(argStr, numVars, strVars, listVars)
+            ?: splitTopLevelCommasKt(argStr).mapNotNull { evalCodeExpression(it, numVars, strVars, listVars, funcs).toDoubleOrNull() }.takeIf { it.size > 1 }
         if (list != null && list.isNotEmpty()) {
             val res = when (fn) {
                 "sum" -> list.sum()
@@ -100,9 +165,10 @@ private fun evalCodeExpression(
         }
     }
     // Replace any sum(var)/len(var)/min(var)/max(var) inside compound arithmetic
-    val expanded = Regex("(sum|len|min|max)\\s*\\(\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\)").replace(expr) { m ->
+    val expanded = Regex("(sum|len|min|max)\\s*\\(\\s*([^)]+)\\s*\\)").replace(expr) { m ->
         val fn = m.groupValues[1]
-        val list = listVars[m.groupValues[2]]
+        val argStr = m.groupValues[2].trim()
+        val list = listVars[argStr] ?: parseInlineNumberListKt(argStr, numVars, strVars, listVars)
         if (list != null && list.isNotEmpty()) {
             val v = when (fn) {
                 "sum" -> list.sum()
@@ -238,12 +304,8 @@ private fun executeCodePreview(language: String?, code: String): CodeRunResult {
             val printMatch = Regex("^print\\s*\\((.+)\\)$").find(line)
             if (printMatch != null) {
                 val inner = printMatch.groupValues[1].trim()
-                if (inner.startsWith("f\"") || inner.startsWith("f'") || !inner.contains(",")) {
-                    outLines += evalCodeExpression(inner, numVars, strVars, listVars)
-                } else {
-                    val parts = inner.split(',').map { evalCodeExpression(it, numVars, strVars, listVars) }
-                    outLines += parts.joinToString(" ")
-                }
+                val parts = splitTopLevelCommasKt(inner).map { evalCodeExpression(it, numVars, strVars, listVars) }
+                outLines += parts.joinToString(" ")
             }
             idx++
         }
@@ -298,14 +360,10 @@ private fun executeCodePreview(language: String?, code: String): CodeRunResult {
                 val asDouble = evaluated.toDoubleOrNull()
                 if (asDouble != null) numVars[name] = asDouble else strVars[name] = evaluated
             }
-            Regex("console\\.(?:log|info|warn)\\s*\\(([^)]+)\\)").findAll(line).forEach { logMatch ->
+            Regex("console\\.(?:log|info|warn)\\s*\\((.+)\\)").findAll(line).forEach { logMatch ->
                 val inner = logMatch.groupValues[1].trim()
                 if (inner != "e") {
-                    if (inner.startsWith("`") || !inner.contains(",")) {
-                        outLines += evalCodeExpression(inner, numVars, strVars, listVars)
-                    } else {
-                        outLines += inner.split(',').joinToString(" ") { evalCodeExpression(it, numVars, strVars, listVars) }
-                    }
+                    outLines += splitTopLevelCommasKt(inner).joinToString(" ") { evalCodeExpression(it, numVars, strVars, listVars) }
                 }
             }
         }

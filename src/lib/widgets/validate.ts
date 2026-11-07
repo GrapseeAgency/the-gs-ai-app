@@ -33,6 +33,7 @@ import {
 } from './catalog'
 import { SURFACES, PALETTES, type Palette, type Surface } from '../design/rulebook'
 import { isNexlyPlanPayload, parseNexlyPlan } from '../nexly/plan'
+import { cleanPlainText, emojiToIconTokens, extractLeadingIcon, iconNameFor } from '../nexly/icons'
 
 export interface WidgetFence {
   kind: string
@@ -806,14 +807,45 @@ export function validateWidget(kind: string, rawJson: string): ValidationResult 
     const palette = typeof payload.palette === 'string' ? payload.palette.trim().toLowerCase() : ''
     if ((PALETTES as readonly Palette[]).some((p) => p.id === palette)) styled.palette = palette
 
-  const json = JSON.stringify(styled)
+  const rawKeysPreserved = new Set([
+    'code', 'html', 'svg', 'url', 'src', 'href', 'unified', 'before', 'after',
+    'formula', 'expression', 'expr', 'z', 'pattern', 'regex', 'query', 'sql',
+  ])
+  const iconNameKeys = new Set(['icon', 'closingIcon'])
+  const sanitizeVal = (val: unknown, keyHint?: string): unknown => {
+    if (typeof val === 'string') {
+      if (keyHint && rawKeysPreserved.has(keyHint)) return val
+      if (keyHint && iconNameKeys.has(keyHint)) {
+        const lead = extractLeadingIcon(val).icon
+        return lead ?? iconNameFor(val)
+      }
+      if (
+        keyHint === 'title' ||
+        ((kind === 'followups' || kind === 'actions' || kind === 'menu' || kind === 'chips') &&
+          (keyHint === 'label' || keyHint === 'text' || keyHint === 'name'))
+      ) {
+        return emojiToIconTokens(val).trim()
+      }
+      return cleanPlainText(val)
+    }
+    if (Array.isArray(val)) return val.map((item) => sanitizeVal(item, keyHint))
+    if (isObj(val)) {
+      const out: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(val)) out[k] = sanitizeVal(v, k)
+      return out
+    }
+    return val
+  }
+
+  const sanitizedWidget = sanitizeVal(styled) as Record<string, unknown>
+  const json = JSON.stringify(sanitizedWidget)
   if (json.length > LIMITS.maxWidgetBytes) {
     return { ok: false, kind, errors: [`payload exceeds ${LIMITS.maxWidgetBytes} bytes`] }
   }
   return {
     ok: true,
     kind,
-    widget: styled,
+    widget: sanitizedWidget,
     json,
     repaired: check.repaired || jsonRepaired,
   }

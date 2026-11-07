@@ -583,6 +583,104 @@ export const EMOJI_TO_ICON: Record<string, string> = {
   '🟢': 'circle-dot',
   '🔵': 'circle-dot',
   '🟣': 'circle-dot',
+  '⚫': 'circle-dot',
+  '⚪': 'circle-dot',
+  '🟤': 'circle-dot',
+  '⬛': 'square',
+  '⬜': 'square',
+  '▪️': 'square',
+  '▫️': 'square',
+  '◾': 'square',
+  '◽': 'square',
+  '◼️': 'square',
+  '◻️': 'square',
+  '🔶': 'diamond',
+  '🔷': 'diamond',
+  '🔸': 'diamond',
+  '🔹': 'diamond',
+  '🔺': 'triangle',
+  '🔻': 'triangle-inverted',
+  '▶️': 'player-play',
+  '▶': 'player-play',
+  '◀️': 'player-skip-back',
+  '◀': 'player-skip-back',
+  '⏩': 'player-track-next',
+  '⏪': 'player-track-prev',
+  '⏸️': 'player-pause',
+  '⏹️': 'player-stop',
+  '🔄': 'refresh',
+  '🔁': 'repeat',
+  '🔀': 'arrows-shuffle',
+  '➡️': 'arrow-right',
+  '⬅️': 'arrow-left',
+  '⬆️': 'arrow-up',
+  '⬇️': 'arrow-down',
+  '↗️': 'arrow-up-right',
+  '↘️': 'arrow-down-right',
+  '↙️': 'arrow-down-left',
+  '↖️': 'arrow-up-left',
+  '↔️': 'arrows-left-right',
+  '↕️': 'arrows-up-down',
+  '↩️': 'arrow-back-up',
+  '↪️': 'arrow-forward-up',
+  '⤴️': 'arrow-ramp-right',
+  '⤵️': 'arrow-ramp-left',
+  '➕': 'plus',
+  '➖': 'minus',
+  '➗': 'divide',
+  '✖️': 'x',
+  '✖': 'x',
+  '♾️': 'infinity',
+  '♾': 'infinity',
+  '💲': 'currency-dollar',
+  '💱': 'arrows-exchange',
+  '™️': 'trademark',
+  '™': 'trademark',
+  '©️': 'copyright',
+  '©': 'copyright',
+  '®️': 'registered',
+  '®': 'registered',
+  '♻️': 'recycle',
+  '♻': 'recycle',
+  '‼️': 'alert-circle',
+  '⁉️': 'help-circle',
+  '〰️': 'wave-sine',
+  '〽️': 'chart-line',
+  '❇️': 'sparkles',
+  '✳️': 'asterisk',
+  '✴️': 'star',
+  '☣️': 'biohazard',
+  '☢️': 'radioactive',
+  '☮️': 'peace',
+  '☯️': 'yin-yang',
+  '☸️': 'steering-wheel',
+  '☺️': 'mood-smile',
+  '☺': 'mood-smile',
+  '⚔️': 'swords',
+  '⚖️': 'scale',
+  '⚖': 'scale',
+  '⚗️': 'flask',
+  '⚱️': 'award',
+  '⚰️': 'box',
+  '⛏️': 'pick',
+  '⚒️': 'hammer',
+  '⛓️': 'link',
+  '⛓': 'link',
+  '⚛️': 'atom',
+  '⚛': 'atom',
+  '⚜️': 'crown',
+  '⚱': 'award',
+  '0️⃣': 'number-0',
+  '1️⃣': 'number-1',
+  '2️⃣': 'number-2',
+  '3️⃣': 'number-3',
+  '4️⃣': 'number-4',
+  '5️⃣': 'number-5',
+  '6️⃣': 'number-6',
+  '7️⃣': 'number-7',
+  '8️⃣': 'number-8',
+  '9️⃣': 'number-9',
+  '🔟': 'numbers',
   '🤔': 'brain',
   '❌': 'circle-x',
   '❓': 'help-circle',
@@ -594,21 +692,24 @@ export const EMOJI_TO_ICON: Record<string, string> = {
 /** Replace known emoji with :icon: tokens; unknown pictographs are dropped. */
 export function emojiToIconTokens(text: string): string {
   let out = text
-  // Longest first so ZWJ sequences (runner, etc.) win over their base glyph.
+  // Longest first so ZWJ sequences (runner, keycaps, etc.) win over their base glyph.
   const entries = Object.entries(EMOJI_TO_ICON).sort((a, b) => b[0].length - a[0].length)
   for (const [emoji, icon] of entries) {
     out = out.split(emoji).join(`:${icon}:`)
   }
-  // Any remaining Extended_Pictographic codepoint is not allowed in the DOM.
+  // Any remaining Extended_Pictographic or symbol emoji codepoint is stripped.
   return out
     .replace(/\p{Extended_Pictographic}/gu, '')
-    .replace(/[\u2600-\u27BF\u2300-\u23FF\u2B50\u2B55\u2640\u2642\uFE0E\uFE0F\u200D\u20E3\u{1F3FB}-\u{1F3FF}]/gu, '')
+    .replace(
+      /[\u203C\u2049\u2122\u2139\u2194-\u21AA\u2300-\u23FF\u25AA-\u25FE\u2600-\u27BF\u2934\u2935\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u3030\u303D\u3297\u3299\uFE00-\uFE0F\u200D\u20E3\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}]/gu,
+      ''
+    )
 }
 
 /**
  * Sanitize a full markdown reply or delta chunk so no raw Unicode emoji ever reaches
  * a client:
- *  - Inside fenced code blocks: replaces ❌/✅ with [x]/[ok] and strips other pictographs.
+ *  - Inside fenced code blocks: for widget JSON fences, converts emojis cleanly; for source code fences, replaces ❌/✅/⚠️ with ASCII and strips pictographs.
  *  - Outside fenced blocks: converts known emojis into :icon: tokens and strips unknown pictographs.
  */
 export function sanitizeReplyEmojis(markdown: string): string {
@@ -617,32 +718,121 @@ export function sanitizeReplyEmojis(markdown: string): string {
   return parts
     .map((part) => {
       if (part.startsWith('```')) {
-        return part
-          .replace(/❌/g, '[x]')
-          .replace(/✅|✔️|✔/g, '[ok]')
-          .replace(/⚠️|⚠/g, '[!]')
-          .replace(/\p{Extended_Pictographic}/gu, '')
-          .replace(/[\u2600-\u27BF\u2300-\u23FF\u2B50\u2B55\uFE0E\uFE0F\u200D\u20E3\u{1F3FB}-\u{1F3FF}]/gu, '')
+        const firstLine = part.slice(3, part.indexOf('\n') > 0 ? part.indexOf('\n') : undefined).trim().toLowerCase()
+        const isCodeLang = /^(python|py|js|javascript|ts|typescript|jsx|tsx|java|kotlin|kt|swift|c|cpp|c\+\+|rust|rs|go|golang|ruby|rb|php|sql|bash|sh|zsh|shell|html|css|xml|yaml|yml|toml|dockerfile|makefile|r|matlab|scala|dart|lua|perl|haskell|elixir|clojure|csharp|cs|fsharp|vb|powershell|ps1)$/.test(
+          firstLine
+        )
+        if (isCodeLang) {
+          return part
+            .replace(/❌/g, '[x]')
+            .replace(/✅|✔️|✔/g, '[ok]')
+            .replace(/⚠️|⚠/g, '[!]')
+            .replace(/\p{Extended_Pictographic}/gu, '')
+            .replace(
+              /[\u203C\u2049\u2122\u2139\u2194-\u21AA\u2300-\u23FF\u25AA-\u25FE\u2600-\u27BF\u2934\u2935\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u3030\u303D\u3297\u3299\uFE00-\uFE0F\u200D\u20E3\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}]/gu,
+              ''
+            )
+        }
+        return emojiToIconTokens(part)
       }
       return emojiToIconTokens(part)
     })
     .join('')
 }
 
-/** Extract a leading :icon: token (or converted leading emoji) and return { icon, rest }. */
+/** Extract a leading :icon: token (or converted leading emoji, even inside leading **bold**) and return { icon, rest }. */
 export function extractLeadingIcon(raw: string): { icon: string | null; rest: string } {
   const normalized = emojiToIconTokens(raw).trimStart()
-  const m = normalized.match(/^:([a-z0-9-]+):\s*([\s\S]*)$/)
+  const m = normalized.match(/^(\*{1,3}|_{1,3})?\s*:([a-z0-9][a-z0-9-]{1,42}):\s*([\s\S]*)$/)
   if (!m) return { icon: null, rest: normalized }
-  return { icon: canonicalIconName(m[1]) ?? m[1], rest: m[2] }
+  const prefix = m[1] ?? ''
+  return { icon: canonicalIconName(m[2]) ?? m[2], rest: `${prefix}${m[3]}` }
 }
 
 /** Strip both raw emojis and :icon: tokens for clean plain-text headings/labels. */
 export function cleanPlainText(raw: string): string {
   return emojiToIconTokens(raw)
-    .replace(/:([a-z0-9-]+):/g, '')
+    .replace(/:([a-z0-9][a-z0-9-]{1,42}):/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim()
+}
+
+const SEMANTIC_KEYWORD_ICONS: Array<{ re: RegExp; icon: string; tone: GlassTone }> = [
+  { re: /\b(python|django|flask|pandas|numpy|pytorch)\b/i, icon: 'brand-python', tone: 'blue' },
+  { re: /\b(java|spring|jvm|maven|coffee|cafe|espresso)\b/i, icon: 'coffee', tone: 'peach' },
+  { re: /\b(javascript|node\.?js|express|npm|v8)\b/i, icon: 'brand-javascript', tone: 'amber' },
+  { re: /\b(typescript|tsx|deno)\b/i, icon: 'brand-typescript', tone: 'blue' },
+  { re: /\b(react|next\.?js|jsx|redux)\b/i, icon: 'brand-react', tone: 'blue' },
+  { re: /\b(swift|swiftui|ios|xcode|apple)\b/i, icon: 'brand-apple', tone: 'lavender' },
+  { re: /\b(android|kotlin|jetpack|gradle)\b/i, icon: 'brand-android', tone: 'green' },
+  { re: /\b(rust|cargo)\b/i, icon: 'brand-rust', tone: 'peach' },
+  { re: /\b(golang|go\b)/i, icon: 'brand-golang', tone: 'mint' },
+  { re: /(?:^|\b)(c\+\+|cpp|clang)(?:\b|$)/i, icon: 'brand-cpp', tone: 'blue' },
+  { re: /^(c|c#|csharp)$/i, icon: 'code', tone: 'blue' },
+  { re: /\b(docker|container|kubernetes|k8s)\b/i, icon: 'brand-docker', tone: 'blue' },
+  { re: /\b(git|github|commit|branch|pull request)\b/i, icon: 'brand-github', tone: 'lavender' },
+  { re: /\b(database|sql|postgres|mysql|sqlite|redis|mongodb|schema|query)\b/i, icon: 'database', tone: 'blue' },
+  { re: /\b(cloud|aws|azure|gcp|serverless|cdn|deploy)\b/i, icon: 'cloud-computing', tone: 'blue' },
+  { re: /\b(security|auth|jwt|oauth|encrypt|password|privacy|shield|safe)\b/i, icon: 'shield-check', tone: 'green' },
+  { re: /\b(performance|speed|fast|latency|throughput|optimize|cache|bolt)\b/i, icon: 'bolt', tone: 'amber' },
+  { re: /\b(api|webhook|endpoint|rest|graphql|http|network|socket)\b/i, icon: 'plug-connected', tone: 'mint' },
+  { re: /\b(bug|error|issue|warning|risk|pitfall|caution|alert|fail)\b/i, icon: 'alert-triangle', tone: 'amber' },
+  { re: /\b(test|qa|verify|validation|check|assert|pass)\b/i, icon: 'circle-check', tone: 'green' },
+  { re: /\b(loan|mortgage|apr|emi|amortiz|bank|debt|interest rate)\b/i, icon: 'building-bank', tone: 'blue' },
+  { re: /\b(invest|compound|portfolio|dividend|stock|etf|roi|wealth|return|growth|profit)\b/i, icon: 'trending-up', tone: 'green' },
+  { re: /\b(budget|salary|income|saving|expense|cost|price|revenue|money|payment|tax|fee)\b/i, icon: 'coin', tone: 'amber' },
+  { re: /\b(formula|equation|math|calculate|calculator|sum|ratio|average)\b/i, icon: 'calculator', tone: 'amber' },
+  { re: /\b(chart|metric|analytics|stat|benchmark|trend|data|distribution)\b/i, icon: 'chart-bar', tone: 'lavender' },
+  { re: /\b(calorie|protein|macro|nutrition|diet|meal|food|vitamin|carbs|fat)\b/i, icon: 'salad', tone: 'green' },
+  { re: /\b(workout|exercise|gym|fitness|strength|cardio|muscle|training|run)\b/i, icon: 'barbell', tone: 'peach' },
+  { re: /\b(health|medical|heart|sleep|recovery|wellness|symptom|doctor)\b/i, icon: 'heartbeat', tone: 'pink' },
+  { re: /\b(study|learn|course|book|read|exam|lesson|education|concept)\b/i, icon: 'book-2', tone: 'lavender' },
+  { re: /\b(time|schedule|timeline|deadline|duration|hour|minute|morning|daily)\b/i, icon: 'clock', tone: 'amber' },
+  { re: /\b(date|calendar|week|month|year|quarter|roadmap|milestone)\b/i, icon: 'calendar', tone: 'blue' },
+  { re: /\b(travel|flight|trip|hotel|airport|vacation|tour)\b/i, icon: 'plane', tone: 'blue' },
+  { re: /\b(location|map|city|country|region|route|address|global|world)\b/i, icon: 'world', tone: 'mint' },
+  { re: /\b(ai|llm|neural|model|machine learning|gpt|agent|brain|smart)\b/i, icon: 'brain', tone: 'lavender' },
+  { re: /\b(code|function|algorithm|class|module|compile|syntax|script)\b/i, icon: 'code', tone: 'lavender' },
+  { re: /\b(user|team|customer|client|people|community|audience|member)\b/i, icon: 'users', tone: 'blue' },
+  { re: /\b(goal|target|objective|focus|mission|priority|kpi)\b/i, icon: 'target', tone: 'pink' },
+  { re: /\b(winner|best|top|rank|award|champion|leader|advantage)\b/i, icon: 'trophy', tone: 'amber' },
+  { re: /\b(launch|start|ship|release|scale|boost|upgrade|future)\b/i, icon: 'rocket', tone: 'peach' },
+  { re: /\b(setting|config|setup|install|tool|environment|option)\b/i, icon: 'settings', tone: 'mint' },
+  { re: /\b(why|tip|insight|idea|note|summary|takeaway|key|pro tip)\b/i, icon: 'bulb', tone: 'amber' },
+]
+
+/**
+ * Resolve any heading, bullet label, step title, or table entity to a semantic
+ * custom glassy icon + tone from the 5,247 Tabler registry.
+ */
+export function semanticIconFor(raw: string, fallbackIcon = 'sparkles'): { icon: string; tone: GlassTone } {
+  const extracted = extractLeadingIcon(raw)
+  if (extracted.icon) {
+    const resolved = iconNameFor(extracted.icon, fallbackIcon)
+    return { icon: resolved, tone: glassToneFor(resolved) }
+  }
+  const clean = cleanPlainText(raw)
+  for (const rule of SEMANTIC_KEYWORD_ICONS) {
+    if (rule.re.test(clean)) {
+      const resolved = iconNameFor(rule.icon, fallbackIcon)
+      return { icon: resolved, tone: rule.tone }
+    }
+  }
+  // Direct lookup of words against the 5,247-icon vocabulary & brand-* icons.
+  const words = clean
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 3)
+  for (const w of words) {
+    const brand = canonicalIconName(`brand-${w}`)
+    if (brand) return { icon: brand, tone: glassToneFor(brand) }
+    const direct = canonicalIconName(w)
+    if (direct) return { icon: direct, tone: glassToneFor(direct) }
+  }
+  if (!fallbackIcon) return { icon: '', tone: 'lavender' }
+  const resolved = iconNameFor(fallbackIcon, 'sparkles')
+  return { icon: resolved, tone: glassToneFor(resolved) }
 }
 
 

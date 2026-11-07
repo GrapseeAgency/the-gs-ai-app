@@ -880,6 +880,7 @@ function run(){
   else { out('(no output)',false); }
 }
 document.getElementById('run').addEventListener('click',run);
+setTimeout(run,60);
 document.getElementById('copy').addEventListener('click',function(){
   var t=document.getElementById('src');
   t.select();t.setSelectionRange(0,999999);

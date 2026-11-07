@@ -300,9 +300,15 @@ class ChatStreamController(private val chat: ChatRepository) {
                     // replace the live event-built list 1:1. clarifyOptions is the
                     // fallback when the live clarify event was missed.
                     onDone = { done ->
+                        val doneContent = done?.content
+                        if (!doneContent.isNullOrBlank()) {
+                            buffer.setLength(0)
+                            buffer.append(doneContent)
+                        }
                         publishIfMine(token) { current ->
                             val cards = done?.sources?.map { it.toSourceCard() }
                             current.copy(
+                                streamText = if (!doneContent.isNullOrBlank()) doneContent else current.streamText,
                                 sources = if (cards.isNullOrEmpty()) current.sources else cards,
                                 clarify = current.clarify
                                     ?: done?.clarifyOptions?.let { parseClarifyPayload(it) }
