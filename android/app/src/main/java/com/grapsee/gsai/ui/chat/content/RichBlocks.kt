@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,6 +27,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -57,6 +60,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
@@ -639,6 +644,7 @@ private fun StructuredBlockSequenceView(
     }
 
     // Automatic interactive calculator when prose contains financial, loan, budget, macro, or rate signals
+    var renderedSpontaneousCalc = false
     if (!isStreaming && !renderedExplicitCalc && normalizedBlocks.none { it is Block.WidgetBlock && it.kind == "calc" }) {
         val fullProse = remember(normalizedBlocks) {
             normalizedBlocks.mapNotNull { b ->
@@ -655,11 +661,12 @@ private fun StructuredBlockSequenceView(
             val hasCurrency = fullProse.contains('$') || fullProse.contains('€') || fullProse.contains('£')
             val hasPct = fullProse.contains('%') || "percent" in low
             val hasNumber = Regex("\\b\\d{2,}\\b").containsMatchIn(fullProse)
-            val isFinOrMath = (hasCurrency && hasPct && ("discount" in low || "tax" in low || "interest" in low || "margin" in low || "roi" in low || "price" in low || "cost" in low || "save" in low || "loan" in low || "mortgage" in low || "compound" in low || "invest" in low || "budget" in low || "salary" in low)) ||
-                (hasNumber && ("mortgage" in low || "amortiz" in low || "compound interest" in low || ("loan" in low && ("apr" in low || "monthly" in low)) || ("budget" in low && "50/30/20" in low) || ("calorie" in low && "protein" in low)))
+            val isFinOrMath = ((hasCurrency || hasNumber) && hasPct && ("discount" in low || "tax" in low || "tip" in low || "interest" in low || "margin" in low || "roi" in low || "price" in low || "cost" in low || "save" in low || "loan" in low || "mortgage" in low || "compound" in low || "invest" in low || "budget" in low || "salary" in low)) ||
+                (hasNumber && ("mortgage" in low || "amortiz" in low || "compound interest" in low || ("loan" in low && ("apr" in low || "monthly" in low)) || ("budget" in low && "50/30/20" in low) || ("calorie" in low && "protein" in low) || "tdee" in low || ("macro" in low && "protein" in low)))
             isFinOrMath
         }
         if (hasCalcSignal) {
+            renderedSpontaneousCalc = true
             val (amt, disc, yrs) = remember(fullProse) { extractQuickCalcParams(fullProse) }
             NexlyQuickCalculatorCard(
                 title = "Interactive Simulator",
@@ -672,10 +679,22 @@ private fun StructuredBlockSequenceView(
     }
 
     // Spontaneous Interactive Quantitative Explorer when prose lists 3+ numeric items without a chart or table
+    var renderedQuantitativeExplorer = false
     if (!isStreaming && normalizedBlocks.none { it is Block.TableBlock || (it is Block.WidgetBlock && it.kind in setOf("chart", "table", "stat", "progress", "gauge")) }) {
         val extractedMetrics = remember(normalizedBlocks) { extractSpontaneousMetricsFromBlocks(normalizedBlocks) }
         if (extractedMetrics.size >= 3) {
+            renderedQuantitativeExplorer = true
             NexlyQuantitativeExplorerCard(items = extractedMetrics)
+        }
+    }
+
+    // Spontaneous Interactive Concept Deck (Flashcards + Self-Test Quiz) when structured prose explains 3+ concepts
+    if (!isStreaming && !renderedExplicitCalc && !renderedSpontaneousCalc && !renderedQuantitativeExplorer &&
+        normalizedBlocks.none { it is Block.TableBlock || it is Block.WidgetBlock || it is Block.HtmlBlock }
+    ) {
+        val extractedConcepts = remember(normalizedBlocks) { extractSpontaneousConceptsFromBlocks(normalizedBlocks) }
+        if (extractedConcepts.size >= 3) {
+            NexlyInteractiveConceptDeckCard(concepts = extractedConcepts)
         }
     }
 
@@ -955,6 +974,8 @@ private fun rememberSpanTheme(
     )
 }
 
+private const val NEXLY_INLINE_ICON_TAG = "nexly_inline_icon"
+
 private fun appendNexlyText(
     builder: AnnotatedString.Builder,
     text: String,
@@ -962,16 +983,49 @@ private fun appendNexlyText(
 ) {
     for (part in NexlyIcons.inlineParts(text)) {
         if (part.isIcon) {
-            builder.withStyle(
-                SpanStyle(
-                    fontFamily = NexlyIcons.family,
-                    fontSize = theme.fontSize * 1.12f,
-                    color = Color(0xFF5B3DF5),
-                    background = Color(0xFFEDE6FF)
-                )
-            ) { append(" ${NexlyIcons.glyph(part.value)} ") }
+            val iconName = NexlyIcons.resolve(part.value)
+            val inlineId = "nexly_icon:$iconName"
+            builder.pushStringAnnotation(tag = NEXLY_INLINE_ICON_TAG, annotation = iconName)
+            builder.appendInlineContent(id = inlineId, alternateText = " ")
+            builder.pop()
         } else {
             builder.append(part.value)
+        }
+    }
+}
+
+@Composable
+private fun rememberNexlyInlineContent(styled: AnnotatedString): Map<String, InlineTextContent> {
+    return remember(styled) {
+        val annotations = styled.getStringAnnotations(
+            tag = NEXLY_INLINE_ICON_TAG,
+            start = 0,
+            end = styled.length
+        )
+        if (annotations.isEmpty()) {
+            emptyMap()
+        } else {
+            annotations.map { it.item }.distinct().associate { iconName ->
+                "nexly_icon:$iconName" to InlineTextContent(
+                    Placeholder(
+                        width = 20.sp,
+                        height = 18.sp,
+                        placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                    )
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        NexlyGlassGlyphTile(
+                            name = iconName,
+                            toneName = NexlyIcons.toneFor(iconName),
+                            size = 17.dp,
+                            glyphSize = 11.dp
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -991,7 +1045,7 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
             }
             is InlineSpan.CodeSpan -> builder.withStyle(
                 SpanStyle(fontFamily = FontFamily.Monospace, background = theme.codeBg, fontSize = theme.fontSize * 0.88f)
-            ) { builder.append(span.code) }
+            ) { builder.append(NexlyIcons.cleanPlainText(span.code).ifEmpty { span.code }) }
             is InlineSpan.LinkSpan -> builder.withLink(
                 LinkAnnotation.Url(
                     span.url,
@@ -1234,10 +1288,12 @@ private fun NexlyCalloutCard(
                 color = titleColor
             )
             if (bodyText != null && bodyText.isNotEmpty()) {
+                val inlineContent = rememberNexlyInlineContent(bodyText)
                 Text(
                     text = bodyText,
                     style = bodyStyle,
-                    color = bodyColor
+                    color = bodyColor,
+                    inlineContent = inlineContent
                 )
             }
             extraBlocks?.invoke()
@@ -1264,15 +1320,42 @@ private fun ParagraphBlock(
     val bodyStyle = compact ?: MaterialTheme.typography.bodyMedium
     val ink = compact?.color ?: MaterialTheme.colorScheme.onSurface
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
-    val styled = remember(block.spans, theme, showCaret) {
-        spansToAnnotatedString(block.spans, theme, showCaret)
+    val leadingIcon = remember(block.spans) {
+        NexlyIcons.extractLeadingIcon(plainTextOfSpans(block.spans)).first
     }
+    val displaySpans = remember(block.spans, leadingIcon) {
+        if (leadingIcon != null) stripLeadingIconFromSpans(block.spans) else block.spans
+    }
+    val styled = remember(displaySpans, theme, showCaret) {
+        spansToAnnotatedString(displaySpans, theme, showCaret)
+    }
+    val inlineContent = rememberNexlyInlineContent(styled)
     val text = @Composable {
-        Text(
-            text = styled,
-            style = bodyStyle,
-            color = ink
-        )
+        if (leadingIcon != null) {
+            Row(verticalAlignment = Alignment.Top) {
+                NexlyGlassGlyphTile(
+                    name = leadingIcon,
+                    toneName = NexlyIcons.toneFor(leadingIcon),
+                    size = 21.dp,
+                    glyphSize = 12.dp,
+                    modifier = Modifier.padding(top = 1.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = styled,
+                    style = bodyStyle,
+                    color = ink,
+                    inlineContent = inlineContent
+                )
+            }
+        } else {
+            Text(
+                text = styled,
+                style = bodyStyle,
+                color = ink,
+                inlineContent = inlineContent
+            )
+        }
     }
     if (selectable) SelectionContainer { text() } else text()
 }
@@ -1312,6 +1395,7 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
         stripLeadingIconFromSpans(block.spans)
     }
     val styled = remember(cleanSpans, theme) { spansToAnnotatedString(cleanSpans, theme) }
+    val inlineContent = rememberNexlyInlineContent(styled)
     val style = when (block.level) {
         1 -> MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
         2 -> MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
@@ -1339,6 +1423,7 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
                     text = styled,
                     style = style,
                     color = if (block.level == 6) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    inlineContent = inlineContent,
                     modifier = Modifier.semantics { heading() }
                 )
             }
@@ -1909,6 +1994,340 @@ private fun inferSourceDomainAndroid(text: String): Pair<String, String>? {
     }
 }
 
+private data class SpontaneousConceptItem(
+    val term: String,
+    val definition: String,
+    val icon: String,
+    val tone: String
+)
+
+private fun extractSpontaneousConceptsFromBlocks(blocks: List<Block>): List<SpontaneousConceptItem> {
+    val out = mutableListOf<SpontaneousConceptItem>()
+    val sepRegex = Regex("""^([^:—–-]{3,42})\s*(?::|—|–|-)\s*(.{14,})$""")
+    blocks.forEachIndexed { idx, b ->
+        val rawItems = when (b) {
+            is Block.BulletList -> if (b.items.all { it.checked == null }) b.items else emptyList()
+            is Block.OrderedList -> b.items
+            else -> emptyList()
+        }
+        rawItems.forEach { li ->
+            val first = li.spans.firstOrNull()
+            if (first is InlineSpan.BoldSpan) {
+                val term = NexlyIcons.cleanPlainText(plainTextOfSpans(first.children)).trimEnd(':', '-', '—', '–').trim()
+                val rest = NexlyIcons.cleanPlainText(plainTextOfSpans(li.spans.drop(1))).replace(Regex("""^[\s:—–-]+"""), "").trim()
+                if (term.length in 3..44 && rest.length >= 14 && "http" !in rest.lowercase()) {
+                    val (icon, tone) = NexlyIcons.semanticIconFor("$term $rest", "bulb")
+                    out += SpontaneousConceptItem(term, rest.take(180), icon, tone)
+                }
+            } else {
+                val plain = NexlyIcons.cleanPlainText(plainTextOfSpans(li.spans))
+                val m = sepRegex.find(plain)
+                if (m != null) {
+                    val term = m.groupValues[1].trim()
+                    val rest = m.groupValues[2].trim()
+                    if (term.length in 3..44 && rest.length >= 14 && "http" !in rest.lowercase()) {
+                        val (icon, tone) = NexlyIcons.semanticIconFor("$term $rest", "bulb")
+                        out += SpontaneousConceptItem(term, rest.take(180), icon, tone)
+                    }
+                }
+            }
+        }
+        if (b is Block.Heading && b.level in 2..3 && idx + 1 < blocks.size) {
+            val hText = NexlyIcons.cleanPlainText(plainTextOfSpans(b.spans)).trimEnd(':').trim()
+            val next = blocks[idx + 1]
+            if (next is Block.Paragraph && classifyCalloutHeaderTitle(hText) == null && classifySectionListMode(hText) == SectionListMode.DEFAULT) {
+                val pText = NexlyIcons.cleanPlainText(plainTextOfSpans(next.spans)).trim()
+                if (hText.length in 3..44 && pText.length >= 20) {
+                    val (icon, tone) = NexlyIcons.semanticIconFor("$hText $pText", "bulb")
+                    out += SpontaneousConceptItem(hText, pText.take(180), icon, tone)
+                }
+            }
+        }
+    }
+    return out.distinctBy { it.term.lowercase() }.take(8)
+}
+
+@Composable
+private fun NexlyInteractiveConceptDeckCard(concepts: List<SpontaneousConceptItem>) {
+    var quizMode by remember { mutableStateOf(false) }
+    var cardIdx by remember { mutableStateOf(0) }
+    var flipped by remember { mutableStateOf(false) }
+    var masteredSet by remember { mutableStateOf(setOf<Int>()) }
+    var quizIdx by remember { mutableStateOf(0) }
+    var quizSelected by remember { mutableStateOf<Int?>(null) }
+    var quizScore by remember { mutableStateOf(0) }
+    var quizAnsweredCount by remember { mutableStateOf(0) }
+
+    val safeCardIdx = cardIdx.coerceIn(0, concepts.lastIndex)
+    val currentCard = concepts[safeCardIdx]
+    val safeQuizIdx = quizIdx.coerceIn(0, concepts.lastIndex)
+    val quizTarget = concepts[safeQuizIdx]
+    val quizOptions = remember(concepts, safeQuizIdx) {
+        val distractors = concepts.indices.filter { it != safeQuizIdx }.take(3)
+        (listOf(safeQuizIdx) + distractors).sortedBy { (it * 7 + safeQuizIdx * 3) % 11 }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.82f))
+            .border(1.dp, Color(0xFFE2DAFA), RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                NexlyGlassGlyphTile(
+                    name = if (quizMode) "school" else "cards",
+                    toneName = "lavender",
+                    size = 25.dp,
+                    glyphSize = 14.dp
+                )
+                Text(
+                    text = if (quizMode) "Interactive Self-Test" else "Interactive Concept Deck",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF211845)
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFEDE5FF))
+                    .padding(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                listOf(false to "Flashcards", true to "Quick Quiz").forEach { (isQuiz, label) ->
+                    val active = quizMode == isQuiz
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (active) Color(0xFF6C4CF6) else Color.Transparent)
+                            .clickable { quizMode = isQuiz }
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (active) Color.White else Color(0xFF4F35E8)
+                        )
+                    }
+                }
+            }
+        }
+
+        if (!quizMode) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(if (flipped) Color(0xFFEDE5FF) else Color(0xFFF6F2FF))
+                    .border(1.dp, Color(0xFFD9CEFA), RoundedCornerShape(11.dp))
+                    .clickable { flipped = !flipped }
+                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        NexlyGlassGlyphTile(
+                            name = currentCard.icon,
+                            toneName = currentCard.tone,
+                            size = 20.dp,
+                            glyphSize = 12.dp
+                        )
+                        Text(
+                            text = if (flipped) "DEFINITION · TAP TO FLIP" else "CONCEPT ${safeCardIdx + 1}/${concepts.size} · TAP TO FLIP",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF5B3DF5)
+                        )
+                    }
+                    if (safeCardIdx in masteredSet) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            NexlyGlyph(name = "circle-check", size = 12.dp, color = Color(0xFF129A5A))
+                            Text(
+                                text = "Mastered",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF129A5A)
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = if (flipped) currentCard.definition else currentCard.term,
+                    fontSize = if (flipped) 12.5.sp else 14.sp,
+                    fontWeight = if (flipped) FontWeight.Medium else FontWeight.Bold,
+                    color = Color(0xFF211845)
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color(0xFFF3EEFF))
+                            .clickable {
+                                cardIdx = (safeCardIdx - 1 + concepts.size) % concepts.size
+                                flipped = false
+                            }
+                            .padding(horizontal = 9.dp, vertical = 4.dp)
+                    ) {
+                        Text("Prev", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4F35E8))
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color(0xFFF3EEFF))
+                            .clickable {
+                                cardIdx = (safeCardIdx + 1) % concepts.size
+                                flipped = false
+                            }
+                            .padding(horizontal = 9.dp, vertical = 4.dp)
+                    ) {
+                        Text("Next", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4F35E8))
+                    }
+                }
+                val isMastered = safeCardIdx in masteredSet
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(if (isMastered) Color(0xFFE6F9F0) else Color(0xFFEDE5FF))
+                        .clickable {
+                            masteredSet = if (isMastered) masteredSet - safeCardIdx else masteredSet + safeCardIdx
+                        }
+                        .padding(horizontal = 9.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    NexlyGlyph(
+                        name = if (isMastered) "circle-check" else "sparkles",
+                        size = 12.dp,
+                        color = if (isMastered) Color(0xFF129A5A) else Color(0xFF5B3DF5)
+                    )
+                    Text(
+                        text = "${masteredSet.size}/${concepts.size} Mastered",
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isMastered) Color(0xFF129A5A) else Color(0xFF5B3DF5)
+                    )
+                }
+            }
+        } else {
+            Text(
+                text = quizTarget.definition,
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF211845),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFFF6F2FF))
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                quizOptions.forEach { optConceptIdx ->
+                    val optConcept = concepts[optConceptIdx]
+                    val isChosen = quizSelected == optConceptIdx
+                    val isCorrect = optConceptIdx == safeQuizIdx
+                    val revealed = quizSelected != null
+                    val bg = when {
+                        revealed && isCorrect -> Color(0xFFE6F9F0)
+                        revealed && isChosen -> Color(0xFFFDECEC)
+                        else -> Color(0xFFF3EEFF)
+                    }
+                    val borderCol = when {
+                        revealed && isCorrect -> Color(0xFF129A5A)
+                        revealed && isChosen -> Color(0xFFE04F5F)
+                        else -> Color(0xFFD9CEFA)
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(bg)
+                            .border(1.dp, borderCol, RoundedCornerShape(8.dp))
+                            .clickable(enabled = !revealed) {
+                                quizSelected = optConceptIdx
+                                quizAnsweredCount += 1
+                                if (isCorrect) quizScore += 1
+                            }
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            NexlyGlassGlyphTile(
+                                name = optConcept.icon,
+                                toneName = optConcept.tone,
+                                size = 18.dp,
+                                glyphSize = 10.dp
+                            )
+                            Text(
+                                text = optConcept.term,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF211845)
+                            )
+                        }
+                        if (revealed && (isCorrect || isChosen)) {
+                            NexlyGlyph(
+                                name = if (isCorrect) "circle-check" else "circle-x",
+                                size = 14.dp,
+                                color = if (isCorrect) Color(0xFF129A5A) else Color(0xFFE04F5F)
+                            )
+                        }
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Score: $quizScore / ${quizAnsweredCount.coerceAtLeast(1)}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF5B3DF5)
+                )
+                if (quizSelected != null) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color(0xFF6C4CF6))
+                            .clickable {
+                                quizSelected = null
+                                quizIdx = (safeQuizIdx + 1) % concepts.size
+                            }
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text("Next Question", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
 private data class ParsedSourceItem(
     val number: Int,
     val title: String,
@@ -2258,12 +2677,14 @@ private fun InteractiveChecklistItemRow(
                 }
             }
             Spacer(Modifier.width(9.dp))
+            val checklistInlineContent = rememberNexlyInlineContent(styled)
             Text(
                 text = styled,
                 style = bodyStyle.copy(
                     textDecoration = if (checked) TextDecoration.LineThrough else TextDecoration.None
                 ),
                 color = ink,
+                inlineContent = checklistInlineContent,
                 modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(6.dp))
@@ -2508,19 +2929,23 @@ private fun StepOrderedListItemRow(
                         )
                     }
                     Spacer(Modifier.height(2.dp))
+                    val detailInlineContent = rememberNexlyInlineContent(detailStyled)
                     Text(
                         text = detailStyled,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        inlineContent = detailInlineContent
                     )
                 } else {
                     val styled = remember(item.spans, theme) { spansToAnnotatedString(item.spans, theme) }
+                    val stepInlineContent = rememberNexlyInlineContent(styled)
                     Text(
                         text = styled,
                         style = bodyStyle.copy(
                             textDecoration = if (completed) TextDecoration.LineThrough else TextDecoration.None
                         ),
-                        color = ink
+                        color = ink,
+                        inlineContent = stepInlineContent
                     )
                 }
             }
@@ -2553,8 +2978,12 @@ private fun ListItemRow(
         when (first) {
             is InlineSpan.TextSpan -> {
                 val (icon, stripped) = NexlyIcons.extractLeadingIcon(first.text)
-                if (icon != null) icon to (listOf(InlineSpan.TextSpan(stripped)) + item.spans.drop(1))
-                else null to item.spans
+                if (icon != null) {
+                    icon to (listOf(InlineSpan.TextSpan(stripped)) + item.spans.drop(1))
+                } else {
+                    val (semIcon, _) = NexlyIcons.semanticIconFor(plainTextOfSpans(item.spans), "")
+                    (semIcon.takeIf { it.isNotBlank() && it != "sparkles" }) to item.spans
+                }
             }
             is InlineSpan.BoldSpan -> {
                 val innerFirst = first.children.firstOrNull()
@@ -2564,7 +2993,7 @@ private fun ListItemRow(
                         val newBold = InlineSpan.BoldSpan(listOf(InlineSpan.TextSpan(stripped)) + first.children.drop(1))
                         icon to (listOf(newBold) + item.spans.drop(1))
                     } else {
-                        val (semIcon, _) = NexlyIcons.semanticIconFor(innerFirst.text, "")
+                        val (semIcon, _) = NexlyIcons.semanticIconFor(plainTextOfSpans(item.spans), "")
                         (semIcon.takeIf { it.isNotBlank() && it != "sparkles" }) to item.spans
                     }
                 } else null to item.spans
@@ -2576,6 +3005,7 @@ private fun ListItemRow(
     val styled = remember(leadingIconAndSpans.second, theme) {
         spansToAnnotatedString(leadingIconAndSpans.second, theme)
     }
+    val bulletInlineContent = rememberNexlyInlineContent(styled)
     Column {
         Row(verticalAlignment = Alignment.Top) {
             if (leadingIcon != null) {
@@ -2607,7 +3037,8 @@ private fun ListItemRow(
                 Text(
                     text = styled,
                     style = bodyStyle,
-                    color = ink
+                    color = ink,
+                    inlineContent = bulletInlineContent
                 )
             }
             if (selectable) SelectionContainer { content() } else content()
@@ -2959,22 +3390,22 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
     }
 }
 
-private fun markdownEntityBadgeForCell(raw: String): Pair<String, Color>? {
-    val clean = NexlyIcons.cleanPlainText(raw).lowercase()
+private fun markdownEntityBadgeForCell(raw: String): Pair<String, String>? {
+    val clean = NexlyIcons.cleanPlainText(raw)
+    if (clean.isEmpty() || clean.length > 32 || clean.all { !it.isLetter() }) return null
+    val lower = clean.lowercase()
     return when {
-        clean == "python" -> "Py" to Color(0xFF3776AB)
-        clean == "java" -> "Jv" to Color(0xFFE76F00)
-        clean == "c++" -> "C+" to Color(0xFF00599C)
-        clean == "c" -> "C" to Color(0xFF283593)
-        clean == "javascript" || clean == "js" -> "JS" to Color(0xFFE6A700)
-        clean == "typescript" || clean == "ts" -> "TS" to Color(0xFF3178C6)
-        clean == "rust" -> "Rs" to Color(0xFFCE422B)
-        clean == "go" || clean == "golang" -> "Go" to Color(0xFF00ADD8)
-        clean == "swift" -> "Sw" to Color(0xFFF05138)
-        clean == "kotlin" -> "Kt" to Color(0xFF7F52FF)
-        clean.startsWith("nexly") -> "Nx" to Color(0xFF6C4CF6)
-        clean.startsWith("data") -> "Dt" to Color(0xFF3B82F6)
-        else -> null
+        lower.startsWith("python") -> "brand-python" to "blue"
+        lower == "java" -> "coffee" to "amber"
+        lower.startsWith("c++") || lower == "cpp" -> "brand-cpp" to "blue"
+        lower == "c" || lower == "c#" -> "code" to "lavender"
+        lower.startsWith("javascript") || lower == "js" -> "brand-javascript" to "amber"
+        lower.startsWith("typescript") || lower == "ts" -> "brand-typescript" to "blue"
+        lower.startsWith("rust") -> "brand-rust" to "peach"
+        lower == "go" || lower == "golang" -> "brand-golang" to "mint"
+        lower.startsWith("swift") -> "brand-apple" to "lavender"
+        lower.startsWith("kotlin") || lower.startsWith("android") -> "brand-android" to "green"
+        else -> NexlyIcons.semanticIconFor(raw, "sparkles")
     }
 }
 
@@ -3010,22 +3441,14 @@ private fun androidx.compose.foundation.layout.RowScope.TableCell(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(18.dp)
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(entityBadge.second.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = entityBadge.first,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = entityBadge.second
-                )
-            }
+            NexlyGlassGlyphTile(
+                name = entityBadge.first,
+                toneName = entityBadge.second,
+                size = 20.dp,
+                glyphSize = 11.dp
+            )
             Text(
-                text = displayText,
+                text = AnnotatedString(NexlyIcons.cleanPlainText(raw)),
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
                 color = cellColor
@@ -3033,11 +3456,13 @@ private fun androidx.compose.foundation.layout.RowScope.TableCell(
         }
         return
     }
+    val cellInlineContent = rememberNexlyInlineContent(displayText)
     Text(
         text = displayText,
         style = if (emphasize) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodySmall,
         fontWeight = if (emphasize || isTrend || (isPrimaryNameCol && !raw.all { it.isDigit() })) FontWeight.Bold else FontWeight.Normal,
         color = cellColor,
+        inlineContent = cellInlineContent,
         textAlign = when (align) {
             TableAlign.LEFT -> TextAlign.Left
             TableAlign.CENTER -> TextAlign.Center

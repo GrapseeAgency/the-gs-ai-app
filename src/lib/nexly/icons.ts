@@ -689,7 +689,36 @@ export const EMOJI_TO_ICON: Record<string, string> = {
   'ℹ': 'info-circle',
 }
 
-/** Replace known emoji with :icon: tokens; unknown pictographs are dropped. */
+function fallbackIconForCodePoint(cp: number): string | null {
+  if (cp >= 0x1f3fb && cp <= 0x1f3ff) return null
+  if ((cp >= 0x1f600 && cp <= 0x1f64f) || (cp >= 0x1f910 && cp <= 0x1f92f) || (cp >= 0x1f970 && cp <= 0x1f97a) || (cp >= 0x1fae0 && cp <= 0x1faef)) {
+    return 'mood-smile'
+  }
+  if ((cp >= 0x1f440 && cp <= 0x1f487) || (cp >= 0x1f930 && cp <= 0x1f93f) || (cp >= 0x1faf0 && cp <= 0x1faff)) {
+    return 'user'
+  }
+  if ((cp >= 0x1f330 && cp <= 0x1f343) || (cp >= 0x1f400 && cp <= 0x1f43f) || (cp >= 0x1f980 && cp <= 0x1f9ae) || (cp >= 0x1fab0 && cp <= 0x1fabf)) {
+    return 'leaf'
+  }
+  if ((cp >= 0x1f32d && cp <= 0x1f32f) || (cp >= 0x1f344 && cp <= 0x1f37f) || (cp >= 0x1f950 && cp <= 0x1f96f) || (cp >= 0x1fad0 && cp <= 0x1fadf)) {
+    return 'cup'
+  }
+  if ((cp >= 0x1f380 && cp <= 0x1f3cf) || (cp >= 0x1f93c && cp <= 0x1f94f)) {
+    return 'trophy'
+  }
+  if ((cp >= 0x1f680 && cp <= 0x1f6ff) || (cp >= 0x1f3d0 && cp <= 0x1f3ff)) {
+    return 'compass'
+  }
+  if (cp >= 0x1f300 && cp <= 0x1f32c) {
+    return 'sun'
+  }
+  if ((cp >= 0x1f488 && cp <= 0x1f5ff) || (cp >= 0x1fa70 && cp <= 0x1fa9f)) {
+    return 'sparkles'
+  }
+  return null
+}
+
+/** Replace known emoji with :icon: tokens, map any remaining emoji block to a semantic :icon: token, and strip pictographs. */
 export function emojiToIconTokens(text: string): string {
   let out = text
   // Longest first so ZWJ sequences (runner, keycaps, etc.) win over their base glyph.
@@ -697,8 +726,26 @@ export function emojiToIconTokens(text: string): string {
   for (const [emoji, icon] of entries) {
     out = out.split(emoji).join(`:${icon}:`)
   }
+  let mapped = ''
+  let lastWasFallback = false
+  for (const ch of out) {
+    const cp = ch.codePointAt(0) ?? 0
+    const fb = fallbackIconForCodePoint(cp)
+    if (fb) {
+      if (!lastWasFallback) {
+        mapped += `:${fb}:`
+        lastWasFallback = true
+      }
+      continue
+    }
+    if (cp === 0x200d || (cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0x1f3fb && cp <= 0x1f3ff)) {
+      continue
+    }
+    mapped += ch
+    if (!/\s/.test(ch)) lastWasFallback = false
+  }
   // Any remaining Extended_Pictographic or symbol emoji codepoint is stripped.
-  return out
+  return mapped
     .replace(/\p{Extended_Pictographic}/gu, '')
     .replace(
       /[\u203C\u2049\u2122\u2139\u2194-\u21AA\u2300-\u23FF\u25AA-\u25FE\u2600-\u27BF\u2934\u2935\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u3030\u303D\u3297\u3299\uFE00-\uFE0F\u200D\u20E3\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}]/gu,

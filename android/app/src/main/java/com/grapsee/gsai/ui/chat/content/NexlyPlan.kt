@@ -331,8 +331,21 @@ object NexlyIcons {
 
     private val tokenRegex = Regex(":([a-z0-9][a-z0-9-]{1,42}):")
 
-    /** Replace known emoji with `:icon:` tokens and drop any remaining
-     * pictograph, including variation selectors and ZWJ sequences. */
+    private fun fallbackIconForCodePoint(cp: Int): String? = when (cp) {
+        in 0x1F3FB..0x1F3FF -> null // skin tone modifier
+        in 0x1F600..0x1F64F, in 0x1F910..0x1F92F, in 0x1F970..0x1F97A, in 0x1FAE0..0x1FAEF -> "mood-smile"
+        in 0x1F440..0x1F487, in 0x1F930..0x1F93F, in 0x1FAF0..0x1FAFF -> "user"
+        in 0x1F330..0x1F343, in 0x1F400..0x1F43F, in 0x1F980..0x1F9AE, in 0x1FAB0..0x1FABF -> "leaf"
+        in 0x1F32D..0x1F32F, in 0x1F344..0x1F37F, in 0x1F950..0x1F96F, in 0x1FAD0..0x1FADF -> "cup"
+        in 0x1F380..0x1F3CF, in 0x1F93C..0x1F94F -> "trophy"
+        in 0x1F680..0x1F6FF, in 0x1F3D0..0x1F3FF -> "compass"
+        in 0x1F300..0x1F32C -> "sun"
+        in 0x1F488..0x1F5FF, in 0x1FA70..0x1FA9F -> "sparkles"
+        else -> null
+    }
+
+    /** Replace known emoji with `:icon:` tokens, map any remaining emoji block
+     * to a semantic `:icon:` token, and drop variation selectors and ZWJs. */
     fun normalize(text: String): String {
         var out = text
         for ((symbol, icon) in emoji.entries.sortedByDescending { it.key.length }) {
@@ -340,8 +353,10 @@ object NexlyIcons {
         }
         val filtered = StringBuilder(out.length)
         var i = 0
+        var lastWasFallbackIcon = false
         while (i < out.length) {
             val cp = out.codePointAt(i)
+            val fallbackIcon = fallbackIconForCodePoint(cp)
             val pictograph = cp in 0x1F000..0x1FAFF ||
                 cp in 0x2600..0x27BF ||
                 cp in 0x2300..0x23FF ||
@@ -364,7 +379,13 @@ object NexlyIcons {
                 cp == 0x200D ||
                 cp == 0x20E3 ||
                 cp in 0x1F1E6..0x1F1FF
-            if (!pictograph) filtered.appendCodePoint(cp)
+            if (!pictograph) {
+                filtered.appendCodePoint(cp)
+                if (!Character.isWhitespace(cp)) lastWasFallbackIcon = false
+            } else if (fallbackIcon != null && !lastWasFallbackIcon) {
+                filtered.append(":$fallbackIcon:")
+                lastWasFallbackIcon = true
+            }
             i += Character.charCount(cp)
         }
         return filtered.toString()

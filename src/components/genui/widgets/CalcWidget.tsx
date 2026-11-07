@@ -16,11 +16,14 @@ export function CalcWidget({ payload }: { payload: CalcPayload }) {
   const { accent, theme } = useWidgetIdentity()
   const fields = (payload.fields ?? []).filter((f) => f.key && f.label)
   const outputs = (payload.outputs ?? []).filter((o) => o.label && o.expr)
-  const [values, setValues] = useState<Record<string, number>>(() =>
-    Object.fromEntries(fields.map((f) => [f.key, f.choices?.length ? f.choices[0].value : f.value ?? f.min ?? 0]))
+  const defaults = useMemo(
+    () => Object.fromEntries(fields.map((f) => [f.key, f.choices?.length ? f.choices[0].value : f.value ?? f.min ?? 0])),
+    [fields]
   )
+  const [values, setValues] = useState<Record<string, number>>(defaults)
   if (!fields.length || !outputs.length) return <EmptyState label="Calculator misconfigured" />
   const set = (key: string, v: number) => setValues((s) => ({ ...s, [key]: v }))
+  const hasChanged = fields.some((f) => Math.abs((values[f.key] ?? defaults[f.key] ?? 0) - (defaults[f.key] ?? 0)) > 1e-6)
   const results = useMemo(() => {
     const out: Array<{ label: string; text: string; primary: boolean; error?: boolean }> = []
     for (const o of outputs) {
@@ -79,6 +82,26 @@ export function CalcWidget({ payload }: { payload: CalcPayload }) {
           )
         )}
       </div>
+      {hasChanged && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+          <button
+            type="button"
+            onClick={() => setValues(defaults)}
+            style={{
+              padding: '4px 10px',
+              borderRadius: 999,
+              border: `1px solid ${theme.border}`,
+              background: 'transparent',
+              color: accent,
+              fontSize: TYPE.micro,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Reset
+          </button>
+        </div>
+      )}
       <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {results.map((r, i) => (
           <div

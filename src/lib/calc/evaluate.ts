@@ -11,6 +11,7 @@ const FUNCS: Record<string, (...args: number[]) => number> = {
   sqrt: Math.sqrt,
   abs: Math.abs,
   ln: Math.log,
+  log: Math.log10,
   log10: Math.log10,
   exp: Math.exp,
   sin: Math.sin,
@@ -75,7 +76,7 @@ class Parser {
   private term(): number {
     let v = this.power()
     for (;;) {
-      if (this.eat('*')) v *= this.power()
+      if (!this.src.startsWith('**', this.pos) && this.eat('*')) v *= this.power()
       else if (this.eat('/')) v /= this.power()
       else if (this.eat('%')) v %= this.power()
       else return v
@@ -84,7 +85,7 @@ class Parser {
 
   private power(): number {
     const base = this.unary()
-    if (this.eat('^')) return Math.pow(base, this.power())
+    if (this.eat('^') || this.eat('**')) return Math.pow(base, this.power())
     return base
   }
 
@@ -107,8 +108,9 @@ class Parser {
     const num = this.number()
     if (num !== null) return num
     const ident = this.ident()
+    const lowerIdent = ident.toLowerCase()
     if (this.peek() === '(') {
-      const fn = FUNCS[ident]
+      const fn = FUNCS[lowerIdent]
       if (!fn) throw new Error(`unknown function ${ident}`)
       this.pos++
       const args: number[] = []
@@ -120,7 +122,8 @@ class Parser {
       return fn(...args)
     }
     if (ident in this.vars) return this.vars[ident]
-    if (ident in CONSTS) return CONSTS[ident]
+    if (lowerIdent in this.vars) return this.vars[lowerIdent]
+    if (lowerIdent in CONSTS) return CONSTS[lowerIdent]
     throw new Error(`unknown identifier ${ident}`)
   }
 
@@ -153,7 +156,10 @@ export function formatOutput(value: number, format: string | undefined, unit: st
     const symbol = unit && /^[^\d\s]/.test(unit) ? unit : '$'
     return `${symbol}${safe.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
   }
-  if (format === 'percent') return `${(safe * 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
+  if (format === 'percent') {
+    const pctVal = Math.abs(safe) <= 1 ? safe * 100 : safe
+    return `${pctVal.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
+  }
   const num = safe.toLocaleString(undefined, { maximumFractionDigits: 4 })
   return unit ? `${num} ${unit}` : num
 }

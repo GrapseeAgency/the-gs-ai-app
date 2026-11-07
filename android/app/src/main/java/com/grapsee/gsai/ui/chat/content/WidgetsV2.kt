@@ -349,7 +349,7 @@ internal fun StepsWidgetView(w: StepsWidget) {
                         contentAlignment = Alignment.Center
                     ) {
                         if (isDone) {
-                            NexlyGlyph(name = "check", size = 12.sp, color = badgeColor)
+                            NexlyGlyph(name = "check", size = 12.dp, color = badgeColor)
                         } else {
                             Text(
                                 "${idx + 1}",
@@ -776,7 +776,7 @@ internal fun ChecklistWidgetView(w: ChecklistWidget) {
                         contentAlignment = Alignment.Center
                     ) {
                         if (isDone) {
-                            NexlyGlyph(name = "check", size = 11.sp, color = Color.White)
+                            NexlyGlyph(name = "check", size = 11.dp, color = Color.White)
                         }
                     }
                     Spacer(Modifier.width(9.dp))
@@ -803,7 +803,7 @@ internal fun ChecklistWidgetView(w: ChecklistWidget) {
                                 }
                                 .padding(4.dp)
                         ) {
-                            NexlyGlyph(name = "x", size = 12.sp, color = c.textTertiary)
+                            NexlyGlyph(name = "x", size = 12.dp, color = c.textTertiary)
                         }
                     }
                 }
@@ -861,7 +861,7 @@ internal fun ChecklistWidgetView(w: ChecklistWidget) {
                             }
                             .padding(horizontal = 6.dp, vertical = 6.dp)
                     ) {
-                        NexlyGlyph(name = "x", size = 13.sp, color = c.textSecondary)
+                        NexlyGlyph(name = "x", size = 13.dp, color = c.textSecondary)
                     }
                 }
             } else {
@@ -876,7 +876,7 @@ internal fun ChecklistWidgetView(w: ChecklistWidget) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    NexlyGlyph(name = "plus", size = 11.sp, color = Color(0xFF5B3DF5))
+                    NexlyGlyph(name = "plus", size = 11.dp, color = Color(0xFF5B3DF5))
                     Text(
                         text = "Add Task",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
