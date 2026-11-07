@@ -2506,13 +2506,15 @@ private fun TableWidgetView(w: TableWidget) {
             if (asc) cmp else -cmp
         }
     }
-    val totalPages = maxOf(1, (rows.size + pageSize - 1) / pageSize)
+    // -1 means the entire filtered dataset, not a disguised 25-row cap.
+    val effectivePageSize = if (pageSize == -1) maxOf(1, rows.size) else pageSize
+    val totalPages = maxOf(1, (rows.size + effectivePageSize - 1) / effectivePageSize)
     val safePage = page.coerceIn(0, totalPages - 1)
-    val visible = remember(rows, safePage, pageSize) {
-        rows.drop(safePage * pageSize).take(pageSize)
+    val visible = remember(rows, safePage, effectivePageSize) {
+        rows.drop(safePage * effectivePageSize).take(effectivePageSize)
     }
-    val startRow = if (rows.isEmpty()) 0 else safePage * pageSize + 1
-    val endRow = (safePage * pageSize + visible.size).coerceAtMost(rows.size)
+    val startRow = if (rows.isEmpty()) 0 else safePage * effectivePageSize + 1
+    val endRow = (safePage * effectivePageSize + visible.size).coerceAtMost(rows.size)
     val primaryNameCol = remember(w.columns) {
         val idx = w.columns.indexOfFirst {
             it.contains("language", true) || it.contains("product", true) ||
@@ -2738,7 +2740,7 @@ private fun TableWidgetView(w: TableWidget) {
                             pageSize = when (pageSize) {
                                 3 -> 5
                                 5 -> 10
-                                10 -> 25
+                                10 -> -1
                                 else -> 3
                             }
                             page = 0
@@ -2746,7 +2748,7 @@ private fun TableWidgetView(w: TableWidget) {
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Text(
-                        text = "Show: $pageSize ▾",
+                        text = "Show: ${if (pageSize == -1) "All" else pageSize.toString()} ▾",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF3E3666)
