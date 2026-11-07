@@ -31,7 +31,20 @@ jobs:
           gradle-version: '8.13'
       - name: Calculator correctness unit tests
         working-directory: android
-        run: gradle :app:testDebugUnitTest --tests 'com.grapsee.gsai.ui.chat.content.CalcHonestyTest' --no-daemon --stacktrace
+        run: |
+          python3 - <<'PYTEST'
+          import subprocess
+          from pathlib import Path
+          result = subprocess.run(['gradle', ':app:testDebugUnitTest', '--tests', 'com.grapsee.gsai.ui.chat.content.CalcHonestyTest', '--no-daemon', '--stacktrace'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+          print(result.stdout)
+          Path('../calculator-tests.log').write_text(result.stdout)
+          if result.returncode:
+              # API-visible diagnostics when the artifact log host is inaccessible.
+              errors = [line for line in result.stdout.splitlines() if line.startswith(('e:', '* What went wrong:', '> ', 'Caused by:', 'Execution failed')) or 'FAILED' in line]
+              for line in (errors or result.stdout.splitlines()[-40:])[:30]:
+                  print('::error::' + line.replace('%', '%25').replace('\r', '%0D'))
+          raise SystemExit(result.returncode)
+          PYTEST
       - name: Enable KVM (run 38704622804 booted without it and never completed)
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -54,6 +67,8 @@ jobs:
         with:
           name: chat-benchmark-raw
           path: |
+            calculator-tests.log
+            android/app/build/test-results/testDebugUnitTest/**
             benchmark-raw.log
             dep-report.log
             dex-scan.log
