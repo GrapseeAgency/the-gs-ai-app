@@ -351,7 +351,7 @@ private func promoteStandaloneBoldHeadingsIOS(_ rawBlocks: [Block]) -> [Block] {
         if case .paragraph(let spans, let id) = b, spans.count == 1, case .bold(let bch) = spans[0] {
             let text = NexlyIcons.cleanPlainText(plainTextOfSpans(bch)).trimmingCharacters(in: .whitespacesAndNewlines)
             if text.count >= 3 && text.count <= 72 && !text.hasSuffix(".") && classifyCalloutHeaderTitle(text) == nil {
-                return .heading(level: 3, spans: bch, id: id)
+                return .heading(level: 3, spans: bch, sourceStart: id)
             }
         }
         return b
