@@ -40,8 +40,8 @@ jobs:
           Path('../calculator-tests.log').write_text(result.stdout)
           if result.returncode:
               # API-visible diagnostics when the artifact log host is inaccessible.
-              errors = [line for line in result.stdout.splitlines() if line.startswith(('e:', '* What went wrong:', '> ', 'Caused by:', 'Execution failed')) or 'FAILED' in line]
-              for line in (errors or result.stdout.splitlines()[-40:])[:30]:
+              errors = [line for line in result.stdout.splitlines() if line.startswith(('e:', '* What went wrong:', 'Caused by:', 'Execution failed')) or ('> ' in line and not line.startswith('> Task')) or 'FAILED' in line]
+              for line in (errors or result.stdout.splitlines()[-40:])[-30:]:
                   print('::error::' + line.replace('%', '%25').replace('\r', '%0D'))
           raise SystemExit(result.returncode)
           PYTEST
