@@ -283,6 +283,7 @@ jobs:
             -derivedDataPath "$DERIVED_DATA" \
             -only-testing:AppTests/CalcHonestyTests \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTableAllDisplaysEveryActualRow \
             -resultBundlePath ios/build/GSApp-genui.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee ios/build/xcodebuild-genui-test.log
@@ -318,6 +319,7 @@ jobs:
           required = [
               ('PlatformRuntimeUITests', 'testBackgroundNoticeIsDeliveredAndDisabledKindsAreNot'),
               ('PlatformRuntimeUITests', 'testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji'),
+              ('PlatformRuntimeUITests', 'testGeneratedTableAllDisplaysEveryActualRow'),
               ('PlatformRuntimeUITests', 'testLongPressPinSurvivesBackgroundAndRelaunch'),
               ('PlatformHapticRuntimeTests', 'testUIKitDispatchAndDisabledGate'),
           ]
