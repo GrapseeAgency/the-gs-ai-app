@@ -13,6 +13,10 @@ name: iOS (macOS) — Xcode build & test
 # The artifacts produced are unsigned simulator builds/archives.
 
 on:
+  pull_request:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
   workflow_dispatch:
   push:
     branches:
@@ -289,6 +293,27 @@ jobs:
             -resultBundlePath "$RESULT_BUNDLE" \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee ios/build/xcodebuild-test.log
+
+      - name: Require platform runtime tests to actually pass
+        run: |
+          python3 - <<'PYRUNTIME'
+          from pathlib import Path
+          import re
+          log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
+          required = [
+              ('PlatformRuntimeUITests', 'testBackgroundNoticeIsDeliveredAndDisabledKindsAreNot'),
+              ('PlatformRuntimeUITests', 'testLongPressPinSurvivesBackgroundAndRelaunch'),
+              ('PlatformHapticRuntimeTests', 'testUIKitDispatchAndDisabledGate'),
+          ]
+          missing = []
+          for suite, test in required:
+              lines = [line for line in log.splitlines() if suite in line and test in line]
+              if not any(re.search(r"\bpassed\b", line) for line in lines):
+                  missing.append(f'{suite}.{test}')
+          if missing:
+              raise SystemExit('Missing runtime passes (skips do not count): ' + ', '.join(missing))
+          print('All three iOS platform runtime tests executed and passed')
+          PYRUNTIME
 
       - name: Publish XCTest failure diagnostics as annotations
         if: failure()
