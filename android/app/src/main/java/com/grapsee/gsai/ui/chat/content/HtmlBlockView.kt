@@ -203,6 +203,17 @@ fun HtmlBlockView(block: Block.HtmlBlock, streaming: Boolean) {
 /** The reusable WebView: loads [doc] once, reports content height back. */
 @Composable
 internal fun HarnessWebView(doc: String, fileBase: Boolean) {
+    val context = LocalContext.current
+    val protectedDoc = remember(context, doc) {
+        runCatching {
+            val policy = context.assets.open("emoji-dom-policy.json").bufferedReader().use { it.readText() }
+            withDOMDisplayPolicyAndroid(doc, org.json.JSONObject(policy).getString("script"))
+        }.getOrNull()
+    }
+    if (protectedDoc == null) {
+        Text("Interactive preview unavailable: display policy could not be loaded.")
+        return
+    }
     var heightPx by remember(doc) { mutableStateOf(0) }
     val density = androidx.compose.ui.platform.LocalDensity.current
     val heightDp = if (heightPx <= 0) DEFAULT_HEIGHT_DP.dp else with(density) {
@@ -211,16 +222,25 @@ internal fun HarnessWebView(doc: String, fileBase: Boolean) {
     AndroidView(
         factory = { ctx -> createHarnessWebView(ctx, serveAssets = fileBase) { h -> heightPx = h } },
         update = { view ->
-            if (view.tag != doc) {
-                view.tag = doc
+            if (view.tag != protectedDoc) {
+                view.tag = protectedDoc
                 // Always an https origin: map/mermaid assets are intercepted
                 // from the APK, while remote calls (OSRM routing) stay a normal
                 // CORS request instead of a blocked file:// one.
-                view.loadDataWithBaseURL("https://gsai.local/", doc, "text/html", "utf-8", null)
+                view.loadDataWithBaseURL("https://gsai.local/", protectedDoc, "text/html", "utf-8", null)
             }
         },
         modifier = Modifier.fillMaxWidth().height(heightDp)
     )
+}
+
+/** Install before model scripts without rewriting their executable source. */
+internal fun withDOMDisplayPolicyAndroid(doc: String, policy: String): String {
+    val head = Regex("<head(?:\\s[^>]*)?>", RegexOption.IGNORE_CASE)
+    val match = head.find(doc)
+    val injection = "<script>$policy</script>"
+    return if (match != null) doc.replaceRange(match.range.last + 1, match.range.last + 1, injection)
+    else injection + doc
 }
 
 /** Full-diagram WebView entry for the mermaid renderer's fallback path. */
