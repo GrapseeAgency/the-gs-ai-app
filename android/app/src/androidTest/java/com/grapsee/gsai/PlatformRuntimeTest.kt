@@ -139,6 +139,27 @@ class PlatformRuntimeTest {
         compose.runOnIdle { assertEquals(1, taps); assertEquals(1, holds) }
     }
 
+    @Test fun generatedTableAllDisplaysEveryActualRow() {
+        val rows = (1..31).joinToString(",") { "[\"Item $it\",$it]" }
+        val widget = parseWidget("table", """{"columns":["Name","Amount"],"rows":[$rows]}""")!!
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme { com.grapsee.gsai.ui.chat.content.WidgetView(widget) }
+        }
+        compose.onNodeWithText("Item 5").assertExists()
+        compose.onNodeWithText("Item 6").assertDoesNotExist()
+        compose.onNodeWithText("Show: 5 ▾").performClick()
+        compose.onNodeWithText("Item 10").assertExists()
+        compose.onNodeWithText("Item 11").assertDoesNotExist()
+        compose.onNodeWithText("Show: 10 ▾").performClick()
+        compose.onNodeWithText("Show: All ▾").assertExists()
+        compose.onNodeWithText("Item 31").assertExists()
+        compose.onNodeWithText("1–31 of 31").assertExists()
+        compose.onNode(hasSetTextAction()).performTextReplacement("Item 31")
+        compose.onNodeWithText("Item 31").assertExists()
+        compose.onNodeWithText("Item 1").assertDoesNotExist()
+        compose.onNodeWithText("1–1 of 1").assertExists()
+    }
+
     @Test fun generatedCalculatorAcceptsExactNumbersAndNeverRendersEmoji() {
         val json = """{"type":"finance","title":"\ud83d\ude80 Growth","fields":[{"key":"amount","label":"Amount \u00a9\ufe0f \ud83d\ude00","value":100}],"outputs":[{"label":"Double","expr":"amount*2","primary":true}]}"""
         val widget = parseWidget("calc", json) as Widget.Calc
