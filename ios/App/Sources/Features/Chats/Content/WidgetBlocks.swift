@@ -187,20 +187,49 @@ func injectWidgetType(json: String, alias: String, kind: String) -> String {
 
 // MARK: - Flexible JSON parsing & normalization
 
+private let widgetRawPresentationKeys: Set<String> = [
+    "id", "key", "type", "kind", "expr", "expression", "formula",
+    "code", "source", "script", "html", "svg", "css", "sql", "query",
+    "url", "href", "link", "src", "route", "action", "method", "prompt",
+    "language", "format", "accent", "palette", "variant", "color",
+    "before", "after", "old", "new", "original", "modified", "patch", "diff"
+]
+
+/// Decoded JSON boundary, including escaped Unicode and primitive string arrays.
+/// Only presentation changes; source, expressions, identities and URLs stay exact.
+func sanitizeWidgetPresentationIOS(_ value: Any, key: String = "") -> Any {
+    if widgetRawPresentationKeys.contains(key) { return value }
+    if let text = value as? String {
+        let normalized = NexlyIcons.normalize(text)
+        if key == "title" { return normalized }
+        if key == "icon" { return NexlyIcons.extractLeadingIcon(text).0 ?? NexlyIcons.resolve(text) }
+        return normalized.replacingOccurrences(of: ":[a-z0-9][a-z0-9-]{1,42}:", with: "", options: .regularExpression)
+    }
+    if let array = value as? [Any] { return array.map { sanitizeWidgetPresentationIOS($0, key: key) } }
+    if let object = value as? [String: Any] {
+        return object.reduce(into: [String: Any]()) { result, entry in
+            result[entry.key] = sanitizeWidgetPresentationIOS(entry.value, key: entry.key)
+        }
+    }
+    return value
+}
+
 func parseRelaxedJSONObject(kind: String, raw: String) -> [String: Any]? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty, trimmed.count <= 65_536 else { return nil }
     if let data = trimmed.data(using: .utf8),
        let any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
-        return normalizeJSONRoot(kind: kind, value: any)
+        return normalizeJSONRoot(kind: kind, value: sanitizeWidgetPresentationIOS(any))
     }
     // Strip trailing commas before } or ] and retry
     let cleaned = trimmed.replacingOccurrences(of: ",\\s*([}\\]])", with: "$1", options: .regularExpression)
     if let data = cleaned.data(using: .utf8),
        let any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
-        return normalizeJSONRoot(kind: kind, value: any)
+        return normalizeJSONRoot(kind: kind, value: sanitizeWidgetPresentationIOS(any))
     }
-    return recoverPlainTextWidgetIOS(kind: kind, raw: trimmed)
+    return recoverPlainTextWidgetIOS(kind: kind, raw: trimmed).map {
+        sanitizeWidgetPresentationIOS($0) as? [String: Any] ?? $0
+    }
 }
 
 private func recoverPlainTextWidgetIOS(kind: String, raw: String) -> [String: Any]? {
