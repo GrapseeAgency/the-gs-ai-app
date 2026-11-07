@@ -7,17 +7,17 @@ const RAW_KEYS = new Set([
   'code', 'source', 'script', 'html', 'svg', 'css', 'sql', 'query',
   'url', 'href', 'link', 'src', 'route', 'action', 'method', 'prompt',
   'language', 'format', 'accent', 'palette', 'variant', 'color',
-  'before', 'after', 'old', 'new', 'original', 'modified', 'patch', 'diff',
+  'before', 'after', 'old', 'new', 'original', 'modified', 'patch', 'diff', 'unified', 'z', 'pattern', 'regex',
 ])
 
 /** Runs AFTER JSON decoding: escaped Unicode must not bypass the emoji rule.
  * Titles retain icon tokens for glass rendering; plain labels cannot render
  * those tokens and must strip them. The source payload is never mutated. */
 export function sanitizeWidgetPresentation<T>(value: T, key = ''): T {
-  if (RAW_KEYS.has(key)) return value
   if (typeof value === 'string') {
+    if (RAW_KEYS.has(key)) return value
     const normalized = emojiToIconTokens(value)
-    if (key === 'icon') {
+    if (key === 'icon' || key === 'closingIcon') {
       const token = /:([a-z0-9-]+):/.exec(normalized)?.[1]
       return (canonicalIconName(token ?? value) ?? 'sparkles') as T
     }
