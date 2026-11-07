@@ -926,6 +926,11 @@ func chartGrowthPercentIOS(first: Double, last: Double) -> Double? {
     return result.isFinite ? result : nil
 }
 
+func chartStepPercentIOS(values: [Double], index: Int) -> Double? {
+    guard index > 0, index < values.count else { return nil }
+    return chartGrowthPercentIOS(first: values[index - 1], last: values[index])
+}
+
 private struct ChartBodyView: View {
     let obj: [String: Any]
     let accent: Color
@@ -1107,9 +1112,9 @@ private struct ChartBodyView: View {
     private func chartTooltipRow(pts: [BarPoint], activeIdx: Int, totalVal: Double, unit: String) -> some View {
         if !pts.isEmpty && activeIdx < pts.count {
             let selPt = pts[activeIdx]
-            let avgVal = totalVal / Double(max(1, pts.count))
-            let prevVal = activeIdx > 0 ? pts[activeIdx - 1].value : avgVal
-            let stepPct = prevVal != 0 ? ((selPt.value - prevVal) / abs(prevVal)) * 100.0 : 0.0
+            let stepPct = chartStepPercentIOS(values: pts.map { $0.value }, index: activeIdx)
+            let stepText = stepPct.map { String(format: "%@ %.1f%%", $0 >= 0 ? "↑" : "↓", abs($0)) } ?? "N/A (no prior baseline)"
+            let stepColor = stepPct == nil ? Aero.textSecondary : ((stepPct ?? 0) >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
             HStack(spacing: 8) {
                 Circle()
                     .fill(Color(red: 0.424, green: 0.298, blue: 0.965))
@@ -1121,9 +1126,9 @@ private struct ChartBodyView: View {
                     .font(.system(size: 13.5, weight: .bold))
                     .foregroundStyle(Aero.text)
                 Spacer()
-                Text(String(format: "%@ %.1f%%", stepPct >= 0 ? "↑" : "↓", abs(stepPct)))
+                Text(stepText)
                     .font(.system(size: 11.5, weight: .bold))
-                    .foregroundStyle(stepPct >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
+                    .foregroundStyle(stepColor)
             }
             .padding(.horizontal, 11)
             .padding(.vertical, 7)
@@ -1461,7 +1466,7 @@ private struct ChartBodyView: View {
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
                         .lineLimit(1)
-                    Text(String(format: "%@ %@%.1f%%", pos ? "↑" : "↓", pos ? "+" : "", growthPct))
+                    Text(deltaText)
                         .font(.system(size: 9.5, weight: .bold))
                         .foregroundStyle(pillFg)
                         .padding(.horizontal, 6)
