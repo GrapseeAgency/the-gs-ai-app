@@ -920,6 +920,12 @@ private struct WidgetBodyView: View {
     }
 }
 
+func chartGrowthPercentIOS(first: Double, last: Double) -> Double? {
+    guard first.isFinite, last.isFinite, first != 0 else { return nil }
+    let result = ((last - first) / abs(first)) * 100
+    return result.isFinite ? result : nil
+}
+
 private struct ChartBodyView: View {
     let obj: [String: Any]
     let accent: Color
@@ -1373,12 +1379,12 @@ private struct ChartBodyView: View {
     @ViewBuilder
     private func chartSummaryFooter(pts: [BarPoint], peakIdx: Int, totalVal: Double, unit: String, rangeLabel: String) -> some View {
         if pts.count >= 2 {
-            let firstVal = pts.first?.value ?? 1.0
-            let lastVal = pts.last?.value ?? 0.0
-            let growthPct = firstVal != 0 ? ((lastVal - firstVal) / abs(firstVal)) * 100.0 : 0.0
-            let pos = growthPct >= 0
-            let pillBg = pos ? Color(red: 0.902, green: 0.976, blue: 0.941) : Color(red: 0.992, green: 0.925, blue: 0.925)
-            let pillFg = pos ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373)
+            let growthPct = chartGrowthPercentIOS(first: pts[0].value, last: pts[pts.count - 1].value)
+            let pos = (growthPct ?? -1) >= 0
+            let growthText = growthPct.map { String(format: "%@%.1f%%", pos ? "+" : "", $0) } ?? "N/A (zero baseline)"
+            let deltaText = growthPct == nil ? "No defined baseline" : "\(pos ? "↑" : "↓") \(growthText)"
+            let pillBg = growthPct == nil ? Color.gray.opacity(0.1) : (pos ? Color(red: 0.902, green: 0.976, blue: 0.941) : Color(red: 0.992, green: 0.925, blue: 0.925))
+            let pillFg = growthPct == nil ? Aero.textSecondary : (pos ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
             let peakPt = pts[peakIdx]
             HStack(spacing: 7) {
                 VStack(alignment: .leading, spacing: 3) {
@@ -1394,7 +1400,7 @@ private struct ChartBodyView: View {
                     Text("Total")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
-                    Text(String(format: "%@ %@%.1f%%", pos ? "↑" : "↓", pos ? "+" : "", growthPct))
+                    Text(deltaText)
                         .font(.system(size: 9.5, weight: .bold))
                         .foregroundStyle(pillFg)
                         .padding(.horizontal, 6)
@@ -1448,7 +1454,7 @@ private struct ChartBodyView: View {
                         size: 24,
                         glyphSize: 14
                     )
-                    Text(String(format: "%@%.1f%%", pos ? "+" : "", growthPct))
+                    Text(growthText)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Aero.text)
                     Text("Growth Rate")
@@ -1480,7 +1486,7 @@ private struct ChartBodyView: View {
                     Text("Key Insights:")
                         .font(.system(size: 11.5, weight: .bold))
                         .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
-                    Text(String(format: "Peak in %@ (%@) · %@%.1f%% overall change across %@", peakPt.label, compactNumber(peakPt.value, unit: unit), pos ? "+" : "", growthPct, rangeLabel.lowercased()))
+                    Text("Peak in \(peakPt.label) (\(compactNumber(peakPt.value, unit: unit))) · \(growthText) overall change across \(rangeLabel.lowercased())")
                         .font(.system(size: 11))
                         .foregroundStyle(Color(red: 0.224, green: 0.196, blue: 0.361))
                 }
