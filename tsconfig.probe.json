@@ -13,6 +13,7 @@
   "include": [
     "src/lib/design/**/*",
     "src/lib/calc/**/*",
+    "src/lib/widgets/prompt.ts",
     "src/components/**/*",
     "scripts/test-genui-pipeline.ts",
     "scripts/test-widget-catalogue.ts",

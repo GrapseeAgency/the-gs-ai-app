@@ -272,6 +272,22 @@ jobs:
             exit 65
           fi
 
+      - name: Focused generated-widget runtime test (before the full suite)
+        run: |
+          set -o pipefail
+          rm -rf ios/build/GSApp-genui.xcresult
+          xcodebuild test \
+            -project "$PROJECT_FILE" \
+            -scheme "$SCHEME" \
+            -destination "$IOS_DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -only-testing:AppTests/CalcHonestyTests \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTableAllDisplaysEveryActualRow \
+            -resultBundlePath ios/build/GSApp-genui.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee ios/build/xcodebuild-genui-test.log
+
       - name: Test (XCTest unit tests on iOS simulator)
         run: |
           set -o pipefail
@@ -302,6 +318,8 @@ jobs:
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
               ('PlatformRuntimeUITests', 'testBackgroundNoticeIsDeliveredAndDisabledKindsAreNot'),
+              ('PlatformRuntimeUITests', 'testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji'),
+              ('PlatformRuntimeUITests', 'testGeneratedTableAllDisplaysEveryActualRow'),
               ('PlatformRuntimeUITests', 'testLongPressPinSurvivesBackgroundAndRelaunch'),
               ('PlatformHapticRuntimeTests', 'testUIKitDispatchAndDisabledGate'),
           ]
@@ -312,7 +330,7 @@ jobs:
                   missing.append(f'{suite}.{test}')
           if missing:
               raise SystemExit('Missing runtime passes (skips do not count): ' + ', '.join(missing))
-          print('All three iOS platform runtime tests executed and passed')
+          print('All required iOS platform runtime tests executed and passed')
           PYRUNTIME
 
       - name: Publish XCTest failure diagnostics as annotations
@@ -320,27 +338,29 @@ jobs:
         run: |
           python3 - <<'PYTEST'
           from pathlib import Path
-          log = Path('ios/build/xcodebuild-test.log')
-          if log.exists():
+          for log in sorted(Path('ios/build').glob('xcodebuild*test.log')):
               lines = log.read_text(errors='replace').splitlines()
-              failures = [line for line in lines if any(word in line.lower() for word in ['error:', 'failed', 'failure', 'timed out', 'could not'])]
+              failures = [line for line in lines if 'Ignoring failure to get hierarchy' not in line and any(word in line.lower() for word in ['error:', 'testing failed:', '** test failed **', 'timed out', 'could not'])]
+              failures += [line for line in lines if 'Test Case' in line and 'failed' in line]
               for line in failures[-35:]:
                   print('::error::' + line[:1800].replace('%', '%25').replace('\r', '%0D'))
           PYTEST
-          if [ -d ios/build/GSApp-tests.xcresult ]; then
-            xcrun xcresulttool get test-results summary --path ios/build/GSApp-tests.xcresult --format json > ios/build/test-summary.json || true
-            python3 - <<'PYRESULT'
+          for RESULT in ios/build/GSApp-genui.xcresult ios/build/GSApp-tests.xcresult; do
+            [ -d "$RESULT" ] || continue
+            # test-results summary emits JSON by default on current Xcode.
+            xcrun xcresulttool get test-results summary --path "$RESULT" > "$RESULT-summary.json" || true
+          done
+          python3 - <<'PYRESULT'
           import json
           from pathlib import Path
-          p = Path('ios/build/test-summary.json')
-          try:
-              obj = json.loads(p.read_text())
-              for item in obj.get('testFailures', [])[:25]:
-                  print('::error::' + json.dumps(item)[:3000].replace('%', '%25'))
-          except (ValueError, OSError):
-              pass
+          for p in Path('ios/build').glob('*.xcresult-summary.json'):
+              try:
+                  obj = json.loads(p.read_text())
+                  for item in obj.get('testFailures', [])[:25]:
+                      print('::error::' + json.dumps(item)[:3000].replace('%', '%25'))
+              except (ValueError, OSError) as error:
+                  print('::warning::Could not read XCTest summary: ' + str(error))
           PYRESULT
-          fi
 
       - name: Collect the iOS renders into the workspace
         run: |
@@ -851,5 +871,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-xcresult-${{ github.run_id }}
-          path: ios/build/GSApp-tests.xcresult
+          path: |
+            ios/build/GSApp-tests.xcresult
+            ios/build/GSApp-genui.xcresult
           if-no-files-found: ignore

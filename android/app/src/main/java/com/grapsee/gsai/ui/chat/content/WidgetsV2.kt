@@ -894,6 +894,33 @@ internal fun ChecklistWidgetView(w: ChecklistWidget) {
 // mid-stream payloads.
 // ---------------------------------------------------------------------------
 
+private val WIDGET_RAW_KEYS = setOf(
+    "id", "key", "type", "kind", "expr", "expression", "formula",
+    "code", "source", "script", "html", "svg", "css", "sql", "query",
+    "url", "href", "link", "src", "route", "action", "method", "prompt",
+    "language", "format", "accent", "palette", "variant", "color",
+    "before", "after", "old", "new", "original", "modified", "patch", "diff", "unified", "z", "pattern", "regex"
+)
+
+/** After JSON decoding, so escaped emoji cannot reach plain native Text labels.
+ * Never alter identifiers, executable source, formulas, or navigation data. */
+internal fun sanitizeWidgetPresentationAndroid(value: JsonElement, key: String = ""): JsonElement {
+    if (value is JsonPrimitive && value.isString && key in WIDGET_RAW_KEYS) return value
+    return when (value) {
+        is JsonObject -> JsonObject(value.mapValues { (name, item) -> sanitizeWidgetPresentationAndroid(item, name) })
+        is JsonArray -> JsonArray(value.map { sanitizeWidgetPresentationAndroid(it, key) })
+        is JsonPrimitive -> if (!value.isString) value else {
+            val text = value.content
+            JsonPrimitive(when (key) {
+                "title" -> NexlyIcons.normalize(text)
+                "icon", "closingIcon" -> NexlyIcons.extractLeadingIcon(text).first ?: NexlyIcons.resolve(text)
+                else -> NexlyIcons.normalize(text).replace(Regex(":([a-z0-9][a-z0-9-]{1,42}):"), "")
+            })
+        }
+        else -> value
+    }
+}
+
 internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
     val trimmed = rawJson.trim()
     if (trimmed.isEmpty()) return rawJson
@@ -1285,26 +1312,5 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
         }
     }
 
-    val rawKeysPreserved = setOf("code", "html", "svg", "url", "src", "href", "unified", "before", "after", "formula", "expression", "expr", "z", "pattern", "regex", "query", "sql")
-    val iconNameKeys = setOf("icon", "closingIcon")
-    val iconTokenKeys = setOf("title") + (if (kind in setOf("followups", "actions", "menu", "chips")) setOf("label", "text", "name") else emptySet())
-
-    fun sanitizeJsonElement(el: JsonElement, keyHint: String? = null): JsonElement = when (el) {
-        is JsonPrimitive -> {
-            if (!el.isString) el
-            else {
-                val rawStr = el.content
-                when {
-                    keyHint in rawKeysPreserved -> el
-                    keyHint in iconNameKeys -> JsonPrimitive(NexlyIcons.extractLeadingIcon(rawStr).first ?: NexlyIcons.resolve(rawStr))
-                    keyHint in iconTokenKeys -> JsonPrimitive(NexlyIcons.normalize(rawStr).trim())
-                    else -> JsonPrimitive(NexlyIcons.cleanPlainText(rawStr))
-                }
-            }
-        }
-        is JsonArray -> JsonArray(el.map { sanitizeJsonElement(it, keyHint) })
-        is JsonObject -> JsonObject(el.mapValues { (k, v) -> sanitizeJsonElement(v, k) })
-    }
-
-    return sanitizeJsonElement(JsonObject(m)).toString()
+    return sanitizeWidgetPresentationAndroid(JsonObject(m)).toString()
 }

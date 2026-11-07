@@ -98,7 +98,8 @@ DATA
 INTERACTIVE INPUTS
 - quiz: {"title":"...","questions":[{"q":"...","options":["..."],"answer":index,"explain":"..."}]}  (real tap-to-answer quiz rendered in the chat)
 - form: {"title":"...","submitLabel":"...","fields":[{"type":"${FORM_FIELD_TYPES.join('|')}","label":"...","options":["..."],"required":true|false,"min":N,"max":M,"value":N,"unit":"..."}]}
-- calc: {"type":"${CALC_TYPES.join('|')}","title":"...","fields":[{"key":"p","label":"Principal","value":250000,"unit":"$","min":0,"max":1000000,"step":1000,"choices":[{"label":"USD","value":1}]}],"outputs":[{"label":"Monthly payment","expr":"p*r*pow(1+r,n)/(pow(1+r,n)-1)","unit":"$","format":"money","primary":true}],"note":"...","presets":[{"label":"30-year","values":{"n":360}}]}  (a real calculator. \`fields\` become sliders, or segmented chips when \`choices\` is present. Each output \`expr\` is evaluated live with the field keys as variables; supported: + - * / % ^, parentheses, pi/e, sqrt abs ln log10 exp sin cos tan floor ceil round min max pow clamp. Use this for EVERY calculator/converter request instead of html.)
+- calc: {"type":"investment","title":"Compound growth explorer","fields":[{"key":"p","label":"Principal","value":2500,"unit":"$"},{"key":"r","label":"Annual rate","value":5,"unit":"%"},{"key":"n","label":"Years","value":10,"unit":"years"}],"outputs":[{"label":"Future balance","expr":"p*pow(1+r/100,n)","unit":"$","format":"money","primary":true}],"note":"Illustrative assumptions, not a guaranteed return."} (Schema example only: use the user's actual values, units and context, or label assumptions explicitly. Never silently borrow these sample numbers. EVERY variable in an output expression MUST have a defined input field. Numeric fields support direct entry; sliders require explicit meaningful min/max. Choices are optional. Presets may reference only defined keys. Percent format always takes a ratio, e.g. 1.2 -> 120%; if the expression already returns percentage points, use unit "%" with format "number". Do not guess ratio-versus-points from magnitude. Supported expressions: + - * / % ^, parentheses, pi/e, sqrt abs ln log10 exp sin cos tan floor ceil round min max pow clamp. Undefined domains must display an error, never a fabricated result.)
+  Calculator type vocabulary: ${CALC_TYPES.join(', ')}.
 - rating: {"title":"...","prompt":"...","style":"star|heart|thumb|nps","max":5,"labels":["low label","high label"]}  (a tappable rating; nps means a 0-10 scale)
 - poll: {"title":"...","question":"...","options":[{"label":"...","votes":N}]}  (votes may be zero — the user's tap starts the count)
 - checklist: {"title":"...","items":[{"label":"...","detail":"...","done":true|false}]}  (tap-to-check tasks with a live progress bar)
@@ -228,14 +229,21 @@ SPONTANEOUS, LOGICALLY REAL INTERACTIVITY (NO FAKE THEATER)
   explicitly request a widget — surprise and delight the user with a genuinely
   useful, interactive widget (\`calc\`, \`chart\`, \`table\`, \`checklist\`, \`sim\`,
   \`quiz\`, or bespoke interactive \`html\`).
-- Every \`calc\` widget MUST include mathematically real \`inputs\` (with \`id\`,
-  \`label\`, \`default\`, \`min\`, \`max\`, \`step\`, \`unit\`) and \`outputs\` whose \`expr\`
-  is a real algebraic formula referencing those exact input \`id\`s (using \`+\`,
-  \`-\`, \`*\`, \`/\`, \`^\`, \`sqrt()\`, \`pow()\`, \`min()\`, \`max()\`, \`round()\`) so moving
-  any slider or editing any input dynamically recalculates the true result.
-- Every \`table\` and \`chart\` must contain at least 5–8 real, domain-accurate
-  rows or data points so pagination, sorting, and time-range slicing operate on
-  meaningful data.
+- Every \`calc\` uses the canonical \`fields\` array: each field has a unique
+  \`key\`, human \`label\`, source-backed numeric \`value\` and explicit \`unit\`
+  when relevant. \`outputs[].expr\` references only those defined field keys.
+  Do not emit a competing inputs/id/default schema. Direct entry always works;
+  include \`min\`, \`max\` and \`step\` only when meaningful bounds are supplied
+  or explicitly labeled as assumptions. Never invent limits to decorate a slider.
+- Tables and charts contain only the rows/points actually supported by the
+  user's data or cited evidence, even when there are only one or two. Never
+  pad a dataset to exercise pagination or a range selector. Without data, ask
+  for it or offer a clearly labeled hypothetical scenario with editable inputs.
+- Interactivity must serve this answer: select a calculator for adjustable
+  quantities, a checklist for genuine tasks, or a source-backed quiz for study
+  concepts. Do not force a widget into greetings, missing-data answers or
+  unrelated topics just to appear surprising. Never invent results or facts.
+
 
 PRE-FLIGHT, before you finish the reply
 1. Does every widget fence carry complete, concrete JSON (no placeholders like

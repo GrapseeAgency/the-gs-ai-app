@@ -922,14 +922,14 @@ private func append(
             result.append(attributed(from: children, theme: theme, style: style.union(.strikethrough)))
         case .code(let code):
             let cleanCode = NexlyIcons.cleanPlainText(code)
-            var run = AttributedString(cleanCode.isEmpty ? code : cleanCode)
+            var run = AttributedString(cleanCode)
             run.font = .system(size: theme.baseSize * 0.88, weight: .regular, design: .monospaced)
             run.backgroundColor = theme.monoBackground
             if !style.isEmpty { run.inlinePresentationIntent = style }
             result.append(run)
         case .link(let text, let url):
             let cleanText = NexlyIcons.cleanPlainText(text)
-            let label = cleanText.isEmpty ? text : cleanText
+            let label = cleanText.isEmpty ? "Link" : cleanText
             if let url = URL(string: url) {
                 var run = AttributedString(label)
                 run.link = url
@@ -2634,7 +2634,7 @@ private struct StepOrderedListItemRowView: View {
         let (leadIcon, strippedTitle) = NexlyIcons.extractLeadingIcon(rawTitle)
         let cleanTitle = NexlyIcons.cleanPlainText(strippedTitle.isEmpty ? rawTitle : strippedTitle)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = cleanTitle.isEmpty ? rawTitle : cleanTitle
+        let title = cleanTitle
         guard !title.isEmpty else { return nil }
         if item.spans.count >= 2 {
             var rest = Array(item.spans.dropFirst())
@@ -3401,8 +3401,12 @@ private struct TableBlockView: View {
         }
     }
 
+    private var effectivePageSize: Int {
+        widgetTablePageSizeIOS(selection: pageSize, rowCount: sortedRows.count)
+    }
+
     private var totalPages: Int {
-        max(1, (sortedRows.count + pageSize - 1) / pageSize)
+        max(1, (sortedRows.count + effectivePageSize - 1) / effectivePageSize)
     }
 
     private var safePage: Int {
@@ -3411,9 +3415,9 @@ private struct TableBlockView: View {
 
     private var visibleRows: [[[InlineSpan]]] {
         let all = sortedRows
-        let start = safePage * pageSize
+        let start = safePage * effectivePageSize
         guard start < all.count else { return [] }
-        let end = min(all.count, start + pageSize)
+        let end = min(all.count, start + effectivePageSize)
         return Array(all[start..<end])
     }
 
@@ -3428,8 +3432,8 @@ private struct TableBlockView: View {
             baseSize: 13,
             citations: citations
         )
-        let startRow = sortedRows.isEmpty ? 0 : safePage * pageSize + 1
-        let endRow = min(sortedRows.count, safePage * pageSize + visibleRows.count)
+        let startRow = sortedRows.isEmpty ? 0 : safePage * effectivePageSize + 1
+        let endRow = min(sortedRows.count, safePage * effectivePageSize + visibleRows.count)
         let chartJson = chartJsonFromTableIOS(headers: headers, rows: rows)
         VStack(alignment: .leading, spacing: 6) {
             if chartJson != nil {
@@ -3532,12 +3536,12 @@ private struct TableBlockView: View {
                 switch pageSize {
                 case 3: pageSize = 5
                 case 5: pageSize = 10
-                case 10: pageSize = 25
+                case 10: pageSize = -1
                 default: pageSize = 3
                 }
                 page = 0
             } label: {
-                Text("Show: \(pageSize) ▾")
+                Text("Show: \(pageSize == -1 ? "All" : String(pageSize)) ▾")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Aero.text)
                     .padding(.horizontal, 8)

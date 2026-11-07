@@ -564,6 +564,16 @@ internal val widgetJson = Json {
  * caller renders the raw JSON as a code block, so the model can never break
  * the transcript with a bad widget.
  */
+internal fun chartGrowthPercentAndroid(first: Double, last: Double): Double? {
+    if (!first.isFinite() || !last.isFinite() || first == 0.0) return null
+    return (((last - first) / kotlin.math.abs(first)) * 100.0).takeIf { it.isFinite() }
+}
+
+internal fun chartStepPercentAndroid(values: List<Double>, index: Int): Double? {
+    if (index <= 0) return null
+    return chartGrowthPercentAndroid(values.getOrNull(index - 1) ?: return null, values.getOrNull(index) ?: return null)
+}
+
 fun parseWidget(kind: String, rawJson: String): Widget? {
     if (rawJson.isBlank() || rawJson.length > MAX_WIDGET_BYTES) return null
     val resolvedKind = widgetKindOf(kind) ?: kind.lowercase().trim()
@@ -1644,9 +1654,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                     val maxIdx = ys.indices.maxByOrNull { ys[it] } ?: 0
                     val peakLabel = slicedWidget.labels.getOrNull(maxIdx)?.takeIf { it.isNotBlank() } ?: "Peak"
                     val peakVal = ys.getOrElse(maxIdx) { 0f }
-                    val first = ys.first().takeIf { it != 0f } ?: 1f
-                    val last = ys.last()
-                    val pct = ((last - first) / kotlin.math.abs(first)) * 100f
+                    val pct = chartGrowthPercentAndroid(ys.first().toDouble(), ys.last().toDouble())
                     Triple(
                         axisLabel(total, slicedWidget.unit),
                         peakLabel to axisLabel(peakVal, slicedWidget.unit),
@@ -1656,10 +1664,11 @@ private fun ChartWidgetView(w: ChartWidget) {
             }
             if (kpiStats != null) {
                 val (totalStr, peakPair, pct) = kpiStats
-                val pos = pct >= 0f
-                val pctStr = String.format(java.util.Locale.US, "%s%.1f%%", if (pos) "+" else "", pct)
-                val pillBg = if (pos) Color(0xFFE6F9F0) else Color(0xFFFDECEC)
-                val pillFg = if (pos) Color(0xFF129A5A) else Color(0xFFE04F5F)
+                val pos = pct != null && pct >= 0.0
+                val pctStr = pct?.let { String.format(java.util.Locale.US, "%s%.1f%%", if (pos) "+" else "", it) } ?: "N/A (zero baseline)"
+                val deltaText = if (pct == null) "No defined baseline" else "${if (pos) "↑" else "↓"} $pctStr"
+                val pillBg = if (pct == null) Color(0xFFF0EDF5) else if (pos) Color(0xFFE6F9F0) else Color(0xFFFDECEC)
+                val pillFg = if (pct == null) Color(0xFF655E70) else if (pos) Color(0xFF129A5A) else Color(0xFFE04F5F)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1690,7 +1699,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                                 .padding(horizontal = 6.dp, vertical = 1.5.dp)
                         ) {
                             Text(
-                                text = "${if (pos) "↑" else "↓"} $pctStr",
+                                text = deltaText,
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = pillFg
@@ -1759,7 +1768,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                                 .padding(horizontal = 6.dp, vertical = 1.5.dp)
                         ) {
                             Text(
-                                text = "${if (pos) "↑" else "↓"} $pctStr",
+                                text = deltaText,
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = pillFg
@@ -1869,15 +1878,11 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
     }
     val activeDatum = probe.datum
     if (activeDatum != null) {
-        val pts = w.series.firstOrNull()?.data.orEmpty()
-        val prevVal = if (activeDatum.index > 0) pts.getOrNull(activeDatum.index - 1)?.getOrNull(1) else null
-        val avgVal = pts.map { it.getOrElse(1) { 0f } }.average().toFloat()
-        val stepPct = when {
-            prevVal != null && prevVal != 0f -> ((activeDatum.value - prevVal) / kotlin.math.abs(prevVal)) * 100f
-            avgVal != 0f -> ((activeDatum.value - avgVal) / kotlin.math.abs(avgVal)) * 100f
-            else -> 0f
-        }
-        val stepPos = stepPct >= 0f
+        val selectedSeries = w.series.firstOrNull { it.name == activeDatum.series } ?: w.series.firstOrNull()
+        val pts = selectedSeries?.data.orEmpty()
+        val stepPct = chartStepPercentAndroid(pts.map { it.getOrElse(1) { Float.NaN }.toDouble() }, activeDatum.index)
+        val stepPos = stepPct != null && stepPct >= 0.0
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1908,7 +1913,7 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
                         color = Color(0xFF1F1842)
                     )
                     Text(
-                        text = String.format(java.util.Locale.US, "%s %s%.1f%%", if (stepPos) "↑" else "↓", if (stepPos) "+" else "", stepPct),
+                        text = stepPct?.let { String.format(java.util.Locale.US, "%s %s%.1f%%", if (stepPos) "↑" else "↓", if (stepPos) "+" else "", it) } ?: "N/A (no prior baseline)",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (stepPos) Color(0xFF129A5A) else Color(0xFFE04F5F)
@@ -2481,6 +2486,9 @@ private fun tableEntityIconBadge(raw: String): Pair<String, String>? {
     }
 }
 
+internal fun widgetTablePageSizeAndroid(selection: Int, rowCount: Int): Int =
+    if (selection == -1) maxOf(1, rowCount) else maxOf(1, selection)
+
 @Composable
 private fun TableWidgetView(w: TableWidget) {
     var sortCol by remember { mutableIntStateOf(-1) }
@@ -2506,13 +2514,15 @@ private fun TableWidgetView(w: TableWidget) {
             if (asc) cmp else -cmp
         }
     }
-    val totalPages = maxOf(1, (rows.size + pageSize - 1) / pageSize)
+    // -1 means the entire filtered dataset, not a disguised 25-row cap.
+    val effectivePageSize = widgetTablePageSizeAndroid(pageSize, rows.size)
+    val totalPages = maxOf(1, (rows.size + effectivePageSize - 1) / effectivePageSize)
     val safePage = page.coerceIn(0, totalPages - 1)
-    val visible = remember(rows, safePage, pageSize) {
-        rows.drop(safePage * pageSize).take(pageSize)
+    val visible = remember(rows, safePage, effectivePageSize) {
+        rows.drop(safePage * effectivePageSize).take(effectivePageSize)
     }
-    val startRow = if (rows.isEmpty()) 0 else safePage * pageSize + 1
-    val endRow = (safePage * pageSize + visible.size).coerceAtMost(rows.size)
+    val startRow = if (rows.isEmpty()) 0 else safePage * effectivePageSize + 1
+    val endRow = (safePage * effectivePageSize + visible.size).coerceAtMost(rows.size)
     val primaryNameCol = remember(w.columns) {
         val idx = w.columns.indexOfFirst {
             it.contains("language", true) || it.contains("product", true) ||
@@ -2738,7 +2748,7 @@ private fun TableWidgetView(w: TableWidget) {
                             pageSize = when (pageSize) {
                                 3 -> 5
                                 5 -> 10
-                                10 -> 25
+                                10 -> -1
                                 else -> 3
                             }
                             page = 0
@@ -2746,7 +2756,7 @@ private fun TableWidgetView(w: TableWidget) {
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Text(
-                        text = "Show: $pageSize ▾",
+                        text = "Show: ${if (pageSize == -1) "All" else pageSize.toString()} ▾",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF3E3666)

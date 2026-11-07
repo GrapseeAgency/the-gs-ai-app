@@ -9,6 +9,9 @@ import UserNotifications
 @MainActor
 struct PlatformRuntimeProbe: View {
     @State private var status = "idle"
+    @State private var showCalculator = false
+    @State private var showTable = false
+    @State private var ordinaryTable = false
     @State private var title = ""
     @State private var armed = false
     @State private var accepted: Bool?
@@ -23,6 +26,23 @@ struct PlatformRuntimeProbe: View {
             Button("Arm messages-disabled notice") { Task { await arm(mode: "messages") } }
             Button("Inspect OS delivery") { Task { await inspect() } }
             Button("Restore runtime settings") { Task { await restore() } }
+            Button("Open generated calculator") { showCalculator = true }
+            Button("Open generated table") { showTable = true }
+            if showCalculator {
+                WidgetBlockView(kind: "calc", json: #"{"title":"\ud83d\ude80 Growth","fields":[{"key":"amount","label":"Amount \u00a9\ufe0f \ud83d\ude00","value":100}],"outputs":[{"label":"Double","expr":"amount*2"}]}"#, open: false)
+            }
+        }
+        .sheet(isPresented: $showTable) {
+            VStack {
+                Button("Use ordinary Markdown") { ordinaryTable = true }
+                ScrollView {
+                    if ordinaryTable {
+                        BlocksView(blocks: parseBlocks(Self.tableMarkdown)).padding()
+                    } else {
+                        WidgetBlockView(kind: "table", json: Self.tableJSON, open: false).padding()
+                    }
+                }
+            }
         }
         .onAppear {
             let settings = SettingsStore.shared
@@ -48,6 +68,19 @@ struct PlatformRuntimeProbe: View {
                 status = "callback-complete"
             }
         }
+    }
+
+    private static var tableMarkdown: String {
+        "`😀` [😀](https://example.org)\n\n| Name | Amount |\n| --- | --- |\n" +
+            (1...31).map { "| Item \($0) | \($0) |" }.joined(separator: "\n")
+    }
+
+    private static var tableJSON: String {
+        let data: [String: Any] = ["columns": ["Name", "Amount"],
+            "rows": (1...31).map { ["Item \($0)", String($0)] }]
+        guard let encoded = try? JSONSerialization.data(withJSONObject: data),
+              let json = String(data: encoded, encoding: .utf8) else { return "{}" }
+        return json
     }
 
     private func arm(mode: String) async {

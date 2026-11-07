@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,10 +60,10 @@ data class CalcChoice(val label: String = "", val value: Double = 0.0)
 data class CalcField(
     val key: String = "",
     val label: String = "",
-    val value: Double = 0.0,
+    val value: Double = Double.NaN,
     val unit: String = "",
-    val min: Double = 0.0,
-    val max: Double = 100.0,
+    val min: Double? = null,
+    val max: Double? = null,
     val step: Double = 1.0,
     val choices: List<CalcChoice> = emptyList()
 )
@@ -257,7 +260,7 @@ internal fun formatCalc(value: Double, format: String, unit: String): String {
     val body = when {
         isCurrency -> String.format(Locale.US, "%s%,.2f", currSymbol, value)
         isPercent -> {
-            val pctVal = if (fmtLower in setOf("percent", "pct") && abs(value) <= 1.0) value * 100.0 else value
+            val pctVal = if (fmtLower in setOf("percent", "pct")) value * 100.0 else value
             String.format(Locale.US, "%.2f%%", pctVal)
         }
         fmtLower == "integer" -> String.format(Locale.US, "%,.0f", value)
@@ -278,7 +281,9 @@ internal fun formatCalc(value: Double, format: String, unit: String): String {
 internal fun CalcWidgetView(w: CalcWidget, onSendPrompt: ((String) -> Unit)? = null) {
     val c = GsTheme.colors
     val fields = w.fields.take(10).filter { it.key.isNotBlank() }
-    val values = remember { mutableStateMapOf<String, Double>().apply { fields.forEach { put(it.key, it.value) } } }
+    val defaults = fields.associate { it.key to (if (it.value.isFinite()) it.value else it.choices.firstOrNull()?.value ?: Double.NaN) }
+    val values = remember(w) { mutableStateMapOf<String, Double>().apply { putAll(defaults) } }
+    val drafts = remember(w) { mutableStateMapOf<String, String>() }
 
     WidgetCardShell(w.title.ifEmpty { "Calculator" }, w.type) {
         Column(Modifier.padding(top = 6.dp)) {
@@ -292,7 +297,7 @@ internal fun CalcWidgetView(w: CalcWidget, onSendPrompt: ((String) -> Unit)? = n
                             Modifier.clip(RoundedCornerShape(20.dp))
                                 .background(c.surface)
                                 .clickable {
-                                    preset.values.forEach { (k, v) -> if (k in values) values[k] = v }
+                                    preset.values.forEach { (k, v) -> if (k in values && v.isFinite()) { values[k] = v; drafts.remove(k) } }
                                 }
                                 .padding(horizontal = 10.dp, vertical = 5.dp)
                         ) {
@@ -335,63 +340,37 @@ internal fun CalcWidgetView(w: CalcWidget, onSendPrompt: ((String) -> Unit)? = n
                         }
                     }
                 } else {
-                    val stepVal = if (f.step > 0) f.step else 1.0
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(f.label, style = MaterialTheme.typography.labelSmall, color = c.textTertiary)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Box(
-                                Modifier.size(22.dp).clip(RoundedCornerShape(6.dp))
-                                    .background(c.surface)
-                                    .clickable {
-                                        values[f.key] = (current - stepVal).coerceIn(f.min, max(f.min, f.max))
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("−", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
-                            }
-                            Text(
-                                formatCalc(current, if (f.step >= 1) "integer" else "number", f.unit),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = c.textPrimary,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Box(
-                                Modifier.size(22.dp).clip(RoundedCornerShape(6.dp))
-                                    .background(c.surface)
-                                    .clickable {
-                                        values[f.key] = (current + stepVal).coerceIn(f.min, max(f.min, f.max))
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("+", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
-                            }
-                        }
-                    }
-                    Slider(
-                        value = current.coerceIn(f.min, max(f.min + 0.0001, f.max)).toFloat(),
-                        onValueChange = { rawVal ->
-                            val snapped = if (f.step > 0) {
-                                (round((rawVal.toDouble() - f.min) / f.step) * f.step + f.min)
-                                    .coerceIn(f.min, max(f.min, f.max))
-                            } else {
-                                rawVal.toDouble()
-                            }
-                            values[f.key] = snapped
+                    OutlinedTextField(
+                        value = drafts[f.key] ?: if (current.isFinite()) current.toString() else "",
+                        onValueChange = { raw ->
+                            drafts[f.key] = raw
+                            values[f.key] = raw.toDoubleOrNull() ?: Double.NaN
                         },
-                        valueRange = f.min.toFloat()..max(f.min + 0.0001, f.max).toFloat(),
-                        modifier = Modifier.fillMaxWidth()
+                        label = { Text(f.label) },
+                        suffix = { if (f.unit.isNotBlank()) Text(f.unit) },
+                        isError = !current.isFinite() || (f.min != null && current < f.min) || (f.max != null && current > f.max),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
                     )
+                    val lo = f.min
+                    val hi = f.max
+                    if (lo != null && hi != null && lo.isFinite() && hi.isFinite() && hi > lo) {
+                        Slider(
+                            value = (if (current.isFinite()) current.coerceIn(lo, hi) else lo).toFloat(),
+                            onValueChange = { raw ->
+                                val v = if (f.step > 0) round((raw.toDouble() - lo) / f.step) * f.step + lo else raw.toDouble()
+                                values[f.key] = v.coerceIn(lo, hi)
+                                drafts.remove(f.key)
+                            },
+                            valueRange = lo.toFloat()..hi.toFloat(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
 
-            val hasChanged = fields.any { abs((values[it.key] ?: it.value) - it.value) > 1e-6 }
+            val hasChanged = fields.any { values[it.key]?.toBits() != defaults[it.key]?.toBits() }
             if (hasChanged) {
                 Row(
                     Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -401,7 +380,8 @@ internal fun CalcWidgetView(w: CalcWidget, onSendPrompt: ((String) -> Unit)? = n
                         Modifier.clip(RoundedCornerShape(999.dp))
                             .background(c.surface)
                             .clickable {
-                                fields.forEach { values[it.key] = it.value }
+                                values.putAll(defaults)
+                                drafts.clear()
                             }
                             .padding(horizontal = 10.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -418,8 +398,13 @@ internal fun CalcWidgetView(w: CalcWidget, onSendPrompt: ((String) -> Unit)? = n
                 }
             }
 
+            val invalidInput = fields.any { f ->
+                val v = values[f.key] ?: Double.NaN
+                !v.isFinite() || (f.min != null && v < f.min) || (f.max != null && v > f.max)
+            }
+            if (invalidInput) Text("Enter valid numbers within the supplied limits", color = c.textSecondary)
             val outputs = w.outputs.take(8).map { out ->
-                out to CalcExpr.eval(out.expr, values)
+                out to if (invalidInput) null else CalcExpr.eval(out.expr, values)
             }
             Column(
                 Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(10.dp))

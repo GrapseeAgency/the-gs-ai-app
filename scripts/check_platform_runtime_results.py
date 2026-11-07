@@ -8,6 +8,8 @@ EXPECTED = {
     'backgroundReplyAppearsInOsAndSettingsSuppressIt',
     'realCardDistinguishesTapFromLongPress',
     'hapticDispatchUsesPlatformConstantsAndHonorsToggle',
+    'generatedCalculatorAcceptsExactNumbersAndNeverRendersEmoji',
+    'generatedTableAllDisplaysEveryActualRow',
 }
 
 

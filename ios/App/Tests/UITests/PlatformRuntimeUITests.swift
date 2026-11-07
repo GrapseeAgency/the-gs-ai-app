@@ -1,6 +1,74 @@
 import XCTest
 
 final class PlatformRuntimeUITests: XCTestCase {
+    func testGeneratedTableAllDisplaysEveryActualRow() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        let open = app.buttons["Open generated table"]
+        XCTAssertTrue(open.waitForExistence(timeout: 20))
+        open.tap()
+        func show(_ label: String) -> XCUIElement {
+            let button = app.buttons[label]
+            for _ in 0..<18 {
+                if button.exists && button.isHittable { return button }
+                app.swipeUp()
+            }
+            XCTFail("Real table never exposed \(label)")
+            return button
+        }
+        show("Show: 5 ▾").tap()
+        show("Show: 10 ▾").tap()
+        XCTAssertTrue(show("Show: All ▾").exists)
+        XCTAssertTrue(app.staticTexts["Item 31"].exists)
+        XCTAssertTrue(app.staticTexts["1–31 of 31"].exists)
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "genui-table-all-31-real-rows"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+        app.buttons["Use ordinary Markdown"].tap()
+        show("Show: 5 ▾").tap()
+        show("Show: 10 ▾").tap()
+        XCTAssertTrue(show("Show: All ▾").exists)
+        XCTAssertTrue(app.staticTexts["Item 31"].exists)
+        XCTAssertTrue(app.staticTexts["1–31 of 31"].exists)
+        // Inspect actual native text, not just a string-normalizer result.
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "😀")).count, 0)
+        let markdownEvidence = XCTAttachment(screenshot: app.screenshot())
+        markdownEvidence.name = "genui-markdown-table-all-31-real-rows"
+        markdownEvidence.lifetime = .keepAlways
+        add(markdownEvidence)
+    }
+
+    func testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        let open = app.buttons["Open generated calculator"]
+        XCTAssertTrue(open.waitForExistence(timeout: 20))
+        open.tap()
+        let field = app.textFields["calc-input-amount"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.sliders.count, 0, "Unbounded model field invented a slider range")
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "©")).count, 0)
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "😀")).count, 0)
+        // A centre tap can place the caret BEFORE right-aligned text. Move
+        // it to the trailing edge explicitly before issuing backspaces.
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+        let initial = field.value as? String ?? ""
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: initial.count) + "12.3456")
+        XCTAssertEqual(field.value as? String, "12.3456", "Typed input was rounded or reformatted")
+        XCTAssertTrue(app.staticTexts["24.69"].waitForExistence(timeout: 10))
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 7))
+        XCTAssertTrue(app.staticTexts["Enter valid inputs"].waitForExistence(timeout: 10))
+        app.buttons["Reset"].tap()
+        XCTAssertTrue(app.staticTexts["200"].waitForExistence(timeout: 10))
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "genui-calculator-typed-reset-no-emoji"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+    }
+
     func testBackgroundNoticeIsDeliveredAndDisabledKindsAreNot() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]

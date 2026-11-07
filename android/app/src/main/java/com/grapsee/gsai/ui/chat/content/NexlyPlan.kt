@@ -357,7 +357,8 @@ object NexlyIcons {
         while (i < out.length) {
             val cp = out.codePointAt(i)
             val fallbackIcon = fallbackIconForCodePoint(cp)
-            val pictograph = cp in 0x1F000..0x1FAFF ||
+            val pictograph = (cp > 0x7F && android.icu.lang.UCharacter.hasBinaryProperty(cp, android.icu.lang.UProperty.EMOJI)) ||
+                cp in 0xE0020..0xE007F || cp in 0x1F000..0x1FAFF ||
                 cp in 0x2600..0x27BF ||
                 cp in 0x2300..0x23FF ||
                 cp in 0x2194..0x21AA ||
