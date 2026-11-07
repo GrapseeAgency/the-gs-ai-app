@@ -7,10 +7,12 @@ import { useWidgetIdentity } from '../theme/WidgetSurface'
 
 export function UiCheckbox({
   label,
+  ariaLabel,
   checked,
   onChange,
 }: {
   label?: string
+  ariaLabel?: string
   checked: boolean
   onChange: (v: boolean) => void
 }) {
@@ -20,6 +22,7 @@ export function UiCheckbox({
       type="button"
       role="checkbox"
       aria-checked={checked}
+      aria-label={ariaLabel}
       onClick={() => onChange(!checked)}
       style={{
         display: 'inline-flex',

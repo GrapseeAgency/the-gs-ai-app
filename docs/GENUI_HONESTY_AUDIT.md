@@ -40,9 +40,9 @@ Earlier compiler/static-green reports did not prove behavioral correctness.
 
 ## Repeatable evidence
 
-`npm run test:interactions` compiles the renderer probe and runs 46 assertions:
+`npm run test:interactions` compiles the renderer probe and runs 51 assertions:
 real DOM clicks for card flips, quiz scoring, calculator preset/reset, SQL
-failure honesty, table paging/sorting/filtering/All; arithmetic failure cases;
+failure honesty, table paging/sorting/filtering/All; real task add/edit/delete/completion; arithmetic failure cases;
 actual generated JavaScript worker code with awaited timers; icon normalization
 and rendering; deterministic calendar-window cases.
 

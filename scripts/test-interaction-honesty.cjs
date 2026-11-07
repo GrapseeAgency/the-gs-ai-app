@@ -24,6 +24,7 @@ const { SpontaneousConceptDeck } = from('components/genui/SpontaneousConceptDeck
 const { CalcWidget } = from('components/genui/widgets/CalcWidget')
 const { CodeBlock } = from('components/genui/blocks/CodeBlock')
 const { chartRange } = from('lib/nexly/chart-range')
+const { ChecklistWidget } = from('components/genui/widgets/ChecklistWidget')
 const { TableWidget } = from('components/genui/widgets/TableWidget')
 const { TitleRow } = from('components/genui/primitives/TitleRow')
 const h = React.createElement
@@ -119,6 +120,25 @@ async function main() {
     filter.dispatchEvent(new window.Event('input', { bubbles: true }))
   })
   check('filter actually changes the dataset', () => assert.equal(document.querySelectorAll('tbody tr').length, 1))
+  async function typeIn(input, value) {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, value)
+      input.dispatchEvent(new window.Event('input', { bubbles: true }))
+    })
+  }
+  await mount(h(ChecklistWidget, { payload: { title: 'My tasks', items: [] } }))
+  check('empty checklist remains usable', () => assert.ok(document.querySelector('input[aria-label="New task"]')))
+  await typeIn(document.querySelector('input[aria-label="New task"]'), 'Book actual tickets')
+  await click(buttons().find((b) => b.textContent === 'Add Task'))
+  check('add task uses the typed text', () => assert.match(document.body.textContent, /Book actual tickets/))
+  await click(document.querySelector('[role="checkbox"]'))
+  check('task completion updates real progress', () => assert.equal(document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '100'))
+  await click(document.querySelector('button[aria-label="Edit Book actual tickets"]'))
+  await typeIn(document.querySelector('input[aria-label="Edit task"]'), 'Confirm train tickets')
+  await click(buttons().find((b) => b.textContent === 'Save'))
+  check('task edit saves the actual new label', () => { assert.match(document.body.textContent, /Confirm train tickets/); assert.doesNotMatch(document.body.textContent, /Book actual tickets/) })
+  await click(document.querySelector('button[aria-label="Delete Confirm train tickets"]'))
+  check('delete removes the task and resets progress', () => { assert.equal(document.querySelectorAll('[role="checkbox"]').length, 0); assert.equal(document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '0') })
   await mount(h(CodeBlock, { language: 'sql', code: 'SELECT * FROM private_accounts' }))
   await click(buttons().find((b) => b.textContent.includes('Run Code')))
   check('SQL button never fabricates a result', () => { assert.match(document.body.textContent, /no database is connected/); assert.doesNotMatch(document.body.textContent, /Ava Chen|3 rows returned/) })

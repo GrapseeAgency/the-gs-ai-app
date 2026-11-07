@@ -30,7 +30,7 @@ export function ChecklistWidget({ payload }: { payload: ChecklistPayload }) {
         {items.map((item, i) => (
           <div key={i} style={{ padding: '6px 0', borderBottom: `1px solid ${theme.border}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <UiCheckbox checked={item.done === true}
+              <UiCheckbox ariaLabel={item.label} checked={item.done === true}
                 onChange={(v) => setItems((s) => s.map((it, j) => j === i ? { ...it, done: v } : it))} />
               {editing === i ? <form style={{ flex: 1 }} onSubmit={(e) => {
                 e.preventDefault()
