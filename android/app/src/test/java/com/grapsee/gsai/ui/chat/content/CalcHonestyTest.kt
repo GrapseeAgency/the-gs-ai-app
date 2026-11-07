@@ -5,6 +5,12 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun tooltipDeltaRequiresAnActualPriorPoint() {
+        assertNull(chartStepPercentAndroid(listOf(20.0, 30.0), 0))
+        assertNull(chartStepPercentAndroid(listOf(0.0, 30.0), 1))
+        assertNull(chartStepPercentAndroid(listOf(20.0), 5))
+        assertEquals(50.0, chartStepPercentAndroid(listOf(20.0, 30.0), 1)!!, 1e-9)
+    }
     @Test fun zeroBaselineGrowthIsUndefinedRatherThanFabricated() {
         assertNull(chartGrowthPercentAndroid(0.0, 25.0))
         assertNull(chartGrowthPercentAndroid(0.0, 0.0))
