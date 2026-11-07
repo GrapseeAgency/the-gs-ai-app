@@ -193,6 +193,11 @@ async function main() {
     assert.match(document.body.textContent, /N\/A \(zero baseline\)/)
     assert.doesNotMatch(document.body.textContent, /↓\s*N\/A/)
   })
+  await click(buttons().find(button => button.textContent.includes('Pie Chart')))
+  check('pie category comparisons do not masquerade as a growth rate', () => {
+    assert.match(document.body.textContent, /N\/A \(slice values\)/)
+    assert.doesNotMatch(document.body.textContent, /zero baseline/)
+  })
   await mount(h(ChartWidget, { payload: { type: 'line', series: [
     { name: 'Short', data: [[0,10],[1,20]] },
     { name: 'Long', data: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]] }
