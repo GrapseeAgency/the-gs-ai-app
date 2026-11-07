@@ -97,12 +97,12 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
   const [activeType, setActiveType] = useState<ChartPayload['type']>(payload.type)
   const [rangeIdx, setRangeIdx] = useState<number>(3)
 
-  const range = useMemo(() => chartRange(payload.labels ?? [], Math.max(payload.series?.[0]?.data.length ?? 0, payload.labels?.length ?? 0), rangeIdx), [payload, rangeIdx])
+  const range = useMemo(() => chartRange(payload.labels ?? [], Math.max(payload.series?.[0]?.data?.length ?? 0, payload.labels?.length ?? 0), rangeIdx), [payload, rangeIdx])
   const RANGE_OPTIONS = range.options
   const slicedPayload = useMemo<ChartPayload>(() => ({
     ...payload,
     labels: payload.labels ? range.indices.map((i) => payload.labels?.[i] ?? "") : payload.labels,
-    series: payload.series?.map((s) => ({ ...s, data: range.indices.filter((i) => i < s.data.length).map((i) => s.data[i]) })),
+    series: payload.series?.map((s) => !Array.isArray(s.data) ? s : ({ ...s, data: range.indices.filter((i) => i < s.data.length).map((i) => s.data[i]) })),
   }), [payload, range])
 
   const summary = useMemo(() => {
