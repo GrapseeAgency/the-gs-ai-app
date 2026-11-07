@@ -192,17 +192,17 @@ private let widgetRawPresentationKeys: Set<String> = [
     "code", "source", "script", "html", "svg", "css", "sql", "query",
     "url", "href", "link", "src", "route", "action", "method", "prompt",
     "language", "format", "accent", "palette", "variant", "color",
-    "before", "after", "old", "new", "original", "modified", "patch", "diff"
+    "before", "after", "old", "new", "original", "modified", "patch", "diff", "unified", "z", "pattern", "regex"
 ]
 
 /// Decoded JSON boundary, including escaped Unicode and primitive string arrays.
 /// Only presentation changes; source, expressions, identities and URLs stay exact.
 func sanitizeWidgetPresentationIOS(_ value: Any, key: String = "") -> Any {
-    if widgetRawPresentationKeys.contains(key) { return value }
     if let text = value as? String {
+        if widgetRawPresentationKeys.contains(key) { return text }
         let normalized = NexlyIcons.normalize(text)
         if key == "title" { return normalized }
-        if key == "icon" { return NexlyIcons.extractLeadingIcon(text).0 ?? NexlyIcons.resolve(text) }
+        if key == "icon" || key == "closingIcon" { return NexlyIcons.extractLeadingIcon(text).0 ?? NexlyIcons.resolve(text) }
         return normalized.replacingOccurrences(of: ":[a-z0-9][a-z0-9-]{1,42}:", with: "", options: .regularExpression)
     }
     if let array = value as? [Any] { return array.map { sanitizeWidgetPresentationIOS($0, key: key) } }
@@ -219,13 +219,13 @@ func parseRelaxedJSONObject(kind: String, raw: String) -> [String: Any]? {
     guard !trimmed.isEmpty, trimmed.count <= 65_536 else { return nil }
     if let data = trimmed.data(using: .utf8),
        let any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
-        return normalizeJSONRoot(kind: kind, value: sanitizeWidgetPresentationIOS(any))
+        return normalizeJSONRoot(kind: kind, value: any)
     }
     // Strip trailing commas before } or ] and retry
     let cleaned = trimmed.replacingOccurrences(of: ",\\s*([}\\]])", with: "$1", options: .regularExpression)
     if let data = cleaned.data(using: .utf8),
        let any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
-        return normalizeJSONRoot(kind: kind, value: sanitizeWidgetPresentationIOS(any))
+        return normalizeJSONRoot(kind: kind, value: any)
     }
     return recoverPlainTextWidgetIOS(kind: kind, raw: trimmed).map {
         sanitizeWidgetPresentationIOS($0) as? [String: Any] ?? $0
@@ -299,30 +299,7 @@ private let RAW_KEYS_PRESERVED_IOS: Set<String> = [
 private let ICON_NAME_KEYS_IOS: Set<String> = ["icon", "closingIcon"]
 
 private func sanitizeJSONValueIOS(kind: String, value: Any, keyHint: String? = nil) -> Any {
-    if let s = value as? String {
-        if let k = keyHint, RAW_KEYS_PRESERVED_IOS.contains(k) { return s }
-        if let k = keyHint, ICON_NAME_KEYS_IOS.contains(k) {
-            return NexlyIcons.extractLeadingIcon(s).0 ?? NexlyIcons.resolve(s)
-        }
-        let allowIconTokens = keyHint == "title"
-            || (["followups", "actions", "menu", "chips"].contains(kind) && ["label", "text", "name"].contains(keyHint ?? ""))
-        if allowIconTokens {
-            return NexlyIcons.normalize(s).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        return NexlyIcons.cleanPlainText(s)
-    }
-    if let arr = value as? [Any] {
-        return arr.map { sanitizeJSONValueIOS(kind: kind, value: $0, keyHint: keyHint) }
-    }
-    if let obj = value as? [String: Any] {
-        var out: [String: Any] = [:]
-        out.reserveCapacity(obj.count)
-        for (k, v) in obj {
-            out[k] = sanitizeJSONValueIOS(kind: kind, value: v, keyHint: k)
-        }
-        return out
-    }
-    return value
+    sanitizeWidgetPresentationIOS(value, key: keyHint ?? "")
 }
 
 private func normalizeJSONRoot(kind: String, value: Any) -> [String: Any]? {
@@ -920,6 +897,7 @@ private struct WidgetBodyView: View {
             FormBodyView(obj: obj, accent: accent)
         case "calc":
             CalcBodyView(obj: obj, accent: accent)
+                .id((try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])) ?? Data())
         case "media", "carousel", "cards":
             MediaBodyView(obj: obj, accent: accent)
         case "app":
