@@ -23,6 +23,8 @@ const { MessageContent } = from('components/genui/MessageContent')
 const { SpontaneousConceptDeck } = from('components/genui/SpontaneousConceptDeck')
 const { CalcWidget } = from('components/genui/widgets/CalcWidget')
 const { CodeBlock } = from('components/genui/blocks/CodeBlock')
+const { chartRange } = from('lib/nexly/chart-range')
+const { TableWidget } = from('components/genui/widgets/TableWidget')
 const { TitleRow } = from('components/genui/primitives/TitleRow')
 const h = React.createElement
 const text = '- **Mitosis**: A cell divides into two genetically identical cells.\n- **Meiosis**: A cell divides to produce four genetically distinct cells.\n- **Osmosis**: Water moves through a selectively permeable membrane.'
@@ -77,6 +79,12 @@ async function main() {
   check('worker source escapes script terminators', () => assert.ok(!javascriptSandboxDocument('</script><img src=x>').includes('</script><img')))
   check('worker network is forbidden and execution is bounded', () => { assert.match(doc, /connect-src 'none'/); assert.match(doc, /worker\.terminate\(\)/); assert.match(doc, /2000/) })
 
+  const calendarLabels = ['2025-11', '2026-01', '2026-04', '2026-06', '2026-11']
+  const clock = new Date('2026-06-15T12:00:00Z')
+  check('Last 3M uses calendar timestamps, excludes future points', () => assert.deepEqual(chartRange(calendarLabels, 5, 0, clock).indices, [2, 3]))
+  check('YTD starts at January of the current year', () => assert.deepEqual(chartRange(calendarLabels, 5, 2, clock).indices, [1, 2, 3]))
+  check('categories never claim to be months', () => assert.equal(chartRange(['A','B','C','D'], 4, 0, clock).options[0], 'Last 3 points'))
+  check('invalid dates never acquire calendar semantics', () => assert.equal(chartRange(['2026-02-31'], 1, 0, clock).options[0], 'Last 3 points'))
   const root = createRoot(document.getElementById('root'))
   async function mount(element) { await act(async () => root.render(element)) }
   async function click(button) { assert.ok(button, 'button exists'); await act(async () => button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))) }
@@ -95,6 +103,22 @@ async function main() {
   check('calculator preset recomputes from state', () => assert.match(document.body.textContent, /500/))
   await click(buttons().find((b) => b.textContent === 'Reset'))
   check('calculator reset restores real inputs', () => assert.match(document.body.textContent, /200/))
+  await mount(h(TableWidget, { payload: { columns: ['Name','Amount'], rows: Array.from({length: 31}, (_, i) => ['Item '+(i+1), String(31-i)]) } }))
+  check('table genuinely paginates', () => assert.equal(document.querySelectorAll('tbody tr').length, 5))
+  await click(document.querySelectorAll('th')[1])
+  check('table numeric sorting uses actual values', () => assert.equal(document.querySelector('tbody tr td:last-child').textContent, '1'))
+  await click(buttons().find((b) => b.textContent === '›'))
+  check('next page reveals the next actual rows', () => assert.equal(document.querySelector('tbody tr td:last-child').textContent, '6'))
+  await click(buttons().find((b) => b.textContent.includes('Show:')))
+  check('page-size change changes the visible row count', () => assert.equal(document.querySelectorAll('tbody tr').length, 10))
+  await click(buttons().find((b) => b.textContent.includes('Show:')))
+  check('All displays more than 25 rows', () => assert.equal(document.querySelectorAll('tbody tr').length, 31))
+  const filter = document.querySelector('input[placeholder="Filter rows…"]')
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(filter, 'Item 31')
+    filter.dispatchEvent(new window.Event('input', { bubbles: true }))
+  })
+  check('filter actually changes the dataset', () => assert.equal(document.querySelectorAll('tbody tr').length, 1))
   await mount(h(CodeBlock, { language: 'sql', code: 'SELECT * FROM private_accounts' }))
   await click(buttons().find((b) => b.textContent.includes('Run Code')))
   check('SQL button never fabricates a result', () => { assert.match(document.body.textContent, /no database is connected/); assert.doesNotMatch(document.body.textContent, /Ava Chen|3 rows returned/) })
