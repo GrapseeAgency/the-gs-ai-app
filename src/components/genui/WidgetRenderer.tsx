@@ -6,6 +6,8 @@
  * guards: an unknown kind or a throw degrades to a code block, never a crash.
  */
 
+import { useMemo } from 'react'
+import { sanitizeWidgetPresentation } from '@/lib/nexly/widget-presentation'
 import type { Surface } from '@/lib/design/rulebook'
 import { rendererFor, type PromptHandler } from './registry'
 import { WidgetSurface } from './theme/WidgetSurface'
@@ -18,7 +20,7 @@ export interface WidgetBlock {
 
 export function WidgetRenderer({
   kind,
-  payload,
+  payload: sourcePayload,
   dark = true,
   onPrompt,
 }: {
@@ -27,6 +29,7 @@ export function WidgetRenderer({
   dark?: boolean
   onPrompt?: PromptHandler
 }) {
+  const payload = useMemo(() => sanitizeWidgetPresentation(sourcePayload), [sourcePayload])
   const Renderer = rendererFor(kind)
   const accent = typeof payload.accent === 'string' ? payload.accent : undefined
   const variant = typeof payload.variant === 'string' ? (payload.variant as Surface) : undefined
