@@ -22,6 +22,9 @@ widget correctness.
   now always takes a ratio, including values greater than one and negatives.
   A '%' unit with number format means percentage points. Scaffold prompts teach
   this contract explicitly.
+- Native charts had a separate zero-baseline defect: Android replaced zero
+  with one, while iOS reported zero-percent growth. Both now show undefined
+  growth with a neutral state instead of invented percentages or trend arrows.
 - The widget prompt's loan example referenced undefined r and n. Its replacement
   defines every field used by its expression, labels its assumptions and tells
   the model never to copy those example values as real user inputs.
@@ -37,8 +40,11 @@ widget correctness.
 
 ## Evidence
 
-Local: 64 behavioral interaction checks; existing renderer 170, catalogue 208
-and pipeline 24 checks pass. Swift static/structure checks and the runtime-result
+Local: 64 behavioral interaction checks; existing renderer 170, catalogue 208,
+pipeline 24 and compiler 146 checks pass. Web CI 42405021335 passed. Android
+CI 42405021263 passed all four mandatory device cases before the additional
+zero-baseline chart correction; its successor must establish the final source.
+The iOS final-source runtime result is still pending. Swift static/structure checks and the runtime-result
 checker self-test pass. These local checks do not substitute for native runtime.
 
 Added mandatory device cases:
