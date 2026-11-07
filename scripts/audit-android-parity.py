@@ -275,8 +275,9 @@ if IOS_CB.exists() and IOS_RB.exists():
     for bad_wb, msg in [
         (r"\bpeakPoint\b", "iOS WidgetBlocks.swift references undeclared `peakPoint` instead of `peakPt`"),
         (r"\bformatChartMetric\b", "iOS WidgetBlocks.swift references undeclared `formatChartMetric` instead of `compactNumber`"),
+        (r"\bGSHaptics\.selection\b", "iOS Swift files use nonexistent `GSHaptics.selection()` instead of `GSHaptics.select()`"),
     ]:
-        if re.search(bad_wb, wb_sw):
+        if re.search(bad_wb, ios_all):
             failures.append(msg)
     if "sourceStart: records[from].offset" not in cb_sw:
         failures.append("iOS ContentBlocks.swift: buildList must set real `sourceStart: records[from].offset`")

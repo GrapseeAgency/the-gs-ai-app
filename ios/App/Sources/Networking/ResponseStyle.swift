@@ -37,10 +37,16 @@ enum ResponseStyle {
     }
 
     /// One sentence per axis, or nil when both are at their defaults.
+    ///
+    /// Reads the two UserDefaults keys directly rather than through
+    /// `OnboardingProfileStore` (a @MainActor ObservableObject): this directive
+    /// travels with the turn's send path, which builds context off the main
+    /// actor, and UserDefaults is the thread-safe source of the same values
+    /// the store caches.
     static var directive: String? {
-        let store = OnboardingProfileStore.shared
-        let tone = store.personality
-        let detail = store.responseStyle
+        let defaults = UserDefaults.standard
+        let tone = defaults.string(forKey: "gs.profile.personality") ?? "Friendly"
+        let detail = defaults.string(forKey: "gs.profile.responseStyle") ?? "Standard"
         if tone == "Friendly" && detail == "Standard" { return nil }
         let toneLine: String
         switch tone {
@@ -64,16 +70,19 @@ enum ResponseStyle {
     }
 
     /// The one-line summary Profile shows under its row.
+    @MainActor
     static var summary: String {
         "\(OnboardingProfileStore.shared.personality) · \(OnboardingProfileStore.shared.responseStyle)"
     }
 
+    @MainActor
     static func setTone(_ value: String) {
         let store = OnboardingProfileStore.shared
         store.save(interests: store.interests, capabilities: store.capabilities,
                    responseStyle: store.responseStyle, personality: value)
     }
 
+    @MainActor
     static func setDetail(_ value: String) {
         let store = OnboardingProfileStore.shared
         store.save(interests: store.interests, capabilities: store.capabilities,

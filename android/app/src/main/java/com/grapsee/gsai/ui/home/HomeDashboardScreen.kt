@@ -381,7 +381,7 @@ private fun HomeHeader(onAssistant: () -> Unit, onMenu: () -> Unit) {
                 // against our 11.00 at 11sp — the last of the header family still
                 // over. (The first reading of 9.1 came from the same narrow window
                 // that clipped "Nexly"'s descender.)
-                style = MaterialTheme.typography.labelSmall.untracked().copy(fontSize = 11.sp),
+                style = MaterialTheme.typography.labelSmall.untracked().copy(fontSize = 10.sp),
                 color = colors.textSecondary
             )
         }
@@ -1428,7 +1428,7 @@ private fun ReferenceChip(icon: ImageVector, label: String) {
             // passed as a parameter. The icon is 8dp because on the sheet the icon
             // and the label are the same height (7.2 pt); at 10dp it set the chip's
             // height on its own.
-            style = MaterialTheme.typography.labelSmall.untracked().copy(fontSize = 11.sp),
+            style = MaterialTheme.typography.labelSmall.untracked().copy(fontSize = 10.sp),
             color = GsTheme.colors.textPrimary
         )
     }

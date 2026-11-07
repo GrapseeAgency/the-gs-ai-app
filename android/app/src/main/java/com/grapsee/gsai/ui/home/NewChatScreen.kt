@@ -358,7 +358,9 @@ private fun Composer(
         Box {
             if (draft.isEmpty()) {
                 androidx.compose.material3.Text(
-                    "Type your message…",
+                    // The mock's exact placeholder, ASCII dots and all — the
+                    // pre-chat sheet spells it "Type your message...".
+                    "Type your message...",
                     fontSize = 15.sp,
                     fontFamily = GsFonts.Product,
                     color = colors.textTertiary,

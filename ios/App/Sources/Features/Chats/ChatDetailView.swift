@@ -556,6 +556,16 @@ struct ChatDetailView: View {
                     onBranch: { vm.branch(at: index) },
                     onFeedback: { value in vm.setFeedback(for: message.id, value: value) }
                 )
+                // The contextual action pills' non-copy prompts ("Ask
+                // follow-up", "Show me a detailed report", ...) send as a
+                // normal user turn — the same gated send path the clarify
+                // chips and the composer use. Injected per row because the
+                // bubble row struct is Equatable on visible inputs only and
+                // owns no view-model state of its own.
+                .environment(\.gsWidgetAction) { prompt in
+                    userIsReading = false
+                    vm.sendClarifyChoice(prompt)
+                }
                 if message.role == "assistant" {
                     if message.isStreaming {
                         if !vm.liveSources.isEmpty {

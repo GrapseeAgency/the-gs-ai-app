@@ -12,6 +12,15 @@ object GsRoutes {
     /** Model Selection (model-selection-v2.png) — the picker the pre-chat page
      *  opens, distinct from the Settings AI page's model details. */
     const val MODEL_PICKER = "model-picker"
+    /** Model Centre — the three-tier model browser the pre-chat page's
+     * "Explore AI Models" card opens. Picking a tier member writes the same
+     * ModelPrefs key the chat send path reads; everything technical stays
+     * collapsed inside per-model "Advanced details", and the spec-sheet
+     * comparison ([MODEL_COMPARE]) is demoted to the Advanced section. */
+    const val MODEL_CENTRE = "model-centre"
+    /** Compare models — the side-by-side spec sheet, reachable only from the
+     * Model Centre's Advanced section, off the consumer path. */
+    const val MODEL_COMPARE = "model-compare"
     const val TRAVEL_AGENT = "travel-agent"
     const val EXPLORE = "explore"
     const val DISCOVER = "discover"

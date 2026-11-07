@@ -33,6 +33,20 @@ has:
      Any scanner that treats the whole literal as opaque stops counting at the
      first inner quote and then mis-lexes everything after it.
 
+  5. A scanner with no backtick-identifier state. Also wrong on a file the
+     build compiles:
+
+         android/app/src/test/java/com/grapsee/gsai/ui/chat/ChatBubblePaletteTest.kt
+         FAIL: depth 1 at end of file (unterminated char literal at line 46)
+
+     because a Kotlin escaped identifier -- a backticked test name containing
+     an apostrophe ("the reader's own sentence ...") -- has a single quote in
+     it, and the scanner read that quote as the START of a char literal,
+     swallowed everything to the next quote it found, and unbalanced the rest
+     of the file. A backtick identifier is OPAQUE: quotes, braces, comment
+     markers and apostrophes inside it are part of the name, and it may not
+     span lines.
+
 WHAT IT IS GOOD FOR. It is a cheap pre-commit check on files that are about to be
 compiled anyway. It has never caught anything the compiler would not have caught
 eventually -- and that is the honest description of it: it does not replace the
@@ -54,7 +68,7 @@ USAGE
 import sys
 
 # Lexer states.
-CODE, STR, RAW, CHR = "code", "str", "raw", "chr"
+CODE, STR, RAW, CHR, IDENT = "code", "str", "raw", "chr", "ident"
 
 
 def scan(path):
@@ -105,10 +119,13 @@ def scan(path):
             line += 1
             i += 1
             # A "..." literal may span lines, so nothing resets here. A
-            # single-quoted char literal may not, and an unterminated one is a
-            # syntax error the compiler will report.
+            # single-quoted char literal and a backtick identifier may not,
+            # and an unterminated one is a syntax error the compiler will
+            # report.
             if state == CHR:
                 return depth, "unterminated char literal at line %d" % line
+            if state == IDENT:
+                return depth, "unterminated backtick identifier at line %d" % line
             continue
 
         # ------------------------------------------------------------- inside
@@ -148,6 +165,17 @@ def scan(path):
             i += 1
             continue
 
+        if state == IDENT:
+            # Everything inside a backtick identifier is part of the name --
+            # quotes, braces and comment markers included -- until the closing
+            # backtick. It may not span lines (handled in the newline branch).
+            if c == "`":
+                stack.pop()
+                i += 1
+                continue
+            i += 1
+            continue
+
         # ------------------------------------------------------------------- code
         if src.startswith('"""', i):
             stack.append([RAW, '"', 0])
@@ -170,6 +198,13 @@ def scan(path):
             continue
         if c == "'":
             stack.append([CHR, "'", 0])
+            i += 1
+            continue
+        if c == "`":
+            # An escaped identifier. Opaque to the lexer until its closing
+            # backtick; a newline inside it is rejected above. Pushed in CODE
+            # only -- inside strings a backtick is an ordinary character.
+            stack.append([IDENT, "`", 0])
             i += 1
             continue
         in_template = len(stack) > 1 and top()[0] == CODE and stack[-1][1] != ""

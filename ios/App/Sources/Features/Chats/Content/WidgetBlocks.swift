@@ -905,7 +905,7 @@ private struct ChartBodyView: View {
                         let tabId = tab.id
                         let isSel = currentType == tabId || (tabId == "pie" && currentType == "donut")
                         Button {
-                            GSHaptics.selection()
+                            GSHaptics.select()
                             withAnimation(.easeOut(duration: 0.18)) { activeType = tabId }
                         } label: {
                             HStack(spacing: 4) {
@@ -934,7 +934,7 @@ private struct ChartBodyView: View {
                 Spacer(minLength: 4)
 
                 Button {
-                    GSHaptics.selection()
+                    GSHaptics.select()
                     rangeIdx = (rangeIdx + 1) % 4
                     selectedIdx = nil
                 } label: {
@@ -1089,7 +1089,7 @@ private struct ChartBodyView: View {
                                         )
                                         .position(c)
                                         .onTapGesture {
-                                            GSHaptics.selection()
+                                            GSHaptics.select()
                                             selectedIdx = idx
                                         }
                                 }
@@ -1117,7 +1117,7 @@ private struct ChartBodyView: View {
                         let isSel = idx == activeIdx
                         let ratio = CGFloat(min(max(abs(pt.value) / maxVal, 0.08), 1.0))
                         Button {
-                            GSHaptics.selection()
+                            GSHaptics.select()
                             selectedIdx = idx
                         } label: {
                             VStack(spacing: 4) {
@@ -1157,7 +1157,7 @@ private struct ChartBodyView: View {
                                 .rotationEffect(.degrees(-90))
                                 .frame(width: 96, height: 96)
                                 .onTapGesture {
-                                    GSHaptics.selection()
+                                    GSHaptics.select()
                                     selectedIdx = idx
                                 }
                         }
@@ -1176,7 +1176,7 @@ private struct ChartBodyView: View {
                         ForEach(Array(pts.prefix(5).enumerated()), id: \.offset) { idx, pt in
                             let sharePct = (max(0, pt.value) / totalVal) * 100.0
                             Button {
-                                GSHaptics.selection()
+                                GSHaptics.select()
                                 selectedIdx = idx
                             } label: {
                                 HStack(spacing: 6) {
@@ -1204,7 +1204,7 @@ private struct ChartBodyView: View {
                     let isSel = idx == activeIdx
                     let sharePct = (max(0, pt.value) / totalVal) * 100.0
                     Button {
-                        GSHaptics.selection()
+                        GSHaptics.select()
                         selectedIdx = idx
                     } label: {
                         VStack(alignment: .leading, spacing: 3) {
@@ -1919,24 +1919,32 @@ private struct PollBodyView: View {
     let accent: Color
     @State private var voted: Int? = nil
 
+    private var parsedOptions: [(label: String, votes: Int)] {
+        let raw = ((obj["options"] ?? obj["choices"] ?? obj["items"]) as? [Any]) ?? []
+        return raw.map { opt in
+            if let plain = opt as? String { return (NexlyIcons.cleanPlainText(plain), 1) }
+            let dict = opt as? [String: Any] ?? [:]
+            return (
+                NexlyIcons.cleanPlainText(str(dict, "label", "title", "name", "text")),
+                Int(dbl(dict, "votes", "count", "value", fallback: 1))
+            )
+        }
+    }
+
     var body: some View {
-        let opts = ((obj["options"] ?? obj["choices"] ?? obj["items"]) as? [Any]) ?? []
-        let totalBase = opts.reduce(0) { acc, opt in
-            acc + Int(dbl((opt as? [String: Any]) ?? [:], "votes", "count", "value", fallback: 1))
-        } + (voted != nil ? 1 : 0)
+        let opts = parsedOptions
+        let totalBase = opts.reduce(0) { $0 + $1.votes } + (voted != nil ? 1 : 0)
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(opts.enumerated()), id: \.offset) { idx, opt in
-                let label = NexlyIcons.cleanPlainText((opt as? String) ?? str((opt as? [String: Any]) ?? [:], "label", "title", "name", "text"))
-                let baseVotes = Int(dbl((opt as? [String: Any]) ?? [:], "votes", "count", "value", fallback: 1))
-                let votes = baseVotes + (voted == idx ? 1 : 0)
+                let votes = opt.votes + (voted == idx ? 1 : 0)
                 let pct = totalBase > 0 ? Int(round(Double(votes) / Double(totalBase) * 100.0)) : 0
                 Button {
-                    GSHaptics.selection()
+                    GSHaptics.select()
                     voted = idx
-                    widgetAction?(label)
+                    widgetAction?(opt.label)
                 } label: {
                     HStack {
-                        Text(label).font(.system(size: 12, weight: voted == idx ? .bold : .regular)).foregroundStyle(Aero.text)
+                        Text(opt.label).font(.system(size: 12, weight: voted == idx ? .bold : .regular)).foregroundStyle(Aero.text)
                         Spacer()
                         Text("\(votes) (\(pct)%)").font(Aero.mono(11)).foregroundStyle(accent)
                     }
@@ -1966,7 +1974,7 @@ private struct RatingBodyView: View {
                 ForEach(1...maxR, id: \.self) { n in
                     let active = (chosen ?? 0) >= n
                     Button {
-                        GSHaptics.selection()
+                        GSHaptics.select()
                         chosen = n
                         widgetAction?(prompt.isEmpty ? "Rated \(n)/\(maxR)" : "\(prompt): \(n)/\(maxR)")
                     } label: {
@@ -2035,7 +2043,7 @@ private struct TreeBodyView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Button {
                     guard !kids.isEmpty else { return }
-                    GSHaptics.selection()
+                    GSHaptics.select()
                     if isCollapsed { collapsed.remove(path) } else { collapsed.insert(path) }
                 } label: {
                     HStack(spacing: 6) {
@@ -2074,7 +2082,7 @@ private struct FlashcardsBodyView: View {
             let back = NexlyIcons.cleanPlainText(str(card, "back", "answer", "a", "definition"))
             VStack(alignment: .leading, spacing: 8) {
                 Button {
-                    GSHaptics.selection()
+                    GSHaptics.select()
                     flipped.toggle()
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
@@ -2123,7 +2131,7 @@ private struct ChecklistBodyView: View {
                 let initialDone = (dict["done"] as? Bool) ?? (dict["checked"] as? Bool) ?? false
                 let isDone = toggled.contains(idx) ? !initialDone : initialDone
                 Button {
-                    GSHaptics.selection()
+                    GSHaptics.select()
                     if toggled.contains(idx) { toggled.remove(idx) } else { toggled.insert(idx) }
                 } label: {
                     HStack(spacing: 9) {
@@ -2151,7 +2159,7 @@ private struct ChecklistBodyView: View {
             ForEach(Array(addedTasks.enumerated()), id: \.offset) { aIdx, task in
                 HStack(spacing: 9) {
                     Button {
-                        GSHaptics.selection()
+                        GSHaptics.select()
                         addedTasks[aIdx].done.toggle()
                     } label: {
                         HStack(spacing: 9) {
@@ -2218,7 +2226,7 @@ private struct ChecklistBodyView: View {
                 .padding(.top, 2)
             } else {
                 Button {
-                    GSHaptics.selection()
+                    GSHaptics.select()
                     addingTask = true
                 } label: {
                     HStack(spacing: 5) {
@@ -2255,7 +2263,7 @@ private struct ChoicesBodyView: View {
                 let label = NexlyIcons.cleanPlainText(stripped)
                 let active = selected.contains(idx)
                 Button {
-                    GSHaptics.selection()
+                    GSHaptics.select()
                     if active { selected.remove(idx) } else { selected.insert(idx) }
                     let dispatch = promptText.isEmpty ? label : promptText
                     if !dispatch.isEmpty {
@@ -2380,7 +2388,7 @@ private struct FormBodyView: View {
                 }
             }
             Button {
-                GSHaptics.selection()
+                GSHaptics.select()
                 submitted = true
                 let summary = fields.prefix(10).enumerated().map { idx, f in
                     let lbl = str(f, "label", "title", "name", "key")
@@ -2820,7 +2828,7 @@ private struct ProductivityBodyView: View {
                             ForEach(colCards, id: \.id) { card in
                                 Button {
                                     guard numCols > 1 else { return }
-                                    GSHaptics.selection()
+                                    GSHaptics.select()
                                     let cur = columnOverrides[card.id] ?? card.origCol
                                     columnOverrides[card.id] = (cur + 1) % numCols
                                 } label: {

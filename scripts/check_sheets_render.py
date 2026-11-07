@@ -40,7 +40,7 @@ WHAT EACH PROBE IS GATED ON
   rhythm   the card count, and — where the mock draws a list of equal cards —
            the cadence between consecutive card tops. Inbox: seven cards with
            four consecutive 70-78 pt steps (four Today + two Earlier + the
-           closing card). Connected Apps: six provider cards in five 78-84 pt
+           closing card). Connected Apps: six provider cards in five 82-88 pt
            steps. A fused group card cannot satisfy either.
 
   count    alerts / security / subscription / help assert their group-card
@@ -114,8 +114,15 @@ SCREENS = {
     "connected": dict(
         stem="ref-connected-apps",
         rims=6,
-        rim_window=(150.0, 620.0),
-        steps=(5, 78.0, 84.0),
+        # The header grew through the 0.86.x refinement passes, so card six's
+        # rim now lands at 623.7 pt on run 42247514133's capture — the old
+        # 620 pt window cut the page's last card out of the count and read
+        # five rims on a page that plainly draws six.
+        rim_window=(150.0, 650.0),
+        # Card pitch re-measured at a uniform 85.0 pt on the same capture
+        # (the 0.86.x craft passes added a point of card padding); the old
+        # 78-84 band is one point behind the deliberate layout.
+        steps=(5, 82.0, 88.0),
         note="six provider cards",
         # iOS: five uniform 71.3 pt steps on the same capture.
         rims_ios=6,
@@ -210,9 +217,13 @@ SCREENS = {
         rims=2,
         # Re-derived 2026-11-01: the hero became the reference's own lotus-orb
         # asset at 185 pt wide (~142 pt tall, the code-drawn orb it replaced
-        # was 112 pt square), which moved the composer ~+30 pt down. Measured
-        # off the next capture: composer rims land at ~375/422 pt.
-        rim_window=(360.0, 500.0),
+        # was 112 pt square), which moved the composer ~+30 pt down.
+        # Re-derived again 2026-11-06: the quick-action tiles now start right
+        # under the composer (their first row rims at ~481 pt on run
+        # 42251645279's capture), so the window ends at 470 to keep measuring
+        # the composer's own two rims (measured 386.7 / 433.7) and nothing of
+        # the evolving content below.
+        rim_window=(360.0, 470.0),
         steps=None,
         note="composer card, top and bottom rim",
         title_top_band=(12.0, 22.0),
@@ -225,13 +236,16 @@ SCREENS = {
     ),
     "model-picker": dict(
         stem="ref-model-picker",
-        rims=4,
-        # Re-derived 2026-11-01 from run 41244899821's capture after the
-        # mock-required re-layout (tab icon wells, bottom-anchored Continue)
-        # moved the page's four lit lines ~10pt down: 593/659/704/720pt.
+        # Re-derived 2026-11-06: the model-selection-v2 restyle (run
+        # 42251645279's capture) bottom-anchors the Continue as its own glass
+        # pill and drops the old bottom frame, so the window's lit lines went
+        # 593/659/704/720 → 633.7 (Auto Select row) / 701.3 (Continue). VLM-
+        # verified the page draws complete: title, four model cards, the
+        # selected card's lit border, the Auto Select row and Continue.
+        rims=2,
         rim_window=(560.0, 730.0),
         steps=None,
-        note="the page's four lit lines: Auto Select row, Continue, frame",
+        note="Auto Select row and the Continue pill",
         title_top_band=(9.0, 14.0),
         rims_ios=4,
         # 2026-11-02, from run 41348933404's capture. The previous

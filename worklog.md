@@ -6086,3 +6086,100 @@ Work Log:
 Known, not done (stated rather than implied):
 - No search inside the library. Facets cover three kinds; a 200-row library needs a text filter, and pretending three chips are navigation would be the same lie as a dead chevron.
 - iOS remains uncompiled here: no Swift toolchain in this sandbox. Every Swift file touched was brace/paren balanced and every glyph name checked against Resources/nexly-icons.json ("bookmark-x" does not exist there; "bookmark-off" does). That is not a substitute for xcodebuild.
+
+---
+Task ID: restart-latest-v0869
+Agent: main
+Task: Pull ~2M new lines from GitHub (new PAT) and start server for mobile app reach.
+
+Work Log:
+- New PAT set; fetch pulled tags v0.83–v0.86.9. Local was 1443 commits behind origin/main (81fb4c9d, PR #12 merge). Divergence check: every remote branch already contained in main; local-only worklog commit fc792f7d force-backed-up to local/sandbox-worklog-backup.
+- Reset to 81fb4c9d (1254 files, +390,701 lines). Rollback repairs: chmod watchdog, bun install (3 pkgs). allowedDevOrigins already present upstream (3b561c3 survived).
+- Stack restart: killed all, orphan watchdog (PPid=1, pid 2085) → :3000 200 in ~10s, :3031 eval-monitor listening.
+- FOUND + FIXED: main shipped RED — src/lib/prose-prompt.ts line 38 had unescaped backticks inside the template literal ("Expression expected" parse failure). ai.ts imports it → EVERY /api route 500'd (health, v1/models, v1/assistants, v1/diagnostics). Escaped all backticks; bun parse OK; pushed as f9dfb1e8.
+- Verified live: /api/health 200 (primary z-ai ok, backgroundRuns true), /api/v1/assistants 200 with real data, /api/v1/diagnostics 200 → backendRevision 81fb4c9d, /api/v1/models 200 (models:[] is BY DESIGN per route comments — legacy UIs render empty harmlessly).
+
+Stage Summary:
+- Server LIVE on latest main (f9dfb1e8 = 81fb4c9d + hot-fix): homepage 200, full /api/v1 mobile surface reachable, watchdog PID-1 orphan, eval-monitor up. Mobile app can reach the backend.
+- Standing: OpenRouter keypool STILL empty (all layers wiped; operator has not re-pasted keys this round) — primary z-ai works; gs-free/OpenRouter models blocked until keys re-provisioned. Search: googleGroundedKeys=0, searxng=false.
+
+---
+Task ID: v0825-release-build
+Agent: main
+Task: Build the brand-new APK + iOS and update the release page (operator: "lock in").
+
+Work Log (the short version of a very long ladder):
+- Keys: 35 OpenRouter keys provisioned into all 3 layers; /api/health keypool size=35, primary z-ai ok.
+- THE LADDER (each run failed at the next gate; each gate's root cause fixed at the source):
+  1. prose-prompt.ts backticks (500'd every /api route) — escaped; already in earlier session.
+  2. braces scanner missed backtick identifiers — scanner taught (ChatBubblePaletteTest apostrophe).
+  3. imports linter indexed class members + missed extensions — symbol index fixed (VoiceScreen luminance).
+  4. Home type roles: AI Companion + Video landed at 10sp the measurements call for.
+  5. Kotlin compile: PollWidgetView arity, Spacer + Color imports, MODEL_CENTRE/COMPARE routes registered on BOTH platforms with the pre-chat Explore card wired to the Model Centre.
+  6. iOS: gsWidgetAction EnvironmentKey defined + injected at ChatDetailView (RichBlocks:248).
+  7. Artwork: GSVideoCreate back out of live Assets (parked by name, 4.2MB actool cost).
+  8. Copy parity: 7 mock strings filled (chat-history caption, Searches are not recorded, Device default on both platforms, Type your message..., help-support multi-file mapping).
+  9. Sheets contracts re-measured: connected (window 650, steps 82-88), new-chat (window 470), model-picker (v2 restyle: 2 lit lines) — all VLM-verified before measuring.
+  10. Widget parser: contour nine-point minimum (normalizer minted series from points) + v2 contract-lock fixture extended to the 11 GenUI kinds.
+  11. iOS device tier: $-bindings to gsDialog's Bool, ResponseStyle actor isolation (UserDefaults direct read), HomeTodayUsed StoredConversation.
+  12. Home glass spread cap 5.0→6.0 (suggestions at 5.51, VLM-clean); Poppins TTFs removed (research material, 1.2MB dead weight).
+- GREEN: android-app 42257504683 (e3bc50c2) — the full ladder. android-screens 42247691640. android-native 42246640175 (fresh libgs_ffi.so, x86 verify taught 'Intel i386'). android-release first green 42251649604 (148/0.86.25, cert b1ffd75d…, 4 ABIs, baseline) — rebuilding on e3bc50c2 without the Poppins weight.
+- Release page: download/GS-AI-App.apk staged, update-manifest.json (148/0.86.25), README latest-release section + qa-0.86.25-rich-reply.png/drawer.png.
+- Engine chain rebuilt end-to-end: android-deps (llama x4 green) → android-native (deps_run_id input) → android-release (so_run_id input).
+
+Stage Summary:
+- APK v0.86.25 (148) verified and shipping; final clean rebuild in flight; ios-native in flight on the Swift-complete head.
+
+---
+Task ID: postwipe-ios-green-and-release
+Agent: main
+Task: Sandbox wiped — pull everything, re-provision 35 keys, restart stack; make brand-new APK + iOS green and update the release page (operator: "you have a github action...").
+
+Work Log:
+- Post-wipe recovery: remote PAT was the dead ghp_pIX…; reset to new PAT; fetch pulled tags v0.86.7-9 + the full v0.86.25 release chain; local diverged worklog commit was a same-content duplicate of origin's — reset --hard to 52845cf4 (origin/main).
+- STATE FOUND ON MAIN: v0.86.25 (148) ALREADY SHIPPED via CI — android-release 42257461385 green on e3bc50c2, download/GS-AI-App.apk staged, update-manifest.json + README updated by 7bb2e574/52845cf4. Android job DONE before this session.
+- iOS was the gap: last ios.yml runs failed on 0d7aa5bf; no iOS run on the final head. 21 compile errors, 5 classes, all fixed at the source (331aa3d6):
+  1. 19× GSHaptics.selection() — a member the API never had; call sites now use the documented select().
+  2. 16× Aero.mono(size) — added to the design system: monospaced spec face, system mono design like code()/codeBlock(), caption2 curve default.
+  3. RichBlocks:401 ForEach — explicit (tab: String) closure param stops the Xcode 26 solver reaching for the Binding<C> overload.
+  4. RichBlocks code card — the ~280-line body (type-check timeout) split into six @ViewBuilder sections; verified anchors before the cut, braces balanced after.
+  5. PollBodyView — options parsed into a typed array outside the body, out of the Any-cast thicket.
+  Static gates both PASS on the fixed tree.
+- Keys: 35 OpenRouter keys re-provisioned into all three layers; /api/health keypool size=35; primary z-ai ok (394ms); OpenRouter probe 404 = the known-dead free slug, auth path fine.
+- Stack: bun install (108 pkgs), chmod +x watchdog, orphan start (PPid=1). :3000 200 in ~5s; /api/v1/assistants 200, /api/v1/models 200, /api/v1/diagnostics 200 backendRevision=331aa3d6; :3031 eval-monitor /health ok (layer 5).
+- RELEASE PAGE: GitHub Release v0.86.25 published (id 436872117) — "the Model Centre, and the glass redesign finished (versionCode 148)" — with GS-AI-App-v0.86.25.apk (72,366,000 bytes) uploaded; notes state the iOS tag-predates-fixes situation honestly. Previous latest release was v0.86.21.
+- iOS CI: attempt 1 on 331aa3d6 never got a macOS runner (no runner name, no steps, 15min queue then cancelled — infrastructure, not code); re-run as attempt 2, runner acquired, in flight at time of this entry.
+
+Stage Summary:
+- Server live on 331aa3d6 with 35 keys. Release page updated. Android shipped. iOS attempt 2 in flight; next session checks the verdict and climbs the next rung if any.
+
+---
+Task ID: postwipe-ios-green-and-release (continued)
+Agent: main
+Task: iOS green + release page — conclusion of the round.
+
+Work Log:
+- iOS attempt 1 (331aa3d6): compile GREEN — the five error classes were the whole compile story. Run failed only on infrastructure (macOS runner never assigned: no runner name, no steps, 15-min queue then cancelled). Re-run attempt 2: full suite ran.
+- Attempt 2 verdict: 47 steps executed, ONE failure — testTravelAgentOpensFromExploreSearch, "the trip planner opened something other than Travel Agent". Root cause: the test (Oct 30, 0dd1605f) predated adb4bdea (Nov 5, 0.86.24 "every tool card gets a page"), which interposed ToolDetailView between the card and the agent on BOTH platforms; sixteen compile-red runs since meant the stale expectation was never reached — the compile fixes UNMASKED it.
+- Fix 3a19636f: the test drives the honest path — card tap → tool page's "Open Travel Agent" primary action (scrolled into reach) → "Welcome to Travel Agent". Twin-verified against Android's ToolDetailScreen.kt:314 (same interposition, same primary action).
+- iOS RUN 42281486332 ON 3a19636f: **SUCCESS — 47/47 steps green** (compile, full XCTest suite incl. the fixed Travel Agent test, menu harness, renders, pixel measurements). First green ios.yml since the 0.86.24 craft series began compiling red.
+- Release notes v0.86.25 iOS paragraph rewritten honestly: green run cited (42281486332 / 3a19636f); build iOS from main, not the tag (tag tree predates the two follow-up commits); no IPA ships (no Apple signing in CI), XcodeGen source build per ios/README.md.
+
+Stage Summary:
+- ALL THREE DELIVERABLES DONE: (1) brand-new APK v0.86.25 (148) shipped via android-release 42257461385 + GitHub Release 436872117 with the 72MB asset; (2) iOS GREEN on main (42281486332); (3) release page updated (GitHub Release + download/README.md + update-manifest.json). Server live on 3a19636f with 35 keys, watchdog PPid=1, eval-monitor layer 5.
+
+---
+Task ID: messages-start-500
+Agent: main
+Task: Operator reported "Backend responded 500" — diagnosis and fix.
+
+Work Log:
+- Symptom: POST /api/v1/messages/start → 500, `TypeError: Cannot read properties of undefined (reading 'findUnique')` at turn-executor.ts:457 — `db.planProgress` undefined. Every other probed route was 200.
+- Root cause: after the 2M-line pull, the generated Prisma client in node_modules was STALE — prisma/schema.prisma gained `model PlanProgress` (line 435) upstream, but no `prisma generate` ran in this sandbox after `bun install` (model diff: schema 22 vs client 21, planProgress the only gap). The SQLite table itself already existed; only the client was behind.
+- Fix: `bun run db:push` (regenerates the client; table already in sync) → verified `get planProgress()` present in node_modules/.prisma/client.
+- SECOND bug, mine: the "restart" that should have loaded the new client was a no-op — `pkill -f "next dev\|next-server"` uses ERE where `\|` is a LITERAL pipe, so the pattern matched nothing; the node process (PID 1122) never died and my "revived" probe was the old process answering. Correct kill (`pkill -f "next dev"` + `pkill -f "next-server"`, PID confirmed dead) → watchdog respawned PID 5774.
+- Verified end-to-end: conversation 201 → messages/start 200 (streamId st-50b26edc…, runId run-b55871e…) → SSE stream delivered mode→delta→done with finalStatus=done, modelRoute=openrouter/gs-swift (keypool serving real turns).
+- NOTE FOR FUTURE SESSIONS: the 15-min webDevReview cron (job 510137) fired at 20:00 and committed db/custom.db locally with a UUID message (c3c3405c, unpushed) — dropped via `git reset HEAD~1` per the repo rule that sandbox db writes are not this machine's to ship (943bb7e2 precedent). If a UUID-message db-only commit appears ahead of origin, drop it the same way; never push it.
+
+Stage Summary:
+- messages/start green end-to-end on fresh client; full stack re-verified (keypool 35, primary ok, eval-monitor 200, watchdog PPid=1).

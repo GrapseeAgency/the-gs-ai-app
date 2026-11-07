@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>CFBundleDisplayName</key>
+	<string>GS AI</string>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>GS turns your voice into text for your prompts when you use voice mode.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>GS uses the microphone when you talk in voice mode.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>GS uses the camera when you attach a photo you take in the moment.</string>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.grapsee.gsai.quick.newChat</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>New chat</string>
+			<key>UIApplicationShortcutItemSubtitle</key>
+			<string>Start a new chat</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>bubble.left</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.grapsee.gsai.quick.newImage</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>New image</string>
+			<key>UIApplicationShortcutItemSubtitle</key>
+			<string>Open Image Studio</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>photo</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.grapsee.gsai.quick.ask</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Ask GS</string>
+			<key>UIApplicationShortcutItemSubtitle</key>
+			<string>Open voice mode</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>mic</string>
+		</dict>
+	</array>
+</dict>
+</plist>

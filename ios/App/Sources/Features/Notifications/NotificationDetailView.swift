@@ -39,7 +39,7 @@ struct NotificationDetailView: View {
         .onAppear {
             if let notice, !notice.read { inbox.markRead(id: notice.id) }
         }
-        .gsDialog(isPresented: $confirmDelete) {
+        .gsDialog(isPresented: confirmDelete) {
             GsDialog(
                 title: "Delete this notification?",
                 message: "It disappears from the inbox on this device. Nexly cannot send it again — the notice was a one-time message.",

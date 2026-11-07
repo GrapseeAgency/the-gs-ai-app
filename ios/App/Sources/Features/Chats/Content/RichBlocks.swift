@@ -464,10 +464,10 @@ private struct StructuredProseSequenceView: View {
         let tabs = dashboardTabs
         if !tabs.isEmpty {
             HStack(spacing: 4) {
-                ForEach(tabs, id: \.self) { tab in
+                ForEach(tabs, id: \.self) { (tab: String) in
                     let selected = activeDashboardTab == tab
                     Button {
-                        GSHaptics.selection()
+                        GSHaptics.select()
                         activeDashboardTab = tab
                     } label: {
                         Text(tab)
@@ -643,7 +643,7 @@ private struct NexlyContextualActionPillsRowView: View {
                 HStack(spacing: 8) {
                     ForEach(Array(list.enumerated()), id: \.offset) { _, pair in
                         Button {
-                            GSHaptics.selection()
+                            GSHaptics.select()
                             onAction(pair.1)
                         } label: {
                             HStack(spacing: 6) {
@@ -1091,7 +1091,7 @@ private struct NexlyQuickCalculatorCardView: View {
                 Spacer()
                 HStack(spacing: 6) {
                     Button {
-                        GSHaptics.selection()
+                        GSHaptics.select()
                         let all = QuickCalcMode.allCases
                         let idx = all.firstIndex(of: mode) ?? 0
                         mode = all[(idx + 1) % all.count]
@@ -1106,7 +1106,7 @@ private struct NexlyQuickCalculatorCardView: View {
                     .buttonStyle(.plain)
 
                     Button("Reset") {
-                        GSHaptics.selection()
+                        GSHaptics.select()
                         amountText = spec.initialAmount.truncatingRemainder(dividingBy: 1.0) == 0
                             ? String(format: "%.0f", spec.initialAmount)
                             : String(format: "%.2f", spec.initialAmount)
@@ -1196,7 +1196,7 @@ private struct NexlyQuickCalculatorCardView: View {
                         ForEach(presets, id: \.self) { p in
                             let selected = abs(rateVal - p) < 0.05
                             Button {
-                                GSHaptics.selection()
+                                GSHaptics.select()
                                 rateText = String(format: "%.0f", p)
                             } label: {
                                 Text("\(Int(p))%")
@@ -1581,7 +1581,7 @@ private struct BulletListView: View {
                         .padding(.top, 2)
                     } else {
                         Button {
-                            GSHaptics.selection()
+                            GSHaptics.select()
                             addingTask = true
                         } label: {
                             HStack(spacing: 5) {
@@ -1621,7 +1621,7 @@ private struct InteractiveChecklistItemRowView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .center, spacing: 9) {
                 Button {
-                    GSHaptics.selection()
+                    GSHaptics.select()
                     withAnimation(.easeOut(duration: 0.15)) { onToggle() }
                 } label: {
                     HStack(alignment: .center, spacing: 9) {
@@ -1662,7 +1662,7 @@ private struct InteractiveChecklistItemRowView: View {
 
                 if let onDelete {
                     Button {
-                        GSHaptics.selection()
+                        GSHaptics.select()
                         onDelete()
                     } label: {
                         NexlyGlyph(name: "x", size: 12, color: Aero.textTertiary)
@@ -1968,279 +1968,298 @@ struct CodeBlockCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header bar
-            HStack(spacing: 8) {
-                NexlyGlyph(
-                    name: "code",
-                    size: 14,
-                    color: Color(red: 0.620, green: 0.525, blue: 1.0)
-                )
-                Text((language ?? "code").capitalized)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color(red: 0.902, green: 0.882, blue: 1.0))
-                Spacer()
-                if !open && isCollapsible && !editing {
-                    Button(expanded ? "Collapse" : "Expand (\(allLines.count))") {
-                        withAnimation(.easeOut(duration: 0.18)) { expanded.toggle() }
-                    }
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.773, green: 0.737, blue: 1.0))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
-                    .buttonStyle(.plain)
-                }
-                if !open && !code.isEmpty {
-                    Button(editing ? "Done" : "Edit") {
-                        if editedCode == nil { editedCode = code }
-                        editing.toggle()
-                    }
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.773, green: 0.737, blue: 1.0))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
-                    .buttonStyle(.plain)
-                }
-                CodeCopyButton(text: currentCode)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(Color(red: 0.106, green: 0.094, blue: 0.188))
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Code block\(language.map { ", " + $0 } ?? "")")
+            codeHeaderBar
+            codeEditorSurface
+            codeExecutionBar
+            codeOutputDrawer
+            codeSeriesPreview
+            browserPreviewSection
+        }
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color(red: 0.133, green: 0.122, blue: 0.231)))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.212, green: 0.192, blue: 0.361), lineWidth: 1))
+    }
 
-            // Code surface with line numbers gutter
-            if currentCode.isEmpty {
-                Text("…")
-                    .font(.system(size: 12, weight: .regular, design: .monospaced))
-                    .foregroundStyle(Color(red: 0.925, green: 0.910, blue: 1.0))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .textSelection(.enabled)
-            } else if editing {
-                TextEditor(text: Binding(
-                    get: { editedCode ?? code },
-                    set: { editedCode = $0 }
-                ))
+    @ViewBuilder
+    private var codeHeaderBar: some View {
+        HStack(spacing: 8) {
+            NexlyGlyph(
+                name: "code",
+                size: 14,
+                color: Color(red: 0.620, green: 0.525, blue: 1.0)
+            )
+            Text((language ?? "code").capitalized)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Color(red: 0.902, green: 0.882, blue: 1.0))
+            Spacer()
+            if !open && isCollapsible && !editing {
+                Button(expanded ? "Collapse" : "Expand (\(allLines.count))") {
+                    withAnimation(.easeOut(duration: 0.18)) { expanded.toggle() }
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color(red: 0.773, green: 0.737, blue: 1.0))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
+                .buttonStyle(.plain)
+            }
+            if !open && !code.isEmpty {
+                Button(editing ? "Done" : "Edit") {
+                    if editedCode == nil { editedCode = code }
+                    editing.toggle()
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color(red: 0.773, green: 0.737, blue: 1.0))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
+                .buttonStyle(.plain)
+            }
+            CodeCopyButton(text: currentCode)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(Color(red: 0.106, green: 0.094, blue: 0.188))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Code block\(language.map { ", " + $0 } ?? "")")
+    }
+
+    @ViewBuilder
+    private var codeEditorSurface: some View {
+        if currentCode.isEmpty {
+            Text("…")
                 .font(.system(size: 12, weight: .regular, design: .monospaced))
                 .foregroundStyle(Color(red: 0.925, green: 0.910, blue: 1.0))
-                .frame(minHeight: 110, maxHeight: 260)
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .textSelection(.enabled)
+        } else if editing {
+            TextEditor(text: Binding(
+                get: { editedCode ?? code },
+                set: { editedCode = $0 }
+            ))
+            .font(.system(size: 12, weight: .regular, design: .monospaced))
+            .foregroundStyle(Color(red: 0.925, green: 0.910, blue: 1.0))
+            .frame(minHeight: 110, maxHeight: 260)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
+        } else {
+            if wrapCode {
+                codeSurfaceWithLineNumbers
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 10)
+                    .textSelection(.enabled)
             } else {
-                if wrapCode {
+                ScrollView([.horizontal, .vertical]) {
                     codeSurfaceWithLineNumbers
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 10)
                         .textSelection(.enabled)
-                } else {
-                    ScrollView([.horizontal, .vertical]) {
-                        codeSurfaceWithLineNumbers
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 10)
-                            .textSelection(.enabled)
-                    }
-                    .frame(maxHeight: 320)
                 }
-            }
-
-            // Bottom Execution Action Bar (Screenshots 1 & 2)
-            if !open && !currentCode.isEmpty {
-                HStack(spacing: 8) {
-                    Button {
-                        GSHaptics.selection()
-                        executeCode()
-                    } label: {
-                        HStack(spacing: 5) {
-                            NexlyGlyph(name: "player-play", size: 12, color: .white)
-                            Text(isBrowserLang ? "Run in Browser" : (lang == "json" ? "Validate JSON" : "Run Code"))
-                                .font(.system(size: 11.5, weight: .bold))
-                        }
-                        .foregroundStyle(Color.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    if runOutput != nil || errorOutput != nil {
-                        let hasError = errorOutput != nil
-                        Text(hasError ? "● Error" : "● Success")
-                            .font(.system(size: 10.5, weight: .bold))
-                            .foregroundStyle(hasError ? Color(red: 0.988, green: 0.647, blue: 0.647) : Color(red: 0.525, green: 0.937, blue: 0.675))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(
-                                Capsule().fill(
-                                    hasError ? Color.red.opacity(0.2) : Color.green.opacity(0.2)
-                                )
-                            )
-                        Button {
-                            GSHaptics.selection()
-                            executeCode()
-                        } label: {
-                            HStack(spacing: 4) {
-                                NexlyGlyph(name: "refresh", size: 11, color: Color(red: 0.773, green: 0.737, blue: 1.0))
-                                Text("Rerun")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(Color(red: 0.773, green: 0.737, blue: 1.0))
-                            }
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    Text("\(allLines.count) lines")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(red: 0.557, green: 0.537, blue: 0.706))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(Color(red: 0.106, green: 0.094, blue: 0.188))
-            }
-
-            // Terminal-style Execution Output Drawer (05. Code Execution)
-            if runOutput != nil || errorOutput != nil || ["error", "stderr", "traceback", "exception"].contains(lang) {
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack {
-                        Text("$ run \(lang) (run #\(max(1, runCount)))")
-                            .font(.system(size: 10.5, design: .monospaced))
-                            .foregroundStyle(Color(red: 0.557, green: 0.537, blue: 0.706))
-                        Spacer()
-                        Button {
-                            runOutput = nil
-                            errorOutput = nil
-                        } label: {
-                            HStack(spacing: 3) {
-                                NexlyGlyph(name: "x", size: 11, color: Color(red: 0.557, green: 0.537, blue: 0.706))
-                                Text("Clear")
-                                    .font(.system(size: 10.5))
-                                    .foregroundStyle(Color(red: 0.557, green: 0.537, blue: 0.706))
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    if let out = runOutput, !out.isEmpty {
-                        Text(out)
-                            .font(.system(size: 11.5, weight: .regular, design: .monospaced))
-                            .foregroundStyle(Color(red: 0.847, green: 0.953, blue: 0.863))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    if let err = errorOutput ?? (["error", "stderr", "traceback", "exception"].contains(lang) ? currentCode : nil),
-                       !err.isEmpty {
-                        Text(err)
-                            .font(.system(size: 11.5, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Color(red: 0.988, green: 0.647, blue: 0.647))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(8)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Color.red.opacity(0.14)))
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(Color(red: 0.078, green: 0.067, blue: 0.141))
-            }
-
-            // Visual Data Plot Preview (Screenshot 1: Revenue Trend mini purple bar chart from Python/JS code)
-            if let seriesPreview = extractCodeSeriesPreview(currentCode) {
-                let maxVal = max(1.0, seriesPreview.points.map(\.1).max() ?? 1.0)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(seriesPreview.title)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
-                    HStack(alignment: .bottom, spacing: 10) {
-                        ForEach(Array(seriesPreview.points.enumerated()), id: \.offset) { _, pt in
-                            let frac = min(max(CGFloat(pt.1 / maxVal), 0.15), 1.0)
-                            VStack(spacing: 4) {
-                                RoundedRectangle(cornerRadius: 5)
-                                    .fill(Color(red: 0.424, green: 0.298, blue: 0.965))
-                                    .frame(height: 48 * frac)
-                                Text(pt.0)
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(Color(red: 0.369, green: 0.337, blue: 0.502))
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .frame(height: 70, alignment: .bottom)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(Color(red: 0.969, green: 0.957, blue: 1.0))
-            }
-
-            // Live Interactive Component Preview for HTML/SVG/JSX/TSX
-            if !open && ["html", "htm", "svg"].contains(lang) && runCount > 0 {
-                HtmlBlockView(kind: lang == "svg" ? "svg" : "html", source: currentCode, open: false)
-                    .padding(8)
-                    .background(Color(red: 0.973, green: 0.961, blue: 1.0))
-            } else if !open && ["jsx", "tsx", "react"].contains(lang) {
-                let spec = parseReactPreviewSpecIOS(currentCode)
-                let currentVal = reactStateVal ?? spec.initialNumber
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("<\(spec.componentName) /> Preview")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
-                        Spacer()
-                        Text("Interactive State")
-                            .font(.system(size: 10.5, weight: .semibold))
-                            .foregroundStyle(Color(red: 0.424, green: 0.298, blue: 0.965))
-                    }
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(spec.componentName)
-                                .font(.system(size: 12.5, weight: .bold))
-                                .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
-                            Text("\(spec.stateName): \(currentVal)")
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(Color(red: 0.384, green: 0.353, blue: 0.518))
-                        }
-                        Spacer()
-                        HStack(spacing: 6) {
-                            ForEach(spec.buttonLabels, id: \.self) { btnLabel in
-                                let lowerBtn = btnLabel.lowercased()
-                                Button(btnLabel) {
-                                    GSHaptics.selection()
-                                    if lowerBtn.contains("reset") || lowerBtn.contains("clear") {
-                                        reactStateVal = spec.initialNumber
-                                    } else if lowerBtn.contains("-") || lowerBtn.contains("dec") || lowerBtn.contains("sub") {
-                                        reactStateVal = currentVal - 1
-                                    } else {
-                                        reactStateVal = currentVal + 1
-                                    }
-                                }
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(Color.white)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.white))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(Color(red: 0.973, green: 0.961, blue: 1.0))
+                .frame(maxHeight: 320)
             }
         }
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color(red: 0.133, green: 0.122, blue: 0.231)))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.212, green: 0.192, blue: 0.361), lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private var codeExecutionBar: some View {
+        if !open && !currentCode.isEmpty {
+            HStack(spacing: 8) {
+                Button {
+                    GSHaptics.select()
+                    executeCode()
+                } label: {
+                    HStack(spacing: 5) {
+                        NexlyGlyph(name: "player-play", size: 12, color: .white)
+                        Text(isBrowserLang ? "Run in Browser" : (lang == "json" ? "Validate JSON" : "Run Code"))
+                            .font(.system(size: 11.5, weight: .bold))
+                    }
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                if runOutput != nil || errorOutput != nil {
+                    let hasError = errorOutput != nil
+                    Text(hasError ? "● Error" : "● Success")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundStyle(hasError ? Color(red: 0.988, green: 0.647, blue: 0.647) : Color(red: 0.525, green: 0.937, blue: 0.675))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule().fill(
+                                hasError ? Color.red.opacity(0.2) : Color.green.opacity(0.2)
+                            )
+                        )
+                    Button {
+                        GSHaptics.select()
+                        executeCode()
+                    } label: {
+                        HStack(spacing: 4) {
+                            NexlyGlyph(name: "refresh", size: 11, color: Color(red: 0.773, green: 0.737, blue: 1.0))
+                            Text("Rerun")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Color(red: 0.773, green: 0.737, blue: 1.0))
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Text("\(allLines.count) lines")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(red: 0.557, green: 0.537, blue: 0.706))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(Color(red: 0.106, green: 0.094, blue: 0.188))
+        }
+    }
+
+    @ViewBuilder
+    private var codeOutputDrawer: some View {
+        if runOutput != nil || errorOutput != nil || ["error", "stderr", "traceback", "exception"].contains(lang) {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Text("$ run \(lang) (run #\(max(1, runCount)))")
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.557, green: 0.537, blue: 0.706))
+                    Spacer()
+                    Button {
+                        runOutput = nil
+                        errorOutput = nil
+                    } label: {
+                        HStack(spacing: 3) {
+                            NexlyGlyph(name: "x", size: 11, color: Color(red: 0.557, green: 0.537, blue: 0.706))
+                            Text("Clear")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(Color(red: 0.557, green: 0.537, blue: 0.706))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if let out = runOutput, !out.isEmpty {
+                    Text(out)
+                        .font(.system(size: 11.5, weight: .regular, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.847, green: 0.953, blue: 0.863))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if let err = errorOutput ?? (["error", "stderr", "traceback", "exception"].contains(lang) ? currentCode : nil),
+                   !err.isEmpty {
+                    Text(err)
+                        .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.988, green: 0.647, blue: 0.647))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.red.opacity(0.14)))
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Color(red: 0.078, green: 0.067, blue: 0.141))
+        }
+    }
+
+    @ViewBuilder
+    private var codeSeriesPreview: some View {
+        if let seriesPreview = extractCodeSeriesPreview(currentCode) {
+            let maxVal = max(1.0, seriesPreview.points.map(\.1).max() ?? 1.0)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(seriesPreview.title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
+                HStack(alignment: .bottom, spacing: 10) {
+                    ForEach(Array(seriesPreview.points.enumerated()), id: \.offset) { _, pt in
+                        let frac = min(max(CGFloat(pt.1 / maxVal), 0.15), 1.0)
+                        VStack(spacing: 4) {
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(Color(red: 0.424, green: 0.298, blue: 0.965))
+                                .frame(height: 48 * frac)
+                            Text(pt.0)
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color(red: 0.369, green: 0.337, blue: 0.502))
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                .frame(height: 70, alignment: .bottom)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(red: 0.969, green: 0.957, blue: 1.0))
+        }
+    }
+
+    @ViewBuilder
+    private var browserPreviewSection: some View {
+        if !open && ["html", "htm", "svg"].contains(lang) && runCount > 0 {
+            HtmlBlockView(kind: lang == "svg" ? "svg" : "html", source: currentCode, open: false)
+                .padding(8)
+                .background(Color(red: 0.973, green: 0.961, blue: 1.0))
+        } else if !open && ["jsx", "tsx", "react"].contains(lang) {
+            let spec = parseReactPreviewSpecIOS(currentCode)
+            let currentVal = reactStateVal ?? spec.initialNumber
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("<\(spec.componentName) /> Preview")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
+                    Spacer()
+                    Text("Interactive State")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.424, green: 0.298, blue: 0.965))
+                }
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(spec.componentName)
+                            .font(.system(size: 12.5, weight: .bold))
+                            .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
+                        Text("\(spec.stateName): \(currentVal)")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Color(red: 0.384, green: 0.353, blue: 0.518))
+                    }
+                    Spacer()
+                    HStack(spacing: 6) {
+                        ForEach(spec.buttonLabels, id: \.self) { (btnLabel: String) in
+                            let lowerBtn = btnLabel.lowercased()
+                            Button(btnLabel) {
+                                GSHaptics.select()
+                                if lowerBtn.contains("reset") || lowerBtn.contains("clear") {
+                                    reactStateVal = spec.initialNumber
+                                } else if lowerBtn.contains("-") || lowerBtn.contains("dec") || lowerBtn.contains("sub") {
+                                    reactStateVal = currentVal - 1
+                                } else {
+                                    reactStateVal = currentVal + 1
+                                }
+                            }
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.white))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(red: 0.973, green: 0.961, blue: 1.0))
+        }
     }
 
     private func extractCodeSeriesPreview(_ src: String) -> (title: String, points: [(String, Double)])? {
@@ -2634,7 +2653,7 @@ private struct TableBlockView: View {
                     let hRaw = c < headers.count ? plainTextOfSpans(headers[c]) : ""
                     let sortSuffix = sortCol == c ? (sortAsc ? " ▲" : " ▼") : ""
                     Button {
-                        GSHaptics.selection()
+                        GSHaptics.select()
                         if sortCol == c {
                             sortAsc.toggle()
                         } else {

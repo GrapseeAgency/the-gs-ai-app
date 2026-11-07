@@ -414,6 +414,17 @@ enum Aero {
     static func code() -> Font { scaledFont(13, .regular, .monospaced, relativeTo: .footnote) }
     static func codeBlock() -> Font { scaledFont(14, .regular, .monospaced, relativeTo: .body) }
 
+    /// Monospaced spec size for data-dense widget chrome — counts, percentages,
+    /// distances, diff gutters, tabular numerals inside a widget row. Same
+    /// engine as every Aero face (Dynamic Type curve + Settings font-scale);
+    /// drawn in the system monospaced design like code()/codeBlock(), because
+    /// the product face has no mono cut and a widget's figures must align.
+    /// Defaults to the caption2 curve since the widget chrome sizes (10-12)
+    /// sit with metadata (11), not body.
+    static func mono(_ size: CGFloat, relativeTo style: Font.TextStyle = .caption2) -> Font {
+        scaledFont(size, .regular, .monospaced, relativeTo: style)
+    }
+
     /// Dynamic-Type-responsive system font at a custom point size — identical
     /// appearance at the default type category, scaling with the reader's
     /// Dynamic Type setting and the Settings font-scale multiplier exactly

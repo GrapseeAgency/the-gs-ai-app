@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -1420,7 +1421,7 @@ fun WidgetView(widget: Widget, onSendPrompt: ((String) -> Unit)? = null) {
         is Widget.Menu -> MenuWidgetView(widget.w, onSendPrompt)
         is Widget.Chips -> ChipsWidgetView(widget.w, onSendPrompt)
         is Widget.Rating -> RatingWidgetView(widget.w, onSendPrompt)
-        is Widget.Poll -> PollWidgetView(widget.w, onSendPrompt)
+        is Widget.Poll -> PollWidgetView(widget.w)
         is Widget.Diff -> DiffWidgetView(widget.w)
         is Widget.Tree -> TreeWidgetView(widget.w)
         is Widget.Flashcards -> FlashcardsWidgetView(widget.w)

@@ -299,6 +299,20 @@ class WidgetBlocksTest {
             "voice" to """{"title":"Talk","prompt":"hello"}""",
             "calc" to """{"type":"loan","fields":[{"key":"p","label":"Principal","value":1000,"min":0,"max":5000}],"outputs":[{"label":"Pay","expr":"p*2","format":"money","primary":true}]}""",
             "app" to """{"type":"tasks","items":[{"title":"Do it"}]}""",
+            // v2 kinds — same contract: routed means parsed. The GenUI passes
+            // added these to WIDGET_LANGUAGES; this fixture grew with them so
+            // the lock keeps proving every routed kind has a parser branch.
+            "tabs" to """{"tabs":[{"label":"A","body":"b"}]}""",
+            "accordion" to """{"sections":[{"label":"A","body":"b"}]}""",
+            "steps" to """{"steps":[{"title":"S"}]}""",
+            "menu" to """{"options":[{"label":"Go"}]}""",
+            "chips" to """{"options":[{"label":"X"}]}""",
+            "rating" to """{"title":"Rate"}""",
+            "poll" to """{"question":"?","options":[{"label":"A","votes":1},{"label":"B","votes":0}]}""",
+            "diff" to """{"before":"a","after":"b"}""",
+            "tree" to """{"roots":[{"label":"R"}]}""",
+            "flashcards" to """{"cards":[{"front":"F","back":"B"}]}""",
+            "checklist" to """{"items":[{"label":"x"}]}""",
             // v3 kinds — same contract: routed means parsed.
             "sim" to """{"sim":"particles","count":40}""",
             "stage3d" to """{"view":"scene","nodes":[{"id":"a","label":"A"}]}""",
