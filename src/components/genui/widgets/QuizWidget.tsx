@@ -1,5 +1,7 @@
 'use client'
 
+import { GlassIcon } from '@/components/nexly/GlassIcon'
+
 import { useState } from 'react'
 import type { QuizPayload } from '../types'
 import { alpha, inkOn, RADIUS, TYPE } from '../theme/tokens'
@@ -66,8 +68,8 @@ export function QuizWidget({ payload, onPrompt }: { payload: QuizPayload; onProm
                       }}
                     >
                       {opt}
-                      {isAnswered && correct ? ' ✓' : ''}
-                      {pickedThis && !correct ? ' ✗' : ''}
+                      {isAnswered && correct && <GlassIcon name="circle-check" size={12} tile={18} />}
+                      {pickedThis && !correct && <GlassIcon name="circle-x" size={12} tile={18} />}
                     </button>
                   )
                 })}

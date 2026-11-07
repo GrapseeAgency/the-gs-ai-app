@@ -3731,7 +3731,8 @@ private struct AppBodyView: View {
                         widgetAction?("Completed \(str(obj, "title").ifEmptyIOS("wizard"))")
                     }
                 } label: {
-                    Text(safeStep < steps.count - 1 ? "Next →" : "Finish ✓")
+                    Text(safeStep < steps.count - 1 ? "Next" : "Finish")
+                        NexlyGlyph(name: safeStep < steps.count - 1 ? "arrow-right" : "check", size: 12, color: accent)
                         .font(.system(size: 11.5, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 12)

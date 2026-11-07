@@ -1,0 +1,50 @@
+"use strict";
+'use client';
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AppWidget = AppWidget;
+const jsx_runtime_1 = require("react/jsx-runtime");
+const AppWizard_1 = require("../apps/AppWizard");
+const AppOnboarding_1 = require("../apps/AppOnboarding");
+const AppKanban_1 = require("../apps/AppKanban");
+const AppCalendar_1 = require("../apps/AppCalendar");
+const AppSheet_1 = require("../apps/AppSheet");
+const AppTasks_1 = require("../apps/AppTasks");
+const AppDashboard_1 = require("../apps/AppDashboard");
+const AppConfig_1 = require("../apps/AppConfig");
+const AppConfigurator_1 = require("../apps/AppConfigurator");
+const AppBooking_1 = require("../apps/AppBooking");
+const AppSchedule_1 = require("../apps/AppSchedule");
+const AppSearch_1 = require("../apps/AppSearch");
+const AppFilter_1 = require("../apps/AppFilter");
+const AppAnalytics_1 = require("../apps/AppAnalytics");
+const AppReport_1 = require("../apps/AppReport");
+const AppFiles_1 = require("../apps/AppFiles");
+const AppConnected_1 = require("../apps/AppConnected");
+const AppDecision_1 = require("../apps/AppDecision");
+const AppScenario_1 = require("../apps/AppScenario");
+const AppTimer_1 = require("../apps/AppTimer");
+function AppWidget({ payload }) {
+    switch (payload.type) {
+        case 'wizard': return (0, jsx_runtime_1.jsx)(AppWizard_1.AppWizard, { payload: payload });
+        case 'onboarding': return (0, jsx_runtime_1.jsx)(AppOnboarding_1.AppOnboarding, { payload: payload });
+        case 'kanban': return (0, jsx_runtime_1.jsx)(AppKanban_1.AppKanban, { payload: payload });
+        case 'calendar': return (0, jsx_runtime_1.jsx)(AppCalendar_1.AppCalendar, { payload: payload });
+        case 'sheet': return (0, jsx_runtime_1.jsx)(AppSheet_1.AppSheet, { payload: payload });
+        case 'tasks': return (0, jsx_runtime_1.jsx)(AppTasks_1.AppTasks, { payload: payload });
+        case 'dashboard': return (0, jsx_runtime_1.jsx)(AppDashboard_1.AppDashboard, { payload: payload });
+        case 'config': return (0, jsx_runtime_1.jsx)(AppConfig_1.AppConfig, { payload: payload });
+        case 'configurator': return (0, jsx_runtime_1.jsx)(AppConfigurator_1.AppConfigurator, { payload: payload });
+        case 'booking': return (0, jsx_runtime_1.jsx)(AppBooking_1.AppBooking, { payload: payload });
+        case 'schedule': return (0, jsx_runtime_1.jsx)(AppSchedule_1.AppSchedule, { payload: payload });
+        case 'search': return (0, jsx_runtime_1.jsx)(AppSearch_1.AppSearch, { payload: payload });
+        case 'filter': return (0, jsx_runtime_1.jsx)(AppFilter_1.AppFilter, { payload: payload });
+        case 'analytics': return (0, jsx_runtime_1.jsx)(AppAnalytics_1.AppAnalytics, { payload: payload });
+        case 'report': return (0, jsx_runtime_1.jsx)(AppReport_1.AppReport, { payload: payload });
+        case 'files': return (0, jsx_runtime_1.jsx)(AppFiles_1.AppFiles, { payload: payload });
+        case 'connected': return (0, jsx_runtime_1.jsx)(AppConnected_1.AppConnected, { payload: payload });
+        case 'decision': return (0, jsx_runtime_1.jsx)(AppDecision_1.AppDecision, { payload: payload });
+        case 'scenario': return (0, jsx_runtime_1.jsx)(AppScenario_1.AppScenario, { payload: payload });
+        case 'timer': return (0, jsx_runtime_1.jsx)(AppTimer_1.AppTimer, { payload: payload });
+        default: return (0, jsx_runtime_1.jsx)(AppWizard_1.AppWizard, { payload: payload });
+    }
+}

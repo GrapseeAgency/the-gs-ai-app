@@ -56,7 +56,7 @@ export function RatingWidget({ payload }: { payload: RatingPayload }) {
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
         <UiButton buttonStyle="filled" disabled={value === 0 || sent} onClick={() => setSent(true)}>
-          {sent ? 'Thanks ✓' : 'Send'}
+          {sent ? 'Thanks' : 'Send'}
         </UiButton>
       </div>
     </div>

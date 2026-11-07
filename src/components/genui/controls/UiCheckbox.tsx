@@ -1,5 +1,7 @@
 'use client'
 
+import { GlassIcon } from '@/components/nexly/GlassIcon'
+
 import { alpha, RADIUS, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 
@@ -47,7 +49,7 @@ export function UiCheckbox({
           lineHeight: 1,
         }}
       >
-        ✓
+        {checked && <GlassIcon name="check" size={12} tile={16} />}
       </span>
       {label ? <span style={{ fontSize: TYPE.body, color: theme.text }}>{label}</span> : null}
     </button>
