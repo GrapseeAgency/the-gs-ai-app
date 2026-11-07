@@ -239,7 +239,7 @@ private fun executeCodePreview(language: String?, code: String): CodeRunResult {
                     val arg = print.groupValues[1].trim()
                     output += when {
                         arg.isEmpty() -> ""
-                        arg.matches(Regex(""[^"\\\\]*"|'[^'\\\\]*'")) -> arg.drop(1).dropLast(1)
+                        arg.matches(Regex(""""[^"\\]*"|'[^'\\]*'""")) -> arg.drop(1).dropLast(1)
                         else -> formatNumValue(numeric(arg))
                     }
                     continue

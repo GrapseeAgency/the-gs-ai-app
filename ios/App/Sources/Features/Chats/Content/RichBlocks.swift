@@ -3331,18 +3331,18 @@ struct CodeBlockCardView: View {
             var output: [String] = []
             var lineNumber = 0
             func numeric(_ expr: String) throws -> Double {
-                guard expr.range(of: #"^[a-zA-Z0-9_+*()./\s-]+$"#, options: .regularExpression) != nil,
+                guard expr.range(of: "^[a-zA-Z0-9_+*()./\\s-]+$", options: .regularExpression) != nil,
                       !expr.contains("**"), !expr.contains("//") else {
                     throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Only numbers, variables, +, -, *, / and parentheses are supported"])
                 }
-                let names = try NSRegularExpression(pattern: #"[a-zA-Z_][a-zA-Z0-9_]*"#)
+                let names = try NSRegularExpression(pattern: "[a-zA-Z_][a-zA-Z0-9_]*")
                 for match in names.matches(in: expr, range: NSRange(expr.startIndex..., in: expr)) {
                     let name = (expr as NSString).substring(with: match.range)
                     guard vars[name] != nil else {
                         throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unknown variable: \(name)"])
                     }
                 }
-                guard expr.range(of: #"[a-zA-Z_]\w*\s*\("#, options: .regularExpression) == nil,
+                guard expr.range(of: "[a-zA-Z_]\\w*\\s*\\(", options: .regularExpression) == nil,
                       let value = CalcExprIOS.evalOptional(expr, vars: vars), value.isFinite else {
                     throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid expression, function call or non-finite result"])
                 }
@@ -3353,7 +3353,7 @@ struct CodeBlockCardView: View {
                 guard src.count <= 32000, lines.count <= 200 else {
                     throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Preview limit exceeded"])
                 }
-                let assignment = try NSRegularExpression(pattern: #"^([a-zA-Z_]\w*)\s*=\s*([^=]+)$"#)
+                let assignment = try NSRegularExpression(pattern: "^([a-zA-Z_]\\w*)\\s*=\\s*([^=]+)$")
                 for raw in lines {
                     lineNumber += 1
                     let line = raw.trimmingCharacters(in: .whitespaces)
@@ -3366,7 +3366,7 @@ struct CodeBlockCardView: View {
                     if line.hasPrefix("print("), line.hasSuffix(")") {
                         let arg = String(line.dropFirst(6).dropLast()).trimmingCharacters(in: .whitespaces)
                         if arg.isEmpty { output.append("") }
-                        else if arg.range(of: #"^"[^"\\]*"$|^'[^'\\]*'$"#, options: .regularExpression) != nil {
+                        else if arg.range(of: "^\"[^\"\\\\]*\"$|^'[^'\\\\]*'$", options: .regularExpression) != nil {
                             output.append(String(arg.dropFirst().dropLast()))
                         } else {
                             let value = try numeric(arg)

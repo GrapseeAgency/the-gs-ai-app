@@ -11,7 +11,7 @@ export function arithmeticPreview(source: string): { output: string; error?: str
       throw new Error('Only numbers, variables, +, -, *, / and parentheses are supported')
     // Do not inherit the calculator's constants, case folding or functions.
     for (const name of expr.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) ?? []) {
-      if (!Object.hasOwn(vars, name)) throw new Error(`Unknown variable: ${name}`)
+      if (!Object.prototype.hasOwnProperty.call(vars, name)) throw new Error(`Unknown variable: ${name}`)
     }
     if (/[a-zA-Z_]\w*\s*\(/.test(expr)) throw new Error('Function calls are not supported')
     const value = evaluateExpr(expr, vars)
