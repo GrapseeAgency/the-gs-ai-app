@@ -17,8 +17,10 @@ type ToneVars = CSSProperties & {
 export interface GlassIconProps {
   /** Tabler kebab-case name, or a friendly alias such as ``study``. */
   name: string
-  /** Glyph box in px. */
+  /** Glyph box in px (or outer tile size when `glyph` is also passed). */
   size?: number
+  /** Optional explicit inner glyph size in px when `size` specifies the tile diameter. */
+  glyph?: number
   /** Glass tile diameter in px. Set 0 for a bare glyph. */
   tile?: number
   tone?: GlassTone | string
@@ -28,6 +30,7 @@ export interface GlassIconProps {
   flat?: boolean
   className?: string
   title?: string
+  style?: CSSProperties
 }
 
 /**
@@ -37,22 +40,26 @@ export interface GlassIconProps {
 export function GlassIcon({
   name,
   size = 16,
-  tile = 32,
+  glyph: glyphSize,
+  tile,
   tone,
   bare = false,
   flat = false,
   className,
   title,
+  style,
 }: GlassIconProps) {
   const id = iconNameFor(name)
   const resolvedTone = glassToneFor(id, tone)
   const palette = GLASS_TONES[resolvedTone]
+  const resolvedGlyphSize = glyphSize ?? size
+  const resolvedTileSize = tile ?? (glyphSize !== undefined ? size : 32)
 
   const glyph = (
     <svg
       className="nx-glyph"
-      width={size}
-      height={size}
+      width={resolvedGlyphSize}
+      height={resolvedGlyphSize}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -70,19 +77,20 @@ export function GlassIcon({
 
   if (bare) {
     return (
-      <span className={`nx-icon-bare ${className ?? ''}`} style={{ width: size, height: size }}>
+      <span className={`nx-icon-bare ${className ?? ''}`} style={{ width: resolvedGlyphSize, height: resolvedGlyphSize, ...style }}>
         {glyph}
       </span>
     )
   }
 
   const vars: ToneVars = {
-    width: tile,
-    height: tile,
+    width: resolvedTileSize,
+    height: resolvedTileSize,
     color: palette.ink,
     '--tone-top': palette.top,
     '--tone-bottom': palette.bottom,
     '--tone-halo': palette.halo,
+    ...style,
   }
 
   return (

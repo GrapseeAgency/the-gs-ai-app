@@ -221,27 +221,33 @@ total++
       'Quick summary', // 01 & 02: Two-deck Callout card
       'Important', // 02: Warning callout card
       'Key Insights', // 06 & 07: Multi-block coalesced Key Insights callout card
-      '🎯', // 02: Key priorities section icon
-      '☰', // 02: Step-by-step plan section icon
+      '#gs-target', // 02: Key priorities custom glassy icon
+      '#gs-list-check', // 02: Step-by-step plan custom glassy icon
       'Validate &amp; Prepare', // 02: Split step bold title
       'role="checkbox"', // 02: Plain bullets under Next actions auto-elevated into interactive checkboxes
-      '+ Add Task', // 01 & 02: Add Task pill button on Todo / Next actions checklist
-      '🐍', // 06: Entity monogram badge in ordinary Markdown table
-      'Show: <!-- -->5<!-- --> ▾', // 06: Table pagination display control on 5-row table
+      '#gs-plus', // 01 & 02: Add Task custom glassy icon on Todo / Next actions checklist
+      'Add Task', // 01 & 02: Add Task pill button on Todo / Next actions checklist
+      '>Py<', // 06: Entity monogram badge in ordinary Markdown table (zero emoji)
+      'Show: <!-- -->All<!-- --> ▾', // 06: Table pagination display control on 5-row table
       'Run Code', // 04 & 05: Code block execution bar
       'Revenue Trend', // 04 & 05: Visual data series bar chart preview extracted from Python code
       'Line Chart', // 07: Interactive chart type switcher
       'Bar Chart',
       'Area Chart',
       'Pie Chart',
-      'Last 6 Months', // 07: Chart date range selector
+      'Last 6M', // 07: Chart date range selector with dataset slicing
       'Trusted Source', // 03: Ordinary Markdown source list elevated to Trusted Source green pill
       'Academic', // 03: Ordinary Markdown source list elevated to Academic lavender pill
+      '#gs-building-bank', // 03: Academic source custom glassy icon
+      '#gs-shield-check', // 03: Trusted source custom glassy icon
       'Ask follow-up', // 01-07: Bottom contextual action pills
     ]
     const missing = requiredMarkers.filter((m) => !html.includes(m))
+    const emojiMatch = html.match(/[\u{1F300}-\u{1FAFF}]/u)
     if (missing.length > 0) {
       holes.push(`Section 01 & 02 proof: missing markers: ${missing.join(', ')}`)
+    } else if (emojiMatch) {
+      holes.push(`Section 01 & 02 proof: forbidden emoji leaked into rendered HTML: ${emojiMatch[0]}`)
     } else {
       pass++
     }

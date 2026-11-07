@@ -1190,6 +1190,25 @@ internal fun widgetStyleOf(json: String): WidgetStyle? {
     return if (accent == null && tone == null) null else WidgetStyle(accent, tone)
 }
 
+private fun widgetTagGlassIcon(tag: String): Pair<String, String> {
+    return when (tag.lowercase()) {
+        "chart" -> "chart-bar" to "lavender"
+        "table" -> "list-check" to "cyan"
+        "calc", "calculator" -> "calculator" to "amber"
+        "stat", "kpi", "metric" -> "trending-up" to "green"
+        "compare", "versus" -> "arrows-sort" to "lavender"
+        "timeline", "schedule", "calendar" -> "calendar" to "blue"
+        "quiz", "poll", "choices" -> "help-circle" to "lavender"
+        "form", "input" -> "edit" to "cyan"
+        "checklist", "productivity", "kanban", "todo" -> "checkbox" to "green"
+        "code", "terminal", "diff" -> "code" to "slate"
+        "tree", "hierarchy", "flow", "diagram" -> "target" to "teal"
+        "citation", "sources", "links" -> "link" to "blue"
+        "alert", "callout", "warning" -> "alert-triangle" to "amber"
+        else -> "sparkles" to "lavender"
+    }
+}
+
 /**
  * The one card surface. [hue] and [tone] default from [tag], so a view only
  * passes them when it wants a specific identity (charts key off their type,
@@ -1258,10 +1277,24 @@ internal fun WidgetCardShell(
             )
         }
         Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            val (leadingIcon, cleanedTitle) = remember(title, tag) {
+                val pair = NexlyIcons.extractLeadingIcon(title)
+                val clean = NexlyIcons.cleanPlainText(pair.second)
+                val defaultPair = widgetTagGlassIcon(tag)
+                (pair.first ?: defaultPair.first) to clean
+            }
+            val defaultTone = remember(tag) { widgetTagGlassIcon(tag).second }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (title.isNotEmpty()) {
+                NexlyGlassGlyphTile(
+                    name = leadingIcon,
+                    toneName = defaultTone,
+                    size = 24.dp,
+                    glyphSize = 14.dp,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                if (cleanedTitle.isNotEmpty()) {
                     Text(
-                        title,
+                        cleanedTitle,
                         style = MaterialTheme.typography.labelLarge,
                         color = c.textPrimary,
                         fontWeight = FontWeight.SemiBold,
@@ -1428,16 +1461,40 @@ private val CHART_HUE_SLOTS = mapOf(
 private val EDITORIAL_CHARTS = setOf("line", "area", "stackedArea", "scatter", "bubble", "candlestick")
 
 private val SWITCHABLE_CHART_TYPES = setOf("line", "bar", "area", "pie", "donut")
-private val CHART_RANGE_LABELS = listOf("Last 7 Days", "Last 30 Days", "Last 6 Months", "Last 12 Months")
+private fun sliceChartByRange(w: ChartWidget, rangeIndex: Int): Pair<ChartWidget, String> {
+    val maxPts = w.series.maxOfOrNull { it.data.size } ?: 0
+    if (maxPts <= 2) return w to "All ($maxPts pts)"
+    val rangeSpecs = listOf(
+        Triple("All ($maxPts pts)", 0, maxPts),
+        Triple("Last ${maxOf(2, (maxPts * 3 + 3) / 4)} pts", maxPts - maxOf(2, (maxPts * 3 + 3) / 4), maxPts),
+        Triple("Last ${maxOf(2, (maxPts + 1) / 2)} pts", maxPts - maxOf(2, (maxPts + 1) / 2), maxPts),
+        Triple("First ${maxOf(2, (maxPts + 1) / 2)} pts", 0, maxOf(2, (maxPts + 1) / 2))
+    )
+    val (label, start, end) = rangeSpecs[rangeIndex % rangeSpecs.size]
+    if (start == 0 && end == maxPts) return w to label
+    val slicedLabels = if (w.labels.size >= end) w.labels.subList(start, end) else w.labels
+    val slicedSeries = w.series.map { s ->
+        if (s.data.size >= end) {
+            val sub = s.data.subList(start, end).mapIndexed { idx, pt ->
+                if (pt.size >= 2) listOf(idx.toFloat(), pt[1]) + pt.drop(2) else pt
+            }
+            s.copy(data = sub)
+        } else s
+    }
+    return w.copy(labels = slicedLabels, series = slicedSeries) to label
+}
 
 @Composable
 private fun ChartWidgetView(w: ChartWidget) {
     val isSwitchable = w.type in SWITCHABLE_CHART_TYPES && w.series.isNotEmpty()
     var activeType by remember(w.type) { mutableStateOf(w.type) }
-    var rangeIndex by remember { mutableStateOf(2) }
+    var rangeIndex by remember { mutableStateOf(0) }
+    val (slicedWidget, rangeLabel) = remember(w, rangeIndex, isSwitchable) {
+        if (isSwitchable) sliceChartByRange(w, rangeIndex) else w to "All"
+    }
 
     WidgetCardShell(
-        w.title.ifEmpty { "Chart" },
+        NexlyIcons.cleanPlainText(w.title).ifEmpty { "Chart" },
         "chart",
         hue = WidgetPalette.at(CHART_HUE_SLOTS[activeType] ?: 0),
         tone = if (activeType in EDITORIAL_CHARTS) CardTone.Editorial else CardTone.Tinted
@@ -1445,10 +1502,10 @@ private fun ChartWidgetView(w: ChartWidget) {
         if (isSwitchable) {
             // 07. Interactive Charts: Type Switcher Pills + Range Selector (Screenshot 6)
             val tabs = listOf(
-                Triple("line", "📈", "Line"),
-                Triple("bar", "📊", "Bar"),
-                Triple("area", "📉", "Area"),
-                Triple(if (w.type == "donut") "donut" else "pie", "◔", "Pie")
+                Triple("line", "chart-line", "Line"),
+                Triple("bar", "chart-bar", "Bar"),
+                Triple("area", "chart-area", "Area"),
+                Triple(if (w.type == "donut") "donut" else "pie", "chart-pie", "Pie")
             )
             Row(
                 modifier = Modifier
@@ -1465,17 +1522,24 @@ private fun ChartWidgetView(w: ChartWidget) {
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    tabs.forEach { (id, icon, label) ->
+                    tabs.forEach { (id, iconName, label) ->
                         val selected = activeType == id || (id == "pie" && activeType == "donut")
-                        Box(
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(7.dp))
                                 .background(if (selected) Color(0xFF6C4CF6) else Color.Transparent)
                                 .clickable { activeType = id }
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
+                            NexlyGlyph(
+                                name = iconName,
+                                size = 12.dp,
+                                color = if (selected) Color.White else Color(0xFF3E3666)
+                            )
                             Text(
-                                text = "$icon $label",
+                                text = label,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (selected) Color.White else Color(0xFF3E3666)
@@ -1483,16 +1547,23 @@ private fun ChartWidgetView(w: ChartWidget) {
                         }
                     }
                 }
-                Box(
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.White.copy(alpha = 0.8f))
                         .border(1.dp, Color(0xFFDFD7FA), RoundedCornerShape(8.dp))
-                        .clickable { rangeIndex = (rangeIndex + 1) % CHART_RANGE_LABELS.size }
+                        .clickable { rangeIndex = (rangeIndex + 1) % 4 }
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
+                    NexlyGlyph(
+                        name = "calendar",
+                        size = 12.dp,
+                        color = Color(0xFF433B6B)
+                    )
                     Text(
-                        text = "📅 ${CHART_RANGE_LABELS[rangeIndex]} ▾",
+                        text = "$rangeLabel ▾",
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF433B6B)
@@ -1501,8 +1572,8 @@ private fun ChartWidgetView(w: ChartWidget) {
             }
         }
 
-        val effectiveWidget = remember(w, activeType) {
-            if (activeType == w.type) w else w.copy(type = activeType)
+        val effectiveWidget = remember(slicedWidget, activeType) {
+            if (activeType == slicedWidget.type) slicedWidget else slicedWidget.copy(type = activeType)
         }
         when (effectiveWidget.type) {
             "bar", "histogram" -> BarChart(effectiveWidget)
@@ -1539,7 +1610,7 @@ private fun ChartWidgetView(w: ChartWidget) {
             "depth" -> DepthChart(effectiveWidget)
             else -> LineChart(effectiveWidget, filled = effectiveWidget.type == "area")
         }
-        if (w.series.size > 1 && activeType !in setOf(
+        if (slicedWidget.series.size > 1 && activeType !in setOf(
                 "pie", "donut", "funnel", "radar", "hbar", "chord",
                 "heatmap", "correlation", "treemap", "waterfall", "candlestick", "gantt",
                 "sankey", "network", "force", "wordcloud", "sunburst", "bullet",
@@ -1547,7 +1618,7 @@ private fun ChartWidgetView(w: ChartWidget) {
             )
         ) {
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                w.series.forEachIndexed { i, s ->
+                slicedWidget.series.forEachIndexed { i, s ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(width = 12.dp, height = 3.dp).clip(RoundedCornerShape(2.dp)).background(seriesColor(i)))
                         Text(
@@ -1563,20 +1634,20 @@ private fun ChartWidgetView(w: ChartWidget) {
 
         // 3-Card KPI Summary Strip below switchable charts (Screenshot 6)
         if (isSwitchable) {
-            val kpiStats = remember(w.series, w.labels, w.unit) {
-                val pts = w.series.firstOrNull()?.data.orEmpty()
+            val kpiStats = remember(slicedWidget.series, slicedWidget.labels, slicedWidget.unit) {
+                val pts = slicedWidget.series.firstOrNull()?.data.orEmpty()
                 val ys = pts.map { it.getOrElse(1) { 0f } }
                 if (ys.size >= 2) {
                     val total = ys.sum()
                     val maxIdx = ys.indices.maxByOrNull { ys[it] } ?: 0
-                    val peakLabel = w.labels.getOrNull(maxIdx)?.takeIf { it.isNotBlank() } ?: "Peak"
+                    val peakLabel = slicedWidget.labels.getOrNull(maxIdx)?.takeIf { it.isNotBlank() } ?: "Peak"
                     val peakVal = ys.getOrElse(maxIdx) { 0f }
                     val first = ys.first().takeIf { it != 0f } ?: 1f
                     val last = ys.last()
                     val pct = ((last - first) / kotlin.math.abs(first)) * 100f
                     Triple(
-                        axisLabel(total, w.unit),
-                        peakLabel to axisLabel(peakVal, w.unit),
+                        axisLabel(total, slicedWidget.unit),
+                        peakLabel to axisLabel(peakVal, slicedWidget.unit),
                         pct
                     )
                 } else null
@@ -1602,15 +1673,12 @@ private fun ChartWidgetView(w: ChartWidget) {
                             .padding(horizontal = 9.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFFEDE6FF)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("📊", fontSize = 11.sp)
-                        }
+                        NexlyGlassGlyphTile(
+                            name = "chart-bar",
+                            toneName = "lavender",
+                            size = 24.dp,
+                            glyphSize = 14.dp
+                        )
                         Text(totalStr, fontSize = 14.sp, color = GsTheme.colors.textPrimary, fontWeight = FontWeight.Bold)
                         Text("Total", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.Medium)
                         Box(
@@ -1636,24 +1704,28 @@ private fun ChartWidgetView(w: ChartWidget) {
                             .padding(horizontal = 9.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFFEDE6FF)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("👥", fontSize = 11.sp)
-                        }
+                        NexlyGlassGlyphTile(
+                            name = "trophy",
+                            toneName = "amber",
+                            size = 24.dp,
+                            glyphSize = 14.dp
+                        )
                         Text(peakPair.second, fontSize = 14.sp, color = GsTheme.colors.textPrimary, fontWeight = FontWeight.Bold)
                         Text("Peak (${peakPair.first})", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.Medium, maxLines = 1)
-                        Box(
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(Color(0xFFEFEAFF))
                                 .padding(horizontal = 6.dp, vertical = 1.5.dp)
                         ) {
-                            Text("★ Highest", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF5B3DF5))
+                            NexlyGlyph(
+                                name = "star",
+                                size = 10.dp,
+                                color = Color(0xFF5B3DF5)
+                            )
+                            Text("Highest", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF5B3DF5))
                         }
                     }
                     Column(
@@ -1665,15 +1737,12 @@ private fun ChartWidgetView(w: ChartWidget) {
                             .padding(horizontal = 9.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFFEDE6FF)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("📈", fontSize = 11.sp)
-                        }
+                        NexlyGlassGlyphTile(
+                            name = "trending-up",
+                            toneName = "green",
+                            size = 24.dp,
+                            glyphSize = 14.dp
+                        )
                         Text(
                             text = pctStr,
                             fontSize = 14.sp,
@@ -1707,10 +1776,12 @@ private fun ChartWidgetView(w: ChartWidget) {
                         .padding(horizontal = 11.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.Top
                 ) {
-                    Text(
-                        text = "💡",
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(end = 8.dp, top = 1.dp)
+                    NexlyGlassGlyphTile(
+                        name = "bulb",
+                        toneName = "amber",
+                        size = 24.dp,
+                        glyphSize = 14.dp,
+                        modifier = Modifier.padding(end = 8.dp)
                     )
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
@@ -1720,7 +1791,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                             color = Color(0xFF211845)
                         )
                         Text(
-                            text = "Peak in ${peakPair.first} (${peakPair.second}) · $pctStr overall change across ${CHART_RANGE_LABELS[rangeIndex].lowercase()}",
+                            text = "Peak in ${peakPair.first} (${peakPair.second}) · $pctStr overall change across ${rangeLabel.lowercase()}",
                             fontSize = 11.sp,
                             color = Color(0xFF39325C)
                         )
@@ -1798,9 +1869,12 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
     if (activeDatum != null) {
         val pts = w.series.firstOrNull()?.data.orEmpty()
         val prevVal = if (activeDatum.index > 0) pts.getOrNull(activeDatum.index - 1)?.getOrNull(1) else null
-        val stepPct = if (prevVal != null && prevVal != 0f) {
-            ((activeDatum.value - prevVal) / kotlin.math.abs(prevVal)) * 100f
-        } else 12.5f
+        val avgVal = pts.map { it.getOrElse(1) { 0f } }.average().toFloat()
+        val stepPct = when {
+            prevVal != null && prevVal != 0f -> ((activeDatum.value - prevVal) / kotlin.math.abs(prevVal)) * 100f
+            avgVal != 0f -> ((activeDatum.value - avgVal) / kotlin.math.abs(avgVal)) * 100f
+            else -> 0f
+        }
         val stepPos = stepPct >= 0f
         Row(
             modifier = Modifier
@@ -2384,7 +2458,7 @@ private fun TableWidgetView(w: TableWidget) {
     var sortCol by remember { mutableIntStateOf(-1) }
     var asc by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }
-    var pageSize by remember { mutableIntStateOf(5) }
+    var pageSize by remember(w.rows.size) { mutableIntStateOf(if (w.rows.size in 4..5) 3 else 5) }
     var page by remember { mutableIntStateOf(0) }
     val clipboard = LocalClipboardManager.current
     val c = GsTheme.colors
@@ -2409,6 +2483,8 @@ private fun TableWidgetView(w: TableWidget) {
     val visible = remember(rows, safePage, pageSize) {
         rows.drop(safePage * pageSize).take(pageSize)
     }
+    val startRow = if (rows.isEmpty()) 0 else safePage * pageSize + 1
+    val endRow = (safePage * pageSize + visible.size).coerceAtMost(rows.size)
     val primaryNameCol = remember(w.columns) {
         val idx = w.columns.indexOfFirst {
             it.contains("language", true) || it.contains("product", true) ||
@@ -2429,7 +2505,7 @@ private fun TableWidgetView(w: TableWidget) {
     }
 
     WidgetCardShell(
-        title = w.title.ifEmpty { "Table" },
+        title = NexlyIcons.cleanPlainText(w.title).ifEmpty { "Table" },
         tag = "table",
         action = {
             Text(
@@ -2575,7 +2651,6 @@ private fun TableWidgetView(w: TableWidget) {
                 )
             }
             // Pagination & Display Controls Bar (Screenshot 5)
-            val displayTotalPages = maxOf(totalPages, if (rows.size >= 5) 3 else 1)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2592,20 +2667,20 @@ private fun TableWidgetView(w: TableWidget) {
                         text = "‹",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = GsTheme.colors.textSecondary,
+                        color = if (safePage > 0) GsTheme.colors.textSecondary else GsTheme.colors.textTertiary.copy(alpha = 0.45f),
                         modifier = Modifier
                             .clip(CircleShape)
                             .clickable(enabled = safePage > 0) { page = (safePage - 1).coerceAtLeast(0) }
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     )
-                    (0 until displayTotalPages).forEach { p ->
+                    (0 until totalPages).forEach { p ->
                         val active = p == safePage
                         Box(
                             modifier = Modifier
                                 .size(22.dp)
                                 .clip(CircleShape)
                                 .background(if (active) Color(0xFF6C4CF6) else Color.Transparent)
-                                .clickable { if (p < totalPages) page = p },
+                                .clickable { page = p },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -2620,11 +2695,17 @@ private fun TableWidgetView(w: TableWidget) {
                         text = "›",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = GsTheme.colors.textSecondary,
+                        color = if (safePage < totalPages - 1) GsTheme.colors.textSecondary else GsTheme.colors.textTertiary.copy(alpha = 0.45f),
                         modifier = Modifier
                             .clip(CircleShape)
                             .clickable(enabled = safePage < totalPages - 1) { page = (safePage + 1).coerceAtMost(totalPages - 1) }
                             .padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                    Text(
+                        text = "$startRow–$endRow of ${rows.size}",
+                        fontSize = 10.5.sp,
+                        color = Color(0xFF6A6190),
+                        modifier = Modifier.padding(start = 4.dp)
                     )
                 }
                 Box(
@@ -2634,9 +2715,10 @@ private fun TableWidgetView(w: TableWidget) {
                         .border(1.dp, Color(0xFFDFD7FA), RoundedCornerShape(7.dp))
                         .clickable {
                             pageSize = when (pageSize) {
+                                3 -> 5
                                 5 -> 10
                                 10 -> 25
-                                else -> 5
+                                else -> 3
                             }
                             page = 0
                         }
@@ -2651,9 +2733,11 @@ private fun TableWidgetView(w: TableWidget) {
                 }
             }
         }
-        if (w.rows.size >= 3) {
-            val topName = w.rows.firstOrNull()?.getOrNull(primaryNameCol).orEmpty()
-            val topMetric = w.rows.firstOrNull()?.drop(primaryNameCol + 1)?.firstOrNull().orEmpty()
+        if (rows.size >= 2) {
+            val topName = rows.firstOrNull()?.getOrNull(primaryNameCol).orEmpty()
+            val topMetric = rows.firstOrNull()?.drop(primaryNameCol + 1)?.firstOrNull().orEmpty()
+            val secondName = rows.getOrNull(1)?.getOrNull(primaryNameCol).orEmpty()
+            val secondMetric = rows.getOrNull(1)?.drop(primaryNameCol + 1)?.firstOrNull().orEmpty()
             if (topName.isNotBlank()) {
                 Row(
                     modifier = Modifier
@@ -2665,10 +2749,12 @@ private fun TableWidgetView(w: TableWidget) {
                         .padding(horizontal = 11.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.Top
                 ) {
-                    Text(
-                        text = "💡",
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(end = 8.dp, top = 1.dp)
+                    NexlyGlassGlyphTile(
+                        name = "bulb",
+                        toneName = "amber",
+                        size = 24.dp,
+                        glyphSize = 14.dp,
+                        modifier = Modifier.padding(end = 8.dp)
                     )
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
@@ -2678,7 +2764,7 @@ private fun TableWidgetView(w: TableWidget) {
                             color = Color(0xFF211845)
                         )
                         Text(
-                            text = "• $topName leads the ranking${if (topMetric.isNotBlank()) " ($topMetric)" else ""} across ${w.rows.size} entries",
+                            text = "• $topName leads${if (topMetric.isNotBlank()) " ($topMetric)" else ""}${if (secondName.isNotBlank()) " followed by $secondName${if (secondMetric.isNotBlank()) " ($secondMetric)" else ""}" else ""} across ${rows.size} entries",
                             fontSize = 11.sp,
                             color = Color(0xFF39325C)
                         )

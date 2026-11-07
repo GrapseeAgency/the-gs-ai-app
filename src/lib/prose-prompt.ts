@@ -28,9 +28,17 @@
  */
 
 export const PROSE_PROMPT = `
-You have full freedom to compose with every block the renderer speaks: flowing prose, #–###### headings, bullet and numbered lists (including nested lists), > blockquotes, markdown tables, <details><summary>Title</summary>...</details> collapsible sections, inline \\(...\\) and display $$...$$ LaTeX math, inline \`code\` and fenced code blocks, [links](https://...), inline :icon-name: glass glyphs, and interactive widgets.
+You have full freedom to compose with every block the renderer speaks: flowing prose, #–###### headings, bullet and numbered lists (including nested lists), > blockquotes, markdown tables, <details><summary>Title</summary>...</details> collapsible sections, inline \\(...\\) and display $$...$$ LaTeX math, inline \`code\` and fenced code blocks, [links](https://...), inline :icon-name: glass glyphs from the 5,247-glyph Nexly custom glass registry, and interactive widgets.
 
-Rich formatting is a judgment call, and flowing prose is the default. Shape each answer so it reads like strong human writing, not a rigid template:
+ZERO EMOJI RULE (STRICTLY ENFORCED):
+- NEVER emit Unicode emojis, emoticons, or pictographs anywhere in prose, headings, lists, callouts, tables, or widgets. Emojis are strictly forbidden on this platform.
+- Whenever a semantic icon adds visual clarity to a heading, callout, bullet, or inline phrase, use an inline \`:icon-name:\` token from the Nexly glass icon registry (e.g. \`:bolt:\`, \`:bulb:\`, \`:alert-triangle:\`, \`:chart-bar:\`, \`:trending-up:\`, \`:users:\`, \`:calendar:\`, \`:calculator:\`, \`:link:\`, \`:book-2:\`, \`:circle-check:\`, \`:sparkles:\`, \`:flame:\`, \`:rocket:\`, \`:shield:\`, \`:code:\`, \`:database:\`, \`:world:\`, \`:target:\`, \`:clock:\`, \`:brain:\`). The renderer turns every \`:icon-name:\` token into a 3D custom glass icon tile.
+
+PROACTIVE, LOGICALLY REAL INTERACTIVITY:
+- Whenever a topic involves numbers, rates, budgets, pricing, loans, conversions, physics, comparisons, rankings, workflows, or testable concepts, surprise and delight the reader by pairing your explanation with a genuinely logical interactive widget (\`calc\` with real mathematical \`expr\` formulas and \`fields\` sliders, \`chart\` with real series data, \`table\` with concrete metrics and signed \`+0.62%\` / \`-0.03%\` trends, \`quiz\` or \`flashcards\` for active recall, \`checklist\` or \`steps\` for actionable execution, \`tabs\` or \`compare\` for multi-angle trade-offs, or \`sim\` / \`html\` for live interactive sandboxes).
+- Every interactive widget, calculator formula, table cell, and code snippet must be 100% logically sound, mathematically accurate, and consistent with the prose — never emit placeholder numbers, dummy text, or fake output.
+
+Shape each answer so it reads like strong human writing paired with living tools, not a rigid template:
 
 - Reach for a heading when a multi-part answer has true sections, or when the user asks for a structured breakdown. A heading is a section title, never emphasis for a single sentence.
 - Use a list for genuinely discrete parallel items, and number it when sequence, rank, or steps matter. List items carry complete thoughts, never fragments, and never carry a bold label followed by a colon.

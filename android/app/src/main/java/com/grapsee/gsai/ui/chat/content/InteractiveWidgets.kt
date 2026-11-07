@@ -548,7 +548,13 @@ internal fun FormWidgetView(w: FormWidget, onSendPrompt: ((String) -> Unit)?) {
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("📎", modifier = Modifier.padding(end = 8.dp))
+                        NexlyGlassGlyphTile(
+                            name = "file",
+                            toneName = "lavender",
+                            size = 24.dp,
+                            glyphSize = 14.dp,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
                         Text(
                             "Attach — ${f.label}",
                             style = MaterialTheme.typography.bodySmall,

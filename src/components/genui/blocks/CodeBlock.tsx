@@ -9,6 +9,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { alpha, RADIUS, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { CopyChip } from '../primitives/CopyChip'
+import { GlassIcon } from '@/components/nexly/GlassIcon'
 
 const KEYWORD_RE =
   /\b(const|let|var|function|return|if|else|for|while|switch|case|break|continue|new|class|extends|import|from|export|default|async|await|try|catch|finally|throw|typeof|instanceof|in|of|def|elif|lambda|yield|with|as|pass|raise|True|False|None|fun|val|when|object|interface|struct|enum|guard|protocol|impl|pub|fn|match|mut|use|SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|GROUP|BY|ORDER|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|LIMIT)\b/g
@@ -286,7 +287,7 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
             letterSpacing: '0.05em',
           }}
         >
-          <span style={{ color: '#9D86FF' }}>&lt;/&gt;</span>
+          <GlassIcon name="code" tone="lavender" size={18} glyph={11} />
           <span>{lang}</span>
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -385,7 +386,7 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
               cursor: 'pointer',
             }}
           >
-            <span>▷</span>
+            <GlassIcon name="player-play" tone="indigo" size={16} glyph={10} />
             <span>
               {isBrowserLang
                 ? 'Run in Browser'
@@ -413,8 +414,9 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
                   <span>●</span>
                   <span>{errorText ? 'Error' : 'Success'}</span>
                 </span>
-                <button type="button" onClick={runCode} style={chipStyle}>
-                  ↻ Rerun
+                <button type="button" onClick={runCode} style={{ ...chipStyle, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <GlassIcon name="refresh" tone="lavender" size={14} glyph={9} />
+                  <span>Rerun</span>
                 </button>
               </>
             )}
@@ -478,9 +480,13 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
                 color: '#8E89B2',
                 cursor: 'pointer',
                 fontSize: 10.5,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
               }}
             >
-              ✕ Clear
+              <GlassIcon name="x" tone="slate" size={14} glyph={9} />
+              <span>Clear</span>
             </button>
           </div>
           {output ? (

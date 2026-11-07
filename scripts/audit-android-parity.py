@@ -275,8 +275,9 @@ if IOS_CB.exists() and IOS_RB.exists():
     for bad_wb, msg in [
         (r"\bpeakPoint\b", "iOS WidgetBlocks.swift references undeclared `peakPoint` instead of `peakPt`"),
         (r"\bformatChartMetric\b", "iOS WidgetBlocks.swift references undeclared `formatChartMetric` instead of `compactNumber`"),
+        (r"\bGSHaptics\.selection\b", "iOS Swift files use nonexistent `GSHaptics.selection()` instead of `GSHaptics.select()`"),
     ]:
-        if re.search(bad_wb, wb_sw):
+        if re.search(bad_wb, ios_all):
             failures.append(msg)
     if "sourceStart: records[from].offset" not in cb_sw:
         failures.append("iOS ContentBlocks.swift: buildList must set real `sourceStart: records[from].offset`")
@@ -286,17 +287,19 @@ if IOS_CB.exists() and IOS_RB.exists():
         ("NexlyCalloutCard", "02. Structured Answers: Callout cards (Quick summary / Important / Key Insights)"),
         ("NexlyQuickCalculatorCard", "01. Dashboard: Interactive Quick Calculator card from ordinary Markdown"),
         ("InteractiveChecklistItemRow", "02. Structured Answers: Interactive Next Actions / Todo checklists"),
-        ("+ Add Task", "01/02. Interactive + Add Task button on Todo checklists"),
+        ("Add Task", "01/02. Interactive Add Task inline input on Todo checklists"),
         ("StepOrderedListItemRow", "02. Structured Answers: Numbered step-by-step plan circles & bold step split"),
         ("Trusted Source", "03. Citations & References: Trusted Source / Academic pills"),
         ("Run in Browser", "04/05. Code Blocks & Execution: Run in Browser / Run Code bar"),
         ("extractCodeSeriesPreview", "04/05. Code Blocks & Execution: Inline Revenue Trend bar chart preview"),
-        ("localhost:3000", "05. Code Execution: Interactive Component localhost:3000 preview"),
-        ("High Priority", "05. Code Execution: Task Overview 4-KPI strip"),
+        ("parseReactPreviewSpec", "05. Code Execution: Dynamic React/JSX interactive component preview parser"),
+        ("CalcExpr", "01/05. Calculator & Code Execution: Recursive-descent math expression evaluator"),
         ("Show:", "06. Tables & Data Grids: Pagination & Show: N display controls"),
-        ("Last 6 Months", "07. Interactive Charts: Date range selector"),
-        ("Key Insights", "06/07. Tables & Charts: Key Insights summary card"),
+        ("sliced", "07. Interactive Charts: Date range selector with dataset slicing"),
+        ("Key Insights", "06/07. Tables & Charts: Dynamic Key Insights summary card"),
         ("Ask follow-up", "01–07. Bottom contextual action pills row"),
+        ("NexlyGlassGlyphTile", "01–07. Custom 5,200+ glassy icon tile renderer (zero emojis)"),
+        ("NexlyGlyph", "01–07. Custom vector glyph stroke renderer"),
     ]
     for token, desc in SECTION_FEATURES:
         if token not in kt_all:
@@ -304,6 +307,21 @@ if IOS_CB.exists() and IOS_RB.exists():
         if token not in ios_all:
             failures.append(f"iOS missing '{token}' ({desc})")
     notes.append(f"Section 01 & 02 feature parity: {len(SECTION_FEATURES)}/{len(SECTION_FEATURES)} features verified on both Android and iOS")
+
+    # Zero-emoji enforcement gate across Android, iOS, and Web
+    emoji_pat = re.compile(r"[\U0001F300-\U0001FAFF]")
+    emoji_allow = {"NexlyPlan.kt", "NexlyPlan.swift", "icons.ts"}
+    emoji_violations = []
+    for check_dir in [K, ROOT / "ios/App/Sources/Features/Chats/Content", ROOT / "src/components/genui"]:
+        for p in sorted(check_dir.rglob("*")):
+            if p.is_file() and p.suffix in {".kt", ".swift", ".ts", ".tsx"} and p.name not in emoji_allow:
+                for line_no, line in enumerate(read(p).splitlines(), 1):
+                    if emoji_pat.search(line):
+                        emoji_violations.append(f"{p.relative_to(ROOT)}:{line_no}")
+    if emoji_violations:
+        failures.append(f"Zero-emoji gate failed in {len(emoji_violations)} line(s): {emoji_violations[:5]}")
+    else:
+        notes.append("Zero-emoji gate: 0 hardcoded emojis across Android, iOS, and Web chat/widget renderers")
 
 # --- report ------------------------------------------------------------------
 print("== android parity audit ==")

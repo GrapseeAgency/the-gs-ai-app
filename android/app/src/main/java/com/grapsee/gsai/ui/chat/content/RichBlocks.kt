@@ -25,10 +25,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -356,17 +358,22 @@ private enum class SectionListMode { DEFAULT, CHECKMARK, TODO, SOURCES }
 private val LocalSectionListMode = androidx.compose.runtime.compositionLocalOf { SectionListMode.DEFAULT }
 
 private fun classifyCalloutHeaderTitle(raw: String): Pair<CalloutTone, String>? {
-    val clean = raw.trim().trimEnd(':').trim()
+    val clean = NexlyIcons.cleanPlainText(raw).trimEnd(':').trim()
     val lower = clean.lowercase()
     return when {
         lower in setOf("important", "warning", "caution", "attention", "important notice") ->
-            CalloutTone.WARNING to "⚠️"
+            CalloutTone.WARNING to "alert-triangle"
         lower in setOf("quick summary", "summary", "tl;dr", "tldr", "executive summary") ->
-            CalloutTone.SUMMARY to "⚡"
+            CalloutTone.SUMMARY to "bolt"
         lower in setOf("key insight", "key insights", "quick fact", "quick facts", "pro tip", "tip", "note", "key takeaway", "key takeaways") ->
-            CalloutTone.FACT to "💡"
+            CalloutTone.FACT to "bulb"
         else -> null
     }
+}
+
+private fun isCalculatorHeadingTitle(raw: String): Boolean {
+    val lower = NexlyIcons.cleanPlainText(raw).lowercase()
+    return "calculator" in lower || "estimator" in lower || "simulator" in lower || "pricing model" in lower
 }
 
 private fun classifySectionListMode(headingText: String): SectionListMode {
@@ -404,7 +411,7 @@ private fun StructuredBlockSequenceView(
         }
         val hasCalc = blocks.any {
             (it is Block.WidgetBlock && it.kind == "calc") ||
-                (it is Block.Heading && "calculator" in plainTextOfSpans(it.spans).lowercase())
+                (it is Block.Heading && isCalculatorHeadingTitle(plainTextOfSpans(it.spans)))
         }
         val hasCode = blocks.any { it is Block.CodeBlock }
         if (hasTable) tabs += "Table"
@@ -459,15 +466,15 @@ private fun StructuredBlockSequenceView(
             "Todo" -> !(block is Block.BulletList) && !(block is Block.WidgetBlock && block.kind == "checklist") &&
                 !(block is Block.Heading && classifySectionListMode(plainTextOfSpans(block.spans)) == SectionListMode.TODO)
             "Calculator" -> !(block is Block.WidgetBlock && block.kind == "calc") &&
-                !(block is Block.Heading && "calculator" in plainTextOfSpans(block.spans).lowercase())
+                !(block is Block.Heading && isCalculatorHeadingTitle(plainTextOfSpans(block.spans)))
             "Code" -> block !is Block.CodeBlock
             else -> false
         }
 
         // Coalesce Heading("Quick Calculator" | "Calculator") + Paragraph/BulletList into interactive NexlyQuickCalculatorCard (Screenshot 1)
         if (!skipForTab && block is Block.Heading) {
-            val hTitle = plainTextOfSpans(block.spans).trim()
-            if ("calculator" in hTitle.lowercase() && (nextBlock is Block.Paragraph || nextBlock is Block.BulletList)) {
+            val hTitle = NexlyIcons.cleanPlainText(plainTextOfSpans(block.spans))
+            if (isCalculatorHeadingTitle(hTitle) && (nextBlock is Block.Paragraph || nextBlock is Block.BulletList)) {
                 val bodyText = when (nextBlock) {
                     is Block.Paragraph -> plainTextOfSpans(nextBlock.spans)
                     is Block.BulletList -> nextBlock.items.joinToString(" ") { plainTextOfSpans(it.spans) }
@@ -475,10 +482,15 @@ private fun StructuredBlockSequenceView(
                 }
                 if (bodyText.isNotBlank()) {
                     val nums = Regex("\\d+(?:\\.\\d+)?").findAll(bodyText).mapNotNull { it.value.toDoubleOrNull() }.toList()
-                    val amt = nums.firstOrNull { it >= 50.0 } ?: 1200.0
-                    val disc = nums.firstOrNull { it > 0.0 && it < 50.0 } ?: 10.0
+                    val amt = nums.firstOrNull { it >= 50.0 } ?: nums.firstOrNull() ?: 1200.0
+                    val disc = nums.firstOrNull { it > 0.0 && it < 50.0 && it != amt } ?: 10.0
                     key("calc:${block.sourceStart}") {
-                        NexlyQuickCalculatorCard(title = hTitle, initialAmount = amt, initialDiscount = disc)
+                        NexlyQuickCalculatorCard(
+                            title = hTitle,
+                            initialAmount = amt,
+                            initialDiscount = disc,
+                            contextHint = bodyText
+                        )
                     }
                     if (statusCard != null && (i == statusHostIndex || i + 1 == statusHostIndex)) {
                         onStatusPlaced()
@@ -610,32 +622,32 @@ private fun NexlyContextualActionPillsRow(
         }
         when {
             hasChart && hasTable && hasCode -> listOf(
-                "💬" to "Ask follow-up",
-                "📊" to "Show me a detailed report",
-                "✦" to "Create a presentation"
+                "message-circle" to "Ask follow-up",
+                "chart-bar" to "Show me a detailed report",
+                "sparkles" to "Create a presentation"
             )
             hasChart -> listOf(
-                "⤓" to "Download Report",
-                "⤢" to "View Details"
+                "download" to "Download Report",
+                "arrows-maximize" to "View Details"
             )
             hasTable -> listOf(
-                "📊" to "View Full Report",
-                "🔗" to "Share"
+                "chart-bar" to "View Full Report",
+                "share" to "Share"
             )
             hasSources -> listOf(
-                "↗" to "View All Sources",
-                "📋" to "Copy Citations",
-                "📖" to "Learn More"
+                "external-link" to "View All Sources",
+                "clipboard" to "Copy Citations",
+                "book-2" to "Learn More"
             )
             hasCode -> listOf(
-                "</>" to "Edit Code",
-                "⤓" to "Download Project",
-                "💬" to "Ask Follow Up"
+                "code" to "Edit Code",
+                "download" to "Download Project",
+                "message-circle" to "Ask Follow Up"
             )
             hasPlanOrSteps -> listOf(
-                "📅" to "Make a timeline",
-                "⤢" to "Expand plan",
-                "🔗" to "Share"
+                "calendar" to "Make a timeline",
+                "arrows-maximize" to "Expand plan",
+                "share" to "Share"
             )
             else -> emptyList()
         }
@@ -669,15 +681,14 @@ private fun NexlyContextualActionPillsRow(
                             onSendPrompt?.invoke(label)
                         }
                     }
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
-                Text(
-                    text = icon,
-                    fontSize = 11.5.sp,
-                    color = Color(0xFF5B3DF5),
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(end = 5.dp)
+                NexlyGlassGlyphTile(
+                    name = icon,
+                    size = 20.dp,
+                    glyphSize = 12.dp
                 )
+                Spacer(Modifier.width(6.dp))
                 Text(
                     text = label,
                     fontSize = 11.5.sp,
@@ -861,10 +872,11 @@ private fun appendNexlyText(
             builder.withStyle(
                 SpanStyle(
                     fontFamily = NexlyIcons.family,
-                    fontSize = theme.fontSize * 1.14f,
-                    color = theme.textColor
+                    fontSize = theme.fontSize * 1.12f,
+                    color = Color(0xFF5B3DF5),
+                    background = Color(0xFFEDE6FF)
                 )
-            ) { append(NexlyIcons.glyph(part.value)) }
+            ) { append(" ${NexlyIcons.glyph(part.value)} ") }
         } else {
             builder.append(part.value)
         }
@@ -1012,15 +1024,15 @@ private fun detectCalloutFromSpans(spans: List<InlineSpan>): CalloutParsed? {
     if (spans.isEmpty()) return null
     val first = spans.first()
     if (first is InlineSpan.BoldSpan) {
-        val rawTitle = plainTextOfSpans(first.children).trim().trimEnd(':').trim()
+        val rawTitle = NexlyIcons.cleanPlainText(plainTextOfSpans(first.children)).trimEnd(':').trim()
         val lower = rawTitle.lowercase()
         val toneAndIcon: Pair<CalloutTone, String>? = when {
             lower in setOf("important", "warning", "caution", "attention") ->
-                CalloutTone.WARNING to "⚠️"
+                CalloutTone.WARNING to "alert-triangle"
             lower in setOf("quick summary", "summary", "tl;dr", "tldr", "executive summary") ->
-                CalloutTone.SUMMARY to "⚡"
+                CalloutTone.SUMMARY to "bolt"
             lower in setOf("key insight", "key insights", "quick fact", "pro tip", "tip", "note", "takeaway") ->
-                CalloutTone.FACT to "💡"
+                CalloutTone.FACT to "bulb"
             else -> null
         }
         if (toneAndIcon != null) {
@@ -1053,7 +1065,7 @@ private fun detectCalloutFromSpans(spans: List<InlineSpan>): CalloutParsed? {
             val isWarn = kind in setOf("IMPORTANT", "WARNING", "CAUTION")
             return CalloutParsed(
                 tone = if (isWarn) CalloutTone.WARNING else CalloutTone.FACT,
-                icon = if (isWarn) "⚠️" else "💡",
+                icon = if (isWarn) "alert-triangle" else "bulb",
                 title = if (kind == "IMPORTANT") "Important" else if (isWarn) "Warning" else "Key Insight",
                 bodySpans = rest
             )
@@ -1063,19 +1075,19 @@ private fun detectCalloutFromSpans(spans: List<InlineSpan>): CalloutParsed? {
 }
 
 private fun sectionBadgeForHeadingText(raw: String): String? {
-    val clean = raw.trim()
+    val (leadingIcon, clean) = NexlyIcons.extractLeadingIcon(raw)
+    if (leadingIcon != null) return leadingIcon
     if (clean.isEmpty()) return null
-    val firstCode = clean.codePointAt(0)
-    if (firstCode > 0x2190) return null
     val lower = clean.lowercase()
     return when {
-        "priorit" in lower || "goal" in lower || "objective" in lower -> "🎯"
-        "step-by-step" in lower || "steps" in lower || "plan" in lower || "roadmap" in lower -> "☰"
-        "next action" in lower || "action item" in lower || "checklist" in lower || "todo" in lower -> "☑️"
-        "key source" in lower || "sources" in lower -> "🔗"
-        "reference" in lower || "citation" in lower || "further reading" in lower -> "📖"
-        "feature" in lower || "highlight" in lower || "benefit" in lower -> "✦"
-        lower.startsWith("top ") || "chart" in lower || "metric" in lower || "overview" in lower -> "📊"
+        "priorit" in lower || "goal" in lower || "objective" in lower -> "target"
+        "step-by-step" in lower || "steps" in lower || "plan" in lower || "roadmap" in lower -> "list-check"
+        "next action" in lower || "action item" in lower || "checklist" in lower || "todo" in lower -> "checkbox"
+        "key source" in lower || "sources" in lower -> "link"
+        "reference" in lower || "citation" in lower || "further reading" in lower -> "book-2"
+        "feature" in lower || "highlight" in lower || "benefit" in lower -> "sparkles"
+        "calculator" in lower || "estimator" in lower || "pricing" in lower -> "calculator"
+        lower.startsWith("top ") || "chart" in lower || "metric" in lower || "overview" in lower -> "chart-bar"
         else -> null
     }
 }
@@ -1089,7 +1101,6 @@ private fun NexlyCalloutCard(
     val isWarn = callout.tone == CalloutTone.WARNING
     val bgColor = if (isWarn) Color(0xFFFFF4E6) else Color(0xFFF2ECFF)
     val borderColor = if (isWarn) Color(0xFFF6C88F) else Color(0xFFD9CCFF)
-    val iconBg = if (isWarn) Color(0xFFFDE3C2) else Color(0xFFE4D8FF)
     val titleColor = if (isWarn) Color(0xFF6B3206) else Color(0xFF211845)
     val bodyColor = if (isWarn) Color(0xFF5A3310) else Color(0xFF39325C)
 
@@ -1108,22 +1119,19 @@ private fun NexlyCalloutCard(
             .padding(horizontal = 13.dp, vertical = 11.dp),
         verticalAlignment = Alignment.Top
     ) {
-        Box(
-            modifier = Modifier
-                .size(26.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(iconBg),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(text = callout.icon, fontSize = 14.sp)
-        }
+        NexlyGlassGlyphTile(
+            name = callout.icon,
+            toneName = if (isWarn) "amber" else "lavender",
+            size = 28.dp,
+            glyphSize = 16.dp
+        )
         Spacer(Modifier.width(10.dp))
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = callout.title,
+                text = NexlyIcons.cleanPlainText(callout.title),
                 style = bodyStyle.copy(fontWeight = FontWeight.Bold),
                 color = titleColor
             )
@@ -1174,10 +1182,18 @@ private fun ParagraphBlock(
 @Composable
 private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: Map<Int, String>) {
     val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize, citationUrls)
-    val styled = remember(block.spans, theme) { spansToAnnotatedString(block.spans, theme) }
-    val badge = remember(block.spans, block.level) {
-        if (block.level in 2..3) sectionBadgeForHeadingText(plainTextOfSpans(block.spans)) else null
+    val rawHeadingText = remember(block.spans) { plainTextOfSpans(block.spans) }
+    val badge = remember(rawHeadingText, block.level) {
+        if (block.level in 2..3) sectionBadgeForHeadingText(rawHeadingText) else null
     }
+    val cleanSpans = remember(block.spans) {
+        val first = block.spans.firstOrNull()
+        if (first is InlineSpan.TextSpan) {
+            val (_, stripped) = NexlyIcons.extractLeadingIcon(first.text)
+            listOf(InlineSpan.TextSpan(stripped)) + block.spans.drop(1)
+        } else block.spans
+    }
+    val styled = remember(cleanSpans, theme) { spansToAnnotatedString(cleanSpans, theme) }
     val style = when (block.level) {
         1 -> MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
         2 -> MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
@@ -1194,11 +1210,12 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
         SelectionContainer {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (badge != null) {
-                    Text(
-                        text = badge,
-                        fontSize = if (block.level == 2) 15.sp else 14.sp,
-                        modifier = Modifier.padding(end = 6.dp)
+                    NexlyGlassGlyphTile(
+                        name = badge,
+                        size = if (block.level == 2) 26.dp else 22.dp,
+                        glyphSize = if (block.level == 2) 15.dp else 13.dp
                     )
+                    Spacer(Modifier.width(7.dp))
                 }
                 Text(
                     text = styled,
@@ -1215,15 +1232,52 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
 private fun NexlyQuickCalculatorCard(
     title: String,
     initialAmount: Double,
-    initialDiscount: Double
+    initialDiscount: Double,
+    contextHint: String = ""
 ) {
-    val discounts = remember { listOf(0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 50.0) }
-    var amount by remember(initialAmount) { mutableStateOf(initialAmount) }
-    var discountIdx by remember(initialDiscount) {
-        mutableStateOf(discounts.indexOf(initialDiscount).takeIf { it >= 0 } ?: 2)
+    val lowerHint = remember(title, contextHint) { "$title $contextHint".lowercase() }
+    val initialMode = remember(lowerHint) {
+        when {
+            "tax" in lowerHint || "interest" in lowerHint || "growth" in lowerHint || "markup" in lowerHint || "tip" in lowerHint || "return" in lowerHint -> 1
+            "share" in lowerHint || "commission" in lowerHint || "allocation" in lowerHint -> 2
+            else -> 0
+        }
     }
-    val discountPct = discounts[discountIdx % discounts.size]
-    val total = amount * (1.0 - discountPct / 100.0)
+    val currency = remember(contextHint) {
+        when {
+            "€" in contextHint -> "€"
+            "£" in contextHint -> "£"
+            "¥" in contextHint -> "¥"
+            else -> "$"
+        }
+    }
+    var mode by remember(initialMode) { mutableStateOf(initialMode) } // 0 = Discount (-%), 1 = Growth/Tax (+%), 2 = Share (% of)
+    var amountText by remember(initialAmount) {
+        mutableStateOf(
+            if (initialAmount % 1.0 == 0.0) initialAmount.toLong().toString()
+            else String.format(java.util.Locale.US, "%.2f", initialAmount)
+        )
+    }
+    var rateText by remember(initialDiscount) {
+        mutableStateOf(
+            if (initialDiscount % 1.0 == 0.0) initialDiscount.toLong().toString()
+            else String.format(java.util.Locale.US, "%.1f", initialDiscount)
+        )
+    }
+    val amount = amountText.replace(",", "").toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
+    val ratePct = rateText.replace("%", "").toDoubleOrNull()?.coerceIn(0.0, 100.0) ?: 0.0
+    val deltaVal = amount * (ratePct / 100.0)
+    val total = when (mode) {
+        1 -> amount + deltaVal
+        2 -> deltaVal
+        else -> amount - deltaVal
+    }
+    val modeLabels = listOf("Discount (-%)", "Markup (+%)", "Share (% of)")
+    val rateLabel = when (mode) {
+        1 -> "Rate (+%)"
+        2 -> "Share (%)"
+        else -> "Discount (-%)"
+    }
 
     Column(
         modifier = Modifier
@@ -1239,25 +1293,49 @@ private fun NexlyQuickCalculatorCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "🧮", fontSize = 13.sp, modifier = Modifier.padding(end = 6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                NexlyGlassGlyphTile(
+                    name = "calculator",
+                    toneName = "blue",
+                    size = 26.dp,
+                    glyphSize = 15.dp
+                )
                 Text(
-                    text = title.ifBlank { "Quick Calculator" },
+                    text = NexlyIcons.cleanPlainText(title).ifBlank { "Quick Calculator" },
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF211845)
                 )
             }
-            Text(
-                text = "Clear",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF6C4CF6),
-                modifier = Modifier.clickable {
-                    amount = initialAmount
-                    discountIdx = 2
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color(0xFFEDE5FF))
+                        .clickable { mode = (mode + 1) % modeLabels.size }
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = modeLabels[mode],
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF5B3DF5)
+                    )
                 }
-            )
+                Text(
+                    text = "Reset",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF6C4CF6),
+                    modifier = Modifier.clickable {
+                        mode = initialMode
+                        amountText = if (initialAmount % 1.0 == 0.0) initialAmount.toLong().toString()
+                        else String.format(java.util.Locale.US, "%.2f", initialAmount)
+                        rateText = if (initialDiscount % 1.0 == 0.0) initialDiscount.toLong().toString()
+                        else String.format(java.util.Locale.US, "%.1f", initialDiscount)
+                    }
+                )
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1265,48 +1343,61 @@ private fun NexlyQuickCalculatorCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Amount", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Amount ($currency)", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color.White.copy(alpha = 0.9f))
+                        .background(Color.White.copy(alpha = 0.92f))
                         .border(1.dp, Color(0xFFE0D8FA), RoundedCornerShape(8.dp))
-                        .clickable { amount = if (amount >= 5000.0) 500.0 else amount + 300.0 }
                         .padding(horizontal = 10.dp, vertical = 7.dp)
                 ) {
-                    Text(
-                        text = String.format(java.util.Locale.US, "%.0f", amount),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF211845)
+                    BasicTextField(
+                        value = amountText,
+                        onValueChange = { next ->
+                            if (next.length <= 12 && next.all { it.isDigit() || it == '.' }) {
+                                amountText = next
+                            }
+                        },
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF211845)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Discount", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(
+                Text(rateLabel, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color.White.copy(alpha = 0.9f))
+                        .background(Color.White.copy(alpha = 0.92f))
                         .border(1.dp, Color(0xFFE0D8FA), RoundedCornerShape(8.dp))
-                        .clickable { discountIdx = (discountIdx + 1) % discounts.size }
-                        .padding(horizontal = 10.dp, vertical = 7.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 10.dp, vertical = 7.dp)
                 ) {
-                    Text(
-                        text = String.format(java.util.Locale.US, "%.0f%%", discountPct),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF211845)
+                    BasicTextField(
+                        value = rateText,
+                        onValueChange = { next ->
+                            if (next.length <= 6 && next.all { it.isDigit() || it == '.' }) {
+                                rateText = next
+                            }
+                        },
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF211845)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    Text("▾", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Total", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Result", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1316,13 +1407,59 @@ private fun NexlyQuickCalculatorCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = String.format(java.util.Locale.US, "$%.2f", total),
+                        text = String.format(java.util.Locale.US, "%s%.2f", currency, total),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF5B3DF5)
+                        color = Color(0xFF5B3DF5),
+                        maxLines = 1
                     )
                 }
             }
+        }
+        Slider(
+            value = ratePct.toFloat(),
+            onValueChange = { v ->
+                rateText = String.format(java.util.Locale.US, "%.0f", v)
+            },
+            valueRange = 0f..100f,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(22.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf(5, 10, 15, 20, 25, 50).forEach { preset ->
+                    val active = kotlin.math.abs(ratePct - preset) < 0.5
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (active) Color(0xFF6C4CF6) else Color(0xFFF3EEFF))
+                            .clickable { rateText = preset.toString() }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "$preset%",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (active) Color.White else Color(0xFF4F35E8)
+                        )
+                    }
+                }
+            }
+            Text(
+                text = when (mode) {
+                    1 -> "+${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
+                    2 -> "${String.format(java.util.Locale.US, "%.1f%%", ratePct)} of base"
+                    else -> "Saved ${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
+                },
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF5B3DF5)
+            )
         }
     }
 }
@@ -1426,6 +1563,8 @@ private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>, all
 private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citationUrls: Map<Int, String>) {
     val sectionMode = LocalSectionListMode.current
     var addedTasks by remember(block.sourceStart) { mutableStateOf(listOf<String>()) }
+    var isAddingTask by remember(block.sourceStart) { mutableStateOf(false) }
+    var draftTaskText by remember(block.sourceStart) { mutableStateOf("") }
 
     val sourceItems = remember(block.items, sectionMode) {
         if (sectionMode == SectionListMode.SOURCES) {
@@ -1484,31 +1623,108 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                 item = ListItem(spans = listOf(InlineSpan.TextSpan(taskText)), checked = false),
                 index = block.items.size + idx,
                 selectable = false,
-                citationUrls = citationUrls
+                citationUrls = citationUrls,
+                onRemove = {
+                    addedTasks = addedTasks.filterIndexed { i, _ -> i != idx }
+                }
             )
         }
         if (sectionMode == SectionListMode.TODO || block.items.any { it.checked != null }) {
-            Row(
-                modifier = Modifier
-                    .padding(top = 2.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Color.White.copy(alpha = 0.8f))
-                    .border(1.dp, Color(0xFFE0D8FA), RoundedCornerShape(999.dp))
-                    .clickable {
-                        addedTasks = addedTasks + "Follow-up action item #${block.items.size + addedTasks.size + 1}"
+            if (isAddingTask) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.White.copy(alpha = 0.92f))
+                        .border(1.dp, Color(0xFFD6CBF9), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (draftTaskText.isEmpty()) {
+                            Text(
+                                text = "Type a new task…",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        BasicTextField(
+                            value = draftTaskText,
+                            onValueChange = { draftTaskText = it },
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                fontSize = 12.5.sp,
+                                color = Color(0xFF211845)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "+ Add Task",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF5B3DF5)
-                )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(Color(0xFF6C4CF6))
+                            .clickable {
+                                val clean = draftTaskText.trim()
+                                if (clean.isNotEmpty()) {
+                                    addedTasks = addedTasks + clean
+                                    draftTaskText = ""
+                                    isAddingTask = false
+                                }
+                            }
+                            .padding(horizontal = 9.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "Add",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                    Text(
+                        text = "Cancel",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.clickable {
+                            draftTaskText = ""
+                            isAddingTask = false
+                        }
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color.White.copy(alpha = 0.8f))
+                        .border(1.dp, Color(0xFFE0D8FA), RoundedCornerShape(999.dp))
+                        .clickable { isAddingTask = true }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    NexlyGlyph(
+                        name = "plus",
+                        size = 12.dp,
+                        color = Color(0xFF5B3DF5)
+                    )
+                    Text(
+                        text = "Add Task",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF5B3DF5)
+                    )
+                }
             }
         }
     }
+}
+
+private fun extractExplicitTaskTag(text: String): String? {
+    val m = Regex("(?:\\(([^)]{2,18})\\)|\\[([^\\]]{2,18})])$").find(text.trim())
+    return m?.groupValues?.get(1)?.ifEmpty { m.groupValues[2] }?.trim()
 }
 
 @Composable
@@ -1517,15 +1733,22 @@ private fun InteractiveChecklistItemRow(
     item: ListItem,
     index: Int = 0,
     selectable: Boolean,
-    citationUrls: Map<Int, String>
+    citationUrls: Map<Int, String>,
+    onRemove: (() -> Unit)? = null
 ) {
     var checked by remember(item.spans, initialChecked) { mutableStateOf(initialChecked) }
+    var priorityIdx by remember(item.spans, index) { mutableStateOf(0) }
+    val priorityLabels = remember { listOf("Todo", "In Progress", "High") }
     val bodyStyle = LocalNexlyProseStyle.current ?: MaterialTheme.typography.bodyMedium
     val ink = if (checked) MaterialTheme.colorScheme.onSurfaceVariant else (bodyStyle.color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface)
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
     val styled = remember(item.spans, theme) { spansToAnnotatedString(item.spans, theme) }
-    val dueLabels = remember { listOf("Today", "Today", "Apr 28", "Apr 30", "May 2") }
-    val dueLabel = dueLabels[index % dueLabels.size]
+    val explicitTag = remember(item.spans) { extractExplicitTaskTag(plainTextOfSpans(item.spans)) }
+    val statusLabel = when {
+        checked -> "Done"
+        explicitTag != null -> explicitTag
+        else -> priorityLabels[priorityIdx % priorityLabels.size]
+    }
 
     Column {
         Row(
@@ -1549,11 +1772,11 @@ private fun InteractiveChecklistItemRow(
                 contentAlignment = Alignment.Center
             ) {
                 if (checked) {
-                    Text(
-                        text = "✓",
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                    Icon(
+                        imageVector = GsIcons.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp)
                     )
                 }
             }
@@ -1567,18 +1790,47 @@ private fun InteractiveChecklistItemRow(
                 modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(6.dp))
-            Text(
-                text = dueLabel,
-                fontSize = 10.5.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.width(5.dp))
-            Text(
-                text = "⋮⋮",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
-            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(
+                        when {
+                            checked -> Color(0xFFE6F9F0)
+                            statusLabel == "High" -> Color(0xFFFDECEC)
+                            else -> Color(0xFFF3EEFF)
+                        }
+                    )
+                    .clickable(enabled = !checked && explicitTag == null) {
+                        priorityIdx = (priorityIdx + 1) % priorityLabels.size
+                    }
+                    .padding(horizontal = 7.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = statusLabel,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = when {
+                        checked -> Color(0xFF129A5A)
+                        statusLabel == "High" -> Color(0xFFE04F5F)
+                        else -> Color(0xFF5B3DF5)
+                    }
+                )
+            }
+            if (onRemove != null) {
+                Spacer(Modifier.width(4.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable { onRemove() }
+                        .padding(3.dp)
+                ) {
+                    NexlyGlyph(
+                        name = "x",
+                        size = 11.dp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
         if (item.children.isNotEmpty()) {
             Column(
@@ -1746,15 +1998,45 @@ private fun ListItemRow(
     val bodyStyle = compact ?: MaterialTheme.typography.bodyMedium
     val ink = compact?.color ?: MaterialTheme.colorScheme.onSurface
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
-    val styled = remember(item.spans, theme) { spansToAnnotatedString(item.spans, theme) }
+    val leadingIconAndSpans = remember(item.spans) {
+        val first = item.spans.firstOrNull()
+        if (first is InlineSpan.TextSpan) {
+            val (icon, stripped) = NexlyIcons.extractLeadingIcon(first.text)
+            if (icon != null) icon to (listOf(InlineSpan.TextSpan(stripped)) + item.spans.drop(1))
+            else null to item.spans
+        } else null to item.spans
+    }
+    val leadingIcon = leadingIconAndSpans.first
+    val styled = remember(leadingIconAndSpans.second, theme) {
+        spansToAnnotatedString(leadingIconAndSpans.second, theme)
+    }
     Column {
         Row(verticalAlignment = Alignment.Top) {
-            Text(
-                text = marker,
-                style = bodyStyle.copy(fontWeight = FontWeight.Bold),
-                color = markerColor,
-                modifier = Modifier.padding(end = 7.dp)
-            )
+            if (leadingIcon != null) {
+                NexlyGlassGlyphTile(
+                    name = leadingIcon,
+                    size = 20.dp,
+                    glyphSize = 12.dp,
+                    modifier = Modifier.padding(top = 1.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+            } else if (marker == "✓") {
+                NexlyGlassGlyphTile(
+                    name = "circle-check",
+                    toneName = "lavender",
+                    size = 20.dp,
+                    glyphSize = 12.dp,
+                    modifier = Modifier.padding(top = 1.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+            } else {
+                Text(
+                    text = marker,
+                    style = bodyStyle.copy(fontWeight = FontWeight.Bold),
+                    color = markerColor,
+                    modifier = Modifier.padding(end = 7.dp)
+                )
+            }
             val content = @Composable {
                 Text(
                     text = styled,
@@ -1836,6 +2118,11 @@ private fun BlockQuoteView(block: Block.BlockQuote, selectable: Boolean, citatio
 // Table
 // ---------------------------------------------------------------------------
 
+private fun parseSortableNumberAndroid(raw: String): Double? {
+    val clean = raw.replace(Regex("[,$€£¥%↑↓↗↘+\\s]"), "")
+    return clean.toDoubleOrNull()
+}
+
 @Composable
 private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citationUrls: Map<Int, String>) {
     val theme = rememberSpanTheme(MaterialTheme.typography.bodySmall.fontSize, citationUrls)
@@ -1844,12 +2131,27 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
     val allRows = remember(block.rows, theme) { block.rows.map { row -> row.map { spansToAnnotatedString(it, theme) } } }
     val columns = maxOf(headers.size, block.aligns.size, 1)
 
-    var pageSize by remember(block) { mutableStateOf(5) }
+    var sortCol by remember(block) { mutableStateOf<Int?>(null) }
+    var sortAsc by remember(block) { mutableStateOf(true) }
+    var pageSize by remember(block) { mutableStateOf(if (allRows.size in 4..5) 3 else 5) }
     var page by remember(block) { mutableStateOf(0) }
-    val totalPages = maxOf(1, (allRows.size + pageSize - 1) / pageSize)
+
+    val sortedRows = remember(allRows, sortCol, sortAsc) {
+        val sc = sortCol ?: return@remember allRows
+        allRows.sortedWith { a, b ->
+            val av = a.getOrNull(sc)?.text?.trim().orEmpty()
+            val bv = b.getOrNull(sc)?.text?.trim().orEmpty()
+            val an = parseSortableNumberAndroid(av)
+            val bn = parseSortableNumberAndroid(bv)
+            val cmp = if (an != null && bn != null) an.compareTo(bn) else av.compareTo(bv, ignoreCase = true)
+            if (sortAsc) cmp else -cmp
+        }
+    }
+
+    val totalPages = maxOf(1, (sortedRows.size + pageSize - 1) / pageSize)
     val safePage = page.coerceIn(0, totalPages - 1)
-    val rows = remember(allRows, safePage, pageSize) {
-        allRows.drop(safePage * pageSize).take(pageSize)
+    val rows = remember(sortedRows, safePage, pageSize) {
+        sortedRows.drop(safePage * pageSize).take(pageSize)
     }
 
     // A markdown table with a readable numeric column can also be a chart —
@@ -1888,12 +2190,28 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
 
             val tableHeader: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
                 headers.forEachIndexed { c, header ->
-                    TableCell(
-                        text = header,
-                        width = cellWidth,
-                        align = block.aligns.getOrElse(c) { TableAlign.LEFT },
-                        emphasize = true
-                    )
+                    val sorted = sortCol == c
+                    val hLabel = if (sorted) {
+                        AnnotatedString("${header.text} ${if (sortAsc) "↑" else "↓"}")
+                    } else header
+                    Box(
+                        modifier = Modifier.clickable {
+                            if (sortCol == c) sortAsc = !sortAsc else {
+                                sortCol = c
+                                sortAsc = true
+                            }
+                            page = 0
+                        }
+                    ) {
+                        Row {
+                            TableCell(
+                                text = hLabel,
+                                width = cellWidth,
+                                align = block.aligns.getOrElse(c) { TableAlign.LEFT },
+                                emphasize = true
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1972,8 +2290,9 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
             }
         }
 
-        if (allRows.size >= 4) {
-            val displayTotalPages = maxOf(totalPages, if (allRows.size >= 5) 3 else 1)
+        if (sortedRows.size >= 4) {
+            val startRow = safePage * pageSize + 1
+            val endRow = minOf(sortedRows.size, (safePage + 1) * pageSize)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1996,14 +2315,14 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
                             .clickable(enabled = safePage > 0) { page = (safePage - 1).coerceAtLeast(0) }
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     )
-                    (0 until displayTotalPages).forEach { p ->
+                    (0 until totalPages).forEach { p ->
                         val active = p == safePage
                         Box(
                             modifier = Modifier
                                 .size(22.dp)
                                 .clip(CircleShape)
                                 .background(if (active) Color(0xFF6C4CF6) else Color.Transparent)
-                                .clickable { if (p < totalPages) page = p },
+                                .clickable { page = p },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -2024,6 +2343,12 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
                             .clickable(enabled = safePage < totalPages - 1) { page = (safePage + 1).coerceAtMost(totalPages - 1) }
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     )
+                    Text(
+                        text = "$startRow–$endRow of ${sortedRows.size}",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
                 }
                 Box(
                     modifier = Modifier
@@ -2032,9 +2357,10 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
                         .border(1.dp, outline.copy(alpha = 0.35f), RoundedCornerShape(7.dp))
                         .clickable {
                             pageSize = when (pageSize) {
+                                3 -> 5
                                 5 -> 10
                                 10 -> 25
-                                else -> 5
+                                else -> 3
                             }
                             page = 0
                         }
@@ -2053,10 +2379,10 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
 }
 
 private fun markdownEntityBadgeForCell(raw: String): Pair<String, Color>? {
-    val clean = raw.trim().lowercase()
+    val clean = NexlyIcons.cleanPlainText(raw).lowercase()
     return when {
-        clean == "python" -> "🐍" to Color(0xFF3776AB)
-        clean == "java" -> "☕" to Color(0xFFE76F00)
+        clean == "python" -> "Py" to Color(0xFF3776AB)
+        clean == "java" -> "Jv" to Color(0xFFE76F00)
         clean == "c++" -> "C+" to Color(0xFF00599C)
         clean == "c" -> "C" to Color(0xFF283593)
         clean == "javascript" || clean == "js" -> "JS" to Color(0xFFE6A700)
@@ -2065,8 +2391,8 @@ private fun markdownEntityBadgeForCell(raw: String): Pair<String, Color>? {
         clean == "go" || clean == "golang" -> "Go" to Color(0xFF00ADD8)
         clean == "swift" -> "Sw" to Color(0xFFF05138)
         clean == "kotlin" -> "Kt" to Color(0xFF7F52FF)
-        clean.startsWith("nexly") -> "✦" to Color(0xFF6C4CF6)
-        clean.startsWith("data") -> "📊" to Color(0xFF3B82F6)
+        clean.startsWith("nexly") -> "Nx" to Color(0xFF6C4CF6)
+        clean.startsWith("data") -> "Dt" to Color(0xFF3B82F6)
         else -> null
     }
 }
@@ -2463,8 +2789,13 @@ private fun CitationsBlockView(block: Block.CitationsBlock) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "🔗", fontSize = 13.sp, modifier = Modifier.padding(end = 5.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                NexlyGlassGlyphTile(
+                    name = "link",
+                    toneName = "lavender",
+                    size = 24.dp,
+                    glyphSize = 14.dp
+                )
                 Text(
                     text = "Key Sources",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
@@ -2514,13 +2845,13 @@ private fun CitationsBlockView(block: Block.CitationsBlock) {
                     verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     Text(
-                        text = citation.title,
+                        text = NexlyIcons.cleanPlainText(citation.title),
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                         color = Color(0xFF1F1842)
                     )
                     if (citation.snippet.isNotBlank()) {
                         Text(
-                            text = citation.snippet,
+                            text = NexlyIcons.cleanPlainText(citation.snippet),
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFF4F4872),
                             maxLines = 2
@@ -2539,14 +2870,21 @@ private fun CitationsBlockView(block: Block.CitationsBlock) {
                             color = Color(0xFF5B3DF5),
                             maxLines = 1
                         )
-                        Box(
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(if (academic) Color(0xFFEFEAFF) else Color(0xFFE6F9F0))
                                 .padding(horizontal = 8.dp, vertical = 2.dp)
                         ) {
+                            NexlyGlyph(
+                                name = if (academic) "building-bank" else "shield-check",
+                                size = 11.dp,
+                                color = if (academic) Color(0xFF5B3DF5) else Color(0xFF129A5A)
+                            )
                             Text(
-                                text = if (academic) "🏛 Academic" else "✓ Trusted Source",
+                                text = if (academic) "Academic" else "Trusted Source",
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (academic) Color(0xFF5B3DF5) else Color(0xFF129A5A)

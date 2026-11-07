@@ -328,6 +328,7 @@ export const EMOJI_TO_ICON: Record<string, string> = {
   '🌙': 'moon',
   '😴': 'moon',
   '✨': 'sparkles',
+  '✦': 'sparkles',
   '🧠': 'brain',
   '⚙️': 'settings',
   '⚙': 'settings',
@@ -337,6 +338,8 @@ export const EMOJI_TO_ICON: Record<string, string> = {
   '❤': 'heart',
   '✅': 'circle-check',
   '✔️': 'circle-check',
+  '☑️': 'checkbox',
+  '☑': 'checkbox',
   '⭐': 'star',
   '🎯': 'target',
   '☕': 'coffee',
@@ -345,6 +348,85 @@ export const EMOJI_TO_ICON: Record<string, string> = {
   '🚶': 'walk',
   '📅': 'calendar',
   '⏰': 'clock',
+  '⏱️': 'clock',
+  '⏳': 'hourglass',
+  '⚡': 'bolt',
+  '⚠️': 'alert-triangle',
+  '⚠': 'alert-triangle',
+  '💡': 'bulb',
+  '📊': 'chart-bar',
+  '📈': 'trending-up',
+  '📉': 'trending-down',
+  '👥': 'users',
+  '👤': 'user',
+  '🧮': 'calculator',
+  '🔗': 'link',
+  '🌐': 'world',
+  '🌍': 'world',
+  '🌎': 'world',
+  '🌏': 'world',
+  '🏛️': 'building-bank',
+  '🏛': 'building-bank',
+  '🚀': 'rocket',
+  '🔒': 'lock',
+  '🔓': 'lock-open',
+  '🛡️': 'shield',
+  '🛡': 'shield',
+  '🐍': 'brand-python',
+  '🔍': 'search',
+  '🔎': 'search',
+  '📌': 'pin',
+  '📎': 'paperclip',
+  '📋': 'clipboard',
+  '📁': 'folder',
+  '📂': 'folder-open',
+  '💬': 'message-circle',
+  '💭': 'message-circle',
+  '🔔': 'bell',
+  '💰': 'coin',
+  '💵': 'cash',
+  '💳': 'credit-card',
+  '🏆': 'trophy',
+  '🥇': 'trophy',
+  '🎉': 'sparkles',
+  '🧪': 'flask',
+  '🧬': 'dna',
+  '🔬': 'microscope',
+  '🎓': 'school',
+  '✈️': 'plane',
+  '🚗': 'car',
+  '🏠': 'home',
+  '🌱': 'plant',
+  '🌿': 'leaf',
+  '🔋': 'battery',
+  '🔌': 'plug',
+  '🧭': 'compass',
+  '🗺️': 'map',
+  '🔑': 'key',
+  '🛠️': 'tools',
+  '🛠': 'tools',
+  '🔧': 'tool',
+  '📱': 'device-mobile',
+  '🛒': 'shopping-cart',
+  '🧾': 'receipt',
+  '📧': 'mail',
+  '✉️': 'mail',
+  '📞': 'phone',
+  '🎥': 'video',
+  '📷': 'camera',
+  '🖼️': 'photo',
+  '🖼': 'photo',
+  '🎬': 'movie',
+  '👍': 'thumb-up',
+  '👎': 'thumb-down',
+  '😊': 'mood-smile',
+  '😀': 'mood-smile',
+  '🤔': 'brain',
+  '❌': 'circle-x',
+  '❓': 'help-circle',
+  '❗': 'alert-circle',
+  'ℹ️': 'info-circle',
+  'ℹ': 'info-circle',
 }
 
 /** Replace known emoji with :icon: tokens; unknown pictographs are dropped. */
@@ -358,5 +440,23 @@ export function emojiToIconTokens(text: string): string {
   // Any remaining Extended_Pictographic codepoint is not allowed in the DOM.
   return out
     .replace(/\p{Extended_Pictographic}/gu, '')
-    .replace(/[\u2640\u2642\uFE0F\u200D]/g, '')
+    .replace(/[\u2600-\u27BF\u2300-\u23FF\u2B50\u2B55\u2640\u2642\uFE0F\u200D\u20E3]/gu, '')
 }
+
+/** Extract a leading :icon: token (or converted leading emoji) and return { icon, rest }. */
+export function extractLeadingIcon(raw: string): { icon: string | null; rest: string } {
+  const normalized = emojiToIconTokens(raw).trimStart()
+  const m = normalized.match(/^:([a-z0-9-]+):\s*([\s\S]*)$/)
+  if (!m) return { icon: null, rest: normalized }
+  return { icon: canonicalIconName(m[1]) ?? m[1], rest: m[2] }
+}
+
+/** Strip both raw emojis and :icon: tokens for clean plain-text headings/labels. */
+export function cleanPlainText(raw: string): string {
+  return emojiToIconTokens(raw)
+    .replace(/:([a-z0-9-]+):/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+

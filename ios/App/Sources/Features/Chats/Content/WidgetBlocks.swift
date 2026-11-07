@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import WebKit
 
 /// iOS twin of `android/.../WidgetBlocks.kt` + `WidgetsV2.kt` + `ContentBlocks.kt`
 /// widget catalogue. Accepts all 36 `WIDGET_KINDS` and every sub-type alias
@@ -444,6 +445,124 @@ private func dbl(_ dict: [String: Any], _ keys: String..., fallback: Double = 0)
     return fallback
 }
 
+private func widgetTagGlassIconIOS(_ tag: String) -> (icon: String, tone: NexlyGlassTone) {
+    switch tag.lowercased() {
+    case "chart": return ("chart-bar", .lavender)
+    case "table": return ("list-check", .cyan)
+    case "calc", "calculator": return ("calculator", .amber)
+    case "stat", "kpi", "metric": return ("trending-up", .green)
+    case "compare", "versus": return ("arrows-sort", .lavender)
+    case "timeline", "schedule", "calendar": return ("calendar", .blue)
+    case "quiz", "poll", "choices": return ("help-circle", .lavender)
+    case "form", "input": return ("edit", .cyan)
+    case "checklist", "productivity", "kanban", "todo": return ("checkbox", .green)
+    case "code", "terminal", "diff": return ("code", .slate)
+    case "tree", "hierarchy", "flow", "diagram": return ("target", .teal)
+    case "citation", "sources", "links": return ("link", .blue)
+    case "alert", "callout", "warning": return ("alert-triangle", .amber)
+    default: return ("sparkles", .lavender)
+    }
+}
+
+private struct HtmlSandboxWebView: UIViewRepresentable {
+    let html: String
+    @Binding var dynamicHeight: CGFloat
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.userContentController.add(context.coordinator, name: "gsResize")
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.isOpaque = false
+        webView.backgroundColor = .clear
+        webView.scrollView.backgroundColor = .clear
+        webView.scrollView.isScrollEnabled = false
+        webView.navigationDelegate = context.coordinator
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        let wrapped = """
+        <!doctype html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+        <style>
+        :root {
+          --gs-text: #1E1638;
+          --gs-text-2: #4A416E;
+          --gs-text-3: #7A719E;
+          --gs-surface: rgba(255,255,255,0.82);
+          --gs-raised: rgba(243,238,255,0.92);
+          --gs-border: rgba(108,76,246,0.22);
+          --gs-accent: #6C4CF6;
+          --gs-hue-1: #6C4CF6; --gs-hue-2: #06B6D4; --gs-hue-3: #10B981;
+          --gs-hue-4: #F59E0B; --gs-hue-5: #EC4899; --gs-hue-6: #3B82F6;
+          --gs-radius: 14px; --gs-space: 8px;
+          --gs-font: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        * { box-sizing: border-box; }
+        html, body {
+          margin: 0; padding: 4px;
+          font-family: var(--gs-font);
+          color: var(--gs-text);
+          background: transparent;
+        }
+        button, input, select {
+          font-family: inherit;
+        }
+        svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+        </style>
+        </head>
+        <body>
+        \(html)
+        <script>
+        function reportHeight() {
+          var h = Math.max(document.body.scrollHeight || 0, document.documentElement.scrollHeight || 0, 80);
+          if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.gsResize) {
+            window.webkit.messageHandlers.gsResize.postMessage(h);
+          }
+        }
+        window.addEventListener('load', reportHeight);
+        window.addEventListener('click', function() { setTimeout(reportHeight, 50); });
+        window.addEventListener('input', function() { setTimeout(reportHeight, 50); });
+        setTimeout(reportHeight, 120);
+        </script>
+        </body>
+        </html>
+        """
+        if context.coordinator.lastLoaded != wrapped {
+            context.coordinator.lastLoaded = wrapped
+            webView.loadHTMLString(wrapped, baseURL: nil)
+        }
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        var parent: HtmlSandboxWebView
+        var lastLoaded: String = ""
+
+        init(_ parent: HtmlSandboxWebView) {
+            self.parent = parent
+        }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if let h = message.body as? CGFloat {
+                DispatchQueue.main.async {
+                    self.parent.dynamicHeight = min(max(h + 12, 90), 560)
+                }
+            } else if let n = message.body as? NSNumber {
+                DispatchQueue.main.async {
+                    self.parent.dynamicHeight = min(max(CGFloat(truncating: n) + 12, 90), 560)
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Top-level Widget & HTML Views
 
 struct WidgetBlockView: View {
@@ -468,11 +587,20 @@ struct WidgetBlockView: View {
                 ? resolvedKind
                 : (inferWidgetKind(json) ?? resolvedKind)
             let accent = WidgetPalette.parseHex(obj["accent"] as? String) ?? WidgetPalette.at( abs(effectiveKind.hashValue) )
-            let title = str(obj, "title", "heading", "name", "question")
+            let rawTitle = str(obj, "title", "heading", "name", "question")
+            let (explicitIcon, strippedTitle) = NexlyIcons.extractLeadingIcon(rawTitle)
+            let cleanTitle = NexlyIcons.cleanPlainText(strippedTitle)
+            let tagIcon = widgetTagGlassIconIOS(effectiveKind)
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .center, spacing: 8) {
-                    if !title.isEmpty {
-                        Text(title)
+                    NexlyGlassGlyphTile(
+                        name: explicitIcon ?? tagIcon.icon,
+                        tone: tagIcon.tone,
+                        size: 24,
+                        glyphSize: 14
+                    )
+                    if !cleanTitle.isEmpty {
+                        Text(cleanTitle)
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(Aero.text)
                             .lineLimit(2)
@@ -500,10 +628,17 @@ struct HtmlBlockView: View {
     let kind: String
     let source: String
     let open: Bool
+    @State private var webHeight: CGFloat = 180
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(spacing: 8) {
+                NexlyGlassGlyphTile(
+                    name: kind == "map" ? "world" : "code",
+                    tone: .cyan,
+                    size: 22,
+                    glyphSize: 13
+                )
                 Text(kind.uppercased())
                     .font(.system(size: 10, weight: .bold, design: .rounded))
                     .foregroundStyle(WidgetPalette.at(5))
@@ -513,7 +648,7 @@ struct HtmlBlockView: View {
                 Spacer()
             }
             if kind == "map", let obj = parseRelaxedJSONObject(kind: "map", raw: source) {
-                let title = str(obj, "title", "label", "name")
+                let title = NexlyIcons.cleanPlainText(str(obj, "title", "label", "name"))
                 let mode = str(obj, "mode")
                 let rawPins = ((obj["pins"] ?? obj["markers"] ?? obj["locations"] ?? obj["places"]) as? [[String: Any]]) ?? []
                 let rawStops = ((obj["stops"] ?? obj["waypoints"] ?? obj["itinerary"]) as? [[String: Any]]) ?? []
@@ -532,8 +667,8 @@ struct HtmlBlockView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(Array(places.prefix(12).enumerated()), id: \.offset) { idx, p in
-                                let lbl = str(p, "label", "title", "name", "place")
-                                let det = str(p, "detail", "description", "address")
+                                let lbl = NexlyIcons.cleanPlainText(str(p, "label", "title", "name", "place"))
+                                let det = NexlyIcons.cleanPlainText(str(p, "detail", "description", "address"))
                                 let pLat = dbl(p, "lat", "latitude")
                                 let pLng = dbl(p, "lng", "lon", "longitude")
                                 VStack(alignment: .leading, spacing: 3) {
@@ -567,7 +702,7 @@ struct HtmlBlockView: View {
                             let dist = str((st as? [String: Any]) ?? [:], "distance", "dist", "duration")
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
                                 Text("\(idx + 1).").font(.system(size: 11, weight: .bold)).foregroundStyle(WidgetPalette.at(5))
-                                Text(instruction).font(.system(size: 12)).foregroundStyle(Aero.text)
+                                Text(NexlyIcons.cleanPlainText(instruction)).font(.system(size: 12)).foregroundStyle(Aero.text)
                                 Spacer()
                                 if !dist.isEmpty {
                                     Text(dist).font(Aero.mono(10)).foregroundStyle(Aero.textSecondary)
@@ -576,22 +711,19 @@ struct HtmlBlockView: View {
                         }
                     }
                 }
-            } else {
-                let stripped = source
-                    .replacingOccurrences(of: "<style[^>]*>[\\s\\S]*?</style>", with: "", options: .regularExpression)
-                    .replacingOccurrences(of: "<script[^>]*>[\\s\\S]*?</script>", with: "", options: .regularExpression)
-                    .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
-                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if !stripped.isEmpty {
-                    Text(stripped)
-                        .font(Aero.body())
-                        .foregroundStyle(Aero.text)
-                } else {
-                    Text("Interactive \(kind.uppercased()) surface (\(source.count) chars)")
+            } else if open {
+                HStack(spacing: 8) {
+                    ProgressView().scaleEffect(0.8)
+                    Text("Rendering \(kind)…")
                         .font(Aero.caption())
                         .foregroundStyle(Aero.textSecondary)
                 }
+                .frame(maxWidth: .infinity, minHeight: 72)
+            } else {
+                HtmlSandboxWebView(html: source, dynamicHeight: $webHeight)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: webHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         }
         .padding(14)
@@ -664,10 +796,8 @@ private struct ChartBodyView: View {
     let accent: Color
 
     @State private var activeType: String = ""
-    @State private var rangeIdx: Int = 2
+    @State private var rangeIdx: Int = 0
     @State private var selectedIdx: Int? = nil
-
-    private let rangeOptions = ["Last 7 Days", "Last 30 Days", "Last 6 Months", "Last 12 Months"]
 
     private struct BarPoint: Identifiable {
         let id = UUID()
@@ -688,7 +818,7 @@ private struct ChartBodyView: View {
         activeType.isEmpty ? initialChartType : activeType
     }
 
-    private var points: [BarPoint] {
+    private var allPoints: [BarPoint] {
         var out: [BarPoint] = []
         let labels = (obj["labels"] as? [Any])?.map { "\($0)" } ?? []
         if let series = obj["series"] as? [[String: Any]] {
@@ -722,6 +852,25 @@ private struct ChartBodyView: View {
         return out
     }
 
+    private var slicedRange: (points: [BarPoint], label: String) {
+        let base = allPoints
+        let n = base.count
+        guard n > 2 else { return (base, "All (\(n) pts)") }
+        let q3 = max(2, (n * 3 + 3) / 4)
+        let half = max(2, (n + 1) / 2)
+        let specs: [(String, Int, Int)] = [
+            ("All (\(n) pts)", 0, n),
+            ("Last \(q3) pts", n - q3, n),
+            ("Last \(half) pts", n - half, n),
+            ("First \(half) pts", 0, half)
+        ]
+        let spec = specs[rangeIdx % specs.count]
+        let slice = Array(base[spec.1..<spec.2]).enumerated().map { idx, pt in
+            BarPoint(index: idx, seriesName: pt.seriesName, label: pt.label, value: pt.value, color: pt.color)
+        }
+        return (slice, spec.0)
+    }
+
     private func compactNumber(_ n: Double, unit: String) -> String {
         let prefix = ["$", "€", "£"].contains(unit) ? unit : ""
         let suffix = (!unit.isEmpty && prefix.isEmpty) ? unit : ""
@@ -732,15 +881,15 @@ private struct ChartBodyView: View {
         return String(format: "%@%.1f%@", prefix, n, suffix)
     }
 
-    private static let chartTypeTabs: [(id: String, label: String)] = [
-        ("line", "📈 Line"),
-        ("bar", "📊 Bar"),
-        ("area", "📉 Area"),
-        ("pie", "◔ Pie")
+    private static let chartTypeTabs: [(id: String, icon: String, label: String)] = [
+        ("line", "chart-line", "Line"),
+        ("bar", "chart-bar", "Bar"),
+        ("area", "chart-area", "Area"),
+        ("pie", "chart-pie", "Pie")
     ]
 
     var body: some View {
-        let pts = points
+        let (pts, rangeLabel) = slicedRange
         let maxVal = max(pts.map { abs($0.value) }.max() ?? 1.0, 0.0001)
         let totalVal = max(pts.map { max(0, $0.value) }.reduce(0, +), 0.0001)
         let unit = str(obj, "unit")
@@ -754,21 +903,27 @@ private struct ChartBodyView: View {
                 HStack(spacing: 3) {
                     ForEach(Array(Self.chartTypeTabs.enumerated()), id: \.offset) { _, tab in
                         let tabId = tab.id
-                        let tabLabel = tab.label
                         let isSel = currentType == tabId || (tabId == "pie" && currentType == "donut")
                         Button {
                             GSHaptics.select()
                             withAnimation(.easeOut(duration: 0.18)) { activeType = tabId }
                         } label: {
-                            Text(tabLabel)
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(isSel ? Color.white : Color(red: 0.243, green: 0.212, blue: 0.400))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 7)
-                                        .fill(isSel ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.clear)
+                            HStack(spacing: 4) {
+                                NexlyGlyph(
+                                    name: tab.icon,
+                                    size: 12,
+                                    color: isSel ? .white : Color(red: 0.243, green: 0.212, blue: 0.400)
                                 )
+                                Text(tab.label)
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(isSel ? Color.white : Color(red: 0.243, green: 0.212, blue: 0.400))
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 7)
+                                    .fill(isSel ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.clear)
+                            )
                         }
                         .buttonStyle(.plain)
                     }
@@ -780,15 +935,23 @@ private struct ChartBodyView: View {
 
                 Button {
                     GSHaptics.select()
-                    rangeIdx = (rangeIdx + 1) % rangeOptions.count
+                    rangeIdx = (rangeIdx + 1) % 4
+                    selectedIdx = nil
                 } label: {
-                    Text("📅 \(rangeOptions[rangeIdx]) ▾")
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.263, green: 0.231, blue: 0.420))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.82)))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.875, green: 0.843, blue: 0.980), lineWidth: 1))
+                    HStack(spacing: 4) {
+                        NexlyGlyph(
+                            name: "calendar",
+                            size: 12,
+                            color: Color(red: 0.263, green: 0.231, blue: 0.420)
+                        )
+                        Text("\(rangeLabel) ▾")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.263, green: 0.231, blue: 0.420))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.82)))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.875, green: 0.843, blue: 0.980), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
             }
@@ -800,7 +963,8 @@ private struct ChartBodyView: View {
             // Floating Glass Tooltip for Selected / Peak Datum (Screenshot 6)
             if !pts.isEmpty && activeIdx < pts.count {
                 let selPt = pts[activeIdx]
-                let prevVal = activeIdx > 0 ? pts[activeIdx - 1].value : pts.first?.value ?? selPt.value
+                let avgVal = totalVal / Double(max(1, pts.count))
+                let prevVal = activeIdx > 0 ? pts[activeIdx - 1].value : avgVal
                 let stepPct = prevVal != 0 ? ((selPt.value - prevVal) / abs(prevVal)) * 100.0 : 0.0
                 HStack(spacing: 8) {
                     Circle()
@@ -1084,10 +1248,12 @@ private struct ChartBodyView: View {
                 let peakPt = pts[peakIdx]
                 HStack(spacing: 7) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("📊")
-                            .font(.system(size: 11))
-                            .frame(width: 22, height: 22)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.929, green: 0.902, blue: 1.0)))
+                        NexlyGlassGlyphTile(
+                            name: "chart-bar",
+                            tone: .lavender,
+                            size: 24,
+                            glyphSize: 14
+                        )
                         Text(compactNumber(totalVal, unit: unit))
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(Aero.text)
@@ -1108,10 +1274,12 @@ private struct ChartBodyView: View {
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
 
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("👥")
-                            .font(.system(size: 11))
-                            .frame(width: 22, height: 22)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.929, green: 0.902, blue: 1.0)))
+                        NexlyGlassGlyphTile(
+                            name: "trophy",
+                            tone: .amber,
+                            size: 24,
+                            glyphSize: 14
+                        )
                         Text(compactNumber(peakPt.value, unit: unit))
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(Aero.text)
@@ -1119,12 +1287,19 @@ private struct ChartBodyView: View {
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(Aero.textSecondary)
                             .lineLimit(1)
-                        Text("★ Highest")
-                            .font(.system(size: 9.5, weight: .bold))
-                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(Color(red: 0.937, green: 0.918, blue: 1.0)))
+                        HStack(spacing: 3) {
+                            NexlyGlyph(
+                                name: "star",
+                                size: 10,
+                                color: Color(red: 0.357, green: 0.239, blue: 0.961)
+                            )
+                            Text("Highest")
+                                .font(.system(size: 9.5, weight: .bold))
+                                .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color(red: 0.937, green: 0.918, blue: 1.0)))
                     }
                     .padding(.horizontal, 9)
                     .padding(.vertical, 8)
@@ -1133,10 +1308,12 @@ private struct ChartBodyView: View {
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.882, green: 0.855, blue: 0.980), lineWidth: 1))
 
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("📈")
-                            .font(.system(size: 11))
-                            .frame(width: 22, height: 22)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.929, green: 0.902, blue: 1.0)))
+                        NexlyGlassGlyphTile(
+                            name: "trending-up",
+                            tone: .green,
+                            size: 24,
+                            glyphSize: 14
+                        )
                         Text(String(format: "%@%.1f%%", pos ? "+" : "", growthPct))
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(Aero.text)
@@ -1160,14 +1337,17 @@ private struct ChartBodyView: View {
 
                 // Key Insights Box (Screenshot 6)
                 HStack(alignment: .top, spacing: 8) {
-                    Text("💡")
-                        .font(.system(size: 13))
-                        .padding(.top, 1)
+                    NexlyGlassGlyphTile(
+                        name: "bulb",
+                        tone: .amber,
+                        size: 24,
+                        glyphSize: 14
+                    )
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Key Insights:")
                             .font(.system(size: 11.5, weight: .bold))
                             .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
-                        Text(String(format: "Peak in %@ (%@) · %@%.1f%% overall change across %@", peakPt.label, compactNumber(peakPt.value, unit: unit), pos ? "+" : "", growthPct, rangeOptions[rangeIdx].lowercased()))
+                        Text(String(format: "Peak in %@ (%@) · %@%.1f%% overall change across %@", peakPt.label, compactNumber(peakPt.value, unit: unit), pos ? "+" : "", growthPct, rangeLabel.lowercased()))
                             .font(.system(size: 11))
                             .foregroundStyle(Color(red: 0.224, green: 0.196, blue: 0.361))
                     }
@@ -1252,7 +1432,7 @@ private struct TableBodyView: View {
     @State private var query = ""
     @State private var sortCol: Int? = nil
     @State private var sortAsc = true
-    @State private var pageSize: Int = 5
+    @State private var pageSize: Int = 0
     @State private var page: Int = 0
 
     var body: some View {
@@ -1281,12 +1461,15 @@ private struct TableBodyView: View {
             }
         }()
 
-        let totalPages = max(1, (filteredRows.count + pageSize - 1) / pageSize)
+        let effPageSize = pageSize > 0 ? pageSize : ((4...5).contains(normRows.count) ? 3 : 5)
+        let totalPages = max(1, (filteredRows.count + effPageSize - 1) / effPageSize)
         let safePage = min(max(0, page), totalPages - 1)
-        let startIdx = safePage * pageSize
+        let startIdx = safePage * effPageSize
         let visibleRows: [[String]] = startIdx < filteredRows.count
-            ? Array(filteredRows[startIdx..<min(filteredRows.count, startIdx + pageSize)])
+            ? Array(filteredRows[startIdx..<min(filteredRows.count, startIdx + effPageSize)])
             : []
+        let startRow = filteredRows.isEmpty ? 0 : startIdx + 1
+        let endRow = min(filteredRows.count, startIdx + visibleRows.count)
         let primaryNameCol: Int = {
             if let idx = cols.firstIndex(where: {
                 let l = $0.lowercased()
@@ -1374,21 +1557,20 @@ private struct TableBodyView: View {
                 }
 
                 // Pagination & Display Controls Bar (Screenshot 5)
-                let displayTotalPages = max(totalPages, filteredRows.count >= 5 ? 3 : 1)
                 HStack {
                     HStack(spacing: 4) {
                         Button("‹") {
                             page = max(0, safePage - 1)
                         }
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Aero.textSecondary)
+                        .foregroundStyle(safePage > 0 ? Aero.textSecondary : Aero.textTertiary.opacity(0.45))
                         .disabled(safePage == 0)
                         .buttonStyle(.plain)
 
-                        ForEach(0..<displayTotalPages, id: \.self) { p in
+                        ForEach(0..<totalPages, id: \.self) { p in
                             let active = p == safePage
                             Button {
-                                if p < totalPages { page = p }
+                                page = p
                             } label: {
                                 Text("\(p + 1)")
                                     .font(.system(size: 11, weight: .bold))
@@ -1403,18 +1585,28 @@ private struct TableBodyView: View {
                             page = min(totalPages - 1, safePage + 1)
                         }
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Aero.textSecondary)
+                        .foregroundStyle(safePage < totalPages - 1 ? Aero.textSecondary : Aero.textTertiary.opacity(0.45))
                         .disabled(safePage >= totalPages - 1)
                         .buttonStyle(.plain)
+
+                        Text("\(startRow)–\(endRow) of \(filteredRows.count)")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(Aero.textSecondary)
+                            .padding(.leading, 4)
                     }
 
                     Spacer()
 
                     Button {
-                        pageSize = pageSize == 5 ? 10 : (pageSize == 10 ? 25 : 5)
+                        switch effPageSize {
+                        case 3: pageSize = 5
+                        case 5: pageSize = 10
+                        case 10: pageSize = 25
+                        default: pageSize = 3
+                        }
                         page = 0
                     } label: {
-                        Text("Show: \(pageSize) ▾")
+                        Text("Show: \(effPageSize) ▾")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(Color(red: 0.243, green: 0.212, blue: 0.400))
                             .padding(.horizontal, 8)
@@ -1432,19 +1624,24 @@ private struct TableBodyView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.886, green: 0.859, blue: 0.980), lineWidth: 1))
 
-            if normRows.count >= 3, let firstRow = normRows.first, primaryNameCol < firstRow.count {
+            if filteredRows.count >= 2, let firstRow = filteredRows.first, primaryNameCol < firstRow.count {
                 let topName = firstRow[primaryNameCol].trimmingCharacters(in: .whitespacesAndNewlines)
                 let topMetric = (primaryNameCol + 1 < firstRow.count) ? firstRow[primaryNameCol + 1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+                let secondName = (filteredRows.count > 1 && primaryNameCol < filteredRows[1].count) ? filteredRows[1][primaryNameCol].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+                let secondMetric = (filteredRows.count > 1 && primaryNameCol + 1 < filteredRows[1].count) ? filteredRows[1][primaryNameCol + 1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
                 if !topName.isEmpty {
                     HStack(alignment: .top, spacing: 8) {
-                        Text("💡")
-                            .font(.system(size: 13))
-                            .padding(.top, 1)
+                        NexlyGlassGlyphTile(
+                            name: "bulb",
+                            tone: .amber,
+                            size: 24,
+                            glyphSize: 14
+                        )
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Key Insights")
                                 .font(.system(size: 11.5, weight: .bold))
                                 .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
-                            Text("• \(topName) leads the ranking\(topMetric.isEmpty ? "" : " (\(topMetric))") across \(normRows.count) entries")
+                            Text("• \(topName) leads\(topMetric.isEmpty ? "" : " (\(topMetric))")\(secondName.isEmpty ? "" : " followed by \(secondName)\(secondMetric.isEmpty ? "" : " (\(secondMetric))")") across \(filteredRows.count) entries")
                                 .font(.system(size: 11))
                                 .foregroundStyle(Color(red: 0.224, green: 0.196, blue: 0.361))
                         }
@@ -1717,35 +1914,39 @@ private struct StepsBodyView: View {
 }
 
 private struct PollBodyView: View {
+    @Environment(\.gsWidgetAction) private var widgetAction
     let obj: [String: Any]
     let accent: Color
     @State private var voted: Int? = nil
 
-    /// Parsed once, outside the body: the raw Any-cast chains (`opt as? String
-    /// ?? str((opt as? [String: Any]) ?? [:], …)`) inside the ForEach closure
-    /// were one expression the solver could not type-check in reasonable time.
     private var parsedOptions: [(label: String, votes: Int)] {
         let raw = ((obj["options"] ?? obj["choices"] ?? obj["items"]) as? [Any]) ?? []
         return raw.map { opt in
-            if let plain = opt as? String { return (plain, 0) }
+            if let plain = opt as? String { return (NexlyIcons.cleanPlainText(plain), 1) }
             let dict = opt as? [String: Any] ?? [:]
-            return (str(dict, "label", "title", "name", "text"),
-                    Int(dbl(dict, "votes", "count", "value", fallback: 0)))
+            return (
+                NexlyIcons.cleanPlainText(str(dict, "label", "title", "name", "text")),
+                Int(dbl(dict, "votes", "count", "value", fallback: 1))
+            )
         }
     }
 
     var body: some View {
         let opts = parsedOptions
+        let totalBase = opts.reduce(0) { $0 + $1.votes } + (voted != nil ? 1 : 0)
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(opts.enumerated()), id: \.offset) { idx, opt in
                 let votes = opt.votes + (voted == idx ? 1 : 0)
+                let pct = totalBase > 0 ? Int(round(Double(votes) / Double(totalBase) * 100.0)) : 0
                 Button {
+                    GSHaptics.select()
                     voted = idx
+                    widgetAction?(opt.label)
                 } label: {
                     HStack {
                         Text(opt.label).font(.system(size: 12, weight: voted == idx ? .bold : .regular)).foregroundStyle(Aero.text)
                         Spacer()
-                        Text("\(votes)").font(Aero.mono(11)).foregroundStyle(accent)
+                        Text("\(votes) (\(pct)%)").font(Aero.mono(11)).foregroundStyle(accent)
                     }
                     .padding(9)
                     .background(voted == idx ? accent.opacity(0.16) : Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 10))
@@ -1757,13 +1958,14 @@ private struct PollBodyView: View {
 }
 
 private struct RatingBodyView: View {
+    @Environment(\.gsWidgetAction) private var widgetAction
     let obj: [String: Any]
     let accent: Color
     @State private var chosen: Int? = nil
 
     var body: some View {
         let maxR = min(max(Int(dbl(obj, "max", fallback: 5)), 2), 10)
-        let prompt = str(obj, "prompt", "question")
+        let prompt = NexlyIcons.cleanPlainText(str(obj, "prompt", "question"))
         VStack(alignment: .leading, spacing: 8) {
             if !prompt.isEmpty {
                 Text(prompt).font(.system(size: 12)).foregroundStyle(Aero.textSecondary)
@@ -1772,11 +1974,15 @@ private struct RatingBodyView: View {
                 ForEach(1...maxR, id: \.self) { n in
                     let active = (chosen ?? 0) >= n
                     Button {
+                        GSHaptics.select()
                         chosen = n
+                        widgetAction?(prompt.isEmpty ? "Rated \(n)/\(maxR)" : "\(prompt): \(n)/\(maxR)")
                     } label: {
-                        Text("★")
-                            .font(.system(size: 18))
-                            .foregroundStyle(active ? accent : Aero.textSecondary.opacity(0.35))
+                        NexlyGlyph(
+                            name: "star",
+                            size: 18,
+                            color: active ? accent : Aero.textSecondary.opacity(0.35)
+                        )
                     }
                     .buttonStyle(.plain)
                 }
@@ -1817,34 +2023,43 @@ private struct DiffBodyView: View {
 private struct TreeBodyView: View {
     let obj: [String: Any]
     let accent: Color
+    @State private var collapsed: Set<String> = []
 
     var body: some View {
         let roots = ((obj["roots"] ?? obj["tree"] ?? obj["nodes"] ?? obj["items"]) as? [[String: Any]]) ?? []
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(roots.enumerated()), id: \.offset) { _, node in
-                treeLines(node, depth: 0)
+            ForEach(Array(roots.enumerated()), id: \.offset) { idx, node in
+                treeLines(node, depth: 0, path: "r\(idx)")
             }
         }
     }
 
-    private func treeLines(_ node: [String: Any], depth: Int) -> AnyView {
-        let label = str(node, "label", "name", "title")
+    private func treeLines(_ node: [String: Any], depth: Int, path: String) -> AnyView {
+        let label = NexlyIcons.cleanPlainText(str(node, "label", "name", "title"))
         let meta = str(node, "meta", "badge", "type")
         let kids = ((node["children"] ?? node["items"] ?? node["nodes"]) as? [[String: Any]]) ?? []
+        let isCollapsed = collapsed.contains(path)
         return AnyView(
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(kids.isEmpty ? "•" : "▾").foregroundStyle(accent)
-                    Text(label).font(.system(size: 12, weight: kids.isEmpty ? .regular : .semibold)).foregroundStyle(Aero.text)
-                    if !meta.isEmpty {
-                        Spacer()
-                        Text(meta).font(Aero.mono(10)).foregroundStyle(Aero.textSecondary)
+                Button {
+                    guard !kids.isEmpty else { return }
+                    GSHaptics.select()
+                    if isCollapsed { collapsed.remove(path) } else { collapsed.insert(path) }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(kids.isEmpty ? "•" : (isCollapsed ? "▸" : "▾")).foregroundStyle(accent)
+                        Text(label).font(.system(size: 12, weight: kids.isEmpty ? .regular : .semibold)).foregroundStyle(Aero.text)
+                        if !meta.isEmpty {
+                            Spacer()
+                            Text(meta).font(Aero.mono(10)).foregroundStyle(Aero.textSecondary)
+                        }
                     }
+                    .padding(.leading, CGFloat(depth * 14))
                 }
-                .padding(.leading, CGFloat(depth * 14))
-                if depth < 4 {
-                    ForEach(Array(kids.enumerated()), id: \.offset) { _, child in
-                        treeLines(child, depth: depth + 1)
+                .buttonStyle(.plain)
+                if depth < 4 && !isCollapsed {
+                    ForEach(Array(kids.enumerated()), id: \.offset) { cIdx, child in
+                        treeLines(child, depth: depth + 1, path: "\(path).\(cIdx)")
                     }
                 }
             }
@@ -1863,10 +2078,11 @@ private struct FlashcardsBodyView: View {
         if !cards.isEmpty {
             let safeIdx = min(max(index, 0), cards.count - 1)
             let card = cards[safeIdx]
-            let front = str(card, "front", "question", "q", "term", "prompt")
-            let back = str(card, "back", "answer", "a", "definition")
+            let front = NexlyIcons.cleanPlainText(str(card, "front", "question", "q", "term", "prompt"))
+            let back = NexlyIcons.cleanPlainText(str(card, "back", "answer", "a", "definition"))
             VStack(alignment: .leading, spacing: 8) {
                 Button {
+                    GSHaptics.select()
                     flipped.toggle()
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
@@ -1902,15 +2118,16 @@ private struct ChecklistBodyView: View {
     let obj: [String: Any]
     let accent: Color
     @State private var toggled: Set<Int> = []
-    @State private var addedTasks: [String] = []
+    @State private var addedTasks: [(text: String, done: Bool)] = []
+    @State private var addingTask = false
+    @State private var newTaskText = ""
 
     var body: some View {
         let items = ((obj["items"] ?? obj["tasks"] ?? obj["todos"]) as? [Any]) ?? []
-        let allItems: [Any] = items + addedTasks
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(allItems.enumerated()), id: \.offset) { idx, raw in
+            ForEach(Array(items.enumerated()), id: \.offset) { idx, raw in
                 let dict = raw as? [String: Any] ?? [:]
-                let label = (raw as? String) ?? str(dict, "label", "title", "text", "task", "name")
+                let label = NexlyIcons.cleanPlainText((raw as? String) ?? str(dict, "label", "title", "text", "task", "name"))
                 let initialDone = (dict["done"] as? Bool) ?? (dict["checked"] as? Bool) ?? false
                 let isDone = toggled.contains(idx) ? !initialDone : initialDone
                 Button {
@@ -1927,9 +2144,7 @@ private struct ChecklistBodyView: View {
                                     .stroke(Color(red: 0.612, green: 0.533, blue: 0.973), lineWidth: 1.5)
                                     .frame(width: 18, height: 18)
                             } else {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(Color.white)
+                                NexlyGlyph(name: "check", size: 11, color: .white)
                             }
                         }
                         Text(label)
@@ -1941,25 +2156,99 @@ private struct ChecklistBodyView: View {
                 }
                 .buttonStyle(.plain)
             }
-            Button {
-                GSHaptics.select()
-                addedTasks.append("Follow-up task #\(allItems.count + 1)")
-            } label: {
-                Text("+ Add Task")
+            ForEach(Array(addedTasks.enumerated()), id: \.offset) { aIdx, task in
+                HStack(spacing: 9) {
+                    Button {
+                        GSHaptics.select()
+                        addedTasks[aIdx].done.toggle()
+                    } label: {
+                        HStack(spacing: 9) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 5)
+                                    .fill(task.done ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.white.opacity(0.85))
+                                    .frame(width: 18, height: 18)
+                                if !task.done {
+                                    RoundedRectangle(cornerRadius: 5)
+                                        .stroke(Color(red: 0.612, green: 0.533, blue: 0.973), lineWidth: 1.5)
+                                        .frame(width: 18, height: 18)
+                                } else {
+                                    NexlyGlyph(name: "check", size: 11, color: .white)
+                                }
+                            }
+                            Text(task.text)
+                                .font(.system(size: 13))
+                                .strikethrough(task.done)
+                                .foregroundStyle(task.done ? Aero.textSecondary : Aero.text)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                    Button {
+                        addedTasks.remove(at: aIdx)
+                    } label: {
+                        NexlyGlyph(name: "x", size: 12, color: Aero.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.vertical, 2)
+            }
+            if addingTask {
+                HStack(spacing: 6) {
+                    TextField("Type a new task…", text: $newTaskText)
+                        .font(.system(size: 12.5))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.92)))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.847, green: 0.808, blue: 0.976), lineWidth: 1))
+                    Button("Add") {
+                        let trimmed = newTaskText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            addedTasks.append((trimmed, false))
+                            newTaskText = ""
+                            addingTask = false
+                        }
+                    }
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
+                    .buttonStyle(.plain)
+
+                    Button {
+                        newTaskText = ""
+                        addingTask = false
+                    } label: {
+                        NexlyGlyph(name: "x", size: 13, color: Aero.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 2)
+            } else {
+                Button {
+                    GSHaptics.select()
+                    addingTask = true
+                } label: {
+                    HStack(spacing: 5) {
+                        NexlyGlyph(name: "plus", size: 11, color: Color(red: 0.357, green: 0.239, blue: 0.961))
+                        Text("Add Task")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                    }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .background(Capsule().fill(Color.white.opacity(0.82)))
                     .overlay(Capsule().stroke(Color(red: 0.878, green: 0.847, blue: 0.980), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
             }
-            .buttonStyle(.plain)
-            .padding(.top, 2)
         }
     }
 }
 
 private struct ChoicesBodyView: View {
+    @Environment(\.gsWidgetAction) private var widgetAction
     let obj: [String: Any]
     let accent: Color
     @State private var selected: Set<Int> = []
@@ -1968,17 +2257,30 @@ private struct ChoicesBodyView: View {
         let items = ((obj["options"] ?? obj["prompts"] ?? obj["buttons"] ?? obj["items"] ?? obj["choices"] ?? obj["suggestions"]) as? [Any]) ?? []
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(items.prefix(10).enumerated()), id: \.offset) { idx, item in
-                let label = (item as? String) ?? str((item as? [String: Any]) ?? [:], "label", "title", "text", "name", "prompt")
+                let rawLabel = (item as? String) ?? str((item as? [String: Any]) ?? [:], "label", "title", "text", "name", "prompt")
+                let promptText = str((item as? [String: Any]) ?? [:], "prompt", "value", "label", "title", "text")
+                let (icon, stripped) = NexlyIcons.extractLeadingIcon(rawLabel)
+                let label = NexlyIcons.cleanPlainText(stripped)
                 let active = selected.contains(idx)
                 Button {
+                    GSHaptics.select()
                     if active { selected.remove(idx) } else { selected.insert(idx) }
+                    let dispatch = promptText.isEmpty ? label : promptText
+                    if !dispatch.isEmpty {
+                        widgetAction?(dispatch)
+                    }
                 } label: {
-                    Text(label)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(active ? accent : Aero.text)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(active ? accent.opacity(0.16) : Color.white.opacity(0.55), in: Capsule())
+                    HStack(spacing: 6) {
+                        if let icon {
+                            NexlyGlyph(name: icon, size: 13, color: active ? accent : Aero.textSecondary)
+                        }
+                        Text(label)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(active ? accent : Aero.text)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(active ? accent.opacity(0.16) : Color.white.opacity(0.55), in: Capsule())
                 }
                 .buttonStyle(.plain)
             }
@@ -1991,14 +2293,14 @@ private struct PanelBodyView: View {
     let accent: Color
 
     var body: some View {
-        let bodyText = str(obj, "body", "text", "content", "description", "message", "summary")
+        let bodyText = NexlyIcons.cleanPlainText(str(obj, "body", "text", "content", "description", "message", "summary"))
         VStack(alignment: .leading, spacing: 6) {
             if !bodyText.isEmpty {
                 Text(bodyText).font(.system(size: 13)).foregroundStyle(Aero.text)
             }
             if let items = (obj["items"] ?? obj["points"] ?? obj["bullets"]) as? [Any] {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, it in
-                    Text("• \(it)").font(.system(size: 12)).foregroundStyle(Aero.text)
+                    Text("• \(NexlyIcons.cleanPlainText("\(it)"))").font(.system(size: 12)).foregroundStyle(Aero.text)
                 }
             }
         }
@@ -2012,14 +2314,14 @@ private struct GenericStructuredBodyView: View {
 
     var body: some View {
         let items = ((obj["items"] ?? obj["cards"] ?? obj["fields"] ?? obj["sliders"] ?? obj["phrases"] ?? obj["commands"] ?? obj["nodes"] ?? obj["steps"]) as? [[String: Any]]) ?? []
-        let subtitle = str(obj, "subtitle", "description", "body", "text", "summary")
+        let subtitle = NexlyIcons.cleanPlainText(str(obj, "subtitle", "description", "body", "text", "summary"))
         VStack(alignment: .leading, spacing: 6) {
             if !subtitle.isEmpty {
                 Text(subtitle).font(.system(size: 12)).foregroundStyle(Aero.textSecondary)
             }
             ForEach(Array(items.prefix(10).enumerated()), id: \.offset) { _, item in
-                let primary = str(item, "title", "label", "name", "phrase", "command", "id")
-                let secondary = str(item, "subtitle", "description", "detail", "value", "translation", "output", "type")
+                let primary = NexlyIcons.cleanPlainText(str(item, "title", "label", "name", "phrase", "command", "id"))
+                let secondary = NexlyIcons.cleanPlainText(str(item, "subtitle", "description", "detail", "value", "translation", "output", "type"))
                 if !primary.isEmpty || !secondary.isEmpty {
                     HStack(alignment: .top) {
                         Text(primary).font(.system(size: 12, weight: .semibold)).foregroundStyle(Aero.text)
@@ -2037,6 +2339,7 @@ private struct GenericStructuredBodyView: View {
 }
 
 private struct FormBodyView: View {
+    @Environment(\.gsWidgetAction) private var widgetAction
     let obj: [String: Any]
     let accent: Color
     @State private var textValues: [Int: String] = [:]
@@ -2048,7 +2351,7 @@ private struct FormBodyView: View {
         let fields = ((obj["fields"] ?? obj["inputs"] ?? obj["questions"]) as? [[String: Any]]) ?? []
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(fields.prefix(10).enumerated()), id: \.offset) { idx, f in
-                let label = str(f, "label", "title", "name", "key")
+                let label = NexlyIcons.cleanPlainText(str(f, "label", "title", "name", "key"))
                 let fType = str(f, "type").lowercased()
                 VStack(alignment: .leading, spacing: 4) {
                     if ["switch", "toggle", "checkbox", "boolean"].contains(fType) {
@@ -2085,7 +2388,23 @@ private struct FormBodyView: View {
                 }
             }
             Button {
+                GSHaptics.select()
                 submitted = true
+                let summary = fields.prefix(10).enumerated().map { idx, f in
+                    let lbl = str(f, "label", "title", "name", "key")
+                    let fType = str(f, "type").lowercased()
+                    if ["switch", "toggle", "checkbox", "boolean"].contains(fType) {
+                        return "\(lbl): \((boolValues[idx] ?? ((f["value"] as? Bool) ?? false)) ? "Yes" : "No")"
+                    } else if ["slider", "range", "number"].contains(fType) {
+                        let cur = numValues[idx] ?? dbl(f, "value", "default", fallback: dbl(f, "min", fallback: 0))
+                        return String(format: "%@: %.1f", lbl, cur)
+                    } else {
+                        return "\(lbl): \(textValues[idx] ?? str(f, "value", "default"))"
+                    }
+                }.joined(separator: ", ")
+                if !summary.isEmpty {
+                    widgetAction?(summary)
+                }
             } label: {
                 Text(submitted ? "Submitted ✓" : (str(obj, "submitLabel").isEmpty ? "Submit" : str(obj, "submitLabel")))
                     .font(.system(size: 12, weight: .bold))
@@ -2099,47 +2418,259 @@ private struct FormBodyView: View {
     }
 }
 
+/// Safe recursive-descent math expression evaluator for `calc` widgets on iOS (parity with Android `CalcExpr.eval`).
+enum CalcExprIOS {
+    static func eval(_ expr: String, vars: [String: Double]) -> Double {
+        let chars = Array(expr)
+        var pos = 0
+
+        func skipWs() {
+            while pos < chars.count && chars[pos].isWhitespace { pos += 1 }
+        }
+
+        func parseAddSub() -> Double {
+            var left = parseMulDiv()
+            while true {
+                skipWs()
+                guard pos < chars.count else { break }
+                let op = chars[pos]
+                if op == "+" { pos += 1; left += parseMulDiv() }
+                else if op == "-" { pos += 1; left -= parseMulDiv() }
+                else { break }
+            }
+            return left
+        }
+
+        func parseMulDiv() -> Double {
+            var left = parsePower()
+            while true {
+                skipWs()
+                guard pos < chars.count else { break }
+                if pos + 1 < chars.count && chars[pos] == "*" && chars[pos + 1] == "*" { break }
+                let op = chars[pos]
+                if op == "*" { pos += 1; left *= parsePower() }
+                else if op == "/" {
+                    pos += 1
+                    let r = parsePower()
+                    left = r == 0.0 ? 0.0 : left / r
+                } else if op == "%" {
+                    pos += 1
+                    let r = parsePower()
+                    left = r == 0.0 ? 0.0 : left.truncatingRemainder(dividingBy: r)
+                } else { break }
+            }
+            return left
+        }
+
+        func parsePower() -> Double {
+            let base = parseUnary()
+            skipWs()
+            if pos < chars.count && chars[pos] == "^" {
+                pos += 1
+                return pow(base, parsePower())
+            }
+            if pos + 1 < chars.count && chars[pos] == "*" && chars[pos + 1] == "*" {
+                pos += 2
+                return pow(base, parsePower())
+            }
+            return base
+        }
+
+        func parseUnary() -> Double {
+            skipWs()
+            if pos < chars.count && chars[pos] == "-" { pos += 1; return -parseUnary() }
+            if pos < chars.count && chars[pos] == "+" { pos += 1; return parseUnary() }
+            return parsePrimary()
+        }
+
+        func parsePrimary() -> Double {
+            skipWs()
+            guard pos < chars.count else { return 0.0 }
+            if chars[pos] == "(" {
+                pos += 1
+                let v = parseAddSub()
+                skipWs()
+                if pos < chars.count && chars[pos] == ")" { pos += 1 }
+                return v
+            }
+            if chars[pos].isNumber || chars[pos] == "." {
+                let start = pos
+                while pos < chars.count && (chars[pos].isNumber || chars[pos] == ".") { pos += 1 }
+                return Double(String(chars[start..<pos])) ?? 0.0
+            }
+            if chars[pos].isLetter || chars[pos] == "_" {
+                let start = pos
+                while pos < chars.count && (chars[pos].isLetter || chars[pos].isNumber || chars[pos] == "_") { pos += 1 }
+                let ident = String(chars[start..<pos])
+                skipWs()
+                if pos < chars.count && chars[pos] == "(" {
+                    pos += 1
+                    var args: [Double] = []
+                    skipWs()
+                    if pos < chars.count && chars[pos] != ")" {
+                        args.append(parseAddSub())
+                        skipWs()
+                        while pos < chars.count && chars[pos] == "," {
+                            pos += 1
+                            args.append(parseAddSub())
+                            skipWs()
+                        }
+                    }
+                    if pos < chars.count && chars[pos] == ")" { pos += 1 }
+                    let a = args.first ?? 0.0
+                    let b = args.count > 1 ? args[1] : 0.0
+                    switch ident.lowercased() {
+                    case "sqrt": return a >= 0 ? sqrt(a) : 0.0
+                    case "abs": return abs(a)
+                    case "round": return round(a)
+                    case "floor": return floor(a)
+                    case "ceil": return ceil(a)
+                    case "min": return args.min() ?? 0.0
+                    case "max": return args.max() ?? 0.0
+                    case "pow": return pow(a, b)
+                    case "log": return a > 0 ? log(a) : 0.0
+                    case "exp": return exp(a)
+                    case "sin": return sin(a)
+                    case "cos": return cos(a)
+                    case "tan": return tan(a)
+                    default: return a
+                    }
+                }
+                if ident.lowercased() == "pi" { return Double.pi }
+                if ident.lowercased() == "e" { return M_E }
+                return vars[ident] ?? vars[ident.lowercased()] ?? 0.0
+            }
+            pos += 1
+            return 0.0
+        }
+
+        let res = parseAddSub()
+        return res.isFinite ? res : 0.0
+    }
+}
+
 private struct CalcBodyView: View {
     let obj: [String: Any]
     let accent: Color
     @State private var vals: [String: Double] = [:]
 
+    private func formatCalcResult(_ n: Double, unit: String) -> String {
+        let prefix = ["$", "€", "£", "¥"].contains(unit) ? unit : ""
+        let suffix = (!unit.isEmpty && prefix.isEmpty) ? (unit == "%" ? "%" : " \(unit)") : ""
+        let formatted: String = {
+            if abs(n) >= 100 && n.truncatingRemainder(dividingBy: 1.0) == 0 {
+                return String(format: "%.0f", n)
+            }
+            if n.truncatingRemainder(dividingBy: 1.0) == 0 {
+                return String(format: "%.0f", n)
+            }
+            return String(format: "%.2f", n)
+        }()
+        return "\(prefix)\(formatted)\(suffix)"
+    }
+
     var body: some View {
         let fields = ((obj["fields"] ?? obj["sliders"] ?? obj["inputs"]) as? [[String: Any]]) ?? []
         let outputs = ((obj["outputs"] ?? obj["results"]) as? [[String: Any]]) ?? []
-        VStack(alignment: .leading, spacing: 8) {
+        let activeVars: [String: Double] = {
+            var map: [String: Double] = [:]
+            for (idx, f) in fields.prefix(10).enumerated() {
+                let rawKey = str(f, "id", "key", "name")
+                let key = rawKey.isEmpty ? "x\(idx + 1)" : rawKey
+                let minV = dbl(f, "min", fallback: 0)
+                let cur = vals[key] ?? dbl(f, "default", "value", fallback: minV)
+                map[key] = cur
+                map[key.lowercased()] = cur
+                map["x\(idx + 1)"] = cur
+            }
+            return map
+        }()
+
+        VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(fields.prefix(8).enumerated()), id: \.offset) { idx, f in
-                let label = str(f, "label", "title", "name", "key")
-                let key = str(f, "key", "id", "name").isEmpty ? "x\(idx + 1)" : str(f, "key", "id", "name")
+                let label = NexlyIcons.cleanPlainText(str(f, "label", "title", "name", "key"))
+                let rawKey = str(f, "id", "key", "name")
+                let key = rawKey.isEmpty ? "x\(idx + 1)" : rawKey
                 let minV = dbl(f, "min", fallback: 0)
                 let maxV = max(dbl(f, "max", fallback: 1000), minV + 1)
-                let cur = vals[key] ?? dbl(f, "value", "default", fallback: minV)
+                let stepV = max(dbl(f, "step", fallback: 0), 0)
+                let cur = activeVars[key] ?? minV
                 let unit = str(f, "unit")
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     HStack {
                         Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
                         Spacer()
-                        Text(String(format: "%.1f%@", cur, unit)).font(Aero.mono(11)).foregroundStyle(accent)
+                        TextField(
+                            "0",
+                            text: Binding(
+                                get: {
+                                    cur.truncatingRemainder(dividingBy: 1.0) == 0
+                                        ? String(format: "%.0f", cur)
+                                        : String(format: "%.2f", cur)
+                                },
+                                set: { s in
+                                    if let d = Double(s.replacingOccurrences(of: ",", with: "")) {
+                                        vals[key] = d
+                                    }
+                                }
+                            )
+                        )
+                        .font(Aero.mono(11.5))
+                        .foregroundStyle(accent)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 72)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 6))
+                        if !unit.isEmpty {
+                            Text(unit).font(Aero.mono(11)).foregroundStyle(Aero.textSecondary)
+                        }
                     }
-                    Slider(value: Binding(
-                        get: { cur },
-                        set: { vals[key] = $0 }
-                    ), in: minV...maxV)
-                    .tint(accent)
+                    if stepV > 0 && (maxV - minV) / stepV <= 5000 {
+                        Slider(
+                            value: Binding(
+                                get: { min(max(cur, minV), maxV) },
+                                set: { vals[key] = $0 }
+                            ),
+                            in: minV...maxV,
+                            step: stepV
+                        )
+                        .tint(accent)
+                    } else {
+                        Slider(
+                            value: Binding(
+                                get: { min(max(cur, minV), maxV) },
+                                set: { vals[key] = $0 }
+                            ),
+                            in: minV...maxV
+                        )
+                        .tint(accent)
+                    }
                 }
             }
             ForEach(Array(outputs.prefix(6).enumerated()), id: \.offset) { _, out in
+                let label = NexlyIcons.cleanPlainText(str(out, "label", "title", "name"))
+                let expr = str(out, "expr", "formula", "value")
+                let unit = str(out, "unit")
+                let evaluated: String = {
+                    if expr.isEmpty { return "0" }
+                    if let literal = Double(expr) { return formatCalcResult(literal, unit: unit) }
+                    let val = CalcExprIOS.eval(expr, vars: activeVars)
+                    return formatCalcResult(val, unit: unit)
+                }()
                 HStack {
-                    Text(str(out, "label", "title", "name"))
-                        .font(.system(size: 12, weight: .semibold))
+                    Text(label)
+                        .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(Aero.textSecondary)
                     Spacer()
-                    Text(str(out, "value", "expr", "formula"))
-                        .font(Aero.mono(12))
+                    Text(evaluated)
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundStyle(accent)
                 }
-                .padding(8)
-                .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(accent.opacity(0.22), lineWidth: 1))
             }
         }
     }
@@ -2158,10 +2689,10 @@ private struct MediaBodyView: View {
         if isCitationLike {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(rawItems.prefix(8).enumerated()), id: \.offset) { idx, item in
-                    let title = str(item, "title", "name", "label")
+                    let title = NexlyIcons.cleanPlainText(str(item, "title", "name", "label"))
                     let url = str(item, "url", "href", "link")
                     let domain = str(item, "domain", "source", "site", "publisher")
-                    let snippet = str(item, "snippet", "description", "caption", "summary")
+                    let snippet = NexlyIcons.cleanPlainText(str(item, "snippet", "description", "caption", "summary"))
                     let hay = "\(domain) \(url)".lowercased()
                     let academic = hay.contains(".edu") || hay.contains("nature.com") || hay.contains("arxiv.org") || hay.contains("ieee.org") || hay.contains("acm.org")
 
@@ -2188,27 +2719,43 @@ private struct MediaBodyView: View {
                                     .lineLimit(2)
                             }
                             HStack {
-                                Text("↗ \(domain.isEmpty ? url : domain)")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
-                                    .lineLimit(1)
+                                HStack(spacing: 4) {
+                                    NexlyGlyph(
+                                        name: "external-link",
+                                        size: 11,
+                                        color: Color(red: 0.357, green: 0.239, blue: 0.961)
+                                    )
+                                    Text(domain.isEmpty ? url : domain)
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                                        .lineLimit(1)
+                                }
                                 Spacer()
-                                Text(academic ? "🏛 Academic" : "✓ Trusted Source")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(
-                                        academic
+                                HStack(spacing: 4) {
+                                    NexlyGlyph(
+                                        name: academic ? "building-bank" : "shield-check",
+                                        size: 11,
+                                        color: academic
                                             ? Color(red: 0.357, green: 0.239, blue: 0.961)
                                             : Color(red: 0.071, green: 0.604, blue: 0.353)
                                     )
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 2)
-                                    .background(
-                                        Capsule().fill(
+                                    Text(academic ? "Academic" : "Trusted Source")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(
                                             academic
-                                                ? Color(red: 0.937, green: 0.918, blue: 1.0)
-                                                : Color(red: 0.902, green: 0.976, blue: 0.941)
+                                                ? Color(red: 0.357, green: 0.239, blue: 0.961)
+                                                : Color(red: 0.071, green: 0.604, blue: 0.353)
                                         )
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule().fill(
+                                        academic
+                                            ? Color(red: 0.937, green: 0.918, blue: 1.0)
+                                            : Color(red: 0.902, green: 0.976, blue: 0.941)
                                     )
+                                )
                             }
                         }
                     }
@@ -2222,9 +2769,9 @@ private struct MediaBodyView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 10) {
                     ForEach(Array(rawItems.prefix(12).enumerated()), id: \.offset) { _, item in
-                        let title = str(item, "title", "name", "label", "filename")
-                        let sub = str(item, "subtitle", "author", "domain", "mime")
-                        let cap = str(item, "caption", "description", "snippet", "summary")
+                        let title = NexlyIcons.cleanPlainText(str(item, "title", "name", "label", "filename"))
+                        let sub = NexlyIcons.cleanPlainText(str(item, "subtitle", "author", "domain", "mime"))
+                        let cap = NexlyIcons.cleanPlainText(str(item, "caption", "description", "snippet", "summary"))
                         let price = str(item, "price", "badge", "meta", "size")
                         VStack(alignment: .leading, spacing: 4) {
                             if !title.isEmpty {
@@ -2254,31 +2801,48 @@ private struct ProductivityBodyView: View {
     let kind: String
     let obj: [String: Any]
     let accent: Color
+    @State private var columnOverrides: [String: Int] = [:]
 
     var body: some View {
         let cols = (obj["columns"] ?? obj["lanes"] ?? obj["boards"]) as? [[String: Any]] ?? []
         if !cols.isEmpty {
+            let numCols = min(cols.count, 4)
+            let allCards: [(id: String, origCol: Int, label: String, badge: String)] = cols.prefix(4).enumerated().flatMap { cIdx, col -> [(String, Int, String, String)] in
+                let colItems = (col["items"] ?? col["cards"] ?? col["tasks"]) as? [Any] ?? []
+                return colItems.prefix(10).enumerated().map { iIdx, it in
+                    let lbl = NexlyIcons.cleanPlainText((it as? String) ?? str((it as? [String: Any]) ?? [:], "title", "label", "text", "task", "name"))
+                    let badge = NexlyIcons.cleanPlainText(str((it as? [String: Any]) ?? [:], "badge", "priority", "tag", "status"))
+                    return ("c\(cIdx)_\(iIdx)", cIdx, lbl, badge)
+                }
+            }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 8) {
-                    ForEach(Array(cols.prefix(4).enumerated()), id: \.offset) { cIdx, col in
-                        let colTitle = str(col, "title", "name", "label", "status")
-                        let colItems = (col["items"] ?? col["cards"] ?? col["tasks"]) as? [Any] ?? []
+                    ForEach(0..<numCols, id: \.self) { cIdx in
+                        let col = cols[cIdx]
+                        let colTitle = NexlyIcons.cleanPlainText(str(col, "title", "name", "label", "status"))
+                        let colCards = allCards.filter { (columnOverrides[$0.id] ?? $0.origCol) == cIdx }
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(colTitle.uppercased())
+                            Text("\(colTitle.uppercased()) (\(colCards.count))")
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundStyle(WidgetPalette.at(cIdx))
-                            ForEach(Array(colItems.prefix(10).enumerated()), id: \.offset) { _, it in
-                                let lbl = (it as? String) ?? str((it as? [String: Any]) ?? [:], "title", "label", "text", "task", "name")
-                                let badge = str((it as? [String: Any]) ?? [:], "badge", "priority", "tag", "status")
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(lbl).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
-                                    if !badge.isEmpty {
-                                        Text(badge).font(.system(size: 10, weight: .bold)).foregroundStyle(accent)
+                            ForEach(colCards, id: \.id) { card in
+                                Button {
+                                    guard numCols > 1 else { return }
+                                    GSHaptics.select()
+                                    let cur = columnOverrides[card.id] ?? card.origCol
+                                    columnOverrides[card.id] = (cur + 1) % numCols
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(card.label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+                                        if !card.badge.isEmpty {
+                                            Text(card.badge).font(.system(size: 10, weight: .bold)).foregroundStyle(accent)
+                                        }
                                     }
+                                    .padding(8)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
                                 }
-                                .padding(8)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+                                .buttonStyle(.plain)
                             }
                         }
                         .frame(width: 135, alignment: .leading)
