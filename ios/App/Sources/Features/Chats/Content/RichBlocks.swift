@@ -627,20 +627,17 @@ private struct StructuredProseSequenceView: View {
                 if case .widget(let k, _, _, _) = e.block, ["calc", "calculator", "converter"].contains(k) { return true }
                 return false
             }
-            var renderedSpontaneousCalc = false
-            if !hasExplicitCalc && (activeDashboardTab == "Dashboard" || activeDashboardTab == "Calculator") {
-                let proseText = extractCopyableProseSummary(normalizedProse, citationsOnly: false)
-                let lowProse = proseText.lowercased()
-                let hasCurrency = proseText.range(of: "[$€£]\\s*\\d", options: .regularExpression) != nil
-                let hasPercent = proseText.range(of: "\\b\\d+(?:\\.\\d+)?\\s*%", options: .regularExpression) != nil || lowProse.contains("percent")
-                let hasNum = proseText.range(of: "\\b\\d{2,}\\b", options: .regularExpression) != nil
-                let hasDomainSignal = hasNum && (lowProse.contains("mortgage") || lowProse.contains("amortiz") || lowProse.contains("compound interest") || (lowProse.contains("loan") && (lowProse.contains("apr") || lowProse.contains("monthly"))) || (lowProse.contains("budget") && lowProse.contains("50/30/20")) || (lowProse.contains("calorie") && lowProse.contains("protein")) || lowProse.contains("tdee") || ((hasCurrency || hasNum) && hasPercent && (lowProse.contains("discount") || lowProse.contains("tax") || lowProse.contains("tip") || lowProse.contains("margin") || lowProse.contains("roi") || lowProse.contains("interest") || lowProse.contains("salary"))))
-                if (hasCurrency && hasPercent) || hasDomainSignal {
-                    renderedSpontaneousCalc = true
-                    NexlyQuickCalculatorCardView(
-                        spec: parseQuickCalculatorSpec(titleRaw: "Interactive Scenario Calculator", bodyText: proseText)
-                    )
-                }
+            let proseText = extractCopyableProseSummary(normalizedProse, citationsOnly: false)
+            let lowProse = proseText.lowercased()
+            let hasCurrency = proseText.range(of: "[$€£]\\s*\\d", options: .regularExpression) != nil
+            let hasPercent = proseText.range(of: "\\b\\d+(?:\\.\\d+)?\\s*%", options: .regularExpression) != nil || lowProse.contains("percent")
+            let hasNum = proseText.range(of: "\\b\\d{2,}\\b", options: .regularExpression) != nil
+            let hasDomainSignal = hasNum && (lowProse.contains("mortgage") || lowProse.contains("amortiz") || lowProse.contains("compound interest") || (lowProse.contains("loan") && (lowProse.contains("apr") || lowProse.contains("monthly"))) || (lowProse.contains("budget") && lowProse.contains("50/30/20")) || (lowProse.contains("calorie") && lowProse.contains("protein")) || lowProse.contains("tdee") || ((hasCurrency || hasNum) && hasPercent && (lowProse.contains("discount") || lowProse.contains("tax") || lowProse.contains("tip") || lowProse.contains("margin") || lowProse.contains("roi") || lowProse.contains("interest") || lowProse.contains("salary"))))
+            let shouldShowSpontaneousCalc = !hasExplicitCalc && (activeDashboardTab == "Dashboard" || activeDashboardTab == "Calculator") && ((hasCurrency && hasPercent) || hasDomainSignal)
+            if shouldShowSpontaneousCalc {
+                NexlyQuickCalculatorCardView(
+                    spec: parseQuickCalculatorSpec(titleRaw: "Interactive Scenario Calculator", bodyText: proseText)
+                )
             }
 
             let hasVisualDataBlock = normalizedProse.contains {
@@ -648,13 +645,12 @@ private struct StructuredProseSequenceView: View {
                 if case .widget(let k, _, _, _) = $0, ["chart", "table", "stat", "progress", "gauge"].contains(k) { return true }
                 return false
             }
-            var renderedQuantitativeExplorer = false
-            if !hasVisualDataBlock && activeDashboardTab == "Dashboard" {
-                let spontaneousMetrics = extractSpontaneousMetricsFromBlocksIOS(normalizedProse)
-                if spontaneousMetrics.count >= 3 {
-                    renderedQuantitativeExplorer = true
-                    NexlyQuantitativeExplorerCardIOS(items: spontaneousMetrics)
-                }
+            let spontaneousMetrics = (!hasVisualDataBlock && activeDashboardTab == "Dashboard")
+                ? extractSpontaneousMetricsFromBlocksIOS(normalizedProse)
+                : []
+            let shouldShowQuantitativeExplorer = spontaneousMetrics.count >= 3
+            if shouldShowQuantitativeExplorer {
+                NexlyQuantitativeExplorerCardIOS(items: spontaneousMetrics)
             }
 
             let hasAnyWidgetOrHtml = normalizedProse.contains {
@@ -663,7 +659,7 @@ private struct StructuredProseSequenceView: View {
                 if case .html = $0 { return true }
                 return false
             }
-            if !hasExplicitCalc && !renderedSpontaneousCalc && !renderedQuantitativeExplorer && !hasAnyWidgetOrHtml && activeDashboardTab == "Dashboard" {
+            if !hasExplicitCalc && !shouldShowSpontaneousCalc && !shouldShowQuantitativeExplorer && !hasAnyWidgetOrHtml && activeDashboardTab == "Dashboard" {
                 let spontaneousConcepts = extractSpontaneousConceptsFromBlocksIOS(normalizedProse)
                 if spontaneousConcepts.count >= 3 {
                     NexlyInteractiveConceptDeckCardIOS(concepts: spontaneousConcepts)
@@ -2168,7 +2164,7 @@ private struct ParagraphView: View {
                     baseSize: compact ? 13 : 15,
                     citations: citations
                 )
-                let leadingIcon = NexlyIcons.extractLeadingIcon(plainTextOfSpans(spans)).icon
+                let leadingIcon = NexlyIcons.extractLeadingIcon(plainTextOfSpans(spans)).0
                 let displaySpans = leadingIcon != nil ? stripLeadingIconFromSpans(spans) : spans
                 if let leadingIcon {
                     HStack(alignment: .top, spacing: 8) {
@@ -2237,7 +2233,7 @@ private struct HeadingView: View {
             if level >= 2 && level <= 3 {
                 return sectionBadgeForHeadingText(rawText)
             }
-            if let explicit = NexlyIcons.extractLeadingIcon(rawText).icon {
+            if let explicit = NexlyIcons.extractLeadingIcon(rawText).0 {
                 return (explicit, .lavender)
             }
             return nil
@@ -3410,7 +3406,7 @@ struct CodeBlockCardView: View {
                             expandedRhs = expandedRhs.replacingOccurrences(of: "min(\(k))", with: "\(lv.min() ?? 0)")
                             expandedRhs = expandedRhs.replacingOccurrences(of: "max(\(k))", with: "\(lv.max() ?? 0)")
                         }
-                        if let evalVal = CalcExprIOS.eval(expandedRhs, vars: numVars) {
+                        if let evalVal = CalcExprIOS.evalOptional(expandedRhs, vars: numVars) {
                             numVars[varName] = evalVal
                         } else {
                             strVars[varName] = rhs
@@ -3471,7 +3467,7 @@ struct CodeBlockCardView: View {
                             }
                         }
                         let normMath = e.replacingOccurrences(of: "**", with: "^")
-                        if let v = CalcExprIOS.eval(normMath, vars: numVars) {
+                        if let v = CalcExprIOS.evalOptional(normMath, vars: numVars) {
                             return fmtNumPy(v)
                         }
                         return e
