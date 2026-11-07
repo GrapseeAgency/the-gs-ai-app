@@ -290,6 +290,33 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee ios/build/xcodebuild-test.log
 
+      - name: Publish XCTest failure diagnostics as annotations
+        if: failure()
+        run: |
+          python3 - <<'PYTEST'
+          from pathlib import Path
+          log = Path('ios/build/xcodebuild-test.log')
+          if log.exists():
+              lines = log.read_text(errors='replace').splitlines()
+              failures = [line for line in lines if any(word in line.lower() for word in ['error:', 'failed', 'failure', 'timed out', 'could not'])]
+              for line in failures[-35:]:
+                  print('::error::' + line[:1800].replace('%', '%25').replace('\r', '%0D'))
+          PYTEST
+          if [ -d ios/build/GSApp-tests.xcresult ]; then
+            xcrun xcresulttool get test-results summary --path ios/build/GSApp-tests.xcresult --format json > ios/build/test-summary.json || true
+            python3 - <<'PYRESULT'
+          import json
+          from pathlib import Path
+          p = Path('ios/build/test-summary.json')
+          try:
+              obj = json.loads(p.read_text())
+              for item in obj.get('testFailures', [])[:25]:
+                  print('::error::' + json.dumps(item)[:3000].replace('%', '%25'))
+          except (ValueError, OSError):
+              pass
+          PYRESULT
+          fi
+
       - name: Collect the iOS renders into the workspace
         run: |
           set -euo pipefail
