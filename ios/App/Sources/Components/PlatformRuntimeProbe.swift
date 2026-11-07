@@ -64,6 +64,12 @@ struct PlatformRuntimeProbe: View {
             status = "permission-denied"
             return
         }
+        // Permission dismissal briefly leaves UIApplication inactive. Wait for
+        // the real lifecycle, not an assumed alert-animation duration.
+        for _ in 0..<30 {
+            if UIApplication.shared.applicationState == .active { break }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
         // The real active-state gate must refuse before Home is pressed.
         guard UIApplication.shared.applicationState == .active else {
             status = "prepare-not-active"
@@ -96,6 +102,9 @@ struct PlatformRuntimeProbe: View {
         let center = UNUserNotificationCenter.current()
         let ours = await center.deliveredNotifications().filter { $0.request.content.title.hasPrefix("GS runtime ") }
         center.removeDeliveredNotifications(withIdentifiers: ours.map { $0.request.identifier })
+        for entry in GsNoticeInbox.shared.entries where entry.title.hasPrefix("GS runtime ") {
+            GsNoticeInbox.shared.delete(id: entry.id)
+        }
     }
 
     private func restore() async {
