@@ -302,6 +302,7 @@ jobs:
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
               ('PlatformRuntimeUITests', 'testBackgroundNoticeIsDeliveredAndDisabledKindsAreNot'),
+              ('PlatformRuntimeUITests', 'testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji'),
               ('PlatformRuntimeUITests', 'testLongPressPinSurvivesBackgroundAndRelaunch'),
               ('PlatformHapticRuntimeTests', 'testUIKitDispatchAndDisabledGate'),
           ]
@@ -312,7 +313,7 @@ jobs:
                   missing.append(f'{suite}.{test}')
           if missing:
               raise SystemExit('Missing runtime passes (skips do not count): ' + ', '.join(missing))
-          print('All three iOS platform runtime tests executed and passed')
+          print('All required iOS platform runtime tests executed and passed')
           PYRUNTIME
 
       - name: Publish XCTest failure diagnostics as annotations
