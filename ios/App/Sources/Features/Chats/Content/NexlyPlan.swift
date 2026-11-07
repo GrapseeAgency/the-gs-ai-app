@@ -211,6 +211,15 @@ enum NexlyInk {
 enum NexlyGlassTone: String, CaseIterable {
     case amber, lavender, blue, green, pink, peach, mint, lilac
 
+    static let rose: NexlyGlassTone = .pink
+    static let indigo: NexlyGlassTone = .lavender
+    static let cyan: NexlyGlassTone = .blue
+    static let slate: NexlyGlassTone = .lilac
+    static let teal: NexlyGlassTone = .mint
+    static let purple: NexlyGlassTone = .lavender
+    static let emerald: NexlyGlassTone = .green
+    static let orange: NexlyGlassTone = .peach
+
     var top: Color {
         switch self {
         case .amber: return Color(red: 1.000, green: 0.969, blue: 0.906)
@@ -427,6 +436,10 @@ enum NexlyIcons {
     }
 
     /// Replace known emoji with `:icon:` tokens; drop any unknown pictograph.
+    static func normalize(_ text: String) -> String {
+        emojiToIconTokens(text)
+    }
+
     static func emojiToIconTokens(_ text: String) -> String {
         var out = text
         for (emoji, icon) in emoji.sorted(by: { $0.key.count > $1.key.count }) {
