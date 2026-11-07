@@ -158,6 +158,22 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("Item 31").assertExists()
         compose.onNodeWithText("Item 1").assertDoesNotExist()
         compose.onNodeWithText("1–1 of 1").assertExists()
+        // Ordinary Markdown has a separate renderer; test it too, including
+        // the emoji-only fallback that formerly restored rejected text.
+        val markdown = "`😀` [😀](https://example.org)\n\n| Name | Amount |\n| --- | --- |\n" +
+            (1..31).joinToString("\n") { "| Item $it | $it |" }
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                com.grapsee.gsai.ui.chat.content.BlocksContent(markdown, false, {})
+            }
+        }
+        compose.onAllNodes(hasText("😀", substring = true)).assertCountEquals(0)
+        compose.onNodeWithText("Link", substring = true).assertExists()
+        compose.onNodeWithText("Show: 5 ▾").performClick()
+        compose.onNodeWithText("Show: 10 ▾").performClick()
+        compose.onNodeWithText("Show: All ▾").assertExists()
+        compose.onNodeWithText("Item 31").assertExists()
+        compose.onNodeWithText("1–31 of 31").assertExists()
     }
 
     @Test fun generatedCalculatorAcceptsExactNumbersAndNeverRendersEmoji() {
