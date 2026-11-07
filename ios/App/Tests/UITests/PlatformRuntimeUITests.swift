@@ -66,12 +66,17 @@ final class PlatformRuntimeUITests: XCTestCase {
         }
         func openRowMenu() {
             let row = app.buttons.matching(
-                NSPredicate(format: "label CONTAINS %@", "Weekend in Kyoto")).firstMatch
+                NSPredicate(format: "label CONTAINS %@", "Explain quantum physics")).firstMatch
             XCTAssertTrue(row.waitForExistence(timeout: 15))
             row.press(forDuration: 1.2)
         }
         openChats()
         openRowMenu()
+        // Existing menu tests may have touched this idempotent fixture.
+        if app.buttons["Unpin"].waitForExistence(timeout: 2) {
+            app.buttons["Unpin"].tap()
+            openRowMenu()
+        }
         let pin = app.buttons["Pin to top"]
         XCTAssertTrue(pin.waitForExistence(timeout: 10))
         pin.tap()
