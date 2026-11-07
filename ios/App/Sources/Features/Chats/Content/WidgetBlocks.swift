@@ -2389,31 +2389,44 @@ private struct StepsBodyView: View {
     }
 }
 
+func pollSourceVotesIOS(_ option: Any) -> Int? {
+    guard let dict = option as? [String: Any] else { return option is String ? 0 : nil }
+    guard let raw = dict["votes"] ?? dict["count"] ?? dict["value"] else { return 0 }
+    guard let value = chartValueIOS(raw), value >= 0 else { return nil }
+    return Int(exactly: value)
+}
+
 private struct PollBodyView: View {
     @Environment(\.gsWidgetAction) private var widgetAction
     let obj: [String: Any]
     let accent: Color
     @State private var voted: Int? = nil
 
-    private var parsedOptions: [(label: String, votes: Int)] {
+    private var parsedOptions: [(label: String, votes: Int?)] {
         let raw = ((obj["options"] ?? obj["choices"] ?? obj["items"]) as? [Any]) ?? []
         return raw.map { opt in
-            if let plain = opt as? String { return (NexlyIcons.cleanPlainText(plain), 1) }
+            if let plain = opt as? String { return (NexlyIcons.cleanPlainText(plain), 0) }
             let dict = opt as? [String: Any] ?? [:]
             return (
                 NexlyIcons.cleanPlainText(str(dict, "label", "title", "name", "text")),
-                Int(dbl(dict, "votes", "count", "value", fallback: 1))
+                pollSourceVotesIOS(dict)
             )
         }
     }
 
     var body: some View {
         let opts = parsedOptions
-        let totalBase = opts.reduce(0) { $0 + $1.votes } + (voted != nil ? 1 : 0)
+        let totalBase = opts.reduce(0.0) { $0 + Double($1.votes ?? 0) } + (voted != nil ? 1 : 0)
         VStack(alignment: .leading, spacing: 6) {
+            Text("Source counts, if supplied, plus your local choice. Not a live audience poll.")
+                .font(Aero.caption()).foregroundStyle(Aero.textSecondary)
+            if opts.contains(where: { $0.votes == nil }) {
+                Text("Poll unavailable: supplied vote counts must be nonnegative whole numbers.")
+                    .font(Aero.caption()).foregroundStyle(Aero.textSecondary)
+            } else {
             ForEach(Array(opts.enumerated()), id: \.offset) { idx, opt in
-                let votes = opt.votes + (voted == idx ? 1 : 0)
-                let pct = totalBase > 0 ? Int(round(Double(votes) / Double(totalBase) * 100.0)) : 0
+                let votes = Double(opt.votes ?? 0) + (voted == idx ? 1 : 0)
+                let pct = totalBase > 0 ? Int(round(votes / totalBase * 100.0)) : 0
                 Button {
                     GSHaptics.select()
                     voted = idx
@@ -2422,12 +2435,13 @@ private struct PollBodyView: View {
                     HStack {
                         Text(opt.label).font(.system(size: 12, weight: voted == idx ? .bold : .regular)).foregroundStyle(Aero.text)
                         Spacer()
-                        Text("\(votes) (\(pct)%)").font(Aero.mono(11)).foregroundStyle(accent)
+                        Text("\(String(format: "%.0f", votes)) (\(pct)%)").font(Aero.mono(11)).foregroundStyle(accent)
                     }
                     .padding(9)
                     .background(voted == idx ? accent.opacity(0.16) : Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 10))
                 }
                 .buttonStyle(.plain)
+            }
             }
         }
     }
