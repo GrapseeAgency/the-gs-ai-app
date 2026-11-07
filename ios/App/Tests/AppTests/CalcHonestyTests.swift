@@ -2,6 +2,20 @@ import XCTest
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testAllRowsAndStrictDescendingTableSort() {
+        XCTAssertEqual(widgetTablePageSizeIOS(selection: -1, rowCount: 73), 73)
+        XCTAssertEqual(widgetTablePageSizeIOS(selection: -1, rowCount: 2), 2)
+        XCTAssertEqual(widgetTablePageSizeIOS(selection: -1, rowCount: 0), 1)
+        XCTAssertEqual(widgetTablePageSizeIOS(selection: 3, rowCount: 73), 3)
+        for cell in ["20", "$20", "same"] {
+            XCTAssertFalse(widgetTablePrecedesIOS(cell, cell, ascending: true))
+            XCTAssertFalse(widgetTablePrecedesIOS(cell, cell, ascending: false))
+        }
+        XCTAssertFalse(widgetTablePrecedesIOS("1K", "1000", ascending: false))
+        let values = ["2", "10", "2", "-3"]
+        XCTAssertEqual(values.sorted { widgetTablePrecedesIOS($0, $1, ascending: false) }, ["10", "2", "2", "-3"])
+    }
+
     func testTooltipDeltaRequiresAnActualPriorPoint() {
         XCTAssertNil(chartStepPercentIOS(values: [20, 30], index: 0))
         XCTAssertNil(chartStepPercentIOS(values: [0, 30], index: 1))
