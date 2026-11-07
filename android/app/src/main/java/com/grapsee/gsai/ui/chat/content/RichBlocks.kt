@@ -383,7 +383,17 @@ private fun isCalculatorHeadingTitle(raw: String): Boolean {
     return "calculator" in lower || "estimator" in lower || "simulator" in lower || "pricing model" in lower
 }
 
-private fun extractQuickCalcParams(text: String): Triple<Double, Double, Int> {
+private fun extractQuickCalcParams(text: String): Triple<Double, Double, Int>? {
+    val low = text.lowercase()
+    // A generic percentage tool cannot infer a medical model, profit margin,
+    // investment cash flows or a 50/30/20 allocation from nearby numbers.
+    if (listOf("calorie", "protein", "macro", "tdee", "bmi", "margin", "roi", "budget", "salary", "income").any { it in low }) return null
+    val amounts = Regex("""[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmMbB])?""").findAll(text).toList()
+    val rates = Regex("""(\d+(?:\.\d+)?)\s*(?:%|percent\b)""", RegexOption.IGNORE_CASE).findAll(text).toList()
+    if (amounts.size != 1 || rates.size != 1) return null
+    if (listOf("discount", "tax", "tip", "markup", "vat", "loan", "mortgage", "emi", "compound", "apy", "apr").none { it in low }) return null
+    val needsTerm = listOf("loan", "mortgage", "emi", "amortiz", "compound", "invest", "apy", "apr").any { it in low }
+    if (needsTerm && !Regex("""\b\d{1,2}\s*(?:-\s*)?(?:years?|yrs?\b)""", RegexOption.IGNORE_CASE).containsMatchIn(text)) return null
     val currMatch = Regex("""[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmMbB])?""").find(text)
     val currAmount = currMatch?.let { m ->
         val base = m.groupValues[1].replace(",", "").toDoubleOrNull() ?: return@let null
@@ -401,18 +411,8 @@ private fun extractQuickCalcParams(text: String): Triple<Double, Double, Int> {
     val yrMatch = Regex("""(\d{1,2})\s*(?:-\s*)?(?:years?|yrs?\b)""", RegexOption.IGNORE_CASE).find(text)
     val yearsVal = yrMatch?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(1, 40) ?: 5
 
-    val allNums = Regex("""\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?""")
-        .findAll(text)
-        .mapNotNull { it.value.replace(",", "").toDoubleOrNull() }
-        .toList()
-    val nonYearNums = allNums.filter { it !in 1990.0..2035.0 }
-    val amt = currAmount
-        ?: nonYearNums.firstOrNull { it >= 50.0 && it != pctVal }
-        ?: nonYearNums.firstOrNull { it >= 25.0 && it != pctVal }
-        ?: 1200.0
-    val rate = pctVal
-        ?: nonYearNums.firstOrNull { it > 0.0 && it < 50.0 && it != amt }
-        ?: 10.0
+    val amt = currAmount ?: return null
+    val rate = pctVal ?: return null
     return Triple(amt, rate, yearsVal)
 }
 
@@ -537,8 +537,9 @@ private fun StructuredBlockSequenceView(
                     is Block.BulletList -> nextBlock.items.joinToString(" ") { plainTextOfSpans(it.spans) }
                     else -> ""
                 }
-                if (bodyText.isNotBlank()) {
-                    val (amt, disc, yrs) = extractQuickCalcParams(bodyText)
+                val params = extractQuickCalcParams("$hTitle $bodyText")
+                if (params != null) {
+                    val (amt, disc, yrs) = params
                     renderedExplicitCalc = true
                     key("calc:${block.sourceStart}") {
                         NexlyQuickCalculatorCard(
@@ -665,9 +666,10 @@ private fun StructuredBlockSequenceView(
                 (hasNumber && ("mortgage" in low || "amortiz" in low || "compound interest" in low || ("loan" in low && ("apr" in low || "monthly" in low)) || ("budget" in low && "50/30/20" in low) || ("calorie" in low && "protein" in low) || "tdee" in low || ("macro" in low && "protein" in low)))
             isFinOrMath
         }
-        if (hasCalcSignal) {
+        val params = remember(fullProse) { extractQuickCalcParams(fullProse) }
+        if (hasCalcSignal && params != null) {
             renderedSpontaneousCalc = true
-            val (amt, disc, yrs) = remember(fullProse) { extractQuickCalcParams(fullProse) }
+            val (amt, disc, yrs) = params
             NexlyQuickCalculatorCard(
                 title = "Interactive Simulator",
                 initialAmount = amt,
@@ -1461,7 +1463,7 @@ private fun NexlyQuickCalculatorCard(
     }
     var mode by remember(initialMode) { mutableStateOf(initialMode) }
     var years by remember(initialYears, initialMode) {
-        mutableStateOf(if (initialMode == 3 && initialYears == 5) 30 else initialYears.coerceIn(1, 40))
+        mutableStateOf(initialYears.coerceIn(1, 40))
     }
     var amountText by remember(initialAmount, initialMode) {
         val seedAmt = if (initialMode == 5 && initialAmount > 300.0) 75.0 else initialAmount
@@ -1573,7 +1575,7 @@ private fun NexlyQuickCalculatorCard(
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
                         .background(Color(0xFFEDE5FF))
-                        .clickable { mode = (mode + 1) % modeLabels.size }
+
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Text(
@@ -1590,7 +1592,7 @@ private fun NexlyQuickCalculatorCard(
                     color = Color(0xFF6C4CF6),
                     modifier = Modifier.clickable {
                         mode = initialMode
-                        years = if (initialMode == 3 && initialYears == 5) 30 else initialYears.coerceIn(1, 40)
+                        years = initialYears.coerceIn(1, 40)
                         amountText = if (initialAmount % 1.0 == 0.0) initialAmount.toLong().toString()
                         else String.format(java.util.Locale.US, "%.2f", initialAmount)
                         rateText = if (initialDiscount % 1.0 == 0.0) initialDiscount.toLong().toString()
@@ -1802,6 +1804,8 @@ private fun extractSpontaneousMetricsFromBlocks(blocks: List<Block>): List<Spont
             }
         }
     }
+    // Mixed units and percentages are not additive parts of a whole.
+    if (items.map { it.unit }.distinct().size != 1 || items.any { it.unit == "%" }) return emptyList()
     return items.distinctBy { it.label.lowercase() }.take(8)
 }
 

@@ -252,11 +252,21 @@ private struct NexlyCalculatorSpec {
     let currency: String
 }
 
-private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> NexlyCalculatorSpec {
+private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> NexlyCalculatorSpec? {
     let (_, strippedTitle) = NexlyIcons.extractLeadingIcon(titleRaw)
     let cleanTitle = NexlyIcons.cleanPlainText(strippedTitle)
         .trimmingCharacters(in: CharacterSet(charactersIn: ":-—– "))
     let combined = "\(cleanTitle) \(bodyText)".lowercased()
+    if ["calorie", "protein", "macro", "tdee", "bmi", "margin", "roi", "budget", "salary", "income"].contains(where: { combined.contains($0) }) { return nil }
+    guard ["discount", "tax", "tip", "markup", "vat", "loan", "mortgage", "emi", "compound", "apy", "apr"].contains(where: { combined.contains($0) }) else { return nil }
+    let amountPattern = try? NSRegularExpression(pattern: "[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)\\s*([kKmMbB])?")
+    let ratePattern = try? NSRegularExpression(pattern: "(\\d+(?:\\.\\d+)?)\\s*(?:%|percent\\b)", options: .caseInsensitive)
+    let sourceRange = NSRange(bodyText.startIndex..., in: bodyText)
+    guard amountPattern?.numberOfMatches(in: bodyText, range: sourceRange) == 1,
+          ratePattern?.numberOfMatches(in: bodyText, range: sourceRange) == 1 else { return nil }
+    let needsTerm = ["loan", "mortgage", "emi", "amortiz", "compound", "invest", "apy", "apr"].contains(where: { combined.contains($0) })
+    if needsTerm && bodyText.range(of: "\\b\\d{1,2}\\s*(?:-\\s*)?(?:years?|yrs?\\b)", options: [.regularExpression, .caseInsensitive]) == nil { return nil }
+
 
     var currAmount: Double? = nil
     if let crx = try? NSRegularExpression(pattern: "[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)\\s*([kKmMbB])?"),
@@ -290,20 +300,7 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
         yearsVal = min(max(1, y), 40)
     }
 
-    let allNums = (try? NSRegularExpression(pattern: "\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?"))
-        .map { rx in rx.matches(in: bodyText, range: NSRange(bodyText.startIndex..., in: bodyText)) }?
-        .compactMap { m -> Double? in
-            guard let r = Range(m.range, in: bodyText) else { return nil }
-            return Double(bodyText[r].replacingOccurrences(of: ",", with: ""))
-        } ?? []
-    let nonYearNums = allNums.filter { !($0 >= 1990 && $0 <= 2035) }
-    let amt = currAmount
-        ?? nonYearNums.first(where: { $0 >= 50 && $0 != pctVal })
-        ?? nonYearNums.first(where: { $0 >= 25 && $0 != pctVal })
-        ?? 1200.0
-    let rate = pctVal
-        ?? nonYearNums.first(where: { $0 > 0 && $0 < 50 && $0 != amt })
-        ?? 10.0
+    guard let amt = currAmount, let rate = pctVal else { return nil }
 
     let currency: String = {
         if bodyText.contains("€") { return "€" }
@@ -322,7 +319,7 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
             resultLabel: "Monthly EMI",
             initialAmount: amt,
             initialRate: rate,
-            initialYears: yearsVal == 5 ? 30 : yearsVal,
+            initialYears: yearsVal,
             mode: .loan,
             currency: currency.isEmpty ? "$" : currency
         )
@@ -522,8 +519,7 @@ private struct StructuredProseSequenceView: View {
                     } else if case .bulletList(let bItems, _) = next {
                         bodyText = bItems.map { plainTextOfSpans($0.spans) }.joined(separator: " ")
                     }
-                    if !bodyText.isEmpty {
-                        let spec = parseQuickCalculatorSpec(titleRaw: hTitle, bodyText: bodyText)
+                    if !bodyText.isEmpty, let spec = parseQuickCalculatorSpec(titleRaw: hTitle, bodyText: bodyText) {
                         out.append(SequenceEntry(index: i, consumedCount: 2, block: block, sectionMode: mode, coalescedCallout: nil, coalescedCalculator: spec))
                         i += 2
                         continue
@@ -633,11 +629,10 @@ private struct StructuredProseSequenceView: View {
             let hasPercent = proseText.range(of: "\\b\\d+(?:\\.\\d+)?\\s*%", options: .regularExpression) != nil || lowProse.contains("percent")
             let hasNum = proseText.range(of: "\\b\\d{2,}\\b", options: .regularExpression) != nil
             let hasDomainSignal = hasNum && (lowProse.contains("mortgage") || lowProse.contains("amortiz") || lowProse.contains("compound interest") || (lowProse.contains("loan") && (lowProse.contains("apr") || lowProse.contains("monthly"))) || (lowProse.contains("budget") && lowProse.contains("50/30/20")) || (lowProse.contains("calorie") && lowProse.contains("protein")) || lowProse.contains("tdee") || ((hasCurrency || hasNum) && hasPercent && (lowProse.contains("discount") || lowProse.contains("tax") || lowProse.contains("tip") || lowProse.contains("margin") || lowProse.contains("roi") || lowProse.contains("interest") || lowProse.contains("salary"))))
-            let shouldShowSpontaneousCalc = !hasExplicitCalc && (activeDashboardTab == "Dashboard" || activeDashboardTab == "Calculator") && ((hasCurrency && hasPercent) || hasDomainSignal)
-            if shouldShowSpontaneousCalc {
-                NexlyQuickCalculatorCardView(
-                    spec: parseQuickCalculatorSpec(titleRaw: "Interactive Scenario Calculator", bodyText: proseText)
-                )
+            let spontaneousSpec = parseQuickCalculatorSpec(titleRaw: "Interactive Scenario Calculator", bodyText: proseText)
+            let shouldShowSpontaneousCalc = spontaneousSpec != nil && !hasExplicitCalc && (activeDashboardTab == "Dashboard" || activeDashboardTab == "Calculator") && ((hasCurrency && hasPercent) || hasDomainSignal)
+            if shouldShowSpontaneousCalc, let spec = spontaneousSpec {
+                NexlyQuickCalculatorCardView(spec: spec)
             }
 
             let hasVisualDataBlock = normalizedProse.contains {
@@ -1378,20 +1373,9 @@ private struct NexlyQuickCalculatorCardView: View {
             }
             Spacer()
             HStack(spacing: 6) {
-                Button {
-                    GSHaptics.select()
-                    let all = QuickCalcMode.allCases
-                    let idx = all.firstIndex(of: mode) ?? 0
-                    mode = all[(idx + 1) % all.count]
-                } label: {
-                    Text(mode.rawValue)
-                        .font(.system(size: 10.5, weight: .bold))
-                        .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.929, green: 0.898, blue: 1.0)))
-                }
-                .buttonStyle(.plain)
+                Text(mode.rawValue)
+                    .font(.system(size: 10.5, weight: .bold))
+                    .padding(.horizontal, 7)
 
                 Button("Reset") {
                     GSHaptics.select()
@@ -1601,6 +1585,7 @@ private func extractSpontaneousMetricsFromBlocksIOS(_ blocks: [Block]) -> [Spont
             if out.count >= 8 { break }
         }
     }
+    if Set(out.map { $0.unit }).count != 1 || out.contains(where: { $0.unit == "%" }) { return [] }
     return out
 }
 
