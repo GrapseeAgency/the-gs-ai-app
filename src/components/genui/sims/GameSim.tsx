@@ -115,7 +115,7 @@ export function GameSim({ payload }: { payload: Rec<string, unknown> & { title?:
           ctx.fill()
           ctx.fillStyle = theme.text2
           ctx.font = `${TYPE.micro}px sans-serif`
-          ctx.fillText(`♥ ${s.lives}`, 8, 14)
+          ctx.fillText(`Lives: ${s.lives}`, 8, 14)
         }}
       />
     </div>

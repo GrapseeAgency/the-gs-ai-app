@@ -8,6 +8,7 @@ EXPECTED = {
     'backgroundReplyAppearsInOsAndSettingsSuppressIt',
     'realCardDistinguishesTapFromLongPress',
     'hapticDispatchUsesPlatformConstantsAndHonorsToggle',
+    'generatedCalculatorAcceptsExactNumbersAndNeverRendersEmoji',
 }
 
 

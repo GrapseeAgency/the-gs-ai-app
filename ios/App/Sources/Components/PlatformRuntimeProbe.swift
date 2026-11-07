@@ -9,6 +9,7 @@ import UserNotifications
 @MainActor
 struct PlatformRuntimeProbe: View {
     @State private var status = "idle"
+    @State private var showCalculator = false
     @State private var title = ""
     @State private var armed = false
     @State private var accepted: Bool?
@@ -23,6 +24,10 @@ struct PlatformRuntimeProbe: View {
             Button("Arm messages-disabled notice") { Task { await arm(mode: "messages") } }
             Button("Inspect OS delivery") { Task { await inspect() } }
             Button("Restore runtime settings") { Task { await restore() } }
+            Button("Open generated calculator") { showCalculator = true }
+            if showCalculator {
+                WidgetBlockView(kind: "calc", json: #"{"title":"\ud83d\ude80 Growth","fields":[{"key":"amount","label":"Amount \u00a9\ufe0f \ud83d\ude00","value":100}],"outputs":[{"label":"Double","expr":"amount*2"}]}"#, open: false)
+            }
         }
         .onAppear {
             let settings = SettingsStore.shared

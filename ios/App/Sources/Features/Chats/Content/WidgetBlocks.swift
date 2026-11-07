@@ -187,6 +187,33 @@ func injectWidgetType(json: String, alias: String, kind: String) -> String {
 
 // MARK: - Flexible JSON parsing & normalization
 
+private let widgetRawPresentationKeys: Set<String> = [
+    "id", "key", "type", "kind", "expr", "expression", "formula",
+    "code", "source", "script", "html", "svg", "css", "sql", "query",
+    "url", "href", "link", "src", "route", "action", "method", "prompt",
+    "language", "format", "accent", "palette", "variant", "color",
+    "before", "after", "old", "new", "original", "modified", "patch", "diff", "unified", "z", "pattern", "regex"
+]
+
+/// Decoded JSON boundary, including escaped Unicode and primitive string arrays.
+/// Only presentation changes; source, expressions, identities and URLs stay exact.
+func sanitizeWidgetPresentationIOS(_ value: Any, key: String = "") -> Any {
+    if let text = value as? String {
+        if widgetRawPresentationKeys.contains(key) { return text }
+        let normalized = NexlyIcons.normalize(text)
+        if key == "title" { return normalized }
+        if key == "icon" || key == "closingIcon" { return NexlyIcons.extractLeadingIcon(text).0 ?? NexlyIcons.resolve(text) }
+        return normalized.replacingOccurrences(of: ":[a-z0-9][a-z0-9-]{1,42}:", with: "", options: .regularExpression)
+    }
+    if let array = value as? [Any] { return array.map { sanitizeWidgetPresentationIOS($0, key: key) } }
+    if let object = value as? [String: Any] {
+        return object.reduce(into: [String: Any]()) { result, entry in
+            result[entry.key] = sanitizeWidgetPresentationIOS(entry.value, key: entry.key)
+        }
+    }
+    return value
+}
+
 func parseRelaxedJSONObject(kind: String, raw: String) -> [String: Any]? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty, trimmed.count <= 65_536 else { return nil }
@@ -200,7 +227,9 @@ func parseRelaxedJSONObject(kind: String, raw: String) -> [String: Any]? {
        let any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
         return normalizeJSONRoot(kind: kind, value: any)
     }
-    return recoverPlainTextWidgetIOS(kind: kind, raw: trimmed)
+    return recoverPlainTextWidgetIOS(kind: kind, raw: trimmed).map {
+        sanitizeWidgetPresentationIOS($0) as? [String: Any] ?? $0
+    }
 }
 
 private func recoverPlainTextWidgetIOS(kind: String, raw: String) -> [String: Any]? {
@@ -270,30 +299,7 @@ private let RAW_KEYS_PRESERVED_IOS: Set<String> = [
 private let ICON_NAME_KEYS_IOS: Set<String> = ["icon", "closingIcon"]
 
 private func sanitizeJSONValueIOS(kind: String, value: Any, keyHint: String? = nil) -> Any {
-    if let s = value as? String {
-        if let k = keyHint, RAW_KEYS_PRESERVED_IOS.contains(k) { return s }
-        if let k = keyHint, ICON_NAME_KEYS_IOS.contains(k) {
-            return NexlyIcons.extractLeadingIcon(s).0 ?? NexlyIcons.resolve(s)
-        }
-        let allowIconTokens = keyHint == "title"
-            || (["followups", "actions", "menu", "chips"].contains(kind) && ["label", "text", "name"].contains(keyHint ?? ""))
-        if allowIconTokens {
-            return NexlyIcons.normalize(s).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        return NexlyIcons.cleanPlainText(s)
-    }
-    if let arr = value as? [Any] {
-        return arr.map { sanitizeJSONValueIOS(kind: kind, value: $0, keyHint: keyHint) }
-    }
-    if let obj = value as? [String: Any] {
-        var out: [String: Any] = [:]
-        out.reserveCapacity(obj.count)
-        for (k, v) in obj {
-            out[k] = sanitizeJSONValueIOS(kind: kind, value: v, keyHint: k)
-        }
-        return out
-    }
-    return value
+    sanitizeWidgetPresentationIOS(value, key: keyHint ?? "")
 }
 
 private func normalizeJSONRoot(kind: String, value: Any) -> [String: Any]? {
@@ -891,6 +897,7 @@ private struct WidgetBodyView: View {
             FormBodyView(obj: obj, accent: accent)
         case "calc":
             CalcBodyView(obj: obj, accent: accent)
+                .id((try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])) ?? Data())
         case "media", "carousel", "cards":
             MediaBodyView(obj: obj, accent: accent)
         case "app":
@@ -911,6 +918,17 @@ private struct WidgetBodyView: View {
             GenericStructuredBodyView(kind: kind, obj: obj, accent: accent)
         }
     }
+}
+
+func chartGrowthPercentIOS(first: Double, last: Double) -> Double? {
+    guard first.isFinite, last.isFinite, first != 0 else { return nil }
+    let result = ((last - first) / abs(first)) * 100
+    return result.isFinite ? result : nil
+}
+
+func chartStepPercentIOS(values: [Double], index: Int) -> Double? {
+    guard index > 0, index < values.count else { return nil }
+    return chartGrowthPercentIOS(first: values[index - 1], last: values[index])
 }
 
 private struct ChartBodyView: View {
@@ -1094,9 +1112,9 @@ private struct ChartBodyView: View {
     private func chartTooltipRow(pts: [BarPoint], activeIdx: Int, totalVal: Double, unit: String) -> some View {
         if !pts.isEmpty && activeIdx < pts.count {
             let selPt = pts[activeIdx]
-            let avgVal = totalVal / Double(max(1, pts.count))
-            let prevVal = activeIdx > 0 ? pts[activeIdx - 1].value : avgVal
-            let stepPct = prevVal != 0 ? ((selPt.value - prevVal) / abs(prevVal)) * 100.0 : 0.0
+            let stepPct = chartStepPercentIOS(values: pts.map { $0.value }, index: activeIdx)
+            let stepText = stepPct.map { String(format: "%@ %.1f%%", $0 >= 0 ? "↑" : "↓", abs($0)) } ?? "N/A (no prior baseline)"
+            let stepColor = stepPct == nil ? Aero.textSecondary : ((stepPct ?? 0) >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
             HStack(spacing: 8) {
                 Circle()
                     .fill(Color(red: 0.424, green: 0.298, blue: 0.965))
@@ -1108,9 +1126,9 @@ private struct ChartBodyView: View {
                     .font(.system(size: 13.5, weight: .bold))
                     .foregroundStyle(Aero.text)
                 Spacer()
-                Text(String(format: "%@ %.1f%%", stepPct >= 0 ? "↑" : "↓", abs(stepPct)))
+                Text(stepText)
                     .font(.system(size: 11.5, weight: .bold))
-                    .foregroundStyle(stepPct >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
+                    .foregroundStyle(stepColor)
             }
             .padding(.horizontal, 11)
             .padding(.vertical, 7)
@@ -1366,12 +1384,12 @@ private struct ChartBodyView: View {
     @ViewBuilder
     private func chartSummaryFooter(pts: [BarPoint], peakIdx: Int, totalVal: Double, unit: String, rangeLabel: String) -> some View {
         if pts.count >= 2 {
-            let firstVal = pts.first?.value ?? 1.0
-            let lastVal = pts.last?.value ?? 0.0
-            let growthPct = firstVal != 0 ? ((lastVal - firstVal) / abs(firstVal)) * 100.0 : 0.0
-            let pos = growthPct >= 0
-            let pillBg = pos ? Color(red: 0.902, green: 0.976, blue: 0.941) : Color(red: 0.992, green: 0.925, blue: 0.925)
-            let pillFg = pos ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373)
+            let growthPct = chartGrowthPercentIOS(first: pts[0].value, last: pts[pts.count - 1].value)
+            let pos = (growthPct ?? -1) >= 0
+            let growthText = growthPct.map { String(format: "%@%.1f%%", pos ? "+" : "", $0) } ?? "N/A (zero baseline)"
+            let deltaText = growthPct == nil ? "No defined baseline" : "\(pos ? "↑" : "↓") \(growthText)"
+            let pillBg = growthPct == nil ? Color.gray.opacity(0.1) : (pos ? Color(red: 0.902, green: 0.976, blue: 0.941) : Color(red: 0.992, green: 0.925, blue: 0.925))
+            let pillFg = growthPct == nil ? Aero.textSecondary : (pos ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
             let peakPt = pts[peakIdx]
             HStack(spacing: 7) {
                 VStack(alignment: .leading, spacing: 3) {
@@ -1387,7 +1405,7 @@ private struct ChartBodyView: View {
                     Text("Total")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
-                    Text(String(format: "%@ %@%.1f%%", pos ? "↑" : "↓", pos ? "+" : "", growthPct))
+                    Text(deltaText)
                         .font(.system(size: 9.5, weight: .bold))
                         .foregroundStyle(pillFg)
                         .padding(.horizontal, 6)
@@ -1441,14 +1459,14 @@ private struct ChartBodyView: View {
                         size: 24,
                         glyphSize: 14
                     )
-                    Text(String(format: "%@%.1f%%", pos ? "+" : "", growthPct))
+                    Text(growthText)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Aero.text)
                     Text("Growth Rate")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
                         .lineLimit(1)
-                    Text(String(format: "%@ %@%.1f%%", pos ? "↑" : "↓", pos ? "+" : "", growthPct))
+                    Text(deltaText)
                         .font(.system(size: 9.5, weight: .bold))
                         .foregroundStyle(pillFg)
                         .padding(.horizontal, 6)
@@ -1473,7 +1491,7 @@ private struct ChartBodyView: View {
                     Text("Key Insights:")
                         .font(.system(size: 11.5, weight: .bold))
                         .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
-                    Text(String(format: "Peak in %@ (%@) · %@%.1f%% overall change across %@", peakPt.label, compactNumber(peakPt.value, unit: unit), pos ? "+" : "", growthPct, rangeLabel.lowercased()))
+                    Text("Peak in \(peakPt.label) (\(compactNumber(peakPt.value, unit: unit))) · \(growthText) overall change across \(rangeLabel.lowercased())")
                         .font(.system(size: 11))
                         .foregroundStyle(Color(red: 0.224, green: 0.196, blue: 0.361))
                 }
@@ -3261,12 +3279,19 @@ enum CalcExprIOS {
     }
 }
 
+/// Percent format takes ratios; a '%' unit without that format takes points.
+func calcPercentDisplayIOS(_ value: Double, format: String) -> Double {
+    ["percent", "pct"].contains(format.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)) ? value * 100 : value
+}
+
 private struct CalcBodyView: View {
     let obj: [String: Any]
     let accent: Color
     @State private var vals: [String: Double] = [:]
+    @State private var drafts: [String: String] = [:]
 
     private func formatCalcResult(_ n: Double, unit: String, format: String = "") -> String {
+        guard n.isFinite else { return "Undefined for these inputs" }
         let uLow = unit.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         let fLow = format.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         let isCurrency = ["money", "currency", "usd"].contains(fLow) || ["currency", "money", "usd", "$", "€", "£", "¥"].contains(uLow)
@@ -3282,7 +3307,7 @@ private struct CalcBodyView: View {
             if isCurrency || unit.isEmpty { return "" }
             return " \(unit)"
         }()
-        let displayNum = (isPercent && ["percent", "pct"].contains(fLow) && abs(n) <= 1.0) ? n * 100.0 : n
+        let displayNum = calcPercentDisplayIOS(n, format: fLow)
         let formatted: String = {
             if displayNum.truncatingRemainder(dividingBy: 1.0) == 0 && !isCurrency {
                 return String(format: "%.0f", displayNum)
@@ -3313,8 +3338,9 @@ private struct CalcBodyView: View {
         for (idx, f) in fields.prefix(10).enumerated() {
             let rawKey = str(f, "id", "key", "name")
             let key = rawKey.isEmpty ? "x\(idx + 1)" : rawKey
-            let minV = dbl(f, "min", fallback: 0)
-            let cur = vals[key] ?? dbl(f, "default", "value", fallback: minV)
+            let choices = f["choices"] as? [[String: Any]] ?? []
+            let initial = dbl(f, "value", "default", fallback: choices.first.map { dbl($0, "value", fallback: .nan) } ?? .nan)
+            let cur = vals[key] ?? initial
             map[key] = cur
             map[key.lowercased()] = cur
             map["x\(idx + 1)"] = cur
@@ -3334,6 +3360,7 @@ private struct CalcBodyView: View {
                     Button("Reset") {
                         GSHaptics.select()
                         vals.removeAll()
+                        drafts.removeAll()
                     }
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(accent)
@@ -3354,10 +3381,11 @@ private struct CalcBodyView: View {
         let label = NexlyIcons.cleanPlainText(str(f, "label", "title", "name", "key"))
         let rawKey = str(f, "id", "key", "name")
         let key = rawKey.isEmpty ? "x\(idx + 1)" : rawKey
-        let minV = dbl(f, "min", fallback: 0)
-        let maxV = max(dbl(f, "max", fallback: 1000), minV + 1)
+        let minV = dbl(f, "min", fallback: -.greatestFiniteMagnitude)
+        let maxV = dbl(f, "max", fallback: .greatestFiniteMagnitude)
+        let hasRange = f["min"] != nil && f["max"] != nil && minV.isFinite && maxV.isFinite && maxV > minV
         let rawStep = max(dbl(f, "step", fallback: 0), 0)
-        let effStep = rawStep > 0 ? rawStep : ((maxV - minV) >= 20 ? 1.0 : 0.1)
+        let effStep = rawStep > 0 ? rawStep : (hasRange ? (maxV - minV) / 100 : 1)
         let cur = activeVars[key] ?? minV
         let rawUnit = str(f, "unit")
         let unit = ["currency", "money", "usd"].contains(rawUnit.lowercased()) ? "$" : rawUnit
@@ -3393,17 +3421,15 @@ private struct CalcBodyView: View {
                         "0",
                         text: Binding(
                             get: {
-                                abs(cur - round(cur)) < 1e-6
-                                    ? String(format: "%.0f", cur)
-                                    : String(format: "%.2f", cur)
+                                drafts[key] ?? (cur.isFinite ? String(cur) : "")
                             },
                             set: { (s: String) in
-                                if let d = Double(s.replacingOccurrences(of: ",", with: "")) {
-                                    vals[key] = d
-                                }
+                                drafts[key] = s
+                                vals[key] = Double(s) ?? .nan
                             }
                         )
                     )
+                    .accessibilityIdentifier("calc-input-\(key)")
                     .font(Aero.mono(11.5))
                     .foregroundStyle(accent)
                     .multilineTextAlignment(.trailing)
@@ -3415,17 +3441,20 @@ private struct CalcBodyView: View {
                         Text(unit).font(Aero.mono(11)).foregroundStyle(Aero.textSecondary)
                     }
                 }
+                if hasRange {
                 Slider(
                     value: Binding(
-                        get: { min(max(cur, minV), maxV) },
+                        get: { cur.isFinite ? min(max(cur, minV), maxV) : minV },
                         set: { (newVal: Double) in
                             let snapped = round((newVal - minV) / effStep) * effStep + minV
                             vals[key] = min(max(snapped, minV), maxV)
+                            drafts.removeValue(forKey: key)
                         }
                     ),
                     in: minV...maxV
                 )
                 .tint(accent)
+                }
             }
         }
     }
@@ -3437,7 +3466,16 @@ private struct CalcBodyView: View {
         let unit = str(out, "unit")
         let fmt = str(out, "format")
         let evaluated: String = {
-            if expr.isEmpty { return "0" }
+            if expr.isEmpty { return "Missing formula" }
+            for (index, field) in calcFields.prefix(10).enumerated() {
+                let rawKey = str(field, "id", "key", "name")
+                let key = rawKey.isEmpty ? "x\(index + 1)" : rawKey
+                let value = activeVars[key] ?? .nan
+                if !value.isFinite || value < dbl(field, "min", fallback: -.greatestFiniteMagnitude)
+                    || value > dbl(field, "max", fallback: .greatestFiniteMagnitude) {
+                    return "Enter valid inputs"
+                }
+            }
             if let literal = Double(expr) { return formatCalcResult(literal, unit: unit, format: fmt) }
             let val = CalcExprIOS.eval(expr, vars: activeVars)
             return formatCalcResult(val, unit: unit, format: fmt)

@@ -46,7 +46,10 @@ enum ResponseStyle {
         "schedules, processes, study concepts, or choices — even when the user did not explicitly ask for a widget — " +
         "delight the user by appending a logical interactive fenced widget block (` ```calc `, ` ```chart `, ` ```stat `, " +
         "` ```compare `, ` ```timeline `, ` ```quiz `, ` ```flashcards `, ` ```checklist `, ` ```steps `, ` ```poll `, " +
-        "` ```sim `, ` ```stage3d `) with real domain values and mathematical formulas."
+        "` ```sim `, ` ```stage3d `) with real domain values and mathematical formulas. " +
+        "Choose one genuinely useful interaction, not an unrelated decoration. If required values are missing, ask for them or label editable assumptions explicitly. " +
+        "For calc widgets, define EVERY expression variable in fields. Numeric fields accept direct entry; min/max are optional and must have a meaningful source. " +
+        "format percent takes ratios at every magnitude (1.2 means 120%); for percentage-point results use unit % with format number. Never guess from magnitude."
 
     /// Rendering contract plus one sentence per preference axis.
     ///
