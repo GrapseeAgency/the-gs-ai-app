@@ -1,6 +1,33 @@
 import XCTest
 
 final class PlatformRuntimeUITests: XCTestCase {
+    func testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        let open = app.buttons["Open generated calculator"]
+        XCTAssertTrue(open.waitForExistence(timeout: 20))
+        open.tap()
+        let field = app.textFields["calc-input-amount"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.sliders.count, 0, "Unbounded model field invented a slider range")
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "©")).count, 0)
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "😀")).count, 0)
+        field.tap()
+        let initial = field.value as? String ?? ""
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: initial.count) + "12.3456")
+        XCTAssertEqual(field.value as? String, "12.3456", "Typed input was rounded or reformatted")
+        XCTAssertTrue(app.staticTexts["24.69"].waitForExistence(timeout: 10))
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 7))
+        XCTAssertTrue(app.staticTexts["Enter valid inputs"].waitForExistence(timeout: 10))
+        app.buttons["Reset"].tap()
+        XCTAssertTrue(app.staticTexts["200"].waitForExistence(timeout: 10))
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "genui-calculator-typed-reset-no-emoji"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+    }
+
     func testBackgroundNoticeIsDeliveredAndDisabledKindsAreNot() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
