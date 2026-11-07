@@ -112,12 +112,49 @@ export const ICON_ALIASES: Record<string, string> = {
   map: 'map',
   phone: 'device-mobile',
   mobile: 'device-mobile',
+  eyeglasses: 'eyeglass',
+  glasses: 'eyeglass',
+  'circle-filled': 'circle-dot',
+  dot: 'circle-dot',
+  bullet: 'circle-dot',
+  lightning: 'bolt',
+  zap: 'bolt',
+  flash: 'bolt',
+  energy: 'bolt',
+  money: 'coin',
+  dollar: 'currency-dollar',
+  currency: 'coin',
+  price: 'coin',
+  graph: 'chart-bar',
+  chart: 'chart-bar',
+  analytics: 'chart-line',
+  stats: 'chart-bar',
+  todo: 'checkbox',
+  task: 'checkbox',
+  tasks: 'list-check',
+  checklist: 'list-check',
+  tip: 'bulb',
+  insight: 'bulb',
+  magic: 'sparkles',
+  ai: 'sparkles',
+  edu: 'school',
+  academic: 'school',
+  university: 'building-bank',
+  security: 'shield-check',
+  safe: 'shield-check',
+  verified: 'shield-check',
+  error: 'alert-circle',
+  danger: 'alert-triangle',
+  info: 'info-circle',
+  help: 'help-circle',
+  question: 'help-circle',
+  checkmark: 'checks',
 }
 
 /** Normalise arbitrary model output into a Tabler kebab-case id. */
 export function canonicalIconName(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
-  let name = raw
+  const name = raw
     .trim()
     .toLowerCase()
     .replace(/^[:[]+|[:\]]+$/g, '')
@@ -128,6 +165,16 @@ export function canonicalIconName(raw: unknown): string | null {
   if (NAME_SET.has(name)) return name
   const alias = ICON_ALIASES[name]
   if (alias && NAME_SET.has(alias)) return alias
+  const stripped = name.replace(/-(?:filled|outline)$/, '')
+  if (NAME_SET.has(stripped)) return stripped
+  const strippedAlias = ICON_ALIASES[stripped]
+  if (strippedAlias && NAME_SET.has(strippedAlias)) return strippedAlias
+  if (stripped.endsWith('s') && stripped.length > 3) {
+    const singular = stripped.slice(0, -1)
+    if (NAME_SET.has(singular)) return singular
+    const sAlias = ICON_ALIASES[singular]
+    if (sAlias && NAME_SET.has(sAlias)) return sAlias
+  }
   return null
 }
 
@@ -429,7 +476,7 @@ export const EMOJI_TO_ICON: Record<string, string> = {
   '😍': 'heart',
   '🥰': 'heart',
   '😎': 'sunglasses',
-  '🤓': 'eyeglasses',
+  '🤓': 'eyeglass',
   '🧐': 'search',
   '🥳': 'sparkles',
   '😞': 'mood-sad',
@@ -530,12 +577,12 @@ export const EMOJI_TO_ICON: Record<string, string> = {
   '🛁': 'bath',
   '🧹': 'brush',
   '🧯': 'fire-extinguisher',
-  '🔴': 'circle-filled',
-  '🟠': 'circle-filled',
-  '🟡': 'circle-filled',
-  '🟢': 'circle-filled',
-  '🔵': 'circle-filled',
-  '🟣': 'circle-filled',
+  '🔴': 'circle-dot',
+  '🟠': 'circle-dot',
+  '🟡': 'circle-dot',
+  '🟢': 'circle-dot',
+  '🔵': 'circle-dot',
+  '🟣': 'circle-dot',
   '🤔': 'brain',
   '❌': 'circle-x',
   '❓': 'help-circle',

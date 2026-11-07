@@ -226,7 +226,17 @@ object NexlyIcons {
         "target" to "target", "idea" to "bulb", "lightbulb" to "bulb",
         "person" to "user", "user" to "user", "home" to "home", "school" to "school",
         "travel" to "plane", "plane" to "plane", "phone" to "device-mobile",
-        "mobile" to "device-mobile"
+        "mobile" to "device-mobile", "eyeglasses" to "eyeglass", "glasses" to "eyeglass",
+        "circle-filled" to "circle-dot", "dot" to "circle-dot", "bullet" to "circle-dot",
+        "lightning" to "bolt", "zap" to "bolt", "flash" to "bolt", "energy" to "bolt",
+        "money" to "coin", "dollar" to "currency-dollar", "currency" to "coin", "price" to "coin",
+        "graph" to "chart-bar", "chart" to "chart-bar", "analytics" to "chart-line", "stats" to "chart-bar",
+        "todo" to "checkbox", "task" to "checkbox", "tasks" to "list-check", "checklist" to "list-check",
+        "tip" to "bulb", "insight" to "bulb", "magic" to "sparkles", "ai" to "sparkles",
+        "edu" to "school", "academic" to "school", "university" to "building-bank",
+        "security" to "shield-check", "safe" to "shield-check", "verified" to "shield-check",
+        "error" to "alert-circle", "danger" to "alert-triangle", "info" to "info-circle",
+        "help" to "help-circle", "question" to "help-circle", "checkmark" to "checks"
     )
 
     /** Known emoji → the closest semantic glass glyph. Prompt bans emoji; this
@@ -266,7 +276,7 @@ object NexlyIcons {
         "👍" to "thumb-up", "👎" to "thumb-down", "😊" to "mood-smile", "😀" to "mood-smile",
         "😃" to "mood-smile", "😄" to "mood-smile", "😁" to "mood-smile", "🙂" to "mood-smile",
         "😉" to "mood-wink", "😍" to "heart", "🥰" to "heart", "😎" to "sunglasses",
-        "🤓" to "eyeglasses", "🧐" to "search", "🥳" to "sparkles",
+        "🤓" to "eyeglass", "🧐" to "search", "🥳" to "sparkles",
         "😞" to "mood-sad", "😔" to "mood-sad", "😟" to "mood-sad", "😕" to "mood-sad",
         "🙁" to "mood-sad", "☹️" to "mood-sad", "☹" to "mood-sad", "😢" to "mood-sad", "😭" to "mood-sad",
         "😤" to "flame", "😠" to "alert-circle", "😡" to "alert-circle", "🤯" to "brain",
@@ -291,8 +301,8 @@ object NexlyIcons {
         "💿" to "disc", "🔭" to "telescope", "📡" to "satellite", "💊" to "pill",
         "🩺" to "stethoscope", "🛏️" to "bed", "🚿" to "bath", "🛁" to "bath",
         "🧹" to "brush", "🧯" to "fire-extinguisher",
-        "🔴" to "circle-filled", "🟠" to "circle-filled", "🟡" to "circle-filled",
-        "🟢" to "circle-filled", "🔵" to "circle-filled", "🟣" to "circle-filled",
+        "🔴" to "circle-dot", "🟠" to "circle-dot", "🟡" to "circle-dot",
+        "🟢" to "circle-dot", "🔵" to "circle-dot", "🟣" to "circle-dot",
         "🤔" to "brain", "❌" to "circle-x", "❓" to "help-circle", "❗" to "alert-circle",
         "ℹ️" to "info-circle", "ℹ" to "info-circle"
     )
@@ -339,8 +349,8 @@ object NexlyIcons {
     fun cleanPlainText(text: String): String =
         normalize(text).replace(tokenRegex, "").replace(Regex("\\s+"), " ").trim()
 
-    /** Split a run on the inline `:icon:` grammar. Unknown tokens stay
-     * literal text, so a stray colon pair never silently disappears. */
+    /** Split a run on the inline `:icon:` grammar. Letter-initial tokens are
+     * always resolved to a valid icon glyph so raw `:icon:` syntax never leaks. */
     fun inlineParts(text: String): List<NexlyInlinePart> {
         val normalized = normalize(text)
         if (normalized.isEmpty()) return emptyList()
@@ -352,8 +362,8 @@ object NexlyIcons {
             }
             val name = match.groupValues[1]
             val map = codepoints
-            if (map == null || map.containsKey(name) || aliases.containsKey(name)) {
-                out += NexlyInlinePart(name, true)
+            if (name[0] in 'a'..'z' || map == null || map.containsKey(name) || aliases.containsKey(name)) {
+                out += NexlyInlinePart(resolve(name), true)
             } else {
                 out += NexlyInlinePart(match.value, false)
             }
@@ -392,10 +402,22 @@ object NexlyIcons {
             .replace(Regex("[_\\s]+"), "-")
             .replace(Regex("-+"), "-")
         if (name.isBlank()) return "sparkles"
-        if (aliases.containsKey(name)) name = aliases.getValue(name)
-        val map = codepoints
-        if (map != null && map.containsKey(name)) return name
-        if (map == null) return name // before the asset loads, let glyph() fall through
+        aliases[name]?.let { name = it }
+        val map = codepoints ?: return name
+        if (map.containsKey(name)) return name
+        val stripped = name.removeSuffix("-filled").removeSuffix("-outline")
+        aliases[stripped]?.let { if (map.containsKey(it)) return it }
+        if (map.containsKey(stripped)) return stripped
+        if (stripped.endsWith("s") && stripped.length > 3) {
+            val singular = stripped.dropLast(1)
+            aliases[singular]?.let { if (map.containsKey(it)) return it }
+            if (map.containsKey(singular)) return singular
+        }
+        if (stripped.endsWith("es") && stripped.length > 4) {
+            val singularEs = stripped.dropLast(2)
+            aliases[singularEs]?.let { if (map.containsKey(it)) return it }
+            if (map.containsKey(singularEs)) return singularEs
+        }
         return "sparkles"
     }
 

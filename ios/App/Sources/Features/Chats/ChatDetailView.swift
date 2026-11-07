@@ -1428,9 +1428,8 @@ struct MessageBubble: View, Equatable {
 
     private func reasoningHint(_ text: String?) -> String? {
         guard let text, !text.isEmpty else { return nil }
-        let collapsed = text
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespaces)
+        let collapsed = NexlyIcons.cleanPlainText(text)
+        guard !collapsed.isEmpty else { return nil }
         if let end = collapsed.firstIndex(where: { $0 == "." || $0 == "!" || $0 == "?" }) {
             return String(collapsed[...end])
         }

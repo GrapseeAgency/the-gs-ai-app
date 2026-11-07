@@ -725,10 +725,12 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
             "calc" -> widgetJson.decodeFromString<CalcWidget>(json).let { w ->
                 val fields = w.fields.take(10).filter { it.key.isNotBlank() }
                 val outputs = w.outputs.take(8).filter { it.expr.isNotBlank() }
-                if (w.type.lowercase() !in CALC_TYPES || fields.isEmpty() || outputs.isEmpty()) null
+                val rawType = w.type.lowercase().ifBlank { "finance" }
+                val normType = if (rawType in CALC_TYPES) rawType else "finance"
+                if (fields.isEmpty() || outputs.isEmpty()) null
                 else Widget.Calc(
                     w.copy(
-                        type = w.type.lowercase(),
+                        type = normType,
                         fields = fields.map { f -> f.copy(choices = f.choices.take(5)) },
                         outputs = outputs
                     )

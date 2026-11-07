@@ -36,11 +36,23 @@ object ResponseStyle {
         "Detailed" to "Show the working, the alternatives and the trade-offs.",
     )
 
-    /** One sentence per axis, or null when both are at their defaults. */
+    private const val NEXLY_UI_CONTRACT =
+        "Nexly UI rendering contract (mandatory): " +
+        "1) ZERO EMOJIS: Never output raw Unicode emojis anywhere in prose, headings, lists, tables, or widgets. " +
+        "Use `:icon-name:` tokens (e.g. `:sparkles:`, `:rocket:`, `:bulb:`, `:bolt:`, `:check:`, `:alert-triangle:`, " +
+        "`:chart-bar:`, `:calculator:`, `:code:`, `:flame:`, `:shield-check:`, `:calendar:`, `:clock:`, `:coin:`, " +
+        "`:compass:`, `:book:`, `:cpu:`, `:world:`, `:target:`, `:heart:`, `:star:`) at the start of section headings and callouts. " +
+        "2) SPONTANEOUS INTERACTIVE WIDGETS: Whenever a topic involves numbers, budgets, loans, pricing, comparisons, " +
+        "schedules, processes, study concepts, or choices — even when the user did not explicitly ask for a widget — " +
+        "delight the user by appending a logical interactive fenced widget block (` ```calc `, ` ```chart `, ` ```stat `, " +
+        "` ```compare `, ` ```timeline `, ` ```quiz `, ` ```flashcards `, ` ```checklist `, ` ```steps `, ` ```poll `, " +
+        "` ```sim `, ` ```stage3d `) with real domain values and mathematical formulas."
+
+    /** Rendering contract plus one sentence per preference axis. */
     fun directive(): String? {
         val tone = OnboardingProfileStore.personality
         val detail = OnboardingProfileStore.responseStyle
-        if (tone == "Friendly" && detail == "Standard") return null
+        if (tone == "Friendly" && detail == "Standard") return NEXLY_UI_CONTRACT
         val toneLine = when (tone) {
             "Professional" -> "Use a professional register: plain, neutral, no slang or exclamation marks."
             "Playful" -> "Use a light, playful register where it costs nothing — never about a serious answer."
@@ -51,7 +63,7 @@ object ResponseStyle {
             "Detailed" -> "Be thorough: show the working, name the alternatives and the trade-offs."
             else -> "Standard depth: the answer, the reasoning that matters, one next step."
         }
-        return "Reader preference (does not override facts or structure): $toneLine $detailLine"
+        return "$NEXLY_UI_CONTRACT\nReader preference (does not override facts or structure): $toneLine $detailLine"
     }
 
     /** The one-line summary Profile shows under its row. */

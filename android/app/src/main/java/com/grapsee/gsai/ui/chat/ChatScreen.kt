@@ -2500,7 +2500,7 @@ enum class NexlyThinkingPhase { THINKING, REASONING, SEARCH, ANSWER, DONE }
 /** First meaningful sentence of the live reasoning, capped for one line. */
 private fun reasoningHint(text: String?): String? {
     if (text.isNullOrBlank()) return null
-    val clean = text.replace(Regex("\\s+"), " ").trim()
+    val clean = com.grapsee.gsai.ui.chat.content.NexlyIcons.cleanPlainText(text)
     if (clean.isEmpty()) return null
     val end = clean.indexOfFirst { it == '.' || it == '!' || it == '?' }
     val sentence = if (end >= 0) clean.substring(0, end + 1) else clean

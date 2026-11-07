@@ -305,7 +305,17 @@ enum NexlyIcons {
         "target": "target", "idea": "bulb", "lightbulb": "bulb",
         "person": "user", "user": "user", "home": "home", "school": "school",
         "travel": "plane", "plane": "plane", "phone": "device-mobile",
-        "mobile": "device-mobile",
+        "mobile": "device-mobile", "eyeglasses": "eyeglass", "glasses": "eyeglass",
+        "circle-filled": "circle-dot", "dot": "circle-dot", "bullet": "circle-dot",
+        "lightning": "bolt", "zap": "bolt", "flash": "bolt", "energy": "bolt",
+        "money": "coin", "dollar": "currency-dollar", "currency": "coin", "price": "coin",
+        "graph": "chart-bar", "chart": "chart-bar", "analytics": "chart-line", "stats": "chart-bar",
+        "todo": "checkbox", "task": "checkbox", "tasks": "list-check", "checklist": "list-check",
+        "tip": "bulb", "insight": "bulb", "magic": "sparkles", "ai": "sparkles",
+        "edu": "school", "academic": "school", "university": "building-bank",
+        "security": "shield-check", "safe": "shield-check", "verified": "shield-check",
+        "error": "alert-circle", "danger": "alert-triangle", "info": "info-circle",
+        "help": "help-circle", "question": "help-circle", "checkmark": "checks",
     ]
 
     /// Known emoji → the closest semantic glass glyph. The prompt bans emoji;
@@ -345,7 +355,7 @@ enum NexlyIcons {
         "👍": "thumb-up", "👎": "thumb-down", "😊": "mood-smile", "😀": "mood-smile",
         "😃": "mood-smile", "😄": "mood-smile", "😁": "mood-smile", "🙂": "mood-smile",
         "😉": "mood-wink", "😍": "heart", "🥰": "heart", "😎": "sunglasses",
-        "🤓": "eyeglasses", "🧐": "search", "🥳": "sparkles",
+        "🤓": "eyeglass", "🧐": "search", "🥳": "sparkles",
         "😞": "mood-sad", "😔": "mood-sad", "😟": "mood-sad", "😕": "mood-sad",
         "🙁": "mood-sad", "☹️": "mood-sad", "☹": "mood-sad", "😢": "mood-sad", "😭": "mood-sad",
         "😤": "flame", "😠": "alert-circle", "😡": "alert-circle", "🤯": "brain",
@@ -370,8 +380,8 @@ enum NexlyIcons {
         "💿": "disc", "🔭": "telescope", "📡": "satellite", "💊": "pill",
         "🩺": "stethoscope", "🛏️": "bed", "🚿": "bath", "🛁": "bath",
         "🧹": "brush", "🧯": "fire-extinguisher",
-        "🔴": "circle-filled", "🟠": "circle-filled", "🟡": "circle-filled",
-        "🟢": "circle-filled", "🔵": "circle-filled", "🟣": "circle-filled",
+        "🔴": "circle-dot", "🟠": "circle-dot", "🟡": "circle-dot",
+        "🟢": "circle-dot", "🔵": "circle-dot", "🟣": "circle-dot",
         "🤔": "brain", "❌": "circle-x", "❓": "help-circle", "❗": "alert-circle",
         "ℹ️": "info-circle", "ℹ": "info-circle"
     ]
@@ -401,7 +411,23 @@ enum NexlyIcons {
         if name.isEmpty { return "sparkles" }
         if let alias = aliases[name] { name = alias }
         if codepoints.isEmpty { return name }
-        return codepoints[name] == nil ? "sparkles" : name
+        if codepoints[name] != nil { return name }
+        var stripped = name
+        if stripped.hasSuffix("-filled") { stripped = String(stripped.dropLast(7)) }
+        if stripped.hasSuffix("-outline") { stripped = String(stripped.dropLast(8)) }
+        if let alias = aliases[stripped], codepoints[alias] != nil { return alias }
+        if codepoints[stripped] != nil { return stripped }
+        if stripped.hasSuffix("s") && stripped.count > 3 {
+            let singular = String(stripped.dropLast())
+            if let alias = aliases[singular], codepoints[alias] != nil { return alias }
+            if codepoints[singular] != nil { return singular }
+        }
+        if stripped.hasSuffix("es") && stripped.count > 4 {
+            let singularEs = String(stripped.dropLast(2))
+            if let alias = aliases[singularEs], codepoints[alias] != nil { return alias }
+            if codepoints[singularEs] != nil { return singularEs }
+        }
+        return "sparkles"
     }
 
     static func glyph(_ raw: String?) -> String {
@@ -518,8 +544,9 @@ enum NexlyIcons {
                 ))))
             }
             let name = ns.substring(with: match.range(at: 1))
-            if codepoints.isEmpty || codepoints[name] != nil || aliases[name] != nil {
-                parts.append(.icon(name))
+            let firstChar = name.first ?? "0"
+            if (firstChar >= "a" && firstChar <= "z") || codepoints.isEmpty || codepoints[name] != nil || aliases[name] != nil {
+                parts.append(.icon(resolve(name)))
             } else {
                 parts.append(.text(ns.substring(with: match.range)))
             }
