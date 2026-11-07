@@ -32,6 +32,7 @@ const { TableWidget } = from('components/genui/widgets/TableWidget')
 const { TitleRow } = from('components/genui/primitives/TitleRow')
 const { HtmlBlock } = from('components/genui/blocks/HtmlBlock')
 const { ChartWidget } = from('components/genui/widgets/ChartWidget')
+const { pieData, PieChartView } = from('components/genui/charts/PieChart')
 const h = React.createElement
 const text = '- **Mitosis**: A cell divides into two genetically identical cells.\n- **Meiosis**: A cell divides to produce four genetically distinct cells.\n- **Osmosis**: Water moves through a selectively permeable membrane.'
 const concepts = extractConceptDeck(text)
@@ -152,6 +153,17 @@ async function main() {
   async function mount(element) { await act(async () => root.render(element)) }
   async function click(button) { assert.ok(button, 'button exists'); await act(async () => button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))) }
   const buttons = () => [...document.querySelectorAll('button')]
+  check('pie switching retains all observations and their source labels', () => {
+    const data = pieData({ type: 'pie', labels: ['Jan', 'Feb', 'Mar'], series: [{ name: 'Actual', data: [[0, 10], [1, 20], [2, 30]] }] })
+    assert.deepEqual(data, [{ name: 'Jan', value: 10 }, { name: 'Feb', value: 20 }, { name: 'Mar', value: 30 }])
+    assert.deepEqual(pieData({ type: 'pie', series: [{ name: 'A', data: [[0, 10]] }, { name: 'B', data: [[0, 20]] }] }).map(p => p.value), [10, 20])
+  })
+  check('pie does not silently discard negative or zero-total source data', () => {
+    for (const values of [[-10, 20], [0, 0]]) {
+      const html = renderToString(h(PieChartView, { payload: { type: 'pie', series: [{ name: 'Actual', data: values.map((value, i) => [i, value]) }] } }))
+      assert.match(html, /positive total/)
+    }
+  })
   // Chart metrics/controls are tested in a DOM. ResizeObserver is a layout
   // platform stub; these assertions do not claim a rasterized chart test.
   global.ResizeObserver = class { observe() {} disconnect() {} unobserve() {} }
@@ -164,10 +176,15 @@ async function main() {
     { name: 'Short', data: [[0,10],[1,20]] },
     { name: 'Long', data: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]] }
   ] } }))
+  check('multi-series chart metrics explicitly identify their actual scope', () => {
+    assert.match(document.body.textContent, /Summary: Short/)
+    assert.match(document.body.textContent, /sum of observations is 30/)
+    assert.doesNotMatch(document.body.textContent, /cumulative volume/)
+  })
   await click(buttons().find(b => b.textContent.includes('All')))
   check('range uses longest series and does not restore short out-of-window history', () => {
     assert.match(document.body.textContent, /Last 3 points/)
-    assert.doesNotMatch(document.body.textContent, /cumulative volume|zero baseline/)
+    assert.doesNotMatch(document.body.textContent, /sum of observations|zero baseline/)
   })
   await mount(h(SpontaneousConceptDeck, { concepts, dark: false }))
   await click(buttons().find((b) => b.textContent.includes('tap to flip')))
