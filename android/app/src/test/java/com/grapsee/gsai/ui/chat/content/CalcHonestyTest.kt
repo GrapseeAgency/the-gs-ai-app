@@ -13,6 +13,11 @@ class CalcHonestyTest {
         assertEquals(listOf("First: A", "First: B", "First: C", "Second: A", "Second: B"), pieSlices(source).map { it.first })
         assertEquals(listOf(10f, 20f, 30f, 5f, 15f), pieSlices(source).map { it.second })
         assertNull(pieSourceProblemAndroid(source))
+        val mixed = source.copy(labels = listOf("P4", "P5"), series = listOf(
+            ChartSeries("Long", listOf(listOf(0f, 7f), listOf(1f, 8f))),
+            ChartSeries("Short", listOf(listOf(0f, 104f)))
+        ))
+        assertEquals(listOf("Long: P4", "Long: P5", "Short: P4"), pieSlices(mixed).map { it.first })
         for (values in listOf(listOf(-10f, 20f), listOf(0f, 0f), listOf(Float.NaN, 10f))) {
             val invalid = source.copy(series = listOf(ChartSeries("Invalid", values.mapIndexed { i, value -> listOf(i.toFloat(), value) })))
             org.junit.Assert.assertNotNull(pieSourceProblemAndroid(invalid))
