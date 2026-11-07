@@ -47,9 +47,9 @@ class PlatformRuntimeTest {
         val oldMessages = SettingsStore.noticeEnabled("messages")
         val oldQuiet = SettingsStore.quietHoursEnabled
         if (Build.VERSION.SDK_INT >= 33) {
-            instrumentation.uiAutomation.executeShellCommand(
-                "pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS"
-            ).close()
+            instrumentation.uiAutomation.grantRuntimePermission(
+                context.packageName, android.Manifest.permission.POST_NOTIFICATIONS
+            )
         }
         fun post() = ReplyNotifier.postReplyReady(context, thread, "Runtime reply from the test callback")
         try {
