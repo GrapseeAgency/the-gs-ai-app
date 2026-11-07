@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import type { CalcPayload } from '../types'
 import { alpha, RADIUS, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
@@ -9,32 +9,36 @@ import { EmptyState } from '../primitives/EmptyState'
 import { evaluateExpr, formatOutput } from '../calc/evaluate'
 import { UiSlider } from '../controls/UiSlider'
 import { UiSegmented } from '../controls/UiSegmented'
-import { formatNumber } from '../controls/UiSlider'
+
 
 /** Calc — live parameter-driven calculator; expr outputs recompute on input. */
 export function CalcWidget({ payload }: { payload: CalcPayload }) {
+  // A new model payload is a new calculator, not stale state from the old one.
+  return <CalculatorControls key={JSON.stringify(payload)} payload={payload} />
+}
+
+function CalculatorControls({ payload }: { payload: CalcPayload }) {
   const { accent, theme } = useWidgetIdentity()
   const fields = (payload.fields ?? []).filter((f) => f.key && f.label)
   const outputs = (payload.outputs ?? []).filter((o) => o.label && o.expr)
-  const defaults = useMemo(
-    () => Object.fromEntries(fields.map((f) => [f.key, f.choices?.length ? f.choices[0].value : f.value ?? f.min ?? 0])),
-    [fields]
-  )
+  const defaults = Object.fromEntries(fields.map((f) => [f.key,
+    f.value ?? f.choices?.[0]?.value ?? NaN]))
   const [values, setValues] = useState<Record<string, number>>(defaults)
   if (!fields.length || !outputs.length) return <EmptyState label="Calculator misconfigured" />
   const set = (key: string, v: number) => setValues((s) => ({ ...s, [key]: v }))
-  const hasChanged = fields.some((f) => Math.abs((values[f.key] ?? defaults[f.key] ?? 0) - (defaults[f.key] ?? 0)) > 1e-6)
-  const results = useMemo(() => {
-    const out: Array<{ label: string; text: string; primary: boolean; error?: boolean }> = []
-    for (const o of outputs) {
-      try {
-        out.push({ label: o.label, text: formatOutput(evaluateExpr(o.expr, values), o.format, o.unit), primary: o.primary === true })
-      } catch {
-        out.push({ label: o.label, text: '—', primary: o.primary === true, error: true })
-      }
+  const invalid = fields.some((f) => !Number.isFinite(values[f.key]) ||
+    (f.min != null && values[f.key] < f.min) || (f.max != null && values[f.key] > f.max))
+  const hasChanged = fields.some((f) => !Object.is(values[f.key], defaults[f.key]))
+  const results = outputs.map((o) => {
+    try {
+      if (invalid) throw new Error('Enter valid numbers within the supplied limits')
+      const value = evaluateExpr(o.expr, values)
+      if (!Number.isFinite(value)) throw new Error('Undefined for these inputs')
+      return { label: o.label, text: formatOutput(value, o.format, o.unit), primary: o.primary === true, error: false }
+    } catch {
+      return { label: o.label, text: invalid ? 'Enter valid inputs' : 'Undefined for these inputs', primary: o.primary === true, error: true }
     }
-    return out
-  }, [outputs, values])
+  })
   return (
     <div>
       <TitleRow title={payload.title} />
@@ -44,7 +48,9 @@ export function CalcWidget({ payload }: { payload: CalcPayload }) {
             <button
               key={preset.label}
               type="button"
-              onClick={() => setValues((s) => ({ ...s, ...preset.values }))}
+              onClick={() => setValues((s) => ({ ...s, ...Object.fromEntries(
+                Object.entries(preset.values).filter(([key, value]) => key in defaults && Number.isFinite(value))
+              ) }))}
               style={{
                 padding: '5px 12px',
                 borderRadius: 999,
@@ -69,16 +75,33 @@ export function CalcWidget({ payload }: { payload: CalcPayload }) {
               <UiSegmented options={f.choices.map((c) => ({ label: c.label, value: String(c.value) }))} value={String(values[f.key])} onChange={(v) => set(f.key, Number(v))} />
             </div>
           ) : (
-            <UiSlider
-              key={f.key}
-              label={f.label}
-              value={values[f.key] ?? 0}
-              min={f.min ?? 0}
-              max={f.max ?? 100}
-              step={f.step ?? Math.max(1, ((f.max ?? 100) - (f.min ?? 0)) / 100)}
-              unit={f.unit}
-              onChange={(v) => set(f.key, v)}
-            />
+            <div key={f.key} style={{ padding: '6px 0' }}>
+              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <span style={{ color: theme.text2, fontSize: TYPE.label }}>{f.label}{f.unit ? ` (${f.unit})` : ''}</span>
+                <input
+                  type="number"
+                  aria-label={f.label}
+                  aria-invalid={!Number.isFinite(values[f.key]) || (f.min != null && values[f.key] < f.min) || (f.max != null && values[f.key] > f.max)}
+                  value={Number.isFinite(values[f.key]) ? values[f.key] : ''}
+                  min={f.min ?? undefined}
+                  max={f.max ?? undefined}
+                  step={f.step ?? 'any'}
+                  onChange={(e) => set(f.key, e.target.value === '' ? NaN : Number(e.target.value))}
+                  style={{ width: 120, padding: '6px 8px', borderRadius: 8, border: `1px solid ${theme.border}`, background: theme.raised, color: theme.text }}
+                />
+              </label>
+              {f.min != null && f.max != null && Number.isFinite(f.min) && Number.isFinite(f.max) && f.max > f.min && (
+                <UiSlider
+                  label={f.label}
+                  value={Number.isFinite(values[f.key]) ? Math.min(f.max, Math.max(f.min, values[f.key])) : f.min}
+                  min={f.min}
+                  max={f.max}
+                  step={f.step ?? (f.max - f.min) / 100}
+                  unit={f.unit}
+                  onChange={(v) => set(f.key, v)}
+                />
+              )}
+            </div>
           )
         )}
       </div>
