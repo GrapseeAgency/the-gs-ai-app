@@ -41,9 +41,29 @@ widget correctness.
   explicitly labeled assumptions and complete calculator variable definitions.
   The lean system operator contract was not expanded into application logic.
 
+## Additional defects confirmed in the current pass
+
+- Android and iOS had separate generated-widget and ordinary-Markdown table
+  paths. All four still offered 25 instead of All. They now use a distinct All
+  selection over the full current dataset, including datasets above 25 rows.
+- iOS generated-table descending sort returned true for equal cells. Its strict
+  comparator now preserves equality in both directions; unit tests cover
+  duplicate numeric/string values and equivalent numeric formats.
+- Native inline-code and link renderers restored the original raw string when
+  sanitization returned empty. Emoji-only labels therefore bypassed the ban.
+  Those fallbacks are removed; empty links receive a safe textual label instead.
+- The final widget scaffold section contradicted its canonical fields/key/value
+  calculator example by demanding inputs/id/default, forced slider bounds and
+  at least 5–8 table/chart rows. It now teaches one schema, meaningful supplied
+  bounds and no dataset padding. A regression assertion checks this contract.
+- Mandatory Android and iOS generated-table device cases now exercise the actual
+  5 -> 10 -> All controls with 31 rows, then repeat through ordinary Markdown.
+  Android also exercises filtering while All is selected. These cases must run;
+  unit/SSR results alone do not certify them.
+
 ## Evidence
 
-Local: 64 behavioral interaction checks; existing renderer 170, catalogue 208,
+Local: 65 behavioral interaction checks; existing renderer 170, catalogue 208,
 pipeline 24 and compiler 146 checks pass. Web CI 42405021335 passed. Android
 CI 42405021263 passed all four mandatory device cases before the additional
 zero-baseline chart correction; its successor must establish the final source.
