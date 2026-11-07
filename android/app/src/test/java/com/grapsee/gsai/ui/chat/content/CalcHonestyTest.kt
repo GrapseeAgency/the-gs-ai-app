@@ -5,6 +5,19 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun percentagesHaveOneMeaningAcrossMagnitudeBoundary() {
+        assertEquals("99.00%", formatCalc(0.99, "percent", ""))
+        assertEquals("100.00%", formatCalc(1.0, "percent", ""))
+        assertEquals("101.00%", formatCalc(1.01, "percent", ""))
+        assertEquals("-120.00%", formatCalc(-1.2, "percent", ""))
+        assertEquals("0.99%", formatCalc(0.99, "number", "%"))
+    }
+    @Test fun missingBoundsAndValuesAreNotInvented() {
+        val field = CalcField(key = "p", label = "Principal")
+        assertNull(field.min)
+        assertNull(field.max)
+        org.junit.Assert.assertTrue(field.value.isNaN())
+    }
     @Test fun requiresWholeExpression() {
         for (expr in listOf("2 garbage", "2 3", "(2+3", "missing + 1", "1/0", "sqrt(-1)")) {
             assertNull(expr, CalcExpr.eval(expr, emptyMap()))
