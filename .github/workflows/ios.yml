@@ -16,6 +16,7 @@ on:
   pull_request:
     paths:
       - "ios/**"
+      - "shared-contracts/emoji-dom-policy.json"
       - ".github/workflows/ios.yml"
   workflow_dispatch:
   push:
@@ -23,6 +24,7 @@ on:
       - main
     paths:
       - "ios/**"
+      - "shared-contracts/emoji-dom-policy.json"
       - ".github/workflows/ios.yml"
       - "scripts/ios_static_gates.py"
       - "scripts/swift_structure_gate.py"
@@ -317,6 +319,8 @@ jobs:
           import re
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
+              ('CalcHonestyTests', 'testGeneratedHtmlExecutesAndCleansDynamicEmojiInProductionWebView'),
+              ('CalcHonestyTests', 'testSignedChartDomainPreservesZeroNegativeAndAllObservations'),
               ('PlatformRuntimeUITests', 'testBackgroundNoticeIsDeliveredAndDisabledKindsAreNot'),
               ('PlatformRuntimeUITests', 'testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji'),
               ('PlatformRuntimeUITests', 'testGeneratedTableAllDisplaysEveryActualRow'),
