@@ -72,6 +72,12 @@ async function main() {
     check('percentage ratios do not change units at ' + value, () => assert.equal(formatOutput(value, 'percent'), expected))
   }
   check('explicit percentage points are not rescaled', () => assert.equal(formatOutput(.99, 'number', '%'), '0.99 %'))
+  check('prompt has one calculator schema and never requires padded datasets', () => {
+    assert.doesNotMatch(WIDGET_PROMPT, /MUST include mathematically real `inputs`|at least 5–8 real/)
+    assert.match(WIDGET_PROMPT, /canonical `fields` array/)
+    assert.match(WIDGET_PROMPT, /Never\s+pad a dataset/)
+    assert.match(WIDGET_PROMPT, /Never invent limits to decorate a slider/)
+  })
   check('prompt calculator defines every variable it uses', () => {
     const sample = JSON.parse(WIDGET_PROMPT.match(/^- calc: (\{.*?\}) \(Schema example/m)[1])
     const vars = Object.fromEntries(sample.fields.map(f => [f.key, f.value]))
