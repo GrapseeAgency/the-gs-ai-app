@@ -257,7 +257,7 @@ internal fun formatCalc(value: Double, format: String, unit: String): String {
     val body = when {
         isCurrency -> String.format(Locale.US, "%s%,.2f", currSymbol, value)
         isPercent -> {
-            val pctVal = if (fmtLower in setOf("percent", "pct") && abs(value) <= 1.0) value * 100.0 else value
+            val pctVal = if (fmtLower in setOf("percent", "pct")) value * 100.0 else value
             String.format(Locale.US, "%.2f%%", pctVal)
         }
         fmtLower == "integer" -> String.format(Locale.US, "%,.0f", value)
