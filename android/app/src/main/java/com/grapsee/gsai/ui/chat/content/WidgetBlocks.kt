@@ -1473,7 +1473,7 @@ private val CHART_HUE_SLOTS = mapOf(
 private val EDITORIAL_CHARTS = setOf("line", "area", "stackedArea", "scatter", "bubble", "candlestick")
 
 private val SWITCHABLE_CHART_TYPES = setOf("line", "bar", "area", "pie", "donut")
-private fun sliceChartByRange(w: ChartWidget, rangeIndex: Int): Pair<ChartWidget, String> {
+internal fun sliceChartByRange(w: ChartWidget, rangeIndex: Int): Pair<ChartWidget, String> {
     val maxPts = w.series.maxOfOrNull { it.data.size } ?: 0
     if (maxPts <= 2) return w to "All ($maxPts pts)"
     val rangeSpecs = listOf(
@@ -1484,15 +1484,15 @@ private fun sliceChartByRange(w: ChartWidget, rangeIndex: Int): Pair<ChartWidget
     )
     val (label, start, end) = rangeSpecs[rangeIndex % rangeSpecs.size]
     if (start == 0 && end == maxPts) return w to label
-    val slicedLabels = if (w.labels.size >= end) w.labels.subList(start, end) else w.labels
+    val slicedLabels = w.labels.drop(start).take(end - start)
     val slicedSeries = w.series.map { s ->
-        if (s.data.size >= end) {
-            val sub = s.data.subList(start, end).mapIndexed { idx, pt ->
-                if (pt.size >= 2) listOf(idx.toFloat(), pt[1]) + pt.drop(2) else pt
-            }
-            s.copy(data = sub)
-        } else s
-    }
+        // A short series contributes only observations inside this window.
+        // It must never fall back to its entire unsliced history.
+        val sub = s.data.drop(start).take(end - start).mapIndexed { idx, pt ->
+            if (pt.size >= 2) listOf(idx.toFloat(), pt[1]) + pt.drop(2) else pt
+        }
+        s.copy(data = sub)
+    }.filter { it.data.isNotEmpty() }
     return w.copy(labels = slicedLabels, series = slicedSeries) to label
 }
 
