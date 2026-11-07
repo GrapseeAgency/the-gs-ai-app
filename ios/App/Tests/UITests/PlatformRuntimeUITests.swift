@@ -1,6 +1,34 @@
 import XCTest
 
 final class PlatformRuntimeUITests: XCTestCase {
+    func testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        let open = app.buttons["Open generated chart"]
+        XCTAssertTrue(open.waitForExistence(timeout: 20))
+        open.tap()
+        XCTAssertTrue(app.buttons["All (31 pts) ▾"].waitForExistence(timeout: 10), "Chart truncated its actual 31 observations")
+        app.buttons["Pie"].tap()
+        XCTAssertTrue(app.staticTexts["Pie shares require nonnegative values and a positive total. Choose Line or Bar for this dataset."].waitForExistence(timeout: 10))
+        app.buttons["Bar"].tap()
+        XCTAssertTrue(app.buttons["All (31 pts) ▾"].exists)
+        app.buttons["Series: Primary"].tap()
+        let second = app.buttons["Secondary"]
+        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        second.tap()
+        XCTAssertTrue(app.buttons["All (3 pts) ▾"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Series: Secondary"].exists)
+        app.buttons["All (3 pts) ▾"].tap()
+        XCTAssertTrue(app.buttons["Last 3 pts ▾"].waitForExistence(timeout: 10))
+        app.buttons["Last 3 pts ▾"].tap()
+        XCTAssertTrue(app.buttons["Last 2 pts ▾"].waitForExistence(timeout: 10))
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "genui-chart-real-series-selection-and-range"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+    }
+
     func testGeneratedTableAllDisplaysEveryActualRow() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
