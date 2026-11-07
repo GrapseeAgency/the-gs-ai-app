@@ -5,6 +5,21 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun pieSwitchPreservesEveryObservationAndRejectsInvalidShares() {
+        val source = ChartWidget(labels = listOf("A", "B", "C"), series = listOf(
+            ChartSeries("First", listOf(listOf(0f, 10f), listOf(1f, 20f), listOf(2f, 30f))),
+            ChartSeries("Second", listOf(listOf(0f, 5f), listOf(1f, 15f)))
+        ))
+        assertEquals(listOf("First: A", "First: B", "First: C", "Second: A", "Second: B"), pieSlices(source).map { it.first })
+        assertEquals(listOf(10f, 20f, 30f, 5f, 15f), pieSlices(source).map { it.second })
+        assertNull(pieSourceProblemAndroid(source))
+        for (values in listOf(listOf(-10f, 20f), listOf(0f, 0f), listOf(Float.NaN, 10f))) {
+            val invalid = source.copy(series = listOf(ChartSeries("Invalid", values.mapIndexed { i, value -> listOf(i.toFloat(), value) })))
+            org.junit.Assert.assertNotNull(pieSourceProblemAndroid(invalid))
+            assertEquals(values.size, pieSlices(invalid).size)
+        }
+    }
+
     @Test fun rangeDoesNotRestoreShortSeriesOutsideWindow() {
         val chart = ChartWidget(labels = (0..7).map { "P$it" }, series = listOf(
             ChartSeries("long", (0..7).map { listOf(it.toFloat(), (it * 10).toFloat()) }),
