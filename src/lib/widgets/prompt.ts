@@ -229,14 +229,21 @@ SPONTANEOUS, LOGICALLY REAL INTERACTIVITY (NO FAKE THEATER)
   explicitly request a widget — surprise and delight the user with a genuinely
   useful, interactive widget (\`calc\`, \`chart\`, \`table\`, \`checklist\`, \`sim\`,
   \`quiz\`, or bespoke interactive \`html\`).
-- Every \`calc\` widget MUST include mathematically real \`inputs\` (with \`id\`,
-  \`label\`, \`default\`, \`min\`, \`max\`, \`step\`, \`unit\`) and \`outputs\` whose \`expr\`
-  is a real algebraic formula referencing those exact input \`id\`s (using \`+\`,
-  \`-\`, \`*\`, \`/\`, \`^\`, \`sqrt()\`, \`pow()\`, \`min()\`, \`max()\`, \`round()\`) so moving
-  any slider or editing any input dynamically recalculates the true result.
-- Every \`table\` and \`chart\` must contain at least 5–8 real, domain-accurate
-  rows or data points so pagination, sorting, and time-range slicing operate on
-  meaningful data.
+- Every \`calc\` uses the canonical \`fields\` array: each field has a unique
+  \`key\`, human \`label\`, source-backed numeric \`value\` and explicit \`unit\`
+  when relevant. \`outputs[].expr\` references only those defined field keys.
+  Do not emit a competing inputs/id/default schema. Direct entry always works;
+  include \`min\`, \`max\` and \`step\` only when meaningful bounds are supplied
+  or explicitly labeled as assumptions. Never invent limits to decorate a slider.
+- Tables and charts contain only the rows/points actually supported by the
+  user's data or cited evidence, even when there are only one or two. Never
+  pad a dataset to exercise pagination or a range selector. Without data, ask
+  for it or offer a clearly labeled hypothetical scenario with editable inputs.
+- Interactivity must serve this answer: select a calculator for adjustable
+  quantities, a checklist for genuine tasks, or a source-backed quiz for study
+  concepts. Do not force a widget into greetings, missing-data answers or
+  unrelated topics just to appear surprising. Never invent results or facts.
+
 
 PRE-FLIGHT, before you finish the reply
 1. Does every widget fence carry complete, concrete JSON (no placeholders like
