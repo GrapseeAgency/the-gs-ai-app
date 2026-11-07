@@ -15,6 +15,8 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Until
 import androidx.test.uiautomator.UiDevice
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.notifications.AppForeground
@@ -58,24 +60,38 @@ class PlatformRuntimeTest {
                 SettingsStore.updateNoticeEnabled("messages", true)
                 SettingsStore.updateQuietHoursEnabled(false)
             }
-            compose.waitUntil(10_000) { AppForeground.inForeground }
+            awaitObserved("initial activity foreground") { AppForeground.inForeground }
             post()
             assertFalse("Foreground reply must not post", manager.activeNotifications.any { it.id == id })
 
             // Home drives MainActivity.ON_STOP; do NOT assign AppForeground in the test.
             assertTrue(UiDevice.getInstance(instrumentation).pressHome())
-            compose.waitUntil(10_000) { !AppForeground.inForeground }
+            awaitObserved("Home backgrounds activity") { !AppForeground.inForeground }
             val callback = CountDownLatch(1)
             Handler(Looper.getMainLooper()).postDelayed({ post(); callback.countDown() }, 1_000)
             assertTrue("Background callback never ran", callback.await(10, TimeUnit.SECONDS))
-            compose.waitUntil(10_000) { manager.activeNotifications.any { it.id == id } }
+            awaitObserved("background reply becomes an active OS notification") {
+                manager.activeNotifications.any { it.id == id }
+            }
             val notice = manager.activeNotifications.single { it.id == id }.notification
             assertEquals("Reply ready", notice.extras.getString(Notification.EXTRA_TITLE))
             assertEquals("Runtime reply from the test callback", notice.extras.getString(Notification.EXTRA_TEXT))
             assertEquals(ReplyNotifier.CHANNEL_ID, notice.channelId)
             assertNotNull("Reply must route back to its conversation", notice.contentIntent)
-            manager.cancel(id)
-            compose.waitUntil(10_000) { manager.activeNotifications.none { it.id == id } }
+            // A real shade tap is a user-initiated launch. Calling send() on
+            // the PendingIntent from a background test is NOT equivalent:
+            // Android 14 correctly applies background activity launch limits.
+            val device = UiDevice.getInstance(instrumentation)
+            assertTrue("Could not open notification shade", device.openNotification())
+            val shadeRow = device.wait(Until.findObject(By.text("Runtime reply from the test callback")), 5_000)
+            assertNotNull("OS shade did not expose the actual reply", shadeRow)
+            shadeRow!!.click()
+            awaitObserved("notification tap returns to foreground") { AppForeground.inForeground }
+            awaitObserved("notification auto-cancels after real shade tap") {
+                manager.activeNotifications.none { it.id == id }
+            }
+            assertTrue(device.pressHome())
+            awaitObserved("second Home backgrounds activity") { !AppForeground.inForeground }
 
             instrumentation.runOnMainSync { SettingsStore.updatePushNotifications(false) }
             post()
@@ -86,9 +102,6 @@ class PlatformRuntimeTest {
             }
             post()
             assertFalse(manager.activeNotifications.any { it.id == id })
-            // The pending intent is the production route, not a test activity.
-            notice.contentIntent.send()
-            compose.waitUntil(10_000) { AppForeground.inForeground }
         } finally {
             manager.cancel(id)
             instrumentation.runOnMainSync {
@@ -96,6 +109,13 @@ class PlatformRuntimeTest {
                 SettingsStore.updateNoticeEnabled("messages", oldMessages)
                 SettingsStore.updateQuietHoursEnabled(oldQuiet)
             }
+        }
+    }
+
+    private fun awaitObserved(stage: String, condition: () -> Boolean) {
+        try { compose.waitUntil(10_000, condition) }
+        catch (error: Throwable) {
+            throw AssertionError("Runtime stage failed: $stage; foreground=${AppForeground.inForeground}", error)
         }
     }
 
