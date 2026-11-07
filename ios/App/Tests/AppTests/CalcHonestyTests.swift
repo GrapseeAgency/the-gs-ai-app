@@ -5,7 +5,8 @@ import WebKit
 
 final class CalcHonestyTests: XCTestCase {
     func testChartNumbersRejectMissingBooleanAndNonFiniteMeasurements() {
-        for invalid: Any in [NSNull(), true, false, "", "missing", "NaN", "Infinity", Double.infinity, Double.nan] {
+        let invalidValues: [Any] = [NSNull(), true, false, "", "missing", "NaN", "Infinity", Double.infinity, Double.nan]
+        for invalid in invalidValues {
             XCTAssertNil(chartValueIOS(invalid), "\(invalid)")
         }
         XCTAssertNil(chartValueIOS(nil))
