@@ -1048,7 +1048,7 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
             }
             is InlineSpan.CodeSpan -> builder.withStyle(
                 SpanStyle(fontFamily = FontFamily.Monospace, background = theme.codeBg, fontSize = theme.fontSize * 0.88f)
-            ) { builder.append(NexlyIcons.cleanPlainText(span.code).ifEmpty { span.code }) }
+            ) { builder.append(NexlyIcons.cleanPlainText(span.code)) }
             is InlineSpan.LinkSpan -> builder.withLink(
                 LinkAnnotation.Url(
                     span.url,
@@ -1057,7 +1057,7 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
                     // long-press path (GsLinks), never a plain tap.
                     linkInteractionListener = { _ -> theme.openLink(span.url) }
                 )
-            ) { builder.append(NexlyIcons.cleanPlainText(span.text).ifEmpty { span.text }) }
+            ) { builder.append(NexlyIcons.cleanPlainText(span.text).ifEmpty { "Link" }) }
             is InlineSpan.CitationSpan -> {
                 // PHASE 8.1: [N] resolves against the turn's real sources → a
                 // small superscript-style tappable chip that opens the source
@@ -3160,10 +3160,11 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
         }
     }
 
-    val totalPages = maxOf(1, (sortedRows.size + pageSize - 1) / pageSize)
+    val effectivePageSize = widgetTablePageSizeAndroid(pageSize, sortedRows.size)
+    val totalPages = maxOf(1, (sortedRows.size + effectivePageSize - 1) / effectivePageSize)
     val safePage = page.coerceIn(0, totalPages - 1)
-    val rows = remember(sortedRows, safePage, pageSize) {
-        sortedRows.drop(safePage * pageSize).take(pageSize)
+    val rows = remember(sortedRows, safePage, effectivePageSize) {
+        sortedRows.drop(safePage * effectivePageSize).take(effectivePageSize)
     }
 
     // A markdown table with a readable numeric column can also be a chart —
@@ -3203,7 +3204,7 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
             val tableHeader: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
                 headers.forEachIndexed { c, header ->
                     val sorted = sortCol == c
-                    val cleanHeaderText = NexlyIcons.cleanPlainText(header.text).ifEmpty { header.text }
+                    val cleanHeaderText = NexlyIcons.cleanPlainText(header.text).ifEmpty { "Column ${c + 1}" }
                     val hLabel = if (sorted) {
                         AnnotatedString("$cleanHeaderText ${if (sortAsc) "↑" else "↓"}")
                     } else AnnotatedString(cleanHeaderText)
@@ -3308,8 +3309,8 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
         }
 
         if (sortedRows.size >= 4) {
-            val startRow = safePage * pageSize + 1
-            val endRow = minOf(sortedRows.size, (safePage + 1) * pageSize)
+            val startRow = safePage * effectivePageSize + 1
+            val endRow = minOf(sortedRows.size, (safePage + 1) * effectivePageSize)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3376,7 +3377,7 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
                             pageSize = when (pageSize) {
                                 3 -> 5
                                 5 -> 10
-                                10 -> 25
+                                10 -> -1
                                 else -> 3
                             }
                             page = 0
@@ -3384,7 +3385,7 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Text(
-                        text = "Show: $pageSize ▾",
+                        text = "Show: ${if (pageSize == -1) "All" else pageSize.toString()} ▾",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
