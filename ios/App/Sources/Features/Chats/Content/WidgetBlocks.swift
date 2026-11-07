@@ -3299,8 +3299,10 @@ private struct CalcBodyView: View {
     let obj: [String: Any]
     let accent: Color
     @State private var vals: [String: Double] = [:]
+    @State private var drafts: [String: String] = [:]
 
     private func formatCalcResult(_ n: Double, unit: String, format: String = "") -> String {
+        guard n.isFinite else { return "Undefined for these inputs" }
         let uLow = unit.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         let fLow = format.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         let isCurrency = ["money", "currency", "usd"].contains(fLow) || ["currency", "money", "usd", "$", "€", "£", "¥"].contains(uLow)
@@ -3347,8 +3349,9 @@ private struct CalcBodyView: View {
         for (idx, f) in fields.prefix(10).enumerated() {
             let rawKey = str(f, "id", "key", "name")
             let key = rawKey.isEmpty ? "x\(idx + 1)" : rawKey
-            let minV = dbl(f, "min", fallback: 0)
-            let cur = vals[key] ?? dbl(f, "default", "value", fallback: minV)
+            let choices = f["choices"] as? [[String: Any]] ?? []
+            let initial = dbl(f, "value", "default", fallback: choices.first.map { dbl($0, "value", fallback: .nan) } ?? .nan)
+            let cur = vals[key] ?? initial
             map[key] = cur
             map[key.lowercased()] = cur
             map["x\(idx + 1)"] = cur
@@ -3368,6 +3371,7 @@ private struct CalcBodyView: View {
                     Button("Reset") {
                         GSHaptics.select()
                         vals.removeAll()
+                        drafts.removeAll()
                     }
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(accent)
@@ -3388,10 +3392,11 @@ private struct CalcBodyView: View {
         let label = NexlyIcons.cleanPlainText(str(f, "label", "title", "name", "key"))
         let rawKey = str(f, "id", "key", "name")
         let key = rawKey.isEmpty ? "x\(idx + 1)" : rawKey
-        let minV = dbl(f, "min", fallback: 0)
-        let maxV = max(dbl(f, "max", fallback: 1000), minV + 1)
+        let minV = dbl(f, "min", fallback: -.greatestFiniteMagnitude)
+        let maxV = dbl(f, "max", fallback: .greatestFiniteMagnitude)
+        let hasRange = f["min"] != nil && f["max"] != nil && minV.isFinite && maxV.isFinite && maxV > minV
         let rawStep = max(dbl(f, "step", fallback: 0), 0)
-        let effStep = rawStep > 0 ? rawStep : ((maxV - minV) >= 20 ? 1.0 : 0.1)
+        let effStep = rawStep > 0 ? rawStep : (hasRange ? (maxV - minV) / 100 : 1)
         let cur = activeVars[key] ?? minV
         let rawUnit = str(f, "unit")
         let unit = ["currency", "money", "usd"].contains(rawUnit.lowercased()) ? "$" : rawUnit
@@ -3427,14 +3432,11 @@ private struct CalcBodyView: View {
                         "0",
                         text: Binding(
                             get: {
-                                abs(cur - round(cur)) < 1e-6
-                                    ? String(format: "%.0f", cur)
-                                    : String(format: "%.2f", cur)
+                                drafts[key] ?? (cur.isFinite ? String(cur) : "")
                             },
                             set: { (s: String) in
-                                if let d = Double(s.replacingOccurrences(of: ",", with: "")) {
-                                    vals[key] = d
-                                }
+                                drafts[key] = s
+                                vals[key] = Double(s) ?? .nan
                             }
                         )
                     )
@@ -3449,17 +3451,20 @@ private struct CalcBodyView: View {
                         Text(unit).font(Aero.mono(11)).foregroundStyle(Aero.textSecondary)
                     }
                 }
+                if hasRange {
                 Slider(
                     value: Binding(
-                        get: { min(max(cur, minV), maxV) },
+                        get: { cur.isFinite ? min(max(cur, minV), maxV) : minV },
                         set: { (newVal: Double) in
                             let snapped = round((newVal - minV) / effStep) * effStep + minV
                             vals[key] = min(max(snapped, minV), maxV)
+                            drafts.removeValue(forKey: key)
                         }
                     ),
                     in: minV...maxV
                 )
                 .tint(accent)
+                }
             }
         }
     }
@@ -3471,7 +3476,16 @@ private struct CalcBodyView: View {
         let unit = str(out, "unit")
         let fmt = str(out, "format")
         let evaluated: String = {
-            if expr.isEmpty { return "0" }
+            if expr.isEmpty { return "Missing formula" }
+            for (index, field) in calcFields.prefix(10).enumerated() {
+                let rawKey = str(field, "id", "key", "name")
+                let key = rawKey.isEmpty ? "x\(index + 1)" : rawKey
+                let value = activeVars[key] ?? .nan
+                if !value.isFinite || value < dbl(field, "min", fallback: -.greatestFiniteMagnitude)
+                    || value > dbl(field, "max", fallback: .greatestFiniteMagnitude) {
+                    return "Enter valid inputs"
+                }
+            }
             if let literal = Double(expr) { return formatCalcResult(literal, unit: unit, format: fmt) }
             let val = CalcExprIOS.eval(expr, vars: activeVars)
             return formatCalcResult(val, unit: unit, format: fmt)
