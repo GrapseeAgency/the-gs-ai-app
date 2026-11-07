@@ -4,6 +4,12 @@ import WebKit
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testPieLabelsUseActualCategoryInsteadOfFirstAxisLabelForEverySeries() {
+        XCTAssertEqual(chartSliceLabelIOS(name: "Organic", labels: ["A", "B"], seriesIndex: 1), "Organic")
+        XCTAssertEqual(chartSliceLabelIOS(name: "", labels: ["A", "B"], seriesIndex: 1), "B")
+        XCTAssertEqual(chartSliceLabelIOS(name: "", labels: [], seriesIndex: 2), "Series 3")
+    }
+
     func testPollNeverInventsAnInitialVoteOrCrashesOnInvalidCounts() {
         XCTAssertEqual(pollSourceVotesIOS("First option"), 0)
         XCTAssertEqual(pollSourceVotesIOS(["label": "Second option"]), 0)
