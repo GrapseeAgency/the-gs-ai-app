@@ -150,7 +150,7 @@ final class PlatformRuntimeUITests: XCTestCase {
         }
     }
 
-    func testLongPressPinSurvivesBackgroundAndRelaunch() {
+    func testLongPressPinSurvivesBackgroundAndRelaunch() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_seed_chats"]
         app.launch()
@@ -160,18 +160,37 @@ final class PlatformRuntimeUITests: XCTestCase {
             chats.tap()
             XCTAssertTrue(app.buttons["Archived"].waitForExistence(timeout: 15))
         }
-        func openRowMenu() {
+        func openRowMenu(_ stage: String) throws {
             let row = app.buttons.matching(
                 NSPredicate(format: "label CONTAINS %@", "Explain quantum physics")).firstMatch
-            XCTAssertTrue(row.waitForExistence(timeout: 15))
-            row.press(forDuration: 1.2)
+            func pressIfVisible() -> Bool {
+                guard row.exists && row.isHittable else { return false }
+                row.press(forDuration: 1.2)
+                return true
+            }
+            if row.waitForExistence(timeout: 5), pressIfVisible() { return }
+            // This is a virtualized List, not an eagerly rendered fixture.
+            // Pinning also moves a row to the top without promising to reset
+            // its scroll offset. Locate it with real gestures in either
+            // direction; never reseed/reset state after pinning.
+            for _ in 0..<8 {
+                app.swipeDown()
+                if pressIfVisible() { return }
+            }
+            for _ in 0..<24 {
+                app.swipeUp()
+                if pressIfVisible() { return }
+            }
+            XCTFail("Persisted chat was not reachable in the real list: \(stage)")
+            throw NSError(domain: "PlatformRuntimeUITests.missingPersistedRow", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: stage])
         }
         openChats()
-        openRowMenu()
+        try openRowMenu("initial fixture")
         // Existing menu tests may have touched this idempotent fixture.
         if app.buttons["Unpin"].waitForExistence(timeout: 2) {
             app.buttons["Unpin"].tap()
-            openRowMenu()
+            try openRowMenu("after normalizing an existing pin")
         }
         let pin = app.buttons["Pin to top"]
         XCTAssertTrue(pin.waitForExistence(timeout: 10))
@@ -179,14 +198,14 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCUIDevice.shared.press(.home)
         XCTAssertTrue(app.wait(for: .runningBackground, timeout: 10))
         app.activate()
-        openRowMenu()
+        try openRowMenu("after background continuation")
         XCTAssertTrue(app.buttons["Unpin"].waitForExistence(timeout: 10), "Pin did not survive background")
         // Relaunch WITHOUT reseeding: verify persisted data, not a second fixture.
         app.terminate()
         app.launchArguments = ["-gs_test_session_active"]
         app.launch()
         openChats()
-        openRowMenu()
+        try openRowMenu("after process relaunch without reseeding")
         let unpin = app.buttons["Unpin"]
         XCTAssertTrue(unpin.waitForExistence(timeout: 10), "Pin did not survive process relaunch")
         let evidence = XCTAttachment(screenshot: app.screenshot())
