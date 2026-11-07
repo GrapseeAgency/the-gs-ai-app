@@ -1499,8 +1499,8 @@ internal fun sliceChartByRange(w: ChartWidget, rangeIndex: Int): Pair<ChartWidge
 @Composable
 private fun ChartWidgetView(w: ChartWidget) {
     val isSwitchable = w.type in SWITCHABLE_CHART_TYPES && w.series.isNotEmpty()
-    var activeType by remember(w.type) { mutableStateOf(w.type) }
-    var rangeIndex by remember { mutableStateOf(0) }
+    var activeType by remember(w) { mutableStateOf(w.type) }
+    var rangeIndex by remember(w) { mutableStateOf(0) }
     val (slicedWidget, rangeLabel) = remember(w, rangeIndex, isSwitchable) {
         if (isSwitchable) sliceChartByRange(w, rangeIndex) else w to "All"
     }
@@ -1646,15 +1646,15 @@ private fun ChartWidgetView(w: ChartWidget) {
 
         // 3-Card KPI Summary Strip below switchable charts (Screenshot 6)
         if (isSwitchable) {
-            val kpiStats = remember(slicedWidget.series, slicedWidget.labels, slicedWidget.unit) {
+            val kpiStats = remember(slicedWidget.series, slicedWidget.labels, slicedWidget.unit, activeType) {
                 val pts = slicedWidget.series.firstOrNull()?.data.orEmpty()
-                val ys = pts.map { it.getOrElse(1) { 0f } }
-                if (ys.size >= 2) {
+                val ys = pts.map { it.getOrElse(1) { Float.NaN } }
+                if (ys.size >= 2 && ys.all { it.isFinite() }) {
                     val total = ys.sum()
                     val maxIdx = ys.indices.maxByOrNull { ys[it] } ?: 0
                     val peakLabel = slicedWidget.labels.getOrNull(maxIdx)?.takeIf { it.isNotBlank() } ?: "Peak"
                     val peakVal = ys.getOrElse(maxIdx) { 0f }
-                    val pct = chartGrowthPercentAndroid(ys.first().toDouble(), ys.last().toDouble())
+                    val pct = if (activeType in setOf("pie", "donut")) null else chartGrowthPercentAndroid(ys.first().toDouble(), ys.last().toDouble())
                     Triple(
                         axisLabel(total, slicedWidget.unit),
                         peakLabel to axisLabel(peakVal, slicedWidget.unit),
@@ -1663,9 +1663,10 @@ private fun ChartWidgetView(w: ChartWidget) {
                 } else null
             }
             if (kpiStats != null) {
+                Text("Summary: ${slicedWidget.series.firstOrNull()?.name?.ifEmpty { "Series 1" } ?: "Series 1"}", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textSecondary)
                 val (totalStr, peakPair, pct) = kpiStats
                 val pos = pct != null && pct >= 0.0
-                val pctStr = pct?.let { String.format(java.util.Locale.US, "%s%.1f%%", if (pos) "+" else "", it) } ?: "N/A (zero baseline)"
+                val pctStr = pct?.let { String.format(java.util.Locale.US, "%s%.1f%%", if (pos) "+" else "", it) } ?: if (activeType in setOf("pie", "donut")) "N/A (slice values)" else "N/A (zero baseline)"
                 val deltaText = if (pct == null) "No defined baseline" else "${if (pos) "↑" else "↓"} $pctStr"
                 val pillBg = if (pct == null) Color(0xFFF0EDF5) else if (pos) Color(0xFFE6F9F0) else Color(0xFFFDECEC)
                 val pillFg = if (pct == null) Color(0xFF655E70) else if (pos) Color(0xFF129A5A) else Color(0xFFE04F5F)
@@ -2250,22 +2251,36 @@ private fun BarChart(w: ChartWidget) {
  * and shape 2 rendered as a single slice because the renderer only read
  * `series`. Both are real, so normalise here instead of guessing upstream.
  */
-internal fun pieSlices(w: ChartWidget): List<Pair<String, Float>> {
-    val single = w.series.singleOrNull()
-    if (single != null && single.data.size > 1) {
-        val names = if (w.labels.size >= single.data.size) w.labels
-        else single.data.indices.map { "Slice ${it + 1}" }
-        return names.take(single.data.size).mapIndexed { i, label ->
-            label to single.data[i].getOrElse(1) { 0f }
-        }.filter { it.second > 0f }
+internal fun pieSlices(w: ChartWidget): List<Pair<String, Float>> =
+    w.series.flatMapIndexed { seriesIndex, series ->
+        series.data.mapIndexed { pointIndex, point ->
+            val label = if (series.data.size == 1) {
+                series.name.ifEmpty { w.labels.getOrNull(seriesIndex) ?: "Slice ${seriesIndex + 1}" }
+            } else {
+                val pointLabel = w.labels.getOrNull(pointIndex) ?: "Slice ${pointIndex + 1}"
+                if (w.series.size > 1) "${series.name}: $pointLabel" else pointLabel
+            }
+            label to point.getOrElse(1) { point.lastOrNull() ?: Float.NaN }
+        }
     }
-    return w.series.map { s ->
-        s.name to (s.data.firstOrNull()?.getOrElse(1) { 0f } ?: 0f)
-    }.filter { it.second > 0f }
+
+internal fun pieSourceProblemAndroid(w: ChartWidget): String? {
+    val slices = pieSlices(w)
+    if (slices.isEmpty()) return "No observations in this range."
+    val total = slices.sumOf { it.second.toDouble() }
+    return if (slices.any { !it.second.isFinite() || it.second < 0f } ||
+        !total.isFinite() || total <= 0.0 || total > Float.MAX_VALUE.toDouble()) {
+        "Pie charts require finite nonnegative observations and a positive total. Use Line or Bar for signed data."
+    } else null
 }
 
 @Composable
 private fun PieChart(w: ChartWidget) {
+    pieSourceProblemAndroid(w)?.let { problem ->
+        Text(problem, style = MaterialTheme.typography.bodySmall, color = GsTheme.colors.textSecondary)
+        return
+    }
+
     var animate by remember { mutableStateOf(false) }
     LaunchedEffect(w) { animate = true }
     val progress by animateFloatAsState(if (animate) 1f else 0f, tween(700), label = "chart")
