@@ -18,7 +18,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: platform-runtime-${{ github.ref }}
+  # Keep different revisions independent: a runner stranded before setup on
+  # an obsolete revision must not prevent the corrected revision from running.
+  group: platform-runtime-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -51,7 +53,9 @@ jobs:
             cd android && bash -o pipefail -c 'gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.grapsee.gsai.PlatformRuntimeTest --no-daemon --stacktrace 2>&1 | tee ../platform-runtime.log'
       - name: Require every runtime test (no skipped or empty reports)
         if: always()
-        run: python3 scripts/check_platform_runtime_results.py android/app/build/outputs/androidTest-results/connected
+        run: |
+          python3 scripts/check_platform_runtime_results.py --self-test
+          python3 scripts/check_platform_runtime_results.py android/app/build/outputs/androidTest-results/connected
       - name: Publish causal diagnostics
         if: failure()
         run: |
