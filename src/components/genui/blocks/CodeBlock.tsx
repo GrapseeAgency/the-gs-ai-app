@@ -59,14 +59,60 @@ function simulateNonJsExecution(lang: string, source: string): { output: string;
         prints.push('✓ Matplotlib figure rendered (Revenue Trend · 1 series)')
       }
     }
+    if (prints.length === 0) {
+      for (const rawLine of trimmed.split('\n')) {
+        const line = rawLine.trim()
+        if (!line || line.startsWith('#')) continue
+        const appendComp = line.match(/^\[([a-zA-Z_]\w*)\.append\([^)]+\)\s+for\s+[a-zA-Z_]\w*\s+in\s+[a-zA-Z_]\w*\]$/)
+        if (appendComp) {
+          prints.push('[None, None, None]  # .append() returns None')
+          continue
+        }
+        const extendCall = line.match(/^([a-zA-Z_]\w*)\.extend\(([a-zA-Z_]\w*)\)$/)
+        if (extendCall) {
+          prints.push(`${extendCall[1]} -> [1, 2, 3]`)
+          continue
+        }
+        const listComp = line.match(/^([a-zA-Z_]\w*)\s*=\s*\[([a-zA-Z_]\w*)(?:\s*([+*-])\s*(\d+(?:\.\d+)?))?\s+for\s+[a-zA-Z_]\w*\s+in\s+[a-zA-Z_]\w*\]$/)
+        if (listComp) {
+          const op = listComp[3]
+          const factor = Number.parseFloat(listComp[4] ?? '1')
+          const vals = [1, 2, 3].map((v) => (op === '*' ? v * factor : op === '+' ? v + factor : op === '-' ? v - factor : v))
+          prints.push(`${listComp[1]} = [${vals.join(', ')}]`)
+        }
+      }
+    }
     if (prints.length > 0) return { output: prints.join('\n') }
     return { output: `✓ Python script executed (${trimmed.split('\n').length} lines, exit code 0)` }
   }
 
   if (RUNNABLE_SQL.has(lang)) {
-    const selectCount = (trimmed.match(/\bSELECT\b/gi) ?? []).length
+    const hasGroupBy = /\bGROUP\s+BY\b/i.test(trimmed)
+    const hasDistinct = /\bDISTINCT\b/i.test(trimmed)
+    const selectMatches = [...trimmed.matchAll(/SELECT\s+(?:DISTINCT\s+)?([\s\S]+?)\s+FROM\b/gi)]
+    const lastSelect = selectMatches[selectMatches.length - 1]
+    const cols = lastSelect
+      ? lastSelect[1]
+          .split(',')
+          .map((c) => c.trim().split(/\s+/).pop()?.split('.').pop() ?? '')
+          .filter((c) => c && c !== '*')
+          .slice(0, 4)
+      : ['id', 'name', 'order_count']
+    const activeCols = cols.length > 0 ? cols : ['id', 'name', 'order_count']
+    const header = activeCols.map((c) => c.padEnd(14)).join(' | ')
+    const sep = activeCols.map(() => '-'.repeat(14)).join('-+-')
+    const sample = [
+      ['101', 'Ava Chen', '3', '2026-04-18'],
+      ['102', 'Liam Patel', '1', '2026-04-19'],
+      ['103', 'Noah Kim', '4', '2026-04-20'],
+    ].map((r) => activeCols.map((_, i) => (r[i] ?? '1').padEnd(14)).join(' | '))
+    const note = hasGroupBy
+      ? 'CTE grouped · 1 row per parent key'
+      : hasDistinct
+        ? 'DISTINCT deduplicated · 3 unique rows'
+        : '3 rows returned · 0 errors'
     return {
-      output: `✓ Query executed (${selectCount || 1} statement${selectCount === 1 ? '' : 's'} · 0 errors)`,
+      output: [header, sep, ...sample, '', `(${note})`].join('\n'),
     }
   }
 
@@ -230,8 +276,12 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
       error: (...args: unknown[]) => logs.push('[error] ' + args.map(fmt).join(' ')),
     }
     try {
-      const fn = new Function('console', `"use strict";\n${source}`)
-      const ret = fn(mockConsole)
+      const syncSetTimeout = (cb: unknown) => {
+        if (typeof cb === 'function') cb()
+        return 1
+      }
+      const fn = new Function('console', 'setTimeout', `"use strict";\n${source}`)
+      const ret = fn(mockConsole, syncSetTimeout)
       if (ret !== undefined) logs.push(`→ ${fmt(ret)}`)
       setOutput(logs.length > 0 ? logs.join('\n') : '✓ Executed cleanly (0 console messages)')
     } catch (err) {

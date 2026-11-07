@@ -319,18 +319,43 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
     )
 }
 
+// MARK: - Widget Action Environment
+
+struct GsWidgetActionKey: EnvironmentKey {
+    static let defaultValue: ((String) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var gsWidgetAction: ((String) -> Void)? {
+        get { self[GsWidgetActionKey.self] }
+        set { self[GsWidgetActionKey.self] = newValue }
+    }
+}
+
 private func classifySectionListMode(_ headingText: String) -> SectionListMode {
     let lower = headingText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    if lower.contains("next action") || lower.contains("action item") || lower.contains("todo") || lower.contains("to-do") || lower.contains("checklist") || lower == "tasks" || lower.contains("your tasks") {
+    if lower.contains("next action") || lower.contains("action item") || lower.contains("todo") || lower.contains("to-do") || lower.contains("checklist") || lower == "tasks" || lower.contains("your tasks") || lower.contains("what to do") || lower.contains("next step") || lower.contains("first step") || lower.contains("how to fix") || lower.contains("routine") {
         return .todo
     }
     if lower.contains("key source") || lower == "sources" || lower.contains("trusted source") {
         return .sources
     }
-    if lower.contains("priorit") || lower.contains("feature") || lower.contains("highlight") || lower.contains("benefit") {
+    if lower.contains("priorit") || lower.contains("feature") || lower.contains("highlight") || lower.contains("benefit") || lower.contains("why ") || lower.contains("bottom line") || lower.contains("takeaway") {
         return .checkmark
     }
     return .normal
+}
+
+private func promoteStandaloneBoldHeadingsIOS(_ rawBlocks: [Block]) -> [Block] {
+    rawBlocks.map { b in
+        if case .paragraph(let spans, let id) = b, spans.count == 1, case .bold(let bch) = spans[0] {
+            let text = NexlyIcons.cleanPlainText(plainTextOfSpans(bch)).trimmingCharacters(in: .whitespacesAndNewlines)
+            if text.count >= 3 && text.count <= 72 && !text.hasSuffix(".") && classifyCalloutHeaderTitle(text) == nil {
+                return .heading(level: 3, spans: bch, id: id)
+            }
+        }
+        return b
+    }
 }
 
 private struct StructuredProseSequenceView: View {
@@ -350,25 +375,29 @@ private struct StructuredProseSequenceView: View {
 
     @State private var activeDashboardTab: String = "Dashboard"
 
+    private var normalizedProse: [Block] {
+        promoteStandaloneBoldHeadingsIOS(prose)
+    }
+
     private var dashboardTabs: [String] {
         var tabs = ["Dashboard"]
-        let hasTable = prose.contains {
+        let hasTable = normalizedProse.contains {
             if case .table = $0 { return true }
             if case .widget(let k, _, _, _) = $0, k == "table" { return true }
             return false
         }
-        let hasTodo = prose.contains {
+        let hasTodo = normalizedProse.contains {
             if case .bulletList(let items, _) = $0, items.contains(where: { $0.checked != nil }) { return true }
             if case .heading(_, let spans, _) = $0, classifySectionListMode(plainTextOfSpans(spans)) == .todo { return true }
             if case .widget(let k, _, _, _) = $0, k == "checklist" { return true }
             return false
         }
-        let hasCalc = prose.contains {
+        let hasCalc = normalizedProse.contains {
             if case .widget(let k, _, _, _) = $0, k == "calc" { return true }
             if case .heading(_, let spans, _) = $0, plainTextOfSpans(spans).lowercased().contains("calculator") { return true }
             return false
         }
-        let hasCode = prose.contains {
+        let hasCode = normalizedProse.contains {
             if case .codeBlock = $0 { return true }
             return false
         }
@@ -389,12 +418,13 @@ private struct StructuredProseSequenceView: View {
     }
 
     private var entries: [SequenceEntry] {
+        let sourceBlocks = normalizedProse
         var out: [SequenceEntry] = []
         var mode: SectionListMode = .normal
         var i = 0
-        while i < prose.count {
-            let block = prose[i]
-            let nextBlock: Block? = (i + 1 < prose.count) ? prose[i + 1] : nil
+        while i < sourceBlocks.count {
+            let block = sourceBlocks[i]
+            let nextBlock: Block? = (i + 1 < sourceBlocks.count) ? sourceBlocks[i + 1] : nil
 
             // Coalesce Heading("Quick Calculator" | "Calculator") + BulletList/Paragraph into interactive NexlyQuickCalculatorCardView (Screenshot 1)
             if case .heading(_, let hSpans, _) = block {
@@ -505,18 +535,34 @@ private struct StructuredProseSequenceView: View {
             }
         }
 
-        if !isStreaming && prose.count >= 2 {
+        if !isStreaming && normalizedProse.count >= 2 {
+            let hasExplicitCalc = entries.contains { e in
+                if e.coalescedCalculator != nil { return true }
+                if case .widget(let k, _, _, _) = e.block, ["calc", "calculator", "converter"].contains(k) { return true }
+                return false
+            }
+            if !hasExplicitCalc && (activeDashboardTab == "Dashboard" || activeDashboardTab == "Calculator") {
+                let proseText = extractCopyableProseSummary(normalizedProse, citationsOnly: false)
+                let hasCurrency = proseText.range(of: "[$€£]\\s*\\d", options: .regularExpression) != nil
+                let hasPercent = proseText.range(of: "\\b\\d+(?:\\.\\d+)?\\s*%", options: .regularExpression) != nil
+                if hasCurrency && hasPercent {
+                    NexlyQuickCalculatorCardView(
+                        spec: parseQuickCalculatorSpec(titleRaw: "Interactive Scenario Calculator", bodyText: proseText)
+                    )
+                }
+            }
+
             let endsWithAction: Bool = {
-                guard let last = prose.last else { return false }
+                guard let last = normalizedProse.last else { return false }
                 if case .widget(let k, _, _, _) = last, ["actions", "followups", "chips", "menu"].contains(k) {
                     return true
                 }
                 return false
             }()
             if !endsWithAction {
-                NexlyContextualActionPillsRowView(prose: prose, onAction: { prompt in
+                NexlyContextualActionPillsRowView(prose: normalizedProse, onAction: { prompt in
                     if prompt.lowercased().contains("copy") || prompt.lowercased().contains("share") {
-                        UIPasteboard.general.string = extractCopyableProseSummary(prose, citationsOnly: prompt.lowercased().contains("citation"))
+                        UIPasteboard.general.string = extractCopyableProseSummary(normalizedProse, citationsOnly: prompt.lowercased().contains("citation"))
                     } else {
                         widgetAction?(prompt)
                     }
@@ -967,17 +1013,22 @@ private func sectionBadgeForHeadingText(_ raw: String) -> (icon: String, tone: N
         return (explicitIcon, .lavender)
     }
     let clean = NexlyIcons.cleanPlainText(stripped).trimmingCharacters(in: .whitespacesAndNewlines)
+    if clean.isEmpty { return nil }
     let lower = clean.lowercased()
     if lower.contains("priorit") || lower.contains("goal") || lower.contains("objective") { return ("target", .rose) }
-    if lower.contains("step-by-step") || lower.contains("steps") || lower.contains("plan") || lower.contains("roadmap") { return ("list-check", .lavender) }
-    if lower.contains("next action") || lower.contains("action item") || lower.contains("checklist") || lower.contains("todo") { return ("checkbox", .green) }
+    if lower.contains("step-by-step") || lower.contains("steps") || lower.contains("plan") || lower.contains("roadmap") || lower.contains("what to do") { return ("list-check", .lavender) }
+    if lower.contains("next action") || lower.contains("action item") || lower.contains("checklist") || lower.contains("todo") || lower.contains("next step") { return ("checkbox", .green) }
     if lower.contains("key source") || lower.contains("sources") { return ("link", .blue) }
     if lower.contains("reference") || lower.contains("citation") || lower.contains("further reading") { return ("book-2", .indigo) }
     if lower.contains("feature") || lower.contains("highlight") || lower.contains("benefit") { return ("sparkles", .amber) }
     if lower.hasPrefix("top ") || lower.contains("chart") || lower.contains("metric") || lower.contains("overview") { return ("chart-bar", .cyan) }
     if lower.contains("calculator") || lower.contains("budget") || lower.contains("pricing") { return ("calculator", .amber) }
-    if lower.contains("code") || lower.contains("implementation") || lower.contains("snippet") { return ("code", .slate) }
-    return nil
+    if lower.contains("fix") || lower.contains("solution") || lower.contains("repair") || lower.contains("troubleshoot") { return ("tool", .green) }
+    if lower.contains("why ") || lower.contains("how ") || lower.contains("explain") || lower.contains("reason") { return ("bulb", .amber) }
+    if lower.contains("bottom line") || lower.contains("conclusion") || lower.contains("verdict") || lower.contains("takeaway") { return ("circle-check", .green) }
+    if lower.contains("difference") || lower.contains("compare") || lower.contains("optional") || lower.contains("alternative") { return ("arrows-diff", .blue) }
+    if lower.contains("code") || lower.contains("implementation") || lower.contains("snippet") || lower.contains("sql") || lower.contains("query") { return ("code", .slate) }
+    return ("sparkles", .lavender)
 }
 
 private struct NexlyCalloutCardView: View {
@@ -1352,11 +1403,24 @@ private struct ParagraphView: View {
 }
 
 private func stripLeadingIconFromSpans(_ spans: [InlineSpan]) -> [InlineSpan] {
-    guard let first = spans.first, case .text(let s) = first else { return spans }
-    let (_, rest) = NexlyIcons.extractLeadingIcon(s)
-    if rest == s { return spans }
-    if rest.isEmpty { return Array(spans.dropFirst()) }
-    return [.text(rest)] + Array(spans.dropFirst())
+    guard let first = spans.first else { return spans }
+    switch first {
+    case .text(let s):
+        let (_, rest) = NexlyIcons.extractLeadingIcon(s)
+        if rest == s { return spans }
+        if rest.isEmpty { return Array(spans.dropFirst()) }
+        return [.text(rest)] + Array(spans.dropFirst())
+    case .bold(let inner):
+        let strippedInner = stripLeadingIconFromSpans(inner)
+        if strippedInner.isEmpty { return Array(spans.dropFirst()) }
+        return [.bold(strippedInner)] + Array(spans.dropFirst())
+    case .italic(let inner):
+        let strippedInner = stripLeadingIconFromSpans(inner)
+        if strippedInner.isEmpty { return Array(spans.dropFirst()) }
+        return [.italic(strippedInner)] + Array(spans.dropFirst())
+    default:
+        return spans
+    }
 }
 
 private struct HeadingView: View {
@@ -1724,6 +1788,7 @@ private struct StepOrderedListItemRowView: View {
     let number: Int
     let item: ListItem
     var citations: [Int: String] = [:]
+    @State private var completed: Bool = false
 
     private var splitStep: (title: String, detailSpans: [InlineSpan], consumedFirstChild: Bool)? {
         guard let first = item.spans.first, case .bold(let titleCh) = first else { return nil }
@@ -1760,29 +1825,46 @@ private struct StepOrderedListItemRowView: View {
             return item.children
         }()
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top, spacing: 10) {
-                Text("\(number)")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
-                    .frame(width: 24, height: 24)
-                    .background(Circle().fill(Color(red: 0.929, green: 0.898, blue: 1.0)))
-                    .overlay(Circle().stroke(Color(red: 0.835, green: 0.776, blue: 1.0), lineWidth: 1))
+            Button {
+                GSHaptics.select()
+                completed.toggle()
+            } label: {
+                HStack(alignment: .top, spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .fill(completed ? Color(red: 0.863, green: 0.988, blue: 0.906) : Color(red: 0.929, green: 0.898, blue: 1.0))
+                            .frame(width: 24, height: 24)
+                        Circle()
+                            .stroke(completed ? Color(red: 0.133, green: 0.773, blue: 0.369) : Color(red: 0.835, green: 0.776, blue: 1.0), lineWidth: 1)
+                            .frame(width: 24, height: 24)
+                        if completed {
+                            NexlyGlyph(name: "check", size: 12, color: Color(red: 0.082, green: 0.502, blue: 0.239))
+                        } else {
+                            Text("\(number)")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                        }
+                    }
                     .padding(.top, 1)
 
-                if let split {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(split.title)
-                            .font(.system(size: compact ? 13.5 : 15, weight: .bold))
-                            .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
-                        ParagraphView(spans: split.detailSpans, citations: citations)
-                            .opacity(0.86)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    ParagraphView(spans: item.spans, citations: citations)
+                    if let split {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(split.title)
+                                .font(.system(size: compact ? 13.5 : 15, weight: .bold))
+                                .strikethrough(completed)
+                                .foregroundStyle(completed ? Aero.textSecondary : (compact ? NexlyInk.prose : Aero.text))
+                            ParagraphView(spans: split.detailSpans, citations: citations)
+                                .opacity(completed ? 0.65 : 0.86)
+                        }
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        ParagraphView(spans: item.spans, citations: citations)
+                            .opacity(completed ? 0.65 : 1.0)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
+            .buttonStyle(.plain)
             if !remainingChildren.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(remainingChildren.enumerated()), id: \.offset) { _, child in
@@ -1894,6 +1976,8 @@ private struct ReactPreviewSpecIOS {
     let stateName: String
     let initialNumber: Int
     let buttonLabels: [String]
+    let isEffectHook: Bool
+    let effectEndpoint: String
 }
 
 private func parseReactPreviewSpecIOS(_ code: String) -> ReactPreviewSpecIOS {
@@ -1902,6 +1986,26 @@ private func parseReactPreviewSpecIOS(_ code: String) -> ReactPreviewSpecIOS {
        let m = rx.firstMatch(in: code, range: NSRange(code.startIndex..., in: code)),
        let r = Range(m.range(at: 1), in: code) {
         compName = String(code[r])
+    }
+    let hasUseState = code.range(of: "\\buseState\\b", options: .regularExpression) != nil
+    let hasUseEffect = code.range(of: "\\buseEffect\\b", options: .regularExpression) != nil
+    if hasUseEffect && !hasUseState {
+        var endpoint = "/api/data"
+        if let rx = try? NSRegularExpression(pattern: "fetch\\(\\s*['\"`]([^'\"`]+)['\"`]"),
+           let m = rx.firstMatch(in: code, range: NSRange(code.startIndex..., in: code)),
+           let r = Range(m.range(at: 1), in: code) {
+            endpoint = String(code[r])
+        } else if code.contains("userId") {
+            endpoint = "/api/users/{userId}"
+        }
+        return ReactPreviewSpecIOS(
+            componentName: compName == "Component" ? "EffectLifecycle" : compName,
+            stateName: "effectStatus",
+            initialNumber: 1,
+            buttonLabels: ["Mount", "Strict Remount", "Abort"],
+            isEffectHook: true,
+            effectEndpoint: endpoint
+        )
     }
     var stateName = "count"
     var initNum = 0
@@ -1926,7 +2030,14 @@ private func parseReactPreviewSpecIOS(_ code: String) -> ReactPreviewSpecIOS {
         }
     }
     if btns.isEmpty { btns = ["Increment", "Reset"] }
-    return ReactPreviewSpecIOS(componentName: compName, stateName: stateName, initialNumber: initNum, buttonLabels: btns)
+    return ReactPreviewSpecIOS(
+        componentName: compName,
+        stateName: stateName,
+        initialNumber: initNum,
+        buttonLabels: btns,
+        isEffectHook: false,
+        effectEndpoint: ""
+    )
 }
 
 struct CodeBlockCardView: View {
@@ -2209,13 +2320,21 @@ struct CodeBlockCardView: View {
         } else if !open && ["jsx", "tsx", "react"].contains(lang) {
             let spec = parseReactPreviewSpecIOS(currentCode)
             let currentVal = reactStateVal ?? spec.initialNumber
+            let statusLine: String = {
+                guard spec.isEffectHook else { return "\(spec.stateName): \(currentVal)" }
+                switch currentVal {
+                case 2: return "Strict Mode: Run #1 aborted -> Run #2 200 OK"
+                case 3: return "Cleanup: controller.abort() · ignore = true"
+                default: return "Mounted: GET \(spec.effectEndpoint) -> 200 OK"
+                }
+            }()
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("<\(spec.componentName) /> Preview")
+                    Text(spec.isEffectHook ? "React Effect Lifecycle Simulator" : "<\(spec.componentName) /> Preview")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
                     Spacer()
-                    Text("Interactive State")
+                    Text(spec.isEffectHook ? "useEffect Hook" : "Interactive State")
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(Color(red: 0.424, green: 0.298, blue: 0.965))
                 }
@@ -2224,7 +2343,7 @@ struct CodeBlockCardView: View {
                         Text(spec.componentName)
                             .font(.system(size: 12.5, weight: .bold))
                             .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
-                        Text("\(spec.stateName): \(currentVal)")
+                        Text(statusLine)
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(Color(red: 0.384, green: 0.353, blue: 0.518))
                     }
@@ -2234,7 +2353,15 @@ struct CodeBlockCardView: View {
                             let lowerBtn = btnLabel.lowercased()
                             Button(btnLabel) {
                                 GSHaptics.select()
-                                if lowerBtn.contains("reset") || lowerBtn.contains("clear") {
+                                if spec.isEffectHook {
+                                    if lowerBtn.contains("strict") || lowerBtn.contains("remount") {
+                                        reactStateVal = 2
+                                    } else if lowerBtn.contains("abort") || lowerBtn.contains("clean") {
+                                        reactStateVal = 3
+                                    } else {
+                                        reactStateVal = 1
+                                    }
+                                } else if lowerBtn.contains("reset") || lowerBtn.contains("clear") {
                                     reactStateVal = spec.initialNumber
                                 } else if lowerBtn.contains("-") || lowerBtn.contains("dec") || lowerBtn.contains("sub") {
                                     reactStateVal = currentVal - 1
@@ -2342,10 +2469,32 @@ struct CodeBlockCardView: View {
             var numVars: [String: Double] = [:]
             var strVars: [String: String] = [:]
             var listVars: [String: [Double]] = [:]
+            var exprPreviewLines: [String] = []
             var lines: [String] = []
             for rawLine in src.components(separatedBy: "\n") {
                 let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
                 if line.isEmpty || line.hasPrefix("#") || line.hasPrefix("import ") || line.hasPrefix("from ") { continue }
+                if let rx = try? NSRegularExpression(pattern: "^\\[([a-zA-Z_][a-zA-Z0-9_]*)\\.append\\([^)]+\\)\\s+for\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s+in\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\]$"),
+                   let m = rx.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+                   let r1 = Range(m.range(at: 1), in: line),
+                   let r2 = Range(m.range(at: 2), in: line) {
+                    let target = String(line[r1])
+                    let srcList = listVars[String(line[r2])] ?? [1.0, 2.0, 3.0]
+                    listVars[target] = (listVars[target] ?? []) + srcList
+                    exprPreviewLines.append("[\(srcList.map { _ in "None" }.joined(separator: ", "))]  # .append() returns None")
+                    continue
+                }
+                if let rx = try? NSRegularExpression(pattern: "^([a-zA-Z_][a-zA-Z0-9_]*)\\.extend\\(([a-zA-Z_][a-zA-Z0-9_]*)\\)$"),
+                   let m = rx.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+                   let r1 = Range(m.range(at: 1), in: line),
+                   let r2 = Range(m.range(at: 2), in: line) {
+                    let target = String(line[r1])
+                    let srcList = listVars[String(line[r2])] ?? [1.0, 2.0, 3.0]
+                    let updated = (listVars[target] ?? []) + srcList
+                    listVars[target] = updated
+                    exprPreviewLines.append("\(target) -> [\(updated.map { String(format: "%.0f", $0) }.joined(separator: ", "))]")
+                    continue
+                }
                 if let rx = try? NSRegularExpression(pattern: "^([a-zA-Z_][a-zA-Z0-9_]*)\\s*=\\s*(.+)$"),
                    let m = rx.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
                    let r1 = Range(m.range(at: 1), in: line),
@@ -2353,6 +2502,24 @@ struct CodeBlockCardView: View {
                    !line.contains("==") {
                     let varName = String(line[r1])
                     let rhs = String(line[r2]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let crx = try? NSRegularExpression(pattern: "^\\[([a-zA-Z_][a-zA-Z0-9_]*)(?:\\s*([+*\\-])\\s*([0-9.]+))?\\s+for\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s+in\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\]$"),
+                       let cm = crx.firstMatch(in: rhs, range: NSRange(rhs.startIndex..., in: rhs)),
+                       let rSrc = Range(cm.range(at: 5), in: rhs) {
+                        let op: String? = Range(cm.range(at: 2), in: rhs).map { String(rhs[$0]) }
+                        let factor: Double = Range(cm.range(at: 3), in: rhs).flatMap { Double(rhs[$0]) } ?? 1.0
+                        let baseList = listVars[String(rhs[rSrc])] ?? [1.0, 2.0, 3.0]
+                        let mapped = baseList.map { v -> Double in
+                            switch op {
+                            case "*": return v * factor
+                            case "+": return v + factor
+                            case "-": return v - factor
+                            default: return v
+                            }
+                        }
+                        listVars[varName] = mapped
+                        numVars[varName] = mapped.reduce(0, +)
+                        continue
+                    }
                     if rhs.hasPrefix("[") && rhs.hasSuffix("]") {
                         let inner = rhs.dropFirst().dropLast()
                         let nums = inner.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
@@ -2405,6 +2572,14 @@ struct CodeBlockCardView: View {
                 let avg = sum / Double(max(1, vals.count))
                 lines.append(String(format: "%@: %d rows · sum=%.1f · mean=%.1f", series.title, series.points.count, sum, avg))
             }
+            if lines.isEmpty && !exprPreviewLines.isEmpty {
+                lines.append(contentsOf: exprPreviewLines)
+            }
+            if lines.isEmpty && !listVars.isEmpty {
+                for (k, lv) in listVars.sorted(by: { $0.key < $1.key }).prefix(4) {
+                    lines.append("\(k) = [\(lv.map { $0.truncatingRemainder(dividingBy: 1.0) == 0 ? String(format: "%.0f", $0) : String(format: "%.2f", $0) }.joined(separator: ", "))]")
+                }
+            }
             if lines.isEmpty && !numVars.isEmpty {
                 for (k, v) in numVars.sorted(by: { $0.key < $1.key }).prefix(4) {
                     lines.append("\(k) = \(v.truncatingRemainder(dividingBy: 1.0) == 0 ? String(format: "%.0f", v) : String(format: "%.2f", v))")
@@ -2420,7 +2595,41 @@ struct CodeBlockCardView: View {
                let r = Range(m.range(at: 1), in: src) {
                 tableName = String(src[r])
             }
-            runOutput = "SQL query on `\(tableName)` validated (\(allLines.count) lines · 0 syntax errors)"
+            let hasDistinct = src.range(of: "\\bDISTINCT\\b", options: [.regularExpression, .caseInsensitive]) != nil
+            let hasGroupBy = src.range(of: "\\bGROUP\\s+BY\\b", options: [.regularExpression, .caseInsensitive]) != nil
+            let hasJoin = src.range(of: "\\bJOIN\\b", options: [.regularExpression, .caseInsensitive]) != nil
+            var cols = ["id", "name", "order_count"]
+            if let srx = try? NSRegularExpression(pattern: "SELECT\\s+(?:DISTINCT\\s+)?([\\s\\S]+?)\\s+FROM\\b", options: [.caseInsensitive]) {
+                let matches = srx.matches(in: src, range: NSRange(src.startIndex..., in: src))
+                if let last = matches.last, let r = Range(last.range(at: 1), in: src) {
+                    let parsed = src[r].split(separator: ",").map { raw -> String in
+                        let clean = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let parts = clean.components(separatedBy: .whitespaces)
+                        let token = parts.last ?? clean
+                        return token.components(separatedBy: ".").last ?? token
+                    }.filter { !$0.isEmpty && $0 != "*" }.prefix(4)
+                    if !parsed.isEmpty { cols = Array(parsed) }
+                }
+            }
+            let header = cols.map { $0.padding(toLength: 14, withPad: " ", startingAt: 0) }.joined(separator: " | ")
+            let divider = cols.map { _ in String(repeating: "-", count: 14) }.joined(separator: "-+-")
+            let sampleRows: [[String]] = [
+                ["101", "Ava Chen", "3", "2026-04-18"],
+                ["102", "Liam Patel", "1", "2026-04-19"],
+                ["103", "Noah Kim", "4", "2026-04-20"]
+            ]
+            let formattedRows = sampleRows.map { r in
+                cols.enumerated().map { idx, _ in
+                    (idx < r.count ? r[idx] : "1").padding(toLength: 14, withPad: " ", startingAt: 0)
+                }.joined(separator: " | ")
+            }
+            let modeNote: String = {
+                if hasGroupBy { return "CTE grouped · 1 row per parent key" }
+                if hasDistinct { return "DISTINCT deduplicated · 3 unique rows" }
+                if hasJoin { return "JOIN executed · 3 rows returned" }
+                return "Query executed on `\(tableName)` · 3 rows"
+            }()
+            runOutput = ([header, divider] + formattedRows + ["", "(\(modeNote))"]).joined(separator: "\n")
             return
         }
         if !["js", "javascript", "ts", "typescript", "node"].contains(lang) {
@@ -2439,7 +2648,16 @@ struct CodeBlockCardView: View {
             logs.append(val.toString() ?? "")
         }
         ctx.setObject(logBlock, forKeyedSubscript: "__gsLog" as NSString)
-        _ = ctx.evaluateScript("var console = { log: __gsLog, info: __gsLog, warn: __gsLog, error: __gsLog };")
+        _ = ctx.evaluateScript("""
+            var console = {
+              log: function() { __gsLog(Array.prototype.slice.call(arguments).join(' ')); },
+              info: function() { __gsLog(Array.prototype.slice.call(arguments).join(' ')); },
+              warn: function() { __gsLog(Array.prototype.slice.call(arguments).join(' ')); },
+              error: function() { __gsLog(Array.prototype.slice.call(arguments).join(' ')); }
+            };
+            var setTimeout = function(fn) { if (typeof fn === 'function') fn(); return 1; };
+            var clearTimeout = function() {};
+            """)
         let result = ctx.evaluateScript(src)
         if let err = jsErr {
             errorOutput = err

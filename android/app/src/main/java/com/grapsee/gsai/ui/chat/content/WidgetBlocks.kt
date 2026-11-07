@@ -2386,24 +2386,26 @@ internal val NUMERIC_CELL = Regex("""^[^\p{L}]{0,3}[-+]?\d[\d.,]*\s*(?:%|[a-zA-Z
 private fun StatWidgetView(w: StatWidget) {
     val c = GsTheme.colors
     val dark = WidgetPalette.onDarkCanvas()
-    WidgetCardShell(w.title.ifEmpty { "Stats" }, "stat") {
+    var selectedIdx by remember { mutableIntStateOf(0) }
+    val safeSelected = selectedIdx.coerceIn(0, (w.cards.size - 1).coerceAtLeast(0))
+    WidgetCardShell(NexlyIcons.cleanPlainText(w.title).ifEmpty { "Stats" }, "stat") {
         Row(
             Modifier.horizontalScroll(rememberScrollState()).padding(top = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             w.cards.forEachIndexed { i, card ->
-                // One hue per card: a KPI row should look like a row of
-                // different numbers, not four identical grey boxes.
                 val accent = WidgetPalette.legible(WidgetPalette.at(i), dark)
+                val isSelected = i == safeSelected
                 Column(
                     Modifier
                         .clip(RoundedCornerShape(12.dp))
                         .background(
                             Brush.verticalGradient(
-                                listOf(accent.copy(alpha = if (dark) 0.22f else 0.14f), c.surface)
+                                listOf(accent.copy(alpha = if (isSelected) (if (dark) 0.32f else 0.22f) else (if (dark) 0.20f else 0.12f)), c.surface)
                             )
                         )
-                        .border(1.dp, accent.copy(alpha = if (dark) 0.34f else 0.22f), RoundedCornerShape(12.dp))
+                        .border(if (isSelected) 1.5.dp else 1.dp, accent.copy(alpha = if (isSelected) 0.65f else (if (dark) 0.34f else 0.22f)), RoundedCornerShape(12.dp))
+                        .clickable { selectedIdx = i }
                         .padding(horizontal = 14.dp, vertical = 10.dp)
                         .width(130.dp)
                 ) {
@@ -2423,6 +2425,33 @@ private fun StatWidgetView(w: StatWidget) {
                         }
                     }
                     Text(card.label, style = MaterialTheme.typography.labelSmall, color = c.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        val activeCard = w.cards.getOrNull(safeSelected)
+        if (activeCard != null && w.cards.size > 1) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(c.raisedSurface)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "${activeCard.label}: ${activeCard.value}${if (activeCard.unit.isNotEmpty()) " ${activeCard.unit}" else ""}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = c.textPrimary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (activeCard.delta.isNotEmpty()) {
+                    Text(
+                        activeCard.delta,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (activeCard.direction == "up") c.success else if (activeCard.direction == "down") c.error else c.textSecondary
+                    )
                 }
             }
         }
@@ -2781,31 +2810,56 @@ private fun TableWidgetView(w: TableWidget) {
 private fun CompareWidgetView(w: CompareWidget) {
     val c = GsTheme.colors
     val dark = WidgetPalette.onDarkCanvas()
-    // Two opposing hues — the whole point of a comparison is that the sides are
-    // distinguishable at a glance, not that they share a card colour.
+    val onSendPrompt = LocalWidgetAction.current
+    var pickedSide by remember { mutableIntStateOf(-1) }
     val hues = listOf(
         WidgetPalette.legible(WidgetPalette.at(1), dark),
         WidgetPalette.legible(WidgetPalette.at(3), dark)
     )
-    WidgetCardShell(w.title.ifEmpty { "Compare" }, "compare") {
-        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            listOf(w.left, w.right).forEachIndexed { i, side ->
-                val accent = hues[i]
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(accent.copy(alpha = if (dark) 0.14f else 0.08f))
-                        .border(1.dp, accent.copy(alpha = if (dark) 0.28f else 0.18f), RoundedCornerShape(12.dp))
-                        .padding(12.dp)
-                ) {
-                    Text(side.title, style = MaterialTheme.typography.labelLarge, color = accent, fontWeight = FontWeight.SemiBold)
-                    side.items.forEach { item ->
-                        Row(Modifier.padding(top = 6.dp)) {
-                            Text("•", color = accent, modifier = Modifier.padding(end = 6.dp))
-                            Text(item, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+    WidgetCardShell(NexlyIcons.cleanPlainText(w.title).ifEmpty { "Compare" }, "compare") {
+        Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf(w.left, w.right).forEachIndexed { i, side ->
+                    val accent = hues[i]
+                    val isPicked = pickedSide == i
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(accent.copy(alpha = if (isPicked) (if (dark) 0.24f else 0.15f) else (if (dark) 0.14f else 0.08f)))
+                            .border(if (isPicked) 1.5.dp else 1.dp, accent.copy(alpha = if (isPicked) 0.7f else (if (dark) 0.28f else 0.18f)), RoundedCornerShape(12.dp))
+                            .clickable { pickedSide = if (isPicked) -1 else i }
+                            .padding(12.dp)
+                    ) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(side.title, style = MaterialTheme.typography.labelLarge, color = accent, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            if (isPicked) {
+                                NexlyGlyph(name = "circle-check", size = 14.sp, color = accent)
+                            }
+                        }
+                        side.items.forEach { item ->
+                            Row(Modifier.padding(top = 6.dp)) {
+                                Text("•", color = accent, modifier = Modifier.padding(end = 6.dp))
+                                Text(item, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                            }
                         }
                     }
+                }
+            }
+            if (pickedSide in 0..1) {
+                val chosen = if (pickedSide == 0) w.left else w.right
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(c.raisedSurface)
+                        .clickable { onSendPrompt?.invoke("Tell me more about ${chosen.title} and how to get started.") }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Selected: ${chosen.title}", style = MaterialTheme.typography.labelMedium, color = c.textPrimary, fontWeight = FontWeight.SemiBold)
+                    Text("Explore →", style = MaterialTheme.typography.labelSmall, color = hues[pickedSide], fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -2816,16 +2870,28 @@ private fun CompareWidgetView(w: CompareWidget) {
 
 @Composable
 private fun ProgressWidgetView(w: ProgressWidget) {
-    WidgetCardShell(w.title.ifEmpty { "Progress" }, "progress") {
+    val c = GsTheme.colors
+    var offsets by remember(w.items) { mutableStateOf(List(w.items.size) { 0f }) }
+    WidgetCardShell(NexlyIcons.cleanPlainText(w.title).ifEmpty { "Progress" }, "progress") {
         Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             w.items.forEachIndexed { i, item ->
-                var animate by remember(item.label, item.percent) { mutableStateOf(false) }
-                LaunchedEffect(item.label, item.percent) { animate = true }
-                val p by animateFloatAsState(if (animate) item.percent / 100f else 0f, tween(900), label = "prog$i")
-                Column {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(item.label, style = MaterialTheme.typography.labelMedium, color = GsTheme.colors.textPrimary)
-                        Text("${item.percent.toInt()}%", style = MaterialTheme.typography.labelMedium, color = GsTheme.colors.textSecondary, fontFamily = FontFamily.Monospace)
+                val adjusted = (item.percent + (offsets.getOrElse(i) { 0f })).coerceIn(0f, 100f)
+                var animate by remember(item.label, adjusted) { mutableStateOf(false) }
+                LaunchedEffect(item.label, adjusted) { animate = true }
+                val p by animateFloatAsState(if (animate) adjusted / 100f else 0f, tween(450), label = "prog$i")
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            val next = if (adjusted >= 100f) 0f else (adjusted + 10f).coerceAtMost(100f)
+                            offsets = offsets.toMutableList().also { it[i] = next - item.percent }
+                        }
+                        .padding(vertical = 2.dp)
+                ) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(item.label, style = MaterialTheme.typography.labelMedium, color = c.textPrimary)
+                        Text("${adjusted.toInt()}%", style = MaterialTheme.typography.labelMedium, color = c.textSecondary, fontFamily = FontFamily.Monospace)
                     }
                     Box(
                         Modifier
@@ -2833,7 +2899,7 @@ private fun ProgressWidgetView(w: ProgressWidget) {
                             .padding(top = 5.dp)
                             .height(7.dp)
                             .clip(RoundedCornerShape(99.dp))
-                            .background(GsTheme.colors.raisedSurface)
+                            .background(c.raisedSurface)
                     ) {
                         Box(
                             Modifier
@@ -2853,21 +2919,38 @@ private fun ProgressWidgetView(w: ProgressWidget) {
 
 @Composable
 private fun TimelineWidgetView(w: TimelineWidget) {
-    WidgetCardShell(w.title.ifEmpty { "Timeline" }, "timeline") {
+    val c = GsTheme.colors
+    var selectedIdx by remember { mutableIntStateOf(0) }
+    val safeSelected = selectedIdx.coerceIn(0, (w.entries.size - 1).coerceAtLeast(0))
+    WidgetCardShell(NexlyIcons.cleanPlainText(w.title).ifEmpty { "Timeline" }, "timeline") {
         Column(Modifier.padding(top = 8.dp)) {
             w.entries.forEachIndexed { i, e ->
-                Row {
+                val isSelected = i == safeSelected
+                val dotColor = seriesColor(i)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) dotColor.copy(alpha = 0.08f) else Color.Transparent)
+                        .clickable { selectedIdx = i }
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(Modifier.size(9.dp).clip(CircleShape).background(seriesColor(i)))
+                        Box(
+                            Modifier
+                                .size(if (isSelected) 11.dp else 9.dp)
+                                .clip(CircleShape)
+                                .background(dotColor)
+                        )
                         if (i < w.entries.lastIndex) {
-                            Box(Modifier.width(2.dp).height(34.dp).background(GsTheme.colors.divider))
+                            Box(Modifier.width(2.dp).height(34.dp).background(c.divider))
                         }
                     }
-                    Column(Modifier.padding(start = 10.dp, bottom = 12.dp)) {
-                        Text(e.date, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)
-                        Text(e.title, style = MaterialTheme.typography.bodySmall, color = GsTheme.colors.textPrimary, fontWeight = FontWeight.Medium)
+                    Column(Modifier.padding(start = 10.dp, bottom = 10.dp)) {
+                        Text(e.date, style = MaterialTheme.typography.labelSmall, color = if (isSelected) dotColor else c.textTertiary, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                        Text(e.title, style = MaterialTheme.typography.bodySmall, color = c.textPrimary, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium)
                         if (e.detail.isNotEmpty()) {
-                            Text(e.detail, style = MaterialTheme.typography.labelMedium, color = GsTheme.colors.textSecondary)
+                            Text(e.detail, style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
                         }
                     }
                 }

@@ -628,21 +628,26 @@ function sectionBadgeForHeading(raw: string): { icon: string; tone: string } | n
   const { icon: explicitIcon, rest } = extractLeadingIcon(raw.replace(/[*_`~]/g, '').trim())
   if (explicitIcon) return { icon: explicitIcon, tone: 'lavender' }
   const clean = cleanPlainText(rest).trim()
+  if (!clean) return null
   const lower = clean.toLowerCase()
   if (lower.includes('priorit') || lower.includes('goal') || lower.includes('objective')) return { icon: 'target', tone: 'rose' }
-  if (lower.includes('step-by-step') || lower.includes('steps') || lower.includes('plan') || lower.includes('roadmap')) return { icon: 'list-check', tone: 'lavender' }
-  if (lower.includes('next action') || lower.includes('action item') || lower.includes('checklist') || lower.includes('todo')) return { icon: 'checkbox', tone: 'green' }
+  if (lower.includes('step-by-step') || lower.includes('steps') || lower.includes('plan') || lower.includes('roadmap') || lower.includes('what to do')) return { icon: 'list-check', tone: 'lavender' }
+  if (lower.includes('next action') || lower.includes('action item') || lower.includes('checklist') || lower.includes('todo') || lower.includes('next step')) return { icon: 'checkbox', tone: 'green' }
   if (lower.includes('key source') || lower.includes('sources')) return { icon: 'link', tone: 'blue' }
   if (lower.includes('reference') || lower.includes('citation') || lower.includes('further reading')) return { icon: 'book-2', tone: 'indigo' }
   if (lower.includes('feature') || lower.includes('highlight') || lower.includes('benefit')) return { icon: 'sparkles', tone: 'amber' }
   if (lower.startsWith('top ') || lower.includes('chart') || lower.includes('metric') || lower.includes('overview')) return { icon: 'chart-bar', tone: 'cyan' }
   if (lower.includes('calculator') || lower.includes('budget') || lower.includes('pricing')) return { icon: 'calculator', tone: 'amber' }
-  if (lower.includes('code') || lower.includes('implementation') || lower.includes('snippet')) return { icon: 'code', tone: 'slate' }
-  return null
+  if (lower.includes('fix') || lower.includes('solution') || lower.includes('repair') || lower.includes('troubleshoot')) return { icon: 'tool', tone: 'green' }
+  if (lower.includes('why ') || lower.includes('how ') || lower.includes('explain') || lower.includes('reason')) return { icon: 'bulb', tone: 'amber' }
+  if (lower.includes('bottom line') || lower.includes('conclusion') || lower.includes('verdict') || lower.includes('takeaway')) return { icon: 'circle-check', tone: 'green' }
+  if (lower.includes('difference') || lower.includes('compare') || lower.includes('optional') || lower.includes('alternative')) return { icon: 'arrows-diff', tone: 'blue' }
+  if (lower.includes('code') || lower.includes('implementation') || lower.includes('snippet') || lower.includes('sql') || lower.includes('query')) return { icon: 'code', tone: 'slate' }
+  return { icon: 'sparkles', tone: 'lavender' }
 }
 
 function splitStepTitleAndDetail(raw: string): { title: string; detail: string } | null {
-  const match = raw.trim().match(/^\*\*([^*]+)\*\*\s*(?:[—–\-:]\s*|\n+)(.+)$/s)
+  const match = raw.trim().match(/^\*\*([^*]+)\*\*\s*(?:[—–\-:]\s*|\n+)([\s\S]+)$/)
   if (!match) return null
   return { title: match[1].trim(), detail: match[2].trim() }
 }
@@ -678,7 +683,12 @@ function classifySectionHeadingMode(raw: string): SectionListMode {
     lower.includes('to-do') ||
     lower.includes('checklist') ||
     lower === 'tasks' ||
-    lower.includes('your tasks')
+    lower.includes('your tasks') ||
+    lower.includes('what to do') ||
+    lower.includes('next step') ||
+    lower.includes('first step') ||
+    lower.includes('how to fix') ||
+    lower.includes('routine')
   ) {
     return 'todo'
   }
@@ -690,7 +700,9 @@ function classifySectionHeadingMode(raw: string): SectionListMode {
     lower.includes('feature') ||
     lower.includes('highlight') ||
     lower.includes('benefit') ||
-    lower.startsWith('why ')
+    lower.startsWith('why ') ||
+    lower.includes('bottom line') ||
+    lower.includes('takeaway')
   ) {
     return 'checkmark'
   }
@@ -1555,7 +1567,21 @@ function Prose({
   accent: string
   citations?: Citation[]
 }) {
-  const blocks = useMemo(() => parseProseBlocks(text), [text])
+  const blocks = useMemo(() => {
+    const raw = parseProseBlocks(text)
+    return raw.map((b) => {
+      if (b.kind === 'paragraph') {
+        const m = b.text.trim().match(/^\*\*([^*]+)\*\*\s*:?$/)
+        if (m) {
+          const clean = cleanPlainText(m[1]).trim()
+          if (clean.length >= 3 && clean.length <= 72 && !clean.endsWith('.') && !classifyCalloutHeader(b.text)) {
+            return { kind: 'heading' as const, level: 3 as const, text: m[1].trim() }
+          }
+        }
+      }
+      return b
+    })
+  }, [text])
   const rendered: ReactNode[] = []
   let currentMode: SectionListMode = 'default'
   let i = 0

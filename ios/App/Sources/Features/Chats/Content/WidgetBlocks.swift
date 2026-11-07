@@ -427,9 +427,25 @@ private enum WidgetPalette {
     }
 }
 
+private let RAW_CODE_OR_URL_KEYS: Set<String> = [
+    "unified", "patch", "diff", "before", "after", "old", "new",
+    "original", "modified", "expr", "formula", "url", "href", "link",
+    "code", "html", "svg"
+]
+
+private func rawStr(_ dict: [String: Any], _ keys: String...) -> String {
+    for k in keys {
+        if let s = dict[k] as? String, !s.isEmpty { return NexlyIcons.normalize(s) }
+        if let n = dict[k] as? NSNumber { return n.stringValue }
+    }
+    return ""
+}
+
 private func str(_ dict: [String: Any], _ keys: String...) -> String {
     for k in keys {
-        if let s = dict[k] as? String, !s.isEmpty { return s }
+        if let s = dict[k] as? String, !s.isEmpty {
+            return RAW_CODE_OR_URL_KEYS.contains(k) ? s : NexlyIcons.cleanPlainText(s)
+        }
         if let n = dict[k] as? NSNumber { return n.stringValue }
     }
     return ""
@@ -587,7 +603,7 @@ struct WidgetBlockView: View {
                 ? resolvedKind
                 : (inferWidgetKind(json) ?? resolvedKind)
             let accent = WidgetPalette.parseHex(obj["accent"] as? String) ?? WidgetPalette.at( abs(effectiveKind.hashValue) )
-            let rawTitle = str(obj, "title", "heading", "name", "question")
+            let rawTitle = rawStr(obj, "title", "heading", "name", "question")
             let (explicitIcon, strippedTitle) = NexlyIcons.extractLeadingIcon(rawTitle)
             let cleanTitle = NexlyIcons.cleanPlainText(strippedTitle)
             let tagIcon = widgetTagGlassIconIOS(effectiveKind)
@@ -1365,45 +1381,86 @@ private struct ChartBodyView: View {
 private struct StatBodyView: View {
     let obj: [String: Any]
     let accent: Color
+    @State private var selectedIdx: Int = 0
 
     var body: some View {
         let cards = ((obj["cards"] ?? obj["items"] ?? obj["metrics"] ?? obj["kpis"] ?? obj["stats"]) as? [[String: Any]]) ?? []
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-            ForEach(Array(cards.prefix(8).enumerated()), id: \.offset) { _, card in
-                let label = str(card, "label", "title", "name", "metric")
-                let value = str(card, "value", "val", "number", "amount")
-                let delta = str(card, "delta", "change", "trend", "sub")
-                let isNeg = delta.contains("-") || delta.hasPrefix("↓") || delta.hasPrefix("↘")
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(label)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Aero.textSecondary)
-                        .lineLimit(1)
-                    Text(value)
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color(red: 0.122, green: 0.094, blue: 0.259))
-                        .lineLimit(1)
-                    if !delta.isEmpty {
-                        let cleanDelta = delta.replacingOccurrences(of: "^[↑↓↗↘\\s]+", with: "", options: .regularExpression)
-                        Text("\(isNeg ? "↘" : "↗") \(cleanDelta)")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(isNeg ? Color(red: 0.878, green: 0.310, blue: 0.373) : Color(red: 0.071, green: 0.604, blue: 0.353))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(
-                                Capsule().fill(
-                                    isNeg
-                                        ? Color(red: 0.992, green: 0.925, blue: 0.925)
-                                        : Color(red: 0.902, green: 0.976, blue: 0.941)
-                                )
+        VStack(alignment: .leading, spacing: 8) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(Array(cards.prefix(8).enumerated()), id: \.offset) { idx, card in
+                    let isSelected = selectedIdx == idx
+                    let label = str(card, "label", "title", "name", "metric")
+                    let value = str(card, "value", "val", "number", "amount")
+                    let delta = str(card, "delta", "change", "trend", "sub")
+                    let isNeg = delta.contains("-") || delta.hasPrefix("↓") || delta.hasPrefix("↘")
+                    Button {
+                        GSHaptics.select()
+                        selectedIdx = idx
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(label)
+                                .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                                .foregroundStyle(isSelected ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
+                                .lineLimit(1)
+                            Text(value)
+                                .font(.system(size: 17, weight: .bold, design: .rounded))
+                                .foregroundStyle(Color(red: 0.122, green: 0.094, blue: 0.259))
+                                .lineLimit(1)
+                            if !delta.isEmpty {
+                                let cleanDelta = delta.replacingOccurrences(of: "^[↑↓↗↘\\s]+", with: "", options: .regularExpression)
+                                Text("\(isNeg ? "↘" : "↗") \(cleanDelta)")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(isNeg ? Color(red: 0.878, green: 0.310, blue: 0.373) : Color(red: 0.071, green: 0.604, blue: 0.353))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        Capsule().fill(
+                                            isNeg
+                                                ? Color(red: 0.992, green: 0.925, blue: 0.925)
+                                                : Color(red: 0.902, green: 0.976, blue: 0.941)
+                                        )
+                                    )
+                                    .lineLimit(1)
+                            }
+                        }
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            (isSelected ? Color(red: 0.953, green: 0.933, blue: 1.0) : Color.white.opacity(0.82)),
+                            in: RoundedRectangle(cornerRadius: 12)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12).stroke(
+                                isSelected ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color(red: 0.886, green: 0.859, blue: 0.980),
+                                lineWidth: isSelected ? 1.5 : 1
                             )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            if selectedIdx < cards.count {
+                let selCard = cards[selectedIdx]
+                let selLabel = str(selCard, "label", "title", "name", "metric")
+                let selValue = str(selCard, "value", "val", "number", "amount")
+                let selDelta = str(selCard, "delta", "change", "trend", "sub", "note")
+                HStack(spacing: 8) {
+                    NexlyGlassGlyphTile(name: "chart-bar", tone: .lavender, size: 22, glyphSize: 13)
+                    Text("\(selLabel): \(selValue)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Aero.text)
+                        .lineLimit(1)
+                    Spacer()
+                    if !selDelta.isEmpty {
+                        Text(selDelta)
+                            .font(Aero.mono(11))
+                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
                             .lineLimit(1)
                     }
                 }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.886, green: 0.859, blue: 0.980), lineWidth: 1))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Color(red: 0.961, green: 0.945, blue: 1.0), in: RoundedRectangle(cornerRadius: 10))
             }
         }
     }
@@ -1658,47 +1715,90 @@ private struct TableBodyView: View {
 }
 
 private struct CompareBodyView: View {
+    @Environment(\.gsWidgetAction) private var widgetAction
     let obj: [String: Any]
+    @State private var selectedSide: Int = 0
 
     var body: some View {
         let left = (obj["left"] ?? obj["sideA"] ?? obj["a"]) as? [String: Any] ?? [:]
         let right = (obj["right"] ?? obj["sideB"] ?? obj["b"]) as? [String: Any] ?? [:]
-        HStack(alignment: .top, spacing: 10) {
-            compareCol(left, color: WidgetPalette.at(0))
-            compareCol(right, color: WidgetPalette.at(3))
+        let leftName = str(left, "name", "title", "label")
+        let rightName = str(right, "name", "title", "label")
+        let activeName = selectedSide == 0 ? (leftName.isEmpty ? "Option A" : leftName) : (rightName.isEmpty ? "Option B" : rightName)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                compareCol(left, sideIdx: 0, color: WidgetPalette.at(0))
+                compareCol(right, sideIdx: 1, color: WidgetPalette.at(3))
+            }
+            HStack {
+                Text("Selected: \(activeName)")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Aero.textSecondary)
+                Spacer()
+                Button("Explore \(activeName) →") {
+                    GSHaptics.select()
+                    widgetAction?("Deep dive into \(activeName)")
+                }
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color(red: 0.933, green: 0.910, blue: 1.0), in: Capsule())
+                .buttonStyle(.plain)
+            }
         }
     }
 
-    private func compareCol(_ side: [String: Any], color: Color) -> some View {
+    private func compareCol(_ side: [String: Any], sideIdx: Int, color: Color) -> some View {
+        let isSelected = selectedSide == sideIdx
         let name = str(side, "name", "title", "label")
         let summary = str(side, "summary", "subtitle", "description")
         let rows = (side["rows"] ?? side["items"] ?? side["points"]) as? [[String: Any]] ?? []
-        return VStack(alignment: .leading, spacing: 5) {
-            Text(name).font(.system(size: 13, weight: .bold)).foregroundStyle(color)
-            if !summary.isEmpty {
-                Text(summary).font(.system(size: 11)).foregroundStyle(Aero.textSecondary)
-            }
-            ForEach(Array(rows.prefix(8).enumerated()), id: \.offset) { _, r in
+        return Button {
+            GSHaptics.select()
+            selectedSide = sideIdx
+        } label: {
+            VStack(alignment: .leading, spacing: 5) {
                 HStack {
-                    Text(str(r, "k", "label", "key", "name"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(Aero.textSecondary)
+                    Text(name).font(.system(size: 13, weight: .bold)).foregroundStyle(color)
                     Spacer()
-                    Text(str(r, "v", "value", "val"))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Aero.text)
+                    if isSelected {
+                        NexlyGlyph(name: "circle-check", size: 13, color: color)
+                    }
+                }
+                if !summary.isEmpty {
+                    Text(summary).font(.system(size: 11)).foregroundStyle(Aero.textSecondary)
+                }
+                ForEach(Array(rows.prefix(8).enumerated()), id: \.offset) { _, r in
+                    HStack {
+                        Text(str(r, "k", "label", "key", "name"))
+                            .font(.system(size: 11))
+                            .foregroundStyle(Aero.textSecondary)
+                        Spacer()
+                        Text(str(r, "v", "value", "val"))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Aero.text)
+                    }
                 }
             }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                (isSelected ? Color(red: 0.953, green: 0.933, blue: 1.0) : Color.white.opacity(0.55)),
+                in: RoundedRectangle(cornerRadius: 12)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12).stroke(isSelected ? color : Color.clear, lineWidth: 1.5)
+            )
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+        .buttonStyle(.plain)
     }
 }
 
 private struct ProgressBodyView: View {
     let obj: [String: Any]
     let accent: Color
+    @State private var overrides: [Int: Double] = [:]
 
     var body: some View {
         let items: [[String: Any]] = {
@@ -1709,23 +1809,32 @@ private struct ProgressBodyView: View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(items.prefix(10).enumerated()), id: \.offset) { idx, item in
                 let label = str(item, "label", "name", "title")
-                let val = dbl(item, "value", "percent", "score")
+                let baseVal = dbl(item, "value", "percent", "score")
                 let maxV = max(dbl(item, "max", "total", "target", fallback: 100), 1)
-                let pct = min(max(val / maxV, 0), 1)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack {
-                        Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
-                        Spacer()
-                        Text("\(Int(pct * 100))%").font(Aero.mono(11)).foregroundStyle(Aero.textSecondary)
-                    }
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Color.black.opacity(0.06))
-                            Capsule().fill(WidgetPalette.at(idx)).frame(width: max(6, geo.size.width * CGFloat(pct)))
+                let curVal = overrides[idx] ?? baseVal
+                let pct = min(max(curVal / maxV, 0), 1)
+                Button {
+                    GSHaptics.select()
+                    let step = maxV * 0.1
+                    let next = curVal + step
+                    overrides[idx] = next > maxV ? 0.0 : next
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+                            Spacer()
+                            Text("\(Int(round(pct * 100)))%").font(Aero.mono(11)).foregroundStyle(Aero.textSecondary)
                         }
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.black.opacity(0.06))
+                                Capsule().fill(WidgetPalette.at(idx)).frame(width: max(6, geo.size.width * CGFloat(pct)))
+                            }
+                        }
+                        .frame(height: 8)
                     }
-                    .frame(height: 7)
                 }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -1734,27 +1843,44 @@ private struct ProgressBodyView: View {
 private struct TimelineBodyView: View {
     let obj: [String: Any]
     let accent: Color
+    @State private var selectedIdx: Int = 0
 
     var body: some View {
         let entries = ((obj["entries"] ?? obj["events"] ?? obj["milestones"] ?? obj["items"]) as? [[String: Any]]) ?? []
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(entries.prefix(12).enumerated()), id: \.offset) { _, entry in
-                HStack(alignment: .top, spacing: 10) {
-                    Circle().fill(accent).frame(width: 8, height: 8).padding(.top, 5)
-                    VStack(alignment: .leading, spacing: 2) {
-                        let date = str(entry, "date", "time", "year", "when", "phase")
-                        if !date.isEmpty {
-                            Text(date).font(.system(size: 11, weight: .bold)).foregroundStyle(accent)
+            ForEach(Array(entries.prefix(12).enumerated()), id: \.offset) { idx, entry in
+                let isSelected = selectedIdx == idx
+                Button {
+                    GSHaptics.select()
+                    selectedIdx = idx
+                } label: {
+                    HStack(alignment: .top, spacing: 10) {
+                        Circle()
+                            .fill(isSelected ? Color(red: 0.424, green: 0.298, blue: 0.965) : accent)
+                            .frame(width: isSelected ? 10 : 8, height: isSelected ? 10 : 8)
+                            .padding(.top, 5)
+                        VStack(alignment: .leading, spacing: 2) {
+                            let date = str(entry, "date", "time", "year", "when", "phase")
+                            if !date.isEmpty {
+                                Text(date).font(.system(size: 11, weight: .bold)).foregroundStyle(accent)
+                            }
+                            Text(str(entry, "title", "label", "event", "name"))
+                                .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
+                                .foregroundStyle(Aero.text)
+                            let detail = str(entry, "detail", "description", "body", "text")
+                            if !detail.isEmpty {
+                                Text(detail).font(.system(size: 12)).foregroundStyle(Aero.textSecondary)
+                            }
                         }
-                        Text(str(entry, "title", "label", "event", "name"))
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Aero.text)
-                        let detail = str(entry, "detail", "description", "body", "text")
-                        if !detail.isEmpty {
-                            Text(detail).font(.system(size: 12)).foregroundStyle(Aero.textSecondary)
-                        }
+                        Spacer(minLength: 0)
                     }
+                    .padding(isSelected ? 8 : 2)
+                    .background(
+                        (isSelected ? Color(red: 0.957, green: 0.937, blue: 1.0) : Color.clear),
+                        in: RoundedRectangle(cornerRadius: 10)
+                    )
                 }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -1887,27 +2013,59 @@ private struct AccordionBodyView: View {
 private struct StepsBodyView: View {
     let obj: [String: Any]
     let accent: Color
+    @State private var completed: Set<Int> = []
 
     var body: some View {
         let steps = ((obj["steps"] ?? obj["items"] ?? obj["stages"]) as? [[String: Any]]) ?? []
+        let doneCount = completed.count
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(steps.enumerated()), id: \.offset) { idx, step in
-                HStack(alignment: .top, spacing: 10) {
-                    Text("\(idx + 1)")
-                        .font(.system(size: 11, weight: .bold))
+            if steps.count > 1 {
+                HStack {
+                    Text("\(doneCount) of \(steps.count) completed")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Aero.textSecondary)
+                    Spacer()
+                    Text("\(Int(round(Double(doneCount) / Double(max(1, steps.count)) * 100.0)))%")
+                        .font(Aero.mono(11))
                         .foregroundStyle(accent)
-                        .frame(width: 22, height: 22)
-                        .background(accent.opacity(0.16), in: Circle())
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(str(step, "title", "label", "name", "step"))
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Aero.text)
-                        let detail = str(step, "detail", "description", "body", "text")
-                        if !detail.isEmpty {
-                            Text(detail).font(.system(size: 12)).foregroundStyle(Aero.textSecondary)
+                }
+            }
+            ForEach(Array(steps.enumerated()), id: \.offset) { idx, step in
+                let isDone = completed.contains(idx)
+                Button {
+                    GSHaptics.select()
+                    if isDone { completed.remove(idx) } else { completed.insert(idx) }
+                } label: {
+                    HStack(alignment: .top, spacing: 10) {
+                        ZStack {
+                            Circle()
+                                .fill(isDone ? Color(red: 0.863, green: 0.988, blue: 0.906) : accent.opacity(0.16))
+                                .frame(width: 22, height: 22)
+                            if isDone {
+                                NexlyGlyph(name: "check", size: 11, color: Color(red: 0.082, green: 0.502, blue: 0.239))
+                            } else {
+                                Text("\(idx + 1)")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(accent)
+                            }
                         }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(str(step, "title", "label", "name", "step"))
+                                .font(.system(size: 13, weight: .semibold))
+                                .strikethrough(isDone)
+                                .foregroundStyle(isDone ? Aero.textSecondary : Aero.text)
+                            let detail = str(step, "detail", "description", "body", "text")
+                            if !detail.isEmpty {
+                                Text(detail)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Aero.textSecondary)
+                                    .opacity(isDone ? 0.7 : 1.0)
+                            }
+                        }
+                        Spacer(minLength: 0)
                     }
                 }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -2257,7 +2415,7 @@ private struct ChoicesBodyView: View {
         let items = ((obj["options"] ?? obj["prompts"] ?? obj["buttons"] ?? obj["items"] ?? obj["choices"] ?? obj["suggestions"]) as? [Any]) ?? []
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(items.prefix(10).enumerated()), id: \.offset) { idx, item in
-                let rawLabel = (item as? String) ?? str((item as? [String: Any]) ?? [:], "label", "title", "text", "name", "prompt")
+                let rawLabel = (item as? String).map { NexlyIcons.normalize($0) } ?? rawStr((item as? [String: Any]) ?? [:], "label", "title", "text", "name", "prompt")
                 let promptText = str((item as? [String: Any]) ?? [:], "prompt", "value", "label", "title", "text")
                 let (icon, stripped) = NexlyIcons.extractLeadingIcon(rawLabel)
                 let label = NexlyIcons.cleanPlainText(stripped)
@@ -2308,30 +2466,91 @@ private struct PanelBodyView: View {
 }
 
 private struct GenericStructuredBodyView: View {
+    @Environment(\.gsWidgetAction) private var widgetAction
     let kind: String
     let obj: [String: Any]
     let accent: Color
+    @State private var selectedIdx: Int = 0
+    @State private var simStep: Int = 1
+    @State private var isRunning: Bool = true
 
     var body: some View {
         let items = ((obj["items"] ?? obj["cards"] ?? obj["fields"] ?? obj["sliders"] ?? obj["phrases"] ?? obj["commands"] ?? obj["nodes"] ?? obj["steps"]) as? [[String: Any]]) ?? []
         let subtitle = NexlyIcons.cleanPlainText(str(obj, "subtitle", "description", "body", "text", "summary"))
         VStack(alignment: .leading, spacing: 6) {
+            if ["sim", "stage3d", "canvas", "terminal", "collab", "voice", "plan"].contains(kind) {
+                HStack(spacing: 8) {
+                    Button {
+                        GSHaptics.select()
+                        isRunning.toggle()
+                    } label: {
+                        HStack(spacing: 4) {
+                            NexlyGlyph(name: isRunning ? "player-pause" : "player-play", size: 11, color: .white)
+                            Text(isRunning ? "Active" : "Paused")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .background(accent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        GSHaptics.select()
+                        simStep += 1
+                    } label: {
+                        HStack(spacing: 4) {
+                            NexlyGlyph(name: "refresh", size: 11, color: accent)
+                            Text("Step #\(simStep)")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(accent)
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .background(accent.opacity(0.14), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+            }
             if !subtitle.isEmpty {
                 Text(subtitle).font(.system(size: 12)).foregroundStyle(Aero.textSecondary)
             }
-            ForEach(Array(items.prefix(10).enumerated()), id: \.offset) { _, item in
+            ForEach(Array(items.prefix(10).enumerated()), id: \.offset) { idx, item in
+                let isSelected = selectedIdx == idx
                 let primary = NexlyIcons.cleanPlainText(str(item, "title", "label", "name", "phrase", "command", "id"))
                 let secondary = NexlyIcons.cleanPlainText(str(item, "subtitle", "description", "detail", "value", "translation", "output", "type"))
                 if !primary.isEmpty || !secondary.isEmpty {
-                    HStack(alignment: .top) {
-                        Text(primary).font(.system(size: 12, weight: .semibold)).foregroundStyle(Aero.text)
-                        Spacer()
-                        if !secondary.isEmpty {
-                            Text(secondary).font(.system(size: 11)).foregroundStyle(Aero.textSecondary)
+                    Button {
+                        GSHaptics.select()
+                        selectedIdx = idx
+                        if kind == "voice" || kind == "terminal" {
+                            widgetAction?(primary)
                         }
+                    } label: {
+                        HStack(alignment: .top) {
+                            Text(primary)
+                                .font(.system(size: 12, weight: isSelected ? .bold : .semibold))
+                                .foregroundStyle(Aero.text)
+                            Spacer()
+                            if !secondary.isEmpty {
+                                Text(secondary)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(isSelected ? accent : Aero.textSecondary)
+                            }
+                        }
+                        .padding(8)
+                        .background(
+                            (isSelected ? Color(red: 0.953, green: 0.933, blue: 1.0) : Color.white.opacity(0.50)),
+                            in: RoundedRectangle(cornerRadius: 8)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8).stroke(isSelected ? accent.opacity(0.45) : Color.clear, lineWidth: 1)
+                        )
                     }
-                    .padding(8)
-                    .background(Color.white.opacity(0.50), in: RoundedRectangle(cornerRadius: 8))
+                    .buttonStyle(.plain)
                 }
             }
         }

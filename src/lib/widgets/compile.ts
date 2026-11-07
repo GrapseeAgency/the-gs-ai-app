@@ -28,6 +28,7 @@ import {
 } from './catalog'
 import { extractBareWidget, extractWidgetFences, inferWidgetKind, validateWidget, validationErrors } from './validate'
 import { directWidgetArt, type ArtDirection } from './art-direct'
+import { sanitizeReplyEmojis } from '../nexly/icons'
 
 export interface CompileInput {
   reply: string
@@ -198,7 +199,8 @@ export function ensureWidgets(
   text: string,
   opts: { userPrompt: string; priorText?: string }
 ): CompileResult {
-  return compileWidgets({ reply: text, userPrompt: opts.userPrompt, priorText: opts.priorText })
+  const sanitized = sanitizeReplyEmojis(text)
+  return compileWidgets({ reply: sanitized, userPrompt: opts.userPrompt, priorText: opts.priorText })
 }
 
 // ---------------------------------------------------------------------------

@@ -38,6 +38,7 @@ import {
   isProviderCapacityError,
 } from '@/lib/provider-execution'
 import { configuredProviderKey } from '@/lib/provider-catalog-store'
+import { sanitizeReplyEmojis } from '@/lib/nexly/icons'
 import {
   SYSTEM_PROMPT,
   WIDGET_PROMPT,
@@ -2060,7 +2061,9 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       full = await synthesize(modelMessages)
     }
 
-    const baseText = sanitizeAgainstPersisted(normalizeCitationBrackets(full), turn, historySources)
+    const baseText = sanitizeReplyEmojis(
+      sanitizeAgainstPersisted(normalizeCitationBrackets(full), turn, historySources)
+    )
     // GENUI production pipeline: validate every widget fence, repair the
     // malformed ones, and — only when the user asked for a visual and the
     // answer already states the numbers — build the widget deterministically.
