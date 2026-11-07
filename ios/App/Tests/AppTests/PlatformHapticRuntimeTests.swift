@@ -8,7 +8,7 @@ import ObjectiveC.runtime
 final class PlatformHapticRuntimeTests: XCTestCase {
     @MainActor
     func testUIKitDispatchAndDisabledGate() throws {
-        let impactSelector = #selector(UIImpactFeedbackGenerator.impactOccurred)
+        let impactSelector = NSSelectorFromString("impactOccurred")
         let noticeSelector = #selector(UINotificationFeedbackGenerator.notificationOccurred(_:))
         let selectionSelector = #selector(UISelectionFeedbackGenerator.selectionChanged)
         let impact = try XCTUnwrap(class_getInstanceMethod(UIImpactFeedbackGenerator.self, impactSelector))
