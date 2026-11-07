@@ -82,7 +82,7 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
     val myColor = "#4C6FFF"
     val sharedState = remember(w) {
         mutableStateMapOf<String, String>().apply {
-            w.start.forEach { (k, v) -> put(k, v) }
+            if (w.surface == "counter") put("n", w.start.toString())
             if (w.surface == "todo" && isEmpty()) {
                 w.items.take(12).forEachIndexed { idx, item -> put("t$idx", item) }
             }

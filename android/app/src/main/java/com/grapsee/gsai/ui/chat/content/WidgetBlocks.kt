@@ -1402,7 +1402,7 @@ fun WidgetView(widget: Widget, onSendPrompt: ((String) -> Unit)? = null) {
         is Widget.Chart -> ChartWidgetView(widget.w)
         is Widget.Stat -> StatWidgetView(widget.w)
         is Widget.Table -> TableWidgetView(widget.w)
-        is Widget.Compare -> CompareWidgetView(widget.w)
+        is Widget.Compare -> CompareWidgetView(widget.w, onSendPrompt)
         is Widget.Progress -> ProgressWidgetView(widget.w)
         is Widget.Timeline -> TimelineWidgetView(widget.w)
         is Widget.Gauge -> GaugeWidgetView(widget.w)
@@ -2500,8 +2500,8 @@ private fun TableWidgetView(w: TableWidget) {
         else filtered.sortedWith { a, b ->
             val va = a.getOrNull(sortCol) ?: ""
             val vb = b.getOrNull(sortCol) ?: ""
-            val na = parseNumericCell(va)
-            val nb = parseNumericCell(vb)
+            val na = parseSortableNumberAndroid(va)
+            val nb = parseSortableNumberAndroid(vb)
             val cmp = if (na != null && nb != null) na.compareTo(nb) else va.compareTo(vb)
             if (asc) cmp else -cmp
         }
@@ -2799,10 +2799,9 @@ private fun TableWidgetView(w: TableWidget) {
 // --- compare ----------------------------------------------------------------
 
 @Composable
-private fun CompareWidgetView(w: CompareWidget) {
+private fun CompareWidgetView(w: CompareWidget, onSendPrompt: ((String) -> Unit)? = null) {
     val c = GsTheme.colors
     val dark = WidgetPalette.onDarkCanvas()
-    val onSendPrompt = LocalWidgetAction.current
     var pickedSide by remember { mutableIntStateOf(-1) }
     val hues = listOf(
         WidgetPalette.legible(WidgetPalette.at(1), dark),
