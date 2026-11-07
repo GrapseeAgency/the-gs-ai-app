@@ -2,6 +2,12 @@ import XCTest
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testZeroBaselineChartGrowthIsUndefined() {
+        XCTAssertNil(chartGrowthPercentIOS(first: 0, last: 25))
+        XCTAssertNil(chartGrowthPercentIOS(first: 0, last: 0))
+        XCTAssertEqual(chartGrowthPercentIOS(first: 20, last: 30)!, 50, accuracy: 1e-9)
+        XCTAssertEqual(chartGrowthPercentIOS(first: -20, last: -10)!, 50, accuracy: 1e-9)
+    }
     func testPercentRatiosHaveNoMagnitudeDiscontinuity() {
         XCTAssertEqual(calcPercentDisplayIOS(0.99, format: "percent"), 99, accuracy: 1e-9)
         XCTAssertEqual(calcPercentDisplayIOS(1.0, format: "percent"), 100, accuracy: 1e-9)
