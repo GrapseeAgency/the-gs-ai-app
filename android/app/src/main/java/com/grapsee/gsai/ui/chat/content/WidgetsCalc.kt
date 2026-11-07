@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -149,6 +150,10 @@ internal object CalcExpr {
             val base = primary()
             skip()
             if (take('^')) return base.pow(unary())
+            if (i + 1 < src.length && src[i] == '*' && src[i + 1] == '*') {
+                i += 2
+                return base.pow(unary())
+            }
             return base
         }
 
@@ -323,25 +328,86 @@ internal fun CalcWidgetView(w: CalcWidget, onSendPrompt: ((String) -> Unit)? = n
                         }
                     }
                 } else {
+                    val stepVal = if (f.step > 0) f.step else 1.0
                     Row(
                         Modifier.fillMaxWidth().padding(top = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(f.label, style = MaterialTheme.typography.labelSmall, color = c.textTertiary)
-                        Text(
-                            formatCalc(current, if (f.step >= 1) "integer" else "number", f.unit),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = c.textPrimary,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                Modifier.size(22.dp).clip(RoundedCornerShape(6.dp))
+                                    .background(c.surface)
+                                    .clickable {
+                                        values[f.key] = (current - stepVal).coerceIn(f.min, max(f.min, f.max))
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("−", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+                            }
+                            Text(
+                                formatCalc(current, if (f.step >= 1) "integer" else "number", f.unit),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = c.textPrimary,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Box(
+                                Modifier.size(22.dp).clip(RoundedCornerShape(6.dp))
+                                    .background(c.surface)
+                                    .clickable {
+                                        values[f.key] = (current + stepVal).coerceIn(f.min, max(f.min, f.max))
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("+", style = MaterialTheme.typography.labelMedium, color = c.textSecondary)
+                            }
+                        }
                     }
                     Slider(
                         value = current.coerceIn(f.min, max(f.min + 0.0001, f.max)).toFloat(),
-                        onValueChange = { values[f.key] = it.toDouble() },
+                        onValueChange = { rawVal ->
+                            val snapped = if (f.step > 0) {
+                                (round((rawVal.toDouble() - f.min) / f.step) * f.step + f.min)
+                                    .coerceIn(f.min, max(f.min, f.max))
+                            } else {
+                                rawVal.toDouble()
+                            }
+                            values[f.key] = snapped
+                        },
                         valueRange = f.min.toFloat()..max(f.min + 0.0001, f.max).toFloat(),
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+            }
+
+            val hasChanged = fields.any { abs((values[it.key] ?: it.value) - it.value) > 1e-6 }
+            if (hasChanged) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Row(
+                        Modifier.clip(RoundedCornerShape(999.dp))
+                            .background(c.surface)
+                            .clickable {
+                                fields.forEach { values[it.key] = it.value }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        NexlyGlyph(name = "refresh", size = 11.dp, color = c.accent)
+                        Text(
+                            "Reset",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = c.accent,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
 

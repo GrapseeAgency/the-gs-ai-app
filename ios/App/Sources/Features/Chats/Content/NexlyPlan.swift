@@ -488,14 +488,46 @@ enum NexlyIcons {
         emojiToIconTokens(text)
     }
 
+    private static func fallbackIconForScalar(_ value: UInt32) -> String? {
+        if (0x1F3FB...0x1F3FF).contains(value) { return nil }
+        if (0x1F600...0x1F64F).contains(value) || (0x1F910...0x1F92F).contains(value) || (0x1F970...0x1F97A).contains(value) || (0x1FAE0...0x1FAEF).contains(value) {
+            return "mood-smile"
+        }
+        if (0x1F440...0x1F487).contains(value) || (0x1F930...0x1F93F).contains(value) || (0x1FAF0...0x1FAFF).contains(value) {
+            return "user"
+        }
+        if (0x1F330...0x1F343).contains(value) || (0x1F400...0x1F43F).contains(value) || (0x1F980...0x1F9AE).contains(value) || (0x1FAB0...0x1FABF).contains(value) {
+            return "leaf"
+        }
+        if (0x1F32D...0x1F32F).contains(value) || (0x1F344...0x1F37F).contains(value) || (0x1F950...0x1F96F).contains(value) || (0x1FAD0...0x1FADF).contains(value) {
+            return "cup"
+        }
+        if (0x1F380...0x1F3CF).contains(value) || (0x1F93C...0x1F94F).contains(value) {
+            return "trophy"
+        }
+        if (0x1F680...0x1F6FF).contains(value) || (0x1F3D0...0x1F3FF).contains(value) {
+            return "compass"
+        }
+        if (0x1F300...0x1F32C).contains(value) {
+            return "sun"
+        }
+        if (0x1F488...0x1F5FF).contains(value) || (0x1FA70...0x1FA9F).contains(value) {
+            return "sparkles"
+        }
+        return nil
+    }
+
     static func emojiToIconTokens(_ text: String) -> String {
         var out = text
         for (emoji, icon) in emoji.sorted(by: { $0.key.count > $1.key.count }) {
             out = out.replacingOccurrences(of: emoji, with: ":\(icon):")
         }
-        var filtered = String.UnicodeScalarView()
+        var filtered = String()
+        filtered.reserveCapacity(out.count)
+        var lastWasFallbackIcon = false
         for scalar in out.unicodeScalars {
             let value = scalar.value
+            let fallbackIcon = fallbackIconForScalar(value)
             let pictograph = (0x1F000...0x1FAFF).contains(value)
                 || (0x2600...0x27BF).contains(value)
                 || (0x2300...0x23FF).contains(value)
@@ -518,9 +550,17 @@ enum NexlyIcons {
                 || value == 0x200D
                 || value == 0x20E3
                 || (0x1F1E6...0x1F1FF).contains(value)
-            if !pictograph { filtered.append(scalar) }
+            if !pictograph {
+                filtered.unicodeScalars.append(scalar)
+                if !CharacterSet.whitespacesAndNewlines.contains(scalar) {
+                    lastWasFallbackIcon = false
+                }
+            } else if let fb = fallbackIcon, !lastWasFallbackIcon {
+                filtered.append(":\(fb):")
+                lastWasFallbackIcon = true
+            }
         }
-        return String(filtered)
+        return filtered
     }
 
     /// Extract a leading `:icon:` or emoji token (even inside leading `**bold**`) as (iconName, remainingCleanText).

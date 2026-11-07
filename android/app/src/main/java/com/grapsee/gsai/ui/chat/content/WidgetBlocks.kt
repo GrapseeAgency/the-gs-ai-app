@@ -2621,10 +2621,9 @@ private fun TableWidgetView(w: TableWidget) {
                                     if (badge != null) {
                                         NexlyGlassGlyphTile(
                                             name = badge.first,
-                                            tone = badge.second,
+                                            toneName = badge.second,
                                             size = 21.dp,
-                                            corner = 6.dp,
-                                            fontSize = 12.sp
+                                            glyphSize = 12.dp
                                         )
                                         Spacer(Modifier.width(7.dp))
                                     }
@@ -2827,7 +2826,7 @@ private fun CompareWidgetView(w: CompareWidget) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text(side.title, style = MaterialTheme.typography.labelLarge, color = accent, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                             if (isPicked) {
-                                NexlyGlyph(name = "circle-check", size = 14.sp, color = accent)
+                                NexlyGlyph(name = "circle-check", size = 14.dp, color = accent)
                             }
                         }
                         side.items.forEach { item ->

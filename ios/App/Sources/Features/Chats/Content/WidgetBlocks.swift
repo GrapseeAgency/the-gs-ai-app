@@ -2388,7 +2388,11 @@ private struct TreeBodyView: View {
                     if isCollapsed { collapsed.remove(path) } else { collapsed.insert(path) }
                 } label: {
                     HStack(spacing: 6) {
-                        Text(kids.isEmpty ? "•" : (isCollapsed ? "▸" : "▾")).foregroundStyle(accent)
+                        NexlyGlyph(
+                            name: kids.isEmpty ? "circle-dot" : (isCollapsed ? "chevron-right" : "chevron-down"),
+                            size: 12,
+                            color: accent
+                        )
                         Text(label).font(.system(size: 12, weight: kids.isEmpty ? .regular : .semibold)).foregroundStyle(Aero.text)
                         if !meta.isEmpty {
                             Spacer()
@@ -2860,169 +2864,240 @@ private struct FormBodyView: View {
         let fields = ((obj["fields"] ?? obj["inputs"] ?? obj["questions"]) as? [[String: Any]]) ?? []
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(fields.prefix(10).enumerated()), id: \.offset) { idx, f in
-                let label = NexlyIcons.cleanPlainText(str(f, "label", "title", "name", "key"))
-                let fType = str(f, "type").lowercased()
-                let isRequired = (f["required"] as? Bool) == true
-                let opts = extractFieldOptions(f)
-                VStack(alignment: .leading, spacing: 4) {
-                    if fType == "checkbox" && !opts.isEmpty {
-                        Text(isRequired ? "\(label) *" : label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 6) {
-                                ForEach(opts, id: \.self) { opt in
-                                    let active = multiValues[idx, default: []].contains(opt)
-                                    Button {
-                                        GSHaptics.select()
-                                        var set = multiValues[idx, default: []]
-                                        if active { set.remove(opt) } else { set.insert(opt) }
-                                        multiValues[idx] = set
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            NexlyGlyph(name: active ? "checkbox" : "square", size: 12, color: active ? .white : accent)
-                                            Text(opt).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(active ? .white : Aero.text)
-                                        }
-                                        .padding(.horizontal, 9)
-                                        .padding(.vertical, 5)
-                                        .background(active ? accent : Color.white.opacity(0.65), in: Capsule())
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                    } else if ["select", "dropdown", "radio", "segmented"].contains(fType) || !opts.isEmpty {
-                        let curChoice = textValues[idx] ?? str(f, "value", "default").ifEmptyIOS(opts.first ?? "")
-                        Text(isRequired ? "\(label) *" : label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 6) {
-                                ForEach(opts, id: \.self) { opt in
-                                    let active = curChoice == opt
-                                    Button {
-                                        GSHaptics.select()
-                                        textValues[idx] = opt
-                                    } label: {
-                                        Text(opt)
-                                            .font(.system(size: 11.5, weight: .semibold))
-                                            .foregroundStyle(active ? .white : Aero.text)
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 5)
-                                            .background(active ? accent : Color.white.opacity(0.65), in: Capsule())
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                    } else if fType == "rating" {
-                        let maxStars = min(max(Int(dbl(f, "max", fallback: 5)), 1), 10)
-                        let curStars = Int(numValues[idx] ?? dbl(f, "value", "default", fallback: 0))
-                        HStack {
-                            Text(isRequired ? "\(label) *" : label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
-                            Spacer()
-                            HStack(spacing: 3) {
-                                ForEach(1...maxStars, id: \.self) { s in
-                                    Button {
-                                        GSHaptics.select()
-                                        numValues[idx] = Double(s)
-                                    } label: {
-                                        NexlyGlyph(
-                                            name: s <= curStars ? "star-filled" : "star",
-                                            size: 16,
-                                            color: s <= curStars ? accent : Aero.textTertiary.opacity(0.45)
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                    } else if ["switch", "toggle", "checkbox", "boolean"].contains(fType) {
-                        Toggle(isRequired ? "\(label) *" : label, isOn: Binding(
-                            get: { boolValues[idx] ?? ((f["value"] as? Bool) ?? false) },
-                            set: { boolValues[idx] = $0 }
-                        ))
-                        .font(.system(size: 12, weight: .medium))
-                        .tint(accent)
-                    } else if ["slider", "range", "number"].contains(fType) {
-                        let minV = dbl(f, "min", fallback: 0)
-                        let maxV = max(dbl(f, "max", fallback: 100), minV + 1)
-                        let cur = numValues[idx] ?? dbl(f, "value", "default", fallback: minV)
-                        let unit = str(f, "unit")
-                        HStack {
-                            Text(isRequired ? "\(label) *" : label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
-                            Spacer()
-                            Text(String(format: "%.1f%@", cur, unit)).font(Aero.mono(11)).foregroundStyle(accent)
-                        }
-                        Slider(value: Binding(
-                            get: { cur },
-                            set: { numValues[idx] = $0 }
-                        ), in: minV...maxV)
-                        .tint(accent)
-                    } else {
-                        Text(isRequired ? "\(label) *" : label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
-                        TextField(str(f, "placeholder", "hint"), text: Binding(
-                            get: { textValues[idx] ?? str(f, "value", "default") },
-                            set: { textValues[idx] = $0 }
-                        ))
-                        .font(.system(size: 12))
-                        .padding(7)
-                        .background(Color.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
-                    }
-                }
+                formFieldRow(idx: idx, f: f)
             }
             if !errorMsg.isEmpty {
                 Text(errorMsg)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Color.red)
             }
-            Button {
-                GSHaptics.select()
-                var missingLabels: [String] = []
-                for (idx, f) in fields.prefix(10).enumerated() {
-                    guard (f["required"] as? Bool) == true else { continue }
-                    let lbl = NexlyIcons.cleanPlainText(str(f, "label", "title", "name", "key"))
-                    let fType = str(f, "type").lowercased()
-                    let opts = extractFieldOptions(f)
-                    if fType == "checkbox" && !opts.isEmpty {
-                        if multiValues[idx, default: []].isEmpty { missingLabels.append(lbl) }
-                    } else if !["switch", "toggle", "checkbox", "boolean", "slider", "range", "number", "select", "dropdown", "radio", "segmented"].contains(fType) && opts.isEmpty {
-                        let v = (textValues[idx] ?? str(f, "value", "default")).trimmingCharacters(in: .whitespacesAndNewlines)
-                        if v.isEmpty { missingLabels.append(lbl) }
+            formSubmitButton(fields: fields)
+        }
+    }
+
+    @ViewBuilder
+    private func formFieldRow(idx: Int, f: [String: Any]) -> some View {
+        let label = NexlyIcons.cleanPlainText(str(f, "label", "title", "name", "key"))
+        let fType = str(f, "type").lowercased()
+        let isRequired = (f["required"] as? Bool) == true
+        let opts = extractFieldOptions(f)
+        VStack(alignment: .leading, spacing: 4) {
+            if fType == "checkbox" && !opts.isEmpty {
+                formMultiCheckRow(idx: idx, label: label, isRequired: isRequired, opts: opts)
+            } else if ["select", "dropdown", "radio", "segmented"].contains(fType) || !opts.isEmpty {
+                formChoiceRow(idx: idx, f: f, label: label, isRequired: isRequired, opts: opts)
+            } else if fType == "rating" {
+                formRatingRow(idx: idx, f: f, label: label, isRequired: isRequired)
+            } else if ["switch", "toggle", "checkbox", "boolean"].contains(fType) {
+                Toggle(isRequired ? "\(label) *" : label, isOn: Binding(
+                    get: { boolValues[idx] ?? ((f["value"] as? Bool) ?? false) },
+                    set: { boolValues[idx] = $0 }
+                ))
+                .font(.system(size: 12, weight: .medium))
+                .tint(accent)
+            } else if ["slider", "range", "number"].contains(fType) {
+                formSliderRow(idx: idx, f: f, label: label, isRequired: isRequired)
+            } else if fType == "file" {
+                formFileRow(idx: idx, label: label, isRequired: isRequired)
+            } else {
+                Text(isRequired ? "\(label) *" : label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+                TextField(str(f, "placeholder", "hint"), text: Binding(
+                    get: { textValues[idx] ?? str(f, "value", "default") },
+                    set: { textValues[idx] = $0 }
+                ))
+                .font(.system(size: 12))
+                .padding(7)
+                .background(Color.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func formMultiCheckRow(idx: Int, label: String, isRequired: Bool, opts: [String]) -> some View {
+        Text(isRequired ? "\(label) *" : label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(opts, id: \.self) { (opt: String) in
+                    let active = multiValues[idx, default: []].contains(opt)
+                    Button {
+                        GSHaptics.select()
+                        var set = multiValues[idx, default: []]
+                        if active { set.remove(opt) } else { set.insert(opt) }
+                        multiValues[idx] = set
+                    } label: {
+                        HStack(spacing: 4) {
+                            NexlyGlyph(name: active ? "checkbox" : "square", size: 12, color: active ? .white : accent)
+                            Text(opt).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(active ? .white : Aero.text)
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(active ? accent : Color.white.opacity(0.65), in: Capsule())
                     }
+                    .buttonStyle(.plain)
                 }
-                if !missingLabels.isEmpty {
-                    errorMsg = "Required: \(missingLabels.joined(separator: ", "))"
-                    submitted = false
-                    return
-                }
-                errorMsg = ""
-                submitted = true
-                let summary = fields.prefix(10).enumerated().map { idx, f in
-                    let lbl = NexlyIcons.cleanPlainText(str(f, "label", "title", "name", "key"))
-                    let fType = str(f, "type").lowercased()
-                    let opts = extractFieldOptions(f)
-                    if fType == "checkbox" && !opts.isEmpty {
-                        return "\(lbl): \(multiValues[idx, default: []].sorted().joined(separator: ", "))"
-                    } else if ["switch", "toggle", "checkbox", "boolean"].contains(fType) {
-                        return "\(lbl): \((boolValues[idx] ?? ((f["value"] as? Bool) ?? false)) ? "Yes" : "No")"
-                    } else if ["slider", "range", "number", "rating"].contains(fType) {
-                        let cur = numValues[idx] ?? dbl(f, "value", "default", fallback: dbl(f, "min", fallback: 0))
-                        return String(format: "%@: %.1f", lbl, cur)
-                    } else {
-                        let defChoice = str(f, "value", "default").ifEmptyIOS(opts.first ?? "")
-                        return "\(lbl): \(textValues[idx] ?? defChoice)"
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func formChoiceRow(idx: Int, f: [String: Any], label: String, isRequired: Bool, opts: [String]) -> some View {
+        let curChoice = textValues[idx] ?? str(f, "value", "default").ifEmptyIOS(opts.first ?? "")
+        Text(isRequired ? "\(label) *" : label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(opts, id: \.self) { (opt: String) in
+                    let active = curChoice == opt
+                    Button {
+                        GSHaptics.select()
+                        textValues[idx] = opt
+                    } label: {
+                        Text(opt)
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(active ? .white : Aero.text)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(active ? accent : Color.white.opacity(0.65), in: Capsule())
                     }
-                }.joined(separator: ", ")
-                if !summary.isEmpty {
-                    widgetAction?(summary)
+                    .buttonStyle(.plain)
                 }
-            } label: {
-                Text(submitted ? "Submitted ✓" : (str(obj, "submitLabel").isEmpty ? "Submit" : str(obj, "submitLabel")))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func formRatingRow(idx: Int, f: [String: Any], label: String, isRequired: Bool) -> some View {
+        let maxStars = min(max(Int(dbl(f, "max", fallback: 5)), 1), 10)
+        let curStars = Int(numValues[idx] ?? dbl(f, "value", "default", fallback: 0))
+        HStack {
+            Text(isRequired ? "\(label) *" : label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+            Spacer()
+            HStack(spacing: 3) {
+                ForEach(0..<maxStars, id: \.self) { (sIdx: Int) in
+                    let s = sIdx + 1
+                    Button {
+                        GSHaptics.select()
+                        numValues[idx] = Double(s)
+                    } label: {
+                        NexlyGlyph(
+                            name: s <= curStars ? "star-filled" : "star",
+                            size: 16,
+                            color: s <= curStars ? accent : Aero.textTertiary.opacity(0.45)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func formSliderRow(idx: Int, f: [String: Any], label: String, isRequired: Bool) -> some View {
+        let minV = dbl(f, "min", fallback: 0)
+        let maxV = max(dbl(f, "max", fallback: 100), minV + 1)
+        let stepV = max(dbl(f, "step", fallback: 1), 0.01)
+        let cur = numValues[idx] ?? dbl(f, "value", "default", fallback: minV)
+        let unit = str(f, "unit")
+        HStack {
+            Text(isRequired ? "\(label) *" : label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+            Spacer()
+            Text(stepV >= 1 ? String(format: "%.0f%@", cur, unit) : String(format: "%.1f%@", cur, unit))
+                .font(Aero.mono(11))
+                .foregroundStyle(accent)
+        }
+        Slider(value: Binding(
+            get: { min(max(cur, minV), maxV) },
+            set: { (newVal: Double) in
+                let snapped = round((newVal - minV) / stepV) * stepV + minV
+                numValues[idx] = min(max(snapped, minV), maxV)
+            }
+        ), in: minV...maxV)
+        .tint(accent)
+    }
+
+    @ViewBuilder
+    private func formFileRow(idx: Int, label: String, isRequired: Bool) -> some View {
+        let presets = ["Document.pdf", "Dataset.csv", "Image.png", "Report.xlsx"]
+        let current = textValues[idx] ?? ""
+        Text(isRequired ? "\(label) *" : label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(presets, id: \.self) { (fileOpt: String) in
+                    let active = current == fileOpt
+                    Button {
+                        GSHaptics.select()
+                        textValues[idx] = active ? "" : fileOpt
+                    } label: {
+                        HStack(spacing: 4) {
+                            NexlyGlyph(name: active ? "circle-check" : "file", size: 12, color: active ? .white : accent)
+                            Text(fileOpt).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(active ? .white : Aero.text)
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(active ? accent : Color.white.opacity(0.65), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func formSubmitButton(fields: [[String: Any]]) -> some View {
+        Button {
+            GSHaptics.select()
+            var missingLabels: [String] = []
+            for (idx, f) in fields.prefix(10).enumerated() {
+                guard (f["required"] as? Bool) == true else { continue }
+                let lbl = NexlyIcons.cleanPlainText(str(f, "label", "title", "name", "key"))
+                let fType = str(f, "type").lowercased()
+                let opts = extractFieldOptions(f)
+                if fType == "checkbox" && !opts.isEmpty {
+                    if multiValues[idx, default: []].isEmpty { missingLabels.append(lbl) }
+                } else if !["switch", "toggle", "checkbox", "boolean", "slider", "range", "number", "select", "dropdown", "radio", "segmented"].contains(fType) && opts.isEmpty {
+                    let v = (textValues[idx] ?? str(f, "value", "default")).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if v.isEmpty { missingLabels.append(lbl) }
+                }
+            }
+            if !missingLabels.isEmpty {
+                errorMsg = "Required: \(missingLabels.joined(separator: ", "))"
+                submitted = false
+                return
+            }
+            errorMsg = ""
+            submitted = true
+            let summary = fields.prefix(10).enumerated().map { idx, f in
+                let lbl = NexlyIcons.cleanPlainText(str(f, "label", "title", "name", "key"))
+                let fType = str(f, "type").lowercased()
+                let opts = extractFieldOptions(f)
+                if fType == "checkbox" && !opts.isEmpty {
+                    return "\(lbl): \(multiValues[idx, default: []].sorted().joined(separator: ", "))"
+                } else if ["switch", "toggle", "checkbox", "boolean"].contains(fType) {
+                    return "\(lbl): \((boolValues[idx] ?? ((f["value"] as? Bool) ?? false)) ? "Yes" : "No")"
+                } else if ["slider", "range", "number", "rating"].contains(fType) {
+                    let cur = numValues[idx] ?? dbl(f, "value", "default", fallback: dbl(f, "min", fallback: 0))
+                    return String(format: "%@: %.1f", lbl, cur)
+                } else {
+                    let defChoice = str(f, "value", "default").ifEmptyIOS(opts.first ?? "")
+                    return "\(lbl): \(textValues[idx] ?? defChoice)"
+                }
+            }.joined(separator: ", ")
+            if !summary.isEmpty {
+                widgetAction?(summary)
+            }
+        } label: {
+            HStack(spacing: 5) {
+                if submitted {
+                    NexlyGlyph(name: "circle-check", size: 12, color: .white)
+                }
+                Text(submitted ? "Submitted" : (str(obj, "submitLabel").isEmpty ? "Submit" : str(obj, "submitLabel")))
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(accent, in: Capsule())
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(accent, in: Capsule())
         }
+        .buttonStyle(.plain)
     }
 }
 
@@ -3194,147 +3269,169 @@ private struct CalcBodyView: View {
         return "\(prefix)\(formatted)\(suffix)"
     }
 
+    private var calcFields: [[String: Any]] {
+        ((obj["fields"] ?? obj["sliders"] ?? obj["inputs"] ?? obj["variables"] ?? obj["params"]) as? [[String: Any]]) ?? []
+    }
+
+    private var calcOutputs: [[String: Any]] {
+        if let outs = (obj["outputs"] ?? obj["results"]) as? [[String: Any]], !outs.isEmpty {
+            return outs
+        }
+        let topFormula = str(obj, "formula", "expression", "expr")
+        if !topFormula.isEmpty {
+            let topLbl = str(obj, "outputLabel", "resultLabel").ifEmptyIOS("Result")
+            return [["label": topLbl, "expr": topFormula, "unit": str(obj, "unit", "currency")]]
+        }
+        return []
+    }
+
+    private func computeActiveVars(fields: [[String: Any]]) -> [String: Double] {
+        var map: [String: Double] = [:]
+        for (idx, f) in fields.prefix(10).enumerated() {
+            let rawKey = str(f, "id", "key", "name")
+            let key = rawKey.isEmpty ? "x\(idx + 1)" : rawKey
+            let minV = dbl(f, "min", fallback: 0)
+            let cur = vals[key] ?? dbl(f, "default", "value", fallback: minV)
+            map[key] = cur
+            map[key.lowercased()] = cur
+            map["x\(idx + 1)"] = cur
+        }
+        return map
+    }
+
     var body: some View {
-        let fields = ((obj["fields"] ?? obj["sliders"] ?? obj["inputs"] ?? obj["variables"] ?? obj["params"]) as? [[String: Any]]) ?? []
-        let outputs: [[String: Any]] = {
-            if let outs = (obj["outputs"] ?? obj["results"]) as? [[String: Any]], !outs.isEmpty {
-                return outs
-            }
-            let topFormula = str(obj, "formula", "expression", "expr")
-            if !topFormula.isEmpty {
-                let topLbl = str(obj, "outputLabel", "resultLabel").ifEmptyIOS("Result")
-                return [["label": topLbl, "expr": topFormula, "unit": str(obj, "unit", "currency")]]
-            }
-            return []
-        }()
-        let activeVars: [String: Double] = {
-            var map: [String: Double] = [:]
-            for (idx, f) in fields.prefix(10).enumerated() {
-                let rawKey = str(f, "id", "key", "name")
-                let key = rawKey.isEmpty ? "x\(idx + 1)" : rawKey
-                let minV = dbl(f, "min", fallback: 0)
-                let cur = vals[key] ?? dbl(f, "default", "value", fallback: minV)
-                map[key] = cur
-                map[key.lowercased()] = cur
-                map["x\(idx + 1)"] = cur
-            }
-            return map
-        }()
+        let fields = calcFields
+        let outputs = calcOutputs
+        let activeVars = computeActiveVars(fields: fields)
 
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(fields.prefix(8).enumerated()), id: \.offset) { idx, f in
-                let label = NexlyIcons.cleanPlainText(str(f, "label", "title", "name", "key"))
-                let rawKey = str(f, "id", "key", "name")
-                let key = rawKey.isEmpty ? "x\(idx + 1)" : rawKey
-                let minV = dbl(f, "min", fallback: 0)
-                let maxV = max(dbl(f, "max", fallback: 1000), minV + 1)
-                let stepV = max(dbl(f, "step", fallback: 0), 0)
-                let cur = activeVars[key] ?? minV
-                let rawUnit = str(f, "unit")
-                let unit = ["currency", "money", "usd"].contains(rawUnit.lowercased()) ? "$" : rawUnit
-                let choices = (f["choices"] as? [[String: Any]]) ?? []
-                VStack(alignment: .leading, spacing: 3) {
-                    if !choices.isEmpty {
-                        Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
-                        HStack(spacing: 4) {
-                            ForEach(Array(choices.prefix(5).enumerated()), id: \.offset) { _, ch in
-                                let cLbl = NexlyIcons.cleanPlainText(str(ch, "label", "title", "name"))
-                                let cVal = dbl(ch, "value", fallback: 0)
-                                let selected = abs(cur - cVal) < 1e-6
-                                Button {
-                                    GSHaptics.select()
-                                    vals[key] = cVal
-                                } label: {
-                                    Text(cLbl)
-                                        .font(.system(size: 11, weight: .bold))
-                                        .foregroundStyle(selected ? .white : Aero.text)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 5)
-                                        .frame(maxWidth: .infinity)
-                                        .background(selected ? accent : Color.white.opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    } else {
-                        HStack {
-                            Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
-                            Spacer()
-                            TextField(
-                                "0",
-                                text: Binding(
-                                    get: {
-                                        cur.truncatingRemainder(dividingBy: 1.0) == 0
-                                            ? String(format: "%.0f", cur)
-                                            : String(format: "%.2f", cur)
-                                    },
-                                    set: { s in
-                                        if let d = Double(s.replacingOccurrences(of: ",", with: "")) {
-                                            vals[key] = d
-                                        }
-                                    }
-                                )
-                            )
-                            .font(Aero.mono(11.5))
-                            .foregroundStyle(accent)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 72)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(Color.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 6))
-                            if !unit.isEmpty {
-                                Text(unit).font(Aero.mono(11)).foregroundStyle(Aero.textSecondary)
-                            }
-                        }
-                        if stepV > 0 && (maxV - minV) / stepV <= 5000 {
-                            Slider(
-                                value: Binding(
-                                    get: { min(max(cur, minV), maxV) },
-                                    set: { vals[key] = $0 }
-                                ),
-                                in: minV...maxV,
-                                step: stepV
-                            )
-                            .tint(accent)
-                        } else {
-                            Slider(
-                                value: Binding(
-                                    get: { min(max(cur, minV), maxV) },
-                                    set: { vals[key] = $0 }
-                                ),
-                                in: minV...maxV
-                            )
-                            .tint(accent)
-                        }
+            if !vals.isEmpty {
+                HStack {
+                    Spacer()
+                    Button("Reset") {
+                        GSHaptics.select()
+                        vals.removeAll()
                     }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(accent)
+                    .buttonStyle(.plain)
                 }
+            }
+            ForEach(Array(fields.prefix(8).enumerated()), id: \.offset) { idx, f in
+                calcFieldRow(idx: idx, f: f, activeVars: activeVars)
             }
             ForEach(Array(outputs.prefix(6).enumerated()), id: \.offset) { _, out in
-                let label = NexlyIcons.cleanPlainText(str(out, "label", "title", "name"))
-                let expr = str(out, "expr", "formula", "value")
-                let unit = str(out, "unit")
-                let fmt = str(out, "format")
-                let evaluated: String = {
-                    if expr.isEmpty { return "0" }
-                    if let literal = Double(expr) { return formatCalcResult(literal, unit: unit, format: fmt) }
-                    let val = CalcExprIOS.eval(expr, vars: activeVars)
-                    return formatCalcResult(val, unit: unit, format: fmt)
-                }()
-                HStack {
-                    Text(label)
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(Aero.textSecondary)
-                    Spacer()
-                    Text(evaluated)
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                        .foregroundStyle(accent)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(accent.opacity(0.22), lineWidth: 1))
+                calcOutputRow(out: out, activeVars: activeVars)
             }
         }
+    }
+
+    @ViewBuilder
+    private func calcFieldRow(idx: Int, f: [String: Any], activeVars: [String: Double]) -> some View {
+        let label = NexlyIcons.cleanPlainText(str(f, "label", "title", "name", "key"))
+        let rawKey = str(f, "id", "key", "name")
+        let key = rawKey.isEmpty ? "x\(idx + 1)" : rawKey
+        let minV = dbl(f, "min", fallback: 0)
+        let maxV = max(dbl(f, "max", fallback: 1000), minV + 1)
+        let rawStep = max(dbl(f, "step", fallback: 0), 0)
+        let effStep = rawStep > 0 ? rawStep : ((maxV - minV) >= 20 ? 1.0 : 0.1)
+        let cur = activeVars[key] ?? minV
+        let rawUnit = str(f, "unit")
+        let unit = ["currency", "money", "usd"].contains(rawUnit.lowercased()) ? "$" : rawUnit
+        let choices = (f["choices"] as? [[String: Any]]) ?? []
+        VStack(alignment: .leading, spacing: 3) {
+            if !choices.isEmpty {
+                Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+                HStack(spacing: 4) {
+                    ForEach(Array(choices.prefix(5).enumerated()), id: \.offset) { _, ch in
+                        let cLbl = NexlyIcons.cleanPlainText(str(ch, "label", "title", "name"))
+                        let cVal = dbl(ch, "value", fallback: 0)
+                        let selected = abs(cur - cVal) < 1e-6
+                        Button {
+                            GSHaptics.select()
+                            vals[key] = cVal
+                        } label: {
+                            Text(cLbl)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(selected ? .white : Aero.text)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .frame(maxWidth: .infinity)
+                                .background(selected ? accent : Color.white.opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            } else {
+                HStack {
+                    Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+                    Spacer()
+                    TextField(
+                        "0",
+                        text: Binding(
+                            get: {
+                                abs(cur - round(cur)) < 1e-6
+                                    ? String(format: "%.0f", cur)
+                                    : String(format: "%.2f", cur)
+                            },
+                            set: { (s: String) in
+                                if let d = Double(s.replacingOccurrences(of: ",", with: "")) {
+                                    vals[key] = d
+                                }
+                            }
+                        )
+                    )
+                    .font(Aero.mono(11.5))
+                    .foregroundStyle(accent)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 72)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 6))
+                    if !unit.isEmpty {
+                        Text(unit).font(Aero.mono(11)).foregroundStyle(Aero.textSecondary)
+                    }
+                }
+                Slider(
+                    value: Binding(
+                        get: { min(max(cur, minV), maxV) },
+                        set: { (newVal: Double) in
+                            let snapped = round((newVal - minV) / effStep) * effStep + minV
+                            vals[key] = min(max(snapped, minV), maxV)
+                        }
+                    ),
+                    in: minV...maxV
+                )
+                .tint(accent)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func calcOutputRow(out: [String: Any], activeVars: [String: Double]) -> some View {
+        let label = NexlyIcons.cleanPlainText(str(out, "label", "title", "name"))
+        let expr = str(out, "expr", "formula", "value")
+        let unit = str(out, "unit")
+        let fmt = str(out, "format")
+        let evaluated: String = {
+            if expr.isEmpty { return "0" }
+            if let literal = Double(expr) { return formatCalcResult(literal, unit: unit, format: fmt) }
+            let val = CalcExprIOS.eval(expr, vars: activeVars)
+            return formatCalcResult(val, unit: unit, format: fmt)
+        }()
+        HStack {
+            Text(label)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(Aero.textSecondary)
+            Spacer()
+            Text(evaluated)
+                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .foregroundStyle(accent)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(accent.opacity(0.22), lineWidth: 1))
     }
 }
 
@@ -3486,227 +3583,247 @@ private struct AppBodyView: View {
         let items = (obj["items"] ?? obj["cards"] ?? obj["metrics"] ?? obj["kpis"]) as? [[String: Any]] ?? []
 
         if !cols.isEmpty || aType == "kanban" {
-            let numCols = max(min(cols.count, 5), 1)
-            let allCards: [KanbanCardItem] = cols.prefix(5).enumerated().flatMap { cIdx, col -> [KanbanCardItem] in
-                let colItems = (col["items"] ?? col["cards"] ?? col["tasks"]) as? [Any] ?? []
-                return colItems.prefix(12).enumerated().map { iIdx, it in
-                    let dict = (it as? [String: Any]) ?? [:]
-                    let lbl = NexlyIcons.cleanPlainText((it as? String) ?? str(dict, "title", "label", "text", "task", "name"))
-                    let sub = NexlyIcons.cleanPlainText(str(dict, "subtitle", "description", "owner"))
-                    let badge = NexlyIcons.cleanPlainText(str(dict, "badge", "priority", "tag", "status"))
-                    return KanbanCardItem(id: "c\(cIdx)_\(iIdx)", origCol: cIdx, label: lbl, subtitle: sub, badge: badge)
-                }
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 8) {
-                        ForEach(0..<numCols, id: \.self) { (cIdx: Int) in
-                            let col = cols[cIdx]
-                            let colTitle = NexlyIcons.cleanPlainText(str(col, "title", "name", "label", "status"))
-                            let colCards = allCards.filter { (columnOverrides[$0.id] ?? $0.origCol) == cIdx }
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Text(colTitle.uppercased())
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(WidgetPalette.at(cIdx))
-                                    Spacer()
-                                    Text("\(colCards.count)")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(Aero.textSecondary)
-                                }
-                                ForEach(colCards) { (card: KanbanCardItem) in
-                                    Button {
-                                        guard numCols > 1 else { return }
-                                        GSHaptics.select()
-                                        let cur = columnOverrides[card.id] ?? card.origCol
-                                        columnOverrides[card.id] = (cur + 1) % numCols
-                                    } label: {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(card.label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
-                                            if !card.subtitle.isEmpty {
-                                                Text(card.subtitle).font(.system(size: 10.5)).foregroundStyle(Aero.textSecondary)
-                                            }
-                                            if !card.badge.isEmpty {
-                                                Text(card.badge).font(.system(size: 10, weight: .bold)).foregroundStyle(accent)
-                                            }
-                                        }
-                                        .padding(8)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 8))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(8)
-                            .frame(width: 148, alignment: .leading)
-                            .background(Color.white.opacity(0.42), in: RoundedRectangle(cornerRadius: 10))
-                        }
-                    }
-                }
-                Text("Tap a card to advance it to the next column")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(Aero.textSecondary)
-            }
+            kanbanView(cols: cols)
         } else if ["wizard", "onboarding", "stepper", "decision"].contains(aType) && !steps.isEmpty {
-            let safeStep = min(max(0, stepIdx), steps.count - 1)
-            let cur = steps[safeStep]
-            let title = NexlyIcons.cleanPlainText(str(cur, "title", "label", "name"))
-            let bodyText = NexlyIcons.cleanPlainText(str(cur, "body", "description", "text", "detail"))
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 4) {
-                    ForEach(0..<steps.count, id: \.self) { idx in
-                        Capsule()
-                            .fill(idx <= safeStep ? accent : Aero.outline.opacity(0.3))
-                            .frame(height: 4)
-                    }
-                }
-                Text("Step \(safeStep + 1) of \(steps.count) · \(title)")
-                    .font(.system(size: 12.5, weight: .bold))
-                    .foregroundStyle(Aero.text)
-                if !bodyText.isEmpty {
-                    Text(bodyText)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Aero.textSecondary)
-                }
-                HStack {
-                    Button {
-                        GSHaptics.select()
-                        stepIdx = max(0, safeStep - 1)
-                    } label: {
-                        Text("← Back")
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .foregroundStyle(safeStep > 0 ? Aero.text : Aero.textTertiary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Color.white.opacity(0.65), in: Capsule())
-                    }
-                    .disabled(safeStep == 0)
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    Button {
-                        GSHaptics.select()
-                        if safeStep < steps.count - 1 {
-                            stepIdx = safeStep + 1
-                        } else {
-                            widgetAction?("Completed \(str(obj, "title").ifEmptyIOS("wizard"))")
-                        }
-                    } label: {
-                        Text(safeStep < steps.count - 1 ? "Next →" : "Finish ✓")
-                            .font(.system(size: 11.5, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 5)
-                            .background(accent, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+            wizardView(steps: steps)
         } else if ["config", "configurator", "pricing"].contains(aType) && !groups.isEmpty {
-            let basePrice = dbl(obj, "basePrice", "price", fallback: 0)
-            let total: Double = groups.enumerated().reduce(basePrice) { acc, pair in
-                let (gIdx, g) = pair
-                let opts = (g["options"] ?? g["items"] ?? g["choices"]) as? [[String: Any]] ?? []
-                let selIdx = min(max(0, selectedConfig[gIdx] ?? 0), max(0, opts.count - 1))
-                guard selIdx < opts.count else { return acc }
-                return acc + dbl(opts[selIdx], "price", "cost", "delta", fallback: 0)
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(groups.prefix(5).enumerated()), id: \.offset) { gIdx, g in
-                    let gTitle = NexlyIcons.cleanPlainText(str(g, "title", "label", "name"))
-                    let opts = (g["options"] ?? g["items"] ?? g["choices"]) as? [[String: Any]] ?? []
-                    let selIdx = selectedConfig[gIdx] ?? 0
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(gTitle).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Aero.textSecondary)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 6) {
-                                ForEach(Array(opts.enumerated()), id: \.offset) { oIdx, opt in
-                                    let oLbl = NexlyIcons.cleanPlainText(str(opt, "label", "title", "name"))
-                                    let oPrice = dbl(opt, "price", "cost", "delta", fallback: 0)
-                                    let active = selIdx == oIdx
-                                    Button {
-                                        GSHaptics.select()
-                                        selectedConfig[gIdx] = oIdx
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Text(oLbl).font(.system(size: 11.5, weight: .semibold))
-                                            if oPrice != 0 {
-                                                Text(String(format: "+$%.0f", oPrice)).font(Aero.mono(10.5))
-                                            }
-                                        }
-                                        .foregroundStyle(active ? .white : Aero.text)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 5)
-                                        .background(active ? accent : Color.white.opacity(0.68), in: Capsule())
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                    }
-                }
-                HStack {
-                    Text("Configured Total")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Aero.textSecondary)
-                    Spacer()
-                    Text(String(format: "$%.2f", total))
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                        .foregroundStyle(accent)
-                }
-                .padding(8)
-                .background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 8))
-            }
+            configuratorView(groups: groups)
         } else if !items.isEmpty {
-            let pairs = stride(from: 0, to: min(items.count, 8), by: 2).map { idx in
-                Array(items[idx..<min(idx + 2, min(items.count, 8))])
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
-                    HStack(spacing: 8) {
-                        ForEach(Array(pair.enumerated()), id: \.offset) { _, item in
-                            let title = NexlyIcons.cleanPlainText(str(item, "title", "label", "name"))
-                            let sub = NexlyIcons.cleanPlainText(str(item, "value", "subtitle"))
-                            let meta = NexlyIcons.cleanPlainText(str(item, "meta", "caption", "date"))
-                            let badge = NexlyIcons.cleanPlainText(str(item, "badge", "delta", "status"))
-                            let primaryVal = sub.isEmpty ? (meta.isEmpty ? "—" : meta) : sub
-                            let secondaryCap = (!sub.isEmpty && !meta.isEmpty) ? meta : ""
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(title)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(Aero.textSecondary)
-                                    .lineLimit(1)
-                                Text(primaryVal)
-                                    .font(.system(size: 15, weight: .bold))
-                                    .foregroundStyle(Aero.text)
-                                    .lineLimit(1)
-                                if !secondaryCap.isEmpty {
-                                    Text(secondaryCap)
-                                        .font(.system(size: 10.5))
-                                        .foregroundStyle(Aero.textSecondary)
-                                        .lineLimit(1)
-                                }
-                                if !badge.isEmpty {
-                                    Text(badge)
-                                        .font(.system(size: 10.5, weight: .bold))
-                                        .foregroundStyle(badge.hasPrefix("-") ? Color.red : accent)
-                                }
-                            }
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 10))
-                        }
-                        if pair.count == 1 {
-                            Spacer().frame(maxWidth: .infinity)
-                        }
-                    }
-                }
-            }
+            kpiGridView(items: items)
         } else if (obj["rows"] ?? obj["data"]) is [Any] {
             TableBodyView(obj: obj, accent: accent)
         } else {
             GenericStructuredBodyView(kind: "app", obj: obj, accent: accent)
+        }
+    }
+
+    @ViewBuilder
+    private func kanbanView(cols: [[String: Any]]) -> some View {
+        let numCols = max(min(cols.count, 5), 1)
+        let allCards: [KanbanCardItem] = cols.prefix(5).enumerated().flatMap { cIdx, col -> [KanbanCardItem] in
+            let colItems = (col["items"] ?? col["cards"] ?? col["tasks"]) as? [Any] ?? []
+            return colItems.prefix(12).enumerated().map { iIdx, it in
+                let dict = (it as? [String: Any]) ?? [:]
+                let lbl = NexlyIcons.cleanPlainText((it as? String) ?? str(dict, "title", "label", "text", "task", "name"))
+                let sub = NexlyIcons.cleanPlainText(str(dict, "subtitle", "description", "owner"))
+                let badge = NexlyIcons.cleanPlainText(str(dict, "badge", "priority", "tag", "status"))
+                return KanbanCardItem(id: "c\(cIdx)_\(iIdx)", origCol: cIdx, label: lbl, subtitle: sub, badge: badge)
+            }
+        }
+        VStack(alignment: .leading, spacing: 6) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 8) {
+                    ForEach(0..<numCols, id: \.self) { (cIdx: Int) in
+                        let col = cols[cIdx]
+                        let colTitle = NexlyIcons.cleanPlainText(str(col, "title", "name", "label", "status"))
+                        let colCards = allCards.filter { (columnOverrides[$0.id] ?? $0.origCol) == cIdx }
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(colTitle.uppercased())
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(WidgetPalette.at(cIdx))
+                                Spacer()
+                                Text("\(colCards.count)")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(Aero.textSecondary)
+                            }
+                            ForEach(colCards) { (card: KanbanCardItem) in
+                                Button {
+                                    guard numCols > 1 else { return }
+                                    GSHaptics.select()
+                                    let cur = columnOverrides[card.id] ?? card.origCol
+                                    columnOverrides[card.id] = (cur + 1) % numCols
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(card.label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
+                                        if !card.subtitle.isEmpty {
+                                            Text(card.subtitle).font(.system(size: 10.5)).foregroundStyle(Aero.textSecondary)
+                                        }
+                                        if !card.badge.isEmpty {
+                                            Text(card.badge).font(.system(size: 10, weight: .bold)).foregroundStyle(accent)
+                                        }
+                                    }
+                                    .padding(8)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 8))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(8)
+                        .frame(width: 148, alignment: .leading)
+                        .background(Color.white.opacity(0.42), in: RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+            }
+            Text("Tap a card to advance it to the next column")
+                .font(.system(size: 10.5))
+                .foregroundStyle(Aero.textSecondary)
+        }
+    }
+
+    @ViewBuilder
+    private func wizardView(steps: [[String: Any]]) -> some View {
+        let safeStep = min(max(0, stepIdx), steps.count - 1)
+        let cur = steps[safeStep]
+        let title = NexlyIcons.cleanPlainText(str(cur, "title", "label", "name"))
+        let bodyText = NexlyIcons.cleanPlainText(str(cur, "body", "description", "text", "detail"))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 4) {
+                ForEach(0..<steps.count, id: \.self) { (idx: Int) in
+                    Capsule()
+                        .fill(idx <= safeStep ? accent : Aero.outline.opacity(0.3))
+                        .frame(height: 4)
+                }
+            }
+            Text("Step \(safeStep + 1) of \(steps.count) · \(title)")
+                .font(.system(size: 12.5, weight: .bold))
+                .foregroundStyle(Aero.text)
+            if !bodyText.isEmpty {
+                Text(bodyText)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Aero.textSecondary)
+            }
+            HStack {
+                Button {
+                    GSHaptics.select()
+                    stepIdx = max(0, safeStep - 1)
+                } label: {
+                    Text("← Back")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(safeStep > 0 ? Aero.text : Aero.textTertiary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.white.opacity(0.65), in: Capsule())
+                }
+                .disabled(safeStep == 0)
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Button {
+                    GSHaptics.select()
+                    if safeStep < steps.count - 1 {
+                        stepIdx = safeStep + 1
+                    } else {
+                        widgetAction?("Completed \(str(obj, "title").ifEmptyIOS("wizard"))")
+                    }
+                } label: {
+                    Text(safeStep < steps.count - 1 ? "Next →" : "Finish ✓")
+                        .font(.system(size: 11.5, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func configuratorView(groups: [[String: Any]]) -> some View {
+        let basePrice = dbl(obj, "basePrice", "price", fallback: 0)
+        let total: Double = groups.enumerated().reduce(basePrice) { acc, pair in
+            let (gIdx, g) = pair
+            let opts = (g["options"] ?? g["items"] ?? g["choices"]) as? [[String: Any]] ?? []
+            let selIdx = min(max(0, selectedConfig[gIdx] ?? 0), max(0, opts.count - 1))
+            guard selIdx < opts.count else { return acc }
+            return acc + dbl(opts[selIdx], "price", "cost", "delta", fallback: 0)
+        }
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(groups.prefix(5).enumerated()), id: \.offset) { gIdx, g in
+                let gTitle = NexlyIcons.cleanPlainText(str(g, "title", "label", "name"))
+                let opts = (g["options"] ?? g["items"] ?? g["choices"]) as? [[String: Any]] ?? []
+                let selIdx = selectedConfig[gIdx] ?? 0
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(gTitle).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Aero.textSecondary)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(Array(opts.enumerated()), id: \.offset) { oIdx, opt in
+                                let oLbl = NexlyIcons.cleanPlainText(str(opt, "label", "title", "name"))
+                                let oPrice = dbl(opt, "price", "cost", "delta", fallback: 0)
+                                let active = selIdx == oIdx
+                                Button {
+                                    GSHaptics.select()
+                                    selectedConfig[gIdx] = oIdx
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Text(oLbl).font(.system(size: 11.5, weight: .semibold))
+                                        if oPrice != 0 {
+                                            Text(String(format: "+$%.0f", oPrice)).font(Aero.mono(10.5))
+                                        }
+                                    }
+                                    .foregroundStyle(active ? .white : Aero.text)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(active ? accent : Color.white.opacity(0.68), in: Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+            HStack {
+                Text("Configured Total")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Aero.textSecondary)
+                Spacer()
+                Text(String(format: "$%.2f", total))
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundStyle(accent)
+            }
+            .padding(8)
+            .background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    @ViewBuilder
+    private func kpiGridView(items: [[String: Any]]) -> some View {
+        let pairs = stride(from: 0, to: min(items.count, 8), by: 2).map { idx in
+            Array(items[idx..<min(idx + 2, min(items.count, 8))])
+        }
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
+                HStack(spacing: 8) {
+                    ForEach(Array(pair.enumerated()), id: \.offset) { _, item in
+                        let title = NexlyIcons.cleanPlainText(str(item, "title", "label", "name"))
+                        let sub = NexlyIcons.cleanPlainText(str(item, "value", "subtitle"))
+                        let meta = NexlyIcons.cleanPlainText(str(item, "meta", "caption", "date"))
+                        let badge = NexlyIcons.cleanPlainText(str(item, "badge", "delta", "status"))
+                        let primaryVal = sub.isEmpty ? (meta.isEmpty ? "—" : meta) : sub
+                        let secondaryCap = (!sub.isEmpty && !meta.isEmpty) ? meta : ""
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(title)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Aero.textSecondary)
+                                .lineLimit(1)
+                            Text(primaryVal)
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(Aero.text)
+                                .lineLimit(1)
+                            if !secondaryCap.isEmpty {
+                                Text(secondaryCap)
+                                    .font(.system(size: 10.5))
+                                    .foregroundStyle(Aero.textSecondary)
+                                    .lineLimit(1)
+                            }
+                            if !badge.isEmpty {
+                                Text(badge)
+                                    .font(.system(size: 10.5, weight: .bold))
+                                    .foregroundStyle(badge.hasPrefix("-") ? Color.red : accent)
+                            }
+                        }
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    if pair.count == 1 {
+                        Spacer().frame(maxWidth: .infinity)
+                    }
+                }
+            }
         }
     }
 }
@@ -3810,120 +3927,131 @@ private struct EditorBodyView: View {
     var body: some View {
         let edType = str(obj, "editor", "type").lowercased()
         if ["video", "audio", "timeline"].contains(edType) {
-            let tracks = ((obj["tracks"] ?? obj["layers"] ?? obj["items"]) as? [[String: Any]]) ?? [
-                ["label": "Main Track", "duration": "00:45"],
-                ["label": "Voiceover", "duration": "00:32"]
-            ]
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Button {
-                        GSHaptics.select()
-                        isPlaying.toggle()
-                        if isPlaying {
-                            playhead = playhead >= 0.95 ? 0.0 : min(1.0, playhead + 0.15)
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            NexlyGlyph(name: isPlaying ? "player-pause" : "player-play", size: 12, color: .white)
-                            Text(isPlaying ? "Pause" : "Play")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(accent, in: Capsule())
+            timelineEditorView
+        } else {
+            sheetEditorView
+        }
+    }
+
+    @ViewBuilder
+    private var timelineEditorView: some View {
+        let tracks = ((obj["tracks"] ?? obj["layers"] ?? obj["items"]) as? [[String: Any]]) ?? [
+            ["label": "Main Track", "duration": "00:45"],
+            ["label": "Voiceover", "duration": "00:32"]
+        ]
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Button {
+                    GSHaptics.select()
+                    isPlaying.toggle()
+                    if isPlaying {
+                        playhead = playhead >= 0.95 ? 0.0 : min(1.0, playhead + 0.15)
                     }
-                    .buttonStyle(.plain)
-
-                    Slider(value: $playhead, in: 0...1)
-                        .tint(accent)
-
-                    Text(String(format: "00:%02d", Int(playhead * 60)))
-                        .font(Aero.mono(11))
-                        .foregroundStyle(Aero.textSecondary)
+                } label: {
+                    HStack(spacing: 4) {
+                        NexlyGlyph(name: isPlaying ? "player-pause" : "player-play", size: 12, color: .white)
+                        Text(isPlaying ? "Pause" : "Play")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(accent, in: Capsule())
                 }
-                ForEach(Array(tracks.prefix(5).enumerated()), id: \.offset) { tIdx, tr in
-                    let tLbl = NexlyIcons.cleanPlainText(str(tr, "label", "title", "name").ifEmptyIOS("Track \(tIdx + 1)"))
-                    HStack {
-                        Text(tLbl)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Aero.text)
-                            .frame(width: 84, alignment: .leading)
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(WidgetPalette.at(tIdx).opacity(0.22))
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(WidgetPalette.at(tIdx).opacity(0.65))
-                                    .frame(width: max(12, geo.size.width * CGFloat(playhead)))
-                            }
+                .buttonStyle(.plain)
+
+                Slider(value: $playhead, in: 0...1)
+                    .tint(accent)
+
+                Text(String(format: "00:%02d", Int(playhead * 60)))
+                    .font(Aero.mono(11))
+                    .foregroundStyle(Aero.textSecondary)
+            }
+            ForEach(Array(tracks.prefix(5).enumerated()), id: \.offset) { tIdx, tr in
+                let tLbl = NexlyIcons.cleanPlainText(str(tr, "label", "title", "name").ifEmptyIOS("Track \(tIdx + 1)"))
+                HStack {
+                    Text(tLbl)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Aero.text)
+                        .frame(width: 84, alignment: .leading)
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(WidgetPalette.at(tIdx).opacity(0.22))
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(WidgetPalette.at(tIdx).opacity(0.65))
+                                .frame(width: max(12, geo.size.width * CGFloat(playhead)))
                         }
-                        .frame(height: 18)
                     }
+                    .frame(height: 18)
                 }
             }
-        } else {
-            let merged = initialCells().merging(cellOverrides) { _, new in new }
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Text(selectedCell)
-                        .font(Aero.mono(11.5))
-                        .foregroundStyle(accent)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
-                        .background(accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
-                    TextField(
-                        "Value or =SUM(B2:B3)",
-                        text: Binding(
-                            get: { merged[selectedCell] ?? "" },
-                            set: { cellOverrides[selectedCell] = $0 }
-                        )
-                    )
+        }
+    }
+
+    @ViewBuilder
+    private var sheetEditorView: some View {
+        let merged = initialCells().merging(cellOverrides) { _, new in new }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text(selectedCell)
                     .font(Aero.mono(11.5))
-                    .padding(.horizontal, 8)
+                    .foregroundStyle(accent)
+                    .padding(.horizontal, 7)
                     .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 6))
-                }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        HStack(spacing: 1) {
-                            Text("")
-                                .frame(width: 24, height: 22)
-                            ForEach(0..<4, id: \.self) { c in
-                                Text(colName(c))
-                                    .font(Aero.mono(10.5))
-                                    .foregroundStyle(Aero.textSecondary)
-                                    .frame(width: 72, height: 22)
-                                    .background(Color(red: 0.933, green: 0.910, blue: 1.0))
-                            }
+                    .background(accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                TextField(
+                    "Value or =SUM(B2:B3)",
+                    text: Binding(
+                        get: { merged[selectedCell] ?? "" },
+                        set: { (newVal: String) in cellOverrides[selectedCell] = newVal }
+                    )
+                )
+                .font(Aero.mono(11.5))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 6))
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 1) {
+                        Text("")
+                            .frame(width: 24, height: 22)
+                        ForEach(0..<4, id: \.self) { (c: Int) in
+                            Text(colName(c))
+                                .font(Aero.mono(10.5))
+                                .foregroundStyle(Aero.textSecondary)
+                                .frame(width: 72, height: 22)
+                                .background(Color(red: 0.933, green: 0.910, blue: 1.0))
                         }
-                        ForEach(1...5, id: \.self) { r in
-                            HStack(spacing: 1) {
-                                Text("\(r)")
-                                    .font(Aero.mono(10))
-                                    .foregroundStyle(Aero.textSecondary)
-                                    .frame(width: 24, height: 26)
-                                    .background(Color(red: 0.953, green: 0.937, blue: 1.0))
-                                ForEach(0..<4, id: \.self) { c in
-                                    let ref = "\(colName(c))\(r)"
-                                    let isSel = selectedCell == ref
-                                    let shown = evalCell(ref, all: merged)
-                                    Button {
-                                        GSHaptics.select()
-                                        selectedCell = ref
-                                    } label: {
-                                        Text(shown)
-                                            .font(Aero.mono(11))
-                                            .foregroundStyle(Aero.text)
-                                            .lineLimit(1)
-                                            .frame(width: 72, height: 26)
-                                            .background(isSel ? accent.opacity(0.16) : Color.white.opacity(0.78))
-                                            .overlay(
-                                                Rectangle().stroke(isSel ? accent : Aero.outline.opacity(0.25), lineWidth: isSel ? 1.5 : 0.5)
-                                            )
-                                    }
-                                    .buttonStyle(.plain)
+                    }
+                    ForEach(0..<5, id: \.self) { (rIdx: Int) in
+                        let r = rIdx + 1
+                        HStack(spacing: 1) {
+                            Text("\(r)")
+                                .font(Aero.mono(10))
+                                .foregroundStyle(Aero.textSecondary)
+                                .frame(width: 24, height: 26)
+                                .background(Color(red: 0.953, green: 0.937, blue: 1.0))
+                            ForEach(0..<4, id: \.self) { (c: Int) in
+                                let ref = "\(colName(c))\(r)"
+                                let isSel = selectedCell == ref
+                                let shown = evalCell(ref, all: merged)
+                                Button {
+                                    GSHaptics.select()
+                                    selectedCell = ref
+                                } label: {
+                                    Text(shown)
+                                        .font(Aero.mono(11))
+                                        .foregroundStyle(Aero.text)
+                                        .lineLimit(1)
+                                        .frame(width: 72, height: 26)
+                                        .background(isSel ? accent.opacity(0.16) : Color.white.opacity(0.78))
+                                        .overlay(
+                                            Rectangle().stroke(isSel ? accent : Aero.outline.opacity(0.25), lineWidth: isSel ? 1.5 : 0.5)
+                                        )
                                 }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -4022,9 +4150,9 @@ private struct SimBodyView: View {
 
             if sType == "life" {
                 VStack(spacing: 2) {
-                    ForEach(0..<8, id: \.self) { r in
+                    ForEach(0..<8, id: \.self) { (r: Int) in
                         HStack(spacing: 2) {
-                            ForEach(0..<12, id: \.self) { c in
+                            ForEach(0..<12, id: \.self) { (c: Int) in
                                 let key = "\(r):\(c)"
                                 let alive = lifeGrid.contains(key)
                                 Button {
@@ -4362,7 +4490,7 @@ private struct TerminalBodyView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
-                    ForEach(quickCmds.prefix(6), id: \.self) { qc in
+                    ForEach(Array(quickCmds.prefix(6).enumerated()), id: \.offset) { (_, qc: String) in
                         Button {
                             GSHaptics.select()
                             runCommand(qc == "calc" ? "calc 2 + 2" : qc)

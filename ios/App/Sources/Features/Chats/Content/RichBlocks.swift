@@ -627,14 +627,16 @@ private struct StructuredProseSequenceView: View {
                 if case .widget(let k, _, _, _) = e.block, ["calc", "calculator", "converter"].contains(k) { return true }
                 return false
             }
+            var renderedSpontaneousCalc = false
             if !hasExplicitCalc && (activeDashboardTab == "Dashboard" || activeDashboardTab == "Calculator") {
                 let proseText = extractCopyableProseSummary(normalizedProse, citationsOnly: false)
                 let lowProse = proseText.lowercased()
                 let hasCurrency = proseText.range(of: "[$€£]\\s*\\d", options: .regularExpression) != nil
-                let hasPercent = proseText.range(of: "\\b\\d+(?:\\.\\d+)?\\s*%", options: .regularExpression) != nil
+                let hasPercent = proseText.range(of: "\\b\\d+(?:\\.\\d+)?\\s*%", options: .regularExpression) != nil || lowProse.contains("percent")
                 let hasNum = proseText.range(of: "\\b\\d{2,}\\b", options: .regularExpression) != nil
-                let hasDomainSignal = hasNum && (lowProse.contains("mortgage") || lowProse.contains("amortiz") || lowProse.contains("compound interest") || (lowProse.contains("loan") && (lowProse.contains("apr") || lowProse.contains("monthly"))) || (lowProse.contains("budget") && lowProse.contains("50/30/20")) || (lowProse.contains("calorie") && lowProse.contains("protein")))
+                let hasDomainSignal = hasNum && (lowProse.contains("mortgage") || lowProse.contains("amortiz") || lowProse.contains("compound interest") || (lowProse.contains("loan") && (lowProse.contains("apr") || lowProse.contains("monthly"))) || (lowProse.contains("budget") && lowProse.contains("50/30/20")) || (lowProse.contains("calorie") && lowProse.contains("protein")) || lowProse.contains("tdee") || ((hasCurrency || hasNum) && hasPercent && (lowProse.contains("discount") || lowProse.contains("tax") || lowProse.contains("tip") || lowProse.contains("margin") || lowProse.contains("roi") || lowProse.contains("interest") || lowProse.contains("salary"))))
                 if (hasCurrency && hasPercent) || hasDomainSignal {
+                    renderedSpontaneousCalc = true
                     NexlyQuickCalculatorCardView(
                         spec: parseQuickCalculatorSpec(titleRaw: "Interactive Scenario Calculator", bodyText: proseText)
                     )
@@ -646,10 +648,25 @@ private struct StructuredProseSequenceView: View {
                 if case .widget(let k, _, _, _) = $0, ["chart", "table", "stat", "progress", "gauge"].contains(k) { return true }
                 return false
             }
+            var renderedQuantitativeExplorer = false
             if !hasVisualDataBlock && activeDashboardTab == "Dashboard" {
                 let spontaneousMetrics = extractSpontaneousMetricsFromBlocksIOS(normalizedProse)
                 if spontaneousMetrics.count >= 3 {
+                    renderedQuantitativeExplorer = true
                     NexlyQuantitativeExplorerCardIOS(items: spontaneousMetrics)
+                }
+            }
+
+            let hasAnyWidgetOrHtml = normalizedProse.contains {
+                if case .table = $0 { return true }
+                if case .widget = $0 { return true }
+                if case .html = $0 { return true }
+                return false
+            }
+            if !hasExplicitCalc && !renderedSpontaneousCalc && !renderedQuantitativeExplorer && !hasAnyWidgetOrHtml && activeDashboardTab == "Dashboard" {
+                let spontaneousConcepts = extractSpontaneousConceptsFromBlocksIOS(normalizedProse)
+                if spontaneousConcepts.count >= 3 {
+                    NexlyInteractiveConceptDeckCardIOS(concepts: spontaneousConcepts)
                 }
             }
 
@@ -913,7 +930,8 @@ private func append(
         case .strike(let children):
             result.append(attributed(from: children, theme: theme, style: style.union(.strikethrough)))
         case .code(let code):
-            var run = AttributedString(code)
+            let cleanCode = NexlyIcons.cleanPlainText(code)
+            var run = AttributedString(cleanCode.isEmpty ? code : cleanCode)
             run.font = .system(size: theme.baseSize * 0.88, weight: .regular, design: .monospaced)
             run.backgroundColor = theme.monoBackground
             if !style.isEmpty { run.inlinePresentationIntent = style }
@@ -1256,193 +1274,284 @@ private struct NexlyQuickCalculatorCardView: View {
         }
     }
 
+    private var headerIconName: String {
+        switch mode {
+        case .loan: return "building-bank"
+        case .compound: return "trending-up"
+        case .macros: return "barbell"
+        default: return "calculator"
+        }
+    }
+
+    private var headerIconTone: NexlyGlassTone {
+        switch mode {
+        case .compound: return .green
+        case .macros: return .peach
+        default: return .lavender
+        }
+    }
+
+    private var amountFieldLabel: String {
+        switch mode {
+        case .loan: return "Principal"
+        case .macros: return "Weight (kg)"
+        default: return spec.amountLabel
+        }
+    }
+
+    private var rateFieldLabel: String {
+        switch mode {
+        case .loan: return "APR (%)"
+        case .macros: return "Protein (g/kg)"
+        default: return spec.rateLabel
+        }
+    }
+
+    private var resultFieldLabel: String {
+        switch mode {
+        case .compound: return "\(years)-Yr Value"
+        case .loan: return "Monthly EMI"
+        case .macros: return "Daily Target"
+        default: return spec.resultLabel
+        }
+    }
+
+    private var horizonOptions: [Int] {
+        mode == .loan ? [5, 10, 15, 20, 30] : [1, 3, 5, 10, 20]
+    }
+
+    private var sliderMax: Double {
+        switch mode {
+        case .macros: return 4.0
+        case .loan: return 20.0
+        default: return 100.0
+        }
+    }
+
+    private var sliderStep: Double {
+        switch mode {
+        case .macros, .loan: return 0.5
+        default: return 1.0
+        }
+    }
+
+    private var summaryBadgeText: String {
+        let curr = spec.currency.isEmpty ? "$" : spec.currency
+        switch mode {
+        case .loan:
+            return String(format: "Interest %@%.0f · Total %@%.0f", curr, totalLoanInterest, curr, totalLoanPaid)
+        case .macros:
+            return String(format: "Protein %.0fg · Water %.1fL", amountVal * max(1.2, rateVal), amountVal * 0.035)
+        case .discount:
+            return String(format: "Saves %@%.2f", spec.currency, delta)
+        case .markup:
+            return String(format: "+%@%.2f", spec.currency, delta)
+        default:
+            return String(format: "Δ %@%.2f", spec.currency, delta)
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            HStack {
-                HStack(spacing: 8) {
-                    NexlyGlassGlyphTile(
-                        name: mode == .loan ? "building-bank" : (mode == .compound ? "trending-up" : (mode == .macros ? "barbell" : "calculator")),
-                        tone: mode == .compound ? .green : (mode == .macros ? .peach : .lavender),
-                        size: 26,
-                        glyphSize: 15
-                    )
-                    Text(spec.title)
-                        .font(.system(size: 13.5, weight: .bold))
-                        .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
-                }
-                Spacer()
-                HStack(spacing: 6) {
-                    Button {
-                        GSHaptics.select()
-                        let all = QuickCalcMode.allCases
-                        let idx = all.firstIndex(of: mode) ?? 0
-                        mode = all[(idx + 1) % all.count]
-                    } label: {
-                        Text(mode.rawValue)
-                            .font(.system(size: 10.5, weight: .bold))
-                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.929, green: 0.898, blue: 1.0)))
-                    }
-                    .buttonStyle(.plain)
-
-                    Button("Reset") {
-                        GSHaptics.select()
-                        amountText = spec.initialAmount.truncatingRemainder(dividingBy: 1.0) == 0
-                            ? String(format: "%.0f", spec.initialAmount)
-                            : String(format: "%.2f", spec.initialAmount)
-                        rateText = spec.initialRate.truncatingRemainder(dividingBy: 1.0) == 0
-                            ? String(format: "%.0f", spec.initialRate)
-                            : String(format: "%.1f", spec.initialRate)
-                        years = spec.initialYears
-                        mode = spec.mode
-                    }
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.424, green: 0.298, blue: 0.965))
-                    .buttonStyle(.plain)
-                }
-            }
-
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(mode == .loan ? "Principal" : (mode == .macros ? "Weight (kg)" : spec.amountLabel))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Aero.textSecondary)
-                    HStack(spacing: 2) {
-                        if !spec.currency.isEmpty && mode != .macros {
-                            Text(spec.currency)
-                                .font(.system(size: 12.5, weight: .semibold))
-                                .foregroundStyle(Aero.textSecondary)
-                        }
-                        TextField("0", text: $amountText)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Aero.text)
-                            .keyboardType(.decimalPad)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.92)))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.878, green: 0.847, blue: 0.980), lineWidth: 1))
-                }
-                .frame(maxWidth: .infinity)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(mode == .loan ? "APR (%)" : (mode == .macros ? "Protein (g/kg)" : spec.rateLabel))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Aero.textSecondary)
-                    HStack(spacing: 2) {
-                        TextField("0", text: $rateText)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Aero.text)
-                            .keyboardType(.decimalPad)
-                        Text(mode == .macros ? "g" : "%")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(Aero.textSecondary)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.92)))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.878, green: 0.847, blue: 0.980), lineWidth: 1))
-                }
-                .frame(maxWidth: .infinity)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(mode == .compound ? "\(years)-Yr Value" : (mode == .loan ? "Monthly EMI" : (mode == .macros ? "Daily Target" : spec.resultLabel)))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Aero.textSecondary)
-                    Text(formattedResultText)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 7)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.929, green: 0.898, blue: 1.0)))
-                }
-                .frame(maxWidth: .infinity)
-            }
-
+            calcHeaderRow
+            calcInputsRow
             if mode == .compound || mode == .loan {
-                HStack {
-                    Text(mode == .loan ? "Loan Term" : "Compounding Horizon")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Aero.textSecondary)
-                    Spacer()
-                    HStack(spacing: 4) {
-                        ForEach(mode == .loan ? [5, 10, 15, 20, 30] : [1, 3, 5, 10, 20], id: \.self) { (yr: Int) in
-                            let active = years == yr
-                            Button {
-                                GSHaptics.select()
-                                years = yr
-                            } label: {
-                                Text("\(yr)Y")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(active ? Color.white : Color(red: 0.357, green: 0.239, blue: 0.961))
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .fill(active ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color(red: 0.941, green: 0.918, blue: 1.0))
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
+                calcHorizonRow
             }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Slider(
-                    value: Binding(
-                        get: { min(max(0, rateVal), mode == .macros ? 4 : (mode == .loan ? 20 : 100)) },
-                        set: { rateText = mode == .macros || mode == .loan ? String(format: "%.1f", $0) : String(format: "%.0f", $0) }
-                    ),
-                    in: 0...(mode == .macros ? 4 : (mode == .loan ? 20 : 100)),
-                    step: mode == .macros || mode == .loan ? 0.5 : 1
-                )
-                .tint(Color(red: 0.424, green: 0.298, blue: 0.965))
-
-                HStack {
-                    HStack(spacing: 4) {
-                        ForEach(presets, id: \.self) { (p: Double) in
-                            let selected = abs(rateVal - p) < 0.05
-                            Button {
-                                GSHaptics.select()
-                                rateText = String(format: "%.0f", p)
-                            } label: {
-                                Text("\(Int(p))%")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(selected ? Color.white : Color(red: 0.357, green: 0.239, blue: 0.961))
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .fill(selected ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color(red: 0.941, green: 0.918, blue: 1.0))
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    Spacer(minLength: 4)
-                    Text(
-                        mode == .loan
-                            ? String(format: "Interest %@%.0f · Total %@%.0f", spec.currency.isEmpty ? "$" : spec.currency, totalLoanInterest, spec.currency.isEmpty ? "$" : spec.currency, totalLoanPaid)
-                            : (mode == .macros
-                                ? String(format: "Protein %.0fg · Water %.1fL", amountVal * max(1.2, rateVal), amountVal * 0.035)
-                                : (mode == .discount
-                                    ? String(format: "Saves %@%.2f", spec.currency, delta)
-                                    : (mode == .markup ? String(format: "+%@%.2f", spec.currency, delta) : String(format: "Δ %@%.2f", spec.currency, delta))))
-                    )
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.071, green: 0.604, blue: 0.353))
-                }
-            }
+            calcSliderSection
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.76)))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private var calcHeaderRow: some View {
+        HStack {
+            HStack(spacing: 8) {
+                NexlyGlassGlyphTile(
+                    name: headerIconName,
+                    tone: headerIconTone,
+                    size: 26,
+                    glyphSize: 15
+                )
+                Text(spec.title)
+                    .font(.system(size: 13.5, weight: .bold))
+                    .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
+            }
+            Spacer()
+            HStack(spacing: 6) {
+                Button {
+                    GSHaptics.select()
+                    let all = QuickCalcMode.allCases
+                    let idx = all.firstIndex(of: mode) ?? 0
+                    mode = all[(idx + 1) % all.count]
+                } label: {
+                    Text(mode.rawValue)
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.929, green: 0.898, blue: 1.0)))
+                }
+                .buttonStyle(.plain)
+
+                Button("Reset") {
+                    GSHaptics.select()
+                    amountText = spec.initialAmount.truncatingRemainder(dividingBy: 1.0) == 0
+                        ? String(format: "%.0f", spec.initialAmount)
+                        : String(format: "%.2f", spec.initialAmount)
+                    rateText = spec.initialRate.truncatingRemainder(dividingBy: 1.0) == 0
+                        ? String(format: "%.0f", spec.initialRate)
+                        : String(format: "%.1f", spec.initialRate)
+                    years = spec.initialYears
+                    mode = spec.mode
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color(red: 0.424, green: 0.298, blue: 0.965))
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var calcInputsRow: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(amountFieldLabel)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Aero.textSecondary)
+                HStack(spacing: 2) {
+                    if !spec.currency.isEmpty && mode != .macros {
+                        Text(spec.currency)
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundStyle(Aero.textSecondary)
+                    }
+                    TextField("0", text: $amountText)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Aero.text)
+                        .keyboardType(.decimalPad)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.92)))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.878, green: 0.847, blue: 0.980), lineWidth: 1))
+            }
+            .frame(maxWidth: .infinity)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(rateFieldLabel)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Aero.textSecondary)
+                HStack(spacing: 2) {
+                    TextField("0", text: $rateText)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Aero.text)
+                        .keyboardType(.decimalPad)
+                    Text(mode == .macros ? "g" : "%")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Aero.textSecondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.92)))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.878, green: 0.847, blue: 0.980), lineWidth: 1))
+            }
+            .frame(maxWidth: .infinity)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(resultFieldLabel)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Aero.textSecondary)
+                Text(formattedResultText)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 7)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.929, green: 0.898, blue: 1.0)))
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var calcHorizonRow: some View {
+        HStack {
+            Text(mode == .loan ? "Loan Term" : "Compounding Horizon")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(Aero.textSecondary)
+            Spacer()
+            HStack(spacing: 4) {
+                ForEach(horizonOptions, id: \.self) { (yr: Int) in
+                    let active = years == yr
+                    Button {
+                        GSHaptics.select()
+                        years = yr
+                    } label: {
+                        Text("\(yr)Y")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(active ? Color.white : Color(red: 0.357, green: 0.239, blue: 0.961))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(active ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color(red: 0.941, green: 0.918, blue: 1.0))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var calcSliderSection: some View {
+        let maxR = sliderMax
+        let stepR = sliderStep
+        let useDec = (mode == .macros || mode == .loan)
+        VStack(alignment: .leading, spacing: 4) {
+            Slider(
+                value: Binding(
+                    get: { min(max(0.0, rateVal), maxR) },
+                    set: { (newVal: Double) in
+                        rateText = useDec ? String(format: "%.1f", newVal) : String(format: "%.0f", newVal)
+                    }
+                ),
+                in: 0.0...maxR,
+                step: stepR
+            )
+            .tint(Color(red: 0.424, green: 0.298, blue: 0.965))
+
+            HStack {
+                HStack(spacing: 4) {
+                    ForEach(presets, id: \.self) { (p: Double) in
+                        let selected = abs(rateVal - p) < 0.05
+                        Button {
+                            GSHaptics.select()
+                            rateText = String(format: "%.0f", p)
+                        } label: {
+                            Text("\(Int(p))%")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(selected ? Color.white : Color(red: 0.357, green: 0.239, blue: 0.961))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(selected ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color(red: 0.941, green: 0.918, blue: 1.0))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                Spacer(minLength: 4)
+                Text(summaryBadgeText)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.071, green: 0.604, blue: 0.353))
+            }
+        }
     }
 }
 
@@ -1626,6 +1735,328 @@ private struct NexlyQuantitativeExplorerCardIOS: View {
     }
 }
 
+private struct SpontaneousConceptItemIOS {
+    let term: String
+    let definition: String
+    let icon: String
+    let tone: NexlyGlassTone
+}
+
+private func extractSpontaneousConceptsFromBlocksIOS(_ blocks: [Block]) -> [SpontaneousConceptItemIOS] {
+    var out: [SpontaneousConceptItemIOS] = []
+    var seen = Set<String>()
+    let sepRx = try? NSRegularExpression(pattern: "^([^:—–-]{3,42})\\s*(?::|—|–|-)\\s*(.{14,})$")
+
+    func appendConcept(termRaw: String, defRaw: String) {
+        let term = NexlyIcons.cleanPlainText(termRaw).trimmingCharacters(in: CharacterSet(charactersIn: ":-—– "))
+        let def = NexlyIcons.cleanPlainText(defRaw).trimmingCharacters(in: CharacterSet(charactersIn: ":-—– "))
+        guard term.count >= 3, term.count <= 44, def.count >= 14, !def.lowercased().contains("http") else { return }
+        let key = term.lowercased()
+        guard !seen.contains(key) else { return }
+        seen.insert(key)
+        let sem = NexlyIcons.semanticIcon(for: "\(term) \(def)", fallback: "bulb")
+        out.append(SpontaneousConceptItemIOS(term: term, definition: String(def.prefix(180)), icon: sem.icon, tone: sem.tone))
+    }
+
+    for (idx, b) in blocks.enumerated() {
+        let rawItems: [ListItem]
+        switch b {
+        case .bulletList(let items, _):
+            rawItems = items.allSatisfy({ $0.checked == nil }) ? items : []
+        case .orderedList(_, let items, _):
+            rawItems = items
+        default:
+            rawItems = []
+        }
+        for li in rawItems {
+            if let first = li.spans.first, case .bold(let bch) = first {
+                let term = plainTextOfSpans(bch)
+                let rest = plainTextOfSpans(Array(li.spans.dropFirst()))
+                appendConcept(termRaw: term, defRaw: rest)
+            } else {
+                let plain = NexlyIcons.cleanPlainText(plainTextOfSpans(li.spans))
+                if let rx = sepRx,
+                   let m = rx.firstMatch(in: plain, range: NSRange(plain.startIndex..., in: plain)),
+                   let r1 = Range(m.range(at: 1), in: plain),
+                   let r2 = Range(m.range(at: 2), in: plain) {
+                    appendConcept(termRaw: String(plain[r1]), defRaw: String(plain[r2]))
+                }
+            }
+            if out.count >= 8 { return out }
+        }
+        if case .heading(let lvl, let hSpans, _) = b, (2...3).contains(lvl), idx + 1 < blocks.count {
+            let hText = NexlyIcons.cleanPlainText(plainTextOfSpans(hSpans))
+            if case .paragraph(let pSpans, _) = blocks[idx + 1],
+               classifyCalloutHeaderTitle(hText) == nil,
+               classifySectionListMode(hText) == .normal {
+                appendConcept(termRaw: hText, defRaw: plainTextOfSpans(pSpans))
+                if out.count >= 8 { return out }
+            }
+        }
+    }
+    return out
+}
+
+private struct NexlyInteractiveConceptDeckCardIOS: View {
+    let concepts: [SpontaneousConceptItemIOS]
+    @State private var quizMode: Bool = false
+    @State private var cardIdx: Int = 0
+    @State private var flipped: Bool = false
+    @State private var masteredSet: Set<Int> = []
+    @State private var quizIdx: Int = 0
+    @State private var quizSelected: Int? = nil
+    @State private var quizScore: Int = 0
+    @State private var quizAnsweredCount: Int = 0
+
+    private var safeCardIdx: Int {
+        min(max(0, cardIdx), max(0, concepts.count - 1))
+    }
+
+    private var safeQuizIdx: Int {
+        min(max(0, quizIdx), max(0, concepts.count - 1))
+    }
+
+    private var quizOptions: [Int] {
+        let target = safeQuizIdx
+        let distractors = Array(concepts.indices.filter { $0 != target }.prefix(3))
+        return ([target] + distractors).sorted { (($0 * 7 + target * 3) % 11) < (($1 * 7 + target * 3) % 11) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            conceptHeaderRow
+            if !quizMode {
+                conceptFlashcardBody
+            } else {
+                conceptQuizBody
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.82)))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private var conceptHeaderRow: some View {
+        HStack {
+            HStack(spacing: 7) {
+                NexlyGlassGlyphTile(
+                    name: quizMode ? "school" : "cards",
+                    tone: .lavender,
+                    size: 25,
+                    glyphSize: 14
+                )
+                Text(quizMode ? "Interactive Self-Test" : "Interactive Concept Deck")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
+            }
+            Spacer()
+            HStack(spacing: 2) {
+                ForEach([false, true], id: \.self) { (isQuiz: Bool) in
+                    let active = quizMode == isQuiz
+                    Button {
+                        GSHaptics.select()
+                        quizMode = isQuiz
+                    } label: {
+                        Text(isQuiz ? "Quick Quiz" : "Flashcards")
+                            .font(.system(size: 10.5, weight: .bold))
+                            .foregroundStyle(active ? Color.white : Color(red: 0.310, green: 0.208, blue: 0.910))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(active ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.clear))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(2)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.929, green: 0.898, blue: 1.0)))
+        }
+    }
+
+    @ViewBuilder
+    private var conceptFlashcardBody: some View {
+        let current = concepts[safeCardIdx]
+        let isMastered = masteredSet.contains(safeCardIdx)
+        Button {
+            GSHaptics.select()
+            flipped.toggle()
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    HStack(spacing: 6) {
+                        NexlyGlassGlyphTile(
+                            name: current.icon,
+                            tone: current.tone,
+                            size: 20,
+                            glyphSize: 12
+                        )
+                        Text(flipped ? "DEFINITION · TAP TO FLIP" : "CONCEPT \(safeCardIdx + 1)/\(concepts.count) · TAP TO FLIP")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                    }
+                    Spacer()
+                    if isMastered {
+                        HStack(spacing: 3) {
+                            NexlyGlyph(name: "circle-check", size: 12, color: Color(red: 0.071, green: 0.604, blue: 0.353))
+                            Text("Mastered")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color(red: 0.071, green: 0.604, blue: 0.353))
+                        }
+                    }
+                }
+                Text(flipped ? current.definition : current.term)
+                    .font(.system(size: flipped ? 12.5 : 14, weight: flipped ? .medium : .bold))
+                    .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(RoundedRectangle(cornerRadius: 11).fill(flipped ? Color(red: 0.929, green: 0.898, blue: 1.0) : Color(red: 0.965, green: 0.949, blue: 1.0)))
+            .overlay(RoundedRectangle(cornerRadius: 11).stroke(Color(red: 0.851, green: 0.808, blue: 0.980), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+
+        HStack {
+            HStack(spacing: 6) {
+                Button("Prev") {
+                    GSHaptics.select()
+                    cardIdx = (safeCardIdx - 1 + concepts.count) % concepts.count
+                    flipped = false
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color(red: 0.310, green: 0.208, blue: 0.910))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Color(red: 0.953, green: 0.933, blue: 1.0)))
+                .buttonStyle(.plain)
+
+                Button("Next") {
+                    GSHaptics.select()
+                    cardIdx = (safeCardIdx + 1) % concepts.count
+                    flipped = false
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color(red: 0.310, green: 0.208, blue: 0.910))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Color(red: 0.953, green: 0.933, blue: 1.0)))
+                .buttonStyle(.plain)
+            }
+            Spacer()
+            Button {
+                GSHaptics.select()
+                if isMastered { masteredSet.remove(safeCardIdx) } else { masteredSet.insert(safeCardIdx) }
+            } label: {
+                HStack(spacing: 4) {
+                    NexlyGlyph(
+                        name: isMastered ? "circle-check" : "sparkles",
+                        size: 12,
+                        color: isMastered ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.357, green: 0.239, blue: 0.961)
+                    )
+                    Text("\(masteredSet.count)/\(concepts.count) Mastered")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundStyle(isMastered ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.357, green: 0.239, blue: 0.961))
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(isMastered ? Color(red: 0.902, green: 0.976, blue: 0.941) : Color(red: 0.929, green: 0.898, blue: 1.0)))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private var conceptQuizBody: some View {
+        let target = concepts[safeQuizIdx]
+        Text(target.definition)
+            .font(.system(size: 12.5, weight: .medium))
+            .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(red: 0.965, green: 0.949, blue: 1.0)))
+
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(quizOptions, id: \.self) { (optIdx: Int) in
+                conceptQuizOptionRow(optIdx: optIdx)
+            }
+        }
+
+        HStack {
+            Text("Score: \(quizScore) / \(max(1, quizAnsweredCount))")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+            Spacer()
+            if quizSelected != nil {
+                Button("Next Question") {
+                    GSHaptics.select()
+                    quizSelected = nil
+                    quizIdx = (safeQuizIdx + 1) % concepts.count
+                }
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func conceptQuizOptionRow(optIdx: Int) -> some View {
+        let optConcept = concepts[optIdx]
+        let isChosen = quizSelected == optIdx
+        let isCorrect = optIdx == safeQuizIdx
+        let revealed = quizSelected != nil
+        let bg: Color = {
+            if revealed && isCorrect { return Color(red: 0.902, green: 0.976, blue: 0.941) }
+            if revealed && isChosen { return Color(red: 0.992, green: 0.925, blue: 0.925) }
+            return Color(red: 0.953, green: 0.933, blue: 1.0)
+        }()
+        let borderCol: Color = {
+            if revealed && isCorrect { return Color(red: 0.071, green: 0.604, blue: 0.353) }
+            if revealed && isChosen { return Color(red: 0.878, green: 0.310, blue: 0.373) }
+            return Color(red: 0.851, green: 0.808, blue: 0.980)
+        }()
+        Button {
+            guard !revealed else { return }
+            GSHaptics.select()
+            quizSelected = optIdx
+            quizAnsweredCount += 1
+            if isCorrect { quizScore += 1 }
+        } label: {
+            HStack {
+                HStack(spacing: 6) {
+                    NexlyGlassGlyphTile(
+                        name: optConcept.icon,
+                        tone: optConcept.tone,
+                        size: 18,
+                        glyphSize: 10
+                    )
+                    Text(optConcept.term)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
+                }
+                Spacer()
+                if revealed && (isCorrect || isChosen) {
+                    NexlyGlyph(
+                        name: isCorrect ? "circle-check" : "circle-x",
+                        size: 14,
+                        color: isCorrect ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373)
+                    )
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(RoundedRectangle(cornerRadius: 8).fill(bg))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(borderCol, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private func inferSourceDomain(from text: String) -> (domain: String, url: String)? {
     let low = text.lowercased()
     if low.contains("iea") { return ("www.iea.org", "https://www.iea.org") }
@@ -1737,11 +2168,30 @@ private struct ParagraphView: View {
                     baseSize: compact ? 13 : 15,
                     citations: citations
                 )
-                Text(attributed(from: spans, theme: theme))
-                    .font(compact ? .system(size: 13, weight: .regular) : Aero.body())
-                    .lineSpacing(compact ? 2 : 0)
-                    .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
-                    .textSelection(.enabled)
+                let leadingIcon = NexlyIcons.extractLeadingIcon(plainTextOfSpans(spans)).icon
+                let displaySpans = leadingIcon != nil ? stripLeadingIconFromSpans(spans) : spans
+                if let leadingIcon {
+                    HStack(alignment: .top, spacing: 8) {
+                        NexlyGlassGlyphTile(
+                            name: leadingIcon,
+                            tone: NexlyIcons.tone(for: leadingIcon),
+                            size: 21,
+                            glyphSize: 12
+                        )
+                        .padding(.top, 1)
+                        Text(attributed(from: displaySpans, theme: theme))
+                            .font(compact ? .system(size: 13, weight: .regular) : Aero.body())
+                            .lineSpacing(compact ? 2 : 0)
+                            .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
+                            .textSelection(.enabled)
+                    }
+                } else {
+                    Text(attributed(from: displaySpans, theme: theme))
+                        .font(compact ? .system(size: 13, weight: .regular) : Aero.body())
+                        .lineSpacing(compact ? 2 : 0)
+                        .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
+                        .textSelection(.enabled)
+                }
             }
         }
     }
@@ -2300,12 +2750,12 @@ private struct ListItemRowView: View {
     var body: some View {
         let rawText = plainTextOfSpans(item.spans)
         let (extractedIcon, _) = NexlyIcons.extractLeadingIcon(rawText)
-        let boldSemanticIcon: String? = {
-            guard extractedIcon == nil, let first = item.spans.first, case .bold(let bch) = first else { return nil }
-            let sem = NexlyIcons.semanticIcon(for: plainTextOfSpans(bch), fallback: "")
+        let semanticMatchIcon: String? = {
+            guard extractedIcon == nil else { return nil }
+            let sem = NexlyIcons.semanticIcon(for: rawText, fallback: "")
             return sem.icon.isEmpty || sem.icon == "sparkles" ? nil : sem.icon
         }()
-        let leadingIcon = extractedIcon ?? boldSemanticIcon ?? (marker == "✓" ? "circle-check" : nil)
+        let leadingIcon = extractedIcon ?? semanticMatchIcon ?? (marker == "✓" ? "circle-check" : nil)
         let displaySpans = extractedIcon != nil ? stripLeadingIconFromSpans(item.spans) : item.spans
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: leadingIcon != nil ? .top : .firstTextBaseline, spacing: 8) {
@@ -3334,30 +3784,7 @@ private struct TableBlockView: View {
         let chartJson = chartJsonFromTableIOS(headers: headers, rows: rows)
         VStack(alignment: .leading, spacing: 6) {
             if chartJson != nil {
-                HStack(spacing: 4) {
-                    ForEach([("Table", false), ("Chart", true)], id: \.0) { item in
-                        let active = showChart == item.1
-                        Button {
-                            GSHaptics.select()
-                            showChart = item.1
-                        } label: {
-                            Text(item.0)
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(active ? Color.white : Color(red: 0.357, green: 0.239, blue: 0.961))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(
-                                    Capsule().fill(
-                                        active
-                                            ? Color(red: 0.424, green: 0.298, blue: 0.965)
-                                            : Color(red: 0.933, green: 0.910, blue: 1.0)
-                                    )
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    Spacer()
-                }
+                tableChartToggleBar
             }
             if showChart, let chartJson {
                 WidgetBlockView(kind: "chart", json: chartJson, open: false)
@@ -3372,68 +3799,7 @@ private struct TableBlockView: View {
                     }
 
                     if rows.count >= 4 {
-                        HStack {
-                            HStack(spacing: 4) {
-                                Button("‹") {
-                                    page = max(0, safePage - 1)
-                                }
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(safePage > 0 ? Aero.textSecondary : Aero.textTertiary.opacity(0.45))
-                                .disabled(safePage == 0)
-                                .buttonStyle(.plain)
-
-                                ForEach(0..<totalPages, id: \.self) { (p: Int) in
-                                    let active = p == safePage
-                                    Button {
-                                        page = p
-                                    } label: {
-                                        Text("\(p + 1)")
-                                            .font(.system(size: 11, weight: .bold))
-                                            .foregroundStyle(active ? Color.white : Aero.textSecondary)
-                                            .frame(width: 22, height: 22)
-                                            .background(Circle().fill(active ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.clear))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-
-                                Button("›") {
-                                    page = min(totalPages - 1, safePage + 1)
-                                }
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(safePage < totalPages - 1 ? Aero.textSecondary : Aero.textTertiary.opacity(0.45))
-                                .disabled(safePage >= totalPages - 1)
-                                .buttonStyle(.plain)
-
-                                Text("\(startRow)–\(endRow) of \(sortedRows.count)")
-                                    .font(.system(size: 10.5))
-                                    .foregroundStyle(Aero.textSecondary)
-                                    .padding(.leading, 4)
-                            }
-
-                            Spacer()
-
-                            Button {
-                                switch pageSize {
-                                case 3: pageSize = 5
-                                case 5: pageSize = 10
-                                case 10: pageSize = 25
-                                default: pageSize = 3
-                                }
-                                page = 0
-                            } label: {
-                                Text("Show: \(pageSize) ▾")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(Aero.text)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.85)))
-                                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(Aero.outline.opacity(0.45), lineWidth: 1))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color(red: 0.965, green: 0.949, blue: 1.0))
+                        tablePaginationFooter(startRow: startRow, endRow: endRow)
                     }
                 }
                 .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.75)))
@@ -3444,11 +3810,105 @@ private struct TableBlockView: View {
     }
 
     @ViewBuilder
+    private var tableChartToggleBar: some View {
+        HStack(spacing: 4) {
+            ForEach([false, true], id: \.self) { (isChart: Bool) in
+                let active = showChart == isChart
+                Button {
+                    GSHaptics.select()
+                    showChart = isChart
+                } label: {
+                    Text(isChart ? "Chart" : "Table")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(active ? Color.white : Color(red: 0.357, green: 0.239, blue: 0.961))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule().fill(
+                                active
+                                    ? Color(red: 0.424, green: 0.298, blue: 0.965)
+                                    : Color(red: 0.933, green: 0.910, blue: 1.0)
+                            )
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private func tablePaginationFooter(startRow: Int, endRow: Int) -> some View {
+        HStack {
+            HStack(spacing: 4) {
+                Button("‹") {
+                    page = max(0, safePage - 1)
+                }
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(safePage > 0 ? Aero.textSecondary : Aero.textTertiary.opacity(0.45))
+                .disabled(safePage == 0)
+                .buttonStyle(.plain)
+
+                ForEach(0..<totalPages, id: \.self) { (p: Int) in
+                    let active = p == safePage
+                    Button {
+                        page = p
+                    } label: {
+                        Text("\(p + 1)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(active ? Color.white : Aero.textSecondary)
+                            .frame(width: 22, height: 22)
+                            .background(Circle().fill(active ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.clear))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button("›") {
+                    page = min(totalPages - 1, safePage + 1)
+                }
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(safePage < totalPages - 1 ? Aero.textSecondary : Aero.textTertiary.opacity(0.45))
+                .disabled(safePage >= totalPages - 1)
+                .buttonStyle(.plain)
+
+                Text("\(startRow)–\(endRow) of \(sortedRows.count)")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Aero.textSecondary)
+                    .padding(.leading, 4)
+            }
+
+            Spacer()
+
+            Button {
+                switch pageSize {
+                case 3: pageSize = 5
+                case 5: pageSize = 10
+                case 10: pageSize = 25
+                default: pageSize = 3
+                }
+                page = 0
+            } label: {
+                Text("Show: \(pageSize) ▾")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Aero.text)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.85)))
+                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(Aero.outline.opacity(0.45), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color(red: 0.965, green: 0.949, blue: 1.0))
+    }
+
+    @ViewBuilder
     private func table(theme: SpanTheme, cellWidth: CGFloat, columns: Int, scrollable: Bool) -> some View {
         let firstHeaderRaw = headers.first.map { NexlyIcons.cleanPlainText(plainTextOfSpans($0)).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
-                ForEach(0..<columns, id: \.self) { c in
+                ForEach(0..<columns, id: \.self) { (c: Int) in
                     let hRaw = c < headers.count ? NexlyIcons.cleanPlainText(plainTextOfSpans(headers[c])) : ""
                     let sortSuffix = sortCol == c ? (sortAsc ? " ▲" : " ▼") : ""
                     Button {
@@ -3478,7 +3938,7 @@ private struct TableBlockView: View {
             Rectangle().fill(Aero.outline.opacity(0.4)).frame(height: 1)
             ForEach(Array(visibleRows.enumerated()), id: \.offset) { r, row in
                 HStack(spacing: 0) {
-                    ForEach(0..<columns, id: \.self) { c in
+                    ForEach(0..<columns, id: \.self) { (c: Int) in
                         let isNameCol = c == 0 || (c == 1 && ["#", "Rank", "No", "ID"].contains(firstHeaderRaw))
                         cell(
                             attributed(from: c < row.count ? row[c] : [], theme: theme),
@@ -3499,24 +3959,21 @@ private struct TableBlockView: View {
         .textSelection(.enabled)
     }
 
-    private func entityBadge(for raw: String) -> (String, Color)? {
-        let lower = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        switch lower {
-        case "python": return ("Py", Color(red: 0.216, green: 0.463, blue: 0.671))
-        case "java": return ("Jv", Color(red: 0.906, green: 0.435, blue: 0.0))
-        case "c++": return ("C+", Color(red: 0.0, green: 0.349, blue: 0.612))
-        case "c": return ("C", Color(red: 0.157, green: 0.208, blue: 0.576))
-        case "javascript", "js": return ("JS", Color(red: 0.902, green: 0.655, blue: 0.0))
-        case "typescript", "ts": return ("TS", Color(red: 0.192, green: 0.471, blue: 0.776))
-        case "rust": return ("Rs", Color(red: 0.808, green: 0.259, blue: 0.169))
-        case "go", "golang": return ("Go", Color(red: 0.0, green: 0.678, blue: 0.847))
-        case "swift": return ("Sw", Color(red: 0.941, green: 0.318, blue: 0.220))
-        case "kotlin": return ("Kt", Color(red: 0.498, green: 0.322, blue: 1.0))
-        default:
-            if lower.hasPrefix("nexly") { return ("Nx", Color(red: 0.424, green: 0.298, blue: 0.965)) }
-            if lower.hasPrefix("data") { return ("Dt", Color(red: 0.231, green: 0.510, blue: 0.965)) }
-            return nil
-        }
+    private func entityBadge(for raw: String) -> (icon: String, tone: NexlyGlassTone)? {
+        let clean = NexlyIcons.cleanPlainText(raw)
+        guard !clean.isEmpty, clean.count <= 32, clean.contains(where: { $0.isLetter }) else { return nil }
+        let lower = clean.lowercased()
+        if lower.hasPrefix("python") { return ("brand-python", .blue) }
+        if lower == "java" { return ("coffee", .amber) }
+        if lower.hasPrefix("c++") || lower == "cpp" { return ("brand-cpp", .blue) }
+        if lower == "c" || lower == "c#" { return ("code", .lavender) }
+        if lower.hasPrefix("javascript") || lower == "js" { return ("brand-javascript", .amber) }
+        if lower.hasPrefix("typescript") || lower == "ts" { return ("brand-typescript", .blue) }
+        if lower.hasPrefix("rust") { return ("brand-rust", .peach) }
+        if lower == "go" || lower == "golang" { return ("brand-golang", .mint) }
+        if lower.hasPrefix("swift") { return ("brand-apple", .lavender) }
+        if lower.hasPrefix("kotlin") || lower.hasPrefix("android") { return ("brand-android", .green) }
+        return NexlyIcons.semanticIcon(for: raw, fallback: "sparkles")
     }
 
     @ViewBuilder
@@ -3536,12 +3993,13 @@ private struct TableBlockView: View {
                 .padding(.vertical, 7)
         } else if !emphasize, isPrimaryNameCol, let badge = entityBadge(for: trimmed) {
             HStack(spacing: 6) {
-                Text(badge.0)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(badge.1)
-                    .frame(width: 18, height: 18)
-                    .background(RoundedRectangle(cornerRadius: 5).fill(badge.1.opacity(0.16)))
-                Text(text)
+                NexlyGlassGlyphTile(
+                    name: badge.icon,
+                    tone: badge.tone,
+                    size: 20,
+                    glyphSize: 11
+                )
+                Text(NexlyIcons.cleanPlainText(trimmed))
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
                     .lineLimit(1)

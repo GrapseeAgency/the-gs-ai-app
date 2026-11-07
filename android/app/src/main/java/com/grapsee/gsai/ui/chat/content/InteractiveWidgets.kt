@@ -80,40 +80,69 @@ private fun GaugeArc(item: GaugeItem, color: Color) {
     var animate by remember(item.label) { mutableStateOf(false) }
     LaunchedEffect(item.label) { animate = true }
     val safeMax = if (item.max > 0f) item.max else 100f
-    val frac = (item.value / safeMax).coerceIn(0f, 1f)
-    val progress by animateFloatAsState(if (animate) frac else 0f, tween(900), label = "gauge")
+    var liveValue by remember(item.label, item.value) { mutableFloatStateOf(item.value) }
+    val frac = (liveValue / safeMax).coerceIn(0f, 1f)
+    val progress by animateFloatAsState(if (animate) frac else 0f, tween(450), label = "gauge")
     val trackColor = GsTheme.colors.raisedSurface
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Canvas(Modifier.size(84.dp)) {
-            val stroke = 10.dp.toPx()
-            val inset = stroke / 2f
-            drawArc(
-                color = trackColor,
-                startAngle = 135f,
-                sweepAngle = 270f,
-                useCenter = false,
-                topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
-                size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
-                style = Stroke(width = stroke)
-            )
-            drawArc(
-                color = color,
-                startAngle = 135f,
-                sweepAngle = 270f * progress,
-                useCenter = false,
-                topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
-                size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
-                style = Stroke(width = stroke)
-            )
-        }
-        Column(Modifier.padding(start = 14.dp)) {
-            Text(
-                if (progress >= 0.99f) "${formatChartValue(item.value)}${item.unit}" else "",
-                style = MaterialTheme.typography.titleLarge,
-                color = GsTheme.colors.textPrimary,
-                fontWeight = FontWeight.Bold
-            )
-            Text(item.label, style = MaterialTheme.typography.labelMedium, color = GsTheme.colors.textSecondary)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Canvas(Modifier.size(84.dp)) {
+                val stroke = 10.dp.toPx()
+                val inset = stroke / 2f
+                drawArc(
+                    color = trackColor,
+                    startAngle = 135f,
+                    sweepAngle = 270f,
+                    useCenter = false,
+                    topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
+                    size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
+                    style = Stroke(width = stroke)
+                )
+                drawArc(
+                    color = color,
+                    startAngle = 135f,
+                    sweepAngle = 270f * progress,
+                    useCenter = false,
+                    topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
+                    size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
+                    style = Stroke(width = stroke)
+                )
+            }
+            Column(Modifier.padding(start = 14.dp).weight(1f)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "${formatChartValue(liveValue)}${item.unit}",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = GsTheme.colors.textPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (kotlin.math.abs(liveValue - item.value) > 0.01f) {
+                        Row(
+                            Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(GsTheme.colors.surface)
+                                .clickable { liveValue = item.value }
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            NexlyGlyph(name = "refresh", size = 11.dp, color = color)
+                            Text("Reset", style = MaterialTheme.typography.labelSmall, color = color)
+                        }
+                    }
+                }
+                Text(item.label, style = MaterialTheme.typography.labelMedium, color = GsTheme.colors.textSecondary)
+                Slider(
+                    value = liveValue.coerceIn(0f, safeMax),
+                    onValueChange = { liveValue = it },
+                    valueRange = 0f..safeMax,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
@@ -143,12 +172,23 @@ internal fun QuizWidgetView(w: QuizWidget) {
                     fontWeight = FontWeight.Bold
                 )
                 questions.forEachIndexed { qi, q ->
-                    Text(
-                        "${if (revealed.contains(qi) && answers[qi] == q.answer) "✓" else "•"} ${q.q}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = c.textSecondary,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
+                    val isRight = revealed.contains(qi) && answers[qi] == q.answer
+                    Row(
+                        Modifier.padding(top = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        NexlyGlyph(
+                            name = if (isRight) "circle-check" else "circle-x",
+                            size = 14.dp,
+                            color = if (isRight) c.success else c.error
+                        )
+                        Text(
+                            q.q,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = c.textSecondary
+                        )
+                    }
                 }
                 TextButton(onClick = {
                     answers.clear(); revealed = emptySet(); index = 0; finished = false
@@ -204,13 +244,23 @@ internal fun QuizWidgetView(w: QuizWidget) {
                         opt,
                         style = MaterialTheme.typography.bodySmall,
                         color = c.textPrimary,
-                        modifier = Modifier.padding(start = 10.dp)
+                        modifier = Modifier.padding(start = 10.dp).weight(1f)
                     )
                     if (isRevealed && isAnswer) {
-                        Text(" ✓", color = c.success, modifier = Modifier.padding(start = 6.dp))
+                        NexlyGlyph(
+                            name = "circle-check",
+                            size = 15.dp,
+                            color = c.success,
+                            modifier = Modifier.padding(start = 6.dp)
+                        )
                     }
                     if (isRevealed && chosen && !isAnswer) {
-                        Text(" ✗", color = c.error, modifier = Modifier.padding(start = 6.dp))
+                        NexlyGlyph(
+                            name = "circle-x",
+                            size = 15.dp,
+                            color = c.error,
+                            modifier = Modifier.padding(start = 6.dp)
+                        )
                     }
                 }
             }
@@ -463,24 +513,30 @@ internal fun FormWidgetView(w: FormWidget, onSendPrompt: ((String) -> Unit)?) {
                         val maxStars = f.max.toInt().coerceIn(1, 10)
                         val current = (values[i]?.toFloatOrNull() ?: 0f).toInt()
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clickable {
-                                    val next = if (current >= maxStars) 0 else current + 1
-                                    values[i] = next.toString()
-                                }
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             for (s in 1..maxStars) {
-                                NexlyGlyph(
-                                    name = if (s <= current) "star-filled" else "star",
-                                    size = 16.dp,
-                                    color = if (s <= current) seriesColor(0) else c.textTertiary.copy(alpha = 0.45f)
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable { values[i] = s.toString() }
+                                        .padding(2.dp)
+                                ) {
+                                    NexlyGlyph(
+                                        name = if (s <= current) "star-filled" else "star",
+                                        size = 17.dp,
+                                        color = if (s <= current) seriesColor(0) else c.textTertiary.copy(alpha = 0.45f)
+                                    )
+                                }
                             }
                         }
-                        Text("tap to rate", style = MaterialTheme.typography.labelSmall, color = c.textTertiary)
+                        Text(
+                            if (current > 0) "$current/$maxStars" else "tap to rate",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = c.textTertiary
+                        )
                     }
                     "otp" -> Column(Modifier.padding(vertical = 6.dp)) {
                         Text(
@@ -547,32 +603,43 @@ internal fun FormWidgetView(w: FormWidget, onSendPrompt: ((String) -> Unit)?) {
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     }
-                    "file" -> Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp)
-                            .border(1.dp, c.divider, RoundedCornerShape(10.dp))
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        NexlyGlassGlyphTile(
-                            name = "file",
-                            toneName = "lavender",
-                            size = 24.dp,
-                            glyphSize = 14.dp,
-                            modifier = Modifier.padding(end = 8.dp)
-                        )
+                    "file" -> Column(Modifier.padding(vertical = 6.dp)) {
                         Text(
-                            "Attach — ${f.label}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = c.textSecondary,
-                            modifier = Modifier.weight(1f)
+                            if (f.required) "${f.label} *" else f.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = c.textSecondary
                         )
-                        Text(
-                            "file pickers open on the web client",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = c.textTertiary
-                        )
+                        val filePresets = listOf("Document.pdf", "Dataset.csv", "Image.png", "Report.xlsx")
+                        val currentFile = values[i] ?: ""
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 6.dp).horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            filePresets.forEach { preset ->
+                                val active = currentFile == preset
+                                Row(
+                                    Modifier
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(if (active) c.accent else c.surface)
+                                        .border(1.dp, if (active) c.accent else c.divider, RoundedCornerShape(999.dp))
+                                        .clickable { values[i] = if (active) "" else preset }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    NexlyGlyph(
+                                        name = if (active) "circle-check" else "file",
+                                        size = 12.dp,
+                                        color = if (active) c.onAccent else c.accent
+                                    )
+                                    Text(
+                                        preset,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (active) c.onAccent else c.textPrimary
+                                    )
+                                }
+                            }
+                        }
                     }
                     else -> OutlinedTextField(
                         value = values[i] ?: "",
@@ -742,34 +809,46 @@ internal fun CarouselWidgetView(w: CarouselWidget) {
 @Composable
 internal fun CardsWidgetView(w: CardsWidget, onSendPrompt: ((String) -> Unit)?) {
     val c = GsTheme.colors
+    var selectedIdx by remember { mutableIntStateOf(-1) }
     WidgetCardShell(w.title.ifEmpty { "Choices" }, "cards") {
         Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            w.cards.take(8).forEach { card ->
+            w.cards.take(8).forEachIndexed { idx, card ->
+                val isSelected = selectedIdx == idx
+                val badge = remember(card.title, card.subtitle) {
+                    NexlyIcons.semanticIconFor("${card.title} ${card.subtitle}", "sparkles")
+                }
                 Row(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(c.surface)
-                        .then(
+                        .background(if (isSelected) c.accent.copy(alpha = 0.12f) else c.surface)
+                        .border(1.dp, if (isSelected) c.accent else Color.Transparent, RoundedCornerShape(12.dp))
+                        .clickable {
+                            selectedIdx = idx
                             if (onSendPrompt != null && card.prompt.isNotBlank()) {
-                                Modifier.clickable { onSendPrompt(card.prompt) }
-                            } else {
-                                Modifier
+                                onSendPrompt(card.prompt)
                             }
-                        )
+                        }
                         .padding(horizontal = 12.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    NexlyGlassGlyphTile(
+                        name = badge.first,
+                        toneName = badge.second,
+                        size = 28.dp,
+                        glyphSize = 15.dp
+                    )
                     Column(Modifier.weight(1f)) {
                         Text(
-                            card.title,
+                            NexlyIcons.cleanPlainText(card.title),
                             style = MaterialTheme.typography.titleSmall,
                             color = c.textPrimary,
                             fontWeight = FontWeight.SemiBold
                         )
                         if (card.subtitle.isNotBlank()) {
                             Text(
-                                card.subtitle,
+                                NexlyIcons.cleanPlainText(card.subtitle),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = c.textSecondary,
                                 maxLines = 2,
@@ -777,9 +856,11 @@ internal fun CardsWidgetView(w: CardsWidget, onSendPrompt: ((String) -> Unit)?) 
                             )
                         }
                     }
-                    if (onSendPrompt != null && card.prompt.isNotBlank()) {
-                        Text("→", style = MaterialTheme.typography.titleMedium, color = c.accent)
-                    }
+                    NexlyGlyph(
+                        name = if (isSelected) "circle-check" else "arrow-right",
+                        size = 15.dp,
+                        color = c.accent
+                    )
                 }
             }
         }
@@ -791,29 +872,30 @@ internal fun CardsWidgetView(w: CardsWidget, onSendPrompt: ((String) -> Unit)?) 
 @Composable
 internal fun FollowupsWidgetView(w: FollowupsWidget, onSendPrompt: ((String) -> Unit)?) {
     val c = GsTheme.colors
+    var selectedIdx by remember { mutableIntStateOf(-1) }
     WidgetCardShell(w.title.ifEmpty { "Ask next" }, "followups") {
-        if (onSendPrompt == null) {
-            Text(
-                "Tap disabled here",
-                style = MaterialTheme.typography.labelMedium,
-                color = c.textTertiary,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-            return@WidgetCardShell
-        }
         Row(
             Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            w.prompts.take(12).forEach { prompt ->
-                Box(
+            w.prompts.take(12).forEachIndexed { idx, prompt ->
+                val isSelected = selectedIdx == idx
+                val (iconName, _) = remember(prompt) { NexlyIcons.semanticIconFor(prompt, "sparkles") }
+                Row(
                     Modifier
                         .clip(RoundedCornerShape(99.dp))
-                        .background(c.surface)
-                        .clickable { onSendPrompt(prompt) }
-                        .padding(horizontal = 14.dp, vertical = 9.dp)
+                        .background(if (isSelected) c.accent.copy(alpha = 0.14f) else c.surface)
+                        .border(1.dp, if (isSelected) c.accent else Color.Transparent, RoundedCornerShape(99.dp))
+                        .clickable {
+                            selectedIdx = idx
+                            onSendPrompt?.invoke(prompt)
+                        }
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(prompt, style = MaterialTheme.typography.labelMedium, color = c.accent, maxLines = 2)
+                    NexlyGlyph(name = iconName, size = 13.dp, color = c.accent)
+                    Text(NexlyIcons.cleanPlainText(prompt), style = MaterialTheme.typography.labelMedium, color = c.accent, maxLines = 2)
                 }
             }
         }
