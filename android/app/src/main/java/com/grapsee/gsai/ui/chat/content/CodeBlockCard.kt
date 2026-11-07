@@ -56,134 +56,6 @@ private fun formatNumValue(d: Double): String =
     if (d % 1.0 == 0.0) d.toLong().toString()
     else String.format(java.util.Locale.US, "%.4f", d).trimEnd('0').trimEnd('.')
 
-private fun splitTopLevelCommasKt(input: String): List<String> {
-    val parts = mutableListOf<String>()
-    val cur = StringBuilder()
-    var depth = 0
-    var inSingle = false
-    var inDouble = false
-    for (i in input.indices) {
-        val ch = input[i]
-        val prev = if (i > 0) input[i - 1] else ' '
-        if (ch == '\'' && !inDouble && prev != '\\') inSingle = !inSingle
-        else if (ch == '"' && !inSingle && prev != '\\') inDouble = !inDouble
-        else if (!inSingle && !inDouble) {
-            when (ch) {
-                '(', '[', '{' -> depth++
-                ')', ']', '}' -> depth = (depth - 1).coerceAtLeast(0)
-                ',' -> if (depth == 0) {
-                    val s = cur.toString().trim()
-                    if (s.isNotEmpty()) parts += s
-                    cur.setLength(0)
-                    continue
-                }
-            }
-        }
-        cur.append(ch)
-    }
-    val tail = cur.toString().trim()
-    if (tail.isNotEmpty()) parts += tail
-    return parts
-}
-
-private fun parseInlineNumberListKt(
-    raw: String,
-    numVars: Map<String, Double>,
-    strVars: Map<String, String>,
-    listVars: Map<String, List<Double>>
-): List<Double>? {
-    val t = raw.trim()
-    if (!t.startsWith("[") || !t.endsWith("]")) return null
-    val inner = t.drop(1).dropLast(1).trim()
-    if (inner.isEmpty()) return emptyList()
-    return splitTopLevelCommasKt(inner).mapNotNull {
-        evalCodeExpression(it, numVars, strVars, listVars).toDoubleOrNull()
-    }
-}
-
-private fun evalCodeExpression(
-    rawExpr: String,
-    numVars: Map<String, Double>,
-    strVars: Map<String, String>,
-    listVars: Map<String, List<Double>>,
-    funcs: Map<String, Pair<List<String>, String>> = emptyMap()
-): String {
-    val expr = rawExpr.trim()
-    if (expr.isEmpty()) return ""
-    // Python f-string or JS template literal
-    if ((expr.startsWith("f\"") && expr.endsWith("\"")) ||
-        (expr.startsWith("f'") && expr.endsWith("'")) ||
-        (expr.startsWith("`") && expr.endsWith("`"))
-    ) {
-        val inner = if (expr.startsWith("f")) expr.drop(2).dropLast(1) else expr.drop(1).dropLast(1)
-        return Regex("\\$\\{([^}]+)}|\\{([^}]+)}").replace(inner) { m ->
-            val sub = m.groupValues[1].ifBlank { m.groupValues[2] }.trim().substringBefore(':')
-            evalCodeExpression(sub, numVars, strVars, listVars, funcs)
-        }
-    }
-    if ((expr.startsWith("\"") && expr.endsWith("\"")) || (expr.startsWith("'") && expr.endsWith("'"))) {
-        return expr.drop(1).dropLast(1)
-    }
-    strVars[expr]?.let { return it }
-    listVars[expr]?.let { list ->
-        return "[" + list.joinToString(", ") { formatNumValue(it) } + "]"
-    }
-    parseInlineNumberListKt(expr, numVars, strVars, listVars)?.let { list ->
-        return "[" + list.joinToString(", ") { formatNumValue(it) } + "]"
-    }
-    // User-defined function call fn(a, b)
-    val fnMatch = Regex("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\((.*)\\)$").find(expr)
-    if (fnMatch != null) {
-        val fnName = fnMatch.groupValues[1]
-        val fnSpec = funcs[fnName]
-        if (fnSpec != null) {
-            val argVals = splitTopLevelCommasKt(fnMatch.groupValues[2]).map {
-                evalCodeExpression(it, numVars, strVars, listVars, funcs).toDoubleOrNull() ?: 0.0
-            }
-            val scoped = numVars.toMutableMap()
-            fnSpec.first.forEachIndexed { idx, p -> scoped[p] = argVals.getOrElse(idx) { 0.0 } }
-            return evalCodeExpression(fnSpec.second, scoped, strVars, listVars, funcs)
-        }
-    }
-    // Aggregate functions over list variables or inline lists: sum(arr), len(arr), min(arr), max(arr), avg(arr)
-    val aggMatch = Regex("^(sum|len|min|max|avg|mean)\\s*\\(\\s*(.+)\\s*\\)$").find(expr)
-    if (aggMatch != null) {
-        val fn = aggMatch.groupValues[1]
-        val argStr = aggMatch.groupValues[2].trim()
-        val list = listVars[argStr]
-            ?: parseInlineNumberListKt(argStr, numVars, strVars, listVars)
-            ?: splitTopLevelCommasKt(argStr).mapNotNull { evalCodeExpression(it, numVars, strVars, listVars, funcs).toDoubleOrNull() }.takeIf { it.size > 1 }
-        if (list != null && list.isNotEmpty()) {
-            val res = when (fn) {
-                "sum" -> list.sum()
-                "len" -> list.size.toDouble()
-                "min" -> list.minOrNull() ?: 0.0
-                "max" -> list.maxOrNull() ?: 0.0
-                else -> list.average()
-            }
-            return formatNumValue(res)
-        }
-    }
-    // Replace any sum(var)/len(var)/min(var)/max(var) inside compound arithmetic
-    val expanded = Regex("(sum|len|min|max)\\s*\\(\\s*([^)]+)\\s*\\)").replace(expr) { m ->
-        val fn = m.groupValues[1]
-        val argStr = m.groupValues[2].trim()
-        val list = listVars[argStr] ?: parseInlineNumberListKt(argStr, numVars, strVars, listVars)
-        if (list != null && list.isNotEmpty()) {
-            val v = when (fn) {
-                "sum" -> list.sum()
-                "len" -> list.size.toDouble()
-                "min" -> list.minOrNull() ?: 0.0
-                else -> list.maxOrNull() ?: 0.0
-            }
-            v.toString()
-        } else m.value
-    }.replace("**", "^")
-    CalcExpr.eval(expanded, numVars)?.let { return formatNumValue(it) }
-    numVars[expr]?.let { return formatNumValue(it) }
-    return expr
-}
-
 private fun executeCodePreview(language: String?, code: String): CodeRunResult {
     val lang = (language ?: "code").lowercase().trim()
     val trimmed = code.trim()
@@ -202,11 +74,6 @@ private fun executeCodePreview(language: String?, code: String): CodeRunResult {
             CodeRunResult(output = "", error = "JSONSyntaxError: ${t.message ?: "Invalid JSON"}")
         }
     }
-
-    val numVars = mutableMapOf<String, Double>()
-    val strVars = mutableMapOf<String, String>()
-    val listVars = mutableMapOf<String, List<Double>>()
-    val outLines = mutableListOf<String>()
 
     if (lang in setOf("py", "python", "python3")) {
         // This is an arithmetic preview, NOT a Python runtime. Never skip a
@@ -253,92 +120,10 @@ private fun executeCodePreview(language: String?, code: String): CodeRunResult {
             CodeRunResult("", "Preview stopped at line $lineNumber: ${t.message}")
         }
     }
-    if (lang in setOf("js", "javascript", "ts", "typescript", "jsx", "tsx", "node")) {
-        if ("throw new " in trimmed) {
-            val errM = Regex("throw new\\s+(\\w+)\\(([^)]*)\\)").find(trimmed)
-            return CodeRunResult(
-                output = "",
-                error = "${errM?.groupValues?.get(1) ?: "Error"}: ${errM?.groupValues?.get(2)?.trim('"', '\'') ?: "Execution halted"}"
-            )
-        }
-        trimmed.lines().forEach { rawLine ->
-            val line = rawLine.substringBefore("//").trim().trimEnd(';')
-            if (line.isEmpty()) return@forEach
-            val listAssign = Regex("^(?:const|let|var)\\s+([a-zA-Z_$][a-zA-Z0-9_$]*)(?:\\s*:[^=]+)?\\s*=\\s*\\[([\\d,\\s.+-]+)]$").find(line)
-            if (listAssign != null) {
-                val name = listAssign.groupValues[1]
-                val nums = listAssign.groupValues[2].split(',').mapNotNull { it.trim().toDoubleOrNull() }
-                if (nums.isNotEmpty()) listVars[name] = nums
-                return@forEach
-            }
-            val assignMatch = Regex("^(?:const|let|var)\\s+([a-zA-Z_$][a-zA-Z0-9_$]*)(?:\\s*:[^=]+)?\\s*=\\s*(.+)$").find(line)
-            if (assignMatch != null && "console." !in line) {
-                val name = assignMatch.groupValues[1]
-                val rhs = assignMatch.groupValues[2].trim()
-                val evaluated = evalCodeExpression(rhs, numVars, strVars, listVars)
-                val asDouble = evaluated.toDoubleOrNull()
-                if (asDouble != null) numVars[name] = asDouble else strVars[name] = evaluated
-            }
-            Regex("console\\.(?:log|info|warn)\\s*\\((.+)\\)").findAll(line).forEach { logMatch ->
-                val inner = logMatch.groupValues[1].trim()
-                if (inner != "e") {
-                    outLines += splitTopLevelCommasKt(inner).joinToString(" ") { evalCodeExpression(it, numVars, strVars, listVars) }
-                }
-            }
-        }
-        if (outLines.isEmpty() && numVars.isNotEmpty()) {
-            outLines += numVars.entries.joinToString("\n") { "${it.key} = ${formatNumValue(it.value)}" }
-        }
-        if (outLines.isNotEmpty()) return CodeRunResult(outLines.joinToString("\n"))
-        if ("useEffect" in trimmed && "fetch(" in trimmed) {
-            val url = Regex("fetch\\s*\\(\\s*['\"]([^'\"]+)['\"]").find(trimmed)?.groupValues?.get(1) ?: "/api/data"
-            return CodeRunResult("useEffect lifecycle verified:\n1. Mount #1 -> GET $url\n2. Cleanup -> controller.abort() (ignore = true)\n3. Remount #2 -> 200 OK -> setData(payload)")
-        }
-        return CodeRunResult(
-            if (lang in setOf("jsx", "tsx", "react")) "React component compiled (${trimmed.lines().size} lines · 0 errors)"
-            else "Executed cleanly (${trimmed.lines().size} lines · 0 errors)"
-        )
-    }
-
     if (lang in setOf("sql", "sqlite", "postgres", "postgresql", "mysql")) {
         return CodeRunResult("", "Not executed: no database is connected. Copy this SQL into your database client.")
     }
     return CodeRunResult("", "Not executed: no ${lang.uppercase()} runtime is available here.")
-}
-
-private data class ParsedComponentPreview(
-    val componentName: String,
-    val stateName: String,
-    val initialNumber: Int,
-    val buttonLabels: List<String>,
-    val isEffectHook: Boolean = false,
-    val effectEndpoint: String = "/api/data"
-)
-
-private fun parseReactPreviewSpec(code: String): ParsedComponentPreview {
-    if ("useEffect" in code && ("fetch(" in code || "AbortController" in code) && "useState(" !in code) {
-        val url = Regex("fetch\\s*\\(\\s*['\"]([^'\"]+)['\"]").find(code)?.groupValues?.get(1) ?: "/api/data"
-        return ParsedComponentPreview(
-            componentName = "useEffect Fetch Guard",
-            stateName = "status",
-            initialNumber = 0,
-            buttonLabels = listOf("Mount", "Strict Remount", "Abort"),
-            isEffectHook = true,
-            effectEndpoint = url
-        )
-    }
-    val compName = Regex("(?:function|const)\\s+([A-Z][a-zA-Z0-9_]*)").find(code)?.groupValues?.get(1)
-        ?: "Component"
-    val stateMatch = Regex("\\[\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*,\\s*set[A-Z][a-zA-Z0-9_]*\\s*]\\s*=\\s*useState\\(([^)]*)\\)").find(code)
-    val stateName = stateMatch?.groupValues?.get(1) ?: "value"
-    val initNum = stateMatch?.groupValues?.get(2)?.trim()?.toIntOrNull() ?: 0
-    val buttons = Regex("<button[^>]*>([^<{]+)</button>", RegexOption.IGNORE_CASE)
-        .findAll(code)
-        .map { it.groupValues[1].trim() }
-        .filter { it.isNotEmpty() }
-        .toList()
-        .ifEmpty { listOf("+1", "Reset") }
-    return ParsedComponentPreview(compName, stateName, initNum, buttons.take(3))
 }
 
 /**
@@ -405,7 +190,7 @@ fun CodeBlockCard(
 
     val langLabel = (language ?: "code").trim().ifBlank { "code" }
     val lowerLang = langLabel.lowercase()
-    val isBrowserLang = lowerLang in setOf("html", "htm", "svg", "jsx", "tsx", "react")
+    val isBrowserLang = lowerLang in setOf("html", "htm", "svg", "js", "javascript")
 
     Surface(
         shape = RoundedCornerShape(14.dp),
@@ -545,7 +330,7 @@ fun CodeBlockCard(
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color(0xFF6C4CF6))
                             .clickable {
-                                if (lowerLang in setOf("html", "htm", "svg")) {
+                                if (lowerLang in setOf("html", "htm", "svg", "js", "javascript")) {
                                     sandboxMode = true
                                 } else {
                                     runCount += 1
@@ -735,101 +520,6 @@ fun CodeBlockCard(
                 }
             }
 
-            // Code-derived Interactive Component Preview (only for JSX/TSX/React components; HTML/SVG opens real WebView sandbox)
-            if (!open && lowerLang in setOf("jsx", "tsx", "react")) {
-                val spec = remember(currentCode) { parseReactPreviewSpec(currentCode) }
-                var stateValue by remember(spec) { mutableStateOf(spec.initialNumber) }
-                val statusLine = if (spec.isEffectHook) {
-                    when (stateValue) {
-                        1 -> "Strict Mode: Run #1 aborted -> Run #2 200 OK"
-                        2 -> "Cleanup: controller.abort() · ignore = true"
-                        else -> "GET ${spec.effectEndpoint} -> 200 OK · setData(payload)"
-                    }
-                } else {
-                    "${spec.stateName}: $stateValue"
-                }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFFF8F5FF))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (spec.isEffectHook) "React Effect Lifecycle Simulator" else "<${spec.componentName} /> Preview",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF221A47)
-                        )
-                        Text(
-                            text = "Open Sandbox",
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF6C4CF6),
-                            modifier = Modifier.clickable { sandboxMode = true }
-                        )
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White)
-                            .border(1.dp, Color(0xFFE2DAFA), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f).padding(end = 6.dp)) {
-                            Text(
-                                text = spec.componentName,
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF221A47)
-                            )
-                            Text(
-                                text = statusLine,
-                                fontSize = 11.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = Color(0xFF625A84)
-                            )
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            spec.buttonLabels.forEachIndexed { bIdx, btnLabel ->
-                                val lowerBtn = btnLabel.lowercase()
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFF6C4CF6))
-                                        .clickable {
-                                            stateValue = if (spec.isEffectHook) {
-                                                bIdx
-                                            } else {
-                                                when {
-                                                    "reset" in lowerBtn || "clear" in lowerBtn -> spec.initialNumber
-                                                    "-" in lowerBtn || "dec" in lowerBtn || "sub" in lowerBtn -> stateValue - 1
-                                                    else -> stateValue + 1
-                                                }
-                                            }
-                                        }
-                                        .padding(horizontal = 9.dp, vertical = 5.dp)
-                                ) {
-                                    Text(
-                                        text = btnLabel,
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 }
