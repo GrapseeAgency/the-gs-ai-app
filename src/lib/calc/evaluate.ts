@@ -157,8 +157,10 @@ export function formatOutput(value: number, format: string | undefined, unit: st
     const symbol = unit && /^[^\d\s]/.test(unit) ? unit : '$'
     return `${symbol}${safe.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
   }
-  if (format === 'percent') {
-    const pctVal = Math.abs(safe) <= 1 ? safe * 100 : safe
+  if (format === 'percent' || format === 'pct') {
+    // Percent format accepts a ratio at EVERY magnitude. Unit '%' alone
+    // denotes percentage points; never infer representation from the value.
+    const pctVal = safe * 100
     return `${pctVal.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
   }
   const num = safe.toLocaleString(undefined, { maximumFractionDigits: 4 })
