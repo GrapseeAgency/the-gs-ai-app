@@ -307,11 +307,35 @@ enum NexlyIcons {
         "🍽️": "tools-kitchen-2", "🍴": "tools-kitchen-2", "🍔": "tools-kitchen-2",
         "📝": "file-text", "📄": "file-text", "🏃": "run", "🏃‍♂️": "run", "🏃‍♀️": "run",
         "🏋️": "barbell", "🎮": "device-gamepad-2", "🕹️": "device-gamepad-2",
-        "🌙": "moon", "😴": "moon", "✨": "sparkles", "🧠": "brain",
+        "🌙": "moon", "😴": "moon", "✨": "sparkles", "✦": "sparkles", "🧠": "brain",
         "⚙️": "settings", "⚙": "settings", "💪": "flame", "🔥": "flame",
         "❤️": "heart", "❤": "heart", "✅": "circle-check", "✔️": "circle-check",
+        "☑️": "checkbox", "☑": "checkbox",
         "⭐": "star", "🎯": "target", "☕": "coffee", "🎨": "palette",
         "🎵": "music", "🚶": "walk", "📅": "calendar", "⏰": "clock",
+        "⏱️": "clock", "⏳": "hourglass",
+        "⚡": "bolt", "⚠️": "alert-triangle", "⚠": "alert-triangle", "💡": "bulb",
+        "📊": "chart-bar", "📈": "trending-up", "📉": "trending-down",
+        "👥": "users", "👤": "user", "🧮": "calculator",
+        "🔗": "link", "🌐": "world", "🌍": "world", "🌎": "world", "🌏": "world",
+        "🏛️": "building-bank", "🏛": "building-bank",
+        "🚀": "rocket", "🔒": "lock", "🔓": "lock-open",
+        "🛡️": "shield", "🛡": "shield", "🐍": "brand-python",
+        "🔍": "search", "🔎": "search", "📌": "pin", "📎": "paperclip",
+        "📋": "clipboard", "📁": "folder", "📂": "folder-open",
+        "💬": "message-circle", "💭": "message-circle", "🔔": "bell",
+        "💰": "coin", "💵": "cash", "💳": "credit-card",
+        "🏆": "trophy", "🥇": "trophy", "🎉": "sparkles",
+        "🧪": "flask", "🧬": "dna", "🔬": "microscope", "🎓": "school",
+        "✈️": "plane", "🚗": "car", "🏠": "home", "🌱": "plant", "🌿": "leaf",
+        "🔋": "battery", "🔌": "plug", "🧭": "compass", "🗺️": "map",
+        "🔑": "key", "🛠️": "tools", "🛠": "tools", "🔧": "tool",
+        "📱": "device-mobile", "🛒": "shopping-cart", "🧾": "receipt",
+        "📧": "mail", "✉️": "mail", "📞": "phone",
+        "🎥": "video", "📷": "camera", "🖼️": "photo", "🖼": "photo", "🎬": "movie",
+        "👍": "thumb-up", "👎": "thumb-down", "😊": "mood-smile", "😀": "mood-smile",
+        "🤔": "brain", "❌": "circle-x", "❓": "help-circle", "❗": "alert-circle",
+        "ℹ️": "info-circle", "ℹ": "info-circle"
     ]
 
     private static let codepoints: [String: Int] = {
@@ -384,12 +408,43 @@ enum NexlyIcons {
             let value = scalar.value
             let pictograph = (0x1F000...0x1FAFF).contains(value)
                 || (0x2600...0x27BF).contains(value)
+                || (0x2300...0x23FF).contains(value)
+                || value == 0x2B50
+                || value == 0x2B55
                 || (0xFE00...0xFE0F).contains(value)
                 || value == 0x200D
+                || value == 0x20E3
                 || (0x1F1E6...0x1F1FF).contains(value)
             if !pictograph { filtered.append(scalar) }
         }
         return String(filtered)
+    }
+
+    /// Extract a leading `:icon:` or emoji token as (iconName, remainingCleanText).
+    static func extractLeadingIcon(_ text: String) -> (String?, String) {
+        let norm = emojiToIconTokens(text).trimmingCharacters(in: .whitespacesAndNewlines)
+        let ns = norm as NSString
+        if let m = try? NSRegularExpression(pattern: "^:([a-z0-9][a-z0-9-]{1,42}):\\s*(.*)$")
+            .firstMatch(in: norm, range: NSRange(location: 0, length: ns.length)) {
+            let rawIcon = ns.substring(with: m.range(at: 1))
+            let tail = ns.substring(with: m.range(at: 2))
+                .replacingOccurrences(of: ":([a-z0-9][a-z0-9-]{1,42}):", with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return (resolve(rawIcon), tail)
+        }
+        let cleaned = norm
+            .replacingOccurrences(of: ":([a-z0-9][a-z0-9-]{1,42}):", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (nil, cleaned)
+    }
+
+    /// Plain string with all emojis and `:icon:` tokens stripped cleanly.
+    static func cleanPlainText(_ text: String) -> String {
+        emojiToIconTokens(text)
+            .replacingOccurrences(of: ":([a-z0-9][a-z0-9-]{1,42}):", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     enum InlinePart {

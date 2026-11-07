@@ -37,9 +37,10 @@ import { ParallelChartView } from '../charts/ParallelChart'
 import { DendrogramChartView } from '../charts/DendrogramChart'
 import { ForceGraphChartView } from '../charts/ForceGraphChart'
 import { DepthChartView } from '../charts/DepthChart'
+import { GlassIcon } from '@/components/nexly/GlassIcon'
 
 const SWITCHABLE_TYPES = new Set(['line', 'bar', 'area', 'pie', 'donut'])
-const RANGE_OPTIONS = ['Last 7 Days', 'Last 30 Days', 'Last 6 Months', 'Last 12 Months']
+const RANGE_OPTIONS = ['Last 3M', 'Last 6M', 'YTD', 'All']
 
 function formatCompactMetric(n: number, unit?: string): string {
   const prefix = unit === '$' || unit === '€' || unit === '£' ? unit : ''
@@ -94,29 +95,58 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
   const { theme } = useWidgetIdentity()
   const isSwitchable = SWITCHABLE_TYPES.has(payload.type)
   const [activeType, setActiveType] = useState<ChartPayload['type']>(payload.type)
-  const [rangeIdx, setRangeIdx] = useState<number>(2)
+  const [rangeIdx, setRangeIdx] = useState<number>(1)
+
+  const slicedPayload = useMemo<ChartPayload>(() => {
+    const rawFirst = payload.series?.[0]?.data ?? []
+    const totalPts = Math.max(rawFirst.length, payload.labels?.length ?? 0)
+    if (totalPts <= 2) return payload
+    const windowSize =
+      rangeIdx === 0
+        ? Math.min(totalPts, Math.max(2, Math.min(3, Math.ceil(totalPts / 2))))
+        : rangeIdx === 1
+        ? Math.min(totalPts, Math.max(2, Math.min(6, Math.ceil((totalPts * 3) / 4))))
+        : rangeIdx === 2
+        ? Math.min(totalPts, Math.max(2, Math.min(9, totalPts - 1)))
+        : totalPts
+    const startIdx = Math.max(0, totalPts - windowSize)
+    return {
+      ...payload,
+      labels: payload.labels ? payload.labels.slice(startIdx) : payload.labels,
+      series: payload.series?.map((s) => ({
+        ...s,
+        data: s.data.slice(startIdx),
+      })),
+    }
+  }, [payload, rangeIdx])
 
   const summary = useMemo(() => {
-    const firstSeries = payload.series?.[0]?.data ?? []
+    const firstSeries = slicedPayload.series?.[0]?.data ?? []
     if (firstSeries.length < 2) return null
     const vals = firstSeries.map((pt) => Number(pt[1] ?? pt[0] ?? 0) || 0)
     const total = vals.reduce((a, b) => a + b, 0)
     let peakIdx = 0
+    let minIdx = 0
     vals.forEach((v, i) => {
       if (v > vals[peakIdx]) peakIdx = i
+      if (v < vals[minIdx]) minIdx = i
     })
     const first = vals[0] || 1
     const last = vals[vals.length - 1] ?? 0
     const growthPct = ((last - first) / Math.abs(first)) * 100
-    const peakLabel = payload.labels?.[peakIdx] ?? `#${peakIdx + 1}`
+    const peakLabel = slicedPayload.labels?.[peakIdx] ?? String(firstSeries[peakIdx]?.[0] ?? `#${peakIdx + 1}`)
+    const minLabel = slicedPayload.labels?.[minIdx] ?? String(firstSeries[minIdx]?.[0] ?? `#${minIdx + 1}`)
     return {
-      total: formatCompactMetric(total, payload.unit),
+      total: formatCompactMetric(total, slicedPayload.unit),
       peakLabel,
-      peakVal: formatCompactMetric(vals[peakIdx] ?? 0, payload.unit),
+      peakVal: formatCompactMetric(vals[peakIdx] ?? 0, slicedPayload.unit),
+      minLabel,
+      minVal: formatCompactMetric(vals[minIdx] ?? 0, slicedPayload.unit),
       growthPct: `${growthPct >= 0 ? '+' : ''}${growthPct.toFixed(1)}%`,
       growthPos: growthPct >= 0,
+      pointCount: vals.length,
     }
-  }, [payload.series, payload.labels, payload.unit])
+  }, [slicedPayload.series, slicedPayload.labels, slicedPayload.unit])
 
   const rawPayload = payload as unknown as Record<string, unknown>
   const explicitInsights: string[] = Array.isArray(rawPayload.insights)
@@ -132,11 +162,21 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
   }
 
   const tabs: Array<{ id: ChartPayload['type']; icon: string; label: string }> = [
-    { id: 'line', icon: '📈', label: 'Line Chart' },
-    { id: 'bar', icon: '📊', label: 'Bar Chart' },
-    { id: 'area', icon: '📉', label: 'Area Chart' },
-    { id: payload.type === 'donut' ? 'donut' : 'pie', icon: '◔', label: 'Pie Chart' },
+    { id: 'line', icon: 'chart-line', label: 'Line Chart' },
+    { id: 'bar', icon: 'chart-bar', label: 'Bar Chart' },
+    { id: 'area', icon: 'chart-area', label: 'Area Chart' },
+    { id: payload.type === 'donut' ? 'donut' : 'pie', icon: 'chart-pie', label: 'Pie Chart' },
   ]
+
+  const computedInsights =
+    explicitInsights.length > 0
+      ? explicitInsights
+      : summary
+      ? [
+          `${summary.peakLabel} recorded the highest value (${summary.peakVal}) across ${summary.pointCount} points (${RANGE_OPTIONS[rangeIdx]}).`,
+          `Net trajectory is ${summary.growthPct} with cumulative volume ${summary.total} (low: ${summary.minLabel} at ${summary.minVal}).`,
+        ]
+      : []
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -172,7 +212,7 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 4,
+                  gap: 5,
                   padding: '4px 9px',
                   borderRadius: 7,
                   border: 'none',
@@ -183,7 +223,7 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
                   cursor: 'pointer',
                 }}
               >
-                <span aria-hidden>{tab.icon}</span>
+                <GlassIcon name={tab.icon} tone={selected ? 'indigo' : 'lavender'} size={16} glyph={10} />
                 <span>{tab.label}</span>
               </button>
             )
@@ -207,13 +247,13 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
             cursor: 'pointer',
           }}
         >
-          <span aria-hidden>📅</span>
+          <GlassIcon name="calendar" tone="lavender" size={16} glyph={10} />
           <span>{RANGE_OPTIONS[rangeIdx]} ▾</span>
         </button>
       </div>
 
       {/* Active Chart Canvas */}
-      {dispatchChartView(activeType, { ...payload, type: activeType })}
+      {dispatchChartView(activeType, { ...slicedPayload, type: activeType })}
 
       {/* 3-Card KPI Summary Strip (Screenshot 6) */}
       {summary && (
@@ -248,7 +288,10 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
           >
             <div style={{ fontSize: 10.5, color: theme.text3, fontWeight: 600 }}>Peak ({summary.peakLabel})</div>
             <div style={{ fontSize: 14, fontWeight: 800, color: theme.text, marginTop: 2 }}>{summary.peakVal}</div>
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: '#6C4CF6', marginTop: 2 }}>★ Highest</div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10.5, fontWeight: 700, color: '#6C4CF6', marginTop: 2 }}>
+              <GlassIcon name="trophy" tone="amber" size={14} glyph={9} />
+              <span>Highest</span>
+            </div>
           </div>
           <div
             style={{
@@ -275,7 +318,7 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
       )}
 
       {/* Key Insights Box (Screenshot 6) */}
-      {explicitInsights.length > 0 && (
+      {computedInsights.length > 0 && (
         <div
           style={{
             padding: '10px 12px',
@@ -287,11 +330,11 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
           }}
         >
           <div style={{ fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span aria-hidden>💡</span>
+            <GlassIcon name="bulb" tone="lavender" size={20} glyph={11} />
             <span>Key Insights</span>
           </div>
           <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {explicitInsights.map((ins, i) => (
+            {computedInsights.map((ins, i) => (
               <li key={i} style={{ color: theme.text2 }}>
                 {ins}
               </li>

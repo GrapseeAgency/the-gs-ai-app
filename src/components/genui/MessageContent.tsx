@@ -23,7 +23,7 @@ import { HtmlBlock } from './blocks/HtmlBlock'
 import { SvgBlock } from './blocks/SvgBlock'
 import { CodeBlock } from './blocks/CodeBlock'
 import { themeFor, TYPE } from './theme/tokens'
-import { canonicalIconName, emojiToIconTokens, ICON_TOKEN_RE } from '@/lib/nexly/icons'
+import { canonicalIconName, emojiToIconTokens, ICON_TOKEN_RE, extractLeadingIcon, cleanPlainText } from '@/lib/nexly/icons'
 import { GlassIcon } from '@/components/nexly/GlassIcon'
 
 /** A persisted citation the host knows about — [N] markers resolve to these. */
@@ -603,37 +603,41 @@ function matchCalloutText(raw: string): CalloutMatch | null {
     const kind = alertMatch[1].toUpperCase()
     const body = alertMatch[2].trim()
     if (kind === 'WARNING' || kind === 'CAUTION' || kind === 'IMPORTANT') {
-      return { tone: 'warning', icon: '⚠️', title: kind === 'IMPORTANT' ? 'Important' : 'Warning', body }
+      return { tone: 'warning', icon: 'alert-triangle', title: kind === 'IMPORTANT' ? 'Important' : 'Warning', body }
     }
-    return { tone: 'fact', icon: '💡', title: kind === 'TIP' ? 'Key Insight' : 'Note', body }
+    return { tone: 'fact', icon: 'bulb', title: kind === 'TIP' ? 'Key Insight' : 'Note', body }
   }
-  const leadMatch = trimmed.match(
-    /^(?:(?:⚡|⚠️|💡|✦|📌)\s*)?\*\*(Quick summary|Summary|TL;DR|Important|Warning|Caution|Key Insights?|Quick Fact|Pro Tip|Tip|Note)\s*:?\*\*\s*:?\s*([\s\S]+)$/i
+  const normalized = emojiToIconTokens(trimmed)
+  const leadMatch = normalized.match(
+    /^(?:(?::[a-z0-9-]+:|✦)\s*)?\*\*(Quick summary|Summary|TL;DR|Important|Warning|Caution|Key Insights?|Quick Fact|Pro Tip|Tip|Note)\s*:?\*\*\s*:?\s*([\s\S]+)$/i
   )
   if (!leadMatch) return null
   const label = leadMatch[1].trim()
   const body = leadMatch[2].trim()
   const lower = label.toLowerCase()
   if (lower === 'important' || lower === 'warning' || lower === 'caution') {
-    return { tone: 'warning', icon: '⚠️', title: label, body }
+    return { tone: 'warning', icon: 'alert-triangle', title: label, body }
   }
   if (lower.includes('fact') || lower.includes('insight') || lower.includes('tip') || lower === 'note') {
-    return { tone: 'fact', icon: '💡', title: label, body }
+    return { tone: 'fact', icon: 'bulb', title: label, body }
   }
-  return { tone: 'summary', icon: '⚡', title: label, body }
+  return { tone: 'summary', icon: 'bolt', title: label, body }
 }
 
-function sectionBadgeForHeading(raw: string): string | null {
-  const clean = raw.replace(/[*_`~]/g, '').trim()
-  if (/^[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}✦⚡🎯☰☑️🔗📖📊💡⚠️]/u.test(clean)) return null
+function sectionBadgeForHeading(raw: string): { icon: string; tone: string } | null {
+  const { icon: explicitIcon, rest } = extractLeadingIcon(raw.replace(/[*_`~]/g, '').trim())
+  if (explicitIcon) return { icon: explicitIcon, tone: 'lavender' }
+  const clean = cleanPlainText(rest).trim()
   const lower = clean.toLowerCase()
-  if (lower.includes('priorit') || lower.includes('goal') || lower.includes('objective')) return '🎯'
-  if (lower.includes('step-by-step') || lower.includes('steps') || lower.includes('plan') || lower.includes('roadmap')) return '☰'
-  if (lower.includes('next action') || lower.includes('action item') || lower.includes('checklist') || lower.includes('todo')) return '☑️'
-  if (lower.includes('key source') || lower.includes('sources')) return '🔗'
-  if (lower.includes('reference') || lower.includes('citation') || lower.includes('further reading')) return '📖'
-  if (lower.includes('feature') || lower.includes('highlight') || lower.includes('benefit')) return '✦'
-  if (lower.startsWith('top ') || lower.includes('chart') || lower.includes('metric') || lower.includes('overview')) return '📊'
+  if (lower.includes('priorit') || lower.includes('goal') || lower.includes('objective')) return { icon: 'target', tone: 'rose' }
+  if (lower.includes('step-by-step') || lower.includes('steps') || lower.includes('plan') || lower.includes('roadmap')) return { icon: 'list-check', tone: 'lavender' }
+  if (lower.includes('next action') || lower.includes('action item') || lower.includes('checklist') || lower.includes('todo')) return { icon: 'checkbox', tone: 'green' }
+  if (lower.includes('key source') || lower.includes('sources')) return { icon: 'link', tone: 'blue' }
+  if (lower.includes('reference') || lower.includes('citation') || lower.includes('further reading')) return { icon: 'book-2', tone: 'indigo' }
+  if (lower.includes('feature') || lower.includes('highlight') || lower.includes('benefit')) return { icon: 'sparkles', tone: 'amber' }
+  if (lower.startsWith('top ') || lower.includes('chart') || lower.includes('metric') || lower.includes('overview')) return { icon: 'chart-bar', tone: 'cyan' }
+  if (lower.includes('calculator') || lower.includes('budget') || lower.includes('pricing')) return { icon: 'calculator', tone: 'amber' }
+  if (lower.includes('code') || lower.includes('implementation') || lower.includes('snippet')) return { icon: 'code', tone: 'slate' }
   return null
 }
 
@@ -644,20 +648,21 @@ function splitStepTitleAndDetail(raw: string): { title: string; detail: string }
 }
 
 function classifyCalloutHeader(raw: string): { tone: 'summary' | 'warning' | 'fact'; icon: string; title: string } | null {
-  const clean = raw.replace(/^[#*>`~\s]+|[*_`~:\s]+$/g, '').trim()
+  const { rest } = extractLeadingIcon(raw.replace(/^[#*>`~\s]+|[*_`~:\s]+$/g, '').trim())
+  const clean = cleanPlainText(rest).replace(/[:\s]+$/, '').trim()
   const lower = clean.toLowerCase()
   if (['important', 'warning', 'caution', 'attention', 'important notice'].includes(lower)) {
-    return { tone: 'warning', icon: '⚠️', title: clean }
+    return { tone: 'warning', icon: 'alert-triangle', title: clean }
   }
   if (['quick summary', 'summary', 'tl;dr', 'tldr', 'executive summary'].includes(lower)) {
-    return { tone: 'summary', icon: '⚡', title: clean }
+    return { tone: 'summary', icon: 'bolt', title: clean }
   }
   if (
     ['key insight', 'key insights', 'quick fact', 'quick facts', 'pro tip', 'tip', 'note', 'key takeaway', 'key takeaways'].includes(
       lower
     )
   ) {
-    return { tone: 'fact', icon: '💡', title: clean }
+    return { tone: 'fact', icon: 'bulb', title: clean }
   }
   return null
 }
@@ -746,23 +751,13 @@ function renderCalloutCard(
         boxShadow: '0 4px 14px rgba(90, 65, 180, 0.06)',
       }}
     >
-      <span
-        aria-hidden
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 26,
-          height: 26,
-          borderRadius: 8,
-          background: isWarning ? 'rgba(245, 158, 11, 0.18)' : 'rgba(124, 92, 252, 0.15)',
-          fontSize: 14,
-          flexShrink: 0,
-          marginTop: 1,
-        }}
-      >
-        {callout.icon}
-      </span>
+      <GlassIcon
+        name={callout.icon}
+        tone={isWarning ? 'amber' : callout.tone === 'fact' ? 'lavender' : 'indigo'}
+        size={26}
+        glyph={14}
+        style={{ flexShrink: 0, marginTop: 1 }}
+      />
       <div style={{ flex: 1, minWidth: 0, color: bodyColor, fontSize: 13.5, lineHeight: 1.55, display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div style={{ fontWeight: 700, color: titleColor, fontSize: 14 }}>{callout.title}</div>
         {callout.body ? (
@@ -840,18 +835,18 @@ function InteractiveProseChecklistItem({
   )
 }
 
-function proseEntityBadge(raw: string): { icon: string; color: string } | null {
+function proseEntityBadge(raw: string): { icon: string; color: string; glassIcon?: string } | null {
   const clean = raw.replace(/[*_`]/g, '').trim().toLowerCase()
-  if (clean === 'python') return { icon: '🐍', color: '#3776AB' }
-  if (clean === 'java') return { icon: '☕', color: '#E76F00' }
-  if (clean === 'c++') return { icon: 'C+', color: '#00599C' }
-  if (clean === 'c') return { icon: 'C', color: '#283593' }
-  if (clean === 'javascript' || clean === 'js') return { icon: 'JS', color: '#D99B00' }
-  if (clean === 'typescript' || clean === 'ts') return { icon: 'TS', color: '#3178C6' }
-  if (clean === 'rust') return { icon: 'Rs', color: '#CE422B' }
-  if (clean === 'go' || clean === 'golang') return { icon: 'Go', color: '#00ADD8' }
-  if (clean.startsWith('nexly')) return { icon: '✦', color: '#6C4CF6' }
-  if (clean.startsWith('data')) return { icon: '📊', color: '#3B82F6' }
+  if (clean === 'python') return { icon: 'Py', color: '#3776AB', glassIcon: 'brand-python' }
+  if (clean === 'java') return { icon: 'Jv', color: '#E76F00', glassIcon: 'coffee' }
+  if (clean === 'c++') return { icon: 'C+', color: '#00599C', glassIcon: 'code' }
+  if (clean === 'c') return { icon: 'C', color: '#283593', glassIcon: 'code' }
+  if (clean === 'javascript' || clean === 'js') return { icon: 'JS', color: '#D99B00', glassIcon: 'code' }
+  if (clean === 'typescript' || clean === 'ts') return { icon: 'TS', color: '#3178C6', glassIcon: 'code' }
+  if (clean === 'rust') return { icon: 'Rs', color: '#CE422B', glassIcon: 'code' }
+  if (clean === 'go' || clean === 'golang') return { icon: 'Go', color: '#00ADD8', glassIcon: 'code' }
+  if (clean.startsWith('nexly')) return { icon: 'Nx', color: '#6C4CF6', glassIcon: 'sparkles' }
+  if (clean.startsWith('data')) return { icon: 'Dt', color: '#3B82F6', glassIcon: 'chart-bar' }
   return null
 }
 
@@ -870,10 +865,29 @@ function ProseTableGrid({
 }) {
   const [pageSize, setPageSize] = useState<number>(5)
   const [page, setPage] = useState<number>(0)
-  const totalPages = Math.max(1, Math.ceil(block.rows.length / pageSize))
-  const displayTotalPages = Math.max(totalPages, block.rows.length >= 5 ? 3 : 1)
+  const [sortCol, setSortCol] = useState<number | null>(null)
+  const [sortAsc, setSortAsc] = useState<boolean>(true)
+
+  const sortedRows = useMemo(() => {
+    if (sortCol === null) return block.rows
+    const parseSortableNum = (cell: string): number | null => {
+      const cleaned = cell.replace(/[*_`~,$%€£¥₹↑↓↗↘+,\s]/g, '').trim()
+      const n = Number(cleaned)
+      return cleaned && Number.isFinite(n) ? n : null
+    }
+    return [...block.rows].sort((a, b) => {
+      const ca = (a[sortCol] ?? '').replace(/[*_`~]/g, '').trim()
+      const cb = (b[sortCol] ?? '').replace(/[*_`~]/g, '').trim()
+      const na = parseSortableNum(ca)
+      const nb = parseSortableNum(cb)
+      const cmp = na !== null && nb !== null ? na - nb : ca.localeCompare(cb, undefined, { numeric: true, sensitivity: 'base' })
+      return sortAsc ? cmp : -cmp
+    })
+  }, [block.rows, sortCol, sortAsc])
+
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize))
   const safePage = Math.min(page, totalPages - 1)
-  const visibleRows = block.rows.slice(safePage * pageSize, safePage * pageSize + pageSize)
+  const visibleRows = sortedRows.slice(safePage * pageSize, safePage * pageSize + pageSize)
   const firstHeaderClean = (block.headers[0] ?? '').replace(/[*_`]/g, '').trim()
   const primaryNameCol = ['#', 'Rank', 'No', 'ID'].includes(firstHeaderClean) ? 1 : 0
 
@@ -944,14 +958,30 @@ function ProseTableGrid({
             {block.headers.map((h, c) => (
               <th
                 key={c}
+                onClick={() => {
+                  if (sortCol === c) {
+                    setSortAsc((prev) => !prev)
+                  } else {
+                    setSortCol(c)
+                    setSortAsc(true)
+                  }
+                  setPage(0)
+                }}
                 style={{
                   padding: '9px 12px',
                   textAlign: block.aligns[c] ?? 'left',
                   fontWeight: 700,
                   color: theme.text,
+                  cursor: 'pointer',
+                  userSelect: 'none',
                 }}
               >
-                {renderInline(h, theme, accent, citations, `th${idx}-${c}`)}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <span>{renderInline(h, theme, accent, citations, `th${idx}-${c}`)}</span>
+                  {sortCol === c && (
+                    <span style={{ fontSize: 10, color: '#6C4CF6' }}>{sortAsc ? '↑' : '↓'}</span>
+                  )}
+                </span>
               </th>
             ))}
           </tr>
@@ -976,7 +1006,7 @@ function ProseTableGrid({
           ))}
         </tbody>
       </table>
-      {block.rows.length >= 4 && (
+      {sortedRows.length >= 4 && (
         <div
           style={{
             display: 'flex',
@@ -1004,13 +1034,11 @@ function ProseTableGrid({
             >
               ‹
             </button>
-            {Array.from({ length: displayTotalPages }, (_, p) => (
+            {Array.from({ length: totalPages }, (_, p) => (
               <button
                 key={p}
                 type="button"
-                onClick={() => {
-                  if (p < totalPages) setPage(p)
-                }}
+                onClick={() => setPage(p)}
                 style={{
                   width: 24,
                   height: 24,
@@ -1041,11 +1069,14 @@ function ProseTableGrid({
             >
               ›
             </button>
+            <span style={{ fontSize: 11, color: theme.text2, marginLeft: 4 }}>
+              {safePage * pageSize + 1}–{Math.min(sortedRows.length, (safePage + 1) * pageSize)} of {sortedRows.length}
+            </span>
           </div>
           <button
             type="button"
             onClick={() => {
-              const next = pageSize === 5 ? 10 : pageSize === 10 ? 25 : 5
+              const next = pageSize === 3 ? 5 : pageSize === 5 ? 10 : pageSize === 10 ? 25 : 3
               setPageSize(next)
               setPage(0)
             }}
@@ -1060,7 +1091,148 @@ function ProseTableGrid({
               cursor: 'pointer',
             }}
           >
-            Show: {pageSize} ▾
+            Show: {pageSize >= sortedRows.length ? 'All' : pageSize} ▾
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function InteractiveProseTodoList({
+  block,
+  idx,
+  theme,
+  accent,
+  citations,
+}: {
+  block: Extract<ProseBlock, { kind: 'bulletList' }>
+  idx: number
+  theme: Theme
+  accent: string
+  citations?: Citation[]
+}) {
+  const [extraTasks, setExtraTasks] = useState<string[]>([])
+  const [isAdding, setIsAdding] = useState(false)
+  const [newTaskText, setNewTaskText] = useState('')
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <ul
+        style={{
+          margin: 0,
+          paddingLeft: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4,
+          color: theme.text,
+          listStyleType: 'none',
+        }}
+      >
+        {block.items.map((item, j) => (
+          <InteractiveProseChecklistItem
+            key={j}
+            item={item.checked !== undefined ? item : { ...item, checked: false }}
+            idx={idx}
+            j={j}
+            theme={theme}
+            accent={accent}
+            citations={citations}
+          />
+        ))}
+        {extraTasks.map((task, ti) => (
+          <InteractiveProseChecklistItem
+            key={`extra-${ti}`}
+            item={{ checked: false, text: task, continuations: [], children: [] }}
+            idx={idx}
+            j={block.items.length + ti}
+            theme={theme}
+            accent={accent}
+            citations={citations}
+          />
+        ))}
+      </ul>
+      {isAdding ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+          <input
+            type="text"
+            value={newTaskText}
+            onChange={(e) => setNewTaskText(e.target.value)}
+            placeholder="Type a new task…"
+            style={{
+              flex: 1,
+              padding: '5px 10px',
+              borderRadius: 8,
+              border: '1px solid rgba(124, 92, 252, 0.35)',
+              background: theme.card,
+              color: theme.text,
+              fontSize: 12.5,
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const t = newTaskText.trim()
+              if (t) {
+                setExtraTasks((prev) => [...prev, t])
+                setNewTaskText('')
+                setIsAdding(false)
+              }
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '4px 10px',
+              borderRadius: 999,
+              border: 'none',
+              background: '#6C4CF6',
+              color: '#FFFFFF',
+              fontSize: 11.5,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Add
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setNewTaskText('')
+              setIsAdding(false)
+            }}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: theme.text2,
+              fontSize: 11.5,
+              cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div>
+          <button
+            type="button"
+            onClick={() => setIsAdding(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '4px 10px',
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 700,
+              color: '#5B3DF5',
+              background: 'rgba(124, 92, 252, 0.10)',
+              border: '1px solid rgba(124, 92, 252, 0.24)',
+              cursor: 'pointer',
+            }}
+          >
+            <GlassIcon name="plus" tone="lavender" size={16} glyph={10} />
+            <span>Add Task</span>
           </button>
         </div>
       )}
@@ -1093,6 +1265,8 @@ function renderProseBlock(
       const sizes: Record<number, number> = { 1: 21, 2: 17.5, 3: 15.5, 4: 14.5, 5: 13.5, 6: 13 }
       const Tag = (`h${Math.min(6, Math.max(1, block.level))}` as unknown) as 'h2'
       const badge = block.level >= 2 && block.level <= 3 ? sectionBadgeForHeading(block.text) : null
+      const { rest } = extractLeadingIcon(block.text.trim())
+      const cleanHeadingText = badge ? cleanPlainText(rest).trim() || block.text : block.text
       return (
         <Tag
           key={idx}
@@ -1104,15 +1278,11 @@ function renderProseBlock(
             color: block.level === 6 ? theme.text2 : theme.text,
             display: 'flex',
             alignItems: 'center',
-            gap: 7,
+            gap: 8,
           }}
         >
-          {badge && (
-            <span aria-hidden style={{ fontSize: Math.max(13, (sizes[block.level] ?? 15) - 2) }}>
-              {badge}
-            </span>
-          )}
-          <span>{renderInline(block.text, theme, accent, citations, `h${idx}`)}</span>
+          {badge && <GlassIcon name={badge.icon} tone={badge.tone as never} size={24} glyph={13} />}
+          <span>{renderInline(cleanHeadingText, theme, accent, citations, `h${idx}`)}</span>
         </Tag>
       )
     }
@@ -1211,34 +1381,36 @@ function renderProseBlock(
         }
       }
       const isTodoSection = sectionMode === 'todo' || block.items.some((it) => it.checked !== undefined)
+      if (isTodoSection) {
+        return (
+          <InteractiveProseTodoList
+            key={idx}
+            block={block}
+            idx={idx}
+            theme={theme}
+            accent={accent}
+            citations={citations}
+          />
+        )
+      }
       const isCheckmarkSection = sectionMode === 'checkmark'
       return (
         <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <ul
             style={{
               margin: 0,
-              paddingLeft: isTodoSection || isCheckmarkSection ? 0 : 20,
+              paddingLeft: isCheckmarkSection ? 0 : 20,
               display: 'flex',
               flexDirection: 'column',
-              gap: isTodoSection ? 4 : 5,
+              gap: 5,
               color: theme.text,
-              listStyleType: isTodoSection || isCheckmarkSection ? 'none' : 'disc',
+              listStyleType: isCheckmarkSection ? 'none' : 'disc',
             }}
           >
             {block.items.map((item, j) =>
-              item.checked !== undefined || isTodoSection ? (
-                <InteractiveProseChecklistItem
-                  key={j}
-                  item={item.checked !== undefined ? item : { ...item, checked: false }}
-                  idx={idx}
-                  j={j}
-                  theme={theme}
-                  accent={accent}
-                  citations={citations}
-                />
-              ) : isCheckmarkSection ? (
+              isCheckmarkSection ? (
                 <li key={j} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <span style={{ color: '#6C4CF6', fontWeight: 800, flexShrink: 0 }}>✓</span>
+                  <GlassIcon name="circle-check" tone="lavender" size={18} glyph={11} style={{ marginTop: 2, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <span>{renderInline(item.text, theme, accent, citations, `li${idx}-${j}`)}</span>
                     {item.continuations.map((c, ci) => (
@@ -1265,26 +1437,6 @@ function renderProseBlock(
               )
             )}
           </ul>
-          {isTodoSection && (
-            <div>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  padding: '3px 10px',
-                  borderRadius: 999,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: '#5B3DF5',
-                  background: 'rgba(124, 92, 252, 0.10)',
-                  border: '1px solid rgba(124, 92, 252, 0.24)',
-                }}
-              >
-                + Add Task
-              </span>
-            </div>
-          )}
         </div>
       )
     }
@@ -1501,7 +1653,7 @@ function CitationsSourceCards({
           }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span aria-hidden>🔗</span>
+            <GlassIcon name="link" tone="blue" size={22} glyph={12} />
             <span>Key Sources</span>
           </span>
           <span style={{ fontSize: 12, fontWeight: 600, color: '#6C4CF6' }}>
@@ -1587,7 +1739,7 @@ function CitationsSourceCards({
                     color: '#5B3DF5',
                   }}
                 >
-                  <span>↗</span>
+                  <GlassIcon name="external-link" tone="indigo" size={16} glyph={10} />
                   <span>{domain}</span>
                 </span>
                 <span
@@ -1603,7 +1755,7 @@ function CitationsSourceCards({
                     color: academic ? '#5B3DF5' : '#129A5A',
                   }}
                 >
-                  <span>{academic ? '🏛' : '✓'}</span>
+                  <GlassIcon name={academic ? 'building-bank' : 'shield-check'} tone={academic ? 'indigo' : 'green'} size={15} glyph={9} />
                   <span>{academic ? 'Academic' : 'Trusted Source'}</span>
                 </span>
               </div>
@@ -1628,52 +1780,53 @@ function deriveContextualActionPills(
   const hasTable =
     segments.some((s) => s.kind === 'widget' && s.widget === 'table') || /\|[^\n]+\|\s*\n\s*\|[\s:-]+\|/.test(rawText)
   const hasCode = segments.some((s) => s.kind === 'code')
+  const normalizedText = emojiToIconTokens(rawText)
   const hasSources =
     (citations && citations.length > 0) ||
-    /##+\s*(?:🔗\s*)?(?:Key\s+)?Sources/i.test(rawText)
+    /##+\s*(?::[a-z0-9-]+:\s*)?(?:Key\s+)?Sources/i.test(normalizedText)
   const hasPlanOrSteps =
     /^\s*1\.\s+\*\*/m.test(rawText) ||
     /^\s*[-*]\s+\[[ xX]\]/m.test(rawText) ||
-    /##+\s*(?:☑️\s*)?(?:Next\s+actions|Your\s+Todo\s+List)/i.test(rawText)
+    /##+\s*(?::[a-z0-9-]+:\s*)?(?:Next\s+actions|Your\s+Todo\s+List)/i.test(normalizedText)
 
   if (hasChart && hasTable && hasCode) {
     return [
-      { icon: '💬', label: 'Ask follow-up' },
-      { icon: '📊', label: 'Show me a detailed report' },
-      { icon: '✦', label: 'Create a presentation' },
+      { icon: 'message-circle', label: 'Ask follow-up' },
+      { icon: 'chart-bar', label: 'Show me a detailed report' },
+      { icon: 'sparkles', label: 'Create a presentation' },
     ]
   }
   if (hasChart) {
     return [
-      { icon: '⤓', label: 'Download Report' },
-      { icon: '⤢', label: 'View Details' },
+      { icon: 'download', label: 'Download Report' },
+      { icon: 'arrows-maximize', label: 'View Details' },
     ]
   }
   if (hasTable) {
     return [
-      { icon: '📊', label: 'View Full Report' },
-      { icon: '🔗', label: 'Share' },
+      { icon: 'chart-bar', label: 'View Full Report' },
+      { icon: 'share', label: 'Share' },
     ]
   }
   if (hasSources) {
     return [
-      { icon: '↗', label: 'View All Sources' },
-      { icon: '📋', label: 'Copy Citations' },
-      { icon: '📖', label: 'Learn More' },
+      { icon: 'external-link', label: 'View All Sources' },
+      { icon: 'clipboard', label: 'Copy Citations' },
+      { icon: 'book-2', label: 'Learn More' },
     ]
   }
   if (hasCode) {
     return [
-      { icon: '</>', label: 'Edit Code' },
-      { icon: '⤓', label: 'Download Project' },
-      { icon: '💬', label: 'Ask Follow Up' },
+      { icon: 'code', label: 'Edit Code' },
+      { icon: 'download', label: 'Download Project' },
+      { icon: 'message-circle', label: 'Ask Follow Up' },
     ]
   }
   if (hasPlanOrSteps) {
     return [
-      { icon: '📅', label: 'Make a timeline' },
-      { icon: '⤢', label: 'Expand plan' },
-      { icon: '🔗', label: 'Share' },
+      { icon: 'calendar', label: 'Make a timeline' },
+      { icon: 'arrows-maximize', label: 'Expand plan' },
+      { icon: 'share', label: 'Share' },
     ]
   }
   return []
@@ -1751,7 +1904,7 @@ export function MessageContent({
                 cursor: 'pointer',
               }}
             >
-              <span style={{ color: '#6C4CF6', fontWeight: 800 }}>{pill.icon}</span>
+              <GlassIcon name={pill.icon} tone="lavender" size={18} glyph={11} />
               <span>{pill.label}</span>
             </button>
           ))}

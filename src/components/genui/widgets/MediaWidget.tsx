@@ -7,6 +7,7 @@ import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { TitleRow } from '../primitives/TitleRow'
 import { EmptyState } from '../primitives/EmptyState'
 import { CopyChip } from '../primitives/CopyChip'
+import { GlassIcon } from '@/components/nexly/GlassIcon'
 
 /** Media — image/gallery/video/audio/code/file/link/citation/search/entity/product/listing/doc/embed/pdf. */
 export function MediaWidget({ payload, onPrompt }: { payload: MediaPayload; onPrompt?: (p: string) => void }) {
@@ -173,8 +174,9 @@ function MediaRow({
         ) : null}
         {isCitationLike ? (
           <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: TYPE.micro, fontWeight: 600, color: '#5B3DF5' }}>
-              ↗ {domain || item.url || 'Source'}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: TYPE.micro, fontWeight: 600, color: '#5B3DF5' }}>
+              <GlassIcon name="external-link" tone="indigo" size={15} glyph={9} />
+              <span>{domain || item.url || 'Source'}</span>
             </span>
             <span
               style={{
@@ -189,14 +191,20 @@ function MediaRow({
                 color: academic ? '#5B3DF5' : '#129A5A',
               }}
             >
-              {academic ? '🏛 Academic' : '✓ Trusted Source'}
+              <GlassIcon name={academic ? 'building-bank' : 'shield-check'} tone={academic ? 'indigo' : 'green'} size={14} glyph={9} />
+              <span>{academic ? 'Academic' : 'Trusted Source'}</span>
             </span>
           </span>
         ) : (
           (item.meta || item.price || item.rating || item.badge || item.domain) && (
             <span style={{ display: 'flex', gap: 8, marginTop: 4, fontSize: TYPE.micro, color: theme.text3, flexWrap: 'wrap' }}>
               {item.price ? <b style={{ color: accent }}>{item.price}</b> : null}
-              {item.rating ? <span>★ {item.rating}</span> : null}
+              {item.rating ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                  <GlassIcon name="star" tone="amber" size={14} glyph={9} />
+                  <span>{item.rating}</span>
+                </span>
+              ) : null}
               {item.badge ? <span style={{ fontWeight: 700, color: accent }}>{item.badge}</span> : null}
               <span>{item.meta ?? item.domain}</span>
             </span>

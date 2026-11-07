@@ -621,21 +621,38 @@ private fun CitationList(items: List<MediaItem>) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            "↗ ${domain.ifBlank { item.url }}",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = Color(0xFF5B3DF5),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Box(
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            NexlyGlyph(
+                                name = "external-link",
+                                size = 11.dp,
+                                color = Color(0xFF5B3DF5)
+                            )
+                            Text(
+                                domain.ifBlank { item.url },
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = Color(0xFF5B3DF5),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(if (academic) Color(0xFFEFEAFF) else Color(0xFFE6F9F0))
                                 .padding(horizontal = 8.dp, vertical = 2.dp)
                         ) {
+                            NexlyGlyph(
+                                name = if (academic) "building-bank" else "shield-check",
+                                size = 11.dp,
+                                color = if (academic) Color(0xFF5B3DF5) else Color(0xFF129A5A)
+                            )
                             Text(
-                                text = if (academic) "🏛 Academic" else "✓ Trusted Source",
+                                text = if (academic) "Academic" else "Trusted Source",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = if (academic) Color(0xFF5B3DF5) else Color(0xFF129A5A)
                             )

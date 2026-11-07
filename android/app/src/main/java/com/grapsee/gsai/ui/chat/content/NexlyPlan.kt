@@ -237,11 +237,35 @@ object NexlyIcons {
         "🍽️" to "tools-kitchen-2", "🍴" to "tools-kitchen-2", "🍔" to "tools-kitchen-2",
         "📝" to "file-text", "📄" to "file-text", "🏃" to "run", "🏃‍♂️" to "run", "🏃‍♀️" to "run",
         "🏋️" to "barbell", "🎮" to "device-gamepad-2", "🕹️" to "device-gamepad-2",
-        "🌙" to "moon", "😴" to "moon", "✨" to "sparkles", "🧠" to "brain",
+        "🌙" to "moon", "😴" to "moon", "✨" to "sparkles", "✦" to "sparkles", "🧠" to "brain",
         "⚙️" to "settings", "⚙" to "settings", "💪" to "flame", "🔥" to "flame",
         "❤️" to "heart", "❤" to "heart", "✅" to "circle-check", "✔️" to "circle-check",
+        "☑️" to "checkbox", "☑" to "checkbox",
         "⭐" to "star", "🎯" to "target", "☕" to "coffee", "🎨" to "palette",
-        "🎵" to "music", "🚶" to "walk", "📅" to "calendar", "⏰" to "clock"
+        "🎵" to "music", "🚶" to "walk", "📅" to "calendar", "⏰" to "clock",
+        "⏱️" to "clock", "⏳" to "hourglass",
+        "⚡" to "bolt", "⚠️" to "alert-triangle", "⚠" to "alert-triangle", "💡" to "bulb",
+        "📊" to "chart-bar", "📈" to "trending-up", "📉" to "trending-down",
+        "👥" to "users", "👤" to "user", "🧮" to "calculator",
+        "🔗" to "link", "🌐" to "world", "🌍" to "world", "🌎" to "world", "🌏" to "world",
+        "🏛️" to "building-bank", "🏛" to "building-bank",
+        "🚀" to "rocket", "🔒" to "lock", "🔓" to "lock-open",
+        "🛡️" to "shield", "🛡" to "shield", "🐍" to "brand-python",
+        "🔍" to "search", "🔎" to "search", "📌" to "pin", "📎" to "paperclip",
+        "📋" to "clipboard", "📁" to "folder", "📂" to "folder-open",
+        "💬" to "message-circle", "💭" to "message-circle", "🔔" to "bell",
+        "💰" to "coin", "💵" to "cash", "💳" to "credit-card",
+        "🏆" to "trophy", "🥇" to "trophy", "🎉" to "sparkles",
+        "🧪" to "flask", "🧬" to "dna", "🔬" to "microscope", "🎓" to "school",
+        "✈️" to "plane", "🚗" to "car", "🏠" to "home", "🌱" to "plant", "🌿" to "leaf",
+        "🔋" to "battery", "🔌" to "plug", "🧭" to "compass", "🗺️" to "map",
+        "🔑" to "key", "🛠️" to "tools", "🛠" to "tools", "🔧" to "tool",
+        "📱" to "device-mobile", "🛒" to "shopping-cart", "🧾" to "receipt",
+        "📧" to "mail", "✉️" to "mail", "📞" to "phone",
+        "🎥" to "video", "📷" to "camera", "🖼️" to "photo", "🖼" to "photo", "🎬" to "movie",
+        "👍" to "thumb-up", "👎" to "thumb-down", "😊" to "mood-smile", "😀" to "mood-smile",
+        "🤔" to "brain", "❌" to "circle-x", "❓" to "help-circle", "❗" to "alert-circle",
+        "ℹ️" to "info-circle", "ℹ" to "info-circle"
     )
 
     private val tokenRegex = Regex(":([a-z0-9][a-z0-9-]{1,42}):")
@@ -259,14 +283,32 @@ object NexlyIcons {
             val cp = out.codePointAt(i)
             val pictograph = cp in 0x1F000..0x1FAFF ||
                 cp in 0x2600..0x27BF ||
+                cp in 0x2300..0x23FF ||
+                cp == 0x2B50 ||
+                cp == 0x2B55 ||
                 cp in 0xFE00..0xFE0F ||
                 cp == 0x200D ||
+                cp == 0x20E3 ||
                 cp in 0x1F1E6..0x1F1FF
             if (!pictograph) filtered.appendCodePoint(cp)
             i += Character.charCount(cp)
         }
         return filtered.toString()
     }
+
+    /** Extract a leading `:icon:` or emoji token as (iconName, remainingCleanText) and strip any raw emojis. */
+    fun extractLeadingIcon(text: String): Pair<String?, String> {
+        val norm = normalize(text).trim()
+        val m = Regex("^:([a-z0-9][a-z0-9-]{1,42}):\\s*(.*)$").find(norm)
+        if (m != null) {
+            return resolve(m.groupValues[1]) to m.groupValues[2].replace(tokenRegex, "").trim()
+        }
+        return null to norm.replace(tokenRegex, "").replace(Regex("\\s+"), " ").trim()
+    }
+
+    /** Plain string with all emojis and `:icon:` tokens stripped cleanly. */
+    fun cleanPlainText(text: String): String =
+        normalize(text).replace(tokenRegex, "").replace(Regex("\\s+"), " ").trim()
 
     /** Split a run on the inline `:icon:` grammar. Unknown tokens stay
      * literal text, so a stray colon pair never silently disappears. */

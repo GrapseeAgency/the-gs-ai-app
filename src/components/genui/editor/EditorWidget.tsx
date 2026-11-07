@@ -417,7 +417,7 @@ function SiteEditor({ payload }: { payload: EditorPayload }) {
   const render = (b: { type: string; text: string }) => {
     if (b.type === 'hero') return <div style={{ fontSize: TYPE.title, fontWeight: 800, padding: '14px', background: `linear-gradient(120deg, ${alpha(accent, 0.25)}, transparent)`, borderRadius: 10 }}>{b.text}</div>
     if (b.type === 'button') return <span style={{ display: 'inline-block', padding: '8px 18px', borderRadius: 999, background: accent, color: theme.dark ? '#0F1216' : '#fff', fontWeight: 700, fontSize: TYPE.label }}>{b.text}</span>
-    if (b.type === 'image') return <div style={{ height: 64, borderRadius: 10, background: `repeating-linear-gradient(45deg, ${alpha(accent, 0.12)} 0 10px, ${alpha(accent, 0.05)} 10px 20px)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.text3, fontSize: TYPE.micro }}>🖼 {b.text}</div>
+    if (b.type === 'image') return <div style={{ height: 64, borderRadius: 10, background: `repeating-linear-gradient(45deg, ${alpha(accent, 0.12)} 0 10px, ${alpha(accent, 0.05)} 10px 20px)`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, color: theme.text3, fontSize: TYPE.micro }}><span>[Image]</span><span>{b.text}</span></div>
     return <p style={{ margin: 0, color: theme.text2, fontSize: TYPE.body, lineHeight: 1.55 }}>{b.text}</p>
   }
   return (

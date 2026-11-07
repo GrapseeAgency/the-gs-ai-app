@@ -371,8 +371,13 @@ private fun SiteEditorView(w: EditorWidgetData) {
                                 color = GsTheme.colors.appBackground,
                                 modifier = Modifier.background(seriesInk(0), RoundedCornerShape(999.dp)).padding(horizontal = 12.dp, vertical = 5.dp)
                             )
-                            "image" -> Box(Modifier.fillMaxWidth().height(28.dp).background(seriesInk(i % 12).copy(alpha = 0.14f), RoundedCornerShape(6.dp))) {
-                                Text("🖼 $text", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary, modifier = Modifier.padding(4.dp))
+                            "image" -> Row(
+                                modifier = Modifier.fillMaxWidth().height(28.dp).background(seriesInk(i % 12).copy(alpha = 0.14f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                NexlyGlyph(name = "photo", size = 12.dp, color = GsTheme.colors.textTertiary)
+                                Text(text, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)
                             }
                             else -> Text(text, style = MaterialTheme.typography.bodySmall, color = GsTheme.colors.textSecondary)
                         }

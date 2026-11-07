@@ -6,6 +6,7 @@ import { alpha, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { TitleRow } from '../primitives/TitleRow'
 import { EmptyState } from '../primitives/EmptyState'
+import { GlassIcon } from '@/components/nexly/GlassIcon'
 
 function monogramBadgeForCell(value: string): { code: string; bg: string; fg: string } | null {
   const clean = value.trim()
@@ -281,11 +282,14 @@ export function TableWidget({ payload }: { payload: TablePayload }) {
             >
               ›
             </button>
+            <span style={{ fontSize: 11, color: theme.text2, marginLeft: 4 }}>
+              {safePage * pageSize + 1}–{Math.min(rows.length, (safePage + 1) * pageSize)} of {rows.length}
+            </span>
           </div>
           <button
             type="button"
             onClick={() => {
-              const next = pageSize === 5 ? 10 : pageSize === 10 ? 25 : 5
+              const next = pageSize === 3 ? 5 : pageSize === 5 ? 10 : pageSize === 10 ? 25 : 3
               setPageSize(next)
               setPage(0)
             }}
@@ -300,36 +304,50 @@ export function TableWidget({ payload }: { payload: TablePayload }) {
               cursor: 'pointer',
             }}
           >
-            Show: {pageSize} ▾
+            Show: {pageSize >= rows.length ? 'All' : pageSize} ▾
           </button>
         </div>
       </div>
 
       {/* Key Insights Card (Screenshot 5) */}
-      {explicitInsights.length > 0 && (
-        <div
-          style={{
-            padding: '11px 13px',
-            borderRadius: 12,
-            background: 'rgba(124, 92, 252, 0.10)',
-            border: '1px solid rgba(124, 92, 252, 0.24)',
-            fontSize: 12.5,
-            color: theme.text,
-          }}
-        >
-          <div style={{ fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span aria-hidden>💡</span>
-            <span>Key Insights</span>
+      {(() => {
+        const computedInsights =
+          explicitInsights.length > 0
+            ? explicitInsights
+            : rows.length > 0
+            ? [
+                `${String(rows[0]?.[primaryNameCol] ?? rows[0]?.[0] ?? 'Top entry')} leads across ${rows.length} compared rows.`,
+                ...(rows.length >= 2
+                  ? [`Runner-up: ${String(rows[1]?.[primaryNameCol] ?? rows[1]?.[0] ?? 'Second entry')}.`]
+                  : []),
+              ]
+            : []
+        if (computedInsights.length === 0) return null
+        return (
+          <div
+            style={{
+              padding: '11px 13px',
+              borderRadius: 12,
+              background: 'rgba(124, 92, 252, 0.10)',
+              border: '1px solid rgba(124, 92, 252, 0.24)',
+              fontSize: 12.5,
+              color: theme.text,
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <GlassIcon name="bulb" tone="lavender" size={20} glyph={11} />
+              <span>Key Insights</span>
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {computedInsights.map((ins, idx) => (
+                <li key={idx} style={{ color: theme.text2 }}>
+                  {ins}
+                </li>
+              ))}
+            </ul>
           </div>
-          <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {explicitInsights.map((ins, idx) => (
-              <li key={idx} style={{ color: theme.text2 }}>
-                {ins}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { RADIUS, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { AppShell } from './AppShell'
 import { EmptyState } from '../primitives/EmptyState'
+import { GlassIcon } from '@/components/nexly/GlassIcon'
 
 /** Files — a simple file browser list. */
 export function AppFiles({ payload }: { payload: AppPayload }) {
@@ -15,12 +16,12 @@ export function AppFiles({ payload }: { payload: AppPayload }) {
   if (!items.length) return <EmptyState label="No files" />
   const icon = (name: string) => {
     const ext = name.split('.').pop()?.toLowerCase()
-    if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext ?? '')) return '🖼'
-    if (['mp4', 'webm', 'mov'].includes(ext ?? '')) return '🎬'
-    if (['mp3', 'm4a', 'wav', 'ogg'].includes(ext ?? '')) return '🎵'
-    if (['pdf', 'doc', 'docx'].includes(ext ?? '')) return '📄'
-    if (['zip', 'tar', 'gz'].includes(ext ?? '')) return '🗜'
-    return '📃'
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext ?? '')) return 'photo'
+    if (['mp4', 'webm', 'mov'].includes(ext ?? '')) return 'video'
+    if (['mp3', 'm4a', 'wav', 'ogg'].includes(ext ?? '')) return 'music'
+    if (['pdf', 'doc', 'docx'].includes(ext ?? '')) return 'file-text'
+    if (['zip', 'tar', 'gz'].includes(ext ?? '')) return 'archive'
+    return 'file'
   }
   return (
     <AppShell title={payload.title ?? 'Files'}>
@@ -45,7 +46,7 @@ export function AppFiles({ payload }: { payload: AppPayload }) {
                 cursor: 'pointer',
               }}
             >
-              <span style={{ fontSize: 18 }}>{icon(name)}</span>
+              <GlassIcon name={icon(name)} tone="lavender" size={26} glyph={14} />
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'block', fontSize: TYPE.label, color: theme.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
                 <span style={{ display: 'block', fontSize: TYPE.micro, color: theme.text3 }}>{String(it.meta ?? it.subtitle ?? '')}</span>

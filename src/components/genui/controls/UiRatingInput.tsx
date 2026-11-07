@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
+import { GlassIcon } from '@/components/nexly/GlassIcon'
 
 /** star | heart | thumb — the tappable rating input. */
 export function UiRatingInput({
@@ -16,12 +17,12 @@ export function UiRatingInput({
   value: number
   onChange: (v: number) => void
 }) {
-  const { accent, theme } = useWidgetIdentity()
+  const { theme } = useWidgetIdentity()
   const [hover, setHover] = useState(0)
-  const glyph = style === 'heart' ? '♥' : style === 'thumb' ? '👍' : '★'
+  const iconName = style === 'heart' ? 'heart' : style === 'thumb' ? 'circle-check' : 'star'
   const shown = hover || value
   return (
-    <div role="radiogroup" style={{ display: 'inline-flex', gap: 4 }}>
+    <div role="radiogroup" style={{ display: 'inline-flex', gap: 6 }}>
       {Array.from({ length: max }, (_, i) => i + 1).map((i) => (
         <button
           key={i}
@@ -35,16 +36,14 @@ export function UiRatingInput({
           style={{
             border: 'none',
             background: 'transparent',
-            fontSize: style === 'thumb' ? 22 : 26,
             lineHeight: 1,
             padding: 2,
             cursor: 'pointer',
             filter: i <= shown ? 'none' : 'grayscale(1)',
             opacity: i <= shown ? 1 : 0.35,
-            color: accent,
           }}
         >
-          {glyph}
+          <GlassIcon name={iconName} tone={style === 'heart' ? 'rose' : 'amber'} size={28} glyph={15} />
         </button>
       ))}
       <span style={{ fontSize: TYPE.label, color: theme.text2, alignSelf: 'center', marginLeft: 6 }}>

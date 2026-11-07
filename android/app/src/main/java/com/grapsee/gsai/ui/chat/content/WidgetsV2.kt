@@ -425,7 +425,7 @@ internal fun RatingWidgetView(w: RatingWidget, onSendPrompt: ((String) -> Unit)?
                     val isSelected = if (w.style == "nps" || w.style == "thumb") chosen == value else chosen >= value
                     val symbol = when (w.style) {
                         "heart" -> if (isSelected) "♥" else "♡"
-                        "thumb" -> if (i == 0) "👍" else "👎"
+                        "thumb" -> if (i == 0) "+1 Yes" else "-1 No"
                         "nps" -> "$value"
                         else -> if (isSelected) "★" else "☆"
                     }
