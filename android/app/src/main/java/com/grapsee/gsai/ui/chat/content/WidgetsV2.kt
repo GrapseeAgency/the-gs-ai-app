@@ -894,6 +894,33 @@ internal fun ChecklistWidgetView(w: ChecklistWidget) {
 // mid-stream payloads.
 // ---------------------------------------------------------------------------
 
+private val WIDGET_RAW_KEYS = setOf(
+    "id", "key", "type", "kind", "expr", "expression", "formula",
+    "code", "source", "script", "html", "svg", "css", "sql", "query",
+    "url", "href", "link", "src", "route", "action", "method", "prompt",
+    "language", "format", "accent", "palette", "variant", "color",
+    "before", "after", "old", "new", "original", "modified", "patch", "diff"
+)
+
+/** After JSON decoding, so escaped emoji cannot reach plain native Text labels.
+ * Never alter identifiers, executable source, formulas, or navigation data. */
+internal fun sanitizeWidgetPresentationAndroid(value: JsonElement, key: String = ""): JsonElement {
+    if (key in WIDGET_RAW_KEYS) return value
+    return when (value) {
+        is JsonObject -> JsonObject(value.mapValues { (name, item) -> sanitizeWidgetPresentationAndroid(item, name) })
+        is JsonArray -> JsonArray(value.map { sanitizeWidgetPresentationAndroid(it, key) })
+        is JsonPrimitive -> if (!value.isString) value else {
+            val text = value.content
+            JsonPrimitive(when (key) {
+                "title" -> NexlyIcons.normalize(text)
+                "icon" -> NexlyIcons.extractLeadingIcon(text).first ?: NexlyIcons.resolve(text)
+                else -> NexlyIcons.normalize(text).replace(Regex(":([a-z0-9][a-z0-9-]{1,42}):"), "")
+            })
+        }
+        else -> value
+    }
+}
+
 internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
     val trimmed = rawJson.trim()
     if (trimmed.isEmpty()) return rawJson
@@ -905,7 +932,7 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
         .replace(Regex("(?<=[:\\[\\s,])None(?=[,\\]\\}\\s]|$)"), "null")
 
     val element = try {
-        widgetJson.parseToJsonElement(dialectCleaned)
+        sanitizeWidgetPresentationAndroid(widgetJson.parseToJsonElement(dialectCleaned))
     } catch (_: Throwable) {
         return dialectCleaned
     }
