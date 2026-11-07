@@ -101,7 +101,7 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
   const RANGE_OPTIONS = range.options
   const slicedPayload = useMemo<ChartPayload>(() => ({
     ...payload,
-    labels: payload.labels ? range.indices.map((i) => payload.labels[i]) : payload.labels,
+    labels: payload.labels ? range.indices.map((i) => payload.labels?.[i] ?? "") : payload.labels,
     series: payload.series?.map((s) => ({ ...s, data: range.indices.filter((i) => i < s.data.length).map((i) => s.data[i]) })),
   }), [payload, range])
 
