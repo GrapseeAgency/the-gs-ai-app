@@ -3323,266 +3323,71 @@ struct CodeBlockCardView: View {
                 .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
                 .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            runOutput = stripped.isEmpty ? "✓ HTML/SVG preview ready (\(src.count) bytes)" : stripped
+            runOutput = stripped.isEmpty ? "HTML/SVG preview ready (\(src.count) bytes)" : stripped
             return
         }
         if ["py", "python", "python3"].contains(lang) {
-            if src.contains("raise ") {
-                errorOutput = "Traceback (most recent call last):\n  File \"main.py\", line 1, in <module>\nRuntimeError: Execution halted"
-                return
+            var vars: [String: Double] = [:]
+            var output: [String] = []
+            var lineNumber = 0
+            func numeric(_ expr: String) throws -> Double {
+                guard expr.range(of: #"^[a-zA-Z0-9_+*()./\s-]+$"#, options: .regularExpression) != nil,
+                      !expr.contains("**"), !expr.contains("//") else {
+                    throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Only numbers, variables, +, -, *, / and parentheses are supported"])
+                }
+                let names = try NSRegularExpression(pattern: #"[a-zA-Z_][a-zA-Z0-9_]*"#)
+                for match in names.matches(in: expr, range: NSRange(expr.startIndex..., in: expr)) {
+                    let name = (expr as NSString).substring(with: match.range)
+                    guard vars[name] != nil else {
+                        throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unknown variable: \(name)"])
+                    }
+                }
+                guard expr.range(of: #"[a-zA-Z_]\w*\s*\("#, options: .regularExpression) == nil,
+                      let value = CalcExprIOS.evalOptional(expr, vars: vars), value.isFinite else {
+                    throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid expression, function call or non-finite result"])
+                }
+                return value
             }
-            var numVars: [String: Double] = [:]
-            var strVars: [String: String] = [:]
-            var listVars: [String: [Double]] = [:]
-            var exprPreviewLines: [String] = []
-            var lines: [String] = []
-            for rawLine in src.components(separatedBy: "\n") {
-                let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-                if line.isEmpty || line.hasPrefix("#") || line.hasPrefix("import ") || line.hasPrefix("from ") { continue }
-                if let rx = try? NSRegularExpression(pattern: "^\\[([a-zA-Z_][a-zA-Z0-9_]*)\\.append\\([^)]+\\)\\s+for\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s+in\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\]$"),
-                   let m = rx.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-                   let r1 = Range(m.range(at: 1), in: line),
-                   let r2 = Range(m.range(at: 2), in: line) {
-                    let target = String(line[r1])
-                    let srcList = listVars[String(line[r2])] ?? [1.0, 2.0, 3.0]
-                    listVars[target] = (listVars[target] ?? []) + srcList
-                    exprPreviewLines.append("[\(srcList.map { _ in "None" }.joined(separator: ", "))]  # .append() returns None")
-                    continue
+            do {
+                let lines = src.components(separatedBy: "\n")
+                guard src.count <= 32000, lines.count <= 200 else {
+                    throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Preview limit exceeded"])
                 }
-                if let rx = try? NSRegularExpression(pattern: "^([a-zA-Z_][a-zA-Z0-9_]*)\\.extend\\(([a-zA-Z_][a-zA-Z0-9_]*)\\)$"),
-                   let m = rx.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-                   let r1 = Range(m.range(at: 1), in: line),
-                   let r2 = Range(m.range(at: 2), in: line) {
-                    let target = String(line[r1])
-                    let srcList = listVars[String(line[r2])] ?? [1.0, 2.0, 3.0]
-                    let updated = (listVars[target] ?? []) + srcList
-                    listVars[target] = updated
-                    exprPreviewLines.append("\(target) -> [\(updated.map { String(format: "%.0f", $0) }.joined(separator: ", "))]")
-                    continue
-                }
-                if let rx = try? NSRegularExpression(pattern: "^([a-zA-Z_][a-zA-Z0-9_]*)\\s*=\\s*(.+)$"),
-                   let m = rx.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-                   let r1 = Range(m.range(at: 1), in: line),
-                   let r2 = Range(m.range(at: 2), in: line),
-                   !line.contains("==") {
-                    let varName = String(line[r1])
-                    let rhs = String(line[r2]).trimmingCharacters(in: .whitespacesAndNewlines)
-                    if let crx = try? NSRegularExpression(pattern: "^\\[([a-zA-Z_][a-zA-Z0-9_]*)(?:\\s*([+*\\-])\\s*([0-9.]+))?\\s+for\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s+in\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\]$"),
-                       let cm = crx.firstMatch(in: rhs, range: NSRange(rhs.startIndex..., in: rhs)),
-                       let rSrc = Range(cm.range(at: 5), in: rhs) {
-                        let op: String? = Range(cm.range(at: 2), in: rhs).map { String(rhs[$0]) }
-                        let factor: Double = Range(cm.range(at: 3), in: rhs).flatMap { Double(rhs[$0]) } ?? 1.0
-                        let baseList = listVars[String(rhs[rSrc])] ?? [1.0, 2.0, 3.0]
-                        let mapped = baseList.map { v -> Double in
-                            switch op {
-                            case "*": return v * factor
-                            case "+": return v + factor
-                            case "-": return v - factor
-                            default: return v
-                            }
-                        }
-                        listVars[varName] = mapped
-                        numVars[varName] = mapped.reduce(0, +)
+                let assignment = try NSRegularExpression(pattern: #"^([a-zA-Z_]\w*)\s*=\s*([^=]+)$"#)
+                for raw in lines {
+                    lineNumber += 1
+                    let line = raw.trimmingCharacters(in: .whitespaces)
+                    if line.isEmpty || line.hasPrefix("#") { continue }
+                    if let match = assignment.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) {
+                        let ns = line as NSString
+                        vars[ns.substring(with: match.range(at: 1))] = try numeric(ns.substring(with: match.range(at: 2)))
                         continue
                     }
-                    if rhs.hasPrefix("[") && rhs.hasSuffix("]") {
-                        let inner = rhs.dropFirst().dropLast()
-                        let nums = inner.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-                        if !nums.isEmpty {
-                            listVars[varName] = nums
-                            numVars[varName] = nums.reduce(0, +)
-                            continue
-                        }
-                    }
-                    if let d = Double(rhs) {
-                        numVars[varName] = d
-                    } else if (rhs.hasPrefix("'") && rhs.hasSuffix("'")) || (rhs.hasPrefix("\"") && rhs.hasSuffix("\"")) {
-                        strVars[varName] = String(rhs.dropFirst().dropLast())
-                    } else {
-                        var expandedRhs = rhs.replacingOccurrences(of: "**", with: "^")
-                        for (k, lv) in listVars {
-                            expandedRhs = expandedRhs.replacingOccurrences(of: "sum(\(k))", with: "\(lv.reduce(0, +))")
-                            expandedRhs = expandedRhs.replacingOccurrences(of: "len(\(k))", with: "\(lv.count)")
-                            expandedRhs = expandedRhs.replacingOccurrences(of: "min(\(k))", with: "\(lv.min() ?? 0)")
-                            expandedRhs = expandedRhs.replacingOccurrences(of: "max(\(k))", with: "\(lv.max() ?? 0)")
-                        }
-                        if let evalVal = CalcExprIOS.evalOptional(expandedRhs, vars: numVars) {
-                            numVars[varName] = evalVal
+                    if line.hasPrefix("print("), line.hasSuffix(")") {
+                        let arg = String(line.dropFirst(6).dropLast()).trimmingCharacters(in: .whitespaces)
+                        if arg.isEmpty { output.append("") }
+                        else if arg.range(of: #"^"[^"\\]*"$|^'[^'\\]*'$"#, options: .regularExpression) != nil {
+                            output.append(String(arg.dropFirst().dropLast()))
                         } else {
-                            strVars[varName] = rhs
+                            let value = try numeric(arg)
+                            output.append(value.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", value) : String(value))
                         }
+                        continue
                     }
+                    throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unsupported statement; imports, loops and libraries require a Python runtime"])
                 }
-                if let rx = try? NSRegularExpression(pattern: "print\\s*\\((.+)\\)$"),
-                   let m = rx.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-                   let r = Range(m.range(at: 1), in: line) {
-                    let arg = String(line[r]).trimmingCharacters(in: .whitespacesAndNewlines)
-                    func fmtNumPy(_ v: Double) -> String {
-                        v.truncatingRemainder(dividingBy: 1.0) == 0 ? String(format: "%.0f", v) : String(format: "%.2f", v)
-                    }
-                    func evalSinglePy(_ rawExpr: String) -> String {
-                        var e = rawExpr.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if (e.hasPrefix("f'") && e.hasSuffix("'")) || (e.hasPrefix("f\"") && e.hasSuffix("\"")) {
-                            let body = String(e.dropFirst(2).dropLast())
-                            let ns = body as NSString
-                            guard let braceRx = try? NSRegularExpression(pattern: "\\{([^}]+)\\}") else { return body }
-                            var result = ""
-                            var lastLoc = 0
-                            for match in braceRx.matches(in: body, range: NSRange(location: 0, length: ns.length)) {
-                                result += ns.substring(with: NSRange(location: lastLoc, length: match.range.location - lastLoc))
-                                let innerExpr = ns.substring(with: match.range(at: 1)).components(separatedBy: ":").first ?? ""
-                                result += evalSinglePy(innerExpr)
-                                lastLoc = match.range.location + match.range.length
-                            }
-                            result += ns.substring(from: lastLoc)
-                            return result
-                        }
-                        if (e.hasPrefix("'") && e.hasSuffix("'")) || (e.hasPrefix("\"") && e.hasSuffix("\"")) {
-                            return String(e.dropFirst().dropLast())
-                        }
-                        if let sv = strVars[e] { return sv }
-                        if let nv = numVars[e] { return fmtNumPy(nv) }
-                        if let lv = listVars[e] {
-                            return "[\(lv.map(fmtNumPy).joined(separator: ", "))]"
-                        }
-                        for (k, lv) in listVars {
-                            e = e.replacingOccurrences(of: "sum(\(k))", with: "\(lv.reduce(0, +))")
-                            e = e.replacingOccurrences(of: "len(\(k))", with: "\(lv.count)")
-                            e = e.replacingOccurrences(of: "min(\(k))", with: "\(lv.min() ?? 0)")
-                            e = e.replacingOccurrences(of: "max(\(k))", with: "\(lv.max() ?? 0)")
-                        }
-                        if let inlineSum = try? NSRegularExpression(pattern: "^(sum|len|min|max)\\s*\\(\\s*\\[([0-9.,\\s+-]+)\\]\\s*\\)$"),
-                           let im = inlineSum.firstMatch(in: e, range: NSRange(e.startIndex..., in: e)),
-                           let fnR = Range(im.range(at: 1), in: e),
-                           let arrR = Range(im.range(at: 2), in: e) {
-                            let fn = String(e[fnR])
-                            let nums = String(e[arrR]).split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
-                            if !nums.isEmpty {
-                                switch fn {
-                                case "sum": return fmtNumPy(nums.reduce(0, +))
-                                case "len": return "\(nums.count)"
-                                case "min": return fmtNumPy(nums.min() ?? 0)
-                                default: return fmtNumPy(nums.max() ?? 0)
-                                }
-                            }
-                        }
-                        let normMath = e.replacingOccurrences(of: "**", with: "^")
-                        if let v = CalcExprIOS.evalOptional(normMath, vars: numVars) {
-                            return fmtNumPy(v)
-                        }
-                        return e
-                    }
-                    var parts: [String] = []
-                    var cur = ""
-                    var depth = 0
-                    var inSingle = false
-                    var inDouble = false
-                    for ch in arg {
-                        if ch == "'" && !inDouble { inSingle.toggle() }
-                        else if ch == "\"" && !inSingle { inDouble.toggle() }
-                        else if !inSingle && !inDouble {
-                            if ch == "(" || ch == "[" || ch == "{" { depth += 1 }
-                            else if ch == ")" || ch == "]" || ch == "}" { depth = max(0, depth - 1) }
-                            else if ch == "," && depth == 0 {
-                                parts.append(cur)
-                                cur = ""
-                                continue
-                            }
-                        }
-                        cur.append(ch)
-                    }
-                    if !cur.trimmingCharacters(in: .whitespaces).isEmpty { parts.append(cur) }
-                    lines.append(parts.map(evalSinglePy).joined(separator: " "))
-                }
+                runOutput = "Arithmetic preview (not a Python runtime)\n" + (output.isEmpty ? "(no print output)" : output.joined(separator: "\n"))
+            } catch {
+                errorOutput = "Preview stopped at line \(lineNumber): \(error.localizedDescription)"
             }
-            if let series = extractCodeSeriesPreview(src) {
-                let vals = series.points.map { $0.1 }
-                let sum = vals.reduce(0, +)
-                let avg = sum / Double(max(1, vals.count))
-                lines.append(String(format: "%@: %d rows · sum=%.1f · mean=%.1f", series.title, series.points.count, sum, avg))
-            }
-            if lines.isEmpty && !exprPreviewLines.isEmpty {
-                lines.append(contentsOf: exprPreviewLines)
-            }
-            if lines.isEmpty && !listVars.isEmpty {
-                for (k, lv) in listVars.sorted(by: { $0.key < $1.key }).prefix(4) {
-                    lines.append("\(k) = [\(lv.map { $0.truncatingRemainder(dividingBy: 1.0) == 0 ? String(format: "%.0f", $0) : String(format: "%.2f", $0) }.joined(separator: ", "))]")
-                }
-            }
-            if lines.isEmpty && !numVars.isEmpty {
-                for (k, v) in numVars.sorted(by: { $0.key < $1.key }).prefix(4) {
-                    lines.append("\(k) = \(v.truncatingRemainder(dividingBy: 1.0) == 0 ? String(format: "%.0f", v) : String(format: "%.2f", v))")
-                }
-            }
-            runOutput = lines.isEmpty ? "Python 3 script executed (\(allLines.count) lines, exit code 0)" : lines.joined(separator: "\n")
             return
         }
         if ["sql", "sqlite", "postgres", "postgresql", "mysql"].contains(lang) {
-            var tableName = "query"
-            if let rx = try? NSRegularExpression(pattern: "\\b(?:FROM|INTO|UPDATE|TABLE)\\s+([a-zA-Z0-9_.]+)", options: [.caseInsensitive]),
-               let m = rx.firstMatch(in: src, range: NSRange(src.startIndex..., in: src)),
-               let r = Range(m.range(at: 1), in: src) {
-                tableName = String(src[r])
-            }
-            let hasDistinct = src.range(of: "\\bDISTINCT\\b", options: [.regularExpression, .caseInsensitive]) != nil
-            let hasGroupBy = src.range(of: "\\bGROUP\\s+BY\\b", options: [.regularExpression, .caseInsensitive]) != nil
-            let hasJoin = src.range(of: "\\bJOIN\\b", options: [.regularExpression, .caseInsensitive]) != nil
-            var cols = ["id", "name", "status", "total", "updated_at"]
-            if let srx = try? NSRegularExpression(pattern: "SELECT\\s+(?:DISTINCT\\s+)?([\\s\\S]+?)\\s+FROM\\b", options: [.caseInsensitive]) {
-                let matches = srx.matches(in: src, range: NSRange(src.startIndex..., in: src))
-                if let last = matches.last, let r = Range(last.range(at: 1), in: src) {
-                    let parsed = src[r].split(separator: ",").map { raw -> String in
-                        let clean = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                        let parts = clean.components(separatedBy: .whitespaces)
-                        let token = (parts.last ?? clean).trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
-                        return token.components(separatedBy: ".").last ?? token
-                    }.filter { !$0.isEmpty && $0 != "*" }.prefix(6)
-                    if !parsed.isEmpty { cols = Array(parsed) }
-                }
-            }
-            func sampleCell(_ col: String, _ rowIdx: Int) -> String {
-                let c = col.lowercased()
-                let idx = rowIdx % 3
-                if c.contains("order_id") { return ["1042", "1043", "1044"][idx] }
-                if c.contains("customer_id") || c.contains("user_id") { return ["CUST-88", "CUST-19", "CUST-42"][idx] }
-                if c.contains("item_id") || c.contains("product_id") { return ["IT-01", "IT-02", "IT-05"][idx] }
-                if c == "id" || c.hasSuffix("_id") { return ["101", "102", "103"][idx] }
-                if c.contains("product") || c.contains("item") || c.contains("title") { return ["Wireless Mouse", "USB-C Hub", "Keycap Set"][idx] }
-                if c.contains("email") { return ["ava@acme.io", "liam@acme.io", "noah@acme.io"][idx] }
-                if c.contains("name") || c.contains("user") || c.contains("customer") || c.contains("author") { return ["Ava Chen", "Liam Patel", "Noah Kim"][idx] }
-                if c.contains("status") || c.contains("state") { return ["active", "completed", "pending"][idx] }
-                if c.contains("amount") || c.contains("price") || c.contains("total") || c.contains("revenue") || c.contains("cost") || c.contains("salary") {
-                    return ["$149.50", "$90.00", "$64.00"][idx]
-                }
-                if c.contains("qty") || c.contains("count") || c.contains("orders") || c.contains("num") { return ["3", "2", "1"][idx] }
-                if c.contains("rate") || c.contains("pct") || c.contains("score") { return ["94.2%", "88.5%", "91.0%"][idx] }
-                if c.contains("date") || c.contains("time") || c.contains("created") || c.contains("updated") { return ["2026-04-18", "2026-04-17", "2026-04-16"][idx] }
-                return ["val_\(idx + 1)a", "val_\(idx + 1)b", "val_\(idx + 1)c"][idx]
-            }
-            let sampleRows: [[String]] = (0..<3).map { r in cols.map { col in sampleCell(col, r) } }
-            let widths: [Int] = cols.enumerated().map { i, col in
-                max(col.count, sampleRows.map { $0[i].count }.max() ?? 4)
-            }
-            let header = cols.enumerated().map { i, col in
-                col.padding(toLength: widths[i], withPad: " ", startingAt: 0)
-            }.joined(separator: " | ")
-            let divider = widths.map { String(repeating: "-", count: $0) }.joined(separator: "-+-")
-            let formattedRows = sampleRows.map { r in
-                cols.enumerated().map { i, _ in
-                    r[i].padding(toLength: widths[i], withPad: " ", startingAt: 0)
-                }.joined(separator: " | ")
-            }
-            let modeNote: String = {
-                if hasGroupBy { return "CTE grouped · 1 row per parent key" }
-                if hasDistinct { return "DISTINCT deduplicated · 3 unique rows" }
-                if hasJoin { return "JOIN executed · 3 rows returned" }
-                return "Query executed on `\(tableName)` · 3 rows"
-            }()
-            runOutput = ([header, divider] + formattedRows + ["", "(\(modeNote))"]).joined(separator: "\n")
+            errorOutput = "Not executed: no database is connected. Copy this SQL into your database client."
             return
         }
-        if !["js", "javascript", "ts", "typescript", "node"].contains(lang) {
-            runOutput = "✓ Executed \(lang.uppercased()) snippet (\(allLines.count) lines · exit code 0)"
+        if !["js", "javascript", "node"].contains(lang) {
+            errorOutput = "Not executed: no \(lang.uppercased()) runtime is available here."
             return
         }
         guard let ctx = JSContext() else { return }
@@ -3623,7 +3428,7 @@ struct CodeBlockCardView: View {
         if !logs.isEmpty {
             runOutput = logs.joined(separator: "\n")
         } else if errorOutput == nil {
-            runOutput = "✓ Executed cleanly (0 console messages)"
+            runOutput = "Completed (no console output)"
         }
     }
 }
