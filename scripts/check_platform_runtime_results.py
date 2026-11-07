@@ -23,7 +23,12 @@ def check(root):
                 errors.append(f'duplicate runtime result: {name}')
             seen.add(name)
             if any(case.find(tag) is not None for tag in ('skipped', 'failure', 'error')):
-                errors.append(f'{name}: failed or skipped in {path}')
+                details = []
+                for tag in ('skipped', 'failure', 'error'):
+                    node = case.find(tag)
+                    if node is not None:
+                        details.append((node.get('message', '') + '\n' + (node.text or '')).strip())
+                errors.append(f'{name}: failed or skipped in {path}: ' + '\n'.join(details)[:6000])
     errors.extend(f'no execution result: {name}' for name in sorted(EXPECTED - seen))
     if errors:
         raise ValueError('; '.join(errors))
@@ -62,5 +67,6 @@ if __name__ == '__main__':
             for name in check(sys.argv[1]):
                 print(f'Runtime executed: {name}')
         except (ValueError, ET.ParseError) as error:
-            print(f'::error::{error}')
+            message = str(error).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+            print(f'::error::{message}')
             sys.exit(1)
