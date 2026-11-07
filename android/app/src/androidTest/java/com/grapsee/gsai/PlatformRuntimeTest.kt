@@ -11,6 +11,10 @@ import androidx.activity.compose.setContent
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
+import com.grapsee.gsai.ui.chat.content.parseWidget
+import com.grapsee.gsai.ui.chat.content.Widget
+import com.grapsee.gsai.ui.chat.content.CalcWidgetView
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -133,6 +137,24 @@ class PlatformRuntimeTest {
         compose.runOnIdle { assertEquals(1, taps); assertEquals(0, holds) }
         compose.onNodeWithTag("runtime-card").performTouchInput { longClick() }
         compose.runOnIdle { assertEquals(1, taps); assertEquals(1, holds) }
+    }
+
+    @Test fun generatedCalculatorAcceptsExactNumbersAndNeverRendersEmoji() {
+        val json = """{"type":"finance","title":"\ud83d\ude80 Growth","fields":[{"key":"amount","label":"Amount \u00a9\ufe0f \ud83d\ude00","value":100}],"outputs":[{"label":"Double","expr":"amount*2","primary":true}]}"""
+        val widget = parseWidget("calc", json) as Widget.Calc
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme { CalcWidgetView(widget.w) }
+        }
+        compose.onNodeWithText("200").assertExists()
+        compose.onAllNodes(hasText("©", substring = true)).assertCountEquals(0)
+        compose.onAllNodes(hasText("😀", substring = true)).assertCountEquals(0)
+        compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)).assertCountEquals(0)
+        compose.onNode(hasSetTextAction()).performTextReplacement("12.3456")
+        compose.onNodeWithText("24.69").assertExists()
+        compose.onNode(hasSetTextAction()).performTextClearance()
+        compose.onNodeWithText("Enter valid numbers within the supplied limits").assertExists()
+        compose.onNodeWithText("Reset").performClick()
+        compose.onNodeWithText("200").assertExists()
     }
 
     @Test fun hapticDispatchUsesPlatformConstantsAndHonorsToggle() {
