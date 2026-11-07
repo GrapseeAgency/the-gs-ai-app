@@ -738,7 +738,7 @@ export function emojiToIconTokens(text: string): string {
       }
       continue
     }
-    if (cp === 0x200d || (cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0x1f3fb && cp <= 0x1f3ff)) {
+    if ((cp >= 0xe0020 && cp <= 0xe007f) || cp === 0x200d || (cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0x1f3fb && cp <= 0x1f3ff)) {
       continue
     }
     mapped += ch
