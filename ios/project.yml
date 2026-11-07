@@ -97,6 +97,8 @@ targets:
       # codepoint table. Both clients bundle the identical pair so a plan
       # emitted once resolves to the same glyph on Android and iOS.
       - path: App/Resources
+      - path: ../shared-contracts/emoji-dom-policy.json
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.grapsee.gsai
