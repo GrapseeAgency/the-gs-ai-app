@@ -1,6 +1,33 @@
 import XCTest
 
 final class PlatformRuntimeUITests: XCTestCase {
+    func testGeneratedTableAllDisplaysEveryActualRow() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        let open = app.buttons["Open generated table"]
+        XCTAssertTrue(open.waitForExistence(timeout: 20))
+        open.tap()
+        func show(_ label: String) -> XCUIElement {
+            let button = app.buttons[label]
+            for _ in 0..<18 {
+                if button.exists && button.isHittable { return button }
+                app.swipeUp()
+            }
+            XCTFail("Real table never exposed \(label)")
+            return button
+        }
+        show("Show: 5 ▾").tap()
+        show("Show: 10 ▾").tap()
+        XCTAssertTrue(show("Show: All ▾").exists)
+        XCTAssertTrue(app.staticTexts["Item 31"].exists)
+        XCTAssertTrue(app.staticTexts["1–31 of 31"].exists)
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "genui-table-all-31-real-rows"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+    }
+
     func testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
