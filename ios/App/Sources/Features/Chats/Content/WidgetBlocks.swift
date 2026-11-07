@@ -3418,6 +3418,7 @@ private struct CalcBodyView: View {
                             }
                         )
                     )
+                    .accessibilityIdentifier("calc-input-\(key)")
                     .font(Aero.mono(11.5))
                     .foregroundStyle(accent)
                     .multilineTextAlignment(.trailing)
