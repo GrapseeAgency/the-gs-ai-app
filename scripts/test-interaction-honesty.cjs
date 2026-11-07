@@ -158,6 +158,10 @@ async function main() {
     const data = pieData({ type: 'pie', labels: ['Jan', 'Feb', 'Mar'], series: [{ name: 'Actual', data: [[0, 10], [1, 20], [2, 30]] }] })
     assert.deepEqual(data, [{ name: 'Jan', value: 10 }, { name: 'Feb', value: 20 }, { name: 'Mar', value: 30 }])
     assert.deepEqual(pieData({ type: 'pie', series: [{ name: 'A', data: [[0, 10]] }, { name: 'B', data: [[0, 20]] }] }).map(p => p.value), [10, 20])
+    const mixed = pieData({ type: 'pie', labels: ['P4', 'P5'], series: [
+      { name: 'Long', data: [[0, 7], [1, 8]] }, { name: 'Short', data: [[0, 104]] }
+    ] })
+    assert.deepEqual(mixed.map(point => point.name), ['Long: P4', 'Long: P5', 'Short: P4'])
   })
   check('pie does not silently discard negative or zero-total source data', () => {
     for (const values of [[-10, 20], [0, 0]]) {
