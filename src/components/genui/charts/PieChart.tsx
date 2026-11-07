@@ -11,8 +11,9 @@ import { useWidgetIdentity } from '../theme/WidgetSurface'
  * each actual point (and include the series name when several are present). */
 export function pieData(payload: ChartPayload) {
   const series = payload.series ?? []
+  const categorySeries = series.every(item => item.data.length <= 1)
   return series.flatMap((s, seriesIndex) => s.data.map((point, pointIndex) => ({
-    name: s.data.length === 1
+    name: categorySeries
       ? s.name || payload.labels?.[seriesIndex] || `#${seriesIndex + 1}`
       : `${series.length > 1 ? `${s.name}: ` : ''}${payload.labels?.[pointIndex] ?? String(point[0] ?? `#${pointIndex + 1}`)}`,
     value: point[point.length - 1] ?? Number.NaN,
