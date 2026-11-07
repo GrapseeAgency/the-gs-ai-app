@@ -462,17 +462,24 @@ internal fun FormWidgetView(w: FormWidget, onSendPrompt: ((String) -> Unit)?) {
                         )
                         val maxStars = f.max.toInt().coerceIn(1, 10)
                         val current = (values[i]?.toFloatOrNull() ?: 0f).toInt()
-                        Text(
-                            "★".repeat(current) + "☆".repeat(maxStars - current),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = seriesColor(0),
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .clickable {
                                     val next = if (current >= maxStars) 0 else current + 1
                                     values[i] = next.toString()
                                 }
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
+                        ) {
+                            for (s in 1..maxStars) {
+                                NexlyGlyph(
+                                    name = if (s <= current) "star-filled" else "star",
+                                    size = 16.dp,
+                                    color = if (s <= current) seriesColor(0) else c.textTertiary.copy(alpha = 0.45f)
+                                )
+                            }
+                        }
                         Text("tap to rate", style = MaterialTheme.typography.labelSmall, color = c.textTertiary)
                     }
                     "otp" -> Column(Modifier.padding(vertical = 6.dp)) {
@@ -584,8 +591,13 @@ internal fun FormWidgetView(w: FormWidget, onSendPrompt: ((String) -> Unit)?) {
 
             Button(
                 onClick = {
-                    val missing = fields.filter { f ->
-                        f.required && (values[fields.indexOf(f)].isNullOrBlank())
+                    val missing = fields.mapIndexedNotNull { idx, f ->
+                        val isSatisfied = when (f.type) {
+                            "checkbox" -> !checks[idx].isNullOrEmpty()
+                            "slider", "toggle" -> true
+                            else -> !values[idx].isNullOrBlank()
+                        }
+                        if (f.required && !isSatisfied) f else null
                     }
                     if (missing.isNotEmpty()) {
                         error = "Required: " + missing.joinToString(", ") { it.label }
@@ -594,10 +606,10 @@ internal fun FormWidgetView(w: FormWidget, onSendPrompt: ((String) -> Unit)?) {
                         error = ""
                         val lines = fields.mapIndexed { i, f ->
                             when (f.type) {
-                                "checkbox" -> "$f.label: ${(checks[i] ?: emptySet()).joinToString(", ").ifEmpty { "—" }}"
-                                "slider" -> "$f.label: ${formatChartValue(sliders[i] ?: f.value)}${f.unit}"
-                                "toggle" -> "$f.label: ${if (values[i] == "on") "Yes" else "No"}"
-                                else -> "$f.label: ${values[i]?.ifBlank { "—" } ?: "—"}"
+                                "checkbox" -> "${f.label}: ${(checks[i] ?: emptySet()).joinToString(", ").ifEmpty { "—" }}"
+                                "slider" -> "${f.label}: ${formatChartValue(sliders[i] ?: f.value)}${f.unit}"
+                                "toggle" -> "${f.label}: ${if (values[i] == "on") "Yes" else "No"}"
+                                else -> "${f.label}: ${values[i]?.ifBlank { "—" } ?: "—"}"
                             }
                         }
                         submitted = (if (w.title.isNotBlank()) "${w.title}\n" else "") + lines.joinToString("\n")

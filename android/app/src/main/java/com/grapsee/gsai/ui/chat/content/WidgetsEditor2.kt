@@ -115,9 +115,7 @@ internal fun EditorWidgetView(w: EditorWidgetData) {
 private fun SheetEditorView(w: EditorWidgetData) {
     val cells = remember(w) {
         mutableStateMapOf<String, String>().apply {
-            if (w.cells.isNotEmpty()) {
-                putAll(w.cells.entries.take(200).associate { it.key.uppercase() to it.value })
-            } else if (w.columns.isNotEmpty() || w.rows.isNotEmpty()) {
+            if (w.columns.isNotEmpty() || w.rows.isNotEmpty()) {
                 var rowOffset = 1
                 if (w.columns.isNotEmpty()) {
                     w.columns.take(6).forEachIndexed { ci, col -> put("${colName(ci)}1", col) }
@@ -125,6 +123,27 @@ private fun SheetEditorView(w: EditorWidgetData) {
                 }
                 w.rows.take(10 - rowOffset + 1).forEachIndexed { ri, row ->
                     row.take(6).forEachIndexed { ci, v -> put("${colName(ci)}${ri + rowOffset}", v) }
+                }
+                w.cells.entries.take(200).forEach { (k, v) ->
+                    val rcMatch = Regex("^(\\d+):(\\d+)$").find(k.trim())
+                    if (rcMatch != null) {
+                        val r = rcMatch.groupValues[1].toIntOrNull() ?: 0
+                        val c = rcMatch.groupValues[2].toIntOrNull() ?: 0
+                        put("${colName(c)}${r + rowOffset}", v)
+                    } else {
+                        put(k.uppercase(), v)
+                    }
+                }
+            } else if (w.cells.isNotEmpty()) {
+                w.cells.entries.take(200).forEach { (k, v) ->
+                    val rcMatch = Regex("^(\\d+):(\\d+)$").find(k.trim())
+                    if (rcMatch != null) {
+                        val r = rcMatch.groupValues[1].toIntOrNull() ?: 0
+                        val c = rcMatch.groupValues[2].toIntOrNull() ?: 0
+                        put("${colName(c)}${r + 1}", v)
+                    } else {
+                        put(k.uppercase(), v)
+                    }
                 }
             } else {
                 put("B1", "120"); put("B2", "180"); put("B3", "95")

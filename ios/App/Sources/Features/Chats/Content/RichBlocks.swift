@@ -245,6 +245,7 @@ private struct NexlyCalculatorSpec {
     let resultLabel: String
     let initialAmount: Double
     let initialRate: Double
+    let initialYears: Int
     let mode: QuickCalcMode
     let currency: String
 }
@@ -254,14 +255,54 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
     let cleanTitle = NexlyIcons.cleanPlainText(strippedTitle)
         .trimmingCharacters(in: CharacterSet(charactersIn: ":-—– "))
     let combined = "\(cleanTitle) \(bodyText)".lowercased()
-    let nums = (try? NSRegularExpression(pattern: "\\d+(?:\\.\\d+)?"))
+
+    var currAmount: Double? = nil
+    if let crx = try? NSRegularExpression(pattern: "[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)\\s*([kKmMbB])?"),
+       let cm = crx.firstMatch(in: bodyText, range: NSRange(bodyText.startIndex..., in: bodyText)),
+       let numRange = Range(cm.range(at: 1), in: bodyText),
+       let base = Double(bodyText[numRange].replacingOccurrences(of: ",", with: "")) {
+        var mult = 1.0
+        if cm.range(at: 2).location != NSNotFound, let sr = Range(cm.range(at: 2), in: bodyText) {
+            switch bodyText[sr].lowercased() {
+            case "k": mult = 1_000.0
+            case "m": mult = 1_000_000.0
+            case "b": mult = 1_000_000_000.0
+            default: break
+            }
+        }
+        currAmount = base * mult
+    }
+
+    var pctVal: Double? = nil
+    if let prx = try? NSRegularExpression(pattern: "(\\d+(?:\\.\\d+)?)\\s*(?:%|percent\\b)", options: [.caseInsensitive]),
+       let pm = prx.firstMatch(in: bodyText, range: NSRange(bodyText.startIndex..., in: bodyText)),
+       let pr = Range(pm.range(at: 1), in: bodyText) {
+        pctVal = Double(bodyText[pr])
+    }
+
+    var yearsVal: Int = 5
+    if let yrx = try? NSRegularExpression(pattern: "(\\d{1,2})\\s*(?:-\\s*)?(?:years?|yrs?\\b)", options: [.caseInsensitive]),
+       let ym = yrx.firstMatch(in: bodyText, range: NSRange(bodyText.startIndex..., in: bodyText)),
+       let yr = Range(ym.range(at: 1), in: bodyText),
+       let y = Int(bodyText[yr]) {
+        yearsVal = min(max(1, y), 40)
+    }
+
+    let allNums = (try? NSRegularExpression(pattern: "\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?"))
         .map { rx in rx.matches(in: bodyText, range: NSRange(bodyText.startIndex..., in: bodyText)) }?
         .compactMap { m -> Double? in
             guard let r = Range(m.range, in: bodyText) else { return nil }
-            return Double(bodyText[r])
+            return Double(bodyText[r].replacingOccurrences(of: ",", with: ""))
         } ?? []
-    let amt = nums.first(where: { $0 >= 50 }) ?? nums.first ?? 1200.0
-    let rate = nums.first(where: { $0 > 0 && $0 < 50 && $0 != amt }) ?? (nums.count > 1 ? nums[1] : 10.0)
+    let nonYearNums = allNums.filter { !($0 >= 1990 && $0 <= 2035) }
+    let amt = currAmount
+        ?? nonYearNums.first(where: { $0 >= 50 && $0 != pctVal })
+        ?? nonYearNums.first(where: { $0 >= 25 && $0 != pctVal })
+        ?? 1200.0
+    let rate = pctVal
+        ?? nonYearNums.first(where: { $0 > 0 && $0 < 50 && $0 != amt })
+        ?? 10.0
+
     let currency: String = {
         if bodyText.contains("€") { return "€" }
         if bodyText.contains("£") { return "£" }
@@ -271,14 +312,15 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
         }
         return ""
     }()
-    if combined.contains("compound") || combined.contains("roi") || combined.contains("invest") || combined.contains("annual") {
+    if combined.contains("compound") || combined.contains("roi") || combined.contains("invest") || combined.contains("annual") || combined.contains("loan") || combined.contains("mortgage") {
         return NexlyCalculatorSpec(
             title: cleanTitle.isEmpty ? "Quick Calculator" : cleanTitle,
             amountLabel: "Principal",
             rateLabel: "Rate (%)",
-            resultLabel: "1-Yr Total",
+            resultLabel: "\(yearsVal)-Yr Total",
             initialAmount: amt,
             initialRate: rate,
+            initialYears: yearsVal,
             mode: .compound,
             currency: currency.isEmpty ? "$" : currency
         )
@@ -291,6 +333,7 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
             resultLabel: "Total",
             initialAmount: amt,
             initialRate: rate,
+            initialYears: yearsVal,
             mode: .markup,
             currency: currency.isEmpty ? "$" : currency
         )
@@ -303,6 +346,7 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
             resultLabel: "Portion",
             initialAmount: amt,
             initialRate: rate,
+            initialYears: yearsVal,
             mode: .percentOf,
             currency: currency
         )
@@ -314,6 +358,7 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
         resultLabel: "Total",
         initialAmount: amt,
         initialRate: rate,
+        initialYears: yearsVal,
         mode: .discount,
         currency: currency.isEmpty ? "$" : currency
     )
@@ -818,14 +863,16 @@ private func append(
             if !style.isEmpty { run.inlinePresentationIntent = style }
             result.append(run)
         case .link(let text, let url):
+            let cleanText = NexlyIcons.cleanPlainText(text)
+            let label = cleanText.isEmpty ? text : cleanText
             if let url = URL(string: url) {
-                var run = AttributedString(text)
+                var run = AttributedString(label)
                 run.link = url
                 run.underlineStyle = .single
                 run.foregroundColor = theme.linkColor
                 result.append(run)
             } else {
-                result.append(AttributedString(text))
+                result.append(AttributedString(label))
             }
         case .math(let latex):
             if let rendered = renderMathAttributedString(latex, baseSize: theme.baseSize, color: theme.textColor) {
@@ -1088,6 +1135,7 @@ private struct NexlyQuickCalculatorCardView: View {
 
     @State private var amountText: String
     @State private var rateText: String
+    @State private var years: Int
     @State private var mode: QuickCalcMode
     private let presets: [Double] = [0, 5, 10, 15, 20, 25, 30, 50]
 
@@ -1101,6 +1149,7 @@ private struct NexlyQuickCalculatorCardView: View {
             : String(format: "%.1f", spec.initialRate)
         _amountText = State(initialValue: amtFmt)
         _rateText = State(initialValue: rateFmt)
+        _years = State(initialValue: spec.initialYears)
         _mode = State(initialValue: spec.mode)
     }
 
@@ -1117,7 +1166,7 @@ private struct NexlyQuickCalculatorCardView: View {
         case .discount: return amountVal * (1.0 - rateVal / 100.0)
         case .markup: return amountVal * (1.0 + rateVal / 100.0)
         case .percentOf: return amountVal * (rateVal / 100.0)
-        case .compound: return amountVal * pow(1.0 + rateVal / 100.0, 5.0)
+        case .compound: return amountVal * pow(1.0 + rateVal / 100.0, Double(years))
         }
     }
 
@@ -1164,6 +1213,7 @@ private struct NexlyQuickCalculatorCardView: View {
                         rateText = spec.initialRate.truncatingRemainder(dividingBy: 1.0) == 0
                             ? String(format: "%.0f", spec.initialRate)
                             : String(format: "%.1f", spec.initialRate)
+                        years = spec.initialYears
                         mode = spec.mode
                     }
                     .font(.system(size: 11, weight: .semibold))
@@ -1216,7 +1266,7 @@ private struct NexlyQuickCalculatorCardView: View {
                 .frame(maxWidth: .infinity)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(mode == .compound ? "5-Yr Value" : spec.resultLabel)
+                    Text(mode == .compound ? "\(years)-Yr Value" : spec.resultLabel)
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
                     Text(String(format: "%@%.2f", spec.currency, total))
@@ -1229,6 +1279,35 @@ private struct NexlyQuickCalculatorCardView: View {
                         .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.929, green: 0.898, blue: 1.0)))
                 }
                 .frame(maxWidth: .infinity)
+            }
+
+            if mode == .compound {
+                HStack {
+                    Text("Compounding Horizon")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Aero.textSecondary)
+                    Spacer()
+                    HStack(spacing: 4) {
+                        ForEach([1, 3, 5, 10, 20], id: \.self) { (yr: Int) in
+                            let active = years == yr
+                            Button {
+                                GSHaptics.select()
+                                years = yr
+                            } label: {
+                                Text("\(yr)Y")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(active ? Color.white : Color(red: 0.357, green: 0.239, blue: 0.961))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(active ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color(red: 0.941, green: 0.918, blue: 1.0))
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -1437,8 +1516,17 @@ private struct HeadingView: View {
             baseSize: 15,
             citations: citations
         )
-        let badge = (level >= 2 && level <= 3) ? sectionBadgeForHeadingText(plainTextOfSpans(spans)) : nil
-        let cleanedSpans = badge != nil ? stripLeadingIconFromSpans(spans) : spans
+        let rawText = plainTextOfSpans(spans)
+        let badge: (icon: String, tone: NexlyGlassTone)? = {
+            if level >= 2 && level <= 3 {
+                return sectionBadgeForHeadingText(rawText)
+            }
+            if let explicit = NexlyIcons.extractLeadingIcon(rawText).icon {
+                return (explicit, .lavender)
+            }
+            return nil
+        }()
+        let cleanedSpans = stripLeadingIconFromSpans(spans)
         VStack(alignment: .leading, spacing: 0) {
             if !isFirst && level <= 3 {
                 Spacer().frame(height: 8)
@@ -1806,9 +1894,13 @@ private struct StepOrderedListItemRowView: View {
 
     private var splitStep: (title: String, detailSpans: [InlineSpan], consumedFirstChild: Bool)? {
         guard let first = item.spans.first, case .bold(let titleCh) = first else { return nil }
-        let title = plainTextOfSpans(titleCh)
+        let rawTitle = plainTextOfSpans(titleCh)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: ":"))
+        let (_, strippedTitle) = NexlyIcons.extractLeadingIcon(rawTitle)
+        let cleanTitle = NexlyIcons.cleanPlainText(strippedTitle.isEmpty ? rawTitle : strippedTitle)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = cleanTitle.isEmpty ? rawTitle : cleanTitle
         guard !title.isEmpty else { return nil }
         if item.spans.count >= 2 {
             var rest = Array(item.spans.dropFirst())
@@ -2612,29 +2704,49 @@ struct CodeBlockCardView: View {
             let hasDistinct = src.range(of: "\\bDISTINCT\\b", options: [.regularExpression, .caseInsensitive]) != nil
             let hasGroupBy = src.range(of: "\\bGROUP\\s+BY\\b", options: [.regularExpression, .caseInsensitive]) != nil
             let hasJoin = src.range(of: "\\bJOIN\\b", options: [.regularExpression, .caseInsensitive]) != nil
-            var cols = ["id", "name", "order_count"]
+            var cols = ["id", "name", "status", "total", "updated_at"]
             if let srx = try? NSRegularExpression(pattern: "SELECT\\s+(?:DISTINCT\\s+)?([\\s\\S]+?)\\s+FROM\\b", options: [.caseInsensitive]) {
                 let matches = srx.matches(in: src, range: NSRange(src.startIndex..., in: src))
                 if let last = matches.last, let r = Range(last.range(at: 1), in: src) {
                     let parsed = src[r].split(separator: ",").map { raw -> String in
                         let clean = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                         let parts = clean.components(separatedBy: .whitespaces)
-                        let token = parts.last ?? clean
+                        let token = (parts.last ?? clean).trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
                         return token.components(separatedBy: ".").last ?? token
-                    }.filter { !$0.isEmpty && $0 != "*" }.prefix(4)
+                    }.filter { !$0.isEmpty && $0 != "*" }.prefix(6)
                     if !parsed.isEmpty { cols = Array(parsed) }
                 }
             }
-            let header = cols.map { $0.padding(toLength: 14, withPad: " ", startingAt: 0) }.joined(separator: " | ")
-            let divider = cols.map { _ in String(repeating: "-", count: 14) }.joined(separator: "-+-")
-            let sampleRows: [[String]] = [
-                ["101", "Ava Chen", "3", "2026-04-18"],
-                ["102", "Liam Patel", "1", "2026-04-19"],
-                ["103", "Noah Kim", "4", "2026-04-20"]
-            ]
+            func sampleCell(_ col: String, _ rowIdx: Int) -> String {
+                let c = col.lowercased()
+                let idx = rowIdx % 3
+                if c.contains("order_id") { return ["1042", "1043", "1044"][idx] }
+                if c.contains("customer_id") || c.contains("user_id") { return ["CUST-88", "CUST-19", "CUST-42"][idx] }
+                if c.contains("item_id") || c.contains("product_id") { return ["IT-01", "IT-02", "IT-05"][idx] }
+                if c == "id" || c.hasSuffix("_id") { return ["101", "102", "103"][idx] }
+                if c.contains("product") || c.contains("item") || c.contains("title") { return ["Wireless Mouse", "USB-C Hub", "Keycap Set"][idx] }
+                if c.contains("email") { return ["ava@acme.io", "liam@acme.io", "noah@acme.io"][idx] }
+                if c.contains("name") || c.contains("user") || c.contains("customer") || c.contains("author") { return ["Ava Chen", "Liam Patel", "Noah Kim"][idx] }
+                if c.contains("status") || c.contains("state") { return ["active", "completed", "pending"][idx] }
+                if c.contains("amount") || c.contains("price") || c.contains("total") || c.contains("revenue") || c.contains("cost") || c.contains("salary") {
+                    return ["$149.50", "$90.00", "$64.00"][idx]
+                }
+                if c.contains("qty") || c.contains("count") || c.contains("orders") || c.contains("num") { return ["3", "2", "1"][idx] }
+                if c.contains("rate") || c.contains("pct") || c.contains("score") { return ["94.2%", "88.5%", "91.0%"][idx] }
+                if c.contains("date") || c.contains("time") || c.contains("created") || c.contains("updated") { return ["2026-04-18", "2026-04-17", "2026-04-16"][idx] }
+                return ["val_\(idx + 1)a", "val_\(idx + 1)b", "val_\(idx + 1)c"][idx]
+            }
+            let sampleRows: [[String]] = (0..<3).map { r in cols.map { col in sampleCell(col, r) } }
+            let widths: [Int] = cols.enumerated().map { i, col in
+                max(col.count, sampleRows.map { $0[i].count }.max() ?? 4)
+            }
+            let header = cols.enumerated().map { i, col in
+                col.padding(toLength: widths[i], withPad: " ", startingAt: 0)
+            }.joined(separator: " | ")
+            let divider = widths.map { String(repeating: "-", count: $0) }.joined(separator: "-+-")
             let formattedRows = sampleRows.map { r in
-                cols.enumerated().map { idx, _ in
-                    (idx < r.count ? r[idx] : "1").padding(toLength: 14, withPad: " ", startingAt: 0)
+                cols.enumerated().map { i, _ in
+                    r[i].padding(toLength: widths[i], withPad: " ", startingAt: 0)
                 }.joined(separator: " | ")
             }
             let modeNote: String = {
@@ -2672,7 +2784,14 @@ struct CodeBlockCardView: View {
             var setTimeout = function(fn) { if (typeof fn === 'function') fn(); return 1; };
             var clearTimeout = function() {};
             """)
-        let result = ctx.evaluateScript(src)
+        let jsSource: String = {
+            guard ["ts", "typescript"].contains(lang) else { return src }
+            return src
+                .replacingOccurrences(of: "(?m)^\\s*(?:export\\s+)?(?:interface|type)\\s+[A-Za-z0-9_]+[^;{]*(?:\\{[\\s\\S]*?\\}|=[^;\\n]+;?)", with: "", options: .regularExpression)
+                .replacingOccurrences(of: ":\\s*(?:string|number|boolean|any|void|unknown|never|Record<[^>]+>|Array<[^>]+>|[A-Z][A-Za-z0-9_<>\\[\\]|\\s]*)(?=\\s*[=,);\\{])", with: "", options: .regularExpression)
+                .replacingOccurrences(of: "\\s+as\\s+[A-Za-z0-9_<>\\[\\]]+", with: "", options: .regularExpression)
+        }()
+        let result = ctx.evaluateScript(jsSource)
         if let err = jsErr {
             errorOutput = err
         } else if let result, !result.isUndefined {
@@ -2718,13 +2837,50 @@ private func parseSortableNumberIOS(_ raw: String) -> Double? {
         .replacingOccurrences(of: "[%xX\\s]+$", with: "", options: .regularExpression)
         .trimmingCharacters(in: .whitespacesAndNewlines)
     let mult: Double = {
+        if cleaned.hasSuffix("T") || cleaned.hasSuffix("t") { return 1_000_000_000_000.0 }
         if cleaned.hasSuffix("B") || cleaned.hasSuffix("b") { return 1_000_000_000.0 }
         if cleaned.hasSuffix("M") || cleaned.hasSuffix("m") { return 1_000_000.0 }
         if cleaned.hasSuffix("K") || cleaned.hasSuffix("k") { return 1_000.0 }
         return 1.0
     }()
-    let numPart = cleaned.replacingOccurrences(of: "[BbMmKk]$", with: "", options: .regularExpression)
+    let numPart = cleaned.replacingOccurrences(of: "[TtBbMmKk]$", with: "", options: .regularExpression)
     return Double(numPart).map { $0 * mult }
+}
+
+private func chartJsonFromTableIOS(headers: [[InlineSpan]], rows: [[[InlineSpan]]]) -> String? {
+    guard rows.count >= 2, headers.count >= 2 else { return nil }
+    let headerTexts = headers.map { NexlyIcons.cleanPlainText(plainTextOfSpans($0)).trimmingCharacters(in: .whitespacesAndNewlines) }
+    let firstHeader = headerTexts.first ?? ""
+    let labelCol = (["#", "Rank", "No", "ID"].contains(firstHeader) && headers.count >= 3) ? 1 : 0
+    var numCol: Int? = nil
+    for c in 0..<headers.count where c != labelCol {
+        let validCount = rows.filter { row in
+            guard c < row.count else { return false }
+            return parseSortableNumberIOS(plainTextOfSpans(row[c])) != nil
+        }.count
+        if validCount >= max(2, rows.count / 2) {
+            numCol = c
+            break
+        }
+    }
+    guard let vc = numCol else { return nil }
+    var dataItems: [[String: Any]] = []
+    for row in rows.prefix(12) {
+        guard labelCol < row.count, vc < row.count,
+              let val = parseSortableNumberIOS(plainTextOfSpans(row[vc])) else { continue }
+        let label = NexlyIcons.cleanPlainText(plainTextOfSpans(row[labelCol])).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !label.isEmpty else { continue }
+        dataItems.append(["label": label, "value": val])
+    }
+    guard dataItems.count >= 2 else { return nil }
+    let payload: [String: Any] = [
+        "type": "bar",
+        "title": headerTexts[vc].isEmpty ? "Comparison" : headerTexts[vc],
+        "data": dataItems
+    ]
+    guard let data = try? JSONSerialization.data(withJSONObject: payload),
+          let str = String(data: data, encoding: .utf8) else { return nil }
+    return str
 }
 
 private struct TableBlockView: View {
@@ -2737,6 +2893,7 @@ private struct TableBlockView: View {
     @State private var page: Int = 0
     @State private var sortCol: Int = -1
     @State private var sortAsc: Bool = true
+    @State private var showChart: Bool = false
 
     init(headers: [[InlineSpan]], aligns: [TableAlign], rows: [[[InlineSpan]]], citations: [Int: String] = [:]) {
         self.headers = headers
@@ -2797,92 +2954,125 @@ private struct TableBlockView: View {
         )
         let startRow = sortedRows.isEmpty ? 0 : safePage * pageSize + 1
         let endRow = min(sortedRows.count, safePage * pageSize + visibleRows.count)
-        VStack(alignment: .leading, spacing: 0) {
-            if CGFloat(columns) * cellWidth <= availableWidth {
-                table(theme: theme, cellWidth: cellWidth, columns: columns, scrollable: false)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    table(theme: theme, cellWidth: cellWidth, columns: columns, scrollable: true)
+        let chartJson = chartJsonFromTableIOS(headers: headers, rows: rows)
+        VStack(alignment: .leading, spacing: 6) {
+            if chartJson != nil {
+                HStack(spacing: 4) {
+                    ForEach([("Table", false), ("Chart", true)], id: \.0) { item in
+                        let active = showChart == item.1
+                        Button {
+                            GSHaptics.select()
+                            showChart = item.1
+                        } label: {
+                            Text(item.0)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(active ? Color.white : Color(red: 0.357, green: 0.239, blue: 0.961))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule().fill(
+                                        active
+                                            ? Color(red: 0.424, green: 0.298, blue: 0.965)
+                                            : Color(red: 0.933, green: 0.910, blue: 1.0)
+                                    )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Spacer()
                 }
             }
-
-            if rows.count >= 4 {
-                HStack {
-                    HStack(spacing: 4) {
-                        Button("‹") {
-                            page = max(0, safePage - 1)
+            if showChart, let chartJson {
+                WidgetBlockView(kind: "chart", json: chartJson, open: false)
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    if CGFloat(columns) * cellWidth <= availableWidth {
+                        table(theme: theme, cellWidth: cellWidth, columns: columns, scrollable: false)
+                    } else {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            table(theme: theme, cellWidth: cellWidth, columns: columns, scrollable: true)
                         }
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(safePage > 0 ? Aero.textSecondary : Aero.textTertiary.opacity(0.45))
-                        .disabled(safePage == 0)
-                        .buttonStyle(.plain)
+                    }
 
-                        ForEach(0..<totalPages, id: \.self) { (p: Int) in
-                            let active = p == safePage
+                    if rows.count >= 4 {
+                        HStack {
+                            HStack(spacing: 4) {
+                                Button("‹") {
+                                    page = max(0, safePage - 1)
+                                }
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(safePage > 0 ? Aero.textSecondary : Aero.textTertiary.opacity(0.45))
+                                .disabled(safePage == 0)
+                                .buttonStyle(.plain)
+
+                                ForEach(0..<totalPages, id: \.self) { (p: Int) in
+                                    let active = p == safePage
+                                    Button {
+                                        page = p
+                                    } label: {
+                                        Text("\(p + 1)")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundStyle(active ? Color.white : Aero.textSecondary)
+                                            .frame(width: 22, height: 22)
+                                            .background(Circle().fill(active ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.clear))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+
+                                Button("›") {
+                                    page = min(totalPages - 1, safePage + 1)
+                                }
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(safePage < totalPages - 1 ? Aero.textSecondary : Aero.textTertiary.opacity(0.45))
+                                .disabled(safePage >= totalPages - 1)
+                                .buttonStyle(.plain)
+
+                                Text("\(startRow)–\(endRow) of \(sortedRows.count)")
+                                    .font(.system(size: 10.5))
+                                    .foregroundStyle(Aero.textSecondary)
+                                    .padding(.leading, 4)
+                            }
+
+                            Spacer()
+
                             Button {
-                                page = p
+                                switch pageSize {
+                                case 3: pageSize = 5
+                                case 5: pageSize = 10
+                                case 10: pageSize = 25
+                                default: pageSize = 3
+                                }
+                                page = 0
                             } label: {
-                                Text("\(p + 1)")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(active ? Color.white : Aero.textSecondary)
-                                    .frame(width: 22, height: 22)
-                                    .background(Circle().fill(active ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.clear))
+                                Text("Show: \(pageSize) ▾")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(Aero.text)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.85)))
+                                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(Aero.outline.opacity(0.45), lineWidth: 1))
                             }
                             .buttonStyle(.plain)
                         }
-
-                        Button("›") {
-                            page = min(totalPages - 1, safePage + 1)
-                        }
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(safePage < totalPages - 1 ? Aero.textSecondary : Aero.textTertiary.opacity(0.45))
-                        .disabled(safePage >= totalPages - 1)
-                        .buttonStyle(.plain)
-
-                        Text("\(startRow)–\(endRow) of \(sortedRows.count)")
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(Aero.textSecondary)
-                            .padding(.leading, 4)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color(red: 0.965, green: 0.949, blue: 1.0))
                     }
-
-                    Spacer()
-
-                    Button {
-                        switch pageSize {
-                        case 3: pageSize = 5
-                        case 5: pageSize = 10
-                        case 10: pageSize = 25
-                        default: pageSize = 3
-                        }
-                        page = 0
-                    } label: {
-                        Text("Show: \(pageSize) ▾")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Aero.text)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.85)))
-                            .overlay(RoundedRectangle(cornerRadius: 7).stroke(Aero.outline.opacity(0.45), lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color(red: 0.965, green: 0.949, blue: 1.0))
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.75)))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline.opacity(0.4), lineWidth: 1))
             }
         }
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.75)))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline.opacity(0.4), lineWidth: 1))
     }
 
     @ViewBuilder
     private func table(theme: SpanTheme, cellWidth: CGFloat, columns: Int, scrollable: Bool) -> some View {
-        let firstHeaderRaw = headers.first.map { plainTextOfSpans($0).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+        let firstHeaderRaw = headers.first.map { NexlyIcons.cleanPlainText(plainTextOfSpans($0)).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
                 ForEach(0..<columns, id: \.self) { c in
-                    let hRaw = c < headers.count ? plainTextOfSpans(headers[c]) : ""
+                    let hRaw = c < headers.count ? NexlyIcons.cleanPlainText(plainTextOfSpans(headers[c])) : ""
                     let sortSuffix = sortCol == c ? (sortAsc ? " ▲" : " ▼") : ""
                     Button {
                         GSHaptics.select()

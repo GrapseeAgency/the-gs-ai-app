@@ -376,6 +376,39 @@ private fun isCalculatorHeadingTitle(raw: String): Boolean {
     return "calculator" in lower || "estimator" in lower || "simulator" in lower || "pricing model" in lower
 }
 
+private fun extractQuickCalcParams(text: String): Triple<Double, Double, Int> {
+    val currMatch = Regex("""[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmMbB])?""").find(text)
+    val currAmount = currMatch?.let { m ->
+        val base = m.groupValues[1].replace(",", "").toDoubleOrNull() ?: return@let null
+        val mult = when (m.groupValues[2].lowercase()) {
+            "k" -> 1_000.0
+            "m" -> 1_000_000.0
+            "b" -> 1_000_000_000.0
+            else -> 1.0
+        }
+        base * mult
+    }
+    val pctMatch = Regex("""(\d+(?:\.\d+)?)\s*(?:%|percent\b)""", RegexOption.IGNORE_CASE).find(text)
+    val pctVal = pctMatch?.groupValues?.get(1)?.toDoubleOrNull()
+
+    val yrMatch = Regex("""(\d{1,2})\s*(?:-\s*)?(?:years?|yrs?\b)""", RegexOption.IGNORE_CASE).find(text)
+    val yearsVal = yrMatch?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(1, 40) ?: 5
+
+    val allNums = Regex("""\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?""")
+        .findAll(text)
+        .mapNotNull { it.value.replace(",", "").toDoubleOrNull() }
+        .toList()
+    val nonYearNums = allNums.filter { it !in 1990.0..2035.0 }
+    val amt = currAmount
+        ?: nonYearNums.firstOrNull { it >= 50.0 && it != pctVal }
+        ?: nonYearNums.firstOrNull { it >= 25.0 && it != pctVal }
+        ?: 1200.0
+    val rate = pctVal
+        ?: nonYearNums.firstOrNull { it > 0.0 && it < 50.0 && it != amt }
+        ?: 10.0
+    return Triple(amt, rate, yearsVal)
+}
+
 private fun classifySectionListMode(headingText: String): SectionListMode {
     val lower = headingText.trim().lowercase()
     return when {
@@ -498,15 +531,14 @@ private fun StructuredBlockSequenceView(
                     else -> ""
                 }
                 if (bodyText.isNotBlank()) {
-                    val nums = Regex("\\d+(?:\\.\\d+)?").findAll(bodyText).mapNotNull { it.value.toDoubleOrNull() }.toList()
-                    val amt = nums.firstOrNull { it >= 50.0 } ?: nums.firstOrNull() ?: 1200.0
-                    val disc = nums.firstOrNull { it > 0.0 && it < 50.0 && it != amt } ?: 10.0
+                    val (amt, disc, yrs) = extractQuickCalcParams(bodyText)
                     renderedExplicitCalc = true
                     key("calc:${block.sourceStart}") {
                         NexlyQuickCalculatorCard(
                             title = hTitle,
                             initialAmount = amt,
                             initialDiscount = disc,
+                            initialYears = yrs,
                             contextHint = bodyText
                         )
                     }
@@ -620,18 +652,15 @@ private fun StructuredBlockSequenceView(
             val low = fullProse.lowercase()
             (fullProse.contains('$') || fullProse.contains('€') || fullProse.contains('£')) &&
                 fullProse.contains('%') &&
-                ("discount" in low || "tax" in low || "interest" in low || "margin" in low || "roi" in low || "price" in low || "cost" in low || "save" in low)
+                ("discount" in low || "tax" in low || "interest" in low || "margin" in low || "roi" in low || "price" in low || "cost" in low || "save" in low || "loan" in low || "compound" in low || "invest" in low)
         }
         if (hasCalcSignal) {
-            val nums = remember(fullProse) {
-                Regex("\\d+(?:\\.\\d+)?").findAll(fullProse.replace(",", "")).mapNotNull { it.value.toDoubleOrNull() }.toList()
-            }
-            val amt = nums.firstOrNull { it >= 25.0 } ?: 1000.0
-            val disc = nums.firstOrNull { it in 1.0..95.0 && it != amt } ?: 15.0
+            val (amt, disc, yrs) = remember(fullProse) { extractQuickCalcParams(fullProse) }
             NexlyQuickCalculatorCard(
                 title = "Quick Calculator",
                 initialAmount = amt,
                 initialDiscount = disc,
+                initialYears = yrs,
                 contextHint = fullProse
             )
         }
@@ -958,7 +987,7 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
                     // long-press path (GsLinks), never a plain tap.
                     linkInteractionListener = { _ -> theme.openLink(span.url) }
                 )
-            ) { builder.append(span.text) }
+            ) { builder.append(NexlyIcons.cleanPlainText(span.text).ifEmpty { span.text }) }
             is InlineSpan.CitationSpan -> {
                 // PHASE 8.1: [N] resolves against the turn's real sources → a
                 // small superscript-style tappable chip that opens the source
@@ -1235,19 +1264,39 @@ private fun ParagraphBlock(
     if (selectable) SelectionContainer { text() } else text()
 }
 
+private fun stripLeadingIconFromSpans(spans: List<InlineSpan>): List<InlineSpan> {
+    val first = spans.firstOrNull() ?: return spans
+    return when (first) {
+        is InlineSpan.TextSpan -> {
+            val (_, rest) = NexlyIcons.extractLeadingIcon(first.text)
+            if (rest == first.text) spans
+            else if (rest.isEmpty()) spans.drop(1)
+            else listOf(InlineSpan.TextSpan(rest)) + spans.drop(1)
+        }
+        is InlineSpan.BoldSpan -> {
+            val inner = stripLeadingIconFromSpans(first.children)
+            if (inner.isEmpty()) spans.drop(1)
+            else listOf(InlineSpan.BoldSpan(inner)) + spans.drop(1)
+        }
+        is InlineSpan.ItalicSpan -> {
+            val inner = stripLeadingIconFromSpans(first.children)
+            if (inner.isEmpty()) spans.drop(1)
+            else listOf(InlineSpan.ItalicSpan(inner)) + spans.drop(1)
+        }
+        else -> spans
+    }
+}
+
 @Composable
 private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: Map<Int, String>) {
     val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize, citationUrls)
     val rawHeadingText = remember(block.spans) { plainTextOfSpans(block.spans) }
     val badge = remember(rawHeadingText, block.level) {
-        if (block.level in 2..3) sectionBadgeForHeadingText(rawHeadingText) else null
+        if (block.level in 2..3) sectionBadgeForHeadingText(rawHeadingText)
+        else NexlyIcons.extractLeadingIcon(rawHeadingText).first
     }
     val cleanSpans = remember(block.spans) {
-        val first = block.spans.firstOrNull()
-        if (first is InlineSpan.TextSpan) {
-            val (_, stripped) = NexlyIcons.extractLeadingIcon(first.text)
-            listOf(InlineSpan.TextSpan(stripped)) + block.spans.drop(1)
-        } else block.spans
+        stripLeadingIconFromSpans(block.spans)
     }
     val styled = remember(cleanSpans, theme) { spansToAnnotatedString(cleanSpans, theme) }
     val style = when (block.level) {
@@ -1268,8 +1317,8 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
                 if (badge != null) {
                     NexlyGlassGlyphTile(
                         name = badge,
-                        size = if (block.level == 2) 26.dp else 22.dp,
-                        glyphSize = if (block.level == 2) 15.dp else 13.dp
+                        size = if (block.level <= 2) 26.dp else 22.dp,
+                        glyphSize = if (block.level <= 2) 15.dp else 13.dp
                     )
                     Spacer(Modifier.width(7.dp))
                 }
@@ -1289,13 +1338,15 @@ private fun NexlyQuickCalculatorCard(
     title: String,
     initialAmount: Double,
     initialDiscount: Double,
+    initialYears: Int = 5,
     contextHint: String = ""
 ) {
     val lowerHint = remember(title, contextHint) { "$title $contextHint".lowercase() }
     val initialMode = remember(lowerHint) {
         when {
+            "compound" in lowerHint || "roi" in lowerHint || "invest" in lowerHint || "annual" in lowerHint || "loan" in lowerHint || "mortgage" in lowerHint -> 3
             "tax" in lowerHint || "interest" in lowerHint || "growth" in lowerHint || "markup" in lowerHint || "tip" in lowerHint || "return" in lowerHint -> 1
-            "share" in lowerHint || "commission" in lowerHint || "allocation" in lowerHint -> 2
+            "share" in lowerHint || "commission" in lowerHint || "allocation" in lowerHint || "portion" in lowerHint -> 2
             else -> 0
         }
     }
@@ -1307,7 +1358,8 @@ private fun NexlyQuickCalculatorCard(
             else -> "$"
         }
     }
-    var mode by remember(initialMode) { mutableStateOf(initialMode) } // 0 = Discount (-%), 1 = Growth/Tax (+%), 2 = Share (% of)
+    var mode by remember(initialMode) { mutableStateOf(initialMode) } // 0 = Discount (-%), 1 = Markup (+%), 2 = Share (% of), 3 = Compound (Yr)
+    var years by remember(initialYears) { mutableStateOf(initialYears.coerceIn(1, 40)) }
     var amountText by remember(initialAmount) {
         mutableStateOf(
             if (initialAmount % 1.0 == 0.0) initialAmount.toLong().toString()
@@ -1322,17 +1374,23 @@ private fun NexlyQuickCalculatorCard(
     }
     val amount = amountText.replace(",", "").toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
     val ratePct = rateText.replace("%", "").toDoubleOrNull()?.coerceIn(0.0, 100.0) ?: 0.0
-    val deltaVal = amount * (ratePct / 100.0)
     val total = when (mode) {
-        1 -> amount + deltaVal
-        2 -> deltaVal
-        else -> amount - deltaVal
+        1 -> amount * (1.0 + ratePct / 100.0)
+        2 -> amount * (ratePct / 100.0)
+        3 -> amount * Math.pow(1.0 + ratePct / 100.0, years.toDouble())
+        else -> amount * (1.0 - ratePct / 100.0)
     }
-    val modeLabels = listOf("Discount (-%)", "Markup (+%)", "Share (% of)")
+    val deltaVal = kotlin.math.abs(total - amount)
+    val modeLabels = listOf("Discount (-%)", "Markup (+%)", "Share (% of)", "Compound (Yr)")
     val rateLabel = when (mode) {
         1 -> "Rate (+%)"
         2 -> "Share (%)"
+        3 -> "Annual (%)"
         else -> "Discount (-%)"
+    }
+    val resultLabel = when (mode) {
+        3 -> "${years}-Yr Total"
+        else -> "Result"
     }
 
     Column(
@@ -1385,6 +1443,7 @@ private fun NexlyQuickCalculatorCard(
                     color = Color(0xFF6C4CF6),
                     modifier = Modifier.clickable {
                         mode = initialMode
+                        years = initialYears.coerceIn(1, 40)
                         amountText = if (initialAmount % 1.0 == 0.0) initialAmount.toLong().toString()
                         else String.format(java.util.Locale.US, "%.2f", initialAmount)
                         rateText = if (initialDiscount % 1.0 == 0.0) initialDiscount.toLong().toString()
@@ -1453,7 +1512,7 @@ private fun NexlyQuickCalculatorCard(
                 }
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Result", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(resultLabel, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1469,6 +1528,34 @@ private fun NexlyQuickCalculatorCard(
                         color = Color(0xFF5B3DF5),
                         maxLines = 1
                     )
+                }
+            }
+        }
+        if (mode == 3) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Compounding Horizon", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf(1, 3, 5, 10, 20).forEach { yr ->
+                        val active = years == yr
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (active) Color(0xFF6C4CF6) else Color(0xFFF3EEFF))
+                                .clickable { years = yr }
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "${yr}Y",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (active) Color.White else Color(0xFF4F35E8)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1510,6 +1597,7 @@ private fun NexlyQuickCalculatorCard(
                 text = when (mode) {
                     1 -> "+${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
                     2 -> "${String.format(java.util.Locale.US, "%.1f%%", ratePct)} of base"
+                    3 -> "Gain +${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
                     else -> "Saved ${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
                 },
                 fontSize = 10.5.sp,
@@ -1961,7 +2049,9 @@ private fun StepOrderedListItemRow(
     val splitStep = remember(item.spans, item.children) {
         val first = item.spans.firstOrNull()
         if (first is InlineSpan.BoldSpan) {
-            val title = plainTextOfSpans(first.children).trim().trimEnd(':').trim()
+            val rawTitle = plainTextOfSpans(first.children).trim().trimEnd(':').trim()
+            val (_, cleanedTitle) = NexlyIcons.extractLeadingIcon(rawTitle)
+            val title = NexlyIcons.cleanPlainText(cleanedTitle.ifEmpty { rawTitle }).trim()
             if (title.isNotEmpty()) {
                 if (item.spans.size >= 2) {
                     val rest = item.spans.drop(1).toMutableList()
@@ -2206,8 +2296,18 @@ private fun BlockQuoteView(block: Block.BlockQuote, selectable: Boolean, citatio
 // ---------------------------------------------------------------------------
 
 private fun parseSortableNumberAndroid(raw: String): Double? {
-    val clean = raw.replace(Regex("[,$€£¥%↑↓↗↘+\\s]"), "")
-    return clean.toDoubleOrNull()
+    val clean = raw.replace(Regex("[,$€£¥%↑↓↗↘+\\s]"), "").trim()
+    if (clean.isEmpty()) return null
+    val mult = when (clean.last().lowercaseChar()) {
+        'k' -> 1_000.0
+        'm' -> 1_000_000.0
+        'b' -> 1_000_000_000.0
+        't' -> 1_000_000_000_000.0
+        else -> 1.0
+    }
+    val numPart = if (mult > 1.0) clean.dropLast(1).trim() else clean
+    val base = numPart.toDoubleOrNull() ?: return null
+    return base * mult
 }
 
 @Composable
@@ -2278,9 +2378,10 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
             val tableHeader: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
                 headers.forEachIndexed { c, header ->
                     val sorted = sortCol == c
+                    val cleanHeaderText = NexlyIcons.cleanPlainText(header.text).ifEmpty { header.text }
                     val hLabel = if (sorted) {
-                        AnnotatedString("${header.text} ${if (sortAsc) "↑" else "↓"}")
-                    } else header
+                        AnnotatedString("$cleanHeaderText ${if (sortAsc) "↑" else "↓"}")
+                    } else AnnotatedString(cleanHeaderText)
                     Box(
                         modifier = Modifier.clickable {
                             if (sortCol == c) sortAsc = !sortAsc else {
@@ -2303,74 +2404,78 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
             }
 
             if (fits) {
-                SelectionContainer {
-                    Column {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFFEDE6FF)),
-                            content = tableHeader
-                        )
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(outline.copy(alpha = 0.35f))
-                        )
-                        rows.forEachIndexed { r, row ->
-                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                (0 until columns).forEach { c ->
-                                    TableCell(
-                                        text = row.getOrElse(c) { AnnotatedString("") },
-                                        width = cellWidth,
-                                        align = block.aligns.getOrElse(c) { TableAlign.LEFT },
-                                        emphasize = false,
-                                        isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFEDE6FF)),
+                        content = tableHeader
+                    )
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(outline.copy(alpha = 0.35f))
+                    )
+                    SelectionContainer {
+                        Column {
+                            rows.forEachIndexed { r, row ->
+                                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    (0 until columns).forEach { c ->
+                                        TableCell(
+                                            text = row.getOrElse(c) { AnnotatedString("") },
+                                            width = cellWidth,
+                                            align = block.aligns.getOrElse(c) { TableAlign.LEFT },
+                                            emphasize = false,
+                                            isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
+                                        )
+                                    }
+                                }
+                                if (r != rows.lastIndex) {
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .height(1.dp)
+                                            .background(outline.copy(alpha = 0.2f))
                                     )
                                 }
-                            }
-                            if (r != rows.lastIndex) {
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .height(1.dp)
-                                        .background(outline.copy(alpha = 0.2f))
-                                )
                             }
                         }
                     }
                 }
             } else {
-                SelectionContainer {
-                    Column(Modifier.horizontalScroll(rememberScrollState())) {
-                        Row(
-                            modifier = Modifier.background(Color(0xFFEDE6FF)),
-                            content = tableHeader
-                        )
-                        Box(
-                            Modifier
-                                .width(cellWidth * columns)
-                                .height(1.dp)
-                                .background(outline.copy(alpha = 0.35f))
-                        )
-                        rows.forEach { row ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                (0 until columns).forEach { c ->
-                                    TableCell(
-                                        text = row.getOrElse(c) { AnnotatedString("") },
-                                        width = cellWidth,
-                                        align = block.aligns.getOrElse(c) { TableAlign.LEFT },
-                                        emphasize = false,
-                                        isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
-                                    )
+                Column(Modifier.horizontalScroll(rememberScrollState())) {
+                    Row(
+                        modifier = Modifier.background(Color(0xFFEDE6FF)),
+                        content = tableHeader
+                    )
+                    Box(
+                        Modifier
+                            .width(cellWidth * columns)
+                            .height(1.dp)
+                            .background(outline.copy(alpha = 0.35f))
+                    )
+                    SelectionContainer {
+                        Column {
+                            rows.forEach { row ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    (0 until columns).forEach { c ->
+                                        TableCell(
+                                            text = row.getOrElse(c) { AnnotatedString("") },
+                                            width = cellWidth,
+                                            align = block.aligns.getOrElse(c) { TableAlign.LEFT },
+                                            emphasize = false,
+                                            isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
+                                        )
+                                    }
                                 }
+                                Box(
+                                    Modifier
+                                        .width(cellWidth * columns)
+                                        .height(1.dp)
+                                        .background(outline.copy(alpha = 0.2f))
+                                )
                             }
-                            Box(
-                                Modifier
-                                    .width(cellWidth * columns)
-                                    .height(1.dp)
-                                    .background(outline.copy(alpha = 0.2f))
-                            )
                         }
                     }
                 }

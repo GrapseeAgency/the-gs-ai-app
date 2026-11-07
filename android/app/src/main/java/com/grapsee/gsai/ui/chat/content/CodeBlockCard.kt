@@ -348,16 +348,51 @@ private fun executeCodePreview(language: String?, code: String): CodeRunResult {
             }
             return CodeRunResult(tableOut)
         }
-        val selects = Regex("\\bSELECT\\b", RegexOption.IGNORE_CASE).findAll(trimmed).count()
-        val inserts = Regex("\\bINSERT\\b", RegexOption.IGNORE_CASE).findAll(trimmed).count()
-        val summary = buildList {
-            if (selects > 0) add("$selects SELECT")
-            if (inserts > 0) add("$inserts INSERT")
-            if (hasGroupBy) add("GROUP BY")
-            if (hasDistinct) add("DISTINCT")
-            if (tables.isNotEmpty()) add("tables: ${tables.joinToString(", ")}")
-        }.joinToString(" · ")
-        return CodeRunResult("SQL query executed (${summary.ifEmpty { "${trimmed.lines().size} lines" }})")
+        val selectColsMatch = Regex("\\bSELECT\\s+(?:DISTINCT\\s+)?([\\s\\S]+?)\\s+FROM\\b", RegexOption.IGNORE_CASE)
+            .findAll(trimmed)
+            .lastOrNull()
+        val parsedCols = selectColsMatch?.groupValues?.get(1)
+            ?.split(',')
+            ?.map { rawCol ->
+                val clean = rawCol.trim().replace(Regex("\\s+"), " ")
+                val asAlias = Regex("\\bAS\\s+([a-zA-Z0-9_\"'`]+)$", RegexOption.IGNORE_CASE).find(clean)?.groupValues?.get(1)
+                val token = (asAlias ?: clean.substringAfterLast('.').substringAfterLast(' ')).trim('"', '\'', '`')
+                token.ifEmpty { "col" }
+            }
+            ?.filter { it.isNotEmpty() && it != "*" }
+            ?.take(6)
+            .orEmpty()
+        val cols = if (parsedCols.isNotEmpty()) parsedCols else listOf("id", "name", "status", "total", "updated_at")
+        fun sampleCell(col: String, rowIdx: Int): String {
+            val c = col.lowercase()
+            return when {
+                "order_id" in c -> listOf("1042", "1043", "1044")[rowIdx % 3]
+                "customer_id" in c || "user_id" in c -> listOf("CUST-88", "CUST-19", "CUST-42")[rowIdx % 3]
+                "item_id" in c || "product_id" in c -> listOf("IT-01", "IT-02", "IT-05")[rowIdx % 3]
+                c == "id" || c.endsWith("_id") -> listOf("101", "102", "103")[rowIdx % 3]
+                "product" in c || "item" in c || "title" in c -> listOf("Wireless Mouse", "USB-C Hub", "Keycap Set")[rowIdx % 3]
+                "email" in c -> listOf("ava@acme.io", "liam@acme.io", "noah@acme.io")[rowIdx % 3]
+                "name" in c || "user" in c || "customer" in c || "author" in c -> listOf("Ava Chen", "Liam Patel", "Noah Kim")[rowIdx % 3]
+                "status" in c || "state" in c -> listOf("active", "completed", "pending")[rowIdx % 3]
+                "amount" in c || "price" in c || "total" in c || "revenue" in c || "cost" in c || "salary" in c ->
+                    listOf("$149.50", "$90.00", "$64.00")[rowIdx % 3]
+                "qty" in c || "count" in c || "orders" in c || "num" in c -> listOf("3", "2", "1")[rowIdx % 3]
+                "rate" in c || "pct" in c || "score" in c -> listOf("94.2%", "88.5%", "91.0%")[rowIdx % 3]
+                "date" in c || "time" in c || "created" in c || "updated" in c -> listOf("2026-04-18", "2026-04-17", "2026-04-16")[rowIdx % 3]
+                else -> listOf("val_${rowIdx + 1}a", "val_${rowIdx + 1}b", "val_${rowIdx + 1}c")[rowIdx % 3]
+            }
+        }
+        val rows = (0..2).map { r -> cols.map { col -> sampleCell(col, r) } }
+        val widths = cols.indices.map { i ->
+            maxOf(cols[i].length, rows.maxOf { it[i].length })
+        }
+        val headerLine = cols.indices.joinToString(" | ") { i -> cols[i].padEnd(widths[i]) }
+        val sepLine = widths.joinToString("-+-") { w -> "-".repeat(w) }
+        val rowLines = rows.joinToString("\n") { r ->
+            cols.indices.joinToString(" | ") { i -> r[i].padEnd(widths[i]) }
+        }
+        val tblSummary = if (tables.isNotEmpty()) "from ${tables.joinToString(", ")}" else "query result"
+        return CodeRunResult("$headerLine\n$sepLine\n$rowLines\n(3 rows · $tblSummary · 1.8 ms)")
     }
 
     return CodeRunResult("Executed ${lang.uppercase()} snippet (${trimmed.lines().size} lines · exit code 0)")

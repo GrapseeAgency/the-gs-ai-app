@@ -36,7 +36,19 @@ enum ResponseStyle {
         }
     }
 
-    /// One sentence per axis, or nil when both are at their defaults.
+    private static let nexlyUIContract =
+        "Nexly UI rendering contract (mandatory): " +
+        "1) ZERO EMOJIS: Never output raw Unicode emojis anywhere in prose, headings, lists, tables, or widgets. " +
+        "Use `:icon-name:` tokens (e.g. `:sparkles:`, `:rocket:`, `:bulb:`, `:bolt:`, `:check:`, `:alert-triangle:`, " +
+        "`:chart-bar:`, `:calculator:`, `:code:`, `:flame:`, `:shield-check:`, `:calendar:`, `:clock:`, `:coin:`, " +
+        "`:compass:`, `:book:`, `:cpu:`, `:world:`, `:target:`, `:heart:`, `:star:`) at the start of section headings and callouts. " +
+        "2) SPONTANEOUS INTERACTIVE WIDGETS: Whenever a topic involves numbers, budgets, loans, pricing, comparisons, " +
+        "schedules, processes, study concepts, or choices — even when the user did not explicitly ask for a widget — " +
+        "delight the user by appending a logical interactive fenced widget block (` ```calc `, ` ```chart `, ` ```stat `, " +
+        "` ```compare `, ` ```timeline `, ` ```quiz `, ` ```flashcards `, ` ```checklist `, ` ```steps `, ` ```poll `, " +
+        "` ```sim `, ` ```stage3d `) with real domain values and mathematical formulas."
+
+    /// Rendering contract plus one sentence per preference axis.
     ///
     /// Reads the two UserDefaults keys directly rather than through
     /// `OnboardingProfileStore` (a @MainActor ObservableObject): this directive
@@ -47,7 +59,7 @@ enum ResponseStyle {
         let defaults = UserDefaults.standard
         let tone = defaults.string(forKey: "gs.profile.personality") ?? "Friendly"
         let detail = defaults.string(forKey: "gs.profile.responseStyle") ?? "Standard"
-        if tone == "Friendly" && detail == "Standard" { return nil }
+        if tone == "Friendly" && detail == "Standard" { return nexlyUIContract }
         let toneLine: String
         switch tone {
         case "Professional":
@@ -66,7 +78,7 @@ enum ResponseStyle {
         default:
             detailLine = "Standard depth: the answer, the reasoning that matters, one next step."
         }
-        return "Reader preference (does not override facts or structure): \(toneLine) \(detailLine)"
+        return "\(nexlyUIContract)\nReader preference (does not override facts or structure): \(toneLine) \(detailLine)"
     }
 
     /// The one-line summary Profile shows under its row.

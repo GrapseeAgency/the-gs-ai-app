@@ -80,7 +80,14 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
     val clientId = remember(w) { "a" + UUID.randomUUID().toString().replace("-", "").take(7) }
     val myName = remember(w) { "Guest-${clientId.take(3)}" }
     val myColor = "#4C6FFF"
-    val sharedState = remember(w) { mutableStateMapOf<String, String>() }
+    val sharedState = remember(w) {
+        mutableStateMapOf<String, String>().apply {
+            w.start.forEach { (k, v) -> put(k, v) }
+            if (w.surface == "todo" && isEmpty()) {
+                w.items.take(12).forEachIndexed { idx, item -> put("t$idx", item) }
+            }
+        }
+    }
     val presence = remember(w) { mutableStateListOf<CollabPeer>() }
     var status by remember(w) { mutableStateOf("connecting") }
     var draft by remember(w) { mutableStateOf("") }
@@ -98,6 +105,14 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
     }
 
     fun publish(body: JsonObject) {
+        (body["set"] as? JsonObject)?.forEach { (k, v) ->
+            if (v is JsonPrimitive) sharedState[k] = v.content
+        }
+        (body["delta"] as? JsonObject)?.forEach { (k, v) ->
+            val by = (v as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
+            val cur = sharedState[k]?.toDoubleOrNull()?.toInt() ?: 0
+            sharedState[k] = (cur + by).toString()
+        }
         scope.launch {
             try {
                 client.post(root) {

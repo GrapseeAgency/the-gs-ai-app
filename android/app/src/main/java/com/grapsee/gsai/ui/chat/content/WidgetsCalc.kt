@@ -234,11 +234,22 @@ internal object CalcExpr {
 
 internal fun formatCalc(value: Double, format: String, unit: String): String {
     if (value.isNaN() || !value.isFinite()) return "—"
-    val body = when (format) {
-        "money" -> String.format(Locale.US, "%,.2f", value)
-        "percent" -> String.format(Locale.US, "%.2f%%", value * 100)
-        "integer" -> String.format(Locale.US, "%,.0f", value)
-        "compact" -> when {
+    val fmtLower = format.lowercase().trim()
+    val unitLower = unit.lowercase().trim()
+    val isCurrency = fmtLower in setOf("money", "currency", "usd") || unitLower in setOf("currency", "money", "usd", "$", "€", "£", "¥")
+    val isPercent = fmtLower in setOf("percent", "pct", "%") || unitLower in setOf("percent", "pct", "%")
+    val currSymbol = when (unit.trim()) {
+        "€", "£", "¥", "$" -> unit.trim()
+        else -> if (isCurrency) "$" else ""
+    }
+    val body = when {
+        isCurrency -> String.format(Locale.US, "%s%,.2f", currSymbol, value)
+        isPercent -> {
+            val pctVal = if (fmtLower in setOf("percent", "pct") && abs(value) <= 1.0) value * 100.0 else value
+            String.format(Locale.US, "%.2f%%", pctVal)
+        }
+        fmtLower == "integer" -> String.format(Locale.US, "%,.0f", value)
+        fmtLower == "compact" -> when {
             abs(value) >= 1_000_000_000 -> String.format(Locale.US, "%.2fB", value / 1_000_000_000)
             abs(value) >= 1_000_000 -> String.format(Locale.US, "%.2fM", value / 1_000_000)
             abs(value) >= 1_000 -> String.format(Locale.US, "%.1fK", value / 1_000)
@@ -247,7 +258,8 @@ internal fun formatCalc(value: Double, format: String, unit: String): String {
         else -> if (abs(value - round(value)) < 1e-9) String.format(Locale.US, "%,.0f", value)
         else String.format(Locale.US, "%,.2f", value)
     }
-    return if (unit.isBlank()) body else "$body $unit"
+    if (isCurrency || isPercent || unit.isBlank()) return body
+    return "$body $unit"
 }
 
 @Composable

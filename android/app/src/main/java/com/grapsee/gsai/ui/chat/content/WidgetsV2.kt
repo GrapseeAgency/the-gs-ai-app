@@ -463,12 +463,6 @@ internal fun RatingWidgetView(w: RatingWidget, onSendPrompt: ((String) -> Unit)?
                 for (i in 0 until count) {
                     val value = if (w.style == "nps") i else i + 1
                     val isSelected = if (w.style == "nps" || w.style == "thumb") chosen == value else chosen >= value
-                    val symbol = when (w.style) {
-                        "heart" -> if (isSelected) "♥" else "♡"
-                        "thumb" -> if (i == 0) "+1 Yes" else "-1 No"
-                        "nps" -> "$value"
-                        else -> if (isSelected) "★" else "☆"
-                    }
                     Box(
                         Modifier
                             .clip(RoundedCornerShape(8.dp))
@@ -482,7 +476,38 @@ internal fun RatingWidgetView(w: RatingWidget, onSendPrompt: ((String) -> Unit)?
                             .padding(horizontal = 10.dp, vertical = 6.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(symbol, style = MaterialTheme.typography.labelLarge, color = if (isSelected) accent else c.textPrimary)
+                        when (w.style) {
+                            "heart" -> NexlyGlyph(
+                                name = "heart-filled",
+                                size = 18.dp,
+                                color = if (isSelected) accent else c.textTertiary.copy(alpha = 0.45f)
+                            )
+                            "thumb" -> Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                NexlyGlyph(
+                                    name = if (i == 0) "thumb-up" else "thumb-down",
+                                    size = 15.dp,
+                                    color = if (isSelected) accent else c.textPrimary
+                                )
+                                Text(
+                                    text = if (i == 0) "Yes" else "No",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if (isSelected) accent else c.textPrimary
+                                )
+                            }
+                            "nps" -> Text(
+                                text = "$value",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (isSelected) accent else c.textPrimary
+                            )
+                            else -> NexlyGlyph(
+                                name = if (isSelected) "star-filled" else "star",
+                                size = 18.dp,
+                                color = if (isSelected) accent else c.textTertiary.copy(alpha = 0.55f)
+                            )
+                        }
                     }
                 }
             }
@@ -1202,9 +1227,65 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
             if ("columns" !in m && m["headers"] is JsonArray) m["columns"] = m["headers"]!!
             if ("rows" !in m && m["data"] is JsonArray) m["rows"] = m["data"]!!
         }
+        "calc" -> {
+            val rawFields = (m["fields"] ?: m["inputs"] ?: m["sliders"] ?: m["variables"] ?: m["params"]) as? JsonArray
+            if (rawFields != null) {
+                m["fields"] = JsonArray(rawFields.mapIndexedNotNull { idx, el ->
+                    val fo = el as? JsonObject ?: return@mapIndexedNotNull null
+                    val fm = fo.toMutableMap()
+                    val keyPrim = (fo["key"] ?: fo["name"] ?: fo["id"]) as? JsonPrimitive
+                    val keyStr = keyPrim?.content?.takeIf { it.isNotBlank() } ?: "x${idx + 1}"
+                    fm["key"] = JsonPrimitive(keyStr)
+                    if ("label" !in fm) {
+                        val lbl = (fo["title"] ?: fo["name"] ?: fo["key"]) as? JsonPrimitive
+                        fm["label"] = JsonPrimitive(lbl?.content ?: keyStr)
+                    }
+                    if ("value" !in fm) {
+                        val defVal = (fo["default"] ?: fo["initial"] ?: fo["min"]) as? JsonPrimitive
+                        val num = defVal?.content?.toDoubleOrNull() ?: 0.0
+                        fm["value"] = JsonPrimitive(num)
+                    }
+                    JsonObject(fm)
+                })
+            }
+            val rawOutputs = (m["outputs"] ?: m["results"]) as? JsonArray
+            if (rawOutputs != null && rawOutputs.isNotEmpty()) {
+                m["outputs"] = JsonArray(rawOutputs.mapNotNull { el ->
+                    val oo = el as? JsonObject ?: return@mapNotNull null
+                    val om = oo.toMutableMap()
+                    if ("expr" !in om) {
+                        val ex = (oo["formula"] ?: oo["expression"] ?: oo["value"]) as? JsonPrimitive
+                        if (ex != null) om["expr"] = JsonPrimitive(ex.content)
+                    }
+                    if ("label" !in om) {
+                        val lbl = (oo["title"] ?: oo["name"]) as? JsonPrimitive
+                        om["label"] = JsonPrimitive(lbl?.content ?: "Result")
+                    }
+                    JsonObject(om)
+                })
+            } else {
+                val topFormula = ((m["formula"] ?: m["expression"] ?: m["expr"]) as? JsonPrimitive)?.content?.trim().orEmpty()
+                if (topFormula.isNotEmpty()) {
+                    val topUnit = ((m["unit"] ?: m["currency"]) as? JsonPrimitive)?.content.orEmpty()
+                    val topLabel = ((m["outputLabel"] ?: m["resultLabel"]) as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() } ?: "Result"
+                    m["outputs"] = JsonArray(
+                        listOf(
+                            JsonObject(
+                                mapOf(
+                                    "label" to JsonPrimitive(topLabel),
+                                    "expr" to JsonPrimitive(topFormula),
+                                    "unit" to JsonPrimitive(topUnit),
+                                    "primary" to JsonPrimitive(true)
+                                )
+                            )
+                        )
+                    )
+                }
+            }
+        }
     }
 
-    val rawKeysPreserved = setOf("code", "html", "svg", "url", "src", "href", "unified", "before", "after", "formula", "expression", "pattern", "regex", "query", "sql")
+    val rawKeysPreserved = setOf("code", "html", "svg", "url", "src", "href", "unified", "before", "after", "formula", "expression", "expr", "z", "pattern", "regex", "query", "sql")
     val iconTokenKeys = if (kind in setOf("followups", "actions", "menu", "chips")) setOf("label", "title", "text", "name") else emptySet()
 
     fun sanitizeJsonElement(el: JsonElement, keyHint: String? = null): JsonElement = when (el) {

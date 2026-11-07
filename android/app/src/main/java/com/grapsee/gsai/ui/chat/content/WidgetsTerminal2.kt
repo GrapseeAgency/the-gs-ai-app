@@ -122,15 +122,15 @@ internal fun TerminalWidgetView(w: TerminalWidget) {
                 val removed = fs.keys.filter { it == p || it.startsWith("$p/") }
                 if (removed.isEmpty()) push("err", "rm: not found") else removed.forEach { fs.remove(it) }
             }
-            "js" -> {
+            "js", "calc", "eval" -> {
                 val src = args.joinToString(" ")
                 if (src.isBlank()) {
-                    push("err", "js: expression required, e.g. js 6*7")
+                    push("err", "$name: expression required, e.g. $name 6*7")
                 } else if (TERMINAL_BLOCKED.containsMatchIn(src)) {
-                    push("err", "js: blocked identifier — this sandbox has no network, storage or DOM access")
+                    push("err", "$name: blocked identifier — this sandbox has no network, storage or DOM access")
                 } else {
                     val out = CalcExpr.eval(src, emptyMap())
-                    if (out == null) push("err", "js: parse error — numbers, + - * / % ^ and parens only")
+                    if (out == null) push("err", "$name: parse error — numbers, + - * / % ^ and parens only")
                     else push("out", if (out % 1.0 == 0.0) out.toLong().toString() else out.toString())
                 }
             }

@@ -262,39 +262,44 @@ private fun KanbanLayout(w: AppWidget, onSendPrompt: ((String) -> Unit)?) {
         Text("No columns", style = MaterialTheme.typography.bodySmall, color = c.textTertiary)
         return
     }
+    val allCards = remember(columns) {
+        columns.flatMapIndexed { origIdx, col ->
+            col.items.take(12).mapIndexed { itemIdx, item ->
+                Triple("${origIdx}:${itemIdx}:${item.title}", origIdx, item)
+            }
+        }
+    }
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         columns.forEachIndexed { ci, col ->
+            val colCards = allCards.filter { (cardKey, origCol, _) -> (moved[cardKey] ?: origCol) == ci }
             Column(
                 Modifier.width(168.dp).clip(RoundedCornerShape(10.dp)).background(c.surface).padding(8.dp)
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(col.title, style = MaterialTheme.typography.labelMedium, color = c.textSecondary, fontWeight = FontWeight.SemiBold)
-                    Text("${col.items.size}", style = MaterialTheme.typography.labelSmall, color = c.textTertiary)
+                    Text("${colCards.size}", style = MaterialTheme.typography.labelSmall, color = c.textTertiary)
                 }
-                col.items.take(12).forEach { item ->
-                    val at = moved[item.title] ?: ci
-                    if (at == ci) {
-                        Column(
-                            Modifier.fillMaxWidth().padding(top = 6.dp).clip(RoundedCornerShape(8.dp))
-                                .background(c.elevatedSurface)
-                                .clickable {
-                                    moved[item.title] = (ci + 1).coerceAtMost(columns.lastIndex)
-                                }
-                                .padding(8.dp)
-                        ) {
-                            Text(
-                                item.title,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = c.textPrimary,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            if (item.subtitle.isNotBlank()) {
-                                Text(item.subtitle, style = MaterialTheme.typography.labelSmall, color = c.textTertiary, maxLines = 1)
+                colCards.forEach { (cardKey, _, item) ->
+                    Column(
+                        Modifier.fillMaxWidth().padding(top = 6.dp).clip(RoundedCornerShape(8.dp))
+                            .background(c.elevatedSurface)
+                            .clickable {
+                                moved[cardKey] = (ci + 1) % columns.size
                             }
-                            if (item.badge.isNotBlank()) {
-                                Text(item.badge, style = MaterialTheme.typography.labelSmall, color = c.accent)
-                            }
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            item.title,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = c.textPrimary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (item.subtitle.isNotBlank()) {
+                            Text(item.subtitle, style = MaterialTheme.typography.labelSmall, color = c.textTertiary, maxLines = 1)
+                        }
+                        if (item.badge.isNotBlank()) {
+                            Text(item.badge, style = MaterialTheme.typography.labelSmall, color = c.accent)
                         }
                     }
                 }
@@ -314,7 +319,7 @@ private fun KanbanLayout(w: AppWidget, onSendPrompt: ((String) -> Unit)?) {
             color = c.accent,
             modifier = Modifier.padding(top = 6.dp).clickable {
                 val state = columns.mapIndexed { ci, col ->
-                    val here = col.items.filter { (moved[it.title] ?: ci) == ci }.joinToString(", ") { it.title }
+                    val here = allCards.filter { (cardKey, origCol, _) -> (moved[cardKey] ?: origCol) == ci }.joinToString(", ") { it.third.title }
                     "${col.title}: ${here.ifBlank { "—" }}"
                 }.joinToString("; ")
                 onSendPrompt("Board state — $state")
@@ -518,16 +523,21 @@ private fun DashboardLayout(w: AppWidget, onSendPrompt: ((String) -> Unit)?) {
     items.chunked(2).forEach { pair ->
         Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             pair.forEach { item ->
+                val primaryVal = item.subtitle.ifBlank { item.meta.ifBlank { "—" } }
+                val secondaryCaption = if (item.subtitle.isNotBlank() && item.meta.isNotBlank()) item.meta else ""
                 Column(
                     Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(c.surface).padding(10.dp)
                 ) {
                     Text(item.title, style = MaterialTheme.typography.labelSmall, color = c.textTertiary, maxLines = 1)
                     Text(
-                        item.meta.ifBlank { "—" },
+                        primaryVal,
                         style = MaterialTheme.typography.titleMedium,
                         color = c.textPrimary,
                         fontWeight = FontWeight.SemiBold
                     )
+                    if (secondaryCaption.isNotBlank()) {
+                        Text(secondaryCaption, style = MaterialTheme.typography.labelSmall, color = c.textTertiary, maxLines = 1)
+                    }
                     if (item.badge.isNotBlank()) {
                         val up = item.badge.trim().startsWith("+") || item.badge.contains("↑")
                         Text(
