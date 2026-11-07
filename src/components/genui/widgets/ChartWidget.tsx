@@ -112,7 +112,8 @@ function ChartControls({ payload }: { payload: ChartPayload }) {
   const summary = useMemo(() => {
     const firstSeries = slicedPayload.series?.[0]?.data ?? []
     if (firstSeries.length < 2) return null
-    const vals = firstSeries.map((pt) => Number(pt[1] ?? pt[0] ?? 0) || 0)
+    const vals = firstSeries.map((pt) => pt[pt.length - 1])
+    if (vals.some(value => !Number.isFinite(value))) return null
     const total = vals.reduce((a, b) => a + b, 0)
     let peakIdx = 0
     let minIdx = 0
@@ -126,6 +127,7 @@ function ChartControls({ payload }: { payload: ChartPayload }) {
     const peakLabel = slicedPayload.labels?.[peakIdx] ?? String(firstSeries[peakIdx]?.[0] ?? `#${peakIdx + 1}`)
     const minLabel = slicedPayload.labels?.[minIdx] ?? String(firstSeries[minIdx]?.[0] ?? `#${minIdx + 1}`)
     return {
+      seriesName: slicedPayload.series?.[0]?.name || 'Series 1',
       total: formatCompactMetric(total, slicedPayload.unit),
       peakLabel,
       peakVal: formatCompactMetric(vals[peakIdx] ?? 0, slicedPayload.unit),
@@ -161,8 +163,8 @@ function ChartControls({ payload }: { payload: ChartPayload }) {
   const computedInsights =
     summary
       ? [
-          `${summary.peakLabel} recorded the highest value (${summary.peakVal}) across ${summary.pointCount} points (${RANGE_OPTIONS[rangeIdx]}).`,
-          `Net trajectory is ${summary.growthPct} with cumulative volume ${summary.total} (low: ${summary.minLabel} at ${summary.minVal}).`,
+          `${summary.seriesName}: ${summary.peakLabel} recorded the highest value (${summary.peakVal}) across ${summary.pointCount} points (${RANGE_OPTIONS[rangeIdx]}).`,
+          `First-to-last change for ${summary.seriesName} is ${summary.growthPct}; sum of observations is ${summary.total} (low: ${summary.minLabel} at ${summary.minVal}).`,
         ]
       : rangeIdx === 3 ? explicitInsights : []
 
@@ -243,6 +245,7 @@ function ChartControls({ payload }: { payload: ChartPayload }) {
       {/* Active Chart Canvas */}
       {range.indices.length ? dispatchChartView(activeType, { ...slicedPayload, type: activeType }) : <div>No observations in this range.</div>}
 
+      {summary && <div style={{ fontSize: 11, color: theme.text2 }}>Summary: {summary.seriesName}</div>}
       {/* 3-Card KPI Summary Strip (Screenshot 6) */}
       {summary && (
         <div
@@ -260,7 +263,7 @@ function ChartControls({ payload }: { payload: ChartPayload }) {
               border: `1px solid ${theme.border}`,
             }}
           >
-            <div style={{ fontSize: 10.5, color: theme.text3, fontWeight: 600 }}>Total</div>
+            <div style={{ fontSize: 10.5, color: theme.text3, fontWeight: 600 }}>Sum</div>
             <div style={{ fontSize: 14, fontWeight: 800, color: theme.text, marginTop: 2 }}>{summary.total}</div>
             <div style={{ fontSize: 10.5, fontWeight: 700, color: !summary.growthDefined ? theme.text3 : summary.growthPos ? '#129A5A' : '#E04F5F', marginTop: 2 }}>
               {summary.growthDefined ? (summary.growthPos ? '↑' : '↓') : ''} {summary.growthPct}
