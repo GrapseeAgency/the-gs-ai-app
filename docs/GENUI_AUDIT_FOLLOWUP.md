@@ -25,6 +25,9 @@ widget correctness.
 - Native charts had a separate zero-baseline defect: Android replaced zero
   with one, while iOS reported zero-percent growth. Both now show undefined
   growth with a neutral state instead of invented percentages or trend arrows.
+  Point tooltips also substituted an average when the previous point was absent
+  or zero; they now require a real nonzero prior point. Android uses the actual
+  selected series rather than silently comparing to the first series.
 - The widget prompt's loan example referenced undefined r and n. Its replacement
   defines every field used by its expression, labels its assumptions and tells
   the model never to copy those example values as real user inputs.
