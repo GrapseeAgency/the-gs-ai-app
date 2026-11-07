@@ -284,6 +284,7 @@ jobs:
             -destination "$IOS_DESTINATION" \
             -derivedDataPath "$DERIVED_DATA" \
             -only-testing:AppTests/CalcHonestyTests \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTableAllDisplaysEveryActualRow \
             -resultBundlePath ios/build/GSApp-genui.xcresult \
@@ -319,6 +320,7 @@ jobs:
           import re
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
+              ('PlatformRuntimeUITests', 'testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie'),
               ('CalcHonestyTests', 'testGeneratedHtmlExecutesAndCleansDynamicEmojiInProductionWebView'),
               ('CalcHonestyTests', 'testSignedChartDomainPreservesZeroNegativeAndAllObservations'),
               ('PlatformRuntimeUITests', 'testBackgroundNoticeIsDeliveredAndDisabledKindsAreNot'),
