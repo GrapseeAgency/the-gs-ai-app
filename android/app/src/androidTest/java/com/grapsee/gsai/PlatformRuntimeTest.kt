@@ -152,10 +152,10 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("Item 11").assertDoesNotExist()
         compose.onNodeWithText("Show: 10 ▾").performClick()
         compose.onNodeWithText("Show: All ▾").assertExists()
-        compose.onNodeWithText("Item 31").assertExists()
+        compose.onNode(hasText("Item 31") and !hasSetTextAction()).assertExists()
         compose.onNodeWithText("1–31 of 31").assertExists()
         compose.onNode(hasSetTextAction()).performTextReplacement("Item 31")
-        compose.onNodeWithText("Item 31").assertExists()
+        compose.onNode(hasText("Item 31") and !hasSetTextAction()).assertExists()
         compose.onNodeWithText("Item 1").assertDoesNotExist()
         compose.onNodeWithText("1–1 of 1").assertExists()
         // Ordinary Markdown has a separate renderer; test it too, including
@@ -172,7 +172,7 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("Show: 5 ▾").performClick()
         compose.onNodeWithText("Show: 10 ▾").performClick()
         compose.onNodeWithText("Show: All ▾").assertExists()
-        compose.onNodeWithText("Item 31").assertExists()
+        compose.onNode(hasText("Item 31") and !hasSetTextAction()).assertExists()
         compose.onNodeWithText("1–31 of 31").assertExists()
     }
 
