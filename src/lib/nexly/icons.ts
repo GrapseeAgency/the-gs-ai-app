@@ -421,6 +421,121 @@ export const EMOJI_TO_ICON: Record<string, string> = {
   '👎': 'thumb-down',
   '😊': 'mood-smile',
   '😀': 'mood-smile',
+  '😃': 'mood-smile',
+  '😄': 'mood-smile',
+  '😁': 'mood-smile',
+  '🙂': 'mood-smile',
+  '😉': 'mood-wink',
+  '😍': 'heart',
+  '🥰': 'heart',
+  '😎': 'sunglasses',
+  '🤓': 'eyeglasses',
+  '🧐': 'search',
+  '🥳': 'sparkles',
+  '😞': 'mood-sad',
+  '😔': 'mood-sad',
+  '😟': 'mood-sad',
+  '😕': 'mood-sad',
+  '🙁': 'mood-sad',
+  '☹️': 'mood-sad',
+  '☹': 'mood-sad',
+  '😢': 'mood-sad',
+  '😭': 'mood-sad',
+  '😤': 'flame',
+  '😠': 'alert-circle',
+  '😡': 'alert-circle',
+  '🤯': 'brain',
+  '😱': 'alert-triangle',
+  '🤗': 'heart',
+  '🙌': 'sparkles',
+  '👏': 'sparkles',
+  '🙏': 'heart',
+  '🤝': 'users',
+  '👀': 'eye',
+  '👁️': 'eye',
+  '👁': 'eye',
+  '💯': 'circle-check',
+  '💎': 'diamond',
+  '👑': 'crown',
+  '🎁': 'gift',
+  '🎈': 'sparkles',
+  '🎊': 'sparkles',
+  '🥈': 'medal',
+  '🥉': 'medal',
+  '🏅': 'medal',
+  '⚽': 'ball-football',
+  '🏀': 'ball-basketball',
+  '🎾': 'ball-tennis',
+  '💧': 'droplet',
+  '🌊': 'wave-sine',
+  '❄️': 'snowflake',
+  '❄': 'snowflake',
+  '🌈': 'sparkles',
+  '🌳': 'tree',
+  '🌲': 'tree',
+  '🌴': 'tree',
+  '🌵': 'plant',
+  '🌸': 'flower',
+  '🌺': 'flower',
+  '🌻': 'flower',
+  '🌹': 'flower',
+  '🌷': 'flower',
+  '🍀': 'leaf',
+  '🍁': 'leaf',
+  '🍂': 'leaf',
+  '🍃': 'leaf',
+  '🍎': 'apple',
+  '🍏': 'apple',
+  '🍋': 'lemon',
+  '🥗': 'salad',
+  '🍕': 'pizza',
+  '🍵': 'mug',
+  '🍺': 'beer',
+  '🍷': 'glass-full',
+  '🚌': 'bus',
+  '🚆': 'train',
+  '🚇': 'train',
+  '🚲': 'bike',
+  '🚢': 'ship',
+  '⚓': 'anchor',
+  '⛽': 'gas-station',
+  '🚨': 'urgent',
+  '🛑': 'octagon-off',
+  '🚧': 'barrier-block',
+  '🏥': 'building-hospital',
+  '🏫': 'school',
+  '🏢': 'building',
+  '🏭': 'building-factory-2',
+  '⛰️': 'mountain',
+  '⛰': 'mountain',
+  '🏔️': 'mountain',
+  '🏖️': 'beach',
+  '🎧': 'headphones',
+  '🎤': 'microphone',
+  '🎹': 'music',
+  '🎸': 'music',
+  '🥁': 'music',
+  '📺': 'device-tv',
+  '🖨️': 'printer',
+  '⌨️': 'keyboard',
+  '🖱️': 'mouse',
+  '💾': 'device-floppy',
+  '💿': 'disc',
+  '🔭': 'telescope',
+  '📡': 'satellite',
+  '💊': 'pill',
+  '🩺': 'stethoscope',
+  '🛏️': 'bed',
+  '🚿': 'bath',
+  '🛁': 'bath',
+  '🧹': 'brush',
+  '🧯': 'fire-extinguisher',
+  '🔴': 'circle-filled',
+  '🟠': 'circle-filled',
+  '🟡': 'circle-filled',
+  '🟢': 'circle-filled',
+  '🔵': 'circle-filled',
+  '🟣': 'circle-filled',
   '🤔': 'brain',
   '❌': 'circle-x',
   '❓': 'help-circle',
@@ -440,7 +555,31 @@ export function emojiToIconTokens(text: string): string {
   // Any remaining Extended_Pictographic codepoint is not allowed in the DOM.
   return out
     .replace(/\p{Extended_Pictographic}/gu, '')
-    .replace(/[\u2600-\u27BF\u2300-\u23FF\u2B50\u2B55\u2640\u2642\uFE0F\u200D\u20E3]/gu, '')
+    .replace(/[\u2600-\u27BF\u2300-\u23FF\u2B50\u2B55\u2640\u2642\uFE0E\uFE0F\u200D\u20E3\u{1F3FB}-\u{1F3FF}]/gu, '')
+}
+
+/**
+ * Sanitize a full markdown reply or delta chunk so no raw Unicode emoji ever reaches
+ * a client:
+ *  - Inside fenced code blocks: replaces ❌/✅ with [x]/[ok] and strips other pictographs.
+ *  - Outside fenced blocks: converts known emojis into :icon: tokens and strips unknown pictographs.
+ */
+export function sanitizeReplyEmojis(markdown: string): string {
+  if (!markdown) return markdown
+  const parts = markdown.split(/(```[\s\S]*?```)/g)
+  return parts
+    .map((part) => {
+      if (part.startsWith('```')) {
+        return part
+          .replace(/❌/g, '[x]')
+          .replace(/✅|✔️|✔/g, '[ok]')
+          .replace(/⚠️|⚠/g, '[!]')
+          .replace(/\p{Extended_Pictographic}/gu, '')
+          .replace(/[\u2600-\u27BF\u2300-\u23FF\u2B50\u2B55\uFE0E\uFE0F\u200D\u20E3\u{1F3FB}-\u{1F3FF}]/gu, '')
+      }
+      return emojiToIconTokens(part)
+    })
+    .join('')
 }
 
 /** Extract a leading :icon: token (or converted leading emoji) and return { icon, rest }. */

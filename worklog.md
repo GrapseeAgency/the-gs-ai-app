@@ -6183,3 +6183,24 @@ Work Log:
 
 Stage Summary:
 - messages/start green end-to-end on fresh client; full stack re-verified (keypool 35, primary ok, eval-monitor 200, watchdog PPid=1).
+
+---
+Task ID: pass-14-zero-emoji-and-logical-interactivity
+Agent: main
+Task: Complete zero-emoji enforcement (server + client prose + widget JSON strings), restore iOS `GsWidgetActionKey` (`exit code 65` fix), and upgrade logical interactivity across Android, iOS, and Web.
+
+Work Log:
+- Fixed iOS Xcode 26 `exit code 65` compile regression on `f8648be` by restoring `GsWidgetActionKey` and `extension EnvironmentValues { var gsWidgetAction: ((String) -> Void)? }` in `ios/App/Sources/Features/Chats/Content/RichBlocks.swift`.
+- Expanded `EMOJI_TO_ICON` / `emoji` tables across `src/lib/nexly/icons.ts`, `android/app/src/main/java/com/grapsee/gsai/ui/chat/content/NexlyPlan.kt`, and `ios/App/Sources/Features/Chats/Content/NexlyPlan.swift` with 100+ additional emojis mapped to verified `nexly-icons.json` glyphs, broadened Unicode emoji stripping, and added `sanitizeReplyEmojis(markdown)` in `src/lib/nexly/icons.ts` wired into `src/lib/turn-executor.ts` and `src/lib/widgets/compile.ts`.
+- Added recursive widget JSON string sanitization on Android (`sanitizeJsonElement` in `WidgetsV2.kt`) and iOS (`str(...)` / `rawStr(...)` in `WidgetBlocks.swift`) so non-code widget strings never display raw emojis or raw `:icon:` tokens.
+- Upgraded `CodeBlockCard.kt`, `RichBlocks.swift` (`CodeBlockCardView`), and `CodeBlock.tsx`:
+  - Added interactive **React Effect Lifecycle Simulator** (`Mount`, `Strict Remount`, `Abort`) for `useEffect`/`fetch`/`AbortController` snippets instead of a fake `value: 0` counter.
+  - Upgraded Python preview evaluator to evaluate list comprehensions (`[my_list.append(x) for x in source] -> [None, None, None]`, `[x * 2 for x in source]`), `.extend()`, and assigned variables when `print()` is omitted.
+  - Upgraded SQL preview evaluator to render formatted query result tables with mode notes (`CTE grouped`, `DISTINCT`, `JOIN`).
+  - Upgraded JS preview evaluator to extract multiple `console.log(...)` calls per line on Android and polyfill synchronous `setTimeout` in iOS `JSContext` and Web `CodeBlock` so Promise/async snippets (`new Promise(r => setTimeout(r, 1000))`) execute and log cleanly.
+- Promoted standalone bold paragraphs (`**What to do first**`, `**Cleanest fix**`, `**Why this works**`, `**Bottom line**`) to `Heading(level = 3)` with semantic `NexlyGlassGlyphTile` badges across Android, iOS, and Web; made numbered steps interactive on tap; extracted leading `:icon:` inside `BoldSpan`; and added automatic `NexlyQuickCalculatorCard` synthesis for currency + percentage prose without an explicit calculator heading.
+- Upgraded `ChecklistWidgetView` (`BasicTextField` task adder, custom task deletion, removed hardcoded `"Follow-up task #..."`), `StepsWidgetView`, `StatWidgetView`, `CompareWidgetView`, `ProgressWidgetView`, `TimelineWidgetView`, and iOS `GenericStructuredBodyView` (`sim`, `stage3d`, `canvas`, `terminal`, `collab`, `voice`, `plan`) to be genuinely interactive on both Android and iOS.
+
+Stage Summary:
+- All static gates (`swift_structure_gate.py`, `ios_static_gates.py`, `audit-android-parity.py`, `check_kt_*.py`) and all 4 TypeScript/GenUI test suites (`test-widget-compiler.ts` 146/146, `test-widget-render.ts` 170/170, `test-widget-catalogue.ts` 208/208, `test-genui-pipeline.ts` 24/24) pass with zero errors.
+

@@ -23,7 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,9 +39,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.ui.theme.GsTheme
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
@@ -295,17 +299,47 @@ internal fun AccordionWidgetView(w: AccordionWidget) {
 internal fun StepsWidgetView(w: StepsWidget) {
     val c = GsTheme.colors
     val accent = seriesColor(0)
-    WidgetCardShell(w.title.ifEmpty { "Steps" }, "steps") {
+    val doneMap = remember(w.steps) {
+        mutableStateMapOf<Int, Boolean>().apply {
+            w.steps.forEachIndexed { idx, s -> put(idx, s.state == "done") }
+        }
+    }
+    val doneCount = w.steps.indices.count { doneMap[it] == true }
+    val total = w.steps.size.coerceAtLeast(1)
+    val currentIdx = w.steps.indices.firstOrNull { doneMap[it] != true } ?: -1
+    WidgetCardShell(NexlyIcons.cleanPlainText(w.title).ifEmpty { "Steps" }, "steps") {
         Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("$doneCount of ${w.steps.size} steps completed", style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
+                Text("${((doneCount.toFloat() / total.toFloat()) * 100f).toInt()}%", style = MaterialTheme.typography.labelSmall, color = accent, fontWeight = FontWeight.Bold)
+            }
+            LinearProgressIndicator(
+                progress = { (doneCount.toFloat() / total.toFloat()).coerceIn(0f, 1f) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(99.dp)),
+                color = accent,
+                trackColor = c.border.copy(alpha = 0.25f)
+            )
             w.steps.forEachIndexed { idx, step ->
-                val isDone = step.state == "done"
-                val isCurrent = step.state == "current"
+                val isDone = doneMap[idx] == true
+                val isCurrent = idx == currentIdx
                 val badgeColor = when {
                     isDone -> Color(0xFF0CA678)
                     isCurrent -> accent
                     else -> c.textTertiary
                 }
-                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isCurrent) accent.copy(alpha = 0.08f) else Color.Transparent)
+                        .clickable { doneMap[idx] = !isDone }
+                        .padding(vertical = 4.dp, horizontal = 4.dp)
+                ) {
                     Box(
                         Modifier
                             .size(22.dp)
@@ -314,22 +348,28 @@ internal fun StepsWidgetView(w: StepsWidget) {
                             .border(1.dp, badgeColor, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            if (isDone) "✓" else "${idx + 1}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = badgeColor,
-                            fontWeight = FontWeight.Bold
-                        )
+                        if (isDone) {
+                            NexlyGlyph(name = "check", size = 12.sp, color = badgeColor)
+                        } else {
+                            Text(
+                                "${idx + 1}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = badgeColor,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                     Column(Modifier.weight(1f)) {
                         Text(
-                            step.title,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = c.textPrimary,
+                            NexlyIcons.cleanPlainText(step.title),
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                textDecoration = if (isDone) TextDecoration.LineThrough else TextDecoration.None
+                            ),
+                            color = if (isDone) c.textSecondary else c.textPrimary,
                             fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold
                         )
                         if (step.body.isNotBlank()) {
-                            Text(step.body, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                            Text(NexlyIcons.cleanPlainText(step.body), style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
                         }
                     }
                 }
@@ -664,6 +704,8 @@ internal fun ChecklistWidgetView(w: ChecklistWidget) {
     val c = GsTheme.colors
     val accent = seriesColor(0)
     var addedTasks by remember(w.items) { mutableStateOf(listOf<ChecklistItem>()) }
+    var addingTask by remember { mutableStateOf(false) }
+    var newTaskInput by remember { mutableStateOf("") }
     val allItems = remember(w.items, addedTasks) { w.items + addedTasks }
     val checked = remember(w.items) {
         mutableStateMapOf<Int, Boolean>().apply {
@@ -672,7 +714,7 @@ internal fun ChecklistWidgetView(w: ChecklistWidget) {
     }
     val doneCount = allItems.indices.count { checked[it] == true }
     val total = allItems.size.coerceAtLeast(1)
-    WidgetCardShell(w.title.ifEmpty { "Your Todo List" }, "checklist") {
+    WidgetCardShell(NexlyIcons.cleanPlainText(w.title).ifEmpty { "Your Todo List" }, "checklist") {
         Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("$doneCount of ${allItems.size} completed", style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
@@ -694,44 +736,128 @@ internal fun ChecklistWidgetView(w: ChecklistWidget) {
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { checked[idx] = !isDone }
-                        .padding(vertical = 4.dp),
+                        .padding(vertical = 5.dp, horizontal = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(
-                        checked = isDone,
-                        onCheckedChange = { checked[idx] = it }
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(if (isDone) Color(0xFF6C4CF6) else Color.White.copy(alpha = 0.85f))
+                            .then(
+                                if (!isDone) Modifier.border(1.5.dp, Color(0xFF9C88F8), RoundedCornerShape(5.dp))
+                                else Modifier
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isDone) {
+                            NexlyGlyph(name = "check", size = 11.sp, color = Color.White)
+                        }
+                    }
+                    Spacer(Modifier.width(9.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            item.label,
-                            style = MaterialTheme.typography.bodyMedium,
+                            NexlyIcons.cleanPlainText(item.label),
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                textDecoration = if (isDone) TextDecoration.LineThrough else TextDecoration.None
+                            ),
                             color = if (isDone) c.textTertiary else c.textPrimary
                         )
                         if (item.detail.isNotBlank()) {
-                            Text(item.detail, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                            Text(NexlyIcons.cleanPlainText(item.detail), style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                        }
+                    }
+                    if (idx >= w.items.size) {
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable {
+                                    val customIdx = idx - w.items.size
+                                    addedTasks = addedTasks.filterIndexed { i, _ -> i != customIdx }
+                                    checked.remove(idx)
+                                }
+                                .padding(4.dp)
+                        ) {
+                            NexlyGlyph(name = "x", size = 12.sp, color = c.textTertiary)
                         }
                     }
                 }
             }
-            Row(
-                modifier = Modifier
-                    .padding(top = 2.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Color.White.copy(alpha = 0.8f))
-                    .border(1.dp, Color(0xFFE0D8FA), RoundedCornerShape(999.dp))
-                    .clickable {
-                        val nextIdx = allItems.size
-                        addedTasks = addedTasks + ChecklistItem(label = "Follow-up task #${nextIdx + 1}", done = false)
-                        checked[nextIdx] = false
+            if (addingTask) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White.copy(alpha = 0.92f))
+                            .border(1.dp, Color(0xFFD8CEFA), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        if (newTaskInput.isEmpty()) {
+                            Text("Type a new task…", fontSize = 12.sp, color = Color(0xFF958BB8))
+                        }
+                        BasicTextField(
+                            value = newTaskInput,
+                            onValueChange = { newTaskInput = it },
+                            singleLine = true,
+                            textStyle = TextStyle(fontSize = 12.5.sp, color = Color(0xFF1F1638)),
+                            cursorBrush = SolidColor(Color(0xFF6C4CF6)),
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "+ Add Task",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = Color(0xFF5B3DF5)
-                )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF6C4CF6))
+                            .clickable {
+                                val trimmed = newTaskInput.trim()
+                                if (trimmed.isNotEmpty()) {
+                                    val nextIdx = allItems.size
+                                    addedTasks = addedTasks + ChecklistItem(label = trimmed, done = false)
+                                    checked[nextIdx] = false
+                                    newTaskInput = ""
+                                    addingTask = false
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text("Add", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                newTaskInput = ""
+                                addingTask = false
+                            }
+                            .padding(horizontal = 6.dp, vertical = 6.dp)
+                    ) {
+                        NexlyGlyph(name = "x", size = 13.sp, color = c.textSecondary)
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color.White.copy(alpha = 0.8f))
+                        .border(1.dp, Color(0xFFE0D8FA), RoundedCornerShape(999.dp))
+                        .clickable { addingTask = true }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    NexlyGlyph(name = "plus", size = 11.sp, color = Color(0xFF5B3DF5))
+                    Text(
+                        text = "Add Task",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF5B3DF5)
+                    )
+                }
             }
         }
     }
@@ -1078,5 +1204,24 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
         }
     }
 
-    return JsonObject(m).toString()
+    val rawKeysPreserved = setOf("code", "html", "svg", "url", "src", "href", "unified", "before", "after", "formula", "expression", "pattern", "regex", "query", "sql")
+    val iconTokenKeys = if (kind in setOf("followups", "actions", "menu", "chips")) setOf("label", "title", "text", "name") else emptySet()
+
+    fun sanitizeJsonElement(el: JsonElement, keyHint: String? = null): JsonElement = when (el) {
+        is JsonPrimitive -> {
+            if (!el.isString) el
+            else {
+                val rawStr = el.content
+                when {
+                    keyHint in rawKeysPreserved -> el
+                    keyHint in iconTokenKeys -> JsonPrimitive(NexlyIcons.normalize(rawStr).trim())
+                    else -> JsonPrimitive(NexlyIcons.cleanPlainText(rawStr))
+                }
+            }
+        }
+        is JsonArray -> JsonArray(el.map { sanitizeJsonElement(it, keyHint) })
+        is JsonObject -> JsonObject(el.mapValues { (k, v) -> sanitizeJsonElement(v, k) })
+    }
+
+    return sanitizeJsonElement(JsonObject(m)).toString()
 }

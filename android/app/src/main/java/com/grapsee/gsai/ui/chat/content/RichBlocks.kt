@@ -379,15 +379,30 @@ private fun isCalculatorHeadingTitle(raw: String): Boolean {
 private fun classifySectionListMode(headingText: String): SectionListMode {
     val lower = headingText.trim().lowercase()
     return when {
-        "next action" in lower || "action item" in lower || "todo" in lower || "to-do" in lower || "checklist" in lower || lower == "tasks" || "your tasks" in lower ->
+        "next action" in lower || "action item" in lower || "todo" in lower || "to-do" in lower ||
+            "checklist" in lower || lower == "tasks" || "your tasks" in lower ||
+            "what to do" in lower || "next step" in lower || "first step" in lower ||
+            "how to fix" in lower || "routine" in lower ->
             SectionListMode.TODO
         "key source" in lower || lower == "sources" || "trusted source" in lower ->
             SectionListMode.SOURCES
-        "priorit" in lower || "feature" in lower || "highlight" in lower || "benefit" in lower || "why " in lower ->
+        "priorit" in lower || "feature" in lower || "highlight" in lower || "benefit" in lower ||
+            "why " in lower || "bottom line" in lower || "takeaway" in lower ->
             SectionListMode.CHECKMARK
         else -> SectionListMode.DEFAULT
     }
 }
+
+private fun promoteStandaloneBoldHeadings(rawBlocks: List<Block>): List<Block> =
+    rawBlocks.map { b ->
+        if (b is Block.Paragraph && b.spans.size == 1 && b.spans.first() is InlineSpan.BoldSpan) {
+            val bold = b.spans.first() as InlineSpan.BoldSpan
+            val text = NexlyIcons.cleanPlainText(plainTextOfSpans(bold.children)).trim()
+            if (text.length in 3..72 && !text.endsWith(".") && classifyCalloutHeaderTitle(text) == null) {
+                Block.Heading(level = 3, spans = bold.children, sourceStart = b.sourceStart)
+            } else b
+        } else b
+    }
 
 @Composable
 private fun StructuredBlockSequenceView(
@@ -400,27 +415,28 @@ private fun StructuredBlockSequenceView(
     statusAtEnd: Boolean,
     onStatusPlaced: () -> Unit
 ) {
+    val normalizedBlocks = remember(blocks) { promoteStandaloneBoldHeadings(blocks) }
     // 1. Detect if this response is a multi-section dashboard (Screenshot 1)
-    val dashboardTabs = remember(blocks) {
+    val dashboardTabs = remember(normalizedBlocks) {
         val tabs = mutableListOf("Dashboard")
-        val hasTable = blocks.any { it is Block.TableBlock || (it is Block.WidgetBlock && it.kind == "table") }
-        val hasTodo = blocks.any {
+        val hasTable = normalizedBlocks.any { it is Block.TableBlock || (it is Block.WidgetBlock && it.kind == "table") }
+        val hasTodo = normalizedBlocks.any {
             (it is Block.BulletList && it.items.any { item -> item.checked != null }) ||
                 (it is Block.Heading && classifySectionListMode(plainTextOfSpans(it.spans)) == SectionListMode.TODO) ||
                 (it is Block.WidgetBlock && it.kind == "checklist")
         }
-        val hasCalc = blocks.any {
+        val hasCalc = normalizedBlocks.any {
             (it is Block.WidgetBlock && it.kind == "calc") ||
                 (it is Block.Heading && isCalculatorHeadingTitle(plainTextOfSpans(it.spans)))
         }
-        val hasCode = blocks.any { it is Block.CodeBlock }
+        val hasCode = normalizedBlocks.any { it is Block.CodeBlock }
         if (hasTable) tabs += "Table"
         if (hasTodo) tabs += "Todo"
         if (hasCalc) tabs += "Calculator"
         else if (hasCode && tabs.size >= 3) tabs += "Code"
         if (tabs.size >= 3) tabs else emptyList()
     }
-    var activeDashboardTab by remember(blocks.size) { mutableStateOf("Dashboard") }
+    var activeDashboardTab by remember(normalizedBlocks.size) { mutableStateOf("Dashboard") }
 
     if (dashboardTabs.isNotEmpty()) {
         Row(
@@ -452,12 +468,13 @@ private fun StructuredBlockSequenceView(
         }
     }
 
-    val statusHostIndex = if (statusAtEnd) blocks.lastIndex else 0
+    val statusHostIndex = if (statusAtEnd) normalizedBlocks.lastIndex else 0
     var currentSectionMode = SectionListMode.DEFAULT
+    var renderedExplicitCalc = false
     var i = 0
-    while (i < blocks.size) {
-        val block = blocks[i]
-        val nextBlock = blocks.getOrNull(i + 1)
+    while (i < normalizedBlocks.size) {
+        val block = normalizedBlocks[i]
+        val nextBlock = normalizedBlocks.getOrNull(i + 1)
 
         // Filter by dashboard tab when user selects Table / Todo / Calculator / Code
         val skipForTab = when (activeDashboardTab) {
@@ -484,6 +501,7 @@ private fun StructuredBlockSequenceView(
                     val nums = Regex("\\d+(?:\\.\\d+)?").findAll(bodyText).mapNotNull { it.value.toDoubleOrNull() }.toList()
                     val amt = nums.firstOrNull { it >= 50.0 } ?: nums.firstOrNull() ?: 1200.0
                     val disc = nums.firstOrNull { it > 0.0 && it < 50.0 && it != amt } ?: 10.0
+                    renderedExplicitCalc = true
                     key("calc:${block.sourceStart}") {
                         NexlyQuickCalculatorCard(
                             title = hTitle,
@@ -586,14 +604,47 @@ private fun StructuredBlockSequenceView(
         i += 1
     }
 
+    // Automatic interactive calculator when prose contains currency/rate/percentage signals without an explicit Calculator heading
+    if (!isStreaming && !renderedExplicitCalc && normalizedBlocks.none { it is Block.WidgetBlock && it.kind == "calc" }) {
+        val fullProse = remember(normalizedBlocks) {
+            normalizedBlocks.mapNotNull { b ->
+                when (b) {
+                    is Block.Paragraph -> plainTextOfSpans(b.spans)
+                    is Block.BulletList -> b.items.joinToString(" ") { plainTextOfSpans(it.spans) }
+                    is Block.OrderedList -> b.items.joinToString(" ") { plainTextOfSpans(it.spans) }
+                    else -> null
+                }
+            }.joinToString(" ")
+        }
+        val hasCalcSignal = remember(fullProse) {
+            val low = fullProse.lowercase()
+            (fullProse.contains('$') || fullProse.contains('€') || fullProse.contains('£')) &&
+                fullProse.contains('%') &&
+                ("discount" in low || "tax" in low || "interest" in low || "margin" in low || "roi" in low || "price" in low || "cost" in low || "save" in low)
+        }
+        if (hasCalcSignal) {
+            val nums = remember(fullProse) {
+                Regex("\\d+(?:\\.\\d+)?").findAll(fullProse.replace(",", "")).mapNotNull { it.value.toDoubleOrNull() }.toList()
+            }
+            val amt = nums.firstOrNull { it >= 25.0 } ?: 1000.0
+            val disc = nums.firstOrNull { it in 1.0..95.0 && it != amt } ?: 15.0
+            NexlyQuickCalculatorCard(
+                title = "Quick Calculator",
+                initialAmount = amt,
+                initialDiscount = disc,
+                contextHint = fullProse
+            )
+        }
+    }
+
     // Bottom Contextual Action Pills (Screenshots 1–6)
-    if (!isStreaming && blocks.size >= 2) {
-        val endsWithActionWidget = blocks.lastOrNull().let {
+    if (!isStreaming && normalizedBlocks.size >= 2) {
+        val endsWithActionWidget = normalizedBlocks.lastOrNull().let {
             it is Block.WidgetBlock && it.kind in setOf("actions", "followups", "chips", "menu")
         }
         if (!endsWithActionWidget) {
             NexlyContextualActionPillsRow(
-                blocks = blocks,
+                blocks = normalizedBlocks,
                 onCopyCode = onCopyCode,
                 onSendPrompt = onSendPrompt
             )
@@ -1081,14 +1132,19 @@ private fun sectionBadgeForHeadingText(raw: String): String? {
     val lower = clean.lowercase()
     return when {
         "priorit" in lower || "goal" in lower || "objective" in lower -> "target"
-        "step-by-step" in lower || "steps" in lower || "plan" in lower || "roadmap" in lower -> "list-check"
-        "next action" in lower || "action item" in lower || "checklist" in lower || "todo" in lower -> "checkbox"
+        "step-by-step" in lower || "steps" in lower || "plan" in lower || "roadmap" in lower || "what to do" in lower -> "list-check"
+        "next action" in lower || "action item" in lower || "checklist" in lower || "todo" in lower || "next step" in lower -> "checkbox"
         "key source" in lower || "sources" in lower -> "link"
         "reference" in lower || "citation" in lower || "further reading" in lower -> "book-2"
         "feature" in lower || "highlight" in lower || "benefit" in lower -> "sparkles"
         "calculator" in lower || "estimator" in lower || "pricing" in lower -> "calculator"
         lower.startsWith("top ") || "chart" in lower || "metric" in lower || "overview" in lower -> "chart-bar"
-        else -> null
+        "fix" in lower || "solution" in lower || "repair" in lower || "troubleshoot" in lower -> "tool"
+        "why " in lower || "how " in lower || "explain" in lower || "reason" in lower -> "bulb"
+        "bottom line" in lower || "conclusion" in lower || "verdict" in lower || "takeaway" in lower -> "circle-check"
+        "difference" in lower || "compare" in lower || "optional" in lower || "alternative" in lower -> "arrows-diff"
+        "code" in lower || "sql" in lower || "query" in lower || "script" in lower -> "code"
+        else -> "sparkles"
     }
 }
 
@@ -1896,8 +1952,9 @@ private fun StepOrderedListItemRow(
     selectable: Boolean,
     citationUrls: Map<Int, String>
 ) {
+    var completed by remember(item.spans, number) { mutableStateOf(item.checked ?: false) }
     val bodyStyle = LocalNexlyProseStyle.current ?: MaterialTheme.typography.bodyMedium
-    val ink = bodyStyle.color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface
+    val ink = if (completed) MaterialTheme.colorScheme.onSurfaceVariant else (bodyStyle.color.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface)
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
 
     // Detect "1. **Step Title** — Step description" OR two-line "1. **Step Title**\n   Step description" from Screenshot 3
@@ -1928,22 +1985,37 @@ private fun StepOrderedListItemRow(
     }
 
     Column {
-        Row(verticalAlignment = Alignment.Top) {
+        Row(
+            verticalAlignment = Alignment.Top,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .clickable { completed = !completed }
+                .padding(vertical = 2.dp)
+        ) {
             Box(
                 modifier = Modifier
                     .padding(top = 1.dp)
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFEDE5FF))
-                    .border(1.dp, Color(0xFFD5C6FF), CircleShape),
+                    .background(if (completed) Color(0xFFDCFCE7) else Color(0xFFEDE5FF))
+                    .border(1.dp, if (completed) Color(0xFF22C55E) else Color(0xFFD5C6FF), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = number.toString(),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF5B3DF5)
-                )
+                if (completed) {
+                    NexlyGlyph(
+                        name = "check",
+                        size = 13.dp,
+                        color = Color(0xFF15803D)
+                    )
+                } else {
+                    Text(
+                        text = number.toString(),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF5B3DF5)
+                    )
+                }
             }
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -1953,7 +2025,10 @@ private fun StepOrderedListItemRow(
                     }
                     Text(
                         text = splitStep.first,
-                        style = bodyStyle.copy(fontWeight = FontWeight.Bold),
+                        style = bodyStyle.copy(
+                            fontWeight = FontWeight.Bold,
+                            textDecoration = if (completed) TextDecoration.LineThrough else TextDecoration.None
+                        ),
                         color = ink
                     )
                     Spacer(Modifier.height(2.dp))
@@ -1964,14 +2039,13 @@ private fun StepOrderedListItemRow(
                     )
                 } else {
                     val styled = remember(item.spans, theme) { spansToAnnotatedString(item.spans, theme) }
-                    val content = @Composable {
-                        Text(
-                            text = styled,
-                            style = bodyStyle,
-                            color = ink
-                        )
-                    }
-                    if (selectable) SelectionContainer { content() } else content()
+                    Text(
+                        text = styled,
+                        style = bodyStyle.copy(
+                            textDecoration = if (completed) TextDecoration.LineThrough else TextDecoration.None
+                        ),
+                        color = ink
+                    )
                 }
             }
         }
@@ -2000,11 +2074,24 @@ private fun ListItemRow(
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
     val leadingIconAndSpans = remember(item.spans) {
         val first = item.spans.firstOrNull()
-        if (first is InlineSpan.TextSpan) {
-            val (icon, stripped) = NexlyIcons.extractLeadingIcon(first.text)
-            if (icon != null) icon to (listOf(InlineSpan.TextSpan(stripped)) + item.spans.drop(1))
-            else null to item.spans
-        } else null to item.spans
+        when (first) {
+            is InlineSpan.TextSpan -> {
+                val (icon, stripped) = NexlyIcons.extractLeadingIcon(first.text)
+                if (icon != null) icon to (listOf(InlineSpan.TextSpan(stripped)) + item.spans.drop(1))
+                else null to item.spans
+            }
+            is InlineSpan.BoldSpan -> {
+                val innerFirst = first.children.firstOrNull()
+                if (innerFirst is InlineSpan.TextSpan) {
+                    val (icon, stripped) = NexlyIcons.extractLeadingIcon(innerFirst.text)
+                    if (icon != null) {
+                        val newBold = InlineSpan.BoldSpan(listOf(InlineSpan.TextSpan(stripped)) + first.children.drop(1))
+                        icon to (listOf(newBold) + item.spans.drop(1))
+                    } else null to item.spans
+                } else null to item.spans
+            }
+            else -> null to item.spans
+        }
     }
     val leadingIcon = leadingIconAndSpans.first
     val styled = remember(leadingIconAndSpans.second, theme) {
