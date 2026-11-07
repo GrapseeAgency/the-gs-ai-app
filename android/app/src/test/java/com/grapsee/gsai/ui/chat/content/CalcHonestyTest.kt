@@ -6,7 +6,7 @@ import org.junit.Test
 
 class CalcHonestyTest {
     @Test fun requiresWholeExpression() {
-        for (expr in listOf("2 garbage", "2 3", "(2+3", "missing + 1", "1/0")) {
+        for (expr in listOf("2 garbage", "2 3", "(2+3", "missing + 1", "1/0", "sqrt(-1)")) {
             assertNull(expr, CalcExpr.eval(expr, emptyMap()))
         }
     }

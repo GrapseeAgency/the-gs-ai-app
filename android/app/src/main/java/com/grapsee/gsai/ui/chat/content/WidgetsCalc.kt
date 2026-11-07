@@ -195,7 +195,7 @@ internal object CalcExpr {
         }
 
         private fun call(fn: String, a: List<Double>): Double = when (fn) {
-            "sqrt" -> if (a.isEmpty()) Double.NaN else sqrt(max(0.0, a[0]))
+            "sqrt" -> if (a.size != 1 || a[0] < 0) Double.NaN else sqrt(a[0])
             "abs" -> if (a.isEmpty()) Double.NaN else abs(a[0])
             "ln" -> if (a.isEmpty() || a[0] <= 0) Double.NaN else ln(a[0])
             "log", "log10" -> if (a.isEmpty() || a[0] <= 0) Double.NaN else log10(a[0])
