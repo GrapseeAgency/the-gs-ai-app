@@ -984,6 +984,11 @@ func chartObservationValueIOS(_ raw: Any) -> Double? {
     return chartValueIOS(raw)
 }
 
+func chartSliceLabelIOS(name: String, labels: [String], seriesIndex: Int) -> String {
+    if !name.isEmpty { return name }
+    return seriesIndex < labels.count ? labels[seriesIndex] : "Series \(seriesIndex + 1)"
+}
+
 private struct ChartBodyView: View {
     let obj: [String: Any]
     let accent: Color
@@ -1041,15 +1046,16 @@ private struct ChartBodyView: View {
                 let color = WidgetPalette.at(sIdx)
                 if let data = s["data"] as? [Any] {
                     for (pIdx, pt) in data.enumerated() {
-                        let fallbackLbl = pIdx < labels.count ? labels[pIdx] : "#\(pIdx + 1)"
+                        let sliceLabel = chartSliceLabelIOS(name: sName, labels: labels, seriesIndex: sIdx)
+                        let fallbackLbl = isSliceSeries ? sliceLabel : (pIdx < labels.count ? labels[pIdx] : "#\(pIdx + 1)")
                         if let pair = pt as? [Any], pair.count >= 2 {
-                            let lbl = pIdx < labels.count ? labels[pIdx] : "\(pair[0])"
+                            let lbl = isSliceSeries ? sliceLabel : (pIdx < labels.count ? labels[pIdx] : "\(pair[0])")
                             guard let val = chartObservationValueIOS(pt) else { continue }
                             out.append(BarPoint(index: out.count, seriesName: sName, label: lbl, value: val, color: color))
                         } else if let val = chartValueIOS(pt) {
                             out.append(BarPoint(index: out.count, seriesName: sName, label: fallbackLbl, value: val, color: color))
                         } else if let d = pt as? [String: Any] {
-                            let lbl = str(d, "label", "x", "name")
+                            let lbl = isSliceSeries ? sliceLabel : str(d, "label", "x", "name")
                             guard let val = chartObservationValueIOS(d) else { continue }
                             out.append(BarPoint(index: out.count, seriesName: sName, label: lbl.isEmpty ? fallbackLbl : lbl, value: val, color: color))
                         }
@@ -1206,8 +1212,9 @@ private struct ChartBodyView: View {
     private func chartTooltipRow(pts: [BarPoint], activeIdx: Int, totalVal: Double, unit: String) -> some View {
         if !pts.isEmpty && activeIdx < pts.count {
             let selPt = pts[activeIdx]
-            let stepPct = chartStepPercentIOS(values: pts.map { $0.value }, index: activeIdx)
-            let stepText = stepPct.map { String(format: "%@ %.1f%%", $0 >= 0 ? "↑" : "↓", abs($0)) } ?? "N/A (no prior baseline)"
+            let slices = currentType == "pie" || currentType == "donut"
+            let stepPct = slices ? nil : chartStepPercentIOS(values: pts.map { $0.value }, index: activeIdx)
+            let stepText = stepPct.map { String(format: "%@ %.1f%%", $0 >= 0 ? "↑" : "↓", abs($0)) } ?? (slices ? "N/A (slice values)" : "N/A (no prior baseline)")
             let stepColor = stepPct == nil ? Aero.textSecondary : ((stepPct ?? 0) >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
             HStack(spacing: 8) {
                 Circle()
@@ -1355,7 +1362,7 @@ private struct ChartBodyView: View {
                 }
             }
             .padding(.top, 4)
-        } else if currentType == "bar" && pts.count >= 2 {
+        } else if currentType == "bar" && !pts.isEmpty {
             HStack(alignment: .bottom, spacing: 8) {
                 ForEach(Array(pts.enumerated()), id: \.offset) { idx, pt in
                     let isSel = idx == activeIdx
@@ -1491,9 +1498,10 @@ private struct ChartBodyView: View {
     @ViewBuilder
     private func chartSummaryFooter(pts: [BarPoint], peakIdx: Int, totalVal: Double, unit: String, rangeLabel: String) -> some View {
         if pts.count >= 2 {
-            let growthPct = chartGrowthPercentIOS(first: pts[0].value, last: pts[pts.count - 1].value)
+            let slices = currentType == "pie" || currentType == "donut"
+            let growthPct = slices ? nil : chartGrowthPercentIOS(first: pts[0].value, last: pts[pts.count - 1].value)
             let pos = (growthPct ?? -1) >= 0
-            let growthText = growthPct.map { String(format: "%@%.1f%%", pos ? "+" : "", $0) } ?? "N/A (zero baseline)"
+            let growthText = growthPct.map { String(format: "%@%.1f%%", pos ? "+" : "", $0) } ?? (slices ? "N/A (slice values)" : "N/A (zero baseline)")
             let deltaText = growthPct == nil ? "No defined baseline" : "\(pos ? "↑" : "↓") \(growthText)"
             let pillBg = growthPct == nil ? Color.gray.opacity(0.1) : (pos ? Color(red: 0.902, green: 0.976, blue: 0.941) : Color(red: 0.992, green: 0.925, blue: 0.925))
             let pillFg = growthPct == nil ? Aero.textSecondary : (pos ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
@@ -1569,7 +1577,7 @@ private struct ChartBodyView: View {
                     Text(growthText)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Aero.text)
-                    Text("Growth Rate")
+                    Text(slices ? "Slice values" : "First–last change")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
                         .lineLimit(1)
@@ -2424,24 +2432,24 @@ private struct PollBodyView: View {
                 Text("Poll unavailable: supplied vote counts must be nonnegative whole numbers.")
                     .font(Aero.caption()).foregroundStyle(Aero.textSecondary)
             } else {
-            ForEach(Array(opts.enumerated()), id: \.offset) { idx, opt in
-                let votes = Double(opt.votes ?? 0) + (voted == idx ? 1 : 0)
-                let pct = totalBase > 0 ? Int(round(votes / totalBase * 100.0)) : 0
-                Button {
-                    GSHaptics.select()
-                    voted = idx
-                    widgetAction?(opt.label)
-                } label: {
-                    HStack {
-                        Text(opt.label).font(.system(size: 12, weight: voted == idx ? .bold : .regular)).foregroundStyle(Aero.text)
-                        Spacer()
-                        Text("\(String(format: "%.0f", votes)) (\(pct)%)").font(Aero.mono(11)).foregroundStyle(accent)
+                ForEach(Array(opts.enumerated()), id: \.offset) { idx, opt in
+                    let votes = Double(opt.votes ?? 0) + (voted == idx ? 1 : 0)
+                    let pct = totalBase > 0 ? Int(round(votes / totalBase * 100.0)) : 0
+                    Button {
+                        GSHaptics.select()
+                        voted = idx
+                        widgetAction?(opt.label)
+                    } label: {
+                        HStack {
+                            Text(opt.label).font(.system(size: 12, weight: voted == idx ? .bold : .regular)).foregroundStyle(Aero.text)
+                            Spacer()
+                            Text("\(String(format: "%.0f", votes)) (\(pct)%)").font(Aero.mono(11)).foregroundStyle(accent)
+                        }
+                        .padding(9)
+                        .background(voted == idx ? accent.opacity(0.16) : Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 10))
                     }
-                    .padding(9)
-                    .background(voted == idx ? accent.opacity(0.16) : Color.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 10))
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-            }
             }
         }
     }
