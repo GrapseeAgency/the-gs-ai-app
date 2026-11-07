@@ -74,25 +74,25 @@ class Parser {
   }
 
   private term(): number {
-    let v = this.power()
+    let v = this.unary()
     for (;;) {
-      if (!this.src.startsWith('**', this.pos) && this.eat('*')) v *= this.power()
-      else if (this.eat('/')) v /= this.power()
-      else if (this.eat('%')) v %= this.power()
+      if (this.eat('*')) v *= this.unary()
+      else if (this.eat('/')) v /= this.unary()
+      else if (this.eat('%')) v %= this.unary()
       else return v
     }
   }
 
   private power(): number {
-    const base = this.unary()
-    if (this.eat('^') || this.eat('**')) return Math.pow(base, this.power())
+    const base = this.primary()
+    if (this.eat('^') || this.eat('**')) return Math.pow(base, this.unary())
     return base
   }
 
   private unary(): number {
     if (this.eat('-')) return -this.unary()
     if (this.eat('+')) return this.unary()
-    return this.primary()
+    return this.power()
   }
 
   private primary(): number {
@@ -151,7 +151,8 @@ export function evaluateExpr(expr: string, vars: Record<string, number>): number
 
 /** Format a calc output: money | percent | plain. */
 export function formatOutput(value: number, format: string | undefined, unit: string | undefined): string {
-  const safe = Number.isFinite(value) ? value : 0
+  if (!Number.isFinite(value)) return '—'
+  const safe = value
   if (format === 'money') {
     const symbol = unit && /^[^\d\s]/.test(unit) ? unit : '$'
     return `${symbol}${safe.toLocaleString(undefined, { maximumFractionDigits: 2 })}`

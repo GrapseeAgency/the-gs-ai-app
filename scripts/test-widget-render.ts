@@ -237,7 +237,7 @@ total++
       'Bar Chart',
       'Area Chart',
       'Pie Chart',
-      'Last 6M', // 07: Chart date range selector with dataset slicing
+      'All', // 07: Honest initial full-data range; calendar/point slicing is behavior-tested separately
       'Trusted Source', // 03: Ordinary Markdown source list elevated to Trusted Source green pill
       'Academic', // 03: Ordinary Markdown source list elevated to Academic lavender pill
       '#gs-building-bank', // 03: Academic source custom glassy icon

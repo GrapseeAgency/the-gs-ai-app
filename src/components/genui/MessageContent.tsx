@@ -17,13 +17,15 @@
 import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { parseStream, type Segment } from './stream'
 import { WidgetRenderer } from './WidgetRenderer'
+import { SpontaneousConceptDeck } from './SpontaneousConceptDeck'
+import { extractConceptDeck } from '@/lib/nexly/concept-deck'
 import { Skeleton } from './primitives/Skeleton'
 import { MermaidBlock } from './blocks/MermaidBlock'
 import { HtmlBlock } from './blocks/HtmlBlock'
 import { SvgBlock } from './blocks/SvgBlock'
 import { CodeBlock } from './blocks/CodeBlock'
 import { themeFor, TYPE } from './theme/tokens'
-import { canonicalIconName, emojiToIconTokens, ICON_TOKEN_RE, extractLeadingIcon, cleanPlainText, semanticIconFor } from '@/lib/nexly/icons'
+import { canonicalIconName, emojiToIconTokens, ICON_TOKEN_RE, extractLeadingIcon, cleanPlainText, semanticIconFor, sanitizeReplyEmojis } from '@/lib/nexly/icons'
 import { GlassIcon } from '@/components/nexly/GlassIcon'
 
 /** A persisted citation the host knows about — [N] markers resolve to these. */
@@ -836,7 +838,7 @@ function InteractiveProseChecklistItem({
           flexShrink: 0,
         }}
       >
-        {checked ? '✓' : ''}
+        {checked && <GlassIcon name="check" size={11} tile={16} />}
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <span style={{ textDecoration: checked ? 'line-through' : 'none', opacity: checked ? 0.68 : 1 }}>
@@ -1897,8 +1899,9 @@ export function MessageContent({
   streaming?: boolean
   citations?: Citation[]
 }) {
-  const segments = useMemo(() => parseStream(text), [text])
+  const segments = useMemo(() => parseStream(sanitizeReplyEmojis(text)), [text])
   const theme = useMemo(() => themeFor(dark), [dark])
+  const concepts = useMemo(() => !streaming && segments.every((s) => s.kind === 'text') ? extractConceptDeck(text) : [], [text, segments, streaming])
   const accent = segments.find((s): s is Extract<Segment, { kind: 'widget' }> => s.kind === 'widget')?.payload.accent as string | undefined
   const contextualPills = useMemo(
     () => (streaming ? [] : deriveContextualActionPills(segments, text, citations)),
@@ -1934,6 +1937,7 @@ export function MessageContent({
             return null
         }
       })}
+      {concepts.length >= 3 && <SpontaneousConceptDeck key={text} concepts={concepts} dark={dark} />}
       {citations && citations.length > 0 && <CitationsSourceCards citations={citations} theme={theme} />}
       {contextualPills.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>

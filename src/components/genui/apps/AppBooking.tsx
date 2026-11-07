@@ -39,7 +39,7 @@ export function AppBooking({ payload }: { payload: AppPayload }) {
           </button>
         ))}
       </div>
-      {done && picked ? <div style={{ marginTop: 12, fontSize: TYPE.label, color: '#0CA678', fontWeight: 700 }}>Booked for {picked} ✓</div> : null}
+      {done && picked ? <div style={{ marginTop: 12, fontSize: TYPE.label, color: '#0CA678', fontWeight: 700 }}>Booked for {picked}</div> : null}
     </AppShell>
   )
 }

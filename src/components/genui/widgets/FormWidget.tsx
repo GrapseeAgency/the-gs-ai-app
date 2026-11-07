@@ -67,7 +67,7 @@ export function FormWidget({ payload, onPrompt }: { payload: FormPayload; onProm
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16 }}>
         <UiButton buttonStyle="filled">{payload.submitLabel ?? 'Submit'}</UiButton>
-        {submitted && <span style={{ fontSize: TYPE.label, color: '#0CA678', fontWeight: 600 }}>Sent ✓</span>}
+        {submitted && <span style={{ fontSize: TYPE.label, color: '#0CA678', fontWeight: 600 }}>Sent</span>}
       </div>
     </form>
   )

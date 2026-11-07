@@ -1,5 +1,7 @@
 'use client'
 
+import { GlassIcon } from '@/components/nexly/GlassIcon'
+
 import type { StepsPayload } from '../types'
 import { alpha, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
@@ -40,7 +42,7 @@ export function StepsWidget({ payload }: { payload: StepsPayload }) {
                   color: done ? theme.dark ? '#0F1216' : '#fff' : current ? accent : theme.text3,
                 }}
               >
-                {done ? '✓' : i + 1}
+                {done ? <GlassIcon name="check" size={12} tile={18} /> : i + 1}
               </span>
               <div style={{ fontSize: TYPE.body, fontWeight: current ? 700 : 600, color: current ? accent : theme.text }}>{step.title}</div>
               {step.body ? <div style={{ fontSize: TYPE.label, color: theme.text2, lineHeight: 1.55, marginTop: 3 }}>{step.body}</div> : null}

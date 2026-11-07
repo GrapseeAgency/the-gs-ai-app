@@ -98,7 +98,7 @@ internal object CalcExpr {
     fun eval(expr: String, vars: Map<String, Double>): Double? {
         val parser = Parser(expr, vars)
         return try {
-            val v = parser.expression()
+            val v = parser.parse()
             if (!v.isFinite()) null else v
         } catch (_: Throwable) {
             null
@@ -107,6 +107,13 @@ internal object CalcExpr {
 
     private class Parser(private val src: String, private val vars: Map<String, Double>) {
         private var i = 0
+
+        fun parse(): Double {
+            val value = expression()
+            skip()
+            require(i == src.length) { "Unexpected trailing input" }
+            return value
+        }
 
         fun expression(): Double {
             var v = term()
@@ -188,7 +195,7 @@ internal object CalcExpr {
         }
 
         private fun call(fn: String, a: List<Double>): Double = when (fn) {
-            "sqrt" -> if (a.isEmpty()) Double.NaN else sqrt(max(0.0, a[0]))
+            "sqrt" -> if (a.size != 1 || a[0] < 0) Double.NaN else sqrt(a[0])
             "abs" -> if (a.isEmpty()) Double.NaN else abs(a[0])
             "ln" -> if (a.isEmpty() || a[0] <= 0) Double.NaN else ln(a[0])
             "log", "log10" -> if (a.isEmpty() || a[0] <= 0) Double.NaN else log10(a[0])

@@ -47,7 +47,7 @@ export function ActionsWidget({ payload, onPrompt }: { payload: ActionsPayload; 
               ...face(btn.style),
             }}
           >
-            {btn.kind === 'copy' && copied === btn.value ? 'Copied ✓' : btn.label}
+            {btn.kind === 'copy' && copied === btn.value ? 'Copied' : btn.label}
           </button>
         ))}
       </div>

@@ -280,13 +280,13 @@ export function TableWidget({ payload }: { payload: TablePayload }) {
               ›
             </button>
             <span style={{ fontSize: 11, color: theme.text2, marginLeft: 4 }}>
-              {safePage * pageSize + 1}–{Math.min(rows.length, (safePage + 1) * pageSize)} of {rows.length}
+              {rows.length === 0 ? 0 : safePage * pageSize + 1}–{Math.min(rows.length, (safePage + 1) * pageSize)} of {rows.length}
             </span>
           </div>
           <button
             type="button"
             onClick={() => {
-              const next = pageSize === 3 ? 5 : pageSize === 5 ? 10 : pageSize === 10 ? 25 : 3
+              const next = pageSize === 3 ? 5 : pageSize === 5 ? 10 : pageSize === 10 ? Number.MAX_SAFE_INTEGER : 3
               setPageSize(next)
               setPage(0)
             }}
@@ -301,7 +301,7 @@ export function TableWidget({ payload }: { payload: TablePayload }) {
               cursor: 'pointer',
             }}
           >
-            Show: {pageSize >= rows.length ? 'All' : pageSize} ▾
+            Show: {pageSize === Number.MAX_SAFE_INTEGER ? 'All' : pageSize} ▾
           </button>
         </div>
       </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import type { CSSProperties, ReactNode } from 'react'
+import { NexlyRichText } from '@/components/nexly/NexlyRichText'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { TYPE } from '../theme/tokens'
 
@@ -28,7 +29,7 @@ export function TitleRow({
       }}
     >
       {title ? (
-        <div style={{ fontSize: TYPE.heading, fontWeight: 600, lineHeight: 1.25 }}>{title}</div>
+        <div style={{ fontSize: TYPE.heading, fontWeight: 600, lineHeight: 1.25 }}><NexlyRichText text={title} /></div>
       ) : (
         <span />
       )}

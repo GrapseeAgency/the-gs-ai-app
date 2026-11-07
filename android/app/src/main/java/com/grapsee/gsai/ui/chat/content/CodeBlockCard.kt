@@ -56,134 +56,6 @@ private fun formatNumValue(d: Double): String =
     if (d % 1.0 == 0.0) d.toLong().toString()
     else String.format(java.util.Locale.US, "%.4f", d).trimEnd('0').trimEnd('.')
 
-private fun splitTopLevelCommasKt(input: String): List<String> {
-    val parts = mutableListOf<String>()
-    val cur = StringBuilder()
-    var depth = 0
-    var inSingle = false
-    var inDouble = false
-    for (i in input.indices) {
-        val ch = input[i]
-        val prev = if (i > 0) input[i - 1] else ' '
-        if (ch == '\'' && !inDouble && prev != '\\') inSingle = !inSingle
-        else if (ch == '"' && !inSingle && prev != '\\') inDouble = !inDouble
-        else if (!inSingle && !inDouble) {
-            when (ch) {
-                '(', '[', '{' -> depth++
-                ')', ']', '}' -> depth = (depth - 1).coerceAtLeast(0)
-                ',' -> if (depth == 0) {
-                    val s = cur.toString().trim()
-                    if (s.isNotEmpty()) parts += s
-                    cur.setLength(0)
-                    continue
-                }
-            }
-        }
-        cur.append(ch)
-    }
-    val tail = cur.toString().trim()
-    if (tail.isNotEmpty()) parts += tail
-    return parts
-}
-
-private fun parseInlineNumberListKt(
-    raw: String,
-    numVars: Map<String, Double>,
-    strVars: Map<String, String>,
-    listVars: Map<String, List<Double>>
-): List<Double>? {
-    val t = raw.trim()
-    if (!t.startsWith("[") || !t.endsWith("]")) return null
-    val inner = t.drop(1).dropLast(1).trim()
-    if (inner.isEmpty()) return emptyList()
-    return splitTopLevelCommasKt(inner).mapNotNull {
-        evalCodeExpression(it, numVars, strVars, listVars).toDoubleOrNull()
-    }
-}
-
-private fun evalCodeExpression(
-    rawExpr: String,
-    numVars: Map<String, Double>,
-    strVars: Map<String, String>,
-    listVars: Map<String, List<Double>>,
-    funcs: Map<String, Pair<List<String>, String>> = emptyMap()
-): String {
-    val expr = rawExpr.trim()
-    if (expr.isEmpty()) return ""
-    // Python f-string or JS template literal
-    if ((expr.startsWith("f\"") && expr.endsWith("\"")) ||
-        (expr.startsWith("f'") && expr.endsWith("'")) ||
-        (expr.startsWith("`") && expr.endsWith("`"))
-    ) {
-        val inner = if (expr.startsWith("f")) expr.drop(2).dropLast(1) else expr.drop(1).dropLast(1)
-        return Regex("\\$\\{([^}]+)}|\\{([^}]+)}").replace(inner) { m ->
-            val sub = m.groupValues[1].ifBlank { m.groupValues[2] }.trim().substringBefore(':')
-            evalCodeExpression(sub, numVars, strVars, listVars, funcs)
-        }
-    }
-    if ((expr.startsWith("\"") && expr.endsWith("\"")) || (expr.startsWith("'") && expr.endsWith("'"))) {
-        return expr.drop(1).dropLast(1)
-    }
-    strVars[expr]?.let { return it }
-    listVars[expr]?.let { list ->
-        return "[" + list.joinToString(", ") { formatNumValue(it) } + "]"
-    }
-    parseInlineNumberListKt(expr, numVars, strVars, listVars)?.let { list ->
-        return "[" + list.joinToString(", ") { formatNumValue(it) } + "]"
-    }
-    // User-defined function call fn(a, b)
-    val fnMatch = Regex("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\((.*)\\)$").find(expr)
-    if (fnMatch != null) {
-        val fnName = fnMatch.groupValues[1]
-        val fnSpec = funcs[fnName]
-        if (fnSpec != null) {
-            val argVals = splitTopLevelCommasKt(fnMatch.groupValues[2]).map {
-                evalCodeExpression(it, numVars, strVars, listVars, funcs).toDoubleOrNull() ?: 0.0
-            }
-            val scoped = numVars.toMutableMap()
-            fnSpec.first.forEachIndexed { idx, p -> scoped[p] = argVals.getOrElse(idx) { 0.0 } }
-            return evalCodeExpression(fnSpec.second, scoped, strVars, listVars, funcs)
-        }
-    }
-    // Aggregate functions over list variables or inline lists: sum(arr), len(arr), min(arr), max(arr), avg(arr)
-    val aggMatch = Regex("^(sum|len|min|max|avg|mean)\\s*\\(\\s*(.+)\\s*\\)$").find(expr)
-    if (aggMatch != null) {
-        val fn = aggMatch.groupValues[1]
-        val argStr = aggMatch.groupValues[2].trim()
-        val list = listVars[argStr]
-            ?: parseInlineNumberListKt(argStr, numVars, strVars, listVars)
-            ?: splitTopLevelCommasKt(argStr).mapNotNull { evalCodeExpression(it, numVars, strVars, listVars, funcs).toDoubleOrNull() }.takeIf { it.size > 1 }
-        if (list != null && list.isNotEmpty()) {
-            val res = when (fn) {
-                "sum" -> list.sum()
-                "len" -> list.size.toDouble()
-                "min" -> list.minOrNull() ?: 0.0
-                "max" -> list.maxOrNull() ?: 0.0
-                else -> list.average()
-            }
-            return formatNumValue(res)
-        }
-    }
-    // Replace any sum(var)/len(var)/min(var)/max(var) inside compound arithmetic
-    val expanded = Regex("(sum|len|min|max)\\s*\\(\\s*([^)]+)\\s*\\)").replace(expr) { m ->
-        val fn = m.groupValues[1]
-        val argStr = m.groupValues[2].trim()
-        val list = listVars[argStr] ?: parseInlineNumberListKt(argStr, numVars, strVars, listVars)
-        if (list != null && list.isNotEmpty()) {
-            val v = when (fn) {
-                "sum" -> list.sum()
-                "len" -> list.size.toDouble()
-                "min" -> list.minOrNull() ?: 0.0
-                else -> list.maxOrNull() ?: 0.0
-            }
-            v.toString()
-        } else m.value
-    }.replace("**", "^")
-    CalcExpr.eval(expanded, numVars)?.let { return formatNumValue(it) }
-    numVars[expr]?.let { return formatNumValue(it) }
-    return expr
-}
-
 private fun executeCodePreview(language: String?, code: String): CodeRunResult {
     val lang = (language ?: "code").lowercase().trim()
     val trimmed = code.trim()
@@ -203,292 +75,55 @@ private fun executeCodePreview(language: String?, code: String): CodeRunResult {
         }
     }
 
-    val numVars = mutableMapOf<String, Double>()
-    val strVars = mutableMapOf<String, String>()
-    val listVars = mutableMapOf<String, List<Double>>()
-    val outLines = mutableListOf<String>()
-
     if (lang in setOf("py", "python", "python3")) {
-        val raiseMatch = Regex("\\braise\\s+(\\w+)\\(([^)]*)\\)").find(trimmed)
-        if (raiseMatch != null) {
-            val errType = raiseMatch.groupValues[1]
-            val errMsg = raiseMatch.groupValues[2].trim('"', '\'')
-            return CodeRunResult(
-                output = "",
-                error = "Traceback (most recent call last):\n  File \"main.py\", line 1, in <module>\n$errType: $errMsg"
-            )
+        // This is an arithmetic preview, NOT a Python runtime. Never skip a
+        // statement or supply missing variables and then report script success.
+        val vars = mutableMapOf<String, Double>()
+        val output = mutableListOf<String>()
+        fun numeric(expr: String): Double {
+            require(expr.matches(Regex("""[a-zA-Z0-9_+*()./\s-]+""")) && "**" !in expr && "//" !in expr) {
+                "Only numbers, variables, +, -, *, / and parentheses are supported"
+            }
+            Regex("""[a-zA-Z_][a-zA-Z0-9_]*""").findAll(expr).forEach {
+                require(vars.containsKey(it.value)) { "Unknown variable: ${it.value}" }
+            }
+            require(!Regex("""[a-zA-Z_]\w*\s*\(""").containsMatchIn(expr)) { "Function calls are not supported" }
+            return (CalcExpr.eval(expr, vars) ?: error("Invalid expression")).also {
+                require(it.isFinite()) { "Result is not finite (check division by zero)" }
+            }
         }
-        val rawLines = trimmed.lines()
-        var idx = 0
-        while (idx < rawLines.size) {
-            val line = rawLines[idx].substringBefore('#').trim()
-            if (line.isEmpty()) {
-                idx++
-                continue
-            }
-            // Simple for-loop over range(N) or list variable
-            val forRange = Regex("^for\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s+in\\s+range\\(\\s*(\\d+)(?:\\s*,\\s*(\\d+))?\\s*\\)\\s*:$").find(line)
-            if (forRange != null && idx + 1 < rawLines.size) {
-                val loopVar = forRange.groupValues[1]
-                val a = forRange.groupValues[2].toIntOrNull() ?: 0
-                val b = forRange.groupValues[3].toIntOrNull()
-                val range = if (b != null) (a until b) else (0 until a)
-                val bodyLine = rawLines[idx + 1].substringBefore('#').trim()
-                for (step in range.take(20)) {
-                    numVars[loopVar] = step.toDouble()
-                    val pm = Regex("^print\\s*\\((.+)\\)$").find(bodyLine)
-                    if (pm != null) {
-                        outLines += evalCodeExpression(pm.groupValues[1], numVars, strVars, listVars)
+        var lineNumber = 0
+        return try {
+            require(trimmed.length <= 32000 && trimmed.lines().size <= 200) { "Preview limit exceeded" }
+            for (raw in trimmed.lines()) {
+                lineNumber++
+                val line = raw.trim()
+                if (line.isEmpty() || line.startsWith("#")) continue
+                val assign = Regex("""^([a-zA-Z_]\w*)\s*=\s*([^=]+)$""").matchEntire(line)
+                if (assign != null) { vars[assign.groupValues[1]] = numeric(assign.groupValues[2]); continue }
+                val print = Regex("""^print\((.*)\)$""").matchEntire(line)
+                if (print != null) {
+                    val arg = print.groupValues[1].trim()
+                    output += when {
+                        arg.isEmpty() -> ""
+                        arg.matches(Regex(""""[^"\\]*"|'[^'\\]*'""")) -> arg.drop(1).dropLast(1)
+                        else -> formatNumValue(numeric(arg))
                     }
-                }
-                idx += 2
-                continue
-            }
-            val listAssign = Regex("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*=\\s*\\[([\\d,\\s.+-]+)]$").find(line)
-            if (listAssign != null) {
-                val name = listAssign.groupValues[1]
-                val nums = listAssign.groupValues[2].split(',').mapNotNull { it.trim().toDoubleOrNull() }
-                if (nums.isNotEmpty()) {
-                    listVars[name] = nums
-                    idx++
                     continue
                 }
+                error("Unsupported statement; imports, loops and libraries require a Python runtime")
             }
-                val assignMatch = Regex("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*=\\s*(.+)$").find(line)
-            if (assignMatch != null && !line.startsWith("print")) {
-                val name = assignMatch.groupValues[1]
-                val rhs = assignMatch.groupValues[2].trim()
-                val compAppend = Regex("^\\[\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\.append\\([^)]+\\)\\s+for\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s+in\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*]$").find(rhs)
-                val compExpr = Regex("^\\[\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*([*+\\-/])\\s*(\\d+(?:\\.\\d+)?)\\s+for\\s+\\1\\s+in\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*]$").find(rhs)
-                if (compAppend != null) {
-                    val srcList = listVars[compAppend.groupValues[2]] ?: listOf(1.0, 2.0, 3.0)
-                    strVars[name] = "[" + srcList.joinToString(", ") { "None" } + "]"
-                } else if (compExpr != null) {
-                    val op = compExpr.groupValues[2]
-                    val factor = compExpr.groupValues[3].toDoubleOrNull() ?: 1.0
-                    val srcList = listVars[compExpr.groupValues[4]] ?: listOf(1.0, 2.0, 3.0)
-                    val mapped = srcList.map { v ->
-                        when (op) {
-                            "*" -> v * factor
-                            "+" -> v + factor
-                            "-" -> v - factor
-                            "/" -> if (factor != 0.0) v / factor else v
-                            else -> v
-                        }
-                    }
-                    listVars[name] = mapped
-                    strVars[name] = "[" + mapped.joinToString(", ") { formatNumValue(it) } + "]"
-                } else {
-                    val evaluated = evalCodeExpression(rhs, numVars, strVars, listVars)
-                    val asDouble = evaluated.toDoubleOrNull()
-                    if (asDouble != null) numVars[name] = asDouble else strVars[name] = evaluated
-                }
-            }
-            val extendMatch = Regex("^([a-zA-Z_][a-zA-Z0-9_]*)\\.extend\\(\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*([*+\\-/])\\s*(\\d+(?:\\.\\d+)?)\\s+for\\s+\\2\\s+in\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\)$").find(line)
-            if (extendMatch != null) {
-                val targetName = extendMatch.groupValues[1]
-                val op = extendMatch.groupValues[3]
-                val factor = extendMatch.groupValues[4].toDoubleOrNull() ?: 1.0
-                val srcList = listVars[extendMatch.groupValues[5]] ?: listOf(1.0, 2.0, 3.0)
-                val mapped = srcList.map { v ->
-                    when (op) {
-                        "*" -> v * factor
-                        "+" -> v + factor
-                        "-" -> v - factor
-                        else -> v
-                    }
-                }
-                listVars[targetName] = mapped
-                strVars[targetName] = "[" + mapped.joinToString(", ") { formatNumValue(it) } + "]"
-            }
-            val printMatch = Regex("^print\\s*\\((.+)\\)$").find(line)
-            if (printMatch != null) {
-                val inner = printMatch.groupValues[1].trim()
-                val parts = splitTopLevelCommasKt(inner).map { evalCodeExpression(it, numVars, strVars, listVars) }
-                outLines += parts.joinToString(" ")
-            }
-            idx++
+            CodeRunResult("Arithmetic preview (not a Python runtime)\n" + if (output.isEmpty()) "(no print output)" else output.joinToString("\n"))
+        } catch (t: IllegalArgumentException) {
+            CodeRunResult("", "Preview stopped at line $lineNumber: ${t.message}")
+        } catch (t: IllegalStateException) {
+            CodeRunResult("", "Preview stopped at line $lineNumber: ${t.message}")
         }
-        if ("DataFrame" in trimmed || "plt.plot" in trimmed) {
-            val nums = listVars.values.firstOrNull()
-                ?: Regex("\\[([\\d,\\s.]+)]").find(trimmed)?.groupValues?.get(1)
-                    ?.split(",")
-                    ?.mapNotNull { it.trim().toDoubleOrNull() }
-                    .orEmpty()
-            if (nums.isNotEmpty()) {
-                val min = nums.minOrNull() ?: 0.0
-                val max = nums.maxOrNull() ?: 0.0
-                val sum = nums.sum()
-                val avg = nums.average()
-                outLines += "DataFrame (${nums.size} rows): min=${formatNumValue(min)} · max=${formatNumValue(max)} · mean=${formatNumValue(avg)} · sum=${formatNumValue(sum)}"
-            }
-        }
-        if (outLines.isEmpty() && (numVars.isNotEmpty() || strVars.isNotEmpty() || listVars.isNotEmpty())) {
-            numVars.forEach { (k, v) -> outLines += "$k = ${formatNumValue(v)}" }
-            strVars.forEach { (k, v) -> outLines += "$k = $v" }
-            listVars.filterKeys { it !in strVars }.forEach { (k, v) ->
-                outLines += "$k = [${v.joinToString(", ") { formatNumValue(it) }}]"
-            }
-        }
-        if (outLines.isNotEmpty()) return CodeRunResult(outLines.joinToString("\n"))
-        return CodeRunResult("Python 3 executed (${rawLines.size} lines, exit code 0)")
     }
-
-    if (lang in setOf("js", "javascript", "ts", "typescript", "jsx", "tsx", "node")) {
-        if ("throw new " in trimmed) {
-            val errM = Regex("throw new\\s+(\\w+)\\(([^)]*)\\)").find(trimmed)
-            return CodeRunResult(
-                output = "",
-                error = "${errM?.groupValues?.get(1) ?: "Error"}: ${errM?.groupValues?.get(2)?.trim('"', '\'') ?: "Execution halted"}"
-            )
-        }
-        trimmed.lines().forEach { rawLine ->
-            val line = rawLine.substringBefore("//").trim().trimEnd(';')
-            if (line.isEmpty()) return@forEach
-            val listAssign = Regex("^(?:const|let|var)\\s+([a-zA-Z_$][a-zA-Z0-9_$]*)(?:\\s*:[^=]+)?\\s*=\\s*\\[([\\d,\\s.+-]+)]$").find(line)
-            if (listAssign != null) {
-                val name = listAssign.groupValues[1]
-                val nums = listAssign.groupValues[2].split(',').mapNotNull { it.trim().toDoubleOrNull() }
-                if (nums.isNotEmpty()) listVars[name] = nums
-                return@forEach
-            }
-            val assignMatch = Regex("^(?:const|let|var)\\s+([a-zA-Z_$][a-zA-Z0-9_$]*)(?:\\s*:[^=]+)?\\s*=\\s*(.+)$").find(line)
-            if (assignMatch != null && "console." !in line) {
-                val name = assignMatch.groupValues[1]
-                val rhs = assignMatch.groupValues[2].trim()
-                val evaluated = evalCodeExpression(rhs, numVars, strVars, listVars)
-                val asDouble = evaluated.toDoubleOrNull()
-                if (asDouble != null) numVars[name] = asDouble else strVars[name] = evaluated
-            }
-            Regex("console\\.(?:log|info|warn)\\s*\\((.+)\\)").findAll(line).forEach { logMatch ->
-                val inner = logMatch.groupValues[1].trim()
-                if (inner != "e") {
-                    outLines += splitTopLevelCommasKt(inner).joinToString(" ") { evalCodeExpression(it, numVars, strVars, listVars) }
-                }
-            }
-        }
-        if (outLines.isEmpty() && numVars.isNotEmpty()) {
-            outLines += numVars.entries.joinToString("\n") { "${it.key} = ${formatNumValue(it.value)}" }
-        }
-        if (outLines.isNotEmpty()) return CodeRunResult(outLines.joinToString("\n"))
-        if ("useEffect" in trimmed && "fetch(" in trimmed) {
-            val url = Regex("fetch\\s*\\(\\s*['\"]([^'\"]+)['\"]").find(trimmed)?.groupValues?.get(1) ?: "/api/data"
-            return CodeRunResult("useEffect lifecycle verified:\n1. Mount #1 -> GET $url\n2. Cleanup -> controller.abort() (ignore = true)\n3. Remount #2 -> 200 OK -> setData(payload)")
-        }
-        return CodeRunResult(
-            if (lang in setOf("jsx", "tsx", "react")) "React component compiled (${trimmed.lines().size} lines · 0 errors)"
-            else "Executed cleanly (${trimmed.lines().size} lines · 0 errors)"
-        )
-    }
-
     if (lang in setOf("sql", "sqlite", "postgres", "postgresql", "mysql")) {
-        val tables = Regex("\\b(?:FROM|JOIN|INTO|TABLE|UPDATE)\\s+([a-zA-Z0-9_.]+)", RegexOption.IGNORE_CASE)
-            .findAll(trimmed)
-            .map { it.groupValues[1] }
-            .distinct()
-            .toList()
-        val hasCte = Regex("\\bWITH\\b", RegexOption.IGNORE_CASE).containsMatchIn(trimmed)
-        val hasDistinct = Regex("\\bDISTINCT\\b", RegexOption.IGNORE_CASE).containsMatchIn(trimmed)
-        val hasGroupBy = Regex("\\bGROUP\\s+BY\\b", RegexOption.IGNORE_CASE).containsMatchIn(trimmed)
-        if ("order_id" in trimmed.lowercase() && "product_name" in trimmed.lowercase()) {
-            val modeNote = when {
-                hasCte || hasGroupBy -> "CTE grouped orders first -> 0 duplicate order headers"
-                hasDistinct -> "DISTINCT applied across (order_id, item_id) -> unique combinations"
-                else -> "Raw 1:N join -> order #1042 repeated per item"
-            }
-            val tableOut = buildString {
-                appendLine("order_id | customer_id | total_amount | item_id | product_name   | qty | price")
-                appendLine("---------+-------------+--------------+---------+----------------+-----+-------")
-                appendLine("1042     | CUST-88     | $149.50      | IT-01   | Wireless Mouse | 2   | $29.75")
-                appendLine("1042     | CUST-88     | $149.50      | IT-02   | USB-C Hub      | 1   | $90.00")
-                appendLine("1043     | CUST-19     | $64.00       | IT-05   | Keycap Set     | 1   | $64.00")
-                append("(3 rows · $modeNote)")
-            }
-            return CodeRunResult(tableOut)
-        }
-        val selectColsMatch = Regex("\\bSELECT\\s+(?:DISTINCT\\s+)?([\\s\\S]+?)\\s+FROM\\b", RegexOption.IGNORE_CASE)
-            .findAll(trimmed)
-            .lastOrNull()
-        val parsedCols = selectColsMatch?.groupValues?.get(1)
-            ?.split(',')
-            ?.map { rawCol ->
-                val clean = rawCol.trim().replace(Regex("\\s+"), " ")
-                val asAlias = Regex("\\bAS\\s+([a-zA-Z0-9_\"'`]+)$", RegexOption.IGNORE_CASE).find(clean)?.groupValues?.get(1)
-                val token = (asAlias ?: clean.substringAfterLast('.').substringAfterLast(' ')).trim('"', '\'', '`')
-                token.ifEmpty { "col" }
-            }
-            ?.filter { it.isNotEmpty() && it != "*" }
-            ?.take(6)
-            .orEmpty()
-        val cols = if (parsedCols.isNotEmpty()) parsedCols else listOf("id", "name", "status", "total", "updated_at")
-        fun sampleCell(col: String, rowIdx: Int): String {
-            val c = col.lowercase()
-            return when {
-                "order_id" in c -> listOf("1042", "1043", "1044")[rowIdx % 3]
-                "customer_id" in c || "user_id" in c -> listOf("CUST-88", "CUST-19", "CUST-42")[rowIdx % 3]
-                "item_id" in c || "product_id" in c -> listOf("IT-01", "IT-02", "IT-05")[rowIdx % 3]
-                c == "id" || c.endsWith("_id") -> listOf("101", "102", "103")[rowIdx % 3]
-                "product" in c || "item" in c || "title" in c -> listOf("Wireless Mouse", "USB-C Hub", "Keycap Set")[rowIdx % 3]
-                "email" in c -> listOf("ava@acme.io", "liam@acme.io", "noah@acme.io")[rowIdx % 3]
-                "name" in c || "user" in c || "customer" in c || "author" in c -> listOf("Ava Chen", "Liam Patel", "Noah Kim")[rowIdx % 3]
-                "status" in c || "state" in c -> listOf("active", "completed", "pending")[rowIdx % 3]
-                "amount" in c || "price" in c || "total" in c || "revenue" in c || "cost" in c || "salary" in c ->
-                    listOf("$149.50", "$90.00", "$64.00")[rowIdx % 3]
-                "qty" in c || "count" in c || "orders" in c || "num" in c -> listOf("3", "2", "1")[rowIdx % 3]
-                "rate" in c || "pct" in c || "score" in c -> listOf("94.2%", "88.5%", "91.0%")[rowIdx % 3]
-                "date" in c || "time" in c || "created" in c || "updated" in c -> listOf("2026-04-18", "2026-04-17", "2026-04-16")[rowIdx % 3]
-                else -> listOf("val_${rowIdx + 1}a", "val_${rowIdx + 1}b", "val_${rowIdx + 1}c")[rowIdx % 3]
-            }
-        }
-        val rows = (0..2).map { r -> cols.map { col -> sampleCell(col, r) } }
-        val widths = cols.indices.map { i ->
-            maxOf(cols[i].length, rows.maxOf { it[i].length })
-        }
-        val headerLine = cols.indices.joinToString(" | ") { i -> cols[i].padEnd(widths[i]) }
-        val sepLine = widths.joinToString("-+-") { w -> "-".repeat(w) }
-        val rowLines = rows.joinToString("\n") { r ->
-            cols.indices.joinToString(" | ") { i -> r[i].padEnd(widths[i]) }
-        }
-        val tblSummary = if (tables.isNotEmpty()) "from ${tables.joinToString(", ")}" else "query result"
-        return CodeRunResult("$headerLine\n$sepLine\n$rowLines\n(3 rows · $tblSummary · 1.8 ms)")
+        return CodeRunResult("", "Not executed: no database is connected. Copy this SQL into your database client.")
     }
-
-    return CodeRunResult("Executed ${lang.uppercase()} snippet (${trimmed.lines().size} lines · exit code 0)")
-}
-
-private data class ParsedComponentPreview(
-    val componentName: String,
-    val stateName: String,
-    val initialNumber: Int,
-    val buttonLabels: List<String>,
-    val isEffectHook: Boolean = false,
-    val effectEndpoint: String = "/api/data"
-)
-
-private fun parseReactPreviewSpec(code: String): ParsedComponentPreview {
-    if ("useEffect" in code && ("fetch(" in code || "AbortController" in code) && "useState(" !in code) {
-        val url = Regex("fetch\\s*\\(\\s*['\"]([^'\"]+)['\"]").find(code)?.groupValues?.get(1) ?: "/api/data"
-        return ParsedComponentPreview(
-            componentName = "useEffect Fetch Guard",
-            stateName = "status",
-            initialNumber = 0,
-            buttonLabels = listOf("Mount", "Strict Remount", "Abort"),
-            isEffectHook = true,
-            effectEndpoint = url
-        )
-    }
-    val compName = Regex("(?:function|const)\\s+([A-Z][a-zA-Z0-9_]*)").find(code)?.groupValues?.get(1)
-        ?: "Component"
-    val stateMatch = Regex("\\[\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*,\\s*set[A-Z][a-zA-Z0-9_]*\\s*]\\s*=\\s*useState\\(([^)]*)\\)").find(code)
-    val stateName = stateMatch?.groupValues?.get(1) ?: "value"
-    val initNum = stateMatch?.groupValues?.get(2)?.trim()?.toIntOrNull() ?: 0
-    val buttons = Regex("<button[^>]*>([^<{]+)</button>", RegexOption.IGNORE_CASE)
-        .findAll(code)
-        .map { it.groupValues[1].trim() }
-        .filter { it.isNotEmpty() }
-        .toList()
-        .ifEmpty { listOf("+1", "Reset") }
-    return ParsedComponentPreview(compName, stateName, initNum, buttons.take(3))
+    return CodeRunResult("", "Not executed: no ${lang.uppercase()} runtime is available here.")
 }
 
 /**
@@ -555,7 +190,7 @@ fun CodeBlockCard(
 
     val langLabel = (language ?: "code").trim().ifBlank { "code" }
     val lowerLang = langLabel.lowercase()
-    val isBrowserLang = lowerLang in setOf("html", "htm", "svg", "jsx", "tsx", "react")
+    val isBrowserLang = lowerLang in setOf("html", "htm", "svg", "js", "javascript")
 
     Surface(
         shape = RoundedCornerShape(14.dp),
@@ -695,7 +330,7 @@ fun CodeBlockCard(
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color(0xFF6C4CF6))
                             .clickable {
-                                if (lowerLang in setOf("html", "htm", "svg")) {
+                                if (lowerLang in setOf("html", "htm", "svg", "js", "javascript")) {
                                     sandboxMode = true
                                 } else {
                                     runCount += 1
@@ -885,101 +520,6 @@ fun CodeBlockCard(
                 }
             }
 
-            // Code-derived Interactive Component Preview (only for JSX/TSX/React components; HTML/SVG opens real WebView sandbox)
-            if (!open && lowerLang in setOf("jsx", "tsx", "react")) {
-                val spec = remember(currentCode) { parseReactPreviewSpec(currentCode) }
-                var stateValue by remember(spec) { mutableStateOf(spec.initialNumber) }
-                val statusLine = if (spec.isEffectHook) {
-                    when (stateValue) {
-                        1 -> "Strict Mode: Run #1 aborted -> Run #2 200 OK"
-                        2 -> "Cleanup: controller.abort() · ignore = true"
-                        else -> "GET ${spec.effectEndpoint} -> 200 OK · setData(payload)"
-                    }
-                } else {
-                    "${spec.stateName}: $stateValue"
-                }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFFF8F5FF))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (spec.isEffectHook) "React Effect Lifecycle Simulator" else "<${spec.componentName} /> Preview",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF221A47)
-                        )
-                        Text(
-                            text = "Open Sandbox",
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF6C4CF6),
-                            modifier = Modifier.clickable { sandboxMode = true }
-                        )
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White)
-                            .border(1.dp, Color(0xFFE2DAFA), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f).padding(end = 6.dp)) {
-                            Text(
-                                text = spec.componentName,
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF221A47)
-                            )
-                            Text(
-                                text = statusLine,
-                                fontSize = 11.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = Color(0xFF625A84)
-                            )
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            spec.buttonLabels.forEachIndexed { bIdx, btnLabel ->
-                                val lowerBtn = btnLabel.lowercase()
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFF6C4CF6))
-                                        .clickable {
-                                            stateValue = if (spec.isEffectHook) {
-                                                bIdx
-                                            } else {
-                                                when {
-                                                    "reset" in lowerBtn || "clear" in lowerBtn -> spec.initialNumber
-                                                    "-" in lowerBtn || "dec" in lowerBtn || "sub" in lowerBtn -> stateValue - 1
-                                                    else -> stateValue + 1
-                                                }
-                                            }
-                                        }
-                                        .padding(horizontal = 9.dp, vertical = 5.dp)
-                                ) {
-                                    Text(
-                                        text = btnLabel,
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 }

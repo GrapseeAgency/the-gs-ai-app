@@ -38,9 +38,9 @@ import { DendrogramChartView } from '../charts/DendrogramChart'
 import { ForceGraphChartView } from '../charts/ForceGraphChart'
 import { DepthChartView } from '../charts/DepthChart'
 import { GlassIcon } from '@/components/nexly/GlassIcon'
+import { chartRange } from '@/lib/nexly/chart-range'
 
 const SWITCHABLE_TYPES = new Set(['line', 'bar', 'area', 'pie', 'donut'])
-const RANGE_OPTIONS = ['Last 3M', 'Last 6M', 'YTD', 'All']
 
 function formatCompactMetric(n: number, unit?: string): string {
   const prefix = unit === '$' || unit === '€' || unit === '£' ? unit : ''
@@ -95,30 +95,15 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
   const { theme } = useWidgetIdentity()
   const isSwitchable = SWITCHABLE_TYPES.has(payload.type)
   const [activeType, setActiveType] = useState<ChartPayload['type']>(payload.type)
-  const [rangeIdx, setRangeIdx] = useState<number>(1)
+  const [rangeIdx, setRangeIdx] = useState<number>(3)
 
-  const slicedPayload = useMemo<ChartPayload>(() => {
-    const rawFirst = payload.series?.[0]?.data ?? []
-    const totalPts = Math.max(rawFirst.length, payload.labels?.length ?? 0)
-    if (totalPts <= 2) return payload
-    const windowSize =
-      rangeIdx === 0
-        ? Math.min(totalPts, Math.max(2, Math.min(3, Math.ceil(totalPts / 2))))
-        : rangeIdx === 1
-        ? Math.min(totalPts, Math.max(2, Math.min(6, Math.ceil((totalPts * 3) / 4))))
-        : rangeIdx === 2
-        ? Math.min(totalPts, Math.max(2, Math.min(9, totalPts - 1)))
-        : totalPts
-    const startIdx = Math.max(0, totalPts - windowSize)
-    return {
-      ...payload,
-      labels: payload.labels ? payload.labels.slice(startIdx) : payload.labels,
-      series: payload.series?.map((s) => ({
-        ...s,
-        data: s.data.slice(startIdx),
-      })),
-    }
-  }, [payload, rangeIdx])
+  const range = useMemo(() => chartRange(payload.labels ?? [], Math.max(payload.series?.[0]?.data?.length ?? 0, payload.labels?.length ?? 0), rangeIdx), [payload, rangeIdx])
+  const RANGE_OPTIONS = range.options
+  const slicedPayload = useMemo<ChartPayload>(() => ({
+    ...payload,
+    labels: payload.labels ? range.indices.map((i) => payload.labels?.[i] ?? "") : payload.labels,
+    series: payload.series?.map((s) => !Array.isArray(s.data) ? s : ({ ...s, data: range.indices.filter((i) => i < s.data.length).map((i) => s.data[i]) })),
+  }), [payload, range])
 
   const summary = useMemo(() => {
     const firstSeries = slicedPayload.series?.[0]?.data ?? []
@@ -131,9 +116,9 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
       if (v > vals[peakIdx]) peakIdx = i
       if (v < vals[minIdx]) minIdx = i
     })
-    const first = vals[0] || 1
+    const first = vals[0]
     const last = vals[vals.length - 1] ?? 0
-    const growthPct = ((last - first) / Math.abs(first)) * 100
+    const growthPct = first === 0 ? null : ((last - first) / Math.abs(first)) * 100
     const peakLabel = slicedPayload.labels?.[peakIdx] ?? String(firstSeries[peakIdx]?.[0] ?? `#${peakIdx + 1}`)
     const minLabel = slicedPayload.labels?.[minIdx] ?? String(firstSeries[minIdx]?.[0] ?? `#${minIdx + 1}`)
     return {
@@ -142,8 +127,8 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
       peakVal: formatCompactMetric(vals[peakIdx] ?? 0, slicedPayload.unit),
       minLabel,
       minVal: formatCompactMetric(vals[minIdx] ?? 0, slicedPayload.unit),
-      growthPct: `${growthPct >= 0 ? '+' : ''}${growthPct.toFixed(1)}%`,
-      growthPos: growthPct >= 0,
+      growthPct: growthPct === null ? 'N/A (zero baseline)' : `${growthPct >= 0 ? '+' : ''}${growthPct.toFixed(1)}%`,
+      growthPos: growthPct !== null && growthPct >= 0,
       pointCount: vals.length,
     }
   }, [slicedPayload.series, slicedPayload.labels, slicedPayload.unit])
@@ -169,14 +154,12 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
   ]
 
   const computedInsights =
-    explicitInsights.length > 0
-      ? explicitInsights
-      : summary
+    summary
       ? [
           `${summary.peakLabel} recorded the highest value (${summary.peakVal}) across ${summary.pointCount} points (${RANGE_OPTIONS[rangeIdx]}).`,
           `Net trajectory is ${summary.growthPct} with cumulative volume ${summary.total} (low: ${summary.minLabel} at ${summary.minVal}).`,
         ]
-      : []
+      : rangeIdx === 3 ? explicitInsights : []
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -253,7 +236,7 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
       </div>
 
       {/* Active Chart Canvas */}
-      {dispatchChartView(activeType, { ...slicedPayload, type: activeType })}
+      {range.indices.length ? dispatchChartView(activeType, { ...slicedPayload, type: activeType }) : <div>No observations in this range.</div>}
 
       {/* 3-Card KPI Summary Strip (Screenshot 6) */}
       {summary && (

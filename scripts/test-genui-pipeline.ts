@@ -13,7 +13,7 @@ import { readFileSync } from 'fs'
 import { parseStream } from '../src/components/genui/stream'
 import { rendererFor } from '../src/components/genui/registry'
 
-const page = readFileSync('/home/user/the-gs-ai-app/src/app/genui/page.tsx', 'utf8')
+const page = readFileSync('src/app/genui/page.tsx', 'utf8')
 const ids = ['sims', 'stage3d', 'canvas', 'editors', 'terminal', 'collab']
 let total = 0
 let missing = 0

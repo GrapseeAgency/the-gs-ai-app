@@ -1,5 +1,6 @@
 package com.grapsee.gsai.ui.chat
 
+import com.grapsee.gsai.ui.chat.content.NexlyGlassGlyphTile
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -240,11 +241,11 @@ private fun TraceLine(item: SearchTraceItem) {
         SearchTraceItem.Kind.Read,
         SearchTraceItem.Kind.RoundVerified,
         SearchTraceItem.Kind.Composing,
-        SearchTraceItem.Kind.Completed -> "✓"
-        SearchTraceItem.Kind.Reading -> "↗"
+        SearchTraceItem.Kind.Completed -> "circle-check"
+        SearchTraceItem.Kind.Reading -> "external-link"
         SearchTraceItem.Kind.SourceFailed,
-        SearchTraceItem.Kind.SearchFailed -> "✕"
-        SearchTraceItem.Kind.SourceSkipped -> "–"
+        SearchTraceItem.Kind.SearchFailed -> "circle-x"
+        SearchTraceItem.Kind.SourceSkipped -> "minus"
     }
     val failed = item.kind == SearchTraceItem.Kind.SourceFailed ||
         item.kind == SearchTraceItem.Kind.SearchFailed
@@ -252,11 +253,7 @@ private fun TraceLine(item: SearchTraceItem) {
         verticalAlignment = Alignment.Top,
         modifier = Modifier.graphicsLayer { this.alpha = alpha.value }
     ) {
-        Text(
-            text = glyph,
-            style = MaterialTheme.typography.labelMedium,
-            color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        NexlyGlassGlyphTile(name = glyph, size = 18.dp, glyphSize = 11.dp)
         Spacer(Modifier.width(8.dp))
         Text(
             text = item.text,
@@ -286,9 +283,9 @@ private fun EngineLine(round: Int, outcome: EngineOutcome, showRound: Boolean) {
     val ok = outcome.status == "ok"
     val failed = outcome.status == "failed"
     val glyph = when {
-        ok -> "✓"
-        failed -> "✕"
-        else -> "–"
+        ok -> "circle-check"
+        failed -> "circle-x"
+        else -> "minus"
     }
     val color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
     val detail = when (outcome.status) {
@@ -299,11 +296,7 @@ private fun EngineLine(round: Int, outcome: EngineOutcome, showRound: Boolean) {
     }
     val prefix = if (showRound) "Round $round · " else ""
     Row(verticalAlignment = Alignment.Top) {
-        Text(
-            text = glyph,
-            style = MaterialTheme.typography.labelMedium,
-            color = color
-        )
+        NexlyGlassGlyphTile(name = glyph, size = 18.dp, glyphSize = 11.dp)
         Spacer(Modifier.width(8.dp))
         Text(
             text = prefix + name + detail,
@@ -327,9 +320,9 @@ private fun EngineLine(round: Int, outcome: EngineOutcome, showRound: Boolean) {
 @Composable
 private fun BranchLine(branch: ResearchBranchRow) {
     val glyph = when (branch.status) {
-        "done" -> "✓"
-        "failed" -> "✕"
-        else -> "–"
+        "done" -> "circle-check"
+        "failed" -> "circle-x"
+        else -> "minus"
     }
     val failed = branch.status == "failed"
     val color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
@@ -344,11 +337,7 @@ private fun BranchLine(branch: ResearchBranchRow) {
         if (failed) append(branch.error?.let { ", ${it.take(SHORT_ERROR_CHARS)}" } ?: "")
     }
     Row(verticalAlignment = Alignment.Top) {
-        Text(
-            text = glyph,
-            style = MaterialTheme.typography.labelMedium,
-            color = color
-        )
+        NexlyGlassGlyphTile(name = glyph, size = 18.dp, glyphSize = 11.dp)
         Spacer(Modifier.width(8.dp))
         Text(
             text = detail,
@@ -641,8 +630,8 @@ private fun SourceCardView(card: SourceCard, onOpenUrl: (String) -> Unit) {
             // a skip, or the honest "headline only" (never fetched). A read or
             // cited source carries just its date, when the wire gave one.
             when (card.status) {
-                "failed" -> SourceCardStatusLine("✕ Failed to read", MaterialTheme.colorScheme.error)
-                "skipped" -> SourceCardStatusLine("– Skipped", MaterialTheme.colorScheme.onSurfaceVariant)
+                "failed" -> SourceCardStatusLine("Failed to read", MaterialTheme.colorScheme.error)
+                "skipped" -> SourceCardStatusLine("Skipped", MaterialTheme.colorScheme.onSurfaceVariant)
                 "snippet_only" -> SourceCardStatusLine("Headline only", MaterialTheme.colorScheme.onSurfaceVariant)
                 else -> card.publishedDate?.let { SourceCardStatusLine(dateLabel(it), MaterialTheme.colorScheme.outline) }
             }

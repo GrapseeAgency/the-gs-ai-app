@@ -18,7 +18,8 @@
     "test:widgets": "tsc scripts/test-widget-compiler.ts --outDir /tmp/wt --module commonjs --target es2020 --moduleResolution node --esModuleInterop --resolveJsonModule --skipLibCheck && node /tmp/wt/scripts/test-widget-compiler.js",
     "icons:nexly": "node scripts/build-nexly-icons.mjs",
     "test:nexly": "bun scripts/test-nexly-plan.ts",
-    "probe:widgets": "tsc scripts/live-widget-probe.ts --outDir /tmp/wp --module commonjs --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck --lib es2020,dom && node /tmp/wp/scripts/live-widget-probe.js"
+    "probe:widgets": "tsc scripts/live-widget-probe.ts --outDir /tmp/wp --module commonjs --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck --lib es2020,dom && node /tmp/wp/scripts/live-widget-probe.js",
+    "test:interactions": "tsc -p tsconfig.probe.json --resolveJsonModule --incremental false && node scripts/test-interaction-honesty.cjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -103,6 +104,7 @@
     "bun-types": "^1.3.4",
     "eslint": "^9",
     "eslint-config-next": "^16.1.1",
+    "jsdom": "^31.0.0",
     "pdf-lib": "^1.17.1",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.5",

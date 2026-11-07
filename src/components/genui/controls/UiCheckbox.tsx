@@ -1,14 +1,18 @@
 'use client'
 
+import { GlassIcon } from '@/components/nexly/GlassIcon'
+
 import { alpha, RADIUS, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 
 export function UiCheckbox({
   label,
+  ariaLabel,
   checked,
   onChange,
 }: {
   label?: string
+  ariaLabel?: string
   checked: boolean
   onChange: (v: boolean) => void
 }) {
@@ -18,6 +22,7 @@ export function UiCheckbox({
       type="button"
       role="checkbox"
       aria-checked={checked}
+      aria-label={ariaLabel}
       onClick={() => onChange(!checked)}
       style={{
         display: 'inline-flex',
@@ -47,7 +52,7 @@ export function UiCheckbox({
           lineHeight: 1,
         }}
       >
-        ✓
+        {checked && <GlassIcon name="check" size={12} tile={16} />}
       </span>
       {label ? <span style={{ fontSize: TYPE.body, color: theme.text }}>{label}</span> : null}
     </button>

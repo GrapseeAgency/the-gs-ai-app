@@ -1,0 +1,25 @@
+name: GenUI interaction contracts
+on:
+  pull_request:
+    paths: ['src/**', 'scripts/test-interaction-honesty.cjs', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
+  push:
+    branches: [main]
+    paths: ['src/**', 'scripts/test-interaction-honesty.cjs', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
+permissions:
+  contents: read
+jobs:
+  interactions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run test:interactions
+      - run: node dist/probe/scripts/test-widget-render.js
+      - run: node dist/probe/scripts/test-widget-catalogue.js
+      - run: node dist/probe/scripts/test-genui-pipeline.js
+      - run: npm run test:widgets

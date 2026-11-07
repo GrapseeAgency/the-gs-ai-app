@@ -1,5 +1,7 @@
 'use client'
 
+import { GlassIcon } from '@/components/nexly/GlassIcon'
+
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { MessageContent, type Citation } from '@/components/genui'
 
@@ -232,7 +234,7 @@ function SearchTracePanel({ steps, phase }: { steps: TraceStep[]; phase: string 
         {steps.map((s) => (
           <li key={s.id} className="flex items-start gap-2 text-xs leading-relaxed" style={{ color: s.tone === 'fail' ? C.danger : s.tone === 'ok' ? C.text : C.muted }}>
             <span className="mt-[1px] w-3.5 shrink-0 text-center" style={{ color: s.tone === 'fail' ? C.danger : C.accent }} aria-hidden="true">
-              {s.icon}
+              <GlassIcon name={s.icon} size={12} tile={18} />
             </span>
             <span className="min-w-0 flex-1">
               <span className="font-medium">{s.text}</span>
@@ -688,26 +690,26 @@ export default function Home() {
             } else if (event.event === 'status') {
               setPhase(event.data)
               if (event.data === 'search_failed') {
-                pushStep('✕', 'The search could not be completed', 'fail')
+                pushStep('circle-x', 'The search could not be completed', 'fail')
               }
             } else if (event.event === 'search') {
               const p = JSON.parse(event.data)
               if (p.type === 'started') {
-                pushStep('◎', `Searching — “${p.label ?? ''}”`)
+                pushStep('search', `Searching — “${p.label ?? ''}”`)
               } else if (p.type === 'engines') {
                 // 8.2 §16 — per-engine truth (✓ ok · ✕ failed · – empty).
                 for (const e of Array.isArray(p.engines) ? p.engines : []) {
                   const name = ENGINE_LABELS[e.id] ?? e.id
-                  if (e.status === 'ok') pushStep('✓', `${name} — ${e.count ?? 0} results`, 'ok')
-                  else if (e.status === 'failed') pushStep('✕', `${name} — ${e.error ?? 'failed'}`, 'fail')
-                  else pushStep('–', `${name} — no results`, undefined)
+                  if (e.status === 'ok') pushStep('circle-check', `${name} — ${e.count ?? 0} results`, 'ok')
+                  else if (e.status === 'failed') pushStep('circle-x', `${name} — ${e.error ?? 'failed'}`, 'fail')
+                  else pushStep('minus', `${name} — no results`, undefined)
                 }
               } else if (p.type === 'results') {
-                pushStep('✓', `Found ${p.found} results${Array.isArray(p.engines) && p.engines.length ? ` · ${p.engines.join(', ')}` : ''}`, 'ok')
+                pushStep('circle-check', `Found ${p.found} results${Array.isArray(p.engines) && p.engines.length ? ` · ${p.engines.join(', ')}` : ''}`, 'ok')
               } else if (p.type === 'round') {
-                pushStep('✓', `${p.sourcesVerified} source${p.sourcesVerified === 1 ? '' : 's'} verified${p.syndicatedGroups ? ` · ${p.syndicatedGroups} syndicated group${p.syndicatedGroups === 1 ? '' : 's'}` : ''}`, 'ok')
+                pushStep('circle-check', `${p.sourcesVerified} source${p.sourcesVerified === 1 ? '' : 's'} verified${p.syndicatedGroups ? ` · ${p.syndicatedGroups} syndicated group${p.syndicatedGroups === 1 ? '' : 's'}` : ''}`, 'ok')
               } else if (p.type === 'failed') {
-                pushStep('✕', `Search failed — ${p.reason ?? 'unknown'}`, 'fail')
+                pushStep('circle-x', `Search failed — ${p.reason ?? 'unknown'}`, 'fail')
               } else if (p.type === 'completed') {
                 traceSummary = `Searched ${p.queries} ${p.queries === 1 ? 'query' : 'queries'} · read ${p.retrieved} of ${p.sources} sources`
               }
@@ -715,16 +717,16 @@ export default function Home() {
               // 8.2 §28 — research-level truth (protocol v2).
               const p = JSON.parse(event.data)
               if (p.type === 'round_completed') {
-                pushStep('✓', `Round ${p.round}: ${p.read ?? 0} read · ${p.failed ?? 0} failed${p.syndicatedGroups ? ` · ${p.syndicatedGroups} syndicated` : ''}`, 'ok')
+                pushStep('circle-check', `Round ${p.round}: ${p.read ?? 0} read · ${p.failed ?? 0} failed${p.syndicatedGroups ? ` · ${p.syndicatedGroups} syndicated` : ''}`, 'ok')
               } else if (p.type === 'synthesis_started') {
-                pushStep('✎', 'Composing grounded answer…', 'live')
+                pushStep('pencil', 'Composing grounded answer…', 'live')
               } else if (p.type === 'completed') {
                 const secs = p.totalMs ? ` · ${(p.totalMs / 1000).toFixed(1)}s` : ''
                 traceSummary = `Searched ${p.queries} ${p.queries === 1 ? 'query' : 'queries'} · read ${p.retrieved} of ${p.sources} sources${secs}`
               } else if (p.type === 'failed') {
                 const last = traceSteps[traceSteps.length - 1]
                 if (!last || !last.text.startsWith('Search failed')) {
-                  pushStep('✕', `Research failed — ${p.reason ?? 'unknown'}`, 'fail')
+                  pushStep('circle-x', `Research failed — ${p.reason ?? 'unknown'}`, 'fail')
                 }
               }
             } else if (event.event === 'source') {
@@ -735,7 +737,7 @@ export default function Home() {
                 setLiveSources([...sourceByOrdinal.values()].sort((a, b) => a.ordinal - b.ordinal))
               } else if (p.type === 'opening' || p.type === 'reading') {
                 const s = sourceByOrdinal.get(ordinal)
-                pushStep('↗', `Reading ${s?.domain ?? `source ${ordinal}`}…`, 'live')
+                pushStep('external-link', `Reading ${s?.domain ?? `source ${ordinal}`}…`, 'live')
               } else if (p.type === 'completed' || p.type === 'read') {
                 // protocol v2 — `read` is canonical, `completed` the v1 alias;
                 // both arrive, the transition is idempotent (one step only).
@@ -747,11 +749,11 @@ export default function Home() {
                   setLiveSources([...sourceByOrdinal.values()].sort((a, b) => a.ordinal - b.ordinal))
                 }
                 if (!alreadyRead) {
-                  pushStep('✓', `Read ${s?.domain ?? `source ${ordinal}`} — ${(s?.title ?? '').slice(0, 70)}`, 'ok')
+                  pushStep('circle-check', `Read ${s?.domain ?? `source ${ordinal}`} — ${(s?.title ?? '').slice(0, 70)}`, 'ok')
                 }
               } else if (p.type === 'failed') {
                 const s = sourceByOrdinal.get(ordinal)
-                pushStep('✕', `${s?.domain ?? `source ${ordinal}`} — ${p.reason ?? 'failed'}`, 'fail')
+                pushStep('circle-x', `${s?.domain ?? `source ${ordinal}`} — ${p.reason ?? 'failed'}`, 'fail')
               }
             } else if (event.event === 'clarify') {
               const p = JSON.parse(event.data)
@@ -1201,7 +1203,7 @@ export default function Home() {
                         className="absolute right-2 top-2.5 hidden h-7 w-7 items-center justify-center rounded-lg border text-xs transition-colors hover:border-[#E5484D] hover:text-[#E5484D] group-hover:flex"
                         style={{ background: C.surface, borderColor: C.outline, color: C.muted }}
                       >
-                        ✕
+                        <GlassIcon name="x" size={12} tile={18} />
                       </button>
                     </div>
                   )
@@ -1335,7 +1337,7 @@ export default function Home() {
                       </div>
                       {m.traceSummary && (
                         <p className="mt-1.5 pl-1 text-[11px]" style={{ color: C.muted }}>
-                          <span style={{ color: C.accent }}>✓</span> {m.traceSummary}
+                          <span style={{ color: C.accent }}><GlassIcon name="circle-check" size={12} tile={18} /></span> {m.traceSummary}
                         </p>
                       )}
                       {m.sources && m.sources.length > 0 && <SourceCards sources={m.sources} />}
@@ -1466,7 +1468,7 @@ export default function Home() {
                           className="ml-0.5 transition-transform active:scale-90"
                           style={{ color: C.muted }}
                         >
-                          ✕
+                          <GlassIcon name="x" size={12} tile={18} />
                         </button>
                       )}
                     </span>
@@ -1567,7 +1569,7 @@ export default function Home() {
                         className="cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium transition-all active:scale-95 sm:hidden"
                         style={{ borderColor: C.outline, color: C.text }}
                       >
-                        📷 Camera
+                        <GlassIcon name="camera" size={13} tile={20} /> Camera
                         <input
                           type="file"
                           accept="image/*"
