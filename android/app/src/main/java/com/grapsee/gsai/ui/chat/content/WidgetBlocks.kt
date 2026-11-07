@@ -569,6 +569,11 @@ internal fun chartGrowthPercentAndroid(first: Double, last: Double): Double? {
     return (((last - first) / kotlin.math.abs(first)) * 100.0).takeIf { it.isFinite() }
 }
 
+internal fun chartStepPercentAndroid(values: List<Double>, index: Int): Double? {
+    if (index <= 0) return null
+    return chartGrowthPercentAndroid(values.getOrNull(index - 1) ?: return null, values.getOrNull(index) ?: return null)
+}
+
 fun parseWidget(kind: String, rawJson: String): Widget? {
     if (rawJson.isBlank() || rawJson.length > MAX_WIDGET_BYTES) return null
     val resolvedKind = widgetKindOf(kind) ?: kind.lowercase().trim()
@@ -1873,15 +1878,11 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
     }
     val activeDatum = probe.datum
     if (activeDatum != null) {
-        val pts = w.series.firstOrNull()?.data.orEmpty()
-        val prevVal = if (activeDatum.index > 0) pts.getOrNull(activeDatum.index - 1)?.getOrNull(1) else null
-        val avgVal = pts.map { it.getOrElse(1) { 0f } }.average().toFloat()
-        val stepPct = when {
-            prevVal != null && prevVal != 0f -> ((activeDatum.value - prevVal) / kotlin.math.abs(prevVal)) * 100f
-            avgVal != 0f -> ((activeDatum.value - avgVal) / kotlin.math.abs(avgVal)) * 100f
-            else -> 0f
-        }
-        val stepPos = stepPct >= 0f
+        val selectedSeries = w.series.firstOrNull { it.name == activeDatum.series } ?: w.series.firstOrNull()
+        val pts = selectedSeries?.data.orEmpty()
+        val stepPct = chartStepPercentAndroid(pts.map { it.getOrElse(1) { Float.NaN }.toDouble() }, activeDatum.index)
+        val stepPos = stepPct != null && stepPct >= 0.0
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1912,7 +1913,7 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
                         color = Color(0xFF1F1842)
                     )
                     Text(
-                        text = String.format(java.util.Locale.US, "%s %s%.1f%%", if (stepPos) "↑" else "↓", if (stepPos) "+" else "", stepPct),
+                        text = stepPct?.let { String.format(java.util.Locale.US, "%s %s%.1f%%", if (stepPos) "↑" else "↓", if (stepPos) "+" else "", it) } ?: "N/A (no prior baseline)",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (stepPos) Color(0xFF129A5A) else Color(0xFFE04F5F)
