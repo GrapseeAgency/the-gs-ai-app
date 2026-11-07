@@ -123,7 +123,8 @@ function ChartControls({ payload }: { payload: ChartPayload }) {
     })
     const first = vals[0]
     const last = vals[vals.length - 1] ?? 0
-    const growthPct = first === 0 ? null : ((last - first) / Math.abs(first)) * 100
+    const slices = activeType === 'pie' || activeType === 'donut'
+    const growthPct = slices || first === 0 ? null : ((last - first) / Math.abs(first)) * 100
     const peakLabel = slicedPayload.labels?.[peakIdx] ?? String(firstSeries[peakIdx]?.[0] ?? `#${peakIdx + 1}`)
     const minLabel = slicedPayload.labels?.[minIdx] ?? String(firstSeries[minIdx]?.[0] ?? `#${minIdx + 1}`)
     return {
@@ -133,12 +134,12 @@ function ChartControls({ payload }: { payload: ChartPayload }) {
       peakVal: formatCompactMetric(vals[peakIdx] ?? 0, slicedPayload.unit),
       minLabel,
       minVal: formatCompactMetric(vals[minIdx] ?? 0, slicedPayload.unit),
-      growthPct: growthPct === null ? 'N/A (zero baseline)' : `${growthPct >= 0 ? '+' : ''}${growthPct.toFixed(1)}%`,
+      growthPct: growthPct === null ? (slices ? 'N/A (slice values)' : 'N/A (zero baseline)') : `${growthPct >= 0 ? '+' : ''}${growthPct.toFixed(1)}%`,
       growthPos: growthPct !== null && growthPct >= 0,
       growthDefined: growthPct !== null,
       pointCount: vals.length,
     }
-  }, [slicedPayload.series, slicedPayload.labels, slicedPayload.unit])
+  }, [slicedPayload.series, slicedPayload.labels, slicedPayload.unit, activeType])
 
   const rawPayload = payload as unknown as Record<string, unknown>
   const explicitInsights: string[] = Array.isArray(rawPayload.insights)
