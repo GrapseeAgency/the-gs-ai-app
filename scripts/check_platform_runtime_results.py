@@ -9,6 +9,7 @@ EXPECTED = {
     'realCardDistinguishesTapFromLongPress',
     'hapticDispatchUsesPlatformConstantsAndHonorsToggle',
     'generatedCalculatorAcceptsExactNumbersAndNeverRendersEmoji',
+    'generatedTableAllDisplaysEveryActualRow',
 }
 
 
