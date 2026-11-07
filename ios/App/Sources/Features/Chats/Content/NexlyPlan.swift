@@ -528,7 +528,9 @@ enum NexlyIcons {
         for scalar in out.unicodeScalars {
             let value = scalar.value
             let fallbackIcon = fallbackIconForScalar(value)
-            let pictograph = (0x1F000...0x1FAFF).contains(value)
+            let pictograph = (value > 0x7F && scalar.properties.isEmoji)
+                || (0xE0020...0xE007F).contains(value)
+                || (0x1F000...0x1FAFF).contains(value)
                 || (0x2600...0x27BF).contains(value)
                 || (0x2300...0x23FF).contains(value)
                 || (0x2194...0x21AA).contains(value)
