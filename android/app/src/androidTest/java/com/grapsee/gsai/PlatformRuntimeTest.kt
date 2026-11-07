@@ -194,6 +194,50 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("200").assertExists()
     }
 
+    @Test fun generatedHtmlRunsRealButtonLogicAndSuppressesDynamicEmoji() {
+        val source = """<button id="run" title="Increase &#x1F600;">Increase &#x1F600;</button><output id="result">0</output><svg data-custom-glass="true"><path d="M0 0L8 8"/></svg><script>window.marker=String.fromCodePoint(0x1F600);window.count=0;document.getElementById('run').onclick=function(){window.count++;document.getElementById('result').textContent=window.count+window.marker;};</script>"""
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                com.grapsee.gsai.ui.chat.content.HtmlBlockView(
+                    com.grapsee.gsai.ui.chat.content.Block.HtmlBlock("html", source, false, 0), false)
+            }
+        }
+        fun findWebView(view: View): android.webkit.WebView? {
+            if (view is android.webkit.WebView) return view
+            if (view is android.view.ViewGroup) {
+                for (i in 0 until view.childCount) findWebView(view.getChildAt(i))?.let { return it }
+            }
+            return null
+        }
+        var web: android.webkit.WebView? = null
+        awaitObserved("production HtmlBlock creates a WebView") {
+            instrumentation.runOnMainSync { web = findWebView(compose.activity.window.decorView) }
+            web != null
+        }
+        fun evaluate(script: String): String? {
+            val done = CountDownLatch(1)
+            var value: String? = null
+            instrumentation.runOnMainSync {
+                web!!.evaluateJavascript(script) { value = it; done.countDown() }
+            }
+            assertTrue("WebView JavaScript callback must execute", done.await(5, TimeUnit.SECONDS))
+            return value
+        }
+        awaitObserved("authored script executes with bundled display policy") {
+            evaluate("window.__gsDisplayEmojiPolicy === true && typeof window.marker === 'string'") == "true"
+        }
+        assertEquals("true", evaluate("document.getElementById('run').textContent === 'Increase ' && document.getElementById('run').title === 'Increase '"))
+        val device = UiDevice.getInstance(instrumentation)
+        val button = device.wait(Until.findObject(By.text("Increase")), 10_000)
+        assertNotNull("HTML button must be accessible to an actual OS tap", button)
+        button!!.click()
+        awaitObserved("OS tap runs authored logic and cleans dynamic output") {
+            evaluate("window.count === 1 && document.getElementById('result').textContent === '1'") == "true"
+        }
+        assertEquals("128512", evaluate("window.marker.codePointAt(0)"))
+        assertEquals("true", evaluate("!!document.querySelector('svg[data-custom-glass] path')"))
+    }
+
     @Test fun hapticDispatchUsesPlatformConstantsAndHonorsToggle() {
         val old = SettingsStore.haptics
         val calls = mutableListOf<Int>()
