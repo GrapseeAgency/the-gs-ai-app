@@ -3109,6 +3109,26 @@ private extension String {
 
 /// Safe recursive-descent math expression evaluator for `calc` widgets on iOS (parity with Android `CalcExpr.eval`).
 enum CalcExprIOS {
+    static func evalOptional(_ expr: String, vars: [String: Double]) -> Double? {
+        let trimmed = expr.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed.range(of: "^[0-9a-zA-Z_+\\-*/%^().,\\s]+$", options: .regularExpression) != nil else {
+            return nil
+        }
+        if let rx = try? NSRegularExpression(pattern: "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b") {
+            let ns = trimmed as NSString
+            let knownFns: Set<String> = ["sqrt", "abs", "round", "floor", "ceil", "min", "max", "pow", "log", "log10", "ln", "exp", "sin", "cos", "tan", "pi", "e"]
+            for m in rx.matches(in: trimmed, range: NSRange(location: 0, length: ns.length)) {
+                let ident = ns.substring(with: m.range(at: 1))
+                if !knownFns.contains(ident.lowercased()) && vars[ident] == nil && vars[ident.lowercased()] == nil {
+                    return nil
+                }
+            }
+        }
+        let v = eval(trimmed, vars: vars)
+        return v.isFinite ? v : nil
+    }
+
     static func eval(_ expr: String, vars: [String: Double]) -> Double {
         let chars = Array(expr)
         var pos = 0
