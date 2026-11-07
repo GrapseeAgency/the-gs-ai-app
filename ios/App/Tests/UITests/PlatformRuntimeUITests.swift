@@ -26,6 +26,18 @@ final class PlatformRuntimeUITests: XCTestCase {
         evidence.name = "genui-table-all-31-real-rows"
         evidence.lifetime = .keepAlways
         add(evidence)
+        app.buttons["Use ordinary Markdown"].tap()
+        show("Show: 5 ▾").tap()
+        show("Show: 10 ▾").tap()
+        XCTAssertTrue(show("Show: All ▾").exists)
+        XCTAssertTrue(app.staticTexts["Item 31"].exists)
+        XCTAssertTrue(app.staticTexts["1–31 of 31"].exists)
+        // Inspect actual native text, not just a string-normalizer result.
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "😀")).count, 0)
+        let markdownEvidence = XCTAttachment(screenshot: app.screenshot())
+        markdownEvidence.name = "genui-markdown-table-all-31-real-rows"
+        markdownEvidence.lifetime = .keepAlways
+        add(markdownEvidence)
     }
 
     func testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji() {
