@@ -92,12 +92,16 @@ function dispatchChartView(activeType: ChartPayload['type'], payload: ChartPaylo
 }
 
 export function ChartWidget({ payload }: { payload: ChartPayload }) {
+  return <ChartControls key={JSON.stringify(payload)} payload={payload} />
+}
+
+function ChartControls({ payload }: { payload: ChartPayload }) {
   const { theme } = useWidgetIdentity()
   const isSwitchable = SWITCHABLE_TYPES.has(payload.type)
   const [activeType, setActiveType] = useState<ChartPayload['type']>(payload.type)
   const [rangeIdx, setRangeIdx] = useState<number>(3)
 
-  const range = useMemo(() => chartRange(payload.labels ?? [], Math.max(payload.series?.[0]?.data?.length ?? 0, payload.labels?.length ?? 0), rangeIdx), [payload, rangeIdx])
+  const range = useMemo(() => chartRange(payload.labels ?? [], Math.max(0, ...(payload.series ?? []).map((series) => series.data?.length ?? 0), payload.labels?.length ?? 0), rangeIdx), [payload, rangeIdx])
   const RANGE_OPTIONS = range.options
   const slicedPayload = useMemo<ChartPayload>(() => ({
     ...payload,
@@ -129,6 +133,7 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
       minVal: formatCompactMetric(vals[minIdx] ?? 0, slicedPayload.unit),
       growthPct: growthPct === null ? 'N/A (zero baseline)' : `${growthPct >= 0 ? '+' : ''}${growthPct.toFixed(1)}%`,
       growthPos: growthPct !== null && growthPct >= 0,
+      growthDefined: growthPct !== null,
       pointCount: vals.length,
     }
   }, [slicedPayload.series, slicedPayload.labels, slicedPayload.unit])
@@ -257,8 +262,8 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
           >
             <div style={{ fontSize: 10.5, color: theme.text3, fontWeight: 600 }}>Total</div>
             <div style={{ fontSize: 14, fontWeight: 800, color: theme.text, marginTop: 2 }}>{summary.total}</div>
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: summary.growthPos ? '#129A5A' : '#E04F5F', marginTop: 2 }}>
-              {summary.growthPos ? '↑' : '↓'} {summary.growthPct}
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: !summary.growthDefined ? theme.text3 : summary.growthPos ? '#129A5A' : '#E04F5F', marginTop: 2 }}>
+              {summary.growthDefined ? (summary.growthPos ? '↑' : '↓') : ''} {summary.growthPct}
             </div>
           </div>
           <div
@@ -289,7 +294,7 @@ export function ChartWidget({ payload }: { payload: ChartPayload }) {
               style={{
                 fontSize: 14,
                 fontWeight: 800,
-                color: summary.growthPos ? '#129A5A' : '#E04F5F',
+                color: !summary.growthDefined ? theme.text3 : summary.growthPos ? '#129A5A' : '#E04F5F',
                 marginTop: 2,
               }}
             >
