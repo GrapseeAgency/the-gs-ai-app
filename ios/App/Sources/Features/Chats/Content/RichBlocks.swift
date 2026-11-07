@@ -1546,7 +1546,7 @@ private struct SpontaneousMetricItemIOS {
 private func extractSpontaneousMetricsFromBlocksIOS(_ blocks: [Block]) -> [SpontaneousMetricItemIOS] {
     var out: [SpontaneousMetricItemIOS] = []
     var seen = Set<String>()
-    guard let rx = try? NSRegularExpression(pattern: "^([A-Za-z][A-Za-z0-9\\s/+.#&-]{1,28})\\s*(?:—|–|-|:)\\s*([$€£¥])?\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)\\s*([kKmMbB%])?") else {
+    guard let rx = try? NSRegularExpression(pattern: "^([A-Za-z][A-Za-z0-9\\s/+.#&-]{1,28})\\s*(?:—|–|-|:)\\s*([$€£¥])?\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)\\s*([kKmMbB%])?\\s*$") else {
         return []
     }
     for b in blocks {
@@ -1585,7 +1585,7 @@ private func extractSpontaneousMetricsFromBlocksIOS(_ blocks: [Block]) -> [Spont
             if out.count >= 8 { break }
         }
     }
-    if Set(out.map { $0.unit }).count != 1 || out.contains(where: { $0.unit == "%" }) { return [] }
+    if Set(out.map { $0.unit }).count != 1 || out.contains(where: { !["$", "€", "£", "¥"].contains($0.unit) }) { return [] }
     return out
 }
 

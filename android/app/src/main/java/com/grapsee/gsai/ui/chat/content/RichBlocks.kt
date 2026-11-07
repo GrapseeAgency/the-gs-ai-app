@@ -1775,7 +1775,7 @@ private data class SpontaneousMetricItem(
 
 private fun extractSpontaneousMetricsFromBlocks(blocks: List<Block>): List<SpontaneousMetricItem> {
     val items = mutableListOf<SpontaneousMetricItem>()
-    val itemRegex = Regex("""^([A-Za-z][A-Za-z0-9\s/+.#&-]{1,28})\s*(?:—|–|-|:)\s*([$€£¥])?\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmMbB%])?""")
+    val itemRegex = Regex("""^([A-Za-z][A-Za-z0-9\s/+.#&-]{1,28})\s*(?:—|–|-|:)\s*([$€£¥])?\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmMbB%])?\s*$""")
     blocks.forEach { b ->
         val rawItems = when (b) {
             is Block.BulletList -> if (b.items.all { it.checked == null }) b.items else emptyList()
@@ -1805,7 +1805,7 @@ private fun extractSpontaneousMetricsFromBlocks(blocks: List<Block>): List<Spont
         }
     }
     // Mixed units and percentages are not additive parts of a whole.
-    if (items.map { it.unit }.distinct().size != 1 || items.any { it.unit == "%" }) return emptyList()
+    if (items.map { it.unit }.distinct().size != 1 || items.any { it.unit !in setOf("$", "€", "£", "¥") }) return emptyList()
     return items.distinctBy { it.label.lowercase() }.take(8)
 }
 
