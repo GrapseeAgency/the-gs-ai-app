@@ -217,7 +217,7 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("Short: P4").assertExists()
         compose.onNodeWithText("Short: P0").assertDoesNotExist()
         compose.onNodeWithText("Absent").assertDoesNotExist()
-        compose.onNodeWithText("N/A (slice values)", substring = true).assertExists()
+        compose.onNodeWithText("N/A (slice values)").assertExists()
         compose.onNodeWithText("Line").performClick()
         compose.onNodeWithText("Last 4 pts ▾").assertExists()
     }
