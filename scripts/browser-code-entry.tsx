@@ -33,5 +33,5 @@ declare global {
 window.gsRenderChecklist = payload => root.render(<WidgetSurface dark={false}><ChecklistWidget payload={payload} /></WidgetSurface>)
 window.gsRenderApp = (kind, payload) => {
   const Component = kind === 'wizard' ? AppWizard : kind === 'onboarding' ? AppOnboarding : kind === 'timer' ? AppTimer : AppBooking
-  root.render(<WidgetSurface dark={false}><Component key={JSON.stringify(payload)} payload={payload} /></WidgetSurface>)
+  root.render(<WidgetSurface dark={false}><Component key={kind === 'timer' ? 'timer' : JSON.stringify(payload)} payload={payload} /></WidgetSurface>)
 }
