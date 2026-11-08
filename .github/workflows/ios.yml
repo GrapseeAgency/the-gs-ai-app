@@ -395,6 +395,24 @@ jobs:
           path: ios/build/source-archive
           if-no-files-found: error
 
+      - name: Isolate full-suite clean-install state from focused acceptance fixtures
+        run: |
+          set -euo pipefail
+          # Focused acceptance intentionally persists real seeded conversations
+          # and proves storage across relaunch WITHIN its tests. Those records
+          # must not masquerade as clean-install Home/history state or displace
+          # the menu suite's four recent rows. Keep every assertion; start the
+          # separate broad suite from an actual fresh app installation.
+          SIM_ID=$(xcrun simctl list devices booted --json | python3 -c '
+          import json, os, sys
+          name = os.environ["IOS_DESTINATION"].split("name=", 1)[1].rsplit(",OS=", 1)[0]
+          devices = [d for group in json.load(sys.stdin)["devices"].values() for d in group
+                     if d["name"] == name and d["state"] == "Booted"]
+          if len(devices) != 1: raise SystemExit("Expected exactly one actual test simulator")
+          print(devices[0]["udid"])
+          ')
+          xcrun simctl uninstall "$SIM_ID" com.grapsee.gsai
+
       - name: Test (XCTest unit tests on iOS simulator)
         run: |
           set -o pipefail
