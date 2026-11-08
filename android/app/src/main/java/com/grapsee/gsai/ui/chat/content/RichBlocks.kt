@@ -3903,19 +3903,18 @@ private fun CollapsibleBlockView(block: Block.CollapsibleBlock, citationUrls: Ma
 // Structured seams — citations & tool results (backend provides; never faked)
 // ---------------------------------------------------------------------------
 
-private fun isAcademicSourceDomain(domain: String, url: String): Boolean {
-    val hay = "$domain $url".lowercase()
-    return ".edu" in hay ||
-        "nature.com" in hay ||
-        "arxiv.org" in hay ||
-        "ieee.org" in hay ||
-        "acm.org" in hay ||
-        "springer." in hay ||
-        "sciencedirect." in hay ||
-        "oxford" in hay ||
-        "cambridge" in hay ||
-        "nih.gov" in hay ||
-        "pubmed" in hay
+internal fun citationSourceUrl(raw: String): java.net.URL? = runCatching {
+    val url = java.net.URL(raw)
+    url.toURI() // Reject malformed authority, whitespace and backslash ambiguities.
+    require(url.protocol.lowercase() in setOf("http", "https") && url.host.isNotBlank() && url.userInfo == null && url.port <= 65535)
+    if (!url.host.startsWith("[")) java.net.IDN.toASCII(url.host, java.net.IDN.USE_STD3_ASCII_RULES)
+    url
+}.getOrNull()
+
+internal fun isAcademicSourceDomain(domain: String, raw: String): Boolean {
+    val host = citationSourceUrl(raw)?.host?.lowercase() ?: return false
+    val publishers = listOf("nature.com", "arxiv.org", "ieee.org", "acm.org", "springer.com", "springernature.com", "sciencedirect.com", "oup.com", "cambridge.org", "nih.gov")
+    return host.endsWith(".edu") || host.endsWith(".ac.uk") || publishers.any { host == it || host.endsWith(".$it") }
 }
 
 @Composable
@@ -3947,6 +3946,8 @@ private fun CitationsBlockView(block: Block.CitationsBlock) {
             )
         }
         block.citations.forEach { citation ->
+            val link = remember(citation.url) { citationSourceUrl(citation.url) }
+            val domain = link?.host?.lowercase()?.removePrefix("www.") ?: "Invalid source URL"
             val academic = remember(citation.domain, citation.url) {
                 isAcademicSourceDomain(citation.domain, citation.url)
             }
@@ -3957,8 +3958,8 @@ private fun CitationsBlockView(block: Block.CitationsBlock) {
                     .clip(RoundedCornerShape(14.dp))
                     .background(Color.White.copy(alpha = 0.78f))
                     .border(1.dp, Color(0xFFE3DCFA), RoundedCornerShape(14.dp))
-                    .clickable(enabled = citation.url.startsWith("http")) {
-                        com.grapsee.gsai.ui.components.GsLinks.openInApp(context, citation.url)
+                    .clickable(enabled = link != null) {
+                        link?.let { com.grapsee.gsai.ui.components.GsLinks.openInApp(context, it.toExternalForm()) }
                     }
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
@@ -4013,19 +4014,19 @@ private fun CitationsBlockView(block: Block.CitationsBlock) {
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
-                                .background(if (academic) Color(0xFFEFEAFF) else Color(0xFFE6F9F0))
+                                .background(Color(0xFFEFEAFF))
                                 .padding(horizontal = 8.dp, vertical = 2.dp)
                         ) {
                             NexlyGlyph(
-                                name = if (academic) "building-bank" else "shield-check",
+                                name = if (academic) "building-bank" else "external-link",
                                 size = 11.dp,
-                                color = if (academic) Color(0xFF5B3DF5) else Color(0xFF129A5A)
+                                color = Color(0xFF5B3DF5)
                             )
                             Text(
-                                text = if (academic) "Academic" else "Trusted Source",
+                                text = if (link == null) "Invalid link" else if (academic) "Academic domain" else "Source link",
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (academic) Color(0xFF5B3DF5) else Color(0xFF129A5A)
+                                color = Color(0xFF5B3DF5)
                             )
                         }
                     }
