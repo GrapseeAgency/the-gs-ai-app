@@ -67,7 +67,10 @@ data class AppItem(
     val badge: String = "",
     val prompt: String = "",
     val date: String = "",
-    val price: Double = 0.0
+    val price: Double = 0.0,
+    val done: Boolean = false,
+    val checked: Boolean = false,
+    val completed: Boolean = false
 )
 
 @Serializable
@@ -107,6 +110,14 @@ internal val APP_TYPES = setOf(
 @Composable
 internal fun AppWidgetView(w: AppWidget, onSendPrompt: ((String) -> Unit)? = null) {
     val type = w.type.lowercase()
+    if (type == "tasks") {
+        ChecklistWidgetView(ChecklistWidget(title = w.title, items = w.items.map { item ->
+            ChecklistItem(label = item.title,
+                detail = listOf(item.subtitle, item.meta, item.badge, item.date).filter { it.isNotBlank() }.distinct().joinToString(" · "),
+                done = item.done || item.checked || item.completed)
+        }))
+        return
+    }
     WidgetCardShell(w.title.ifEmpty { "App" }, type) {
         Column(Modifier.padding(top = 8.dp)) {
             when (type) {
@@ -114,7 +125,6 @@ internal fun AppWidgetView(w: AppWidget, onSendPrompt: ((String) -> Unit)? = nul
                 "kanban" -> KanbanLayout(w, onSendPrompt)
                 "calendar" -> CalendarLayout(w, onSendPrompt)
                 "sheet" -> SheetLayout(w)
-                "tasks" -> TasksLayout(w, onSendPrompt)
                 "dashboard", "analytics", "report", "scenario" -> DashboardLayout(w, onSendPrompt)
                 "config", "configurator" -> ConfiguratorLayout(w, onSendPrompt)
                 "booking", "schedule" -> BookingLayout(w, onSendPrompt)
@@ -467,48 +477,6 @@ private fun SheetLayout(w: AppWidget) {
 }
 
 // --- tasks -------------------------------------------------------------------
-
-@Composable
-private fun TasksLayout(w: AppWidget, onSendPrompt: ((String) -> Unit)?) {
-    val c = GsTheme.colors
-    val items = w.items.take(20).filter { it.title.isNotBlank() }
-    val done = remember { mutableStateMapOf<String, Boolean>() }
-    if (items.isEmpty()) {
-        Text("No tasks", style = MaterialTheme.typography.bodySmall, color = c.textTertiary)
-        return
-    }
-    items.forEach { item ->
-        val checked = done[item.title] == true
-        Row(
-            Modifier.fillMaxWidth().clickable { done[item.title] = !checked }.padding(vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(checked = checked, onCheckedChange = null)
-            Column(Modifier.weight(1f)) {
-                Text(
-                    item.title,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (checked) c.textTertiary else c.textPrimary
-                )
-                if (item.subtitle.isNotBlank()) {
-                    Text(item.subtitle, style = MaterialTheme.typography.labelSmall, color = c.textTertiary, maxLines = 1)
-                }
-            }
-            if (item.badge.isNotBlank()) {
-                Text(item.badge, style = MaterialTheme.typography.labelSmall, color = c.accent)
-            }
-        }
-    }
-    val open = items.count { done[it.title] != true }
-    Text("$open of ${items.size} open", style = MaterialTheme.typography.labelSmall, color = c.textTertiary, modifier = Modifier.padding(top = 6.dp))
-    if (onSendPrompt != null) {
-        Text("Ask about progress", style = MaterialTheme.typography.labelMedium, color = c.accent,
-            modifier = Modifier.padding(top = 6.dp).clickable {
-                val state = items.joinToString(", ") { "${it.title}=${if (done[it.title] == true) "done" else "open"}" }
-                onSendPrompt("Task progress — $state")
-            })
-    }
-}
 
 // --- dashboard ---------------------------------------------------------------
 
