@@ -754,6 +754,7 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
             }
             "app" -> widgetJson.decodeFromString<AppWidget>(json).let { w ->
                 val type = w.type.lowercase()
+                if (type == "tasks" && (w.items.isEmpty() || w.items.size > 30 || w.items.any { it.title.isBlank() })) return null
                 val steps = w.steps.take(10)
                 val columns = w.columns.take(6)
                 val items = w.items.take(40)
