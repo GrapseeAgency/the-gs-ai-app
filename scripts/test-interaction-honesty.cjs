@@ -137,7 +137,7 @@ async function main() {
   const doc = javascriptSandboxDocument('irrelevant')
   const workerSource = JSON.parse(doc.match(/new Blob\(\[("(?:[^"\\]|\\.)*")\]/)[1])
   let messages = []
-  const self = { postMessage: (m) => messages.push(m) }
+  const self = { postMessage: (m) => messages.push(m), addEventListener: () => {} }
   vm.runInNewContext(workerSource, { self, setTimeout, clearTimeout })
   await self.onmessage({ data: 'console.log(7*9); await new Promise(r=>setTimeout(r, 15)); console.log("later");' })
   check('JavaScript runs arithmetic and real awaited timers', () => assert.deepEqual(messages.map((m) => m.value), ['63', 'later', 'Completed. Unawaited background work is stopped.']))
@@ -146,6 +146,21 @@ async function main() {
   check('JavaScript errors are actual exceptions', () => assert.match(messages[0].value, /actual failure/))
   check('worker source escapes script terminators', () => assert.ok(!javascriptSandboxDocument('</script><img src=x>').includes('</script><img')))
   check('worker network is forbidden and execution is bounded', () => { assert.match(doc, /connect-src 'none'/); assert.match(doc, /worker\.terminate\(\)/); assert.match(doc, /2000/) })
+  for (const source of ['console.log("$&")', 'console.log("$$")', 'console.log("$`")', 'console.log("$\'")', 'console.log("</script><script>hostEscape=1</script>")']) {
+    const generated = javascriptSandboxDocument(source)
+    check('sandbox source insertion is literal: ' + source, () => {
+      const extracted = JSON.parse(generated.match(/worker.postMessage\(("(?:[^"\\]|\\.)*")\)/)[1])
+      assert.equal(extracted, source)
+      assert.ok(!generated.includes('</script><script>hostEscape'))
+    })
+  }
+  const actualWrapper = new JSDOM(renderToString(h(HtmlBlock, { source: javascriptSandboxDocument('console.log(7)') })))
+  const actualDocument = new JSDOM(actualWrapper.window.document.querySelector('iframe').getAttribute('srcDoc'))
+  check('actual HTML wrapper keeps worker CSP inside a real document head', () => {
+    assert.equal(actualDocument.window.document.querySelector('meta[http-equiv="Content-Security-Policy"]').parentElement.tagName, 'HEAD')
+  })
+  actualWrapper.window.close(); actualDocument.window.close()
+
 
   const unicodeSource = 'const data = {"😀": 7, "🌅": 9};\nconsole.log(data["😀"] + data["🌅"], "😀".length);'.replace('\\n', '\n')
   // The reply normalizer, compiler, parser and runtime all receive the actual
