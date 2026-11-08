@@ -498,7 +498,7 @@ data class CollabWidgetData(
     val title: String = "",
     val label: String = "",
     val items: List<String> = emptyList(),
-    val start: Int = 0
+    val start: Double = 0.0
 )
 
 /** A validated widget payload. */
