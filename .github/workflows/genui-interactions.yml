@@ -1,10 +1,10 @@
 name: GenUI interaction contracts
 on:
   pull_request:
-    paths: ['shared-contracts/emoji-dom-policy.json', 'src/**', 'scripts/test-interaction-honesty.cjs', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
+    paths: ['shared-contracts/**', 'src/**', 'scripts/test-interaction-honesty.cjs', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
   push:
     branches: [main]
-    paths: ['shared-contracts/emoji-dom-policy.json', 'src/**', 'scripts/test-interaction-honesty.cjs', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
+    paths: ['shared-contracts/**', 'src/**', 'scripts/test-interaction-honesty.cjs', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
 permissions:
   contents: read
 jobs:
