@@ -892,8 +892,8 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
                 if (cards.isEmpty()) null else Widget.Flashcards(w.copy(cards = cards))
             }
             "checklist" -> widgetJson.decodeFromString<ChecklistWidget>(json).let { w ->
-                val items = w.items.filter { it.label.isNotBlank() }.take(30)
-                if (items.isEmpty()) null else Widget.Checklist(w.copy(items = items))
+                if (w.items.isEmpty() || w.items.size > 30 || w.items.any { it.label.isBlank() }) null
+                else Widget.Checklist(w)
             }
             else -> null
         }
@@ -1012,7 +1012,7 @@ fun inferWidgetKind(json: String): String? {
             add("steps"); add("app")
         }
         if ("items" in keys || "tasks" in keys || "todos" in keys) {
-            add("checklist"); add("progress"); add("gauge"); add("carousel"); add("cards"); add("steps"); add("accordion"); add("menu"); add("chips"); add("app"); add("media"); add("collab")
+            add("checklist"); add("progress"); add("gauge"); add("carousel"); add("cards"); add("steps"); add("accordion"); add("menu"); add("chips"); add("app"); add("media")
         }
         if ("pages" in keys) add("media")
         if ("groups" in keys || "slots" in keys) add("app")
