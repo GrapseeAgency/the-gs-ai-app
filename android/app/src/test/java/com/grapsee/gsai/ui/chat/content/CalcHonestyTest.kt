@@ -9,6 +9,7 @@ class CalcHonestyTest {
         for (invalid in listOf("""null""", """[0,null]""", """[0,true]""", """[0,1e100]""", """[0,10,null]""", """[null,10]""", """[0,10,"unknown"]""", """{"x":1,"y":null}""", """{"x":null,"y":10}""", """{"x":1,"y":10,"z":null}""", """{"open":1,"high":2,"low":null,"close":1}""")) {
             val source = """{"type":"line","labels":["Before","Missing","After"],"series":[{"name":"Actual","data":[[0,10],$invalid,[2,30]]}]}"""
             assertNull("Preserve source rather than chart missing observation: $invalid", parseWidget("chart", source))
+            assertNull("Pie expansion must not hide a missing measurement: $invalid", parseWidget("chart", source.replace("\"line\"", "\"pie\"")))
         }
         val source = """{"type":"line","labels":["Loss","Zero","Gain"],"series":[{"name":"Actual","data":[[0,-10],[1,0],[2,30]]}]}"""
         val actual = (parseWidget("chart", source) as Widget.Chart).w.series.single().data
@@ -18,6 +19,9 @@ class CalcHonestyTest {
         assertEquals(listOf(listOf(0f, 10f), listOf(1f, 20f)), categories)
         val candle = (parseWidget("chart", """{"type":"candlestick","series":[{"data":[{"open":10,"high":20,"low":5,"close":15}]}]}""") as Widget.Chart).w.series.single().data.single()
         assertEquals(listOf(10f, 20f, 5f, 15f), candle)
+        val pie = (parseWidget("chart", """{"type":"pie","labels":["A","B"],"series":[{"data":[[0,10,99],[1,20,88]]}]}""") as Widget.Chart).w
+        assertEquals(listOf(10f, 20f), pie.series.map { it.data.single()[1] })
+        assertEquals(listOf("A", "B"), pie.series.map { it.name })
     }
 
     @Test fun actualChartDomainsRetainLossesZeroAndSourcePeakWithoutDoublingTheRange() {
