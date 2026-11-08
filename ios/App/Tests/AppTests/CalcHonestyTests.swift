@@ -5,6 +5,19 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testActualMessagePreviewIdentitySurvivesRehydrationWithoutInventingServerIDs() {
+        let live = ChatViewModel.ChatMessage(role: "assistant", content: "actual source", serverId: "actual-server-row")
+        let reopened = ChatViewModel.ChatMessage(role: "assistant", content: "actual source", durableID: "actual-server-row")
+        XCTAssertNotEqual(live.id, reopened.id, "UI identity really changes on reload")
+        XCTAssertEqual(live.reactPreviewIdentity, reopened.reactPreviewIdentity)
+        XCTAssertNil(reopened.serverId, "A cached row ID is not proof of a feedback API row")
+        let local = ChatViewModel.ChatMessage(role: "assistant", content: "offline source")
+        let localReopened = ChatViewModel.ChatMessage(role: "assistant", content: "offline source", durableID: local.reactPreviewIdentity)
+        XCTAssertEqual(local.reactPreviewIdentity, localReopened.reactPreviewIdentity)
+        XCTAssertNotEqual(local.reactPreviewIdentity, live.reactPreviewIdentity)
+        XCTAssertNotEqual(reopened.reactPreviewIdentity, ChatViewModel.ChatMessage(role: "assistant", content: "another answer").reactPreviewIdentity)
+    }
+
     func testAxisLabelsCoverTheCompleteSourceDomainWithoutInventingObservationIndices() {
         XCTAssertEqual(chartAxisLabelIndicesIOS(count: 31), [0, 4, 9, 13, 17, 21, 26, 30])
         XCTAssertEqual(chartAxisLabelIndicesIOS(count: 6), Array(0..<6))
