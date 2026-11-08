@@ -324,7 +324,20 @@ jobs:
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTableAllDisplaysEveryActualRow \
             -resultBundlePath ios/build/GSApp-genui.xcresult \
             CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee ios/build/xcodebuild-genui-test.log
+            2>&1 | tee ios/build/xcodebuild-genui-test.log | awk '
+              {
+                print
+                line = $0
+                gsub(/%/, "%25", line)
+                gsub(/\r/, "%0D", line)
+                if ($0 ~ /^Test Case .* failed/ && failures++ < 10)
+                  print "::error title=Actual XCTest runtime failure::" line
+                if ($0 ~ /^Test Case .*PlatformRuntimeUITests/ &&
+                    $0 ~ /test(ContextualEdit|GeneratedReactCode|OrdinaryMarkdownTask|VanishedDashboardTab)/ &&
+                    events++ < 8)
+                  print "::notice title=Actual native response acceptance::" line
+                fflush()
+              }'
 
       - name: Independently verify actual XCTest source archive bytes
         if: always()
