@@ -458,6 +458,23 @@ private fun promoteStandaloneBoldHeadings(rawBlocks: List<Block>): List<Block> =
         } else b
     }
 
+internal fun sourceCardForHeading(heading: Block, following: Block?): Pair<Block.CitationsBlock, String>? {
+    if (heading !is Block.Heading) return null
+    val title = NexlyIcons.cleanPlainText(plainTextOfSpans(heading.spans)).trim()
+    if (classifySectionListMode(title) != SectionListMode.SOURCES) return null
+    if (following is Block.CitationsBlock) return following to title
+    val items = when (following) {
+        is Block.OrderedList -> following.items
+        is Block.BulletList -> following.items
+        else -> return null
+    }
+    val start = (following as? Block.OrderedList)?.start ?: 1
+    val sources = items.mapIndexedNotNull { index, item -> extractSourceItemFromItem(item.number ?: (start + index), item) }
+    // A mixed list must not lose its unlinked source text.
+    if (sources.isEmpty() || sources.size != items.size) return null
+    return Block.CitationsBlock(sources.map { CitationEntry(number = it.number, title = it.title, domain = it.domain, snippet = it.snippet, url = it.url) }, following.sourceStart) to title
+}
+
 @Composable
 private fun StructuredBlockSequenceView(
     blocks: List<Block>,
@@ -559,18 +576,17 @@ private fun StructuredBlockSequenceContent(
             else -> false
         }
 
-        // The actual citation capture showed the same source heading twice:
-        // preserve its supplied title in the card rather than stacking headers.
-        if (!skipForTab && block is Block.Heading && nextBlock is Block.CitationsBlock) {
-            val title = NexlyIcons.cleanPlainText(plainTextOfSpans(block.spans)).trim()
-            if (classifySectionListMode(title) == SectionListMode.SOURCES) {
-                key("sources:${block.sourceStart}") { CitationsBlockView(nextBlock, title) }
-                if (statusCard != null && (i == statusHostIndex || i + 1 == statusHostIndex)) {
-                    onStatusPlaced(); Spacer(Modifier.height(2.dp)); statusCard()
-                }
-                i += 2
-                continue
+        // Markdown source lists are still list blocks at this seam, not only
+        // dedicated citations blocks. Coalesce the actual parser output too.
+        val sourceCard = if (!skipForTab) sourceCardForHeading(block, nextBlock) else null
+        if (sourceCard != null) {
+            currentSectionMode = SectionListMode.SOURCES
+            key("sources:${block.sourceStart}") { CitationsBlockView(sourceCard.first, sourceCard.second) }
+            if (statusCard != null && (i == statusHostIndex || i + 1 == statusHostIndex)) {
+                onStatusPlaced(); Spacer(Modifier.height(2.dp)); statusCard()
             }
+            i += 2
+            continue
         }
 
         // Coalesce Heading("Quick Calculator" | "Calculator") + Paragraph/BulletList into interactive NexlyQuickCalculatorCard (Screenshot 1)
@@ -2123,24 +2139,6 @@ private fun NexlyQuantitativeExplorerCard(items: List<SpontaneousMetricItem>) {
     }
 }
 
-private fun inferSourceDomainAndroid(text: String): Pair<String, String>? {
-    val low = text.lowercase()
-    return when {
-        "iea" in low -> "www.iea.org" to "https://www.iea.org"
-        "irena" in low -> "www.irena.org" to "https://www.irena.org"
-        "nature" in low -> "www.nature.com" to "https://www.nature.com"
-        "react" in low -> "react.dev" to "https://react.dev"
-        "tailwind" in low -> "tailwindcss.com" to "https://tailwindcss.com"
-        "mdn" in low || "mozilla" in low -> "developer.mozilla.org" to "https://developer.mozilla.org"
-        "python" in low -> "docs.python.org" to "https://docs.python.org"
-        "clickhouse" in low -> "clickhouse.com" to "https://clickhouse.com"
-        "nexly" in low -> "nexly-analytics.com" to "https://nexly-analytics.com"
-        "arxiv" in low -> "arxiv.org" to "https://arxiv.org"
-        "ieee" in low -> "www.ieee.org" to "https://www.ieee.org"
-        else -> null
-    }
-}
-
 private data class SpontaneousConceptItem(
     val term: String,
     val definition: String,
@@ -2483,7 +2481,7 @@ private data class ParsedSourceItem(
     val url: String
 )
 
-private fun extractSourceItemFromItem(number: Int, item: ListItem, allowInference: Boolean = false): ParsedSourceItem? {
+private fun extractSourceItemFromItem(number: Int, item: ListItem): ParsedSourceItem? {
     val combined = mutableListOf<InlineSpan>()
     combined.addAll(item.spans)
     item.children.forEach { child ->
@@ -2492,10 +2490,10 @@ private fun extractSourceItemFromItem(number: Int, item: ListItem, allowInferenc
             combined.addAll(child.spans)
         }
     }
-    return extractSourceItemFromSpans(number, combined, allowInference)
+    return extractSourceItemFromSpans(number, combined)
 }
 
-private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>, allowInference: Boolean = false): ParsedSourceItem? {
+private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>): ParsedSourceItem? {
     var linkUrl = ""
     var linkTitle = ""
     fun walk(list: List<InlineSpan>) {
@@ -2522,12 +2520,6 @@ private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>, all
         if (m != null) {
             val found = m.value
             linkUrl = if (found.startsWith("http")) found else "https://$found"
-        }
-    }
-    if (linkUrl.isEmpty() && allowInference) {
-        val inferred = inferSourceDomainAndroid(fullText)
-        if (inferred != null) {
-            linkUrl = inferred.second
         }
     }
     if (linkUrl.isEmpty()) return null
@@ -2567,7 +2559,7 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
 
     val sourceItems = remember(block.items, sectionMode) {
         if (sectionMode == SectionListMode.SOURCES) {
-            block.items.mapIndexedNotNull { idx, item -> extractSourceItemFromItem(idx + 1, item, allowInference = true) }
+            block.items.mapIndexedNotNull { idx, item -> extractSourceItemFromItem(idx + 1, item) }
         } else emptyList()
     }
     if (sourceItems.isNotEmpty() && sourceItems.size == block.items.size) {
@@ -2897,11 +2889,10 @@ private fun OrderedListBlock(block: Block.OrderedList, selectable: Boolean, cita
         val extracted = block.items.mapIndexedNotNull { idx, item ->
             extractSourceItemFromItem(
                 number = item.number ?: (block.start + idx),
-                item = item,
-                allowInference = sectionMode == SectionListMode.SOURCES
+                item = item
             )
         }
-        if (extracted.isNotEmpty() && (sectionMode == SectionListMode.SOURCES || extracted.size == block.items.size)) {
+        if (extracted.isNotEmpty() && extracted.size == block.items.size) {
             extracted
         } else emptyList()
     }
@@ -2920,6 +2911,21 @@ private fun OrderedListBlock(block: Block.OrderedList, selectable: Boolean, cita
                 sourceStart = block.sourceStart
             )
         )
+        return
+    }
+
+    if (sectionMode == SectionListMode.SOURCES) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            block.items.forEachIndexed { index, item ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+                    Text("${item.number ?: (block.start + index)}.", style = MaterialTheme.typography.labelMedium)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        ParagraphBlock(Block.Paragraph(item.spans, block.sourceStart), showCaret = false, selectable = selectable, citationUrls = citationUrls)
+                        item.children.forEach { NestedChildView(it, selectable, citationUrls) }
+                    }
+                }
+            }
+        }
         return
     }
 
