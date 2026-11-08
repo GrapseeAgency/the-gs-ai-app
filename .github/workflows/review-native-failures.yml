@@ -1,5 +1,7 @@
 name: Review stored native failure evidence
 on:
+  pull_request:
+    paths: ['.github/workflows/review-native-failures.yml']
   workflow_dispatch:
     inputs:
       source_run:
@@ -11,6 +13,7 @@ permissions:
   actions: read
 jobs:
   review:
+    if: github.event_name == 'workflow_dispatch'
     name: Actual stored ${{ matrix.label }} from iOS ${{ inputs.source_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -75,4 +78,33 @@ jobs:
           for start in range(0, min(len(actual), 28000), 3500):
               print('::notice::GS_STORED_' + os.environ['GS_REVIEW_LABEL'] + '_GEOMETRY: ' + actual[start:start+3500].replace('%', '%25').replace('\r', '%0D'))
           if not chunks: print('No original failure hierarchy exists for this label; no substitute is emitted')
+          PY
+
+  inspect-stored-full-suite:
+    if: github.event_name == 'pull_request'
+    name: Actual full-suite failure from iOS 42506329728
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-build-logs-42506329728
+          run-id: 42506329728
+          github-token: ${{ github.token }}
+          path: stored-full-suite
+      - name: Publish actual full-suite failures, not focused-log noise
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          paths = list(Path('stored-full-suite').rglob('xcodebuild-test.log'))
+          if len(paths) != 1: raise SystemExit('Expected the original full-suite XCTest log')
+          lines = paths[0].read_text(errors='replace').splitlines()
+          actual = [line for line in lines if re.search(r'error:|failed \(|Testing failed:|XCTAssert|Failing tests:|TEST FAILED|crash|fatal|Abort', line, re.I)
+                    and 'ProcessSuspension' not in line]
+          for line in actual[-10:]:
+              print('::error title=Actual stored full-suite XCTest failure::' + line[:3500].replace('%', '%25').replace('\r', '%0D'))
+          if not actual:
+              print('::notice::No matching actual XCTest error lines; no substitute diagnosis is produced')
+              for line in lines[-8:]: print('::notice::Actual stored log tail: ' + line[:3500].replace('%', '%25'))
           PY
