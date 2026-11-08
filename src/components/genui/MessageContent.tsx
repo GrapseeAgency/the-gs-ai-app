@@ -1,5 +1,7 @@
 'use client'
 
+import { escapeCodeDisplay } from '@/lib/code/display-source'
+
 /**
  * MessageContent — the full assistant answer: rich markdown prose and widgets
  * inline, streamed-aware. Unclosed fences render as skeletons; a tap on any
@@ -454,7 +456,7 @@ function renderInline(
             border: `1px solid ${theme.border}`,
           }}
         >
-          {code}
+          {escapeCodeDisplay(code)}
         </code>
       )
     } else if (mathParen !== undefined || mathBracket !== undefined || mathDisplay !== undefined || mathDollar !== undefined) {
@@ -472,7 +474,7 @@ function renderInline(
         </span>
       )
     } else if (imgUrl !== undefined) {
-      const label = imgAlt || imgUrl
+      const label = escapeCodeDisplay(imgAlt || imgUrl)
       if (isSafeUrl(imgUrl)) {
         out.push(
           <a
@@ -518,11 +520,11 @@ function renderInline(
             rel="noopener noreferrer"
             style={{ color: accent, textDecoration: 'underline' }}
           >
-            {bareUrl}
+            {escapeCodeDisplay(bareUrl)}
           </a>
         )
       } else {
-        out.push(<Fragment key={`${keyPrefix}-bu${k++}`}>{bareUrl}</Fragment>)
+        out.push(<Fragment key={`${keyPrefix}-bu${k++}`}>{escapeCodeDisplay(bareUrl)}</Fragment>)
       }
     } else if (boldStar !== undefined || boldUnder !== undefined) {
       const inner = boldStar ?? boldUnder ?? ''
