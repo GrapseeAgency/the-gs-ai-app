@@ -2578,6 +2578,17 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
         )
     }
 
+    val saveTask = {
+        val clean = NexlyIcons.cleanPlainText(draftTaskText).trim()
+        if (clean.isNotEmpty()) {
+            val target = editingTask
+            if (target == null) addedTasks = addedTasks + (nextTaskId++ to clean)
+            else if (target < block.items.size) editedTasks = editedTasks + (target to parseInline(clean))
+            else addedTasks = addedTasks.map { if (it.first == target) target to clean else it }
+            editingTask = null; draftTaskText = ""; isAddingTask = false
+        }
+    }
+
     val sourceItems = remember(block.items, sectionMode) {
         if (sectionMode == SectionListMode.SOURCES) {
             block.items.mapIndexedNotNull { idx, item -> extractSourceItemFromItem(idx + 1, item) }
@@ -2606,7 +2617,7 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
     val completionPct = if (totalTaskCount > 0) (completedTaskCount * 100) / totalTaskCount else 0
 
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        if (isChecklist && totalTaskCount >= 2) {
+        if (isChecklist) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2710,6 +2721,8 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                             value = draftTaskText,
                             onValueChange = { draftTaskText = it },
                             singleLine = true,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { saveTask() }),
                             textStyle = TextStyle(
                                 fontSize = 12.5.sp,
                                 color = Color(0xFF211845)
@@ -2721,16 +2734,7 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                         modifier = Modifier
                             .clip(RoundedCornerShape(7.dp))
                             .background(Color(0xFF6C4CF6))
-                            .clickable {
-                                val clean = NexlyIcons.cleanPlainText(draftTaskText).trim()
-                                if (clean.isNotEmpty()) {
-                                    val target = editingTask
-                                    if (target == null) addedTasks = addedTasks + (nextTaskId++ to clean)
-                                    else if (target < block.items.size) editedTasks = editedTasks + (target to parseInline(clean))
-                                    else addedTasks = addedTasks.map { if (it.first == target) target to clean else it }
-                                    editingTask = null; draftTaskText = ""; isAddingTask = false
-                                }
-                            }
+                            .clickable(enabled = NexlyIcons.cleanPlainText(draftTaskText).isNotBlank(), onClick = saveTask)
                             .padding(horizontal = 9.dp, vertical = 4.dp)
                     ) {
                         Text(
