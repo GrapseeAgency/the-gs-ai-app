@@ -627,6 +627,41 @@ final class CalcHonestyTests: XCTestCase {
         try await observe(web, "document.getElementById('count').textContent === '0/0 complete' && localStorage.getItem('tasks') === '[]'")
         web = try await load(source, scope)
         try await observe(web, "document.querySelectorAll('li').length === 0 && !window.Android && !window.webkit?.messageHandlers?.gsResize && window.__gsDisplayEmojiPolicy === true")
+        // Execute the exact reference answer through the real parser and WK
+        // runtime too: a source listing alone cannot prove its filters work.
+        let referenceURL = try XCTUnwrap(Bundle.main.url(forResource: "response-section-references", withExtension: "json"))
+        let referenceContract = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: referenceURL)) as? [String: Any])
+        let references = try XCTUnwrap(referenceContract["fixtures"] as? [[String: Any]])
+        let reference = try XCTUnwrap(references.first { $0["id"] as? String == "03-react-code" })
+        let referenceWire = try XCTUnwrap(reference["wire"] as? String)
+        let referenceSource = try XCTUnwrap(parseBlocks(referenceWire).compactMap { block -> String? in
+            if case .codeBlock(let language, let code, _, _) = block, language == "jsx" { return code }
+            return nil
+        }.first)
+        web = try await load(referenceSource, scope + ":reference")
+        for title in ["Reference completed", "Reference active"] {
+            try await replaceInput(web, "[aria-label='New task']", title)
+            _ = try await web.evaluateJavaScript("document.querySelector('form button').click();true")
+            try await observe(web, "JSON.parse(localStorage.getItem('tasks') || '[]').some(t=>t.title === '\(title)')")
+        }
+        _ = try await web.evaluateJavaScript("document.querySelector('article input[type=checkbox]').click();true")
+        func selectFilter(_ value: String) async throws {
+            _ = try await web.evaluateJavaScript("(function(){const select=document.querySelector('[aria-label=\"Task filter\"]');select.value='\(value)';select.dispatchEvent(new Event('change',{bubbles:true}));return true;})()")
+        }
+        try await selectFilter("completed")
+        try await observe(web, "document.querySelectorAll('article').length === 1 && document.querySelector('article input[type=checkbox]').checked")
+        try await selectFilter("active")
+        try await observe(web, "document.querySelectorAll('article').length === 1 && document.querySelector('article input[type=checkbox]').getAttribute('aria-label') === 'Reference active'")
+        try await replaceInput(web, "[aria-label='Edit Reference active']", "Reference edited")
+        try await observe(web, "JSON.parse(localStorage.getItem('tasks')).some(t=>t.title==='Reference edited' && !t.done)")
+        try await selectFilter("all")
+        try await observe(web, "document.querySelectorAll('article').length === 2")
+        web = try await load(referenceSource, scope + ":reference")
+        try await observe(web, "document.querySelectorAll('article').length === 2 && document.querySelector('[aria-label=\"Reference completed\"]').checked && document.querySelector('[aria-label=\"Edit Reference edited\"]').value === 'Reference edited'")
+        try await selectFilter("completed")
+        try await observe(web, "document.querySelectorAll('article').length === 1")
+        _ = try await web.evaluateJavaScript("document.querySelector('article button').click();true")
+        try await observe(web, "document.querySelectorAll('article').length === 0 && JSON.parse(localStorage.getItem('tasks')).length === 1 && JSON.parse(localStorage.getItem('tasks'))[0].title === 'Reference edited'")
         let firstOrigin = ReactPreviewRuntimeIOS.origin(scope: scope)
         let secondOrigin = ReactPreviewRuntimeIOS.origin(scope: scope + ":other-response")
         XCTAssertNotEqual(firstOrigin, secondOrigin)
