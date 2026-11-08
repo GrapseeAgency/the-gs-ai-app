@@ -2056,7 +2056,9 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
                         col.copy(alpha = 0.01f)
                     ),
                     startY = padT,
-                    endY = base
+                    // The fill closes at true zero, but its paint domain must
+                    // remain nonzero even when every observation is negative.
+                    endY = padT + ch
                 )
             )
             drawPath(path, col, style = Stroke(width = 3.dp.toPx()))
