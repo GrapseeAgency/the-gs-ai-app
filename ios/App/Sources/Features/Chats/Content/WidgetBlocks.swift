@@ -510,6 +510,7 @@ func isValidWidget(kind: String, json: String) -> Bool {
         }
     case "app":
         let type = (obj["type"] as? String ?? "wizard").lowercased()
+        if type == "tasks" { return isValidWidget(kind: "checklist", json: json) }
         if type == "wizard" || type == "onboarding" {
             return ((obj["steps"] ?? obj["stages"]) as? [Any])?.isEmpty == false
         }
@@ -2670,7 +2671,7 @@ private struct ChecklistBodyView: View {
         return items.enumerated().map { index, raw in
             let dict = raw as? [String: Any] ?? [:]
             let label = NexlyIcons.cleanPlainText((raw as? String) ?? str(dict, "label", "title", "text", "task", "name"))
-            let rawDone = (dict["done"] ?? dict["checked"]) as? NSNumber
+            let rawDone = (dict["done"] ?? dict["checked"] ?? dict["completed"]) as? NSNumber
             let done = rawDone.map { CFGetTypeID($0) == CFBooleanGetTypeID() && $0.boolValue } ?? false
             let detail = [str(dict, "detail", "description", "subtitle"), str(dict, "meta"), str(dict, "badge", "priority"), str(dict, "date")]
                 .filter { !$0.isEmpty }.map { NexlyIcons.cleanPlainText($0) }.joined(separator: " · ")
