@@ -5,7 +5,7 @@ enum CodeDisplayIOS {
     static func escape(_ source: String) -> String {
         source.unicodeScalars.map { scalar in
             let cp = scalar.value
-            let forbidden = cp > 0x7f && (scalar.properties.isEmoji || cp == 0x200d || cp == 0x20e3 || cp == 0xfe0e || cp == 0xfe0f || (0xe0020...0xe007f).contains(cp))
+            let forbidden = cp > 0x7f && (scalar.properties.isEmoji || (0x1f000...0x1faff).contains(cp) || cp == 0x200d || cp == 0x20e3 || cp == 0xfe0e || cp == 0xfe0f || (0xe0020...0xe007f).contains(cp))
             guard forbidden else { return String(scalar) }
             return String(scalar).utf16.map { String(format: "\\u%04x", $0) }.joined()
         }.joined()
