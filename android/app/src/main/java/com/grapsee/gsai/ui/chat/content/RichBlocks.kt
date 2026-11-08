@@ -3285,18 +3285,15 @@ private fun BlockQuoteView(block: Block.BlockQuote, selectable: Boolean, citatio
 // ---------------------------------------------------------------------------
 
 internal fun parseSortableNumberAndroid(raw: String): Double? {
-    val clean = raw.replace(Regex("[,$€£¥%↑↓↗↘+\\s]"), "").trim()
-    if (clean.isEmpty()) return null
-    val mult = when (clean.last().lowercaseChar()) {
-        'k' -> 1_000.0
-        'm' -> 1_000_000.0
-        'b' -> 1_000_000_000.0
-        't' -> 1_000_000_000_000.0
-        else -> 1.0
-    }
-    val numPart = if (mult > 1.0) clean.dropLast(1).trim() else clean
-    val base = numPart.toDoubleOrNull() ?: return null
-    return base * mult
+    val match = Regex("^(?:([↑↓↗↘])\\s*)?([+-]?)\\s*[\$€£¥₹৳#]?\\s*([+-]?)\\s*((?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?)\\s*([kKmMbBtT]?)\\s*[%xX]?\$").matchEntire(raw.trim().replace('−', '-')) ?: return null
+    val (arrow, outer, inner, digits, suffix) = match.destructured
+    if (outer.isNotEmpty() && inner.isNotEmpty()) return null
+    val sign = outer.ifEmpty { inner }
+    val down = arrow == "↓" || arrow == "↘"
+    if (arrow.isNotEmpty() && ((down && sign == "+") || (!down && sign == "-"))) return null
+    val multiplier = when (suffix.lowercase()) { "k" -> 1e3; "m" -> 1e6; "b" -> 1e9; "t" -> 1e12; else -> 1.0 }
+    val base = digits.replace(",", "").toDoubleOrNull() ?: return null
+    return (base * multiplier * if (sign == "-" || down) -1 else 1).takeIf { it.isFinite() }
 }
 
 @Composable
