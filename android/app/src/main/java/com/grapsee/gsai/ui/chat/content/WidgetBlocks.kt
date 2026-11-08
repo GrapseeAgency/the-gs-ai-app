@@ -847,7 +847,7 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
             }
             "collab" -> widgetJson.decodeFromString<CollabWidgetData>(json).let { w ->
                 val surface = if (w.surface in COLLAB_TYPES) w.surface
-                else w.type?.takeIf { it in COLLAB_TYPES } ?: "counter"
+                else w.type?.takeIf { it in COLLAB_TYPES } ?: return null
                 val room = w.room.lowercase().replace(Regex("[^a-z0-9-]+"), "-")
                     .trim('-').take(48).ifEmpty { "lobby" }
                 if (!w.start.isFinite() || w.items.size > 12 || w.items.any { it.isBlank() } || (surface == "vote" && w.items.size < 2)) return null
