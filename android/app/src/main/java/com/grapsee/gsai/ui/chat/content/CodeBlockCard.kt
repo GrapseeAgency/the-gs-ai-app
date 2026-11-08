@@ -24,6 +24,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.key
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -126,6 +132,7 @@ internal fun executeCodePreview(language: String?, code: String): CodeRunResult 
  * bar ([▷ Run in Browser] / [▷ Run Code]), and terminal-style output drawer
  * with ● Success / ● Error status and ↻ Rerun control.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun CodeBlockCard(
     language: String?,
@@ -150,6 +157,25 @@ fun CodeBlockCard(
             delay(1500)
             copied = false
         }
+    }
+    val responseActions = LocalResponseCodeActions.current
+    val sourceId = remember(code, language) { Any() }
+    val latestSource = rememberUpdatedState(currentCode)
+    val bringIntoView = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    DisposableEffect(responseActions, sourceId, open) {
+        if (!open) responseActions?.register(sourceId, ResponseCodeActions.Entry(language, { latestSource.value }, {
+            val source = latestSource.value
+            editorEncoded = CodeDisplay.requiresEncoding(source)
+            editorDraft = if (editorEncoded) CodeDisplay.encodeEditor(source) else source
+            editorError = null
+            editing = true
+            scope.launch {
+                androidx.compose.runtime.withFrameNanos { }
+                bringIntoView.bringIntoView()
+            }
+        }))
+        onDispose { responseActions?.remove(sourceId) }
     }
     val colors = GsTheme.colors
     val wrapCode = LocalNexlyCodeWrap.current
@@ -181,6 +207,7 @@ fun CodeBlockCard(
         color = Color(0xFF221F3B),
         modifier = Modifier
             .fillMaxWidth()
+            .bringIntoViewRequester(bringIntoView)
             .border(1.dp, Color(0xFF36315C), RoundedCornerShape(14.dp))
             .semantics {
                 contentDescription = if (language != null) "Code block, $language" else "Code block"
