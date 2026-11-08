@@ -723,6 +723,11 @@ function closeOpenStructures(s: string): string | null {
     if (ch === '"') {
       inString = true
       stringCanClose = hasClosingJsonQuote(s, index + 1)
+      if (!stringCanClose && /"(?:code|source|script|html|svg|css|sql|query|expr|expression|formula|url|href|src|pattern|regex)"\s*:\s*$/.test(out)) {
+        // Never manufacture a completed executable, formula or destination
+        // from a truncated machine string. Preserve raw source as unsupported.
+        return null
+      }
       out += ch
       continue
     }
