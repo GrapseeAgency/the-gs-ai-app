@@ -99,6 +99,25 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("1 of 1 completed").assertExists()
     }
 
+    @Test fun vanishedDashboardTabCannotHideReplacementWithSameBlockCount() {
+        var wire by androidx.compose.runtime.mutableStateOf("# Source dashboard\n\n| Name | Value |\n| --- | --- |\n| A | 1 |\n\n- [ ] Source task\n\nSource footer")
+        val replacement = "# Replacement dashboard\n\n## Supplied heading\n\nReplacement stays visible\n\nSupplied replacement footer"
+        assertEquals(com.grapsee.gsai.ui.chat.content.parseBlocks(wire).size,
+            com.grapsee.gsai.ui.chat.content.parseBlocks(replacement).size)
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    com.grapsee.gsai.ui.chat.content.BlocksContent(wire, false, {})
+                }
+            }
+        }
+        compose.onNodeWithText("Table").performClick()
+        compose.onNodeWithText("Source footer").assertDoesNotExist()
+        compose.runOnIdle { wire = replacement }
+        compose.onNodeWithText("Replacement stays visible").assertExists()
+        compose.onNodeWithText("Supplied replacement footer").assertExists()
+    }
+
     @Test fun ordinaryMarkdownTasksEditDeletePreserveDetailsAndDoNotMoveCompletion() {
         var wire by androidx.compose.runtime.mutableStateOf("## Next actions\n- [ ] Original task\n  Supplied source detail\n- [x] Keep completed")
         compose.activity.setContentForPlatformTest {
