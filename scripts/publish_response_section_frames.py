@@ -39,9 +39,9 @@ def publish(directory: Path, platform: str, section: str | None = None) -> None:
             output = io.BytesIO()
             image.save(output, 'JPEG', quality=quality, optimize=True)
             data = output.getvalue()
-            if len(data) <= 24000:
+            if len(data) <= 22000:
                 break
-        if len(data) > 24000:
+        if len(data) > 22000:
             raise ValueError(f'Preview exceeds the annotation bound: {name}')
         digest = hashlib.sha256(data).hexdigest()
         encoded = base64.b64encode(data).decode('ascii')
@@ -49,7 +49,7 @@ def publish(directory: Path, platform: str, section: str | None = None) -> None:
         # Workflow commands truncate messages to 4096 characters and retain
         # at most ten notices per step. One section gets its own step and at
         # most ten bounded chunks, whose whole-image digest detects loss.
-        chunks = [encoded[i:i + 3375] for i in range(0, len(encoded), 3375)]
+        chunks = [encoded[i:i + 3750] for i in range(0, len(encoded), 3750)]
         if len(chunks) > 10:
             raise ValueError('Too many annotation chunks')
         for index, chunk in enumerate(chunks, 1):
