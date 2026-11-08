@@ -5,6 +5,35 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testMarkdownNumbersKeepActualDirectionalSignsAndRejectMalformedCells() {
+        for (raw, expected) in [("↓ 1.2%", -1.2), ("↘ -1.2%", -1.2), ("↑ +0.5%", 0.5), ("−0.3%", -0.3), ("-$1,200.50", -1200.5), ("$-1.2k", -1200), ("৳2M", 2e6), ("2x", 2), ("0", 0)] {
+            XCTAssertEqual(parseSortableNumberIOS(raw), expected, raw)
+        }
+        for raw in ["1,00", "1+2", "1 2", "1e3", "NaN", "Infinity", "↓+1%", "↑-1%", "--1", "+-1", "growth 12%", "1.2.3"] {
+            XCTAssertNil(parseSortableNumberIOS(raw), raw)
+        }
+        XCTAssertEqual(NexlyIcons.cleanPlainText("↘️1.5%"), "↓1.5%")
+        XCTAssertEqual(NexlyIcons.cleanPlainText("↗1.5%"), "↑1.5%")
+    }
+
+    func testMarkdownChartUsesActualMeasureNamesUnitsAndAllThirtyOneRows() throws {
+        func cell(_ text: String) -> [InlineSpan] { [.text(text)] }
+        let headers = ["#", "Language", "Popularity"].map(cell)
+        var rows = (1...31).map { [cell("\($0)"), cell("Language \($0)"), cell("\($0)%")] }
+        let json = try XCTUnwrap(chartJsonFromTableIOS(headers: headers, rows: rows))
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        let data = try XCTUnwrap(payload["data"] as? [[String: Any]])
+        XCTAssertEqual(payload["title"] as? String, "Popularity")
+        XCTAssertEqual(payload["unit"] as? String, "%")
+        XCTAssertEqual(data.count, 31)
+        XCTAssertEqual(data[30]["label"] as? String, "Language 31")
+        XCTAssertEqual(data[30]["value"] as? Double, 31)
+        rows[2][2] = cell("not recorded")
+        XCTAssertNil(chartJsonFromTableIOS(headers: headers, rows: rows), "No silently dropped observations")
+        rows[2][2] = cell("$3")
+        XCTAssertNil(chartJsonFromTableIOS(headers: headers, rows: rows), "Incompatible units cannot become one numerical series")
+    }
+
     func testSpontaneousLearningUsesDefinitionsWithoutQuizzingSourceRecordsOrActionPlans() {
         let definitions = "- Atom: A basic unit of a chemical element.\n- Molecule: Two or more atoms bonded together.\n- Element: A substance made of one type of atom."
         XCTAssertEqual(extractSpontaneousConceptsFromBlocksIOS(parseBlocks("## Core concepts\n\n\(definitions)")).count, 3)
