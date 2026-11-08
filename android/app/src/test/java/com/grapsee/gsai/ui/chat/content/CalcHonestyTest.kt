@@ -5,6 +5,19 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun deferredPromotedSourceEditWaitsForTheExactSourceCard() {
+        val actions = ResponseCodeActions()
+        var targetEdits = 0
+        var unrelatedEdits = 0
+        actions.editOnRegistration(42)
+        actions.register(7, ResponseCodeActions.Entry("text", { "unrelated" }, { unrelatedEdits++ }))
+        assertEquals(0, unrelatedEdits)
+        actions.register(42, ResponseCodeActions.Entry("text", { "original visual source" }, { targetEdits++ }))
+        assertEquals(1, targetEdits)
+        actions.register(42, ResponseCodeActions.Entry("text", { "original visual source" }, { targetEdits++ }))
+        assertEquals(1, targetEdits)
+    }
+
     @Test fun wholeJsonPreservesMachineStringsBeforeMarkdownAndStreaming() {
         val documents = listOf("{}", "[]", "[1,2,3]", "[{\"literal\":\"**bold** :rocket: 😀\"}]",
             " \r\n{\"literal\":\"**bold** :rocket: 😀\",\"nested\":{\"x\":true}}\r\n ")
