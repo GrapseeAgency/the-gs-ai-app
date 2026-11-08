@@ -766,6 +766,7 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
                     "sheet" -> rows.size >= 2
                     "config", "configurator" -> groups.any { it.options.isNotEmpty() }
                     "booking", "schedule" -> items.isNotEmpty() || w.slots.isNotEmpty()
+                    "timer" -> w.durationSeconds?.let { it.isFinite() && it % 1.0 == 0.0 && it >= 1.0 && it <= 604800.0 } ?: true
                     else -> items.isNotEmpty() || columns.isNotEmpty()
                 }
                 if (type !in APP_TYPES || !hasBody) null
