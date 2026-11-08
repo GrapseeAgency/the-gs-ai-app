@@ -189,9 +189,11 @@ export function compileWidgets(input: CompileInput): CompileResult {
   const widget = buildChart(points, chartType)
   const direction = directWidgetArt({ kind: 'chart', payload: widget, priorText })
   const styled = { ...widget, accent: direction.accent, variant: direction.variant, palette: direction.palette }
+  const validated = validateWidget('chart', JSON.stringify(styled))
+  if (!validated.ok) return { text: strip(reply, invalid), widgets: 0, path: 'none', errors: [...errors, ...validationErrors(validated)] }
   const body = strip(reply, invalid).trimEnd()
   return {
-    text: `${body}${body ? '\n\n' : ''}${fenceBlock('chart', JSON.stringify(styled))}`,
+    text: `${body}${body ? '\n\n' : ''}${fenceBlock('chart', validated.json)}`,
     widgets: 1,
     path: 'fallback',
     errors,
@@ -267,7 +269,9 @@ function parseNumber(text: string): { value: number; display: string; percent: b
   const low = Number(m[1].replace(/,/g, ''))
   const high = m[2] ? Number(m[2].replace(/,/g, '')) : null
   if (!Number.isFinite(low)) return null
-  const raw = high !== null && Number.isFinite(high) ? (low + high) / 2 : low
+  // A range is not an observed scalar; do not manufacture its midpoint.
+  if (high !== null) return null
+  const raw = low
   const unit = (m[3] ?? '').toLowerCase()
   const factor =
     unit === 'trillion' || unit === 'tn' || unit === 't'
@@ -346,12 +350,13 @@ function extractPoints(text: string): Point[] {
     : rows.map((r) => r.point)
 
   const seen = new Set<string>()
-  return points.filter((p) => {
+  const unique = points.filter((p) => {
     const key = p.label.toLowerCase()
     if (seen.has(key)) return false
     seen.add(key)
     return true
-  }).slice(0, 8)
+  })
+  return unique.length <= LIMITS.maxPointsPerSeries ? unique : []
 }
 
 function buildChart(points: Point[], type: (typeof CHART_TYPES)[number]) {
