@@ -310,6 +310,7 @@ jobs:
             -derivedDataPath "$DERIVED_DATA" \
             -only-testing:AppTests/CalcHonestyTests \
             -only-testing:AppTests/NexlyChatRenderTests/testSixSuppliedResponseSectionReferencesRenderThroughActualChat \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testConversationActionsTapOpensRealOptionsWithoutLeavingChat \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testVanishedDashboardTabCannotHideReplacementSource \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testOrdinaryMarkdownTaskControlsPreserveRealDetailsAndCompletion \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch \
