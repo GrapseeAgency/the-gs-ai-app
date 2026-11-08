@@ -477,6 +477,29 @@ async function main() {
   check('malformed or contradictory numbers never become invented numeric cells', () => {
     for (const raw of ['1,00', '1+2', '1 2', '1e3', 'NaN', 'Infinity', '↓+1%', '↑-1%', '--1', '+-1', 'growth 12%', '1.2.3', true, null]) assert.equal(parseTableNumber(raw), null, String(raw))
   })
+  const { chartFromTableCells, plainTableCell } = from('lib/nexly/table-number')
+  const completeTable = Array.from({length:31}, (_, index)=>[String(index+1), 'Language '+(index+1), (index+1)+'%'])
+  check('derived ranked-table chart includes the actual measure, names, units and all 31 rows', () => {
+    const chart = chartFromTableCells(['#','Language','Popularity'], completeTable)
+    assert.equal(chart.title, 'Popularity'); assert.equal(chart.unit, '%'); assert.equal(chart.labels.at(-1), 'Language 31')
+    assert.equal(chart.series[0].data.length, 31); assert.deepEqual(chart.series[0].data.at(-1), [30,31])
+  })
+  check('derived charts refuse missing values, mixed units and invented arithmetic from Markdown erasure', () => {
+    for (const bad of ['not recorded', '$3', '1*2%', '+1_2%']) {
+      const rows = completeTable.map((row,index)=>index===2 ? [row[0],row[1],bad] : row)
+      assert.equal(chartFromTableCells(['#','Language','Popularity'], rows), null, bad)
+    }
+    assert.equal(plainTableCell('**12.5%**'), '12.5%'); assert.equal(plainTableCell('1*2%'), '1*2%')
+  })
+  await mount(h(MessageContent, {text:'| # | Language | Popularity |\n| --- | --- | --- |\n' + completeTable.map(row=>'| '+row.join(' | ')+' |').join('\n')}))
+  await click(buttons().find(button=>button.textContent==='Chart'))
+  check('ordinary Web Markdown Chart tab really renders the complete source-derived chart', () => {
+    assert.equal(document.querySelector('table'), null)
+    assert.match(document.body.textContent, /Popularity/)
+    assert.match(document.body.textContent, /31 points/)
+  })
+  await click(buttons().find(button=>button.textContent==='Table'))
+  check('ordinary Web chart switches back to the original paginated table', () => assert.equal(document.querySelectorAll('tbody tr').length, 5))
   const trendRows = [['Down', '↘1.5%'], ['Up', '+0.2%'], ['Negative', '−0.3%']]
   for (const ordinary of [false, true]) {
     await mount(ordinary ? h(MessageContent, {text: '| Name | Trend |\n| --- | --- |\n' + trendRows.map(row=>'| '+row.join(' | ')+' |').join('\n')}) : h(TableWidget, {payload:{columns:['Name','Trend'],rows:trendRows}}))
