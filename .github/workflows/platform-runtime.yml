@@ -67,29 +67,35 @@ jobs:
                   raise SystemExit('Missing actual native section frame: ' + str(image))
           print('All six actual Android section frames captured; visual review remains required')
           PYFRAMES
-      - name: Publish actual native section previews for review
+      - uses: actions/setup-python@v5
+        if: always()
+        with:
+          python-version: '3.11'
+      - name: Prepare actual native section previews for review
         if: always()
         run: |
-          python3 -m venv /tmp/gs-native-frame-tools
-          /tmp/gs-native-frame-tools/bin/pip install --quiet "pillow==11.0.0"
+          if ! python3 -m pip install --quiet --disable-pip-version-check "pillow==11.0.0" > /tmp/gs-frame-tools-install.log 2>&1; then
+            python3 -c 'from pathlib import Path; print("::error::Native frame dependencies: " + Path("/tmp/gs-frame-tools-install.log").read_text()[-3200:].replace("%", "%25").replace("\n", "%0A"))'
+            exit 1
+          fi
       - name: Review actual Android reference 01-dashboard
         if: always()
-        run: /tmp/gs-native-frame-tools/bin/python scripts/publish_response_section_frames.py android/app/build/screenshots android 01-dashboard
+        run: python3 scripts/publish_response_section_frames.py android/app/build/screenshots android 01-dashboard
       - name: Review actual Android reference 02-structured-launch
         if: always()
-        run: /tmp/gs-native-frame-tools/bin/python scripts/publish_response_section_frames.py android/app/build/screenshots android 02-structured-launch
+        run: python3 scripts/publish_response_section_frames.py android/app/build/screenshots android 02-structured-launch
       - name: Review actual Android reference 03-react-code
         if: always()
-        run: /tmp/gs-native-frame-tools/bin/python scripts/publish_response_section_frames.py android/app/build/screenshots android 03-react-code
+        run: python3 scripts/publish_response_section_frames.py android/app/build/screenshots android 03-react-code
       - name: Review actual Android reference 04-citations
         if: always()
-        run: /tmp/gs-native-frame-tools/bin/python scripts/publish_response_section_frames.py android/app/build/screenshots android 04-citations
+        run: python3 scripts/publish_response_section_frames.py android/app/build/screenshots android 04-citations
       - name: Review actual Android reference 05-data-grid
         if: always()
-        run: /tmp/gs-native-frame-tools/bin/python scripts/publish_response_section_frames.py android/app/build/screenshots android 05-data-grid
+        run: python3 scripts/publish_response_section_frames.py android/app/build/screenshots android 05-data-grid
       - name: Review actual Android reference 06-interactive-charts
         if: always()
-        run: /tmp/gs-native-frame-tools/bin/python scripts/publish_response_section_frames.py android/app/build/screenshots android 06-interactive-charts
+        run: python3 scripts/publish_response_section_frames.py android/app/build/screenshots android 06-interactive-charts
       - name: Require every runtime test (no skipped or empty reports)
         if: always()
         run: |
