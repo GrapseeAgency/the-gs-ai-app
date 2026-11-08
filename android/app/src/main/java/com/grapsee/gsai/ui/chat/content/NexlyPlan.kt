@@ -715,8 +715,8 @@ internal fun Modifier.nexlyGlassCard(corner: Dp = 20.dp): Modifier {
             // the card never turns into a grey rectangle.
             Brush.verticalGradient(
                 listOf(
-                    Color.White.copy(alpha = if (dark) 0.10f else 0.78f),
-                    Color.White.copy(alpha = if (dark) 0.055f else 0.60f)
+                    Color.White.copy(alpha = if (dark) 0.10f else 0.64f),
+                    Color.White.copy(alpha = if (dark) 0.055f else 0.46f)
                 )
             ),
             shape
@@ -1206,8 +1206,8 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
                     )
                 } else {
                     listOf(
-                        Color(0xFFFFFCF7),
-                        Color(0xFFFDF1E9)
+                        Color(0xFFF2DFF3),
+                        Color(0xFFFBE0F0)
                     )
                 }
             )
@@ -1216,7 +1216,7 @@ fun Modifier.nexlyPearlBackdrop(): Modifier {
         drawRect(
             Brush.radialGradient(
                 colors = listOf(
-                    Color.White.copy(alpha = if (dark) 0.05f else 0.42f),
+                    Color.White.copy(alpha = if (dark) 0.05f else 0.18f),
                     Color.Transparent
                 ),
                 center = Offset(w * 0.12f, h * 0.02f),
