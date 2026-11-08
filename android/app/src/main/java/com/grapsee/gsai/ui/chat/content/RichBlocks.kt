@@ -423,7 +423,9 @@ private fun extractQuickCalcParams(text: String): Triple<Double, Double, Int>? {
     val pctVal = pctMatch?.groupValues?.get(1)?.toDoubleOrNull()
 
     val yrMatch = Regex("""(\d{1,2})\s*(?:-\s*)?(?:years?|yrs?\b)""", RegexOption.IGNORE_CASE).find(text)
-    val yearsVal = yrMatch?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(1, 40) ?: 5
+    val suppliedYears = yrMatch?.groupValues?.get(1)?.toIntOrNull()
+    if (needsTerm && (suppliedYears == null || suppliedYears !in 1..40)) return null
+    val yearsVal = suppliedYears ?: 5
 
     val amt = currAmount ?: return null
     val rate = pctVal ?: return null
