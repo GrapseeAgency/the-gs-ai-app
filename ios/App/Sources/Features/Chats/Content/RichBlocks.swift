@@ -772,9 +772,15 @@ private struct NexlyContextualActionPillsRowView: View {
     let prose: [Block]
     let citations: [Int: String]
     let onShowCode: () -> Void
-    private enum PresentedSheet: String, Identifiable {
-        case share, export, details
-        var id: String { rawValue }
+    private enum PresentedSheet: Identifiable {
+        case share, export(URL), details
+        var id: String {
+            switch self {
+            case .share: return "share"
+            case .details: return "details"
+            case .export(let url): return url.absoluteString
+            }
+        }
     }
     @State private var presentedSheet: PresentedSheet? = nil
     @State private var sourcesOnly = false
@@ -807,7 +813,7 @@ private struct NexlyContextualActionPillsRowView: View {
             let file = directory.appendingPathComponent(filename)
             try data.write(to: file, options: .atomic)
             preparedExportURL = file
-            presentedSheet = .export
+            presentedSheet = .export(file)
         } catch {
             try? FileManager.default.removeItem(at: directory)
             throw error
@@ -924,12 +930,10 @@ private struct NexlyContextualActionPillsRowView: View {
                 switch sheet {
                 case .share:
                     ActivitySheet(items: [sourceText])
-                case .export:
-                    if let file = preparedExportURL {
-                        ResponseDocumentPickerIOS(sourceURL: file) { destination in
-                            notice = destination == nil ? "Export cancelled." : "Export saved."
-                            presentedSheet = nil
-                        }
+                case .export(let file):
+                    ResponseDocumentPickerIOS(sourceURL: file) { destination in
+                        notice = destination == nil ? "Export cancelled." : "Export saved."
+                        presentedSheet = nil
                     }
                 case .details:
                 NavigationStack {
