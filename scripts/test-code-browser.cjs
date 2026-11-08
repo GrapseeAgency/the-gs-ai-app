@@ -233,8 +233,8 @@ async function main() {
       await controlPage.close()
     }
     await page.screenshot({ path: path.join(os.tmpdir(), 'gs-terminal-browser-runtime.png'), fullPage: true })
-    assert.equal(checks, 27, 'All required real-browser code and terminal cases must execute')
-    console.log(`\n${checks} real-browser code and terminal checks passed`)
+    assert.equal(checks, 33, 'All required real-browser code, terminal and production widget-control cases must execute')
+    console.log(`\n${checks} real-browser code, terminal and widget-control checks passed`)
   } finally { closeProbe(); await browser.close(); fs.rmSync(libs, { recursive: true, force: true }) }
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })
