@@ -47,6 +47,45 @@ class PlatformRuntimeTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
 
+    @Test fun generatedChecklistEditsDeletesAddsAndKeepsCompletionWithTheActualTask() {
+        var payload by androidx.compose.runtime.mutableStateOf("""{"title":"Actual tasks","items":[{"label":"Original source","detail":"Only supplied detail"},{"label":"Keep source"}]}""")
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    com.grapsee.gsai.ui.chat.content.WidgetBlockView(
+                        com.grapsee.gsai.ui.chat.content.Block.WidgetBlock("checklist", payload, false, 0), false)
+                }
+            }
+        }
+        compose.onNodeWithText("0 of 2 completed").assertExists()
+        compose.onNodeWithText("Keep source").performClick().assertIsOn()
+        compose.onNodeWithContentDescription("Edit task: Original source").performClick()
+        compose.onNode(hasSetTextAction()).performTextReplacement("Renamed source")
+        compose.onNodeWithText("Save task").performScrollTo().performClick()
+        compose.onNodeWithText("Only supplied detail").assertExists()
+        compose.onNodeWithText("Keep source").assertIsOn()
+        compose.onNodeWithContentDescription("Delete task: Renamed source").performClick()
+        compose.onNodeWithText("1 of 1 completed").assertExists()
+        compose.onNodeWithText("Keep source").assertIsOn()
+        compose.onNodeWithText("Add Task").performClick()
+        compose.onNodeWithText("Add", useUnmergedTree = false).assertIsNotEnabled()
+        compose.onNode(hasSetTextAction()).performTextReplacement("Added task")
+        compose.onNodeWithText("Add").performClick()
+        compose.onNodeWithText("Added task").performClick().assertIsOn()
+        compose.onNodeWithText("2 of 2 completed").assertExists()
+        compose.onNodeWithContentDescription("Edit task: Added task").performClick()
+        compose.onNode(hasSetTextAction()).performTextReplacement("Added edited")
+        compose.onNodeWithText("Save task").performClick()
+        compose.onNodeWithText("Added edited").assertIsOn()
+        compose.onNodeWithContentDescription("Delete task: Keep source").performClick()
+        compose.onNodeWithText("Added edited").assertIsOn()
+        compose.onNodeWithText("1 of 1 completed").assertExists()
+        compose.runOnIdle { payload = """{"title":"New tasks","items":[{"label":"New supplied task"}]}""" }
+        compose.onNodeWithText("0 of 1 completed").assertExists()
+        compose.onNodeWithText("Added edited").assertDoesNotExist()
+        compose.onNodeWithText("New supplied task").assertIsOff()
+    }
+
     @Test fun contextualActionsEditActualCodeShowDataAndLaunchPlatformSharing() {
         val prompts = mutableListOf<String>()
         var content by androidx.compose.runtime.mutableStateOf("```javascript\nconsole.log(7)\n```")
