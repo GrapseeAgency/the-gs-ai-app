@@ -5,6 +5,15 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testSpontaneousLearningUsesDefinitionsWithoutQuizzingSourceRecordsOrActionPlans() {
+        let definitions = "- Atom: A basic unit of a chemical element.\n- Molecule: Two or more atoms bonded together.\n- Element: A substance made of one type of atom."
+        XCTAssertEqual(extractSpontaneousConceptsFromBlocksIOS(parseBlocks("## Core concepts\n\n\(definitions)")).count, 3)
+        for heading in ["Sources", "Key Sources", "References", "Step-by-step plan", "Next actions"] {
+            XCTAssertTrue(extractSpontaneousConceptsFromBlocksIOS(parseBlocks("## \(heading)\n\n\(definitions)")).isEmpty, heading)
+        }
+        XCTAssertEqual(extractSpontaneousConceptsFromBlocksIOS(parseBlocks("## Sources\n\n- A supplied source record.\n\n## Core concepts\n\n\(definitions)")).count, 3)
+    }
+
     func testProseScenariosPreserveRealAmountsVATAndUnsupportedSourceTerms() throws {
         XCTAssertEqual(try XCTUnwrap(parseQuickCalculatorSpec(titleRaw: "Calculator", bodyText: "$100 markup at 10%")).initialAmount, 100)
         XCTAssertEqual(try XCTUnwrap(parseQuickCalculatorSpec(titleRaw: "Calculator", bodyText: "€1.2k with 10% tax")).initialAmount, 1200)
