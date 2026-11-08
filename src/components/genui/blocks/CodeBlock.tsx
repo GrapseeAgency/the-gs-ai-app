@@ -451,6 +451,7 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
           ) : null}
           {errorText ? (
             <pre
+              role="alert"
               style={{
                 margin: output ? '6px 0 0' : 0,
                 padding: '8px 10px',
