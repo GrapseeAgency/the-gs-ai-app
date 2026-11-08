@@ -5,6 +5,14 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testChecklistRefusesMalformedAndOversizedSourceWithoutKindHealing() throws {
+        let overflow = try JSONSerialization.data(withJSONObject: ["items": (1...31).map { ["label": "Task \($0)"] }])
+        for json in [#"{"items":[{"label":"Actual"},{"alien":42}]}"#, #"{"items":["Actual",42]}"#, String(decoding: overflow, as: UTF8.self)] {
+            XCTAssertFalse(isValidWidget(kind: "checklist", json: json))
+            XCTAssertNil(validatedWidgetKindIOS(kind: "checklist", json: json))
+        }
+    }
+
     func testWholeJSONPreservesMachineStringsBeforeMarkdownAndStreaming() {
         let sources = ["{}", "[]", "[1,2,3]", #"[{"literal":"**bold** :rocket: 😀"}]"#,
             " \r\n" + #"{"literal":"**bold** :rocket: 😀","nested":{"x":true}}"# + "\r\n "]
