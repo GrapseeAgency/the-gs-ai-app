@@ -1,10 +1,10 @@
 name: GenUI interaction contracts
 on:
   pull_request:
-    paths: ['shared-contracts/**', 'src/**', 'scripts/test-interaction-honesty.cjs', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
+    paths: ['shared-contracts/**', 'src/**', 'scripts/test-interaction-honesty.cjs', 'scripts/test-code-browser.cjs', 'scripts/browser-code-entry.tsx', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
   push:
     branches: [main]
-    paths: ['shared-contracts/**', 'src/**', 'scripts/test-interaction-honesty.cjs', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
+    paths: ['shared-contracts/**', 'src/**', 'scripts/test-interaction-honesty.cjs', 'scripts/test-code-browser.cjs', 'scripts/browser-code-entry.tsx', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
 permissions:
   contents: read
 jobs:
@@ -19,6 +19,30 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run test:interactions
+      - name: Install pinned real-browser verification tools
+        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund @sparticuz/chromium@143.0.4 puppeteer-core@24.37.5 esbuild@0.27.3
+      - name: Real browser controls, clipboard, worker timeout and causal CSP denial
+        run: |
+          set -o pipefail
+          node scripts/test-code-browser.cjs 2>&1 | tee /tmp/gs-code-browser-runtime.log
+      - name: Publish browser failure diagnostics
+        if: failure()
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          p = Path('/tmp/gs-code-browser-runtime.log')
+          if p.exists():
+              text = p.read_text()[-10000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print('::error::' + text)
+          PYCODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-browser-code-runtime
+          path: |
+            /tmp/gs-code-browser-runtime.log
+            /tmp/gs-code-browser-runtime.png
+          if-no-files-found: error
       - run: node dist/probe/scripts/test-widget-render.js
       - run: node dist/probe/scripts/test-widget-catalogue.js
       - run: node dist/probe/scripts/test-genui-pipeline.js
