@@ -342,7 +342,18 @@ class PlatformRuntimeTest {
         awaitObserved("shared terminal asset loads and preserves token-looking data") {
             evaluate("!!document.getElementById('command') && document.getElementById('log').textContent.includes('__GS_WORKER_CONTRACT_LITERAL__')") == "true"
         }
+        val cssWidth = evaluate("innerWidth")!!.toDouble()
+        val nativeWidthDp = web!!.width / instrumentation.targetContext.resources.displayMetrics.density
+        assertEquals("The actual viewport must use device-independent CSS pixels", nativeWidthDp.toDouble(), cssWidth, 2.0)
         val device = UiDevice.getInstance(instrumentation)
+        fun requireWorkerOutput(text: String) {
+            if (!device.wait(Until.hasObject(By.textContains(text)), 15_000L)) {
+                val dump = java.io.ByteArrayOutputStream()
+                device.dumpWindowHierarchy(dump)
+                val state = evaluate("JSON.stringify({text:document.body.innerText,height:innerHeight,frame:document.querySelector('#execution iframe')?.getBoundingClientRect().toJSON()})")
+                throw AssertionError("Actual Worker output missing: $text; DOM state: $state; accessibility: " + dump.toString("UTF-8").takeLast(4500))
+            }
+        }
         fun submit(command: String) {
             assertEquals("true", evaluate("document.getElementById('command').value=" + org.json.JSONObject.quote(command) + ";true"))
             val encoded = evaluate("(function(){var r=document.querySelector('button[type=submit]').getBoundingClientRect();return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,vw:innerWidth});})()")
@@ -357,9 +368,9 @@ class PlatformRuntimeTest {
         submit("rm actual.txt"); submit("ls")
         assertEquals("true", evaluate("document.getElementById('log').textContent.endsWith('(empty)')"))
         submit("js [1,2,3].map(n=>n*2)")
-        assertTrue("Actual sandboxed iframe Worker must compute array output", device.wait(Until.hasObject(By.textContains("[2,4,6]")), 15_000L))
+        requireWorkerOutput("[2,4,6]")
         submit("js while(true) {}")
-        assertTrue("Actual infinite Worker must stop", device.wait(Until.hasObject(By.textContains("exceeded 2 seconds")), 15_000L))
+        requireWorkerOutput("exceeded 2 seconds")
         submit("python print(7)")
         assertEquals("true", evaluate("document.getElementById('log').textContent.includes('python: not executed') && document.getElementById('execution').children.length === 0"))
         submit("deploy")
