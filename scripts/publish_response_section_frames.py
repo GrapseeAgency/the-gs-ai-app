@@ -70,14 +70,17 @@ def publish(directory: Path, platform: str, section: str | None = None, scroll_i
             # pretend it was the qualifier's complete physical display.
             height = round(original.height * 393 / original.width)
             image = original.convert('RGB').resize((393, height), Image.Resampling.LANCZOS)
+        # Ten notices of 3920 base64 characters hold 29400 binary bytes.
+        # Use that real transport budget (with a small margin), rather than
+        # rejecting dense, genuine code screenshots after only eight chunks.
         data = b''
         for quality in (80, 65, 50, 35, 20):
             output = io.BytesIO()
             image.save(output, 'JPEG', quality=quality, optimize=True)
             data = output.getvalue()
-            if len(data) <= 23500:
+            if len(data) <= 29300:
                 break
-        if len(data) > 23500:
+        if len(data) > 29300:
             raise ValueError(f'Preview exceeds the annotation bound: {name}')
         digest = hashlib.sha256(data).hexdigest()
         encoded = base64.b64encode(data).decode('ascii')
