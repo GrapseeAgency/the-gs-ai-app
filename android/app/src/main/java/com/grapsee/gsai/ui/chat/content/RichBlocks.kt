@@ -57,6 +57,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -70,6 +71,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.Placeholder
@@ -3268,6 +3270,27 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
     val headers = remember(block.headers, theme) { block.headers.map { spansToAnnotatedString(it, theme) } }
     val allRows = remember(block.rows, theme) { block.rows.map { row -> row.map { spansToAnnotatedString(it, theme) } } }
     val columns = maxOf(headers.size, block.aligns.size, 1)
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val bodyStyle = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold)
+    val headerStyle = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+    // Equal-width rank/data columns left only ~40dp for a language after its
+    // glass badge, splitting JavaScript while clipping the actual trend. Size
+    // from all supplied rows (not just this page), then scroll if necessary.
+    val naturalWidths = remember(headers, allRows, density, bodyStyle, headerStyle) {
+        (0 until columns).map { column ->
+            val header = headers.getOrNull(column)?.text.orEmpty()
+            val nameColumn = column == 0 || (column == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
+            val headerWidth = with(density) { textMeasurer.measure(header, headerStyle, softWrap = false).size.width.toDp() } + 24.dp
+            val dataWidth = allRows.maxOfOrNull { row ->
+                val raw = row.getOrNull(column)?.text.orEmpty().trim()
+                val badgeSpace = if (nameColumn && markdownEntityBadgeForCell(raw) != null) 26.dp else 0.dp
+                val trendSpace = if (raw.endsWith("%") && raw.firstOrNull() in listOf('+', '-', '↑', '↓', '↗', '↘')) 16.dp else 0.dp
+                with(density) { textMeasurer.measure(raw, bodyStyle, softWrap = false).size.width.toDp() } + 20.dp + badgeSpace + trendSpace
+            } ?: 0.dp
+            maxOf(44.dp, headerWidth, dataWidth).coerceAtMost(280.dp)
+        }
+    }
 
     var sortCol by remember(block) { mutableStateOf<Int?>(null) }
     var sortAsc by remember(block) { mutableStateOf(true) }
@@ -3323,9 +3346,11 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
             .border(1.dp, outline.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-            val minCell = 92.dp
-            val fits = minCell * columns <= maxWidth
-            val cellWidth = if (fits) maxWidth / columns else minCell
+            val naturalTotal = naturalWidths.fold(0.dp) { total, width -> total + width }
+            val fits = naturalTotal <= maxWidth
+            val extra = if (fits) (maxWidth - naturalTotal) / columns else 0.dp
+            val widths = naturalWidths.map { it + extra }
+            val tableWidth = widths.fold(0.dp) { total, width -> total + width }
 
             val tableHeader: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
                 headers.forEachIndexed { c, header ->
@@ -3346,7 +3371,7 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
                         Row {
                             TableCell(
                                 text = hLabel,
-                                width = cellWidth,
+                                width = widths[c],
                                 align = block.aligns.getOrElse(c) { TableAlign.LEFT },
                                 emphasize = true
                             )
@@ -3376,7 +3401,7 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
                                     (0 until columns).forEach { c ->
                                         TableCell(
                                             text = row.getOrElse(c) { AnnotatedString("") },
-                                            width = cellWidth,
+                                            width = widths[c],
                                             align = block.aligns.getOrElse(c) { TableAlign.LEFT },
                                             emphasize = false,
                                             isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
@@ -3403,7 +3428,7 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
                     )
                     Box(
                         Modifier
-                            .width(cellWidth * columns)
+                            .width(tableWidth)
                             .height(1.dp)
                             .background(outline.copy(alpha = 0.35f))
                     )
@@ -3414,7 +3439,7 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
                                     (0 until columns).forEach { c ->
                                         TableCell(
                                             text = row.getOrElse(c) { AnnotatedString("") },
-                                            width = cellWidth,
+                                            width = widths[c],
                                             align = block.aligns.getOrElse(c) { TableAlign.LEFT },
                                             emphasize = false,
                                             isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
@@ -3423,7 +3448,7 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
                                 }
                                 Box(
                                     Modifier
-                                        .width(cellWidth * columns)
+                                        .width(tableWidth)
                                         .height(1.dp)
                                         .background(outline.copy(alpha = 0.2f))
                                 )
