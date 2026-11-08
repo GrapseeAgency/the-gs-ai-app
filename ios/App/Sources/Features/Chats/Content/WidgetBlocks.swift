@@ -560,6 +560,20 @@ private enum WidgetPalette {
         return hues[((index % n) + n) % n]
     }
 
+    /// Match Android's stable family palette; Swift's hashValue changes on relaunch.
+    static func forKind(_ kind: String) -> Color {
+        let slots = ["chart": 0, "stat": 1, "gauge": 2, "compare": 3,
+                     "progress": 4, "timeline": 5, "table": 6, "quiz": 7,
+                     "form": 8, "carousel": 9, "cards": 10, "followups": 11,
+                     "media": 3, "actions": 2, "panel": 1, "voice": 8,
+                     "calc": 9, "app": 4, "tabs": 0, "accordion": 5,
+                     "steps": 4, "menu": 8, "chips": 11, "rating": 2,
+                     "poll": 7, "diff": 9, "tree": 10, "flashcards": 6, "checklist": 1]
+        let key = kind.lowercased()
+        let hash = key.utf16.reduce(UInt32(0)) { ($0 &* 31) &+ UInt32($1) }
+        return at(slots[key] ?? Int(Int32(bitPattern: hash)))
+    }
+
     static func parseHex(_ raw: String?) -> Color? {
         guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
               raw.hasPrefix("#") else { return nil }
@@ -773,12 +787,13 @@ struct WidgetBlockView: View {
             .nexlyGlassCard(corner: 16)
         } else if let obj = parseRelaxedJSONObject(kind: resolvedKind, raw: json),
                   let effectiveKind = validatedWidgetKindIOS(kind: resolvedKind, json: json) {
-            let accent = WidgetPalette.parseHex(obj["accent"] as? String) ?? WidgetPalette.at( abs(effectiveKind.hashValue) )
+            let accent = WidgetPalette.parseHex(obj["accent"] as? String) ?? WidgetPalette.forKind(effectiveKind)
             let rawTitle = rawStr(obj, "title", "heading", "name", "question")
             let (explicitIcon, strippedTitle) = NexlyIcons.extractLeadingIcon(rawTitle)
             let cleanTitle = NexlyIcons.cleanPlainText(strippedTitle)
             let tagIcon = widgetTagGlassIconIOS(effectiveKind)
             VStack(alignment: .leading, spacing: 10) {
+                if !cleanTitle.isEmpty {
                 HStack(alignment: .center, spacing: 8) {
                     NexlyGlassGlyphTile(
                         name: explicitIcon ?? tagIcon.icon,
@@ -793,12 +808,7 @@ struct WidgetBlockView: View {
                             .lineLimit(2)
                     }
                     Spacer(minLength: 4)
-                    Text(effectiveKind.uppercased())
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundStyle(accent)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(accent.opacity(0.14), in: Capsule())
+                }
                 }
                 WidgetBodyView(kind: effectiveKind, obj: obj, accent: accent)
                     .id(effectiveKind + ":" + json)
