@@ -141,8 +141,11 @@ fun CodeBlockCard(
     onCopyCode: (String) -> Unit
 ) {
     var copied by remember { mutableStateOf(false) }
-    var sandboxMode by remember { mutableStateOf(false) }
+    var sandboxMode by remember(code, language) { mutableStateOf(false) }
     var editing by remember(code) { mutableStateOf(false) }
+    var editorDraft by remember(code) { mutableStateOf("") }
+    var editorEncoded by remember(code) { mutableStateOf(false) }
+    var editorError by remember(code) { mutableStateOf<String?>(null) }
     var currentCode by remember(code) { mutableStateOf(code) }
     var expanded by remember(code) { mutableStateOf(false) }
     var runResult by remember(code) { mutableStateOf<CodeRunResult?>(null) }
@@ -180,11 +183,12 @@ fun CodeBlockCard(
         (1..visibleLineCount).joinToString("\n")
     }
 
-    val highlighted = remember(visibleCode, language, colors, open) {
+    val displayCode = remember(visibleCode) { CodeDisplay.escape(visibleCode) }
+    val highlighted = remember(displayCode, language, colors, open) {
         when {
             visibleCode.isBlank() -> AnnotatedString("…")
-            open -> AnnotatedString(visibleCode)
-            else -> highlightCode(visibleCode, language, colors)
+            open -> AnnotatedString(displayCode)
+            else -> highlightCode(displayCode, language, colors)
         }
     }
 
@@ -244,7 +248,14 @@ fun CodeBlockCard(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .background(Color.White.copy(alpha = 0.08f))
-                            .clickable { editing = !editing }
+                            .clickable {
+                                if (!editing) {
+                                    editorEncoded = CodeDisplay.requiresEncoding(currentCode)
+                                    editorDraft = if (editorEncoded) CodeDisplay.encodeEditor(currentCode) else currentCode
+                                    editorError = null
+                                }
+                                if (editorError == null) editing = !editing
+                            }
                             .padding(horizontal = 7.dp, vertical = 3.dp)
                     )
                     Spacer(Modifier.width(4.dp))
@@ -283,8 +294,20 @@ fun CodeBlockCard(
                     )
                     if (editing) {
                         BasicTextField(
-                            value = currentCode,
-                            onValueChange = { currentCode = it },
+                            value = editorDraft,
+                            onValueChange = { draft ->
+                                if (!editorEncoded && CodeDisplay.requiresEncoding(draft)) {
+                                    editorEncoded = true
+                                    editorDraft = CodeDisplay.encodeEditor(draft)
+                                    currentCode = draft
+                                    editorError = null
+                                } else {
+                                    editorDraft = CodeDisplay.escape(draft)
+                                    runCatching { if (editorEncoded) CodeDisplay.decodeEditor(draft) else draft }
+                                        .onSuccess { currentCode = it; editorError = null }
+                                        .onFailure { editorError = "Enter one valid JSON source string. Invalid drafts cannot run." }
+                                }
+                            },
                             textStyle = TextStyle(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 12.sp,
@@ -313,6 +336,13 @@ fun CodeBlockCard(
                 }
             }
 
+            if (CodeDisplay.requiresEncoding(currentCode)) {
+                Text("Unicode symbols are shown as escapes; Copy and Run keep original source.", color = Color(0xFFC5BCFF), fontSize = 11.sp)
+            }
+            if (editing && editorEncoded) {
+                Text("Unicode-safe editor: edit one JSON-encoded source string.", color = Color(0xFFC5BCFF), fontSize = 11.sp)
+            }
+            editorError?.let { Text(it, color = Color(0xFFFCA5A5), fontSize = 11.sp) }
             // Bottom Execution Action Bar (04 & 05: Screenshots 1 & 2)
             if (!open && currentCode.isNotBlank()) {
                 Row(
@@ -330,7 +360,9 @@ fun CodeBlockCard(
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color(0xFF6C4CF6))
                             .clickable {
-                                if (lowerLang in setOf("html", "htm", "svg", "js", "javascript")) {
+                                if (editing && editorError != null) {
+                                    runResult = CodeRunResult("", "Not executed: correct the JSON-encoded source draft first.")
+                                } else if (lowerLang in setOf("html", "htm", "svg", "js", "javascript")) {
                                     sandboxMode = true
                                 } else {
                                     runCount += 1
@@ -382,8 +414,12 @@ fun CodeBlockCard(
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(Color.White.copy(alpha = 0.08f))
                                     .clickable {
-                                        runCount += 1
-                                        runResult = executeCodePreview(language, currentCode)
+                                        if (editing && editorError != null) {
+                                            runResult = CodeRunResult("", "Not executed: correct the JSON-encoded source draft first.")
+                                        } else {
+                                            runCount += 1
+                                            runResult = executeCodePreview(language, currentCode)
+                                        }
                                     }
                                     .padding(horizontal = 7.dp, vertical = 3.dp)
                             ) {
@@ -449,14 +485,14 @@ fun CodeBlockCard(
                     }
                     if (activeResult.output.isNotBlank()) {
                         Text(
-                            text = activeResult.output,
+                            text = CodeDisplay.escape(activeResult.output),
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                             color = Color(0xFFD8F3DC)
                         )
                     }
                     if (activeResult.error != null) {
                         Text(
-                            text = activeResult.error,
+                            text = CodeDisplay.escape(activeResult.error),
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                             color = Color(0xFFFCA5A5),
                             modifier = Modifier
