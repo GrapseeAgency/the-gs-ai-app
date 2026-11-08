@@ -3685,19 +3685,24 @@ private struct TableBlockView: View {
     }
 
     private func naturalColumnWidths(columns: Int) -> [CGFloat] {
-        let font = UIFont.systemFont(ofSize: 13, weight: .bold)
+        let headerFont = UIFont.systemFont(ofSize: 12.5, weight: .bold)
         let firstHeader = headers.first.map { NexlyIcons.cleanPlainText(plainTextOfSpans($0)) } ?? ""
         return (0..<columns).map { column in
             let header = column < headers.count ? NexlyIcons.cleanPlainText(plainTextOfSpans(headers[column])) : ""
-            var width = (header as NSString).size(withAttributes: [.font: font]).width + 24
+            var width = (header as NSString).size(withAttributes: [.font: headerFont]).width + 20
             let isName = column == 0 || (column == 1 && ["#", "Rank", "No", "ID"].contains(firstHeader))
             for row in rows where column < row.count {
                 let raw = plainTextOfSpans(row[column]).trimmingCharacters(in: .whitespacesAndNewlines)
                 let badge: CGFloat = isName && entityBadge(for: raw) != nil ? 26 : 0
-                let trend: CGFloat = raw.hasSuffix("%") && ["+", "-", "↑", "↓", "↗", "↘"].contains(String(raw.prefix(1))) ? 16 : 0
-                width = max(width, (raw as NSString).size(withAttributes: [.font: font]).width + 20 + badge + trend)
+                let trend = raw.hasSuffix("%") && ["+", "-", "↑", "↓", "↗", "↘"].contains(String(raw.prefix(1)))
+                // Measure the actual displayed arrow plus value, not the raw
+                // arrow AND an extra phantom 16pt icon. Rank cells do not need
+                // the 44pt floor reserved for ordinary data columns either.
+                let display = trend ? "\((raw.contains("-") || raw.hasPrefix("↓") || raw.hasPrefix("↘")) ? "↓" : "↑") \(raw.replacingOccurrences(of: "^[↑↓↗↘\\s]+", with: "", options: .regularExpression))" : NexlyIcons.cleanPlainText(raw)
+                let font = UIFont.systemFont(ofSize: badge > 0 || trend ? 12.5 : 13, weight: trend ? .bold : (badge > 0 ? .semibold : .regular))
+                width = max(width, (display as NSString).size(withAttributes: [.font: font]).width + 20 + badge)
             }
-            return min(280, max(44, ceil(width)))
+            return min(280, max(28, ceil(width)))
         }
     }
 
