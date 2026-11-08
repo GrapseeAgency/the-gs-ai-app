@@ -772,13 +772,13 @@ private struct NexlyContextualActionPillsRowView: View {
     let prose: [Block]
     let citations: [Int: String]
     let onShowCode: () -> Void
-    @State private var showShare = false
-    @State private var showExport = false
-    @State private var showDetails = false
+    private enum PresentedSheet: String, Identifiable {
+        case share, export, details
+        var id: String { rawValue }
+    }
+    @State private var presentedSheet: PresentedSheet? = nil
     @State private var sourcesOnly = false
-    @State private var exportDocument: ResponseExportDocument? = nil
-    @State private var exportType: UTType = .data
-    @State private var exportName = "gs-ai-response.md"
+    @State private var preparedExportURL: URL? = nil
     @State private var notice: String? = nil
 
     private var citationText: String {
@@ -799,33 +799,49 @@ private struct NexlyContextualActionPillsRowView: View {
         let body = extractCopyableProseSummary(prose, citationsOnly: false)
         return body + (citations.isEmpty ? "" : "\n\nSources\n" + citations.sorted { $0.key < $1.key }.map { "[\($0.key)] \($0.value)" }.joined(separator: "\n"))
     }
+    private func prepareExport(_ data: Data, filename: String) throws {
+        cleanPreparedExport()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("GSResponse-" + UUID().uuidString, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let file = directory.appendingPathComponent(filename)
+            try data.write(to: file, options: .atomic)
+            preparedExportURL = file
+            presentedSheet = .export
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            throw error
+        }
+    }
+    private func cleanPreparedExport() {
+        if let file = preparedExportURL { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        preparedExportURL = nil
+    }
     private func perform(_ label: String) {
         notice = nil
         switch label {
-        case "Share": showShare = true
+        case "Share": presentedSheet = .share
         case "Copy Citations":
             if citationText.isEmpty { notice = "No citation URLs are available to copy." }
             else { UIPasteboard.general.string = citationText; notice = "Citations copied." }
         case "Download Report":
-            exportDocument = ResponseExportDocument(data: Data(sourceText.utf8))
-            exportType = UTType(filenameExtension: "md") ?? .plainText
-            exportName = "gs-ai-response.md"; showExport = true
+            do { try prepareExport(Data(sourceText.utf8), filename: "gs-ai-response.md") }
+            catch { notice = "Could not prepare export: \(error.localizedDescription)" }
         case "Download Project":
             let sources: [(String?, String)] = prose.compactMap { block in
                 guard case .codeBlock(let language, let source, let open, let id) = block, !open else { return nil }
                 return codeActions?.source(AnyHashable(id)) ?? (language, source)
             }
             do {
-                exportDocument = ResponseExportDocument(data: try responseSourceArchiveIOS(sources))
-                exportType = .zip; exportName = "gs-ai-source-snippets.zip"; showExport = true
+                try prepareExport(try responseSourceArchiveIOS(sources), filename: "gs-ai-source-snippets.zip")
                 notice = "Source snippets only, not a complete runnable project. See README.txt."
             } catch { notice = error.localizedDescription }
         case "Edit Code":
             onShowCode()
             if let codeActions { codeActions.editFirst() }
             else { notice = "No editable code block is available." }
-        case "View All Sources": sourcesOnly = true; showDetails = true
-        case "View Details", "View Full Report": sourcesOnly = false; showDetails = true
+        case "View All Sources": sourcesOnly = true; presentedSheet = .details
+        case "View Details", "View Full Report": sourcesOnly = false; presentedSheet = .details
         default:
             if let widgetAction { widgetAction(label) }
             else { notice = "Follow-up requests are unavailable in this view." }
@@ -904,8 +920,18 @@ private struct NexlyContextualActionPillsRowView: View {
             }
             if let notice { Text(notice).font(.caption).accessibilityIdentifier("response.action.notice") }
             }
-            .sheet(isPresented: $showShare) { ActivitySheet(items: [sourceText]) }
-            .sheet(isPresented: $showDetails) {
+            .sheet(item: $presentedSheet, onDismiss: { cleanPreparedExport() }) { sheet in
+                switch sheet {
+                case .share:
+                    ActivitySheet(items: [sourceText])
+                case .export:
+                    if let file = preparedExportURL {
+                        ResponseDocumentPickerIOS(sourceURL: file) { destination in
+                            notice = destination == nil ? "Export cancelled." : "Export saved."
+                            presentedSheet = nil
+                        }
+                    }
+                case .details:
                 NavigationStack {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 14) {
@@ -928,15 +954,9 @@ private struct NexlyContextualActionPillsRowView: View {
                         .frame(maxWidth: .infinity, alignment: .leading).padding()
                     }
                     .navigationTitle(sourcesOnly ? "All sources" : "Response source and data")
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Close details") { showDetails = false } } }
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Close details") { presentedSheet = nil } } }
                 }
-            }
-            .fileExporter(isPresented: $showExport, document: exportDocument, contentType: exportType, defaultFilename: exportName) { result in
-                switch result {
-                case .success: notice = "Export saved."
-                case .failure(let error): notice = "Could not save export: \(error.localizedDescription)"
                 }
-                exportDocument = nil
             }
         }
     }
