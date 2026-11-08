@@ -138,8 +138,8 @@ fun CodeBlockCard(
     language: String?,
     code: String,
     open: Boolean,
-    onCopyCode: (String) -> Unit,
-    sourceStart: Int? = null
+    sourceStart: Int? = null,
+    onCopyCode: (String) -> Unit
 ) {
     val responseActions = LocalResponseCodeActions.current
     val sourceId = remember(code, language, sourceStart) { sourceStart ?: Any() }
