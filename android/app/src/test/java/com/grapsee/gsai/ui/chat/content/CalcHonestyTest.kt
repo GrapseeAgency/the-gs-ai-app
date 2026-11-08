@@ -5,6 +5,46 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun nativeFencesPreserveEverySourceSeparatorAndBlankLine() {
+        val sources = listOf("", "\n", "\r\n", "\n\nconst value = 7;\n\n", "\r\nconst value = 7;\r\n\r\n", "বাংলা 日本語\r\n\n\r\n", "const key = \"😀\";\r")
+        for (marker in listOf("```", "````", "~~~~~")) {
+            for (separator in listOf("\n", "\r\n")) {
+                for (source in sources) {
+                    val block = parseBlocks(marker + "javascript" + separator + source + separator + marker).single() as Block.CodeBlock
+                    assertEquals("javascript", block.language)
+                    assertEquals("Source must survive $marker with separator ${separator.toByteArray().toList()}", source, block.code)
+                    assertEquals(false, block.open)
+                }
+            }
+        }
+        val source = "first\n```\n~~~\nlast\n\n"
+        val block = parseBlocks("````javascript\n" + source + "\n`````").single() as Block.CodeBlock
+        assertEquals(source, block.code)
+        assertEquals(false, block.open)
+        val html = "<!doctype html>\r\n<html>\r\n\r\n<body>Actual source</body></html>\r\n"
+        assertEquals(html, (parseBlocks("~~~~html\r\n" + html + "\r\n~~~~").single() as Block.HtmlBlock).code)
+        assertEquals("chart", (parseBlocks("~~~chart\n{\"labels\":[\"A\"],\"values\":[7]}\n~~~").single() as Block.WidgetBlock).kind)
+    }
+
+    @Test fun nativeStreamingMatchesFullParseAtEveryFencePrefix() {
+        val prefix = "Intro.\n\nStable paragraph.\n\n"
+        val documents = listOf(
+            prefix + "````javascript\r\n\r\nconst value = 7;\r\n\r\n```\r\nconsole.log(value);\n\n````\nAfter fence.\n\nFinal.",
+            prefix + "~~~~html\r\n<!doctype html>\r\n\r\n<html><body><button>Run</button></body></html>\r\n~~~~\r\nAfter app.",
+            prefix + "> ````javascript\r\n> \r\n> const value = 7;\r\n> \r\n> ````\r\n\r\nAfter quote."
+        )
+        for (document in documents) {
+            var previous = ""
+            var blocks: List<Block> = emptyList()
+            for (end in 1..document.length) {
+                val current = document.substring(0, end)
+                blocks = parseStreamingBlocks(previous, blocks, current)
+                assertEquals("Streaming must not freeze a spanning block at prefix $end", parseBlocks(current), blocks)
+                previous = current
+            }
+        }
+    }
+
     @Test fun pieSwitchPreservesEveryObservationAndRejectsInvalidShares() {
         val source = ChartWidget(labels = listOf("A", "B", "C"), series = listOf(
             ChartSeries("First", listOf(listOf(0f, 10f), listOf(1f, 20f), listOf(2f, 30f))),
