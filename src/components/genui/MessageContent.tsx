@@ -2005,7 +2005,7 @@ export function MessageContent({
           <h3>{detailView === 'sources' ? 'All sources' : 'Response report — original source and data'}</h3>
           {detailView === 'sources' && citations?.length
             ? <CitationsSourceCards citations={citations} theme={theme} />
-            : <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{detailView === 'sources' ? citationText || text.split('\n').filter(line => /https?:\/\//.test(line)).join('\n') || 'No source URLs were supplied.' : sanitizeReplyEmojis(text)}</pre>}
+            : <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{escapeCodeDisplay(detailView === 'sources' ? citationText || text.split('\n').filter(line => /https?:\/\//.test(line)).join('\n') || 'No source URLs were supplied.' : text)}</pre>}
         </section>
       )}
       {contextualPills.length > 0 && (
