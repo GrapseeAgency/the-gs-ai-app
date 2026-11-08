@@ -193,6 +193,18 @@ async function main() {
     assert.equal(mixed.widgets, 0)
     assert.ok(mixed.text.includes('Rate: 10%'))
   })
+  check('timer generation preserves real explicit seconds without price defaults or unit coercion', () => {
+    for (const durationSeconds of [0, -1, 1.5, 604801, null, true, '$25', '25%', '25']) {
+      assert.equal(validateWidget('app', JSON.stringify({type:'timer',durationSeconds})).ok, false)
+    }
+    const configured = validateWidget('app', JSON.stringify({type:'timer',durationSeconds:5}))
+    assert.equal(configured.ok, true); assert.equal(configured.widget.durationSeconds, 5)
+    const setup = validateWidget('app', JSON.stringify({type:'timer',items:[{title:'Not a duration',price:99}]}))
+    assert.equal(setup.ok, true); assert.equal(setup.widget.durationSeconds, undefined)
+    const result = compileWidgets({reply:'```timer\n{"durationSeconds":5}\n```', userPrompt:'Set a five second countdown'})
+    assert.equal(result.widgets, 1)
+    assert.equal(parseStream(result.text).find(segment => segment.kind === 'widget').payload.durationSeconds, 5)
+  })
   check('invalid or overflowing checklist tasks are refused without loss or unrelated widget healing', () => {
     for (const items of [[{label:'Actual'}, {alien:42}], Array.from({length:31}, (_,i)=>({label:`Task ${i}`}))]) {
       const source = JSON.stringify({items})
