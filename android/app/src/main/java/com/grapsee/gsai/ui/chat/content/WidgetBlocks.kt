@@ -871,7 +871,7 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
             }
             "poll" -> widgetJson.decodeFromString<PollWidget>(json).let { w ->
                 val options = w.options.filter { it.label.isNotBlank() }.take(12)
-                if (options.size < 2) null else Widget.Poll(w.copy(options = options))
+                if (options.size < 2 || options.any { it.votes < 0 }) null else Widget.Poll(w.copy(options = options))
             }
             "diff" -> widgetJson.decodeFromString<DiffWidget>(json).let { w ->
                 if (w.unified.isBlank() && w.before.isBlank() && w.after.isBlank()) null
