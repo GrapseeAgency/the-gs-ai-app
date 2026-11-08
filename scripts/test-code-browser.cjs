@@ -33,32 +33,23 @@ async function main() {
     headless: true, env: { ...process.env, LD_LIBRARY_PATH: path.join(libs, 'lib') + ':' + (process.env.LD_LIBRARY_PATH || '') } })
   let closeProbe = () => {}
   try {
-    const requests = []
     const probeHits = { '/code-probe': 0, '/terminal-probe': 0 }
     const server = http.createServer((request, response) => {
-      if (Object.hasOwn(probeHits, request.url)) probeHits[request.url]++
-      response.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' })
-      response.end('{"allowed":true}')
+      if (request.method === 'GET' && Object.hasOwn(probeHits, request.url)) probeHits[request.url]++
+      response.writeHead(200, { 'Content-Type': Object.hasOwn(probeHits, request.url) ? 'application/json' : 'text/html', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' })
+      response.end(Object.hasOwn(probeHits, request.url) ? '{"allowed":true}' : '<!doctype html><div id="app"></div>')
     })
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
     const endpoint = `http://127.0.0.1:${server.address().port}`
     closeProbe = () => { server.closeAllConnections(); server.close() }
 
     const context = browser.defaultBrowserContext()
-    await context.overridePermissions('https://gs.test', ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write'])
+    await context.overridePermissions(endpoint, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write'])
     async function pageWithApp() {
       const page = await browser.newPage()
-      await page.setViewport({ width: 430, height: 920 })
-      await page.setRequestInterception(true)
-      page.on('request', request => {
-        requests.push(request.url())
-        request.respond({ status: 200, contentType: request.url().includes('forbidden.example') ? 'application/json' : 'text/html',
-          headers: { 'Access-Control-Allow-Origin': '*' }, body: request.url().includes('forbidden.example') ? '{"allowed":true}' : '<!doctype html><div id="app"></div>' }).catch(() => {})
-      })
-      await page.goto('https://gs.test/')
-      // Only the fixture page is intercepted. Probe fetches use a REAL HTTP
-      // endpoint: CDP response delivery is not part of the two-second runtime.
-      await page.setRequestInterception(false)
+      // Real same-address-space HTTP avoids Local Network Access/CORS/CDP
+      // artifacts masquerading as CSP. No browser network mocks or bypasses.
+      await page.goto(endpoint + '/')
       return page
     }
     const page = await pageWithApp()
