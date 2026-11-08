@@ -73,6 +73,8 @@ private const val DEFAULT_HEIGHT_DP = 300
 /** Injected into every document: reports real content height, kills navigation. */
 private val BRIDGE_SCRIPT = """
 (function(){
+  if(window.__gsNativeHeightBridge)return;
+  window.__gsNativeHeightBridge=true;
   function h(){
     var b=document.body,d=document.documentElement;
     var attr=b&&b.getAttribute&&b.getAttribute('data-gs-height');
@@ -228,13 +230,12 @@ internal fun HarnessWebView(doc: String, fileBase: Boolean) {
         Text("Interactive preview unavailable: display policy could not be loaded.")
         return
     }
-    var heightPx by remember(doc) { mutableStateOf(0) }
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val heightDp = if (heightPx <= 0) DEFAULT_HEIGHT_DP.dp else with(density) {
-        (heightPx / density.density).toInt().coerceIn(120, 2400).dp
-    }
+    // DOM scrollHeight is CSS pixels (device-independent with our viewport),
+    // NOT physical screen pixels. Dividing by Android density clips the app.
+    var heightCss by remember(doc) { mutableStateOf(0) }
+    val heightDp = if (heightCss <= 0) DEFAULT_HEIGHT_DP.dp else heightCss.coerceIn(120, 2400).dp
     AndroidView(
-        factory = { ctx -> createHarnessWebView(ctx, serveAssets = fileBase) { h -> heightPx = h } },
+        factory = { ctx -> createHarnessWebView(ctx, serveAssets = fileBase) { h -> heightCss = h } },
         update = { view ->
             if (view.tag != protectedDoc) {
                 view.tag = protectedDoc
@@ -252,7 +253,7 @@ internal fun HarnessWebView(doc: String, fileBase: Boolean) {
 internal fun withDOMDisplayPolicyAndroid(doc: String, policy: String): String {
     val head = Regex("<head(?:\\s[^>]*)?>", RegexOption.IGNORE_CASE)
     val match = head.find(doc)
-    val injection = "<script>$policy</script>"
+    val injection = "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><script>$policy</script>"
     return if (match != null) doc.replaceRange(match.range.last + 1, match.range.last + 1, injection)
     else injection + doc
 }
@@ -878,6 +879,14 @@ private fun createHarnessWebView(
         isHorizontalScrollBarEnabled = false
         addJavascriptInterface(HeightBridge(onHeight), "GsHost")
         webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView, url: String?) {
+                super.onPageFinished(view, url)
+                // Trusted presentation code, not source rewriting. Direct
+                // Worker/terminal documents need this too, not just HTML built
+                // by buildDocument. The bridge is idempotent and observes growth.
+                view.evaluateJavascript(BRIDGE_SCRIPT, null)
+            }
+
             override fun shouldInterceptRequest(
                 view: WebView,
                 request: WebResourceRequest
