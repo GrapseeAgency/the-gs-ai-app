@@ -266,8 +266,8 @@ function ChartControls({ payload }: { payload: ChartPayload }) {
           >
             <div style={{ fontSize: 10.5, color: theme.text3, fontWeight: 600 }}>Sum</div>
             <div style={{ fontSize: 14, fontWeight: 800, color: theme.text, marginTop: 2 }}>{summary.total}</div>
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: !summary.growthDefined ? theme.text3 : summary.growthPos ? '#129A5A' : '#E04F5F', marginTop: 2 }}>
-              {summary.growthDefined ? (summary.growthPos ? '↑' : '↓') : ''} {summary.growthPct}
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: theme.text3, marginTop: 2 }}>
+              {summary.pointCount} points
             </div>
           </div>
           <div
@@ -293,7 +293,7 @@ function ChartControls({ payload }: { payload: ChartPayload }) {
               border: `1px solid ${theme.border}`,
             }}
           >
-            <div style={{ fontSize: 10.5, color: theme.text3, fontWeight: 600 }}>Trend</div>
+            <div style={{ fontSize: 10.5, color: theme.text3, fontWeight: 600 }}>{activeType === 'pie' || activeType === 'donut' ? 'Category data' : 'First–last change'}</div>
             <div
               style={{
                 fontSize: 14,
