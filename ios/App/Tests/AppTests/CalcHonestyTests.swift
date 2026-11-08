@@ -5,6 +5,24 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testOrdinaryMarkdownSourcesUseOneHeadingAndOnlyActualCompleteSourceDestinations() throws {
+        for marker in ["1.", "-"] {
+            let second = marker == "1." ? "2." : "-"
+            let parsed = parseBlocks("## Key Sources\n\n\(marker) [IEA](https://www.iea.org/) - Supplied report.\n\(second) [IRENA](https://www.irena.org/) - Supplied publication.")
+            let card = try XCTUnwrap(sourceCardForHeadingIOS(parsed[0], following: parsed[1]))
+            XCTAssertEqual(card.title, "Key Sources")
+            XCTAssertEqual(card.citations.map { $0.url }, ["https://www.iea.org/", "https://www.irena.org/"])
+        }
+        for name in ["IEA", "IRENA", "Nature", "React", "Tailwind", "MDN", "Python", "Nexly", "arXiv", "IEEE"] {
+            let parsed = parseBlocks("## Sources\n\n1. \(name): supplied name only")
+            XCTAssertNil(sourceCardForHeadingIOS(parsed[0], following: parsed[1]))
+        }
+        let mixed = parseBlocks("## Sources\n\n1. [Actual source](https://example.org/report)\n2. Missing destination must remain visible.")
+        XCTAssertNil(sourceCardForHeadingIOS(mixed[0], following: mixed[1]))
+        let unrelated = parseBlocks("## Priorities\n\n1. [Actual link](https://example.org/)")
+        XCTAssertNil(sourceCardForHeadingIOS(unrelated[0], following: unrelated[1]))
+    }
+
     func testSharedControlsRequireActualOptionsAndFiniteSourceStarts() throws {
         for items in ["[]", "[\"Only choice\"]", "[\"Actual\",\"\"]", "[\"Actual\",{}]"] {
             XCTAssertFalse(isValidWidget(kind: "collab", json: "{\"surface\":\"vote\",\"items\":\(items)}"))
