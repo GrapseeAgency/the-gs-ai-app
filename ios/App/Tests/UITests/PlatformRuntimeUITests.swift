@@ -98,6 +98,8 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["2/2 completed"].exists)
         app.buttons["Edit task: Original task"].tap(); edit("Edited source")
         XCTAssertTrue(app.staticTexts["Supplied source detail"].exists)
+        XCTAssertTrue(app.staticTexts["Supplied nested detail"].exists)
+        XCTAssertFalse(app.buttons["Edit task: Supplied nested detail"].exists)
         XCTAssertTrue(app.staticTexts["2/2 completed"].exists)
         app.buttons["Delete task: Keep completed"].tap()
         XCTAssertTrue(app.staticTexts["1/1 completed"].exists)
