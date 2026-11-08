@@ -1542,16 +1542,16 @@ private fun ChartWidgetView(w: ChartWidget) {
                 Triple("area", "chart-area", "Area"),
                 Triple(if (w.type == "donut") "donut" else "pie", "chart-pie", "Pie")
             )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // Keep every chart type visible on phone-width cards; the
+            // genuine source-range control must not squeeze Pie off-screen.
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalAlignment = Alignment.End
             ) {
                 Row(
                     modifier = Modifier
-                        .weight(1f)
+                        .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
                         .clip(RoundedCornerShape(10.dp))
                         .background(Color(0xFFEDE6FF))
