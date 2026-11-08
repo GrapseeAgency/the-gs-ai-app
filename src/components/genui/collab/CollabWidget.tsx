@@ -117,15 +117,16 @@ function CollabControls({ payload }: { payload: CollabPayload }) {
   const { ramp } = useWidgetIdentity()
   const me = useMemo(() => makeMe((payload.room ?? '').length + 1), [payload.room])
   const room = payload.room ?? 'lobby'
-  const initial = useMemo(() => payload.surface === 'todo'
+  const initialWire = JSON.stringify(payload.surface === 'todo'
     ? { todos: (payload.items ?? []).map(text => ({ text, done: false })) }
-    : payload.surface === 'counter' || !payload.surface ? { n: payload.start ?? 0 } : {}, [payload])
+    : payload.surface === 'counter' || !payload.surface ? { n: payload.start ?? 0 } : {})
+  const initial = useMemo<Record<string, unknown>>(() => JSON.parse(initialWire), [initialWire])
   const shared = useCollabRoom(room, me, initial)
   const requestPublish = usePublish(room)
   const [publishError, setPublishError] = useState<string | null>(null)
   const publish = useCallback(async (body: Record<string, unknown>) => {
     const response = await requestPublish({ ...body, initial })
-    setPublishError(response ? null : 'Not saved: the shared server did not confirm this change. Your current input is retained.')
+    setPublishError(response ? null : 'Not confirmed: the shared server did not acknowledge this change; it may have been received. Your current input is retained.')
     return response
   }, [requestPublish, initial])
   const surface = payload.surface ?? 'counter'
@@ -140,7 +141,7 @@ function CollabControls({ payload }: { payload: CollabPayload }) {
               <span key={p.id} title={p.name} style={{ width: 10, height: 10, borderRadius: 999, background: p.color, display: 'inline-block' }} />
             ))}
             {shared.presence.length > 4 ? `+${shared.presence.length - 4}` : ''}
-            {shared.presence.length ? ` · ${shared.presence.length} live` : ' · you'}
+            {shared.status === 'live' && shared.presence.length ? ` · ${shared.presence.length} live` : ' · no confirmed live roster'}
           </span>
         }
       />
