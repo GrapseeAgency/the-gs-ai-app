@@ -3308,7 +3308,7 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
     val columns = maxOf(headers.size, block.aligns.size, 1)
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    val bodyStyle = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold)
+    val bodyStyle = MaterialTheme.typography.bodySmall
     val headerStyle = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
     // Equal-width rank/data columns left only ~40dp for a language after its
     // glass badge, splitting JavaScript while clipping the actual trend. Size
@@ -3317,14 +3317,23 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
         (0 until columns).map { column ->
             val header = headers.getOrNull(column)?.text.orEmpty()
             val nameColumn = column == 0 || (column == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
-            val headerWidth = with(density) { textMeasurer.measure(header, headerStyle, softWrap = false).size.width.toDp() } + 24.dp
+            val headerWidth = with(density) { textMeasurer.measure(header, headerStyle, softWrap = false).size.width.toDp() } + 20.dp
             val dataWidth = allRows.maxOfOrNull { row ->
                 val raw = row.getOrNull(column)?.text.orEmpty().trim()
                 val badgeSpace = if (nameColumn && markdownEntityBadgeForCell(raw) != null) 26.dp else 0.dp
-                val trendSpace = if (raw.endsWith("%") && raw.firstOrNull() in listOf('+', '-', '↑', '↓', '↗', '↘')) 16.dp else 0.dp
-                with(density) { textMeasurer.measure(raw, bodyStyle, softWrap = false).size.width.toDp() } + 20.dp + badgeSpace + trendSpace
+                val trend = raw.endsWith("%") && raw.firstOrNull() in listOf('+', '-', '↑', '↓', '↗', '↘')
+                val display = if (trend) {
+                    val stripped = raw.replace(Regex("^[↑↓↗↘\\s]+"), "")
+                    "${if (raw.contains('-') || raw.startsWith("↓") || raw.startsWith("↘")) "↓" else "↑"} $stripped"
+                } else NexlyIcons.cleanPlainText(raw)
+                val style = bodyStyle.copy(fontWeight = when {
+                    trend -> FontWeight.Bold
+                    badgeSpace > 0.dp -> FontWeight.SemiBold
+                    else -> FontWeight.Normal
+                })
+                with(density) { textMeasurer.measure(display, style, softWrap = false).size.width.toDp() } + 20.dp + badgeSpace
             } ?: 0.dp
-            maxOf(44.dp, headerWidth, dataWidth).coerceAtMost(280.dp)
+            maxOf(28.dp, headerWidth, dataWidth).coerceAtMost(280.dp)
         }
     }
 
