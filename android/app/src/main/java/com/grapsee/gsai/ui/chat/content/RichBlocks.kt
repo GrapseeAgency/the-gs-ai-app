@@ -3257,6 +3257,7 @@ private fun ListItemRow(
 
 @Composable
 private fun NestedChildView(block: Block, selectable: Boolean, citationUrls: Map<Int, String>) {
+    CompositionLocalProvider(LocalSectionListMode provides SectionListMode.DEFAULT) {
     when (block) {
         is Block.Paragraph -> ParagraphBlock(block, showCaret = false, selectable = selectable, citationUrls = citationUrls)
         is Block.BulletList -> BulletListBlock(block, selectable, citationUrls)
@@ -3264,6 +3265,7 @@ private fun NestedChildView(block: Block, selectable: Boolean, citationUrls: Map
         is Block.BlockQuote -> BlockQuoteView(block, selectable, citationUrls)
         else -> BlockView(block, isLast = false, isStreaming = false, onCopyCode = {}, citationUrls = citationUrls)
     }
+}
 }
 
 @Composable
