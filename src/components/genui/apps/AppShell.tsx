@@ -5,7 +5,7 @@ import { TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 
 /** Shared app chrome: title + optional submit row. */
-export function AppShell({ title, right, children, submitLabel }: { title?: string; right?: string; children: ReactNode; submitLabel?: string }) {
+export function AppShell({ title, right, children, submitLabel, onSubmit }: { title?: string; right?: string; children: ReactNode; submitLabel?: string; onSubmit?: () => void }) {
   const { accent, theme } = useWidgetIdentity()
   return (
     <div>
@@ -20,6 +20,9 @@ export function AppShell({ title, right, children, submitLabel }: { title?: stri
         <div style={{ marginTop: 14 }}>
           <button
             type="button"
+            onClick={onSubmit}
+            disabled={!onSubmit}
+            title={onSubmit ? undefined : "No completion action is connected"}
             style={{
               width: '100%',
               padding: '11px 0',
