@@ -317,6 +317,59 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("Last 4 pts ▾").assertExists()
     }
 
+    @Test fun generatedTerminalUsesRealFilesWorkerAndUnsupportedRefusal() {
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                com.grapsee.gsai.ui.chat.content.WidgetBlockView(
+                    com.grapsee.gsai.ui.chat.content.Block.WidgetBlock("terminal",
+                        """{"welcome":"Provided \ud83d\ude00 $& $$ __GS_WORKER_CONTRACT_LITERAL__","commands":[{"name":"deploy","description":"Help only","output":"deployed"}]}""", false, 0), false)
+            }
+        }
+        fun findWeb(view: View): android.webkit.WebView? {
+            if (view is android.webkit.WebView) return view
+            if (view is android.view.ViewGroup) for (i in 0 until view.childCount) findWeb(view.getChildAt(i))?.let { return it }
+            return null
+        }
+        var web: android.webkit.WebView? = null
+        awaitObserved("production terminal creates its real sandbox") {
+            instrumentation.runOnMainSync { web = findWeb(compose.activity.window.decorView) }; web != null
+        }
+        fun evaluate(script: String): String? {
+            val done = CountDownLatch(1); var result: String? = null
+            instrumentation.runOnMainSync { web!!.evaluateJavascript(script) { result = it; done.countDown() } }
+            assertTrue(done.await(5, TimeUnit.SECONDS)); return result
+        }
+        awaitObserved("shared terminal asset loads and preserves token-looking data") {
+            evaluate("!!document.getElementById('command') && document.getElementById('log').textContent.includes('__GS_WORKER_CONTRACT_LITERAL__')") == "true"
+        }
+        val device = UiDevice.getInstance(instrumentation)
+        fun submit(command: String) {
+            assertEquals("true", evaluate("document.getElementById('command').value=" + org.json.JSONObject.quote(command) + ";true"))
+            val encoded = evaluate("(function(){var r=document.querySelector('button[type=submit]').getBoundingClientRect();return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,vw:innerWidth});})()")
+            val bounds = org.json.JSONObject(org.json.JSONTokener(encoded!!).nextValue() as String)
+            val position = IntArray(2); var scale = 1.0
+            instrumentation.runOnMainSync { web!!.getLocationOnScreen(position); scale = web!!.width / bounds.getDouble("vw") }
+            assertTrue(device.click((position[0] + bounds.getDouble("x") * scale).toInt(), (position[1] + bounds.getDouble("y") * scale).toInt()))
+            awaitObserved("actual OS Run tap submits terminal command") { evaluate("document.getElementById('command').value === ''") == "true" }
+        }
+        submit("mkdir project"); submit("cd project"); submit("touch actual.txt"); submit("ls")
+        assertEquals("true", evaluate("document.getElementById('log').textContent.endsWith('actual.txt')"))
+        submit("rm actual.txt"); submit("ls")
+        assertEquals("true", evaluate("document.getElementById('log').textContent.endsWith('(empty)')"))
+        submit("js [1,2,3].map(n=>n*2)")
+        assertTrue("Actual sandboxed iframe Worker must compute array output", device.wait(Until.hasObject(By.textContains("[2,4,6]")), 15_000L))
+        submit("js while(true) {}")
+        assertTrue("Actual infinite Worker must stop", device.wait(Until.hasObject(By.textContains("exceeded 2 seconds")), 15_000L))
+        submit("python print(7)")
+        assertEquals("true", evaluate("document.getElementById('log').textContent.includes('python: not executed') && document.getElementById('execution').children.length === 0"))
+        submit("deploy")
+        assertEquals("true", evaluate("document.getElementById('log').textContent.endsWith('deploy: not executed — no OS shell or command runtime is connected.')"))
+        assertEquals("false", evaluate("document.body.innerText.includes(String.fromCodePoint(0x1f600))"))
+        assertEquals("true", evaluate("document.getElementById('reset').click();document.getElementById('path').textContent === '/home/guest $'"))
+        submit("ls")
+        assertEquals("true", evaluate("document.getElementById('log').textContent.endsWith('README.md')"))
+    }
+
     @Test fun generatedHtmlRunsRealButtonLogicAndSuppressesDynamicEmoji() {
         val source = """<button id="run" title="Increase &#x1F600;">Increase &#x1F600;</button><output id="result">0</output><svg data-custom-glass="true"><path d="M0 0L8 8"/></svg><script>window.marker=String.fromCodePoint(0x1F600);window.count=0;document.getElementById('run').onclick=function(){window.count++;document.getElementById('result').textContent=window.count+window.marker;};</script>"""
         compose.activity.setContentForPlatformTest {
