@@ -494,6 +494,11 @@ jobs:
           DIR=ios/build/nexly-renders
           mkdir -p "$DIR"
           if [ -d "$SRC" ]; then cp "$SRC"/nexly-chat-ios-*.png "$DIR/" 2>/dev/null || true; fi
+          if [ -d "$SRC" ]; then cp "$SRC"/genui-reference-ios-*.png "$DIR/" 2>/dev/null || true; fi
+          for section in 01-dashboard 02-structured-launch 03-react-code 04-citations 05-data-grid 06-interactive-charts; do
+            test -s "$DIR/genui-reference-ios-$section-393x852.png" \
+              || { echo "::error::Missing actual iOS reference frame: $section"; exit 1; }
+          done
           for w in 393x852 411x914 360x780; do
             test -s "$DIR/nexly-chat-ios-$w.png" \
               || { echo "::error::nexly-chat-ios-$w.png missing — the chat render harness did not produce it"; exit 1; }
