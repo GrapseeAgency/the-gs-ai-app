@@ -1,6 +1,15 @@
 import XCTest
 
 final class PlatformRuntimeUITests: XCTestCase {
+    private func printPresentationDiagnostics(_ app: XCUIApplication, label: String) {
+        let hierarchy = app.debugDescription.replacingOccurrences(of: "\n", with: " | ")
+        for start in stride(from: 0, to: hierarchy.count, by: 1400) {
+            print("GS_PRESENTATION_\(label)_\(start): " + String(hierarchy.dropFirst(start).prefix(1400)))
+        }
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-actual-\(label.lowercased())-failure"; capture.lifetime = .keepAlways; add(capture)
+    }
+
     func testGeneratedChecklistEditsDeletesAddsAndKeepsActualTaskCompletion() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
@@ -71,6 +80,7 @@ final class PlatformRuntimeUITests: XCTestCase {
         app.buttons["Download Project"].tap()
         let pickerCancel = app.buttons["Cancel"].firstMatch
         let shown = pickerCancel.waitForExistence(timeout: 15)
+        if !shown { printPresentationDiagnostics(app, label: "EXPORT") }
         XCTAssertTrue(shown, "Export must present the real system document picker; notice=\(app.staticTexts["response.action.notice"].firstMatch.label); hierarchy=\(app.debugDescription.suffix(5000))")
         guard shown else { return }
         XCTAssertGreaterThan(app.navigationBars.count, 0)
@@ -91,7 +101,9 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Item 31")).firstMatch.waitForExistence(timeout: 10), "Report must include every supplied row, not just the visible page")
         app.buttons["Close details"].tap()
         app.buttons["Share"].tap()
-        XCTAssertTrue(app.buttons["Copy"].firstMatch.waitForExistence(timeout: 15), "Share must present the real activity sheet, not copy silently")
+        let shareShown = app.buttons["Copy"].firstMatch.waitForExistence(timeout: 15)
+        if !shareShown { printPresentationDiagnostics(app, label: "SHARE") }
+        XCTAssertTrue(shareShown, "Share must present the real activity sheet, not copy silently")
         let capture = XCTAttachment(screenshot: app.screenshot())
         capture.name = "genui-contextual-real-system-share-sheet"; capture.lifetime = .keepAlways; add(capture)
     }
