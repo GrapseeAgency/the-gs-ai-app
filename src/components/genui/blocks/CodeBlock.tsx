@@ -21,7 +21,6 @@ const RUNNABLE_JS = new Set(['js', 'javascript', 'ts', 'typescript', 'jsx', 'tsx
 const RUNNABLE_HTML = new Set(['html', 'htm', 'svg'])
 const RUNNABLE_PY = new Set(['py', 'python', 'python3'])
 const RUNNABLE_SQL = new Set(['sql', 'sqlite', 'postgres', 'postgresql', 'mysql'])
-const RUNNABLE_SH = new Set(['sh', 'bash', 'zsh', 'shell'])
 const ERROR_LANGS = new Set(['error', 'stderr', 'traceback', 'stacktrace', 'exception'])
 
 function previewNonJsExecution(lang: string, source: string): { output: string; error?: string } {
@@ -108,13 +107,10 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
   )
   const [htmlPreview, setHtmlPreview] = useState<string | null>(null)
 
-  const canRun =
-    RUNNABLE_JS.has(lang) ||
-    RUNNABLE_HTML.has(lang) ||
-    RUNNABLE_PY.has(lang) ||
-    RUNNABLE_SQL.has(lang) ||
-    RUNNABLE_SH.has(lang) ||
-    lang === 'json'
+  const canRun = ['js', 'javascript', 'node'].includes(lang) || RUNNABLE_HTML.has(lang) || lang === 'json'
+  const unsupportedNotice = ['ts', 'typescript', 'jsx', 'tsx', 'react'].includes(lang)
+    ? 'Source only: no TypeScript/React compiler is available here. No component has been executed. Use self-contained HTML/JavaScript for a live preview.'
+    : previewNonJsExecution(lang, source).error
 
   const allLines = useMemo(() => source.split('\n'), [source])
   const isCollapsible = allLines.length > 14
@@ -389,6 +385,12 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
               {allLines.length} {allLines.length === 1 ? 'line' : 'lines'}
             </span>
           </div>
+        </div>
+      )}
+
+      {!canRun && !ERROR_LANGS.has(lang) && (
+        <div style={{ padding: '10px 12px', color: '#D8D2EB', fontSize: 12, lineHeight: 1.5 }}>
+          {unsupportedNotice}
         </div>
       )}
 
