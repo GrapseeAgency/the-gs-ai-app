@@ -1,3 +1,5 @@
+import { escapeCodeDisplay } from './display-source'
+
 /** Isolated, bounded execution: opaque-origin iframe + CSP + disposable Worker.
  * The app never evaluates model code in its own window. Native timers are not
  * replaced; async work must be awaited before the worker completes. */
@@ -19,11 +21,12 @@ export function javascriptSandboxDocument(source: string): string {
 <style>body{font:13px system-ui;margin:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere}button{cursor:pointer}</style></head>
 <body><button id="run">Run again</button> <span>JavaScript worker · 2 second limit · no network</span><pre id="out" role="log"></pre>
 <script>
+${escapeCodeDisplay.toString()}
 let worker, timer;
 function run(){
   if(worker)worker.terminate();clearTimeout(timer);
   const out=document.getElementById('out');out.textContent='';let count=0;
-  function line(text){if(count++<100)out.textContent+=text+'\\n';}
+  function line(text){if(count++<100)out.textContent+=escapeCodeDisplay(String(text))+'\\n';}
   try{
     const url=URL.createObjectURL(new Blob([${literal(worker)}],{type:'text/javascript'}));
     worker=new Worker(url);URL.revokeObjectURL(url);
