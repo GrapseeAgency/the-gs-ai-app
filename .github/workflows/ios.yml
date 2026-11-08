@@ -79,7 +79,7 @@ concurrency:
   # exact reference React application's filters and persisted records, beyond
   # the standalone preview contract. Keep previous real evidence intact while
   # this generation runs; only pending runs within this generation are replaced.
-  group: ios-response-runtime-v5-${{ github.ref }}
+  group: ios-response-runtime-v6-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -299,6 +299,20 @@ jobs:
             exit 65
           fi
 
+      - name: Early actual inline React keyboard and storage acceptance
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -parallel-testing-enabled NO \
+            -project "$PROJECT_FILE" \
+            -scheme "$SCHEME" \
+            -destination "$IOS_DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch \
+            -resultBundlePath ios/build/GSApp-react-keyboard.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee ios/build/xcodebuild-genui-test.log
+
       - name: Focused generated-widget runtime test (before the full suite)
         run: |
           set -o pipefail
@@ -508,7 +522,7 @@ jobs:
                   if archive_log.exists():
                       print('::notice::Native archive diagnostic: ' + archive_log.read_text(errors='replace')[-8000:].replace('%', '%25').replace('\n', '%0A'))
           PYTEST
-          for RESULT in ios/build/GSApp-genui.xcresult ios/build/GSApp-tests.xcresult; do
+          for RESULT in ios/build/GSApp-react-keyboard.xcresult ios/build/GSApp-genui.xcresult ios/build/GSApp-tests.xcresult; do
             [ -d "$RESULT" ] || continue
             # test-results summary emits JSON by default on current Xcode.
             xcrun xcresulttool get test-results summary --path "$RESULT" > "$RESULT-summary.json" || true
@@ -1045,6 +1059,7 @@ jobs:
           path: |
             ios/build/GSApp-tests.xcresult
             ios/build/GSApp-genui.xcresult
+            ios/build/GSApp-react-keyboard.xcresult
           if-no-files-found: ignore
 
   response-section-review:
