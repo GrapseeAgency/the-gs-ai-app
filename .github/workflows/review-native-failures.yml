@@ -1,15 +1,17 @@
 name: Review stored native failure evidence
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/review-native-failures.yml'
-      - 'scripts/publish_native_ui_pixels.py'
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: 'Existing iOS run containing genuine fixture failure logs'
+        required: true
+        type: number
 permissions:
   contents: read
   actions: read
 jobs:
   review:
-    name: Actual stored ${{ matrix.label }} from iOS 42504322347
+    name: Actual stored ${{ matrix.label }} from iOS ${{ inputs.source_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
@@ -26,8 +28,8 @@ jobs:
       # merely because dense pixels exceeded the earlier annotation budget.
       - uses: actions/download-artifact@v4
         with:
-          name: ios-build-logs-42504322347
-          run-id: 42504322347
+          name: ios-build-logs-${{ inputs.source_run }}
+          run-id: ${{ inputs.source_run }}
           github-token: ${{ github.token }}
           path: stored-native-fixture
       - name: Locate actual stored XCTest output
