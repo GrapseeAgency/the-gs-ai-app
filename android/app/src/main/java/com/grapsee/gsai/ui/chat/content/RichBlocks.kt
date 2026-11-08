@@ -559,6 +559,20 @@ private fun StructuredBlockSequenceContent(
             else -> false
         }
 
+        // The actual citation capture showed the same source heading twice:
+        // preserve its supplied title in the card rather than stacking headers.
+        if (!skipForTab && block is Block.Heading && nextBlock is Block.CitationsBlock) {
+            val title = NexlyIcons.cleanPlainText(plainTextOfSpans(block.spans)).trim()
+            if (classifySectionListMode(title) == SectionListMode.SOURCES) {
+                key("sources:${block.sourceStart}") { CitationsBlockView(nextBlock, title) }
+                if (statusCard != null && (i == statusHostIndex || i + 1 == statusHostIndex)) {
+                    onStatusPlaced(); Spacer(Modifier.height(2.dp)); statusCard()
+                }
+                i += 2
+                continue
+            }
+        }
+
         // Coalesce Heading("Quick Calculator" | "Calculator") + Paragraph/BulletList into interactive NexlyQuickCalculatorCard (Screenshot 1)
         if (!skipForTab && block is Block.Heading) {
             val hTitle = NexlyIcons.cleanPlainText(plainTextOfSpans(block.spans))
@@ -3943,7 +3957,7 @@ internal fun isAcademicSourceDomain(domain: String, raw: String): Boolean {
 }
 
 @Composable
-private fun CitationsBlockView(block: Block.CitationsBlock) {
+private fun CitationsBlockView(block: Block.CitationsBlock, title: String = "Key Sources") {
     val context = androidx.compose.ui.platform.LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -3959,7 +3973,7 @@ private fun CitationsBlockView(block: Block.CitationsBlock) {
                     glyphSize = 14.dp
                 )
                 Text(
-                    text = "Key Sources",
+                    text = title,
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
