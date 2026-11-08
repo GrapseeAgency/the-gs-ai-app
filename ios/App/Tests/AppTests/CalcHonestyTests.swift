@@ -7,7 +7,7 @@ final class CalcHonestyTests: XCTestCase {
     func testCodeDisplayAndEditorPreserveActualSource() throws {
         let source = #"const data = {"😀":7,"🌅":9}; console.log(data["😀"]+data["🌅"], "😀".length);"#
         let blocks = parseBlocks("```javascript\n\(source)\n```")
-        guard case .codeBlock(_, let parsed, _, _) = blocks.first else { return XCTFail("Source must parse as code") }
+        guard case .codeBlock(_, let parsed, _, _)? = blocks.first else { return XCTFail("Source must parse as code") }
         XCTAssertEqual(parsed, source)
         for value in [source, #"console.log("\ud83d\ude00")"#, "বাংলা 日本語", "🏳️‍🌈"] {
             let encoded = CodeDisplayIOS.encodeEditor(value)
