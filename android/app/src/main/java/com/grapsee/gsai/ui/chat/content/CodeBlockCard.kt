@@ -24,6 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.key
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -142,34 +143,21 @@ fun CodeBlockCard(
 ) {
     var copied by remember { mutableStateOf(false) }
     var sandboxMode by remember(code, language) { mutableStateOf(false) }
-    var editing by remember(code) { mutableStateOf(false) }
-    var editorDraft by remember(code) { mutableStateOf("") }
-    var editorEncoded by remember(code) { mutableStateOf(false) }
-    var editorError by remember(code) { mutableStateOf<String?>(null) }
-    var currentCode by remember(code) { mutableStateOf(code) }
-    var expanded by remember(code) { mutableStateOf(false) }
-    var runResult by remember(code) { mutableStateOf<CodeRunResult?>(null) }
-    var runCount by remember(code) { mutableStateOf(0) }
+    var sandboxSource by remember(code, language) { mutableStateOf("") }
+    var editing by remember(code, language) { mutableStateOf(false) }
+    var editorDraft by remember(code, language) { mutableStateOf("") }
+    var editorEncoded by remember(code, language) { mutableStateOf(false) }
+    var editorError by remember(code, language) { mutableStateOf<String?>(null) }
+    var currentCode by remember(code, language) { mutableStateOf(code) }
+    var expanded by remember(code, language) { mutableStateOf(false) }
+    var runResult by remember(code, language) { mutableStateOf<CodeRunResult?>(null) }
+    var runCount by remember(code, language) { mutableStateOf(0) }
 
     LaunchedEffect(copied) {
         if (copied) {
             delay(1500)
             copied = false
         }
-    }
-    if (sandboxMode && !open && currentCode.isNotBlank()) {
-        Column {
-            CodeSandboxView(code = currentCode, language = language ?: "javascript")
-            Text(
-                text = "Close full sandbox",
-                style = MaterialTheme.typography.labelSmall,
-                color = GsTheme.colors.codeComment,
-                modifier = Modifier
-                    .padding(top = 4.dp, start = 4.dp)
-                    .clickable { sandboxMode = false }
-            )
-        }
-        return
     }
     val colors = GsTheme.colors
     val wrapCode = LocalNexlyCodeWrap.current
@@ -363,6 +351,9 @@ fun CodeBlockCard(
                                 if (editing && editorError != null) {
                                     runResult = CodeRunResult("", "Not executed: correct the JSON-encoded source draft first.")
                                 } else if (lowerLang in setOf("html", "htm", "svg", "js", "javascript")) {
+                                    runCount += 1
+                                    runResult = null
+                                    sandboxSource = currentCode
                                     sandboxMode = true
                                 } else {
                                     runCount += 1
@@ -504,6 +495,10 @@ fun CodeBlockCard(
                         )
                     }
                 }
+            }
+
+            if (sandboxMode && !open) {
+                key(runCount) { CodeSandboxView(code = sandboxSource, language = language ?: "javascript") }
             }
 
             // Visual Data Plot Preview (Screenshot 1: Revenue Trend mini bar chart from Python/JS code)
