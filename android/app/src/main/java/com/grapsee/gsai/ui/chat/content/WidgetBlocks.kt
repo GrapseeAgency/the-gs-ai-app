@@ -1834,7 +1834,18 @@ private fun ChartWidgetView(w: ChartWidget) {
     }
 }
 
-private data class LineGeom(val minX: Float, val minY: Float, val spanX: Float, val spanY: Float)
+/** Actual signed source bounds, shared by Line/Area/Bar and iOS parity.
+ * Double intermediates keep opposite finite Float extremes representable. */
+internal data class ChartValueDomainAndroid(val lower: Double, val upper: Double) {
+    fun heightFraction(value: Float): Float = ((upper - value.toDouble()) / (upper - lower)).toFloat()
+    fun axisValue(fractionFromTop: Float): Float = (upper - (upper - lower) * fractionFromTop.toDouble()).toFloat()
+}
+internal fun chartValueDomainAndroid(values: List<Float>): ChartValueDomainAndroid {
+    val lower = minOf(0.0, values.minOrNull()?.toDouble() ?: 0.0)
+    val upper = maxOf(0.0, values.maxOrNull()?.toDouble() ?: 0.0)
+    return ChartValueDomainAndroid(lower, if (upper == lower) lower + 1.0 else upper)
+}
+private data class LineGeom(val minX: Float, val spanX: Float, val domain: ChartValueDomainAndroid)
 
 /** Thin axis labels without assigning the first eight labels to all points. */
 internal fun chartAxisLabelIndicesAndroid(count: Int, limit: Int = 8): List<Int> = when {
@@ -1859,23 +1870,15 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
         val ys = flat.map { it.getOrElse(1) { 0f } }
         val minX = xs.minOrNull() ?: 0f
         val maxX = xs.maxOrNull() ?: 1f
-        val minY = minOf(0f, ys.minOrNull() ?: 0f)
-        // Snap the ceiling to a round step, otherwise the four gridlines are
-        // labelled 0 / 61 / 122 / 183 and the chart reads as a debug overlay.
-        val rawMaxY = ys.maxOrNull() ?: 1f
-        val step = niceStep(((rawMaxY - minY) / 3f).takeIf { it > 0f } ?: 1f)
-        val maxY = minY + step * 3f
         LineGeom(
             minX = minX,
-            minY = minY,
             spanX = (maxX - minX).takeIf { it > 0f } ?: 1f,
-            spanY = (maxY - minY).takeIf { it > 0f } ?: 1f
+            domain = chartValueDomainAndroid(ys)
         )
     }
     val minX = geom.minX
-    val minY = geom.minY
     val spanX = geom.spanX
-    val spanY = geom.spanY
+    val domain = geom.domain
     val measurer = rememberTextMeasurer()
     val axisStyle = TextStyle(fontSize = 10.5.sp, color = GsTheme.colors.textTertiary)
     val probe = rememberChartProbe()
@@ -1997,12 +2000,12 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
         val padL = 34.dp.toPx(); val padT = 8.dp.toPx()
         val cw = (size.width - padL).coerceAtLeast(1f)
         val ch = (size.height - padT).coerceAtLeast(1f)
-        val base = padT + ch
+        val base = padT + ch * domain.heightFraction(0f)
         val selected = probe.datum
         repeat(4) { g ->
             val y = padT + ch * g / 3f
             drawLine(gridColor, Offset(padL, y), Offset(size.width, y), strokeWidth = 1f)
-            val laid = measurer.measure(axisLabel(minY + spanY * (1f - g / 3f), w.unit), axisStyle)
+            val laid = measurer.measure(axisLabel(domain.axisValue(g / 3f), w.unit), axisStyle)
             drawText(
                 laid,
                 topLeft = Offset(
@@ -2016,7 +2019,7 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
             val pts = s.data.map {
                 Offset(
                     padL + cw * ((it.getOrElse(0) { 0f } - minX) / spanX),
-                    padT + ch * (1f - ((it.getOrElse(1) { 0f } - minY) / spanY))
+                    padT + ch * domain.heightFraction(it.getOrElse(1) { 0f })
                 )
             }
             if (pts.size < 2) return@forEachIndexed
@@ -2100,27 +2103,6 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
 
 }
 
-/**
- * The axis ceiling: a "nice" number, not the raw maximum.
- *
- * Gridlines at 0/33/66/100% of 187 read as a debug overlay; gridlines at
- * 0/50/100/150 read as a chart. The step is rounded to 1/2/5×10^n so the labels
- * are always short, and the top line is step×3 so all four lines are round.
- */
-private fun niceStep(raw: Float): Float {
-    if (raw <= 0f) return 1f
-    val exp = kotlin.math.floor(kotlin.math.log10(raw.toDouble())).toInt()
-    val base = Math.pow(10.0, exp.toDouble()).toFloat()
-    val n = raw / base
-    val mult = when {
-        n <= 1f -> 1f
-        n <= 2f -> 2f
-        n <= 5f -> 5f
-        else -> 10f
-    }
-    return mult * base
-}
-
 /** 1234 -> "1.2K", 0.5 -> "0.5", 100 -> "100" (+ the widget's unit). */
 internal fun axisLabel(value: Float, unit: String): String {
     if (!value.isFinite()) return "Undefined"
@@ -2154,10 +2136,9 @@ private fun BarChart(w: ChartWidget) {
         if (w.labels.size >= first.size) w.labels
         else first.map { it.getOrElse(0) { 0f }.toInt().toString() }
     }
-    val maxV = remember(w.series) {
-        w.series.flatMap { s -> s.data.map { it.getOrElse(1) { 0f } } }.maxOrNull()?.takeIf { it > 0f } ?: 1f
+    val domain = remember(w.series) {
+        chartValueDomainAndroid(w.series.flatMap { series -> series.data.map { it.getOrElse(1) { 0f } } })
     }
-    val axisMax = remember(maxV) { niceStep(maxV / 3f) * 3f }
     val measurer = rememberTextMeasurer()
     val axisStyle = TextStyle(fontSize = 10.5.sp, color = c.textTertiary)
     val valueStyle = TextStyle(fontSize = 11.sp, color = c.textSecondary, fontWeight = FontWeight.SemiBold)
@@ -2206,7 +2187,7 @@ private fun BarChart(w: ChartWidget) {
         repeat(4) { g ->
             val y = top + plotH * g / 3f
             drawLine(gridColor, Offset(gutter, y), Offset(size.width, y), strokeWidth = 1f)
-            val laid = measurer.measure(axisLabel(axisMax * (1f - g / 3f), w.unit), axisStyle)
+            val laid = measurer.measure(axisLabel(domain.axisValue(g / 3f), w.unit), axisStyle)
             drawText(
                 laid,
                 topLeft = Offset(
@@ -2216,13 +2197,17 @@ private fun BarChart(w: ChartWidget) {
             )
         }
 
+        val zeroY = top + plotH * domain.heightFraction(0f)
+        if (domain.lower < 0.0) drawLine(c.textTertiary.copy(alpha = 0.5f), Offset(gutter, zeroY), Offset(size.width, zeroY), strokeWidth = 1f)
         val groupW = plotW / groups
         val barW = (groupW * 0.62f) / seriesCount
         val radius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
         w.series.forEachIndexed { si, s ->
             s.data.forEachIndexed { gi, point ->
-                val v = point.getOrElse(1) { 0f }.coerceAtLeast(0f)
-                val h = plotH * (v / axisMax) * progress
+                val v = point.getOrElse(1) { 0f }
+                val valueY = top + plotH * domain.heightFraction(v)
+                val h = kotlin.math.abs(valueY - zeroY) * progress
+                val barTop = if (v >= 0f) zeroY - h else zeroY
                 if (h <= 0.5f) return@forEachIndexed
                 val x = gutter + gi * groupW + groupW * 0.19f + si * barW
                 val width = barW * 0.92f
@@ -2232,14 +2217,14 @@ private fun BarChart(w: ChartWidget) {
                 val dim = selected != null && !isSelected
                 drawRoundRect(
                     colors[si % colors.size].copy(alpha = if (dim) 0.32f else 1f),
-                    topLeft = Offset(x, top + plotH - h),
+                    topLeft = Offset(x, barTop),
                     size = Size(width, h),
                     cornerRadius = radius
                 )
                 if (isSelected) {
                     drawRoundRect(
                         color = c.textPrimary.copy(alpha = 0.55f),
-                        topLeft = Offset(x, top + plotH - h),
+                        topLeft = Offset(x, barTop),
                         size = Size(width, h),
                         cornerRadius = radius,
                         style = Stroke(width = 1.5.dp.toPx())
@@ -2251,7 +2236,8 @@ private fun BarChart(w: ChartWidget) {
                         laid,
                         topLeft = Offset(
                             x + (width - laid.size.width) / 2f,
-                            (top + plotH - h - laid.size.height - 2.dp.toPx()).coerceAtLeast(0f)
+                            (if (v >= 0f) barTop - laid.size.height - 2.dp.toPx() else barTop + h + 2.dp.toPx())
+                                .coerceIn(0f, (size.height - laid.size.height).coerceAtLeast(0f))
                         )
                     )
                 }
