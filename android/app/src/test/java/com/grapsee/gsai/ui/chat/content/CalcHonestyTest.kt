@@ -5,6 +5,13 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun checklistRefusesInvalidEntriesAndOverflowInsteadOfDeletingSourceTasks() {
+        for (json in listOf("""{"items":[{"label":"Actual"},{"alien":42}]}""", """{"items":["Actual",42]}""",
+            "{\"items\":[" + (1..31).joinToString(",") { "{\"label\":\"Task $it\"}" } + "]}")) {
+            assertNull(parseWidget("checklist", json))
+        }
+    }
+
     @Test fun deferredPromotedSourceEditWaitsForTheExactSourceCard() {
         val actions = ResponseCodeActions()
         var targetEdits = 0
