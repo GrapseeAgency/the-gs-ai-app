@@ -139,6 +139,8 @@ async function main() {
   let messages = []
   const self = { postMessage: (m) => messages.push(m), addEventListener: () => {} }
   vm.runInNewContext(workerSource, { self, setTimeout, clearTimeout })
+  check('actual worker announces readiness before accepting execution', () => assert.equal(messages[0].kind, 'ready'))
+  messages = []
   await self.onmessage({ data: 'console.log(7*9); await new Promise(r=>setTimeout(r, 15)); console.log("later");' })
   check('JavaScript runs arithmetic and real awaited timers', () => assert.deepEqual(messages.map((m) => m.value), ['63', 'later', 'Completed. Unawaited background work is stopped.']))
   messages = []
