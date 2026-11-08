@@ -111,8 +111,8 @@ function CodeControls({ code, language, storageKey }: { code: string; language?:
   const [htmlPreview, setHtmlPreview] = useState<string | null>(null)
 
   const canRun = isReact || ['js', 'javascript', 'node'].includes(lang) || RUNNABLE_HTML.has(lang) || lang === 'json'
-  const unsupportedNotice = ['ts', 'typescript', 'jsx', 'tsx', 'react'].includes(lang)
-    ? 'Source only: no TypeScript/React compiler is available here. No component has been executed. Use self-contained HTML/JavaScript for a live preview.'
+  const unsupportedNotice = ['ts', 'typescript'].includes(lang)
+    ? 'Source only: standalone TypeScript execution is not supported. Use a JSX/TSX default-export React component or self-contained HTML/JavaScript for a live preview.'
     : previewNonJsExecution(lang, source).error
 
   const allLines = useMemo(() => source.split('\n'), [source])
@@ -185,7 +185,7 @@ function CodeControls({ code, language, storageKey }: { code: string; language?:
     cursor: 'pointer',
   } as const
 
-  const isBrowserLang = RUNNABLE_HTML.has(lang) || lang === 'jsx' || lang === 'tsx'
+  const isBrowserLang = RUNNABLE_HTML.has(lang) || isReact
 
   return (
     <div
