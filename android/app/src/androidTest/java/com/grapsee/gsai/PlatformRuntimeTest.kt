@@ -114,7 +114,7 @@ class PlatformRuntimeTest {
         compose.onNode(hasSetTextAction()).performTextReplacement("2")
         compose.onNodeWithText("Start").assertIsEnabled().performClick()
         compose.onNodeWithText("Pause").performClick()
-        val paused = compose.onAllNodes(SemanticsMatcher("countdown display") { node -> node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.any { it.text.matches(Regex("\\d+:\\d{2}")) } == true }).fetchSemanticsNodes().single().config[androidx.compose.ui.semantics.SemanticsProperties.Text].single().text
+        val paused = compose.onNodeWithTag("timer.remaining").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].single().text
         android.os.SystemClock.sleep(1100)
         compose.onNodeWithText(paused).assertExists()
         compose.onNodeWithText("Reset").performClick()
