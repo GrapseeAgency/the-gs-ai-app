@@ -30,12 +30,12 @@ async function main() {
   const compiled = await esbuild.build({ entryPoints: [path.join(__dirname, 'browser-code-entry.tsx')], bundle: true,
     write: false, platform: 'browser', format: 'iife', jsx: 'automatic', tsconfig: path.join(__dirname, '../tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'silent' })
-  const browser = await puppeteer.launch({ executablePath: await chromium.executablePath(), args: chromium.args,
+  const browser = await puppeteer.launch({ executablePath: await chromium.executablePath(), args: chromium.args.filter(arg => arg !== '--disable-web-security'),
     headless: true, env: { ...process.env, LD_LIBRARY_PATH: path.join(libs, 'lib') + ':' + (process.env.LD_LIBRARY_PATH || '') } })
   try {
     const requests = []
     const context = browser.defaultBrowserContext()
-    await context.overridePermissions('https://gs.test', ['clipboard-read', 'clipboard-write'])
+    await context.overridePermissions('https://gs.test', ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write'])
     async function pageWithApp() {
       const page = await browser.newPage()
       await page.setViewport({ width: 430, height: 920 })
