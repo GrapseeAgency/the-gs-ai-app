@@ -88,6 +88,9 @@ struct ReactPreviewIOS: UIViewRepresentable {
             // inside WebKit's private remote-input hierarchy. Read no values,
             // inject no events, and expose no generated-code native bridge.
             web.evaluateJavaScript("(function(){const e=document.activeElement;return !!(document.hasFocus()&&e&&e!==document.body&&(e.matches('input,textarea,select')||e.isContentEditable));})()") { [weak self, weak web] result, _ in
+                #if DEBUG
+                print("GS_REACT_FOCUS_CHECK: focused=\(result as? Bool == true)")
+                #endif
                 guard let self, let web, let window = web.window, result as? Bool == true else { return }
                 var ancestor = web.superview
                 var parent: UIScrollView?
