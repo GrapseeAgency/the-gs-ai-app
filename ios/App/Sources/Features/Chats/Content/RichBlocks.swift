@@ -3999,19 +3999,16 @@ private struct CollapsibleBlockView: View {
 
 // MARK: - Structured seams — citations & tool results (backend provides; never faked)
 
-private func isAcademicCitationDomain(_ domain: String, _ url: String) -> Bool {
-    let hay = "\(domain) \(url)".lowercased()
-    return hay.contains(".edu") ||
-        hay.contains("nature.com") ||
-        hay.contains("arxiv.org") ||
-        hay.contains("ieee.org") ||
-        hay.contains("acm.org") ||
-        hay.contains("springer.") ||
-        hay.contains("sciencedirect.") ||
-        hay.contains("oxford") ||
-        hay.contains("cambridge") ||
-        hay.contains("nih.gov") ||
-        hay.contains("pubmed")
+func citationSourceURLIOS(_ raw: String) -> URL? {
+    guard let url = URL(string: raw), let host = url.host, !host.isEmpty,
+          ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.user == nil, url.password == nil else { return nil }
+    return url
+}
+
+func isAcademicCitationDomain(_ domain: String, _ raw: String) -> Bool {
+    guard let host = citationSourceURLIOS(raw)?.host?.lowercased() else { return false }
+    let publishers = ["nature.com", "arxiv.org", "ieee.org", "acm.org", "springer.com", "springernature.com", "sciencedirect.com", "oup.com", "cambridge.org", "nih.gov"]
+    return host.hasSuffix(".edu") || host.hasSuffix(".ac.uk") || publishers.contains { host == $0 || host.hasSuffix("." + $0) }
 }
 
 private struct CitationsBlockView: View {
@@ -4039,9 +4036,11 @@ private struct CitationsBlockView: View {
             }
 
             ForEach(Array(citations.enumerated()), id: \.offset) { _, citation in
+                let link = citationSourceURLIOS(citation.url)
+                let domain = link?.host?.replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression) ?? "Invalid source URL"
                 let academic = isAcademicCitationDomain(citation.domain, citation.url)
                 Button {
-                    if let link = URL(string: citation.url), ["https", "http"].contains(link.scheme?.lowercased() ?? "") {
+                    if let link {
                         gsOpenURL(link, inApp: inAppBrowser)
                     }
                 } label: {
@@ -4075,7 +4074,7 @@ private struct CitationsBlockView: View {
                                         size: 11,
                                         color: Color(red: 0.357, green: 0.239, blue: 0.961)
                                     )
-                                    Text(citation.domain.isEmpty ? citation.url : citation.domain)
+                                    Text(domain)
                                         .font(.system(size: 11.5, weight: .semibold))
                                         .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
                                         .lineLimit(1)
@@ -4083,18 +4082,18 @@ private struct CitationsBlockView: View {
                                 Spacer()
                                 HStack(spacing: 4) {
                                     NexlyGlyph(
-                                        name: academic ? "building-bank" : "shield-check",
+                                        name: academic ? "building-bank" : "external-link",
                                         size: 11,
                                         color: academic
                                             ? Color(red: 0.357, green: 0.239, blue: 0.961)
-                                            : Color(red: 0.071, green: 0.604, blue: 0.353)
+                                            : Color(red: 0.357, green: 0.239, blue: 0.961)
                                     )
-                                    Text(academic ? "Academic" : "Trusted Source")
+                                    Text(link == nil ? "Invalid link" : academic ? "Academic domain" : "Source link")
                                         .font(.system(size: 10.5, weight: .bold))
                                         .foregroundStyle(
                                             academic
                                                 ? Color(red: 0.357, green: 0.239, blue: 0.961)
-                                                : Color(red: 0.071, green: 0.604, blue: 0.353)
+                                                : Color(red: 0.357, green: 0.239, blue: 0.961)
                                         )
                                 }
                                 .padding(.horizontal, 8)
@@ -4103,7 +4102,7 @@ private struct CitationsBlockView: View {
                                     Capsule().fill(
                                         academic
                                             ? Color(red: 0.937, green: 0.918, blue: 1.0)
-                                            : Color(red: 0.902, green: 0.976, blue: 0.941)
+                                            : Color(red: 0.937, green: 0.918, blue: 1.0)
                                     )
                                 )
                             }
@@ -4117,6 +4116,7 @@ private struct CitationsBlockView: View {
                     .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.890, green: 0.863, blue: 0.980), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
+                .disabled(link == nil)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Source \(citation.number). \(citation.title), \(citation.domain)")
             }
