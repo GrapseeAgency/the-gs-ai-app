@@ -5,6 +5,21 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testNativeJSONDelimiterRecoveryPreservesActualSourceBytesAndQuotedPunctuation() throws {
+        let source = #"const text = ",} ,] True False None"; const escaped = "\\\" ,}"; const smart = "“literal”";"#
+        let original: [String: Any] = ["code": source, "title": "Keep ,} and ,] and “curly” quotes", "values": [1, 2]]
+        let data = try JSONSerialization.data(withJSONObject: original, options: [.sortedKeys])
+        let valid = try XCTUnwrap(String(data: data, encoding: .utf8))
+        XCTAssertEqual(Data(stripTrailingJSONCommasIOS(valid).utf8), Data(valid.utf8))
+        let malformed = String(valid.dropLast()) + ",}"
+        let actual = try XCTUnwrap(parseRelaxedJSONObject(kind: "app", raw: malformed))
+        let actualCode = try XCTUnwrap(actual["code"] as? String)
+        XCTAssertEqual(Data(actualCode.utf8), Data(source.utf8))
+        XCTAssertEqual(actual["title"] as? String, original["title"] as? String)
+        XCTAssertEqual(stripTrailingJSONCommasIOS(#"{"a":[1,2,],"b":"literal ,}","c":{"ok":true,},}"#),
+                       #"{"a":[1,2],"b":"literal ,}","c":{"ok":true}}"#)
+    }
+
     @MainActor
     func testActualMessagePreviewIdentitySurvivesRehydrationWithoutInventingServerIDs() {
         let live = ChatViewModel.ChatMessage(role: "assistant", content: "actual source", serverId: "actual-server-row")
