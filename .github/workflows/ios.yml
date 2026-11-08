@@ -375,6 +375,7 @@ jobs:
           import re
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
+              ('CalcHonestyTests', 'testGeneratedReactTsxUsesActualWebKitTasksPersistenceAndResponseIsolation'),
               ('PlatformRuntimeUITests', 'testGeneratedChecklistEditsDeletesAddsAndKeepsActualTaskCompletion'),
               ('NexlyChatRenderTests', 'testSixSuppliedResponseSectionReferencesRenderThroughActualChat'),
               ('PlatformRuntimeUITests', 'testGeneratedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices'),
