@@ -243,7 +243,14 @@ internal fun HarnessWebView(doc: String, fileBase: Boolean) {
     // callback must write the CURRENT document's state, not a captured old one.
     val reportHeight by rememberUpdatedState<(Int) -> Unit> { h -> heightCss = h }
     AndroidView(
-        factory = { ctx -> createHarnessWebView(ctx, serveAssets = fileBase) { h -> reportHeight(h) } },
+        factory = { ctx ->
+            lateinit var web: WebView
+            web = createHarnessWebView(ctx, serveAssets = fileBase) { h ->
+                reportHeight(h)
+                web.evaluateJavascript("window.__gsNativeBridgeReceived=$h;window.__gsNativeMeasuredHeight=" + web.height, null)
+            }
+            web
+        },
         onReset = null,
         onRelease = { view ->
             view.stopLoading()
@@ -252,6 +259,7 @@ internal fun HarnessWebView(doc: String, fileBase: Boolean) {
             view.destroy()
         },
         update = { view ->
+            view.evaluateJavascript("window.__gsComposeHeight=" + heightCss + ";window.__gsNativeMeasuredHeight=" + view.height, null)
             if (view.tag != protectedDoc) {
                 view.tag = protectedDoc
                 // Always an https origin: map/mermaid assets are intercepted
@@ -863,7 +871,7 @@ fun CodeSandboxView(code: String, language: String, title: String = "") {
 // WebView
 // ---------------------------------------------------------------------------
 
-private class HeightBridge(val onHeight: (Int) -> Unit) {
+internal class HeightBridge(val onHeight: (Int) -> Unit) {
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     @JavascriptInterface
