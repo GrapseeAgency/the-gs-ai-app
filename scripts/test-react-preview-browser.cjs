@@ -8,21 +8,7 @@ const chromium = require('@sparticuz/chromium'), puppeteer = require('puppeteer-
 const esbuild = require('esbuild')
 let checks = 0
 function check(name, fn) { fn(); checks++; console.log('PASS React browser:', name) }
-const taskSource = `import {useState, useEffect} from 'react';
-type Task = {id: string; title: string; done: boolean};
-export default function Tasks() {
- const [tasks,setTasks] = useState<Task[]>(()=>JSON.parse(localStorage.getItem('tasks') || '[]'));
- const [draft,setDraft] = useState('');
- useEffect(()=>localStorage.setItem('tasks',JSON.stringify(tasks)),[tasks]);
- return <section className="p-4 rounded-xl bg-violet-100"><h1 className="font-bold">Response tasks</h1>
- <form onSubmit={e=>{e.preventDefault();if(draft.trim()){setTasks([...tasks,{id:String(Date.now()),title:draft.trim(),done:false}]);setDraft('');}}}>
- <input aria-label="New task" value={draft} onChange={e=>setDraft(e.target.value)}/><button type="submit">Add task</button></form>
- <output id="count">{tasks.filter(t=>t.done).length}/{tasks.length} complete</output>
- <ul>{tasks.map(t=><li key={t.id} data-task={t.id}>
- <input type="checkbox" aria-label={'Complete '+t.title} checked={t.done} onChange={()=>setTasks(tasks.map(x=>x.id===t.id?{...x,done:!x.done}:x))}/>
- <input aria-label="Task title" value={t.title} onChange={e=>setTasks(tasks.map(x=>x.id===t.id?{...x,title:e.target.value}:x))}/>
- <button onClick={()=>setTasks(tasks.filter(x=>x.id!==t.id))}>Delete task</button></li>)}</ul></section>;
-}`
+const taskSource = require('../shared-contracts/react-preview-acceptance.json').source
 async function main() {
  const libs=fs.mkdtempSync(path.join(os.tmpdir(),'gs-react-browser-'))
  let browser, server, page
