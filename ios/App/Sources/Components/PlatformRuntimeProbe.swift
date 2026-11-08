@@ -22,6 +22,7 @@ struct PlatformRuntimeProbe: View {
     @State private var showCode = false
     @State private var showTerminal = false
     @State private var copyStatus = "Copy not inspected"
+    @State private var reportCopyStatus = "Report copy not inspected"
     @State private var ordinaryTable = false
     @State private var title = ""
     @State private var armed = false
@@ -92,6 +93,17 @@ struct PlatformRuntimeProbe: View {
         .sheet(isPresented: $showTable) {
             VStack {
                 Button("Use ordinary Markdown") { ordinaryTable = true }
+                Button("Prepare report share check") {
+                    UIPasteboard.general.string = "GS_SHARE_NOT_PERFORMED"
+                    reportCopyStatus = "Share check prepared"
+                }
+                Button("Inspect shared report") {
+                    let copied = UIPasteboard.general.string ?? ""
+                    let expected = extractCopyableProseSummary(parseBlocks(Self.tableMarkdown), citationsOnly: false)
+                    let complete = (1...31).allSatisfy { copied.contains("Item \($0)\t\($0)") }
+                    reportCopyStatus = copied == expected && complete ? "Original complete report shared" : "Wrong or incomplete report shared"
+                }
+                Text(reportCopyStatus).accessibilityIdentifier("report.copy.inspection")
                 ScrollView {
                     if ordinaryTable {
                         BlocksView(blocks: parseBlocks(Self.tableMarkdown)).padding()
