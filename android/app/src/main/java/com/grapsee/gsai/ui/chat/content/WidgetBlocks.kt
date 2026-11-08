@@ -2452,7 +2452,7 @@ private fun StatWidgetView(w: StatWidget) {
         val compactMetrics = w.cards.size == 4 && androidx.compose.ui.platform.LocalDensity.current.fontScale <= 1.1f &&
             w.cards.all { it.value.length + it.unit.length <= 10 && it.label.length <= 28 }
         val columns = if (compactMetrics) 4 else 2
-        Column(Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth().padding(top = if (w.title.isBlank()) 0.dp else 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             w.cards.chunked(columns).forEachIndexed { rowIndex, row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(if (compactMetrics) 5.dp else 8.dp)) {
                     row.forEachIndexed { columnIndex, card ->
@@ -2465,7 +2465,7 @@ private fun StatWidgetView(w: StatWidget) {
                                 .padding(horizontal = if (compactMetrics) 6.dp else 10.dp, vertical = 10.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text(NexlyIcons.cleanPlainText(card.label), style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactMetrics) 9.5.sp else 11.sp), color = NexlyInk.label)
+                            Text(NexlyIcons.cleanPlainText(card.label), style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactMetrics) 9.5.sp else 11.sp, lineHeight = if (compactMetrics) 12.sp else 14.sp), minLines = if (compactMetrics) 2 else 1, color = NexlyInk.label)
                             Row(verticalAlignment = Alignment.Bottom) {
                                 Text(NexlyIcons.cleanPlainText(card.value), style = MaterialTheme.typography.titleMedium.copy(fontSize = if (compactMetrics) 13.sp else 16.sp), color = NexlyInk.row, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false))
                                 if (card.unit.isNotEmpty()) {
