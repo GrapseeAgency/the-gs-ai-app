@@ -500,6 +500,84 @@ final class CalcHonestyTests: XCTestCase {
         XCTAssertEqual(vector as? Bool, true)
     }
 
+    @MainActor
+    func testGeneratedReactTsxUsesActualWebKitTasksPersistenceAndResponseIsolation() async throws {
+        let contractURL = try XCTUnwrap(Bundle.main.url(forResource: "react-preview-acceptance", withExtension: "json"))
+        let contract = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: contractURL)) as? [String: Any])
+        let source = try XCTUnwrap(contract["source"] as? String)
+        let scope = "react-acceptance:" + UUID().uuidString
+        let old = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }.first { $0.isKeyWindow }
+        let window: UIWindow
+        if let scene = old?.windowScene { window = UIWindow(windowScene: scene) }
+        else { window = UIWindow(frame: UIScreen.main.bounds) }
+        defer { window.isHidden = true; window.rootViewController = nil; old?.makeKeyAndVisible() }
+        func findWeb(_ view: UIView) -> WKWebView? {
+            if let web = view as? WKWebView { return web }
+            for child in view.subviews { if let web = findWeb(child) { return web } }
+            return nil
+        }
+        func observe(_ web: WKWebView, _ expression: String) async throws {
+            let deadline = Date().addingTimeInterval(20)
+            var success = false
+            while Date() < deadline {
+                if let result = try? await web.evaluateJavaScript(expression), (result as? Bool) == true { success = true; break }
+                try await Task.sleep(nanoseconds: 50_000_000)
+            }
+            let text = (try? await web.evaluateJavaScript("document.body.innerText")) as? String ?? "No document"
+            XCTAssertTrue(success, "Actual React/WebKit expression failed: \(expression); document: \(text)")
+        }
+        func load(_ program: String, _ identity: String, error: Bool = false) async throws -> WKWebView {
+            let host = UIHostingController(rootView: ReactPreviewIOS(source: program, scope: identity))
+            window.rootViewController = host; window.makeKeyAndVisible(); host.view.layoutIfNeeded()
+            let deadline = Date().addingTimeInterval(5)
+            var rendered: WKWebView?
+            while Date() < deadline {
+                host.view.layoutIfNeeded(); rendered = findWeb(host.view)
+                if rendered != nil { break }
+                try await Task.sleep(nanoseconds: 50_000_000)
+            }
+            let web = try XCTUnwrap(rendered, "The production React renderer must create an actual WKWebView")
+            try await observe(web, "document.getElementById('status')?.textContent === '\(error ? "React preview error" : "React preview running")'")
+            return web
+        }
+        func replaceInput(_ web: WKWebView, _ selector: String, _ text: String) async throws {
+            let selectorData = try JSONSerialization.data(withJSONObject: selector, options: [.fragmentsAllowed])
+            let textData = try JSONSerialization.data(withJSONObject: text, options: [.fragmentsAllowed])
+            let selectorJS = String(decoding: selectorData, as: UTF8.self), textJS = String(decoding: textData, as: UTF8.self)
+            _ = try await web.evaluateJavaScript("(function(){const input=document.querySelector(\(selectorJS));Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,\(textJS));input.dispatchEvent(new Event('input',{bubbles:true}));return true;})()")
+        }
+        var web = try await load(source, scope)
+        try await observe(web, "getComputedStyle(document.querySelector('section')).paddingTop === getComputedStyle(document.documentElement).fontSize && getComputedStyle(document.querySelector('h1')).fontWeight === '700'")
+        try await replaceInput(web, "[aria-label='New task']", "iOS actual task")
+        _ = try await web.evaluateJavaScript("document.querySelector('button[type=submit]').click();true")
+        try await observe(web, "document.getElementById('count').textContent === '0/1 complete'")
+        _ = try await web.evaluateJavaScript("document.querySelector('input[type=checkbox]').click();true")
+        try await observe(web, "document.getElementById('count').textContent === '1/1 complete'")
+        try await replaceInput(web, "[aria-label='Task title']", "Edited iOS task")
+        try await observe(web, "JSON.parse(localStorage.getItem('tasks'))[0].title === 'Edited iOS task'")
+        web = try await load(source, scope)
+        try await observe(web, "document.querySelector('[aria-label=\"Task title\"]').value === 'Edited iOS task' && document.querySelector('input[type=checkbox]').checked")
+        web = try await load(source, scope + ":other-response")
+        try await observe(web, "document.getElementById('count').textContent === '0/0 complete'")
+        web = try await load(source, scope)
+        try await observe(web, "document.querySelector('[aria-label=\"Task title\"]').value === 'Edited iOS task'")
+        _ = try await web.evaluateJavaScript("document.querySelector('li button').click();true")
+        try await observe(web, "document.getElementById('count').textContent === '0/0 complete' && localStorage.getItem('tasks') === '[]'")
+        web = try await load(source, scope)
+        try await observe(web, "document.querySelectorAll('li').length === 0 && !window.Android && !window.webkit?.messageHandlers?.gsResize && window.__gsDisplayEmojiPolicy === true")
+        let firstOrigin = ReactPreviewRuntimeIOS.origin(scope: scope)
+        let secondOrigin = ReactPreviewRuntimeIOS.origin(scope: scope + ":other-response")
+        XCTAssertNotEqual(firstOrigin, secondOrigin)
+        XCTAssertEqual(firstOrigin.host?.split(separator: ".").count, 2, "Every snippet needs a distinct registrable domain, not a cookie-sharing parent domain")
+        web = try await load("import missing from 'not-bundled';export default function App(){return <p>{missing}</p>}", scope, error: true)
+        try await observe(web, "document.getElementById('error').textContent.includes('Unsupported dependency')")
+        web = try await load("export default function App( { return <p>Invalid</p> }", scope, error: true)
+        try await observe(web, "document.getElementById('error').textContent.includes('Unexpected')")
+        web = try await load("export default function App(){return <p id='emoji'>{String.fromCodePoint(128512)} Clean</p>}", scope)
+        try await observe(web, "!document.getElementById('emoji').textContent.includes(String.fromCodePoint(128512))")
+    }
+
     func testAllRowsAndStrictDescendingTableSort() {
         XCTAssertEqual(widgetTablePageSizeIOS(selection: -1, rowCount: 73), 73)
         XCTAssertEqual(widgetTablePageSizeIOS(selection: -1, rowCount: 2), 2)
