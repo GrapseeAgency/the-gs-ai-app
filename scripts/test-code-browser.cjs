@@ -22,7 +22,7 @@ const check = (name, fn) => { fn(); checks++; console.log('PASS browser:', name)
 
 async function main() {
   // The binary package bundles these libraries for minimal Linux hosts too.
-  const bin = path.join(path.dirname(require.resolve('@sparticuz/chromium/package.json')), 'bin')
+  const bin = path.resolve(path.dirname(require.resolve('@sparticuz/chromium')), '../../bin')
   const libs = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-browser-libs-'))
   const archive = path.join(libs, 'al2023.tar')
   fs.writeFileSync(archive, zlib.brotliDecompressSync(fs.readFileSync(path.join(bin, 'al2023.tar.br'))))
@@ -78,11 +78,11 @@ async function main() {
     }
     const source = 'const data={"😀":7,"🌅":9}; console.log(data["😀"]+data["🌅"],"😀".length,"$&","$$");'
     await mount(source)
-    check('visible source uses escapes', () => assert.ok(true))
-    assert.equal(await page.evaluate(() => document.body.innerText.includes('😀')), false)
+    const visibleEmoji = await page.evaluate(() => document.body.innerText.includes('😀'))
+    check('visible source uses escapes', () => assert.equal(visibleEmoji, false))
     await click('Copy')
-    check('real browser clipboard receives original source', () => assert.ok(true))
-    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), source)
+    const clipboard = await page.evaluate(() => navigator.clipboard.readText())
+    check('real browser clipboard receives original source', () => assert.equal(clipboard, source))
     await click('Run Code')
     const first = await frameOutput('Completed.')
     check('actual worker computes Unicode keys and literal dollar strings', () => assert.ok(first.output.includes('16 2 $& $$')))
@@ -91,8 +91,8 @@ async function main() {
     check('a repeated Run replaces the previous execution context', () => { assert.ok(first.frame.isDetached()); assert.notEqual(first.frame, second.frame) })
     await click('Edit'); await typeSource('"unfinished')
     await click('Run Code')
-    assert.equal(await page.$('iframe'), null)
-    check('actual invalid draft Run clears stale successful execution', () => assert.ok(true))
+    const stale = await page.$('iframe')
+    check('actual invalid draft Run clears stale successful execution', () => assert.equal(stale, null))
     await click('Reset'); await click('Done'); await click('Run Code')
     const reset = await frameOutput('Completed.')
     check('actual Reset restores original executable source', () => assert.ok(reset.output.includes('16 2 $& $$')))
