@@ -581,6 +581,21 @@ async function main() {
   })
   await click(contextual('View All Sources'))
   check('View All Sources displays the real citation destinations', () => assert.ok(document.querySelector('[aria-label="All sources"] a[href="https://example.org/evidence"]')))
+  await renderResponse('A different ordinary response.')
+  check('response replacement closes previous source disclosure and clears its notice', () => {
+    assert.equal(document.querySelector('[aria-label="All sources"]'), null)
+    assert.equal(document.querySelector('[role="status"]'), null)
+  })
+  let finishOldClipboard
+  navigator.clipboard.writeText = () => new Promise(resolve => { finishOldClipboard = resolve })
+  await renderResponse(tableResponse)
+  await click(contextual('Share'))
+  await renderResponse('New answer while clipboard permission is pending.')
+  await act(async () => { finishOldClipboard(); await Promise.resolve() })
+  check('late clipboard completion cannot announce sharing success on a different response', () => {
+    assert.equal(document.querySelector('[role="status"]'), null)
+    assert.equal(document.querySelector('[role="alert"]'), null)
+  })
   URL.createObjectURL = createURL; URL.revokeObjectURL = revokeURL
   window.HTMLAnchorElement.prototype.click = anchorClick
   await act(async () => root.unmount())
