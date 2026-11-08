@@ -11,12 +11,13 @@ import { UiButton } from '../controls/UiButton'
 /** Booking — pick a slot, confirm. */
 export function AppBooking({ payload }: { payload: AppPayload }) {
   const { accent, theme } = useWidgetIdentity()
-  const slots = (payload.slots ?? []).slice(0, 12)
+  const slots = (payload.slots ?? [])
   const [picked, setPicked] = useState<string | null>(null)
   const [done, setDone] = useState(false)
   if (!slots.length) return <EmptyState label="No slots available" />
   return (
-    <AppShell title={payload.title} submitLabel={picked && !done ? (payload.submitLabel ?? 'Confirm booking') : undefined}>
+    <AppShell title={payload.title} onSubmit={() => { if (picked) setDone(true) }} submitLabel={picked && !done ? (payload.submitLabel || 'Save slot locally') : undefined}>
+      <p style={{ fontSize: TYPE.micro, color: theme.text3 }}>Local selection only. No booking service is connected and no reservation will be made.</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
         {slots.map((slot) => (
           <button
@@ -39,7 +40,7 @@ export function AppBooking({ payload }: { payload: AppPayload }) {
           </button>
         ))}
       </div>
-      {done && picked ? <div style={{ marginTop: 12, fontSize: TYPE.label, color: '#0CA678', fontWeight: 700 }}>Booked for {picked}</div> : null}
+      {done && picked ? <div role="status" style={{ marginTop: 12, fontSize: TYPE.label, color: '#0CA678', fontWeight: 700 }}>Saved locally: {picked}. No reservation has been made.<UiButton onClick={() => setDone(false)}>Change selection</UiButton></div> : null}
     </AppShell>
   )
 }
