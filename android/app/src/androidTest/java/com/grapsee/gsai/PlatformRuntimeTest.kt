@@ -264,6 +264,80 @@ class PlatformRuntimeTest {
         compose.onNode(hasSetTextAction()).assertExists()
     }
 
+    @Test fun generatedReactTsxRunsActualTasksPersistsAndIsolatesResponses() {
+        val contract = instrumentation.targetContext.assets.open("react-preview-acceptance.json").bufferedReader().use { org.json.JSONObject(it.readText()) }
+        val tasks = contract.getString("source")
+        var source by androidx.compose.runtime.mutableStateOf(tasks)
+        val originalScope = "react-acceptance:" + java.util.UUID.randomUUID()
+        var scope by androidx.compose.runtime.mutableStateOf(originalScope)
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.runtime.CompositionLocalProvider(com.grapsee.gsai.ui.chat.content.LocalReactPreviewScope provides scope) {
+                    androidx.compose.runtime.key(scope, source) {
+                        androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                            com.grapsee.gsai.ui.chat.content.BlocksContent("```tsx\n$source\n```", false, {})
+                        }
+                    }
+                }
+            }
+        }
+        fun findWeb(view: View): android.webkit.WebView? {
+            if (view is android.webkit.WebView) return view
+            if (view is android.view.ViewGroup) for (i in 0 until view.childCount) findWeb(view.getChildAt(i))?.let { return it }
+            return null
+        }
+        var web: android.webkit.WebView? = null
+        fun evaluate(script: String): String? {
+            val done = CountDownLatch(1); var result: String? = null
+            instrumentation.runOnMainSync { web!!.evaluateJavascript(script) { result = it; done.countDown() } }
+            assertTrue(done.await(5, TimeUnit.SECONDS)); return result
+        }
+        fun run(expectError: Boolean = false) {
+            compose.onNodeWithText("Run in Browser").performScrollTo().performClick()
+            awaitObserved("real native React WebView exists") {
+                instrumentation.runOnMainSync { web = findWeb(compose.activity.window.decorView) }; web != null
+            }
+            try {
+                awaitObserved("actual TSX compiler and React mount settle") {
+                    evaluate("document.getElementById('status')?.textContent === '${if (expectError) "React preview error" else "React preview running"}'") == "true"
+                }
+            } catch (error: Throwable) { throw AssertionError("Actual React document: " + evaluate("document.body.innerText"), error) }
+        }
+        fun replaceInput(selector: String, text: String) {
+            evaluate("(function(){const input=document.querySelector(${org.json.JSONObject.quote(selector)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${org.json.JSONObject.quote(text)});input.dispatchEvent(new Event('input',{bubbles:true}));return true;})()")
+        }
+        run()
+        awaitObserved("offline Tailwind applies actual task layout") {
+            evaluate("getComputedStyle(document.querySelector('section')).paddingTop === getComputedStyle(document.documentElement).fontSize && getComputedStyle(document.querySelector('h1')).fontWeight === '700'") == "true"
+        }
+        replaceInput("[aria-label='New task']", "Android actual task")
+        assertEquals("true", evaluate("document.querySelector('button[type=submit]').click();true"))
+        awaitObserved("actual React add handler updates source-derived count") { evaluate("document.getElementById('count').textContent === '0/1 complete'") == "true" }
+        evaluate("document.querySelector('input[type=checkbox]').click();true")
+        awaitObserved("actual React toggle handler changes completion") { evaluate("document.getElementById('count').textContent === '1/1 complete'") == "true" }
+        replaceInput("[aria-label='Task title']", "Edited Android task")
+        awaitObserved("actual React edit effect persists to WebView storage") { evaluate("JSON.parse(localStorage.getItem('tasks'))[0].title === 'Edited Android task'") == "true" }
+        run()
+        assertEquals("true", evaluate("document.querySelector('[aria-label=\"Task title\"]').value === 'Edited Android task' && document.querySelector('input[type=checkbox]').checked"))
+        compose.runOnIdle { scope = originalScope + ":other-response" }
+        run()
+        assertEquals("true", evaluate("document.getElementById('count').textContent === '0/0 complete'"))
+        compose.runOnIdle { scope = originalScope }
+        run()
+        assertEquals("true", evaluate("document.querySelector('[aria-label=\"Task title\"]').value === 'Edited Android task'"))
+        evaluate("document.querySelector('li button').click();true")
+        awaitObserved("delete changes actual task data and count") { evaluate("document.getElementById('count').textContent === '0/0 complete' && localStorage.getItem('tasks') === '[]'") == "true" }
+        run()
+        assertEquals("true", evaluate("document.querySelectorAll('li').length === 0"))
+        assertEquals("true", evaluate("!window.Android && !window.webkit && window.__gsDisplayEmojiPolicy === true"))
+        compose.runOnIdle { source = "import missing from 'not-bundled';export default function App(){return <p>{missing}</p>}" }
+        run(expectError = true)
+        assertEquals("true", evaluate("document.getElementById('error').textContent.includes('Unsupported dependency')"))
+        compose.runOnIdle { source = "export default function App( { return <p>Invalid</p> }" }
+        run(expectError = true)
+        assertEquals("true", evaluate("document.getElementById('error').textContent.includes('Unexpected')"))
+    }
+
     @Test fun generatedPollUsesRealTotalsAndResetsForNewPayload() {
         val payload = androidx.compose.runtime.mutableStateOf("""{"title":"First poll","options":[{"label":"A"},{"label":"B"}]}""")
         compose.activity.setContentForPlatformTest {
