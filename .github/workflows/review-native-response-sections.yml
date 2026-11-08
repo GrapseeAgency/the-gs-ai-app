@@ -51,3 +51,78 @@ jobs:
         run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 05-data-grid
       - name: Review actual interactive charts
         run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 06-interactive-charts
+
+      # Separate steps preserve the ten-notice bound for each genuine viewport.
+      # The publisher validates the full scroll manifest before every image.
+      - name: Review full-scroll 01-dashboard viewport 0
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 01-dashboard 0
+      - name: Review full-scroll 01-dashboard viewport 1
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 01-dashboard 1
+      - name: Review full-scroll 01-dashboard viewport 2
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 01-dashboard 2
+      - name: Review full-scroll 01-dashboard viewport 3
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 01-dashboard 3
+      - name: Review full-scroll 01-dashboard viewport 4
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 01-dashboard 4
+      - name: Review full-scroll 01-dashboard viewport 5
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 01-dashboard 5
+      - name: Review full-scroll 02-structured-launch viewport 0
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 02-structured-launch 0
+      - name: Review full-scroll 02-structured-launch viewport 1
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 02-structured-launch 1
+      - name: Review full-scroll 02-structured-launch viewport 2
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 02-structured-launch 2
+      - name: Review full-scroll 02-structured-launch viewport 3
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 02-structured-launch 3
+      - name: Review full-scroll 02-structured-launch viewport 4
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 02-structured-launch 4
+      - name: Review full-scroll 02-structured-launch viewport 5
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 02-structured-launch 5
+      - name: Review full-scroll 03-react-code viewport 0
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 03-react-code 0
+      - name: Review full-scroll 03-react-code viewport 1
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 03-react-code 1
+      - name: Review full-scroll 03-react-code viewport 2
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 03-react-code 2
+      - name: Review full-scroll 03-react-code viewport 3
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 03-react-code 3
+      - name: Review full-scroll 03-react-code viewport 4
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 03-react-code 4
+      - name: Review full-scroll 03-react-code viewport 5
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 03-react-code 5
+      - name: Review full-scroll 04-citations viewport 0
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 04-citations 0
+      - name: Review full-scroll 04-citations viewport 1
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 04-citations 1
+      - name: Review full-scroll 04-citations viewport 2
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 04-citations 2
+      - name: Review full-scroll 04-citations viewport 3
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 04-citations 3
+      - name: Review full-scroll 04-citations viewport 4
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 04-citations 4
+      - name: Review full-scroll 04-citations viewport 5
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 04-citations 5
+      - name: Review full-scroll 05-data-grid viewport 0
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 05-data-grid 0
+      - name: Review full-scroll 05-data-grid viewport 1
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 05-data-grid 1
+      - name: Review full-scroll 05-data-grid viewport 2
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 05-data-grid 2
+      - name: Review full-scroll 05-data-grid viewport 3
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 05-data-grid 3
+      - name: Review full-scroll 05-data-grid viewport 4
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 05-data-grid 4
+      - name: Review full-scroll 05-data-grid viewport 5
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 05-data-grid 5
+      - name: Review full-scroll 06-interactive-charts viewport 0
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 06-interactive-charts 0
+      - name: Review full-scroll 06-interactive-charts viewport 1
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 06-interactive-charts 1
+      - name: Review full-scroll 06-interactive-charts viewport 2
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 06-interactive-charts 2
+      - name: Review full-scroll 06-interactive-charts viewport 3
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 06-interactive-charts 3
+      - name: Review full-scroll 06-interactive-charts viewport 4
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 06-interactive-charts 4
+      - name: Review full-scroll 06-interactive-charts viewport 5
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 06-interactive-charts 5
