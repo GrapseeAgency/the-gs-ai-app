@@ -207,6 +207,16 @@ async function main() {
     const code = parseStream(fixtures.find(f=>f.id==='03-react-code').wire).find(segment=>segment.kind==='code')
     assert.equal(code.language, 'jsx'); assert.ok(code.code.includes('localStorage'))
   })
+  check('shared votes refuse invented malformed and over-capacity options without healing them into unrelated tasks',()=>{
+    for(const items of [[],['Only option'],['Actual',''],['Actual',{title:'Not a string'}],Array.from({length:13},(_,i)=>'Option '+i)]) {
+      const source=JSON.stringify({surface:'vote',room:'source-options',items})
+      assert.equal(validateWidget('collab',source).ok,false)
+      const response=compileWidgets({reply:'```collab\n'+source+'\n```',userPrompt:'Let viewers vote'})
+      assert.equal(response.widgets,0)
+      assert.ok(response.text.includes(source))
+    }
+    assert.equal(validateWidget('collab',JSON.stringify({surface:'vote',room:'source-options',items:['First','Second']})).ok,true)
+  })
   check('timer generation preserves real explicit seconds without price defaults or unit coercion', () => {
     for (const durationSeconds of [0, -1, 1.5, 604801, null, true, '$25', '25%', '25']) {
       assert.equal(validateWidget('app', JSON.stringify({type:'timer',durationSeconds})).ok, false)
