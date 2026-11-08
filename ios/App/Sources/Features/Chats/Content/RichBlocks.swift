@@ -2922,6 +2922,9 @@ struct CodeBlockCardView: View {
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
                 .buttonStyle(.plain)
             }
+            if currentCode != code || editorError != nil {
+                Button("Reset") { resetCodeState() }.buttonStyle(.plain).font(.caption)
+            }
             CodeCopyButton(text: currentCode)
         }
         .padding(.horizontal, 12)
@@ -3123,8 +3126,9 @@ struct CodeBlockCardView: View {
 
     @ViewBuilder
     private var browserPreviewSection: some View {
-        if !open && ["html", "htm", "svg"].contains(lang) && runCount > 0 {
-            HtmlBlockView(kind: lang == "svg" ? "svg" : "html", source: currentCode, open: false)
+        if !open && ["html", "htm", "svg"].contains(lang), let browserDocument {
+            HtmlBlockView(kind: lang == "svg" ? "svg" : "html", source: browserDocument, open: false)
+                .id(runCount)
                 .padding(8)
                 .background(Color(red: 0.973, green: 0.961, blue: 1.0))
         } else if !open && ["js", "javascript", "node"].contains(lang), let workerDocument {
@@ -3184,11 +3188,12 @@ struct CodeBlockCardView: View {
 
     private func resetCodeState() {
         editedCode = nil; editing = false; editorDraft = ""; editorError = nil
-        editorEncoded = false; expanded = false; runOutput = nil; errorOutput = nil; runCount = 0; workerDocument = nil
+        editorEncoded = false; expanded = false; runOutput = nil; errorOutput = nil; runCount = 0; workerDocument = nil; browserDocument = nil
     }
 
     private func executeCode() {
         if editing && editorError != nil {
+            workerDocument = nil; browserDocument = nil; runOutput = nil
             errorOutput = "Not executed: correct the JSON-encoded source draft first."
             return
         }
@@ -3196,6 +3201,7 @@ struct CodeBlockCardView: View {
         runOutput = nil
         errorOutput = nil
         workerDocument = nil
+        browserDocument = nil
         let src = currentCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !src.isEmpty else {
             runOutput = "(empty snippet)"
@@ -3213,11 +3219,7 @@ struct CodeBlockCardView: View {
             return
         }
         if ["html", "htm", "svg"].contains(lang) {
-            let stripped = src
-                .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
-                .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            runOutput = stripped.isEmpty ? "HTML/SVG preview ready (\(src.count) bytes)" : stripped
+            browserDocument = currentCode
             return
         }
         if ["py", "python", "python3"].contains(lang) {
