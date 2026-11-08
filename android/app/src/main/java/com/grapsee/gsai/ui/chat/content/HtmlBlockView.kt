@@ -187,8 +187,8 @@ fun HtmlBlockView(block: Block.HtmlBlock, streaming: Boolean) {
     }
     val tokens = rememberDocTokens()
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     if (block.mode == "sandbox") {
-        val clipboard = LocalClipboardManager.current
         val payload = remember(block.code) { runCatching { widgetJson.decodeFromString<SandboxPayload>(block.code) }.getOrNull() }
         if (payload == null) Text("Not executed: invalid code sandbox payload.")
         else Column {
@@ -205,7 +205,8 @@ fun HtmlBlockView(block: Block.HtmlBlock, streaming: Boolean) {
     val built = doc
     if (built == null) {
         // Honest degradation: an over-cap or unbuildable document shows as code.
-        CodeBlockCard(language = block.mode, code = block.code, open = false, onCopyCode = {})
+        CodeBlockCard(language = block.mode, code = block.code, open = block.open,
+            onCopyCode = { clipboard.setText(AnnotatedString(it)) })
         return
     }
     HarnessCard(tag = when (block.mode) { "map" -> "MAP"; "svg" -> "SVG"; else -> "HTML" }) {
@@ -332,7 +333,7 @@ internal fun buildDocument(mode: String, code: String, tokens: DocTokens): Strin
         "map" -> buildMapDoc(code, tokens.text, tokens.accent)
         "mermaid" -> buildMermaidDoc(code, tokens.text, tokens.accent)
         "player" -> buildPlayerDoc(code, tokens.text, tokens.accent)
-        "sandbox" -> buildSandboxDoc(code, tokens.text, tokens.accent)
+        "sandbox" -> null // Native editor handled by HtmlBlockView, never a host-script evaluator.
         else -> null
     }
 }
@@ -825,7 +826,6 @@ private data class SandboxPayload(
 
 // Structured sandbox payloads use the same native source editor as code fences.
 // They are never evaluated synchronously in a WebView host script.
-private fun buildSandboxDoc(code: String, textHex: String, accentHex: String): String? = null
 
 @Composable
 fun CodeSandboxView(code: String, language: String, title: String = "") {
