@@ -83,8 +83,8 @@ struct ReactPreviewIOS: UIViewRepresentable {
         }
         @objc private func keyboardChanged(_ note: Notification) {
             guard let web = webView, let window = web.window,
-                  let keyboardScreen = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
-            let keyboard = window.convert(keyboardScreen, from: nil)
+                  let keyboardValue = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue else { return }
+            let keyboard = window.convert(keyboardValue.cgRectValue, from: nil)
             guard keyboard.minY < window.bounds.maxY else { restoreKeyboardInset(); return }
             guard ownsFirstResponder(web) else { return }
             // Read the ACTUAL focused form bounds. No runtime bridge is exposed
