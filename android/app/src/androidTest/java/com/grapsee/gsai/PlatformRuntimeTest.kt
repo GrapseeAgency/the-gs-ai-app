@@ -45,6 +45,72 @@ class PlatformRuntimeTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
 
+    @Test fun generatedCodeEditorAndWorkerPreserveUnicodeAndStopLoops() {
+        val source = """const data = {"😀":7,"🌅":9}; console.log(data["😀"]+data["🌅"], "😀".length);"""
+        val parsed = com.grapsee.gsai.ui.chat.content.parseBlocks("```javascript\n$source\n```")
+            .filterIsInstance<com.grapsee.gsai.ui.chat.content.Block.CodeBlock>().single()
+        assertEquals(source, parsed.code)
+        val encoded = com.grapsee.gsai.ui.chat.content.CodeDisplay.encodeEditor(source)
+        assertEquals(source, com.grapsee.gsai.ui.chat.content.CodeDisplay.decodeEditor(encoded))
+        assertFalse(encoded.contains("😀"))
+        for (invalid in listOf("'not JSON'", "\"unfinished", "\"ok\" false", "[]", "\"bad\\x\"")) {
+            assertTrue(runCatching { com.grapsee.gsai.ui.chat.content.CodeDisplay.decodeEditor(invalid) }.isFailure)
+        }
+        var copied: String? = null
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    com.grapsee.gsai.ui.chat.content.CodeBlockCard(parsed.language, parsed.code, false) { copied = it }
+                }
+            }
+        }
+        compose.onAllNodes(hasText("😀", substring = true)).assertCountEquals(0)
+        compose.onNodeWithContentDescription("Copy code").performClick()
+        compose.runOnIdle { assertEquals(source, copied) }
+        compose.onNodeWithText("Edit").performClick()
+        compose.onNode(hasSetTextAction()).assertTextEquals(encoded)
+        compose.onNode(hasSetTextAction()).performTextReplacement("\"unfinished")
+        compose.onNodeWithText("Run in Browser").performScrollTo().performClick()
+        compose.onNodeWithText("Not executed: correct the JSON-encoded source draft first.").assertExists()
+        compose.onNodeWithText("Reset").performScrollTo().performClick()
+        compose.onNodeWithText("Edit").assertExists()
+        compose.onNodeWithText("Run in Browser").performScrollTo().performClick()
+        fun findWeb(view: View): android.webkit.WebView? {
+            if (view is android.webkit.WebView) return view
+            if (view is android.view.ViewGroup) for (i in 0 until view.childCount) findWeb(view.getChildAt(i))?.let { return it }
+            return null
+        }
+        var web: android.webkit.WebView? = null
+        awaitObserved("native Run creates an actual worker WebView") {
+            instrumentation.runOnMainSync { web = findWeb(compose.activity.window.decorView) }; web != null
+        }
+        fun evaluate(script: String): String? {
+            val done = CountDownLatch(1); var result: String? = null
+            instrumentation.runOnMainSync { web!!.evaluateJavascript(script) { result = it; done.countDown() } }
+            assertTrue(done.await(5, TimeUnit.SECONDS)); return result
+        }
+        awaitObserved("actual Unicode-key computation reaches native worker console") {
+            evaluate("!!document.getElementById('out') && document.getElementById('out').textContent.includes('16 2') && document.getElementById('out').textContent.includes('Completed.')") == "true"
+        }
+        assertEquals("false", evaluate("document.body.textContent.includes(String.fromCodePoint(0x1f600))"))
+        val network = """self.addEventListener('securitypolicyviolation', e=>console.log('BLOCKED '+e.effectiveDirective));try{await fetch('https://github.com/');}catch{console.log('FETCH REFUSED');}await new Promise(r=>setTimeout(r,100));"""
+        fun load(sourceCode: String) {
+            instrumentation.runOnMainSync {
+                web!!.loadDataWithBaseURL(null, com.grapsee.gsai.ui.chat.content.JavaScriptWorkerSandboxAndroid.document(instrumentation.targetContext, sourceCode), "text/html", "UTF-8", null)
+            }
+        }
+        load(network)
+        awaitObserved("real Worker CSP blocks network, not merely a DNS or CORS failure") {
+            evaluate("!!document.getElementById('out') && document.getElementById('out').textContent.includes('BLOCKED connect-src')") == "true"
+        }
+        load("while(true) {}")
+        awaitObserved("infinite worker loop is actually terminated while native UI remains responsive") {
+            evaluate("!!document.getElementById('out') && document.getElementById('out').textContent.includes('Stopped: execution exceeded 2 seconds.')") == "true"
+        }
+        compose.onNodeWithText("Edit").performScrollTo().performClick()
+        compose.onNode(hasSetTextAction()).assertExists()
+    }
+
     @Test fun backgroundReplyAppearsInOsAndSettingsSuppressIt() {
         val context = instrumentation.targetContext
         val manager = context.getSystemService(NotificationManager::class.java)
