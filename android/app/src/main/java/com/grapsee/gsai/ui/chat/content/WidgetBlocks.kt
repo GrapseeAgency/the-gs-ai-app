@@ -953,6 +953,13 @@ fun inferWidgetKind(json: String): String? {
         null
     } ?: return null
     val keys = obj.keys
+    val explicitApp = listOf("kind", "widget", "type").any { key ->
+        val value = (obj[key] as? JsonPrimitive)?.contentOrNull
+        value != null && widgetKindOf(value) == "app"
+    }
+    if (explicitApp) return if (parseWidget("app", normalized) != null) "app" else null
+    if ("columns" in keys && "rows" in keys) return if (parseWidget("table", normalized) != null) "table" else null
+    if ("series" in keys) return if (parseWidget("chart", normalized) != null) "chart" else null
     val candidates = buildList {
         // Explicit kind / sub-type discriminators
         for (k in listOf("kind", "widget", "type", "sim", "view", "surface", "editor")) {
