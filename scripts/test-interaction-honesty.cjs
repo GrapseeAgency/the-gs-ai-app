@@ -193,6 +193,20 @@ async function main() {
     assert.equal(mixed.widgets, 0)
     assert.ok(mixed.text.includes('Rate: 10%'))
   })
+  check('all six supplied section fixtures pass production generation and parsing without discarded widget source', () => {
+    const fixtures = require('../shared-contracts/response-section-references.json').fixtures
+    assert.equal(fixtures.length, 6)
+    for (const fixture of fixtures) {
+      const compiled = compileWidgets({reply:fixture.wire,userPrompt:fixture.question})
+      assert.deepEqual(compiled.errors, [], fixture.id)
+      assert.deepEqual(parseStream(compiled.text).filter(segment=>segment.kind==='widget').map(segment=>segment.widget), fixture.widgetKinds, fixture.id)
+      assert.doesNotThrow(()=>renderToString(h(MessageContent,{text:compiled.text,dark:false})), fixture.id)
+    }
+    const grid = parseStream(fixtures.find(f=>f.id==='05-data-grid').wire).find(segment=>segment.kind==='table')
+    assert.equal(grid.rows.length, 11)
+    const code = parseStream(fixtures.find(f=>f.id==='03-react-code').wire).find(segment=>segment.kind==='code')
+    assert.equal(code.language, 'jsx'); assert.ok(code.code.includes('localStorage'))
+  })
   check('timer generation preserves real explicit seconds without price defaults or unit coercion', () => {
     for (const durationSeconds of [0, -1, 1.5, 604801, null, true, '$25', '25%', '25']) {
       assert.equal(validateWidget('app', JSON.stringify({type:'timer',durationSeconds})).ok, false)
