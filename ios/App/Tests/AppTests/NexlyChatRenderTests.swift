@@ -241,9 +241,14 @@ final class NexlyChatRenderTests: XCTestCase {
                 (view as? UIScrollView).map { [$0] } ?? view.subviews.flatMap { scrollViews($0) }
             }
             let scroll = try XCTUnwrap(scrollViews(host.view).filter { $0.bounds.width > size.width * 0.8 }.max { $0.bounds.height < $1.bounds.height }, "Actual chat response scroll view is required")
-            let maximum = max(0, scroll.contentSize.height - scroll.bounds.height)
-            let stride = max(1, scroll.bounds.height * 0.75)
-            var offset: CGFloat = 0
+            // UIKit's real top is negative when safe-area content insets apply.
+            // Normalize evidence coordinates to that genuine top; do not ask a
+            // short response to reach offset zero when UIKit clamps it to -47.
+            let minimum = -scroll.adjustedContentInset.top
+            let maximum = max(minimum, scroll.contentSize.height + scroll.adjustedContentInset.bottom - scroll.bounds.height)
+            let viewportHeight = max(1, scroll.bounds.height - scroll.adjustedContentInset.top - scroll.adjustedContentInset.bottom)
+            let stride = max(1, viewportHeight * 0.75)
+            var offset = minimum
             var frames: [[String: Any]] = []
             repeat {
                 scroll.setContentOffset(CGPoint(x: 0, y: offset), animated: false)
@@ -255,14 +260,14 @@ final class NexlyChatRenderTests: XCTestCase {
                 XCTAssertTrue(composited)
                 let name = "\(scrollStem)-scroll-\(frames.count).png"
                 try XCTUnwrap(viewport.pngData()).write(to: outputDirectory().appendingPathComponent(name))
-                frames.append(["file": name, "offsetY": Double(scroll.contentOffset.y)])
+                frames.append(["file": name, "offsetY": Double(scroll.contentOffset.y - minimum)])
                 if offset >= maximum { break }
                 offset = min(maximum, offset + stride)
                 XCTAssertLessThan(frames.count, 20, "A capture cap must fail, never silently omit the response tail")
                 if frames.count >= 20 { break }
             } while true
             XCTAssertEqual(scroll.contentOffset.y, maximum, accuracy: 1, "Full-scroll evidence must include the actual bottom")
-            let manifest: [String: Any] = ["viewportHeight": Double(scroll.bounds.height), "maximumOffsetY": Double(maximum), "frames": frames]
+            let manifest: [String: Any] = ["viewportHeight": Double(viewportHeight), "maximumOffsetY": Double(maximum - minimum), "minimumContentOffsetY": Double(minimum), "frames": frames]
             try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]).write(to: outputDirectory().appendingPathComponent(scrollStem + "-scroll.json"))
         }
         return drew ? image : nil
