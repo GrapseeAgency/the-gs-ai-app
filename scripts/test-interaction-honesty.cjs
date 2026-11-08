@@ -470,6 +470,21 @@ async function main() {
   check('no invented 0-100 slider for unbounded source input', () => assert.equal(document.querySelectorAll('input[type="range"]').length, 0))
   await mount(h(CalcWidget, { payload: { fields: [], outputs: [] } }))
   check('empty payload changes do not violate React hook order', () => assert.match(document.body.textContent, /misconfigured/))
+  const { parseTableNumber } = from('lib/nexly/table-number')
+  check('whole-cell numbers retain signs, grouping and real unit multipliers', () => {
+    for (const [raw, expected] of [['↓ 1.2%', -1.2], ['↘ -1.2%', -1.2], ['↑ +0.5%', 0.5], ['−0.3%', -0.3], ['-$1,200.50', -1200.5], ['$-1.2k', -1200], ['৳2M', 2e6], ['₹10', 10], ['2x', 2], ['0', 0]]) assert.equal(parseTableNumber(raw), expected, raw)
+  })
+  check('malformed or contradictory numbers never become invented numeric cells', () => {
+    for (const raw of ['1,00', '1+2', '1 2', '1e3', 'NaN', 'Infinity', '↓+1%', '↑-1%', '--1', '+-1', 'growth 12%', '1.2.3', true, null]) assert.equal(parseTableNumber(raw), null, String(raw))
+  })
+  const trendRows = [['Down', '↘1.5%'], ['Up', '+0.2%'], ['Negative', '−0.3%']]
+  for (const ordinary of [false, true]) {
+    await mount(ordinary ? h(MessageContent, {text: '| Name | Trend |\n| --- | --- |\n' + trendRows.map(row=>'| '+row.join(' | ')+' |').join('\n')}) : h(TableWidget, {payload:{columns:['Name','Trend'],rows:trendRows}}))
+    await click(document.querySelectorAll('th')[1])
+    check(`${ordinary ? 'Markdown' : 'widget'} trend sorting puts the actual largest loss first`, () => assert.match(document.querySelector('tbody tr').textContent, /Down/))
+    await click(document.querySelectorAll('th')[1])
+    check(`${ordinary ? 'Markdown' : 'widget'} descending trend sorting puts the actual gain first`, () => assert.match(document.querySelector('tbody tr').textContent, /Up/))
+  }
   await mount(h(TableWidget, { payload: { columns: ['Name','Amount'], rows: Array.from({length: 31}, (_, i) => ['Item '+(i+1), String(31-i)]) } }))
   check('table genuinely paginates', () => assert.equal(document.querySelectorAll('tbody tr').length, 5))
   await click(document.querySelectorAll('th')[1])
