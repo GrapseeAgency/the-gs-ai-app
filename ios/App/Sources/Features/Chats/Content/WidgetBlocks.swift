@@ -215,6 +215,35 @@ func sanitizeWidgetPresentationIOS(_ value: Any, key: String = "") -> Any {
     return value
 }
 
+/// Repair delimiters, never comma/bracket text inside actual source strings.
+func stripTrailingJSONCommasIOS(_ raw: String) -> String {
+    let scalars = Array(raw.unicodeScalars)
+    var result = ""
+    var quoted = false
+    var escaped = false
+    var index = 0
+    while index < scalars.count {
+        let scalar = scalars[index]
+        if quoted {
+            result.unicodeScalars.append(scalar)
+            if escaped { escaped = false }
+            else if scalar.value == 92 { escaped = true }
+            else if scalar.value == 34 { quoted = false }
+        } else if scalar.value == 34 {
+            quoted = true
+            result.unicodeScalars.append(scalar)
+        } else if scalar.value == 44 {
+            var next = index + 1
+            while next < scalars.count && CharacterSet.whitespacesAndNewlines.contains(scalars[next]) { next += 1 }
+            if next >= scalars.count || (scalars[next].value != 125 && scalars[next].value != 93) {
+                result.unicodeScalars.append(scalar)
+            }
+        } else { result.unicodeScalars.append(scalar) }
+        index += 1
+    }
+    return result
+}
+
 func parseRelaxedJSONObject(kind: String, raw: String) -> [String: Any]? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty, trimmed.count <= 65_536 else { return nil }
@@ -222,8 +251,9 @@ func parseRelaxedJSONObject(kind: String, raw: String) -> [String: Any]? {
        let any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
         return normalizeJSONRoot(kind: kind, value: any)
     }
-    // Strip trailing commas before } or ] and retry
-    let cleaned = trimmed.replacingOccurrences(of: ",\\s*([}\\]])", with: "$1", options: .regularExpression)
+    // String-aware recovery cannot turn a literal ",}" inside executable
+    // code into "}" merely because another field has a trailing comma.
+    let cleaned = stripTrailingJSONCommasIOS(trimmed)
     if let data = cleaned.data(using: .utf8),
        let any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
         return normalizeJSONRoot(kind: kind, value: any)
