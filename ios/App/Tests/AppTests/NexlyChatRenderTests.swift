@@ -44,7 +44,8 @@ final class NexlyChatRenderTests: XCTestCase {
             }
             XCTAssertEqual(widgets.map { $0.0 }, expected, id)
             for (kind, json) in widgets { XCTAssertTrue(isValidWidget(kind: kind, json: json), "\(id) cannot silently fall back to raw JSON") }
-            let image = try XCTUnwrap(try await Self.renderFlash(question: question, wire: wire, size: CGSize(width: 393, height: 852)))
+            let rendered = try await Self.renderFlash(question: question, wire: wire, size: CGSize(width: 393, height: 852))
+            let image = try XCTUnwrap(rendered)
             let data = try XCTUnwrap(image.pngData())
             XCTAssertGreaterThan(data.count, 20_000, id)
             let name = "genui-reference-ios-\(id)-393x852"
