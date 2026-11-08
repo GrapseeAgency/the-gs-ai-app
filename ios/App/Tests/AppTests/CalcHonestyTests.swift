@@ -39,6 +39,116 @@ final class CalcHonestyTests: XCTestCase {
         XCTAssertNotEqual(reopened.reactPreviewIdentity, ChatViewModel.ChatMessage(role: "assistant", content: "another answer").reactPreviewIdentity)
     }
 
+    /// Capture an actual SQLite snapshot before later main-actor mutations.
+    /// Applying that stored snapshot explicitly makes the real startup race
+    /// deterministic, without mocking SQL or erasing the shared app history.
+    @MainActor
+    private func actualSQLiteBootstrapFixture() throws -> (directory: URL, sql: SQLiteChatStore, store: ConversationStore, conversations: [StoredConversation], messages: [StoredMessage]) {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("gs-bootstrap-" + UUID().uuidString)
+        let sql = SQLiteChatStore(databaseURL: directory.appendingPathComponent("history.sqlite"))
+        XCTAssertTrue(sql.isAvailable)
+        let old = StoredConversation(id: "actual-existing", title: "Original title", modelId: nil, pinned: false, archived: false,
+                                     createdAt: "2026-10-01T10:00:00.000Z", updatedAt: "2026-10-01T10:00:00.000Z")
+        let untouched = StoredConversation(id: "actual-untouched", title: "Untouched title", modelId: nil, pinned: false, archived: false,
+                                           createdAt: "2026-10-20T10:00:00.000Z", updatedAt: "2026-10-20T10:00:00.000Z")
+        sql.upsertConversation(old)
+        sql.upsertConversation(untouched)
+        for (index, content) in ["Original question", "Original answer", "Follow-up", "Original follow-up answer"].enumerated() {
+            sql.upsertMessage(StoredMessage(id: "actual-message-\(index)", conversationId: old.id,
+                                           role: index % 2 == 0 ? "user" : "assistant", content: content,
+                                           createdAt: String(format: "2026-10-01T10:00:%02d.000Z", index)))
+        }
+        sql.upsertMessage(StoredMessage(id: "untouched-message", conversationId: untouched.id, role: "assistant",
+                                       content: "Untouched actual answer", createdAt: untouched.createdAt))
+        let conversations = sql.loadConversations()
+        let messages = sql.loadMessages()
+        XCTAssertEqual(conversations.count, 2)
+        XCTAssertEqual(messages.count, 5)
+        return (directory, sql, ConversationStore(sql: sql), conversations, messages)
+    }
+
+    @MainActor
+    func testActualSQLiteDelayedBootstrapKeepsNewerRenamePinArchiveAndSourceBytes() throws {
+        let fixture = try actualSQLiteBootstrapFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let original = try XCTUnwrap(fixture.conversations.first { $0.id == "actual-existing" })
+        fixture.store.upsert(original)
+        fixture.store.rename(id: original.id, to: "Actual newer title")
+        fixture.store.setPinned(id: original.id, true)
+        fixture.store.setArchived(id: original.id, true)
+        let source = "Actual newer source with “curly quotes” and literal ,} ,]"
+        fixture.store.append(StoredMessage(id: "actual-message-1", conversationId: original.id, role: "assistant",
+                                          content: source, createdAt: "2026-10-20T10:00:00.000Z"))
+        fixture.store.applyBootstrap(conversations: fixture.conversations, messages: fixture.messages)
+        let actual = try XCTUnwrap(fixture.store.conversation(withID: original.id))
+        XCTAssertEqual(actual.title, "Actual newer title")
+        XCTAssertTrue(actual.pinned)
+        XCTAssertTrue(actual.archived)
+        let messages = fixture.store.messages(for: original.id)
+        XCTAssertEqual(messages.count, 4)
+        XCTAssertEqual(messages.first { $0.id == "actual-message-1" }?.content, source)
+        XCTAssertEqual(fixture.sql.loadConversations().first { $0.id == original.id }, actual)
+        XCTAssertEqual(fixture.store.messages(for: "actual-untouched").map(\.content), ["Untouched actual answer"])
+    }
+
+    @MainActor
+    func testActualSQLiteDelayedBootstrapCannotResurrectDeletedConversationOrMessages() throws {
+        let fixture = try actualSQLiteBootstrapFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        fixture.store.delete(id: "actual-existing")
+        fixture.store.applyBootstrap(conversations: fixture.conversations, messages: fixture.messages)
+        XCTAssertNil(fixture.store.conversation(withID: "actual-existing"))
+        XCTAssertTrue(fixture.store.messages(for: "actual-existing").isEmpty)
+        XCTAssertEqual(fixture.store.conversations.map(\.id), ["actual-untouched"])
+        XCTAssertEqual(fixture.sql.loadConversations(), fixture.store.conversations)
+        XCTAssertEqual(fixture.sql.loadMessages(), fixture.store.messages)
+    }
+
+    @MainActor
+    func testActualSQLiteDelayedBootstrapCannotUndoClearHistoryOrDropPostClearAnswer() throws {
+        let fixture = try actualSQLiteBootstrapFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        fixture.store.clearHistory()
+        XCTAssertTrue(fixture.sql.loadConversations().isEmpty)
+        XCTAssertTrue(fixture.sql.loadMessages().isEmpty)
+        let new = fixture.store.createLocalConversation(title: "Actual post-clear conversation")
+        fixture.store.append(StoredMessage(id: "actual-post-clear", conversationId: new.id, role: "assistant",
+                                          content: "Actual post-clear answer", createdAt: new.createdAt))
+        fixture.store.applyBootstrap(conversations: fixture.conversations, messages: fixture.messages)
+        XCTAssertEqual(fixture.store.conversations.map(\.id), [new.id])
+        XCTAssertEqual(fixture.store.messages.map(\.content), ["Actual post-clear answer"])
+        XCTAssertEqual(fixture.sql.loadConversations(), fixture.store.conversations)
+        XCTAssertEqual(fixture.sql.loadMessages(), fixture.store.messages)
+    }
+
+    @MainActor
+    func testActualSQLiteDelayedBootstrapCannotRestoreEditedAwayMessageTail() throws {
+        let fixture = try actualSQLiteBootstrapFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let original = try XCTUnwrap(fixture.conversations.first { $0.id == "actual-existing" })
+        fixture.store.upsert(original)
+        for message in fixture.messages where message.conversationId == original.id { fixture.store.append(message) }
+        fixture.store.truncateMessages(fromUserContent: "Follow-up", in: original.id)
+        fixture.store.append(StoredMessage(id: "actual-replacement", conversationId: original.id, role: "assistant",
+                                          content: "Actual replacement", createdAt: "2026-10-20T10:00:00.000Z"))
+        fixture.store.applyBootstrap(conversations: fixture.conversations, messages: fixture.messages)
+        XCTAssertEqual(fixture.store.messages(for: original.id).map(\.content), ["Original question", "Original answer", "Actual replacement"])
+        XCTAssertEqual(fixture.sql.loadMessages().filter { $0.conversationId == original.id }, fixture.store.messages(for: original.id))
+    }
+
+    @MainActor
+    func testActualSQLiteDelayedBootstrapCannotRestoreRetentionPurgedHistory() throws {
+        let fixture = try actualSQLiteBootstrapFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        fixture.store.upsert(try XCTUnwrap(fixture.conversations.first { $0.id == "actual-existing" }))
+        XCTAssertEqual(fixture.store.purgeConversations(updatedBefore: "2026-10-10T00:00:00.000Z"), 1)
+        fixture.store.applyBootstrap(conversations: fixture.conversations, messages: fixture.messages)
+        XCTAssertEqual(fixture.store.conversations.map(\.id), ["actual-untouched"])
+        XCTAssertEqual(fixture.store.messages.map(\.id), ["untouched-message"])
+        XCTAssertEqual(fixture.sql.loadConversations(), fixture.store.conversations)
+        XCTAssertEqual(fixture.sql.loadMessages(), fixture.store.messages)
+    }
+
     @MainActor
     func testActualSQLiteHistoryAndOlderPagesKeepDurablePreviewIdentity() throws {
         let store = ConversationStore.shared
