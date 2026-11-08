@@ -120,6 +120,7 @@ async function main() {
     await allowedFrame.waitForFunction(() => document.getElementById('out')?.textContent.includes('NETWORK REACHED'), { timeout: 10000 })
     check('removing just CSP denial actually reaches the controlled network endpoint', () => assert.equal(requests.filter(url => url.includes('forbidden.example')).length, 1))
     await page.screenshot({ path: path.join(os.tmpdir(), 'gs-code-browser-runtime.png'), fullPage: true })
+    assert.equal(checks, 11, 'All required real-browser cases must execute')
     console.log(`\n${checks} real-browser code checks passed`)
   } finally { await browser.close(); fs.rmSync(libs, { recursive: true, force: true }) }
 }
