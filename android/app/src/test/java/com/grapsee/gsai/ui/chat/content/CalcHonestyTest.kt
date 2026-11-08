@@ -7,11 +7,11 @@ import org.junit.Test
 class CalcHonestyTest {
     @Test fun timersHaveExplicitSecondsNotPricesAndPassTheActualParserWithoutFakeItems() {
         val configured = parseWidget("app", """{"type":"timer","durationSeconds":5}""") as Widget.App
-        assertEquals(5.0, configured.data.durationSeconds!!, 0.0)
+        assertEquals(5.0, configured.w.durationSeconds!!, 0.0)
         val empty = parseWidget("app", """{"type":"timer"}""") as Widget.App
-        assertNull(empty.data.durationSeconds)
+        assertNull(empty.w.durationSeconds)
         val monetary = parseWidget("app", """{"type":"timer","items":[{"price":25}]}""") as Widget.App
-        assertNull(monetary.data.durationSeconds)
+        assertNull(monetary.w.durationSeconds)
         for (duration in listOf("0", "-1", "1.5", "604801", "true", "\"$25\"")) {
             assertNull(parseWidget("app", "{\"type\":\"timer\",\"durationSeconds\":" + duration + "}"))
         }
