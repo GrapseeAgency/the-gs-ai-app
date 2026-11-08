@@ -78,7 +78,7 @@ concurrency:
   # Final acceptance requires an executed, passing native keyboard/CRUD/storage
   # receipt before the full production-message, SQLite and visual audit. Keep
   # prior diagnostic runs intact; coalesce pending changes in this generation.
-  group: ios-response-runtime-v7-${{ github.ref }}
+  group: ios-response-runtime-v8-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -307,6 +307,7 @@ jobs:
             -scheme "$SCHEME" \
             -destination "$IOS_DESTINATION" \
             -derivedDataPath "$DERIVED_DATA" \
+            -only-testing:AppTests/CalcHonestyTests/testNativeJSONDelimiterRecoveryPreservesActualSourceBytesAndQuotedPunctuation \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch \
             -resultBundlePath ios/build/GSApp-react-keyboard.xcresult \
             CODE_SIGNING_ALLOWED=NO \
@@ -321,6 +322,12 @@ jobs:
           if len(receipt) != 1:
               raise SystemExit('Actual inline React test must execute and pass exactly once; zero/skipped tests do not count')
           print('::notice::Actual inline React keyboard/CRUD/storage receipt: ' + receipt[0].replace('%', '%25'))
+          source_receipt = [line for line in log.splitlines() if 'Test Case' in line
+                            and 'CalcHonestyTests testNativeJSONDelimiterRecoveryPreservesActualSourceBytesAndQuotedPunctuation]' in line
+                            and 'passed (' in line]
+          if len(source_receipt) != 1:
+              raise SystemExit('The actual native JSON source-byte test must execute and pass exactly once')
+          print('::notice::Actual native JSON source-byte receipt: ' + source_receipt[0].replace('%', '%25'))
           PY
 
       - name: Focused generated-widget runtime test (before the full suite)
