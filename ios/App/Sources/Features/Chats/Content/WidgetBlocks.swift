@@ -2706,7 +2706,7 @@ private struct ChecklistBodyView: View {
                         }
                         .font(.system(size: 13)).padding(.vertical, 4)
                     }
-                    .buttonStyle(.plain).accessibilityLabel(task.label)
+                    .buttonStyle(.plain).accessibilityLabel(task.label + (task.detail.isEmpty ? "" : ", " + task.detail))
                     .accessibilityValue(task.done ? "Completed" : "Not completed")
                     Button { editingID = task.id; adding = false; draft = task.label } label: {
                         NexlyGlyph(name: "pencil", size: 13, color: accent)
