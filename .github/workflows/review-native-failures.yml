@@ -1,19 +1,22 @@
 name: Review stored native failure evidence
 on:
-  pull_request:
-    paths: ['.github/workflows/review-native-failures.yml']
   workflow_dispatch:
     inputs:
       source_run:
         description: 'Existing iOS run containing genuine fixture failure logs'
         required: true
         type: number
+      evidence:
+        description: 'Original native control evidence or full-suite failure log'
+        type: choice
+        options: [controls, full-suite]
+        default: controls
 permissions:
   contents: read
   actions: read
 jobs:
   review:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.evidence != 'full-suite'
     name: Actual stored ${{ matrix.label }} from iOS ${{ inputs.source_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -81,15 +84,15 @@ jobs:
           PY
 
   inspect-stored-full-suite:
-    if: github.event_name == 'pull_request'
-    name: Actual full-suite failure from iOS 42506329728
+    if: github.event_name == 'workflow_dispatch' && inputs.evidence == 'full-suite'
+    name: Actual full-suite failure from iOS ${{ inputs.source_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: ios-build-logs-42506329728
-          run-id: 42506329728
+          name: ios-build-logs-${{ inputs.source_run }}
+          run-id: ${{ inputs.source_run }}
           github-token: ${{ github.token }}
           path: stored-full-suite
       - name: Publish actual full-suite failures, not focused-log noise
@@ -100,8 +103,8 @@ jobs:
           paths = list(Path('stored-full-suite').rglob('xcodebuild-test.log'))
           if len(paths) != 1: raise SystemExit('Expected the original full-suite XCTest log')
           lines = paths[0].read_text(errors='replace').splitlines()
-          actual = [line for line in lines if re.search(r'error:|failed \(|Testing failed:|XCTAssert|Failing tests:|TEST FAILED|crash|fatal|Abort', line, re.I)
-                    and 'ProcessSuspension' not in line]
+          actual = [line for line in lines if re.search(r'error:|failed \(|Testing failed:|XCTAssert|Failing tests:|TEST FAILED|crash(?:ed|ing|:)|fatal error|Abort trap', line, re.I)
+                    and 'ProcessSuspension' not in line and not re.search(r"Test Case .* (?:passed|started)", line)]
           for line in actual[-10:]:
               print('::error title=Actual stored full-suite XCTest failure::' + line[:3500].replace('%', '%25').replace('\r', '%0D'))
           if not actual:
