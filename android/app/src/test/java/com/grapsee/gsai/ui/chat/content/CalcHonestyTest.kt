@@ -14,6 +14,15 @@ class CalcHonestyTest {
         }
     }
 
+    @Test fun actualScenarioSeedsNeverRoundSmallAPRToZeroOrTruncateSourceAmounts() {
+        assertEquals("0.0012", sourceScenarioNumberText(0.0012))
+        assertEquals("0.0000000012", sourceScenarioNumberText(0.0000000012))
+        assertEquals("100.999", sourceScenarioNumberText(100.999))
+        assertEquals("120000000000000000000", sourceScenarioNumberText(1.2e20))
+        assertEquals("0", sourceScenarioNumberText(0.0))
+        assertEquals("", sourceScenarioNumberText(Double.NaN))
+    }
+
     @Test fun sourceLoanPaymentsKeepTrueZeroAndSmallRateInterestWithoutInventedRounding() {
         // Independent 90-digit Decimal amortization references.
         assertEquals(1000.0 / 12, sourceLoanMonthlyPayment(1000.0, 0.0, 1)!!, 1e-9)
