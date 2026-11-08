@@ -103,7 +103,7 @@ export function compileWidgets(input: CompileInput): CompileResult {
   }
 
   const valid: Array<{ start: number; end: number; replacement: string; repaired: boolean }> = []
-  const invalid: Array<{ start: number; end: number }> = []
+  const invalid: Array<{ start: number; end: number; replacement: string }> = []
   const errors: string[] = []
   // Tracks the block above so two adjacent widgets never share a face. The
   // model's explicit accent/variant wins; this only breaks ties.
@@ -152,8 +152,9 @@ export function compileWidgets(input: CompileInput): CompileResult {
         repaired: result.repaired,
       })
     } else {
-      invalid.push({ start: fence.start, end: fence.end })
-      errors.push(`${fence.kind}: ${validationErrors(result).join(', ')}`)
+      const reason = `${fence.kind}: ${validationErrors(result).join(', ')}`
+      invalid.push({ start: fence.start, end: fence.end, replacement: widgetSourceFallback(fence.json, `Interactive content could not be rendered (${reason}). Original source is preserved below.`) })
+      errors.push(reason)
     }
   }
 
@@ -162,7 +163,7 @@ export function compileWidgets(input: CompileInput): CompileResult {
   const overflow = valid.slice(LIMITS.maxWidgetsPerAnswer)
 
   if (kept.length > 0) {
-    let text = rewrite(reply, [...kept, ...overflow.map((v) => ({ ...v, replacement: '' }))], invalid)
+    let text = rewrite(reply, [...kept, ...overflow.map((v) => ({ ...v, replacement: widgetSourceFallback(reply.slice(v.start, v.end), 'Additional interactive content exceeds this response’s widget limit. Original source is preserved below.') }))], invalid)
     return {
       text: text.trimEnd(),
       widgets: kept.length,
@@ -170,6 +171,9 @@ export function compileWidgets(input: CompileInput): CompileResult {
       errors,
     }
   }
+
+  // An invalid data widget is not evidence for an invented replacement chart.
+  if (invalid.length > 0) return { text: strip(reply, invalid), widgets: 0, path: 'none', errors }
 
   // Path 3: no usable widget. Only build one when the user asked for it.
   const chartType = requestedChartType(userPrompt)
@@ -214,9 +218,9 @@ function fenceBlock(kind: WidgetKind, json: string): string {
 function rewrite(
   text: string,
   replacements: Array<{ start: number; end: number; replacement: string }>,
-  removals: Array<{ start: number; end: number }>
+  removals: Array<{ start: number; end: number; replacement?: string }>
 ): string {
-  const edits = [...replacements, ...removals.map((r) => ({ ...r, replacement: '' }))]
+  const edits = [...replacements, ...removals.map((r) => ({ ...r, replacement: r.replacement ?? '' }))]
     .sort((a, b) => b.start - a.start)
   let out = text
   for (const edit of edits) {
@@ -225,7 +229,14 @@ function rewrite(
   return out
 }
 
-function strip(text: string, removals: Array<{ start: number; end: number }>): string {
+function widgetSourceFallback(source: string, message: string): string {
+  const longest = Math.max(0, ...(source.match(/`+/g) ?? []).map(run => run.length))
+  const fence = '`'.repeat(Math.max(3, longest + 1))
+  // A text fence cannot be re-promoted into the same invalid widget by clients.
+  return `> ${message}\n\n${fence}text\n${source}\n${fence}`
+}
+
+function strip(text: string, removals: Array<{ start: number; end: number; replacement?: string }>): string {
   return rewrite(text, [], removals)
 }
 
