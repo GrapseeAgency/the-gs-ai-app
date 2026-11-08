@@ -1,8 +1,9 @@
 /* Requires the compiled probe plus pinned Chromium/puppeteer-core/esbuild.
  * Real browser, actual React controls and clipboard. No fabricated worker or
  * fetch responses are used to claim denial: the allowed counterfactual MUST
- * reach the intercepted request, while production CSP must prevent it. */
+ * reach a real local HTTP endpoint, while production CSP must prevent it. */
 const assert = require('node:assert/strict')
+const http = require('node:http')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -30,8 +31,19 @@ async function main() {
     define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'silent' })
   const browser = await puppeteer.launch({ executablePath: await chromium.executablePath(), args: chromium.args.filter(arg => arg !== '--disable-web-security'),
     headless: true, env: { ...process.env, LD_LIBRARY_PATH: path.join(libs, 'lib') + ':' + (process.env.LD_LIBRARY_PATH || '') } })
+  let closeProbe = () => {}
   try {
     const requests = []
+    const probeHits = { '/code-probe': 0, '/terminal-probe': 0 }
+    const server = http.createServer((request, response) => {
+      if (Object.hasOwn(probeHits, request.url)) probeHits[request.url]++
+      response.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' })
+      response.end('{"allowed":true}')
+    })
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+    const endpoint = `http://127.0.0.1:${server.address().port}`
+    closeProbe = () => { server.closeAllConnections(); server.close() }
+
     const context = browser.defaultBrowserContext()
     await context.overridePermissions('https://gs.test', ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write'])
     async function pageWithApp() {
@@ -44,6 +56,9 @@ async function main() {
           headers: { 'Access-Control-Allow-Origin': '*' }, body: request.url().includes('forbidden.example') ? '{"allowed":true}' : '<!doctype html><div id="app"></div>' }).catch(() => {})
       })
       await page.goto('https://gs.test/')
+      // Only the fixture page is intercepted. Probe fetches use a REAL HTTP
+      // endpoint: CDP response delivery is not part of the two-second runtime.
+      await page.setRequestInterception(false)
       return page
     }
     const page = await pageWithApp()
@@ -104,21 +119,21 @@ async function main() {
     const stopped = await frameOutput('Stopped: execution exceeded 2 seconds.')
     check('infinite actual Worker is terminated without blocking the app', () => assert.ok(Date.now() - began >= 1900 && Date.now() - began < 10000))
     assert.equal(await stopped.frame.$eval('#run', el => el.textContent), 'Run again')
-    const networkSource = 'try{await fetch("https://forbidden.example/secret");console.log("NETWORK REACHED")}catch{console.log("FETCH REFUSED")}await new Promise(r=>setTimeout(r,100));'
+    const networkSource = 'try{await fetch(' + JSON.stringify(endpoint + '/code-probe') + ');console.log("NETWORK REACHED")}catch{console.log("FETCH REFUSED")}await new Promise(r=>setTimeout(r,100));'
     await mount(networkSource); await click('Run Code')
     const denied = await frameOutput('Completed.')
     check('real browser Worker reports an actual CSP violation', () => { assert.ok(denied.output.includes('BLOCKED connect-src')); assert.ok(denied.output.includes('FETCH REFUSED')); assert.ok(!denied.output.includes('NETWORK REACHED')) })
-    check('production CSP prevents the request before interception', () => assert.equal(requests.filter(url => url.includes('forbidden.example')).length, 0))
+    check('production CSP prevents any actual HTTP request', () => assert.equal(probeHits['/code-probe'], 0))
     // Causal negative control: only the connection policy changes. If requests
     // were merely offline/blocked by the test infrastructure this MUST fail.
     const allowedPage = await pageWithApp()
-    const permissive = javascriptSandboxDocument(networkSource).replace("connect-src 'none'", 'connect-src https://forbidden.example')
+    const permissive = javascriptSandboxDocument(networkSource).replace("connect-src 'none'", `connect-src ${endpoint}`)
     await allowedPage.addScriptTag({ content: compiled.outputFiles[0].text })
     await allowedPage.evaluate(source => window.gsRenderHTML(source), permissive)
     await allowedPage.waitForSelector('iframe')
     const allowedFrame = await (await allowedPage.$('iframe')).contentFrame()
     await allowedFrame.waitForFunction(() => document.getElementById('out')?.textContent.includes('NETWORK REACHED'), { timeout: 10000 })
-    check('removing just CSP denial actually reaches the controlled network endpoint', () => assert.equal(requests.filter(url => url.includes('forbidden.example')).length, 1))
+    check('removing just CSP denial actually reaches the real HTTP endpoint', () => assert.equal(probeHits['/code-probe'], 1))
     await page.screenshot({ path: path.join(os.tmpdir(), 'gs-code-browser-runtime.png'), fullPage: true })
     const payload = JSON.parse('{"welcome":"Welcome $& $$ </script> 😀 __GS_WORKER_CONTRACT_LITERAL__ __GS_TERMINAL_PAYLOAD_LITERAL__","commands":[{"name":"deploy","description":"Help, not execution","output":"deployed"}],"__proto__":{"polluted":true}}')
     await page.evaluate(json => window.gsRenderTerminal(JSON.parse(json)), JSON.stringify(payload))
@@ -175,16 +190,16 @@ async function main() {
       const controlPage = await pageWithApp()
       await controlPage.addScriptTag({ content: compiled.outputFiles[0].text })
       const production = terminalSandboxDocument(payload)
-      const document = allowed ? production.replaceAll("connect-src 'none'", 'connect-src https://forbidden.example') : production
+      const document = allowed ? production.replaceAll("connect-src 'none'", `connect-src ${endpoint}`) : production
       await controlPage.evaluate(source => window.gsRenderHTML(source), document)
       await controlPage.waitForSelector('iframe[title="interactive view"]')
       const host = await (await controlPage.$('iframe[title="interactive view"]')).contentFrame()
       await host.waitForSelector('#command')
-      await host.type('#command', 'js try{await fetch("https://forbidden.example/terminal-probe");console.log("NETWORK REACHED")}catch{console.log("FETCH REFUSED")}await new Promise(r=>setTimeout(r,100));')
+      await host.type('#command', 'js try{await fetch(' + JSON.stringify(endpoint + '/terminal-probe') + ');console.log("NETWORK REACHED")}catch{console.log("FETCH REFUSED")}await new Promise(r=>setTimeout(r,100));')
       await host.click('button[type="submit"]')
       const output = await execution(host, 'Completed.')
-      check(allowed ? 'terminal policy-only counterfactual really reaches the endpoint' : 'terminal production CSP prevents actual network before interception', () => {
-        assert.equal(requests.filter(url => url.includes('/terminal-probe')).length, allowed ? 1 : 0)
+      check(allowed ? 'terminal policy-only counterfactual really reaches the endpoint' : 'terminal production CSP prevents any actual HTTP request', () => {
+        assert.equal(probeHits['/terminal-probe'], allowed ? 1 : 0)
         assert.equal(output.output.includes('NETWORK REACHED'), allowed)
         if (!allowed) assert.ok(output.output.includes('FETCH REFUSED'))
       })
@@ -193,6 +208,6 @@ async function main() {
     await page.screenshot({ path: path.join(os.tmpdir(), 'gs-terminal-browser-runtime.png'), fullPage: true })
     assert.equal(checks, 27, 'All required real-browser code and terminal cases must execute')
     console.log(`\n${checks} real-browser code and terminal checks passed`)
-  } finally { await browser.close(); fs.rmSync(libs, { recursive: true, force: true }) }
+  } finally { closeProbe(); await browser.close(); fs.rmSync(libs, { recursive: true, force: true }) }
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })
