@@ -99,7 +99,7 @@ func responseSourceArchiveIOS(_ sources: [(String?, String)]) throws -> Data {
 }
 
 struct ResponseExportDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.data] }
+    static var readableContentTypes: [UTType] { [.zip, .plainText, UTType(filenameExtension: "md") ?? .plainText, .data] }
     var data: Data
     init(data: Data) { self.data = data }
     init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
