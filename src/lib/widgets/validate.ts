@@ -327,6 +327,15 @@ export function inferWidgetKind(json: string): WidgetKind | null {
   const obj = norm.obj
   const has = (k: string) => k in obj
 
+  // A recognizable dataset that fails validation must not be reinterpreted
+  // as an unrelated empty app just to obtain a successful widget result.
+  const explicitApp = [obj.kind, obj.widget].some(value => value === 'app') ||
+    (typeof obj.type === 'string' && (APP_TYPES as readonly string[]).includes(obj.type))
+  if (!explicitApp && (has('columns') || has('headers')) && (has('rows') || has('data'))) {
+    return validateWidget('table', repaired).ok ? 'table' : null
+  }
+  if (has('series') || has('datasets')) return validateWidget('chart', repaired).ok ? 'chart' : null
+
   const candidates: WidgetKind[] = []
   const push = (...ks: WidgetKind[]) => {
     for (const k of ks) {
@@ -1909,7 +1918,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       widget.slots.length > 0
     return {
       widget,
-      errors: hasBody ? [] : ['app needs steps, columns, items, groups, rows or slots'],
+      errors: (type === 'wizard' || type === 'onboarding') && !widget.steps.length ? ['wizard/onboarding needs actual steps'] : hasBody ? [] : ['app needs steps, columns, items, groups, rows or slots'],
       repaired,
     }
   },
