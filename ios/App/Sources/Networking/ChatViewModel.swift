@@ -395,6 +395,10 @@ final class ChatViewModel: ObservableObject {
         /// "up" | "down" | nil — the reader's verdict on this turn. Local
         /// truth: it is applied on tap, before the PATCH resolves.
         var feedback: String? = nil
+        /// The actual offline row identity, retained without pretending that a
+        /// local UUID is a server row eligible for the feedback API.
+        var durableID: String? = nil
+        var reactPreviewIdentity: String { serverId ?? durableID ?? id.uuidString }
     }
 
     // MARK: - Published state
@@ -1237,13 +1241,18 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func persistAssistant(content: String) {
-        guard let conversationID, !content.isEmpty else { return }
+        guard let conversationID, !content.isEmpty,
+              let index = messages.indices.last, messages[index].role == "assistant" else { return }
+        // Persist the SAME identity used by the live answer. A new unrelated
+        // UUID here made actual React edits disappear after history reload.
+        let identity = messages[index].reactPreviewIdentity
+        messages[index].durableID = identity
         ConversationStore.shared.append(StoredMessage(
-            id: UUID().uuidString,
+            id: identity,
             conversationId: conversationID,
             role: "assistant",
             content: content,
-            createdAt: ConversationStore.now()))
+            createdAt: messages[index].createdAt))
     }
 
     // MARK: - GS Lite (on-device responder)
@@ -1426,7 +1435,7 @@ final class ChatViewModel: ObservableObject {
 
     private func applyWindow(_ page: [StoredMessage]) {
         messages = page.map {
-            ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt, attachments: $0.attachments)
+            ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt, attachments: $0.attachments, durableID: $0.id)
         }
         oldestStamp = page.first?.createdAt
         hasOlder = page.count == historyPageSize
@@ -1455,7 +1464,7 @@ final class ChatViewModel: ObservableObject {
             return
         }
         messages.insert(contentsOf: page.map {
-            ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt, attachments: $0.attachments)
+            ChatMessage(role: $0.role, content: $0.content, createdAt: $0.createdAt, attachments: $0.attachments, durableID: $0.id)
         }, at: 0)
         oldestStamp = page.first?.createdAt
         if page.count < historyPageSize { hasOlder = false }
