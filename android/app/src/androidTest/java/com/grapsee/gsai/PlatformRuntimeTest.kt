@@ -350,8 +350,15 @@ class PlatformRuntimeTest {
             if (!device.wait(Until.hasObject(By.textContains(text)), 15_000L)) {
                 val dump = java.io.ByteArrayOutputStream()
                 device.dumpWindowHierarchy(dump)
-                val state = evaluate("JSON.stringify({text:document.body.innerText,height:innerHeight,frame:document.querySelector('#execution iframe')?.getBoundingClientRect().toJSON()})")
-                throw AssertionError("Actual Worker output missing: $text; DOM state: $state; accessibility: " + dump.toString("UTF-8").takeLast(4500))
+                val state = evaluate("JSON.stringify({text:document.body.innerText,height:innerHeight,bodyHeight:document.body.scrollHeight,bridge:typeof GsHost,installed:!!window.__gsNativeHeightBridge,frame:document.querySelector('#execution iframe')?.getBoundingClientRect().toJSON()})")
+                val tree = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
+                    .parse(java.io.ByteArrayInputStream(dump.toByteArray())).getElementsByTagName("node")
+                val labels = (0 until tree.length).mapNotNull { index ->
+                    val attributes = tree.item(index).attributes
+                    if (attributes.getNamedItem("package")?.nodeValue != "com.grapsee.gsai") null
+                    else listOf("text", "content-desc").mapNotNull { attributes.getNamedItem(it)?.nodeValue?.takeIf { value -> value.isNotBlank() } }.joinToString(" | ").takeIf { it.isNotBlank() }
+                }
+                throw AssertionError("Actual Worker output missing: $text; DOM state: $state; actual app accessibility: " + labels.joinToString("; ").take(4000))
             }
         }
         fun submit(command: String) {
