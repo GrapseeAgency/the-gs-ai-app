@@ -164,8 +164,8 @@ private struct NexlyCardGlass: ViewModifier {
                         shape.fill(
                             (scheme == .dark
                                 ? Color.white
-                                : Color(red: 0.953, green: 0.910, blue: 0.894))
-                                .opacity(scheme == .dark ? 0.10 : 0.30)
+                                : Color(red: 0.965, green: 0.925, blue: 1.0))
+                                .opacity(scheme == .dark ? 0.10 : 0.18)
                         )
                     )
             )
@@ -1257,15 +1257,15 @@ struct NexlyChatBackdrop: View {
                         ? [Color(red: 0.10, green: 0.07, blue: 0.065),
                            Color(red: 0.15, green: 0.10, blue: 0.09),
                            Color(red: 0.11, green: 0.075, blue: 0.07)]
-                        : [Color(red: 1.000, green: 0.985, blue: 0.965),
-                           Color(red: 0.992, green: 0.949, blue: 0.918),
-                           Color(red: 1.000, green: 0.973, blue: 0.953)],
+                        : [Color(red: 0.949, green: 0.875, blue: 0.953),
+                           Color(red: 0.969, green: 0.894, blue: 0.957),
+                           Color(red: 0.984, green: 0.878, blue: 0.941)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
                 // Daylight entering from the upper-left, as in the sheet.
                 RadialGradient(
-                    colors: [Color.white.opacity(scheme == .dark ? 0.05 : 0.52),
+                    colors: [Color.white.opacity(scheme == .dark ? 0.05 : 0.18),
                              Color.clear],
                     center: UnitPoint(x: 0.12, y: 0.02),
                     startRadius: 0,
