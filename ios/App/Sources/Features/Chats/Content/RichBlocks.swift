@@ -1328,12 +1328,14 @@ private struct NexlyCalloutCardView: View {
                 Text(callout.title)
                     .font(.system(size: compact ? 13.5 : 14.5, weight: .bold))
                     .foregroundStyle(titleColor)
+                    .fixedSize(horizontal: false, vertical: true)
                 if !callout.bodySpans.isEmpty {
                     Text(attributed(from: callout.bodySpans, theme: theme))
                         .font(.system(size: compact ? 13 : 14, weight: .regular))
                         .foregroundStyle(bodyColor)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if !extraItems.isEmpty {
                     BulletListView(items: extraItems, citations: citations)
