@@ -1266,17 +1266,17 @@ internal fun WidgetCardShell(
     val c = GsTheme.colors
     val dark = WidgetPalette.onDarkCanvas()
     val accent = WidgetPalette.legible(chosenHue, dark)
-    val base = c.elevatedSurface
+    val base = c.elevatedSurface.copy(alpha = if (dark) 0.80f else 0.46f)
     val clear = Color.Transparent
     val shape = toneShape(chosenTone)
     val fill: Brush = when (chosenTone) {
         CardTone.Plain, CardTone.Inset -> Brush.verticalGradient(listOf(base, base))
         CardTone.Outline, CardTone.Editorial -> Brush.verticalGradient(listOf(clear, clear))
         CardTone.Tinted -> Brush.verticalGradient(
-            listOf(accent.copy(alpha = if (dark) 0.16f else 0.10f), base, base)
+            listOf(accent.copy(alpha = if (dark) 0.16f else 0.06f), base, base)
         )
         CardTone.Hero -> Brush.verticalGradient(
-            listOf(accent.copy(alpha = if (dark) 0.26f else 0.18f), base, base)
+            listOf(accent.copy(alpha = if (dark) 0.26f else 0.08f), base, base)
         )
     }
     val edge = when (chosenTone) {
@@ -1320,6 +1320,7 @@ internal fun WidgetCardShell(
                 (pair.first ?: defaultPair.first) to clean
             }
             val defaultTone = remember(tag) { widgetTagGlassIcon(tag).second }
+            if (cleanedTitle.isNotEmpty() || action != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 NexlyGlassGlyphTile(
                     name = leadingIcon,
@@ -1344,21 +1345,7 @@ internal fun WidgetCardShell(
                 if (action != null) {
                     Box(Modifier.padding(end = 8.dp)) { action() }
                 }
-                Text(
-                    tag.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = accent,
-                    modifier = if (chosenTone == CardTone.Editorial) {
-                        // Editorial has no pill: the tag is a quiet caption on
-                        // the rule, not another chip on another card.
-                        Modifier.padding(start = 8.dp)
-                    } else {
-                        Modifier
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(accent.copy(alpha = if (dark) 0.20f else 0.12f))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    }
-                )
+            }
             }
             // Inset is a card inside a card: the content sits in its own
             // recessed panel, so a form never reads as a chart with fields.
@@ -2459,7 +2446,7 @@ internal val NUMERIC_CELL = Regex("""^[^\p{L}]{0,3}[-+]?\d[\d.,]*\s*(?:%|[a-zA-Z
 private fun StatWidgetView(w: StatWidget) {
     val c = GsTheme.colors
     val dark = WidgetPalette.onDarkCanvas()
-    WidgetCardShell(NexlyIcons.cleanPlainText(w.title).ifEmpty { "Stats" }, "stat") {
+    WidgetCardShell(NexlyIcons.cleanPlainText(w.title), "stat") {
         // Metrics are information, not pretend drill-down buttons. A two-column
         // layout keeps every source card discoverable on an ordinary phone.
         Column(Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
