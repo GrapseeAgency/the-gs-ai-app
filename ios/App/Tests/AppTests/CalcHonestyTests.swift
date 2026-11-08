@@ -1,9 +1,61 @@
 import XCTest
 import SwiftUI
 import WebKit
+import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testNativeFencesPreserveEverySourceSeparatorAndBlankLine() throws {
+        let sources = ["", "\n", "\r\n", "\n\nconst value = 7;\n\n", "\r\nconst value = 7;\r\n\r\n", "বাংলা 日本語\r\n\n\r\n", "const key = \"😀\";\rkeep"]
+        for marker in ["```", "````", "~~~~~"] {
+            for separator in ["\n", "\r\n"] {
+                for source in sources {
+                    let blocks = parseBlocks(marker + "javascript" + separator + source + separator + marker)
+                    guard blocks.count == 1, case .codeBlock(let language, let code, let open, _) = blocks[0] else {
+                        XCTFail("Source must remain one code block"); continue
+                    }
+                    XCTAssertEqual(language, "javascript")
+                    // Byte comparison is deliberate: Swift String equality
+                    // otherwise permits canonically equivalent source changes.
+                    XCTAssertEqual(Array(code.utf8), Array(source.utf8))
+                    XCTAssertFalse(open)
+                }
+            }
+        }
+        let source = "first\n```\n~~~\nlast\n\n"
+        guard case .codeBlock(_, let code, let open, _)? = parseBlocks("````javascript\n" + source + "\n`````").first else { return XCTFail("Expected wide code fence") }
+        XCTAssertEqual(Array(code.utf8), Array(source.utf8))
+        XCTAssertFalse(open)
+        guard case .codeBlock(_, let partial, _, _)? = parseBlocks("```javascript\nconst value = 7;\r").first else { return XCTFail("Expected partial source") }
+        XCTAssertEqual(Array(partial.utf8), Array("const value = 7;\r".utf8))
+        let html = "<!doctype html>\r\n<html>\r\n\r\n<body>Actual source</body></html>\r\n"
+        guard case .html(_, let parsedHTML, _, _)? = parseBlocks("~~~~html\r\n" + html + "\r\n~~~~").first else { return XCTFail("Expected HTML") }
+        XCTAssertEqual(Array(parsedHTML.utf8), Array(html.utf8))
+        guard case .widget(let kind, _, _, _)? = parseBlocks("~~~chart\n{\"labels\":[\"A\"],\"values\":[7]}\n~~~").first else { return XCTFail("Expected widget") }
+        XCTAssertEqual(kind, "chart")
+    }
+
+    func testNativeStreamingMatchesFullParseAtEveryFencePrefix() {
+        let prefix = "Intro.\n\nStable paragraph.\n\n"
+        let documents = [
+            prefix + "````javascript\r\n\r\nconst value = 7;\r\n\r\n```\r\nconsole.log(value);\n\n````\nAfter fence.\n\nFinal.",
+            prefix + "~~~~html\r\n<!doctype html>\r\n\r\n<html><body><button>Run</button></body></html>\r\n~~~~\r\nAfter app.",
+            prefix + "> ````javascript\r\n> \r\n> const value = 7;\r\n> \r\n> ````\r\n\r\nAfter quote."
+        ]
+        for document in documents {
+            var previous = ""
+            var blocks: [Block] = []
+            let bytes = Array(document.utf8)
+            // ASCII fixture bytes intentionally split CRLF between flushes.
+            for end in 1...bytes.count {
+                let current = String(decoding: bytes.prefix(end), as: UTF8.self)
+                blocks = parseStreamingBlocks(previousContent: previous, previousBlocks: blocks, content: current)
+                XCTAssertEqual(blocks, parseBlocks(current), "Streaming corrupted prefix \(end)")
+                previous = current
+            }
+        }
+    }
+
     func testCodeDisplayAndEditorPreserveActualSource() throws {
         let source = #"const data = {"😀":7,"🌅":9}; console.log(data["😀"]+data["🌅"], "😀".length);"#
         let blocks = parseBlocks("```javascript\n\(source)\n```")
@@ -24,7 +76,7 @@ final class CalcHonestyTests: XCTestCase {
         let source = #"const data = {"😀":7,"🌅":9}; console.log(data["😀"]+data["🌅"], "😀".length);"#
         let cases = [
             (source, "16 2\nCompleted."),
-            ("self.addEventListener('securitypolicyviolation',e=>console.log('BLOCKED '+e.effectiveDirective));try{await fetch('https://github.com/');}catch{console.log('FETCH REFUSED');}await new Promise(r=>setTimeout(r,100));", "BLOCKED connect-src"),
+            ("self.addEventListener('securitypolicyviolation',e=>console.log('BLOCKED '+e.effectiveDirective));try{await fetch('https://github.com/');}catch{console.log('FETCH REFUSED');}await new Promise(r=>setTimeout(r,100));", "FETCH REFUSED"),
             ("while(true) {}", "Stopped: execution exceeded 2 seconds.")
         ]
         let old = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
@@ -53,6 +105,53 @@ final class CalcHonestyTests: XCTestCase {
             }
             XCTAssertTrue(observed.contains(expected), "Actual WKWebView worker: expected \(expected), observed \(observed)")
             XCTAssertFalse(observed.contains("😀"))
+        }
+    }
+
+    @MainActor
+    func testWorkerCSPPreventsActualHTTPAndPolicyOnlyCounterfactualCanFetch() async throws {
+        // WebKit can refuse a Worker fetch without dispatching the Chromium
+        // securitypolicyviolation event. A rejected fetch alone proves nothing:
+        // count real HTTP requests and change ONLY the policy as a control.
+        let server = try WorkerHTTPProbe()
+        let ready = expectation(description: "HTTP probe listening")
+        server.listener.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
+        server.listener.start(queue: server.queue)
+        defer { server.listener.cancel() }
+        await fulfillment(of: [ready], timeout: 5)
+        let port = try XCTUnwrap(server.listener.port)
+        let endpoint = "http://127.0.0.1:\(port.rawValue)/worker-probe"
+        let program = "try { const response = await fetch('\(endpoint)', {cache:'no-store'}); console.log('PROBE ' + await response.text()); } catch { console.log('FETCH REFUSED'); }"
+        let production = JavaScriptWorkerSandboxIOS.document(source: program)
+        XCTAssertTrue(production.contains("connect-src 'none'"))
+        for allowed in [false, true] {
+            let document = allowed ? production.replacingOccurrences(of: "connect-src 'none'", with: "connect-src *") : production
+            let host = UIHostingController(rootView: HtmlBlockView(kind: "html", source: document, open: false))
+            let old = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }.first { $0.isKeyWindow }
+            let window: UIWindow
+            if let scene = old?.windowScene { window = UIWindow(windowScene: scene) }
+            else { window = UIWindow(frame: UIScreen.main.bounds) }
+            defer { window.isHidden = true; window.rootViewController = nil; old?.makeKeyAndVisible() }
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            func findWeb(_ view: UIView) -> WKWebView? {
+                if let web = view as? WKWebView { return web }
+                for child in view.subviews { if let web = findWeb(child) { return web } }
+                return nil
+            }
+            var observed = ""
+            let expected = allowed ? "PROBE causal-response" : "FETCH REFUSED"
+            let deadline = Date().addingTimeInterval(15)
+            while Date() < deadline {
+                host.view.layoutIfNeeded()
+                if let web = findWeb(host.view), let text = try? await web.evaluateJavaScript("document.getElementById('out')?.textContent || ''") as? String {
+                    observed = text
+                    if text.contains(expected) && text.contains("Completed.") { break }
+                }
+                try await Task.sleep(nanoseconds: 50_000_000)
+            }
+            XCTAssertTrue(observed.contains(expected), "Policy-only control allowed=\(allowed): \(observed)")
+            XCTAssertEqual(server.requestCount, allowed ? 1 : 0, "CSP must prevent the actual request, not merely fail DNS, CORS or ATS")
         }
     }
 
@@ -197,5 +296,32 @@ final class CalcHonestyTests: XCTestCase {
         XCTAssertEqual(CalcExprIOS.eval("-2**2", vars: [:]), -4, accuracy: 1e-9)
         XCTAssertEqual(CalcExprIOS.eval("2**3**2", vars: [:]), 512, accuracy: 1e-9)
         XCTAssertEqual(CalcExprIOS.eval("amount*(1+rate/100)", vars: ["amount": 240, "rate": 15]), 276, accuracy: 1e-9)
+    }
+}
+
+/// Actual test-only HTTP endpoint, not a fetch stub or a WebKit scheme mock.
+private final class WorkerHTTPProbe {
+    let queue = DispatchQueue(label: "gs.tests.worker-http-probe")
+    let listener: NWListener
+    private let lock = NSLock()
+    private var requests = 0
+    var requestCount: Int {
+        lock.lock(); defer { lock.unlock() }
+        return requests
+    }
+
+    init() throws {
+        listener = try NWListener(using: .tcp, on: .any)
+        listener.newConnectionHandler = { [weak self] connection in
+            guard let self = self else { connection.cancel(); return }
+            connection.start(queue: self.queue)
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [weak self] data, _, _, _ in
+                guard let self = self, let data = data, !data.isEmpty else { connection.cancel(); return }
+                self.lock.lock(); self.requests += 1; self.lock.unlock()
+                let body = "causal-response"
+                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-store\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n" + body
+                connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
+            }
+        }
     }
 }
