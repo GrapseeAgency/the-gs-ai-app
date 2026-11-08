@@ -342,6 +342,15 @@ private func normalizeJSONRoot(kind: String, value: Any) -> [String: Any]? {
 func inferWidgetKind(_ raw: String) -> String? {
     guard let obj = parseRelaxedJSONObject(kind: "json", raw: raw) else { return nil }
     let keys = Set(obj.keys)
+    let explicitApp = ["kind", "widget", "type"].contains { key in
+        guard let value = obj[key] as? String else { return false }
+        return widgetKindOf(value) == "app"
+    }
+    if explicitApp { return isValidWidget(kind: "app", json: raw) ? "app" : nil }
+    if (keys.contains("columns") || keys.contains("headers")) && (keys.contains("rows") || keys.contains("data")) {
+        return isValidWidget(kind: "table", json: raw) ? "table" : nil
+    }
+    if keys.contains("series") { return isValidWidget(kind: "chart", json: raw) ? "chart" : nil }
     var candidates: [String] = []
     for k in ["kind", "widget", "type", "sim", "view", "surface", "editor"] {
         if let s = obj[k] as? String, let mapped = widgetKindOf(s), !candidates.contains(mapped) {
@@ -486,7 +495,13 @@ func isValidWidget(kind: String, json: String) -> Bool {
     case "checklist":
         let items = (obj["items"] ?? obj["tasks"] ?? obj["todos"]) as? [Any]
         return items?.isEmpty == false
-    case "media", "app", "sim", "stage3d", "canvas", "editor", "terminal", "collab":
+    case "app":
+        let type = (obj["type"] as? String ?? "wizard").lowercased()
+        if type == "wizard" || type == "onboarding" {
+            return ((obj["steps"] ?? obj["stages"]) as? [Any])?.isEmpty == false
+        }
+        return !obj.isEmpty
+    case "media", "sim", "stage3d", "canvas", "editor", "terminal", "collab":
         return !obj.isEmpty
     default:
         return false
@@ -703,6 +718,12 @@ private struct HtmlSandboxWebView: UIViewRepresentable {
 
 // MARK: - Top-level Widget & HTML Views
 
+func validatedWidgetKindIOS(kind: String, json: String) -> String? {
+    if isValidWidget(kind: kind, json: json) { return kind }
+    guard let inferred = inferWidgetKind(json), isValidWidget(kind: inferred, json: json) else { return nil }
+    return inferred
+}
+
 struct WidgetBlockView: View {
     let kind: String
     let json: String
@@ -720,10 +741,8 @@ struct WidgetBlockView: View {
             .frame(maxWidth: .infinity, minHeight: 76)
             .padding(12)
             .nexlyGlassCard(corner: 16)
-        } else if let obj = parseRelaxedJSONObject(kind: resolvedKind, raw: json) {
-            let effectiveKind = isValidWidget(kind: resolvedKind, json: json)
-                ? resolvedKind
-                : (inferWidgetKind(json) ?? resolvedKind)
+        } else if let obj = parseRelaxedJSONObject(kind: resolvedKind, raw: json),
+                  let effectiveKind = validatedWidgetKindIOS(kind: resolvedKind, json: json) {
             let accent = WidgetPalette.parseHex(obj["accent"] as? String) ?? WidgetPalette.at( abs(effectiveKind.hashValue) )
             let rawTitle = rawStr(obj, "title", "heading", "name", "question")
             let (explicitIcon, strippedTitle) = NexlyIcons.extractLeadingIcon(rawTitle)
