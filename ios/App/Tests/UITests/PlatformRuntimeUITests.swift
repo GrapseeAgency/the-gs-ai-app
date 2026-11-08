@@ -10,6 +10,30 @@ final class PlatformRuntimeUITests: XCTestCase {
         capture.name = "genui-actual-\(label.lowercased())-failure"; capture.lifetime = .keepAlways; add(capture)
     }
 
+    func testGeneratedBookingSavesOnlyActualLocalSelectionWithoutReservation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated booking"].waitForExistence(timeout: 20))
+        app.buttons["Open generated booking"].tap()
+        let save = app.buttons["Save slot locally"]
+        XCTAssertTrue(save.waitForExistence(timeout: 10)); XCTAssertFalse(save.isEnabled)
+        app.buttons["09:00"].tap()
+        XCTAssertTrue(save.isEnabled); save.tap()
+        let receipt = app.staticTexts["booking.local.receipt"]
+        XCTAssertTrue(receipt.waitForExistence(timeout: 5))
+        XCTAssertEqual(receipt.label, "Saved locally: 09:00. Preview only; no reservation has been made.")
+        app.buttons["10:00"].tap()
+        XCTAssertFalse(receipt.exists)
+        save.tap()
+        XCTAssertEqual(receipt.label, "Saved locally: 10:00. Preview only; no reservation has been made.")
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-booking-actual-local-selection"; capture.lifetime = .keepAlways; add(capture)
+        app.buttons["Use next booking payload"].tap()
+        XCTAssertTrue(app.buttons["11:00"].waitForExistence(timeout: 5))
+        XCTAssertFalse(receipt.exists); XCTAssertFalse(save.isEnabled)
+    }
+
     func testGeneratedChecklistEditsDeletesAddsAndKeepsActualTaskCompletion() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
