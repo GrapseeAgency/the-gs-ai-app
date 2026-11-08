@@ -5,6 +5,49 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun contextualCodeActionsAreResponseScopedAndPreserveRealDrafts() {
+        val first = ResponseCodeActions()
+        val other = ResponseCodeActions()
+        var source = "original"
+        var edits = 0
+        first.editFirst()
+        first.register(7, ResponseCodeActions.Entry("javascript", { source }, { edits++ }))
+        assertEquals(1, edits)
+        source = "actually edited"
+        assertEquals("actually edited", first.source(7)?.second)
+        first.remove(7)
+        assertEquals("actually edited", first.source(7)?.second)
+        assertNull(other.source(7))
+        first.register(7, ResponseCodeActions.Entry("javascript", { source }, { edits++ }))
+        first.editFirst()
+        assertEquals(2, edits)
+    }
+
+    @Test fun sourceArchivePreservesBytesAndDoesNotInventAProject() {
+        val source = "বাংলা 日本語\r\n" + String(Character.toChars(0x1f600)) + "\u0000"
+        val bytes = responseSourceArchive(listOf("python" to source, "../../unsafe" to "second"))
+        val files = linkedMapOf<String, String>()
+        java.util.zip.ZipInputStream(bytes.inputStream(), Charsets.UTF_8).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                files[entry.name] = zip.readBytes().toString(Charsets.UTF_8)
+                zip.closeEntry()
+            }
+        }
+        assertEquals(listOf("README.txt", "snippet-1.py", "snippet-2.txt"), files.keys.toList())
+        assertEquals(source, files["snippet-1.py"])
+        org.junit.Assert.assertTrue(files["README.txt"]!!.contains("not a complete runnable project"))
+        assertEquals("js", responseSourceExtension("JAVASCRIPT"))
+    }
+
+    @Test fun sharedResponseReportIncludesActualTableAndWidgetData() {
+        val blocks = parseBlocks("| Name | Amount |\n| --- | --- |\n| Actual | 42 |\n\n```chart\n{\"labels\":[\"A\"],\"values\":[73]}\n```")
+        val report = extractCopyableBlockSummary(blocks, false)
+        org.junit.Assert.assertTrue(report.contains("Actual\t42"))
+        org.junit.Assert.assertTrue(report.contains("73"))
+        assertEquals("", extractCopyableBlockSummary(emptyList(), true))
+    }
+
     @Test fun codeValidationRejectsNonJsonAndNeverPretendsToRunPython() {
         for (source in listOf("print(6*7)", "x=7\nprint(x)", "import pandas as pd", "while True: pass")) {
             val result = executeCodePreview("python", source)
