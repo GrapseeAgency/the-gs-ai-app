@@ -1905,9 +1905,13 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       return { ...o, ...(title ? { title } : {}), ...(body ? { body } : {}) }
     })
 
+    const durationSeconds = asNumber(p.durationSeconds)
+    const invalidDuration = type === 'timer' && p.durationSeconds !== undefined &&
+      (durationSeconds === null || !Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 604800)
     const widget = {
       type,
       title: asString(p.title),
+      ...(type === 'timer' && durationSeconds !== null ? { durationSeconds } : {}),
       steps,
       columns,
       items: rawItems.map(normAppItem).slice(0, LIMITS.maxAppItems),
@@ -1926,7 +1930,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       widget.slots.length > 0
     return {
       widget,
-      errors: type === 'tasks' && (rawItems.length > LIMITS.maxChecklistItems || !rawItems.length || widget.items.some(item => !asString(item.title).trim())) ? ['Task app needs complete labelled tasks within capacity; source tasks are not silently discarded'] : (type === 'wizard' || type === 'onboarding') && !widget.steps.length ? ['wizard/onboarding needs actual steps'] : hasBody ? [] : ['app needs steps, columns, items, groups, rows or slots'],
+      errors: invalidDuration ? ['Timer durationSeconds must be actual whole seconds from 1 through 604800; durations are not clamped or derived from prices'] : type === 'timer' ? [] : type === 'tasks' && (rawItems.length > LIMITS.maxChecklistItems || !rawItems.length || widget.items.some(item => !asString(item.title).trim())) ? ['Task app needs complete labelled tasks within capacity; source tasks are not silently discarded'] : (type === 'wizard' || type === 'onboarding') && !widget.steps.length ? ['wizard/onboarding needs actual steps'] : hasBody ? [] : ['app needs steps, columns, items, groups, rows or slots'],
       repaired,
     }
   },
