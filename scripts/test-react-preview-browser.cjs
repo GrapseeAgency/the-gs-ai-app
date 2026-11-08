@@ -88,7 +88,7 @@ async function main() {
   const isolation=await frame.evaluate(()=>{let parentDenied=false;try{parent.document.body}catch{parentDenied=true};return{parentDenied,origin:location.origin,sandbox:typeof window.Android,webkit:typeof window.webkit}})
   assert.equal(isolation.parentDenied,true);assert.equal(isolation.sandbox,'undefined');assert.equal(isolation.webkit,'undefined')
   check('The actual iframe has no parent DOM or native application bridge access',()=>{})
-  await page.screenshot({path:'/home/user/gs-react-preview-browser.png',fullPage:true})
+  await page.screenshot({path:path.join(os.tmpdir(),'gs-react-preview-browser.png'),fullPage:true})
   await page.evaluate(()=>window.gsRenderMessage('## Next actions\n- [ ] Original task\n  Supplied source detail\n  - Supplied nested detail\n- [x] Keep completed','ordinary-tasks'))
   await page.waitForSelector('button[role="checkbox"]')
   assert.ok((await page.$eval('#app',n=>n.textContent)).includes('1/2 completed'))
@@ -122,7 +122,7 @@ async function main() {
   await page.waitForSelector('[aria-label="Complete task: Replacement source"]')
   assert.ok((await page.$eval('#app',n=>n.textContent)).includes('0/1 completed'));assert.equal(await page.$('[aria-label="Edit task: Edited source"]'),null)
   check('Replacing ordinary source resets old task edits and checked state rather than contaminating another answer',()=>{})
-  await page.screenshot({path:'/home/user/gs-ordinary-task-browser.png',fullPage:true})
+  await page.screenshot({path:path.join(os.tmpdir(),'gs-ordinary-task-browser.png'),fullPage:true})
   console.log(`\n${checks} actual React and ordinary-response task acceptance checks passed`)
  } catch(error) {
   if(page) {console.error(await page.evaluate(()=>({host:document.body.innerText.slice(-1200),frames:document.querySelectorAll('iframe').length})).catch(()=>''));for(const frame of page.frames().slice(1))console.error(await frame.evaluate(()=>document.body.innerText.slice(0,2000)).catch(()=>''))}
