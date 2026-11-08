@@ -87,7 +87,13 @@ final class PlatformRuntimeUITests: XCTestCase {
         guard run() else { return }
         let input = app.webViews.textFields["New task"]
         XCTAssertTrue(input.waitForExistence(timeout: 10)); input.tap(); input.typeText("iOS React task")
-        app.webViews.buttons["Add task"].tap()
+        let addTask = app.webViews.buttons["Add task"]
+        let reachable = NSPredicate { _, _ in addTask.exists && addTask.isHittable }
+        let formVisible = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: reachable, object: nil)], timeout: 5) == .completed
+        if !formVisible { printPresentationDiagnostics(app, label: "REACT") }
+        XCTAssertTrue(formVisible, "The actual inline form submit button must remain touchable above the real keyboard")
+        guard formVisible else { return }
+        addTask.tap()
         XCTAssertTrue(complete("0/1 complete").waitForExistence(timeout: 10))
         let toggle = complete("Complete iOS React task")
         XCTAssertTrue(toggle.waitForExistence(timeout: 5)); toggle.tap()
