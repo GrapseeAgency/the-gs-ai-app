@@ -1039,6 +1039,13 @@ func chartObservationValueIOS(_ raw: Any) -> Double? {
     return chartValueIOS(raw)
 }
 
+func chartAxisLabelIndicesIOS(count: Int, limit: Int = 8) -> [Int] {
+    guard count > 0, limit > 0 else { return [] }
+    if count <= limit { return Array(0..<count) }
+    if limit == 1 { return [count - 1] }
+    return (0..<limit).map { Int((Double($0) * Double(count - 1) / Double(limit - 1)).rounded()) }
+}
+
 func chartSliceLabelIOS(name: String, labels: [String], seriesIndex: Int) -> String {
     if !name.isEmpty { return name }
     return seriesIndex < labels.count ? labels[seriesIndex] : "Series \(seriesIndex + 1)"
@@ -1411,16 +1418,20 @@ private struct ChartBodyView: View {
                     .frame(height: 132)
                 }
 
-                HStack(spacing: 0) {
-                    Spacer().frame(width: 42)
-                    ForEach(Array(pts.enumerated()), id: \.offset) { idx, pt in
-                        Text(pt.label)
-                            .font(.system(size: 10, weight: idx == activeIdx ? .bold : .regular))
-                            .foregroundStyle(idx == activeIdx ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
-                            .frame(maxWidth: .infinity)
+                GeometryReader { geometry in
+                    let plotWidth = max(1, geometry.size.width - 42)
+                    let indices = chartAxisLabelIndicesIOS(count: pts.count)
+                    let labelWidth = min(64, plotWidth / CGFloat(max(1, indices.count)))
+                    ForEach(indices, id: \.self) { index in
+                        Text(pts[index].label)
+                            .font(.system(size: 10, weight: index == activeIdx ? .bold : .regular))
+                            .foregroundStyle(index == activeIdx ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
+                            .frame(width: labelWidth)
                             .lineLimit(1)
+                            .position(x: min(geometry.size.width - labelWidth / 2, max(labelWidth / 2, 42 + plotWidth * CGFloat(index) / CGFloat(max(1, pts.count - 1)))), y: 9)
                     }
                 }
+                .frame(height: 18)
             }
             .padding(.top, 4)
         } else if currentType == "bar" && !pts.isEmpty {
