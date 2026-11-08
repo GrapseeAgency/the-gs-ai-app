@@ -36,7 +36,7 @@ object ReactPreviewRuntimeAndroid {
     fun origin(scope: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(scope.toByteArray(Charsets.UTF_8))
         val hash = digest.joinToString("") { "%02x".format(it.toInt() and 255) }.take(48)
-        return "https://$hash.gs-react.invalid/"
+        return "https://gs-react-$hash.invalid/"
     }
 }
 
