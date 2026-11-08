@@ -43,6 +43,17 @@ jobs:
           PY
       - name: Publish original composited failure pixels
         run: python3 scripts/publish_native_ui_pixels.py "$GS_STORED_FIXTURE_LOG" '${{ matrix.label }}'
+      - name: Publish actual stored execution receipts
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          names = ['testContextualReportShowsActualDataAndSharePresentsSystemActivitySheet',
+                   'testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch']
+          for line in Path(os.environ['GS_STORED_FIXTURE_LOG']).read_text(errors='replace').splitlines():
+              if 'Test Case' in line and any(name in line for name in names) and ('passed (' in line or 'failed (' in line):
+                  print('::notice::Actual stored XCTest receipt: ' + line[:3500].replace('%', '%25'))
+          PY
       - name: Publish actual relevant accessibility geometry
         env:
           GS_REVIEW_LABEL: ${{ matrix.label }}
