@@ -89,7 +89,7 @@ import kotlinx.serialization.builtins.serializer
 
 /** Hard caps. A widget is data, not a document; anything bigger is a bug. */
 private const val MAX_WIDGET_BYTES = 64 * 1024
-private const val MAX_CHART_SERIES = 8
+private const val MAX_CHART_SERIES = 16
 private const val MAX_POINTS_PER_SERIES = 200
 private const val MAX_TABLE_ROWS = 100
 private const val MAX_TABLE_COLUMNS = 8
@@ -587,7 +587,10 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
                 // correctly-shaped pie and rendered it as a code block. A
                 // gantt is ONE RANGE PER SERIES (Task 1 = [0,2]), the same
                 // deal (probe 2026-10-20).
-                val minPoints = if (w.type == "pie" || w.type == "donut" || w.type == "gantt") 1 else 2
+                val minPoints = 1 // Preserve real singleton series; never discard or pad their observations.
+                require(w.series.size <= MAX_CHART_SERIES && w.series.all { it.data.size <= MAX_POINTS_PER_SERIES }) {
+                    "Chart exceeds supported capacity; original source is preserved instead of truncating observations."
+                }
                 val series = w.series.take(MAX_CHART_SERIES).map {
                     it.copy(data = it.data.take(MAX_POINTS_PER_SERIES))
                 }.filter { it.data.size >= minPoints }
@@ -644,6 +647,9 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
                 if (cards.isEmpty()) null else Widget.Stat(w.copy(cards = cards))
             }
             "table" -> widgetJson.decodeFromString<TableWidget>(json).let { w ->
+                require(w.columns.size <= MAX_TABLE_COLUMNS && w.rows.size <= MAX_TABLE_ROWS && w.rows.all { it.size <= w.columns.size }) {
+                    "Table exceeds supported capacity or declares fewer columns than cells; source was not silently truncated."
+                }
                 val cols = w.columns.take(MAX_TABLE_COLUMNS)
                 val rows = w.rows.take(MAX_TABLE_ROWS).filter { it.isNotEmpty() }
                 if (cols.isEmpty() || rows.isEmpty()) null
