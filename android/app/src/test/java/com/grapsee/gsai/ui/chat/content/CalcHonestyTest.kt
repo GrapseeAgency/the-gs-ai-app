@@ -5,6 +5,25 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun codeValidationRejectsNonJsonAndNeverPretendsToRunPython() {
+        for (source in listOf("print(6*7)", "x=7\nprint(x)", "import pandas as pd", "while True: pass")) {
+            val result = executeCodePreview("python", source)
+            assertEquals("", result.output)
+            org.junit.Assert.assertTrue(result.error!!.contains("Not executed: no Python runtime"))
+        }
+        val invalid = listOf("{'x':1}", "{x:1}", "{\"x\":1,}", "[1,]", "{\"x\":1} false", "01", "NaN", "Infinity", "[1;2]", "//comment\n{}", "\"raw\nnewline\"", "\"bad\\x\"", "\"bad\\u123x\"", "\u00a0{}", "")
+        for (source in invalid) {
+            val result = executeCodePreview("json", source)
+            org.junit.Assert.assertNotNull("Invalid JSON must not validate: $source", result.error)
+            assertEquals("", result.output)
+        }
+        for (source in listOf("{\"x\":1,\"s\":\"বাংলা\"}", "[true,false,null,-1.25e+3,\"NaN\"]", "true", "null", "\"😀\"")) {
+            val result = executeCodePreview("json", source)
+            assertNull(result.error)
+            org.junit.Assert.assertTrue(result.output.isNotBlank())
+        }
+    }
+
     @Test fun nativeFencesPreserveEverySourceSeparatorAndBlankLine() {
         val sources = listOf("", "\n", "\r\n", "\n\nconst value = 7;\n\n", "\r\nconst value = 7;\r\n\r\n", "বাংলা 日本語\r\n\n\r\n", "const key = \"😀\";\rkeep")
         for (marker in listOf("```", "````", "~~~~~")) {
