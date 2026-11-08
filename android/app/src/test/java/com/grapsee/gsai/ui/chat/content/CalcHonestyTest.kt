@@ -27,7 +27,7 @@ class CalcHonestyTest {
         assertEquals("chart", (parseBlocks("~~~chart\n{\"labels\":[\"A\"],\"values\":[7]}\n~~~").single() as Block.WidgetBlock).kind)
     }
 
-    @Test fun nativeStreamingMatchesFullParseAtEveryFencePrefix() {
+    @Test(timeout = 5000) fun nativeStreamingMatchesFullParseAtEveryFencePrefix() {
         val prefix = "Intro.\n\nStable paragraph.\n\n"
         val documents = listOf(
             prefix + "````javascript\r\n\r\nconst value = 7;\r\n\r\n```\r\nconsole.log(value);\n\n````\nAfter fence.\n\nFinal.",
