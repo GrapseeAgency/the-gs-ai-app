@@ -81,6 +81,7 @@ async function main() {
     const visibleEmoji = await page.evaluate(() => document.body.innerText.includes('😀'))
     check('visible source uses escapes', () => assert.equal(visibleEmoji, false))
     await click('Copy')
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent.trim() === 'Copied'))
     const clipboard = await page.evaluate(() => navigator.clipboard.readText())
     check('real browser clipboard receives original source', () => assert.equal(clipboard, source))
     await click('Run Code')
