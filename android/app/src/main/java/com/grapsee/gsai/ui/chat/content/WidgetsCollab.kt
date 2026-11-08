@@ -3,8 +3,8 @@ package com.grapsee.gsai.ui.chat.content
 // ---------------------------------------------------------------------------
 // Collab kind — LIVE shared state over /api/v1/collab (SSE + POST), the same
 // rooms the web widget joins. Presence = 10s heartbeat, 30s TTL server-side.
-// Tier-2 honesty is printed on the card: per-server memory, last-write-wins,
-// resets on restart. Every mutation goes through the server (POST) and every
+// Tier-2 honesty is printed on the card: public SQLite-backed state,
+// last-write-wins lists, idle eviction and no privacy/durability guarantee. Every mutation goes through the server (POST) and every
 // view converges on the server's authoritative revision (SSE snapshot/rev).
 // ---------------------------------------------------------------------------
 
@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -57,6 +58,9 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.utils.io.readUTF8Line
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -83,13 +87,23 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
     val sharedState = remember(w) {
         mutableStateMapOf<String, String>().apply {
             if (w.surface == "counter") put("n", w.start.toString())
-            if (w.surface == "todo" && isEmpty()) {
-                w.items.take(12).forEachIndexed { idx, item -> put("t$idx", item) }
-            }
+            if (w.surface == "todo") put("todos", JsonArray(w.items.map { item ->
+                buildJsonObject { put("text", item); put("done", false) }
+            }).toString())
         }
     }
     val presence = remember(w) { mutableStateListOf<CollabPeer>() }
     var status by remember(w) { mutableStateOf("connecting") }
+    var revision by remember(w) { mutableStateOf(-1L) }
+    var pending by remember(w) { mutableStateOf(false) }
+    var publishError by remember(w) { mutableStateOf<String?>(null) }
+    val myVotes = remember(w) { mutableStateListOf<Int>() }
+    val initial = remember(w) { buildJsonObject {
+        if (w.surface == "counter") put("n", w.start)
+        if (w.surface == "todo") put("todos", JsonArray(w.items.map { item ->
+            buildJsonObject { put("text", item); put("done", false) }
+        }))
+    } }
     var draft by remember(w) { mutableStateOf("") }
     var boxSize by remember(w) { mutableStateOf(IntSize.Zero) }
 
@@ -104,32 +118,60 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
         onDispose { client.close() }
     }
 
-    fun publish(body: JsonObject) {
-        (body["set"] as? JsonObject)?.forEach { (k, v) ->
-            if (v is JsonPrimitive) sharedState[k] = v.content
+    fun acceptSnapshot(obj: JsonObject) {
+        val nextState = obj["state"] as? JsonObject ?: error("Missing shared state")
+        val nextRevision = (obj["rev"] as? JsonPrimitive)?.content?.toLongOrNull() ?: error("Missing shared revision")
+        if (nextRevision < revision) return
+        revision = nextRevision
+        sharedState.clear()
+        nextState.forEach { (key, value) ->
+            sharedState[key] = if (value is JsonPrimitive) value.content else value.toString()
         }
-        (body["delta"] as? JsonObject)?.forEach { (k, v) ->
-            val by = (v as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
-            val cur = sharedState[k]?.toDoubleOrNull()?.toInt() ?: 0
-            sharedState[k] = (cur + by).toString()
-        }
-        scope.launch {
-            try {
-                client.post(root) {
-                    contentType(ContentType.Application.Json)
-                    setBody(buildJsonObject {
-                        put("room", w.room)
-                        body.forEach { (k, v) -> put(k, v) }
-                    }.toString())
-                }.bodyAsText()
-            } catch (_: Throwable) {
+        (obj["presence"] as? JsonArray)?.let { peers ->
+            presence.clear()
+            peers.forEach { element ->
+                val peer = element as? JsonObject ?: return@forEach
+                presence.add(CollabPeer(
+                    (peer["id"] as? JsonPrimitive)?.content ?: "",
+                    (peer["name"] as? JsonPrimitive)?.content ?: "guest",
+                    (peer["color"] as? JsonPrimitive)?.content ?: "#4C6FFF"
+                ))
             }
         }
     }
 
-    fun delta(key: String, by: Int) = publish(buildJsonObject {
+    fun publish(body: JsonObject, onSaved: () -> Unit = {}) {
+        if (pending || status != "live") return
+        pending = true
+        scope.launch {
+            try {
+                val response = withTimeout(15_000L) { client.post(root) {
+                    contentType(ContentType.Application.Json)
+                    setBody(buildJsonObject {
+                        put("room", w.room)
+                        put("initial", initial)
+                        body.forEach { (key, value) -> put(key, value) }
+                    }.toString())
+                } }
+                require(response.status.value in 200..299) { "Shared server rejected the write" }
+                acceptSnapshot(collabJson.parseToJsonElement(response.bodyAsText()).jsonObject)
+                publishError = null
+                onSaved()
+            } catch (_: TimeoutCancellationException) {
+                publishError = "Not confirmed: shared write timed out. Your input is retained; the server may still have received it."
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                publishError = "Not confirmed: the shared server did not acknowledge this change. Your input is retained."
+            } finally {
+                pending = false
+            }
+        }
+    }
+
+    fun delta(key: String, by: Int, onSaved: () -> Unit = {}) = publish(buildJsonObject {
         put("delta", buildJsonObject { put(key, by) })
-    })
+    }, onSaved)
 
     LaunchedEffect(w, clientId, root) {
         while (isActive) {
@@ -138,6 +180,7 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
                     contentType(ContentType.Application.Json)
                     setBody(buildJsonObject {
                         put("room", w.room)
+                        put("initial", initial)
                         put("heartbeat", buildJsonObject {
                             put("id", clientId)
                             put("name", myName)
@@ -153,13 +196,20 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
 
     LaunchedEffect(w, clientId, root) {
         try {
-            client.prepareGet("$root?room=${w.room}&client=$clientId&name=$myName&color=$myColor")
-                .execute { response ->
+            client.prepareGet(root) {
+                url {
+                    parameters.append("room", w.room)
+                    parameters.append("client", clientId)
+                    parameters.append("name", myName)
+                    parameters.append("color", myColor)
+                }
+            }.execute { response ->
+                    require(response.status.value in 200..299 && response.headers["Content-Type"]?.startsWith("text/event-stream") == true) { "Shared stream unavailable" }
                     val channel = response.bodyAsChannel()
                     var event = ""
                     var data = ""
                     while (!channel.isClosedForRead) {
-                        val line = channel.readUTF8Line(16384) ?: break
+                        val line = channel.readUTF8Line(65536) ?: break
                         when {
                             line.startsWith("event:") -> event = line.removePrefix("event:").trim()
                             line.startsWith("data:") -> data = line.removePrefix("data:").trim()
@@ -167,24 +217,12 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
                                 if (event == "snapshot" || event == "rev") {
                                     try {
                                         val obj = collabJson.parseToJsonElement(data).jsonObject
+                                        acceptSnapshot(obj)
                                         status = "live"
-                                        sharedState.clear()
-                                        (obj["state"] as? JsonObject)?.forEach { (k, v) ->
-                                            val content = (v as? JsonPrimitive)?.content
-                                            if (content != null) sharedState[k] = content
-                                        }
-                                        presence.clear()
-                                        (obj["presence"] as? JsonArray)?.forEach { el ->
-                                            val p = el as? JsonObject ?: return@forEach
-                                            presence.add(
-                                                CollabPeer(
-                                                    (p["id"] as? JsonPrimitive)?.content ?: "",
-                                                    (p["name"] as? JsonPrimitive)?.content ?: "guest",
-                                                    (p["color"] as? JsonPrimitive)?.content ?: "#4C6FFF"
-                                                )
-                                            )
-                                        }
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
                                     } catch (_: Throwable) {
+                                        status = "offline"
                                     }
                                 }
                                 event = ""
@@ -227,7 +265,7 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
                         Modifier
                             .fillMaxWidth()
                             .padding(vertical = 3.dp)
-                            .clickable { delta("v$i", 1) }
+                            .clickable(enabled = status == "live" && !pending && !myVotes.contains(i)) { delta("v$i", 1) { myVotes.add(i) } }
                     ) {
                         Row(Modifier.fillMaxWidth()) {
                             Text(label, style = MaterialTheme.typography.bodySmall, color = GsTheme.colors.textPrimary, modifier = Modifier.weight(1f))
@@ -251,48 +289,36 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
                 Text("tap an option to vote — one vote per viewer per option", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary, modifier = Modifier.padding(top = 6.dp))
             }
             "todo" -> {
-                val todos = (0 until 12).mapNotNull { i -> sharedState["t$i"]?.takeIf { it.isNotBlank() } }
-                todos.forEachIndexed { i, item ->
+                val todos = try {
+                    (collabJson.parseToJsonElement(sharedState["todos"] ?: "[]") as? JsonArray)?.toList() ?: emptyList()
+                } catch (_: Throwable) { emptyList() }
+                fun replaceTodos(next: List<kotlinx.serialization.json.JsonElement>, onSaved: () -> Unit = {}) = publish(buildJsonObject {
+                    put("set", buildJsonObject { put("todos", JsonArray(next)) })
+                }, onSaved)
+                todos.forEachIndexed { index, element ->
+                    val item = element as? JsonObject ?: return@forEachIndexed
+                    val text = (item["text"] as? JsonPrimitive)?.content ?: return@forEachIndexed
+                    val done = (item["done"] as? JsonPrimitive)?.content == "true"
                     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(item, style = MaterialTheme.typography.bodySmall, color = GsTheme.colors.textPrimary, modifier = Modifier.weight(1f))
-                        Text(
-                            "×",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = GsTheme.colors.textTertiary,
-                            modifier = Modifier
-                                .clickable {
-                                    publish(buildJsonObject {
-                                        put("set", buildJsonObject {
-                                            (0 until 12).forEach { k -> sharedState["t$k"]?.let { put("t$k", JsonPrimitive(it)) } }
-                                            put("t$i", JsonPrimitive(""))
-                                        })
-                                    })
-                                }
-                                .padding(horizontal = 8.dp)
-                        )
+                        Checkbox(checked = done, enabled = status == "live" && !pending, onCheckedChange = { nextDone ->
+                            replaceTodos(todos.mapIndexed { i, current -> if (i == index) buildJsonObject { put("text", text); put("done", nextDone) } else current })
+                        })
+                        Text(text, style = MaterialTheme.typography.bodySmall, color = GsTheme.colors.textPrimary, modifier = Modifier.weight(1f))
+                        TextButton(enabled = status == "live" && !pending, onClick = {
+                            replaceTodos(todos.filterIndexed { i, _ -> i != index })
+                        }) { Text("Remove") }
                     }
                 }
-                if (todos.isEmpty()) {
-                    Text("empty — add something, it appears for everyone", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)
-                }
+                if (todos.isEmpty()) Text("No shared items in the current snapshot.", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)
+                if (todos.size >= 12) Text("Shared prototype capacity: 12 items. Remove an item before adding another.", style = MaterialTheme.typography.labelSmall)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedTextField(
-                        value = draft,
-                        onValueChange = { draft = it },
-                        label = { Text("add a shared item") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(onClick = {
-                        if (draft.isNotBlank()) {
-                            val idx = (0 until 12).firstOrNull { sharedState["t$it"].isNullOrBlank() } ?: return@TextButton
-                            val key = draft.trim()
-                            draft = ""
-                            publish(buildJsonObject {
-                                put("set", buildJsonObject { put("t$idx", JsonPrimitive(key)) })
-                            })
+                    OutlinedTextField(value = draft, onValueChange = { draft = it }, label = { Text("add a shared item") }, singleLine = true, modifier = Modifier.weight(1f))
+                    TextButton(enabled = status == "live" && !pending && draft.isNotBlank() && todos.size < 12, onClick = {
+                        val original = draft
+                        replaceTodos(todos + buildJsonObject { put("text", original.trim()); put("done", false) }) {
+                            if (draft == original) draft = ""
                         }
-                    }) { Text("Add") }
+                    }) { Text(if (pending) "Saving…" else "Add") }
                 }
             }
             "pointer" -> {
@@ -307,7 +333,7 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
                             detectDragGestures { change, _ ->
                                 change.consume()
                                 val now = System.currentTimeMillis()
-                                if (now - lastSent < 90 || boxSize.width == 0) return@detectDragGestures
+                                if (status != "live" || pending || now - lastSent < 90 || boxSize.width == 0) return@detectDragGestures
                                 lastSent = now
                                 val nx = ((change.position.x / size.width) * 1000).roundToInt() / 1000.0
                                 val ny = ((change.position.y / size.height) * 1000).roundToInt() / 1000.0
@@ -358,24 +384,27 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
             else -> {
                 Column(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        num("n").toString(),
+                        (sharedState["n"]?.toDoubleOrNull() ?: w.start).let { value ->
+                            if (value % 1.0 == 0.0 && value >= Long.MIN_VALUE.toDouble() && value < Long.MAX_VALUE.toDouble()) value.toLong().toString() else value.toString()
+                        },
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Bold,
                         color = seriesInk(0)
                     )
                     Text(
-                        w.label.ifBlank { "this number is the same for everyone, right now" },
+                        if (status == "live" && sharedState.containsKey("n")) w.label.ifBlank { "Confirmed shared state" } else "Configured start; awaiting a confirmed shared value.",
                         style = MaterialTheme.typography.labelSmall,
                         color = GsTheme.colors.textTertiary
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(-1, 1, 5).forEach { d ->
-                        TextButton(onClick = { delta("n", d) }) { Text(if (d > 0) "+$d" else "$d") }
+                        TextButton(enabled = status == "live" && !pending, onClick = { delta("n", d) }) { Text(if (d > 0) "+$d" else "$d") }
                     }
                 }
             }
         }
+        publishError?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textSecondary) }
         Text(
             "room ${w.room} · shared prototype: public SQLite-backed room, last-write-wins; state can survive restarts and idle rooms may be evicted",
             style = MaterialTheme.typography.labelSmall,
