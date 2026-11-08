@@ -25,6 +25,9 @@ final class SQLiteChatStore: @unchecked Sendable {
     }
 
     private var db: OpaquePointer?
+    /// An explicit URL allows real SQLite integration tests without touching
+    /// the app's conversations or importing somebody else's legacy document.
+    let usesDefaultDatabase: Bool
 
     /// Serializes every statement against the single connection, and keeps
     /// bootstrap/load/write order deterministic across threads.
@@ -76,10 +79,12 @@ final class SQLiteChatStore: @unchecked Sendable {
     END;
     """
 
-    init() {
-        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let path = directory.appendingPathComponent("gsai-store.sqlite").path
+    init(databaseURL: URL? = nil) {
+        usesDefaultDatabase = databaseURL == nil
+        let url = databaseURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("gsai-store.sqlite")
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let path = url.path
         var handle: OpaquePointer?
         let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
         guard sqlite3_open_v2(path, &handle, flags, nil) == SQLITE_OK, let opened = handle else {
@@ -91,7 +96,7 @@ final class SQLiteChatStore: @unchecked Sendable {
         queue.sync {
             exec(schemaSQL)
             migrateSchemaIfNeeded()
-            importLegacyJSONIfNeeded()
+            if usesDefaultDatabase { importLegacyJSONIfNeeded() }
         }
     }
 
