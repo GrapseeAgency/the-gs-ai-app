@@ -1131,7 +1131,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     // A gantt chart is encoded as ONE RANGE PER SERIES — Task 1 is [0,2],
     // Task 2 is [2,4] (probe 2026-10-20). Demanding two points per series
     // rejected every canonical gantt payload.
-    const minPoints = pieLike || type === 'gantt' ? 1 : 2
+    const minPoints = 1 // A real one-point series is data, not permission to pad or discard it.
 
     // Accept series, Chart.js datasets, or lines/bars.
     let rawSeries = asArray(p.series)
@@ -1206,7 +1206,6 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       p.labels ?? p.categories ?? (Array.isArray(p.xAxis) ? p.xAxis : xAxisObj ? xAxisObj.categories ?? xAxisObj.data ?? xAxisObj.labels : undefined)
     )
       .map((l) => asString(l))
-      .filter(Boolean)
 
     if (rawSeries.length > LIMITS.maxChartSeries) errors.push(`chart exceeds ${LIMITS.maxChartSeries} series; data was not silently truncated`)
     let series = rawSeries
@@ -1215,6 +1214,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
         const rawPoints = asArray(row.data).length > 0 ? asArray(row.data) : asArray(row.values).length > 0 ? asArray(row.values) : asArray(row.points)
         if (rawPoints.length > LIMITS.maxPointsPerSeries) errors.push(`chart series exceeds ${LIMITS.maxPointsPerSeries} points; data was not silently truncated`)
         const data = normalisePoints(rawPoints, labelHints, errors)
+        if (data.length !== rawPoints.length) errors.push('chart contains missing or invalid observations; points were not silently discarded')
         return { name: asString(row.name ?? row.label ?? row.title ?? row.id, 'Series'), data }
       })
       .filter((s) => s.data.length >= minPoints)
@@ -1300,7 +1300,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     // If rows are objects [{"Brand":"A","Price":"120"}] and columns were omitted,
     // derive columns from the keys of the first row object.
     if (columns.length === 0 && rawRows.length > 0 && isObj(rawRows[0])) {
-      const derived = Object.keys(rawRows[0]).slice(0, LIMITS.maxTableColumns)
+      const derived = [...new Set(rawRows.flatMap(row => isObj(row) ? Object.keys(row) : []))]
       columns = derived
       colKeys.push(...derived)
       repaired = true
@@ -1322,7 +1322,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       .slice(0, LIMITS.maxTableRows)
     const errors: string[] = []
     if (rawRows.length > LIMITS.maxTableRows) errors.push(`table exceeds ${LIMITS.maxTableRows} rows; data was not silently truncated`)
-    if (rawCols.length > LIMITS.maxTableColumns) errors.push(`table exceeds ${LIMITS.maxTableColumns} columns; data was not silently truncated`)
+    if (Math.max(rawCols.length, columns.length) > LIMITS.maxTableColumns) errors.push(`table exceeds ${LIMITS.maxTableColumns} columns; data was not silently truncated`)
     if (rawRows.some(row => Array.isArray(row) && row.length > columns.length)) errors.push('table row contains cells without declared columns')
     if (!columns.length) errors.push('table needs columns')
     if (!rows.length) errors.push('table needs rows')
