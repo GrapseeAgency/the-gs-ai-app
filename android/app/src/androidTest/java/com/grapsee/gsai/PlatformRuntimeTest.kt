@@ -381,6 +381,13 @@ class PlatformRuntimeTest {
         assertEquals("The actual viewport must use device-independent CSS pixels", nativeWidthDp.toDouble(), cssWidth, 2.0)
         val device = UiDevice.getInstance(instrumentation)
         fun requireWorkerOutput(text: String) {
+            // UiDevice waits do not advance Compose's test frame clock. Drive
+            // the real measure/layout pass after asynchronous WebView bridge
+            // delivery; otherwise state changes are observed but never drawn.
+            awaitObserved("terminal content height is actually applied before inspecting accessibility") {
+                compose.waitForIdle()
+                evaluate("innerHeight + 2 >= document.body.scrollHeight") == "true"
+            }
             if (!device.wait(Until.hasObject(By.textContains(text)), 15_000L)) {
                 // This is failure diagnostics only; scrolling must NOT turn a
                 // clipped terminal into a passing auto-layout test. It reveals
