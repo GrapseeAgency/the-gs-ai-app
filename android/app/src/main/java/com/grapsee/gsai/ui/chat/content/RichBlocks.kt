@@ -402,13 +402,13 @@ internal fun extractQuickCalcParams(text: String): Triple<Double, Double, Int>? 
     // A generic percentage tool cannot infer a medical model, profit margin,
     // investment cash flows or a 50/30/20 allocation from nearby numbers.
     if (listOf("calorie", "protein", "macro", "tdee", "bmi", "margin", "roi", "budget", "salary", "income").any { it in low }) return null
-    val amounts = Regex("""[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*([kKmMbB])(?![A-Za-z]))?(?![\dA-Za-z.,])""").findAll(text).toList()
-    val rates = Regex("""(?<![\d.,−-])(\d+(?:\.\d+)?)\s*(?:%|percent\b)""", RegexOption.IGNORE_CASE).findAll(text).toList()
+    val amounts = Regex("""(?<![\dA-Za-z_(−-])[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*([kKmMbB])(?![A-Za-z]))?(?![\dA-Za-z.,])""").findAll(text).toList()
+    val rates = Regex("""(?<![\dA-Za-z_.,−-])(\d+(?:\.\d+)?)\s*(?:%|percent\b)""", RegexOption.IGNORE_CASE).findAll(text).toList()
     if (amounts.size != 1 || rates.size != 1) return null
     if (listOf("discount", "tax", "tip", "markup", "vat", "loan", "mortgage", "emi", "compound", "apy", "apr").none { it in low }) return null
     val needsTerm = listOf("loan", "mortgage", "emi", "amortiz", "compound", "invest", "apy", "apr").any { it in low }
     if (needsTerm && !Regex("""\b\d{1,2}\s*(?:-\s*)?(?:years?|yrs?\b)""", RegexOption.IGNORE_CASE).containsMatchIn(text)) return null
-    val currMatch = Regex("""[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*([kKmMbB])(?![A-Za-z]))?(?![\dA-Za-z.,])""").find(text)
+    val currMatch = Regex("""(?<![\dA-Za-z_(−-])[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*([kKmMbB])(?![A-Za-z]))?(?![\dA-Za-z.,])""").find(text)
     val currAmount = currMatch?.let { m ->
         val base = m.groupValues[1].replace(",", "").toDoubleOrNull() ?: return@let null
         val mult = when (m.groupValues[2].lowercase()) {
@@ -419,7 +419,7 @@ internal fun extractQuickCalcParams(text: String): Triple<Double, Double, Int>? 
         }
         base * mult
     }
-    val pctMatch = Regex("""(?<![\d.,−-])(\d+(?:\.\d+)?)\s*(?:%|percent\b)""", RegexOption.IGNORE_CASE).find(text)
+    val pctMatch = Regex("""(?<![\dA-Za-z_.,−-])(\d+(?:\.\d+)?)\s*(?:%|percent\b)""", RegexOption.IGNORE_CASE).find(text)
     val pctVal = pctMatch?.groupValues?.get(1)?.toDoubleOrNull()
 
     val yrMatch = Regex("""(\d{1,2})\s*(?:-\s*)?(?:years?|yrs?\b)""", RegexOption.IGNORE_CASE).find(text)
