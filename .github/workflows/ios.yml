@@ -279,6 +279,7 @@ jobs:
           set -o pipefail
           rm -rf ios/build/GSApp-genui.xcresult
           xcodebuild test \
+            -parallel-testing-enabled NO \
             -project "$PROJECT_FILE" \
             -scheme "$SCHEME" \
             -destination "$IOS_DESTINATION" \
@@ -306,6 +307,7 @@ jobs:
           RESULT_BUNDLE="ios/build/GSApp-tests.xcresult"
           rm -rf "$RESULT_BUNDLE"
           xcodebuild test \
+            -parallel-testing-enabled NO \
             -project "$PROJECT_FILE" \
             -scheme "$SCHEME" \
             -destination "$IOS_DESTINATION" \
@@ -324,6 +326,9 @@ jobs:
               ('PlatformRuntimeUITests', 'testGeneratedCodeCopyEditRunAndInvalidDraftReset'),
               ('CalcHonestyTests', 'testCodeDisplayAndEditorPreserveActualSource'),
               ('CalcHonestyTests', 'testGeneratedJavaScriptWorkerPreservesUnicodeStopsLoopsAndRejectsNetwork'),
+              ('CalcHonestyTests', 'testWorkerCSPPreventsActualHTTPAndPolicyOnlyCounterfactualCanFetch'),
+              ('CalcHonestyTests', 'testNativeFencesPreserveEverySourceSeparatorAndBlankLine'),
+              ('CalcHonestyTests', 'testNativeStreamingMatchesFullParseAtEveryFencePrefix'),
               ('PlatformRuntimeUITests', 'testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie'),
               ('CalcHonestyTests', 'testGeneratedHtmlExecutesAndCleansDynamicEmojiInProductionWebView'),
               ('CalcHonestyTests', 'testSignedChartDomainPreservesZeroNegativeAndAllObservations'),
