@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 // ---------------------------------------------------------------------------
 // The wire shape
@@ -196,16 +197,22 @@ extension View {
     }
 }
 
-/// The sheet's ink is a soft neutral grey, not the app's near-black brown.
-/// Using full-contrast ink was what made the first native pass read heavy.
+/// The supplied response references use indigo ink on pearl glass. Adapt the
+/// same roles for dark mode rather than carrying low-contrast light ink over.
 enum NexlyInk {
-    static let prose = Color(red: 0.290, green: 0.278, blue: 0.314)
-    static let title = Color(red: 0.333, green: 0.345, blue: 0.376)
-    static let row = Color(red: 0.369, green: 0.376, blue: 0.408)
-    static let label = Color(red: 0.294, green: 0.306, blue: 0.345)
-    static let meta = Color(red: 0.549, green: 0.557, blue: 0.588)
-    static let header = Color(red: 0.231, green: 0.227, blue: 0.251)
-    static let headerMeta = Color(red: 0.494, green: 0.494, blue: 0.525)
+    private static func adaptive(_ light: UInt32, _ dark: UInt32) -> Color {
+        Color(UIColor { traits in
+            let hex = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: CGFloat((hex >> 16) & 255) / 255, green: CGFloat((hex >> 8) & 255) / 255, blue: CGFloat(hex & 255) / 255, alpha: 1)
+        })
+    }
+    static let prose = adaptive(0x080080, 0xEDEAF6)
+    static let title = adaptive(0x080080, 0xF4F1FA)
+    static let row = adaptive(0x21128F, 0xDDD8EA)
+    static let label = adaptive(0x171087, 0xE6E1F2)
+    static let meta = adaptive(0x7867B8, 0xA9A3BD)
+    static let header = adaptive(0x080080, 0xF6F3FC)
+    static let headerMeta = adaptive(0x7867B8, 0xA9A3BD)
 }
 
 enum NexlyGlassTone: String, CaseIterable {
