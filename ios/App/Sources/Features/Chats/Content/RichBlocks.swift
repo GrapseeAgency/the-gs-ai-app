@@ -920,7 +920,7 @@ private func append(
         case .strike(let children):
             result.append(attributed(from: children, theme: theme, style: style.union(.strikethrough)))
         case .code(let code):
-            let cleanCode = NexlyIcons.cleanPlainText(code)
+            let cleanCode = CodeDisplayIOS.escape(code)
             var run = AttributedString(cleanCode)
             run.font = .system(size: theme.baseSize * 0.88, weight: .regular, design: .monospaced)
             run.backgroundColor = theme.monoBackground
