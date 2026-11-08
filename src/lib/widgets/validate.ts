@@ -1905,7 +1905,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       return { ...o, ...(title ? { title } : {}), ...(body ? { body } : {}) }
     })
 
-    const durationSeconds = asNumber(p.durationSeconds)
+    const durationSeconds = typeof p.durationSeconds === 'number' && Number.isFinite(p.durationSeconds) ? p.durationSeconds : null
     const invalidDuration = type === 'timer' && p.durationSeconds !== undefined &&
       (durationSeconds === null || !Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 604800)
     const widget = {
