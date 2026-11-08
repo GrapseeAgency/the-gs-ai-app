@@ -239,16 +239,20 @@ final class PlatformRuntimeUITests: XCTestCase {
         // waiter can itself fail with "remote AX element ... interrupted by
         // waiter". Dispatch an actual touch to the visible native Cancel
         // frame instead; only its real delegate receipt can pass this test.
+        // Screenshot resolves the visible, composited system presentation.
+        // Query the touch frame AFTER it, not before: the remote Files AX
+        // element can exist while the full-screen presentation is animating.
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-contextual-real-source-export-picker"; capture.lifetime = .keepAlways; add(capture)
         let cancelFrame = pickerCancel.frame
         let applicationFrame = app.frame
+        print("GS_FILES_CANCEL_FRAME: cancel=\(cancelFrame); application=\(applicationFrame)")
         guard !cancelFrame.isEmpty, !cancelFrame.isNull,
               applicationFrame.contains(CGPoint(x: cancelFrame.midX, y: cancelFrame.midY)) else {
             printPresentationDiagnostics(app, label: "EXPORT")
             XCTFail("The actual native Files Cancel control must occupy the visible viewport")
             return
         }
-        let capture = XCTAttachment(screenshot: app.screenshot())
-        capture.name = "genui-contextual-real-source-export-picker"; capture.lifetime = .keepAlways; add(capture)
         app.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: cancelFrame.midX - applicationFrame.minX, dy: cancelFrame.midY - applicationFrame.minY)).tap()
         let cancelled = app.staticTexts["response.action.notice"].firstMatch
