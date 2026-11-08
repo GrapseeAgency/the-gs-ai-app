@@ -363,15 +363,22 @@ final class CalcHonestyTests: XCTestCase {
         if let scene = old?.windowScene { window = UIWindow(windowScene: scene) }
         else { window = UIWindow(frame: UIScreen.main.bounds) }
         defer { window.isHidden = true; window.rootViewController = nil; old?.makeKeyAndVisible() }
+        // Give the production WebView a real, nonzero foreground viewport.
+        // A scene window can otherwise leave a freshly hosted WK view at its
+        // initial zero bounds while WebKit waits for presentation readiness.
+        window.frame = old?.frame ?? UIScreen.main.bounds
         window.rootViewController = host
+        host.view.frame = window.bounds
         window.makeKeyAndVisible()
+        window.layoutIfNeeded()
+        host.view.layoutIfNeeded()
         func findWeb(_ view: UIView) -> WKWebView? {
             if let web = view as? WKWebView { return web }
             for child in view.subviews { if let web = findWeb(child) { return web } }
             return nil
         }
         var warmupResult = ""
-        let warmupDeadline = Date().addingTimeInterval(15)
+        let warmupDeadline = Date().addingTimeInterval(45)
         while Date() < warmupDeadline {
             host.view.layoutIfNeeded()
             if let web = findWeb(host.view), let text = try? await web.evaluateJavaScript("document.getElementById('warmup')?.textContent || ''") as? String {
@@ -380,7 +387,11 @@ final class CalcHonestyTests: XCTestCase {
             }
             try await Task.sleep(nanoseconds: 50_000_000)
         }
-        XCTAssertEqual(warmupResult, "causal-response", "Actual WebKit network initialization must succeed: \(server.requestLines)")
+        let readiness: String
+        if let web = findWeb(host.view) {
+            readiness = (try? await web.evaluateJavaScript("JSON.stringify({ready:document.readyState,visibility:document.visibilityState,url:location.href,body:document.body?.innerText})")) as? String ?? "No evaluable document; loading=\(web.isLoading), bounds=\(web.bounds)"
+        } else { readiness = "No production WKWebView; host bounds=\(host.view.bounds)" }
+        XCTAssertEqual(warmupResult, "causal-response", "Actual WebKit network initialization must succeed: \(server.requestLines); \(readiness)")
         XCTAssertEqual(server.requestCount, 1)
         guard warmupResult == "causal-response", server.requestCount == 1 else { return }
         for allowed in [false, true] {
