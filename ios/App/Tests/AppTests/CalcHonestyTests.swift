@@ -5,6 +5,16 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testSharedControlsRequireActualOptionsAndFiniteSourceStarts() throws {
+        for items in ["[]", "[\"Only choice\"]", "[\"Actual\",\"\"]", "[\"Actual\",{}]"] {
+            XCTAssertFalse(isValidWidget(kind: "collab", json: "{\"surface\":\"vote\",\"items\":\(items)}"))
+        }
+        XCTAssertTrue(isValidWidget(kind: "collab", json: #"{"surface":"vote","items":["First","Second"]}"#))
+        XCTAssertTrue(isValidWidget(kind: "collab", json: #"{"surface":"counter","start":12.5}"#))
+        XCTAssertFalse(isValidWidget(kind: "collab", json: #"{"surface":"counter","start":true}"#))
+        XCTAssertFalse(isValidWidget(kind: "collab", json: #"{"surface":"unknown"}"#))
+    }
+
     func testCitationAuthorityComesFromTheActualSafeHostNotModelLabelsOrURLSubstrings() {
         XCTAssertEqual(citationSourceURLIOS("https://www.nature.com/article")?.host, "www.nature.com")
         XCTAssertTrue(isAcademicCitationDomain("untrusted.example", "https://www.nature.com/article"))
