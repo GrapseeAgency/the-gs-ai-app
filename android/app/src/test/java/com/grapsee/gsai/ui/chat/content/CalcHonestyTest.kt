@@ -27,6 +27,22 @@ class CalcHonestyTest {
         assertEquals(listOf(10f, 20f), namedPie.series.map { it.data.single()[1] })
     }
 
+    @Test fun actualCategoryLabelsAndDatasetCountsSurviveModelShapeNormalization() {
+        val pairs = (parseWidget("chart", """{"type":"line","series":[{"data":[["January",10],["February",20]]}]}""") as Widget.Chart).w
+        assertEquals(listOf("January", "February"), pairs.labels)
+        val objects = (parseWidget("chart", """{"type":"bar","data":[{"label":"Food","value":10},{"name":"Rent","value":20}]}""") as Widget.Chart).w
+        assertEquals(listOf("Food", "Rent"), objects.labels)
+        val explicit = (parseWidget("chart", """{"type":"bar","labels":["Supplied A","Supplied B"],"series":[{"data":[["Other A",10],["Other B",20]]}]}""") as Widget.Chart).w
+        assertEquals(listOf("Supplied A", "Supplied B"), explicit.labels)
+        val dataset = (parseWidget("chart", """{"type":"line","datasets":[{"label":"Actual","values":[["Jan",10],["Feb",20]]}]}""") as Widget.Chart).w
+        assertEquals(listOf("Jan", "Feb"), dataset.labels)
+        assertEquals("Actual", dataset.series.single().name)
+        for (bad in listOf("""null""", """{"label":"Missing"}""", """{"data":null}""", """{"values":"not observations"}""")) {
+            assertNull("Never drop the malformed dataset beside a valid one: $bad",
+                parseWidget("chart", """{"type":"line","datasets":[{"data":[10,20]},$bad]}"""))
+        }
+    }
+
     @Test fun actualChartDomainsRetainLossesZeroAndSourcePeakWithoutDoublingTheRange() {
         val signed = chartValueDomainAndroid(listOf(-20f, 0f, 10f))
         assertEquals(-20.0, signed.lower, 0.0)
