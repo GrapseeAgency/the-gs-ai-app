@@ -15,7 +15,10 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertFalse((editor.value as? String ?? "").contains("😀"))
         app.buttons["Done"].tap()
         app.buttons["Download Project"].tap()
-        XCTAssertTrue(app.buttons["Cancel"].firstMatch.waitForExistence(timeout: 15), "Export must present the real system document picker")
+        let pickerCancel = app.buttons["Cancel"].firstMatch
+        let shown = pickerCancel.waitForExistence(timeout: 15)
+        XCTAssertTrue(shown, "Export must present the real system document picker; notice=\(app.staticTexts["response.action.notice"].firstMatch.label); hierarchy=\(app.debugDescription.suffix(5000))")
+        guard shown else { return }
         XCTAssertGreaterThan(app.navigationBars.count, 0)
         let capture = XCTAttachment(screenshot: app.screenshot())
         capture.name = "genui-contextual-real-source-export-picker"; capture.lifetime = .keepAlways; add(capture)
