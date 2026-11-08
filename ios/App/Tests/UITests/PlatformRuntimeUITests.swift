@@ -1,6 +1,47 @@
 import XCTest
 
 final class PlatformRuntimeUITests: XCTestCase {
+    func testGeneratedTerminalUsesRealFilesWorkerAndUnsupportedRefusal() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated terminal"].waitForExistence(timeout: 20))
+        app.buttons["Open generated terminal"].tap()
+        let input = app.webViews.textFields["Terminal command"].firstMatch
+        XCTAssertTrue(input.waitForExistence(timeout: 15))
+        func command(_ value: String) {
+            input.tap()
+            input.typeText(value)
+            app.webViews.buttons["Run"].firstMatch.tap()
+            XCTAssertEqual(input.value as? String, "", "Real form submission must consume the command")
+        }
+        func output(_ value: String) -> XCUIElement {
+            app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", value)).firstMatch
+        }
+        command("mkdir project"); command("cd project"); command("touch actual.txt"); command("ls")
+        XCTAssertTrue(app.webViews.staticTexts["actual.txt"].waitForExistence(timeout: 10))
+        command("rm actual.txt"); command("ls")
+        XCTAssertTrue(app.webViews.staticTexts["(empty)"].waitForExistence(timeout: 10))
+        command("js [1,2,3].map(n=>n*2)")
+        XCTAssertTrue(output("[2,4,6]").waitForExistence(timeout: 15), "A genuine Worker must compute array output")
+        command("js while(true) {}")
+        XCTAssertTrue(output("exceeded 2 seconds").waitForExistence(timeout: 15), "Actual infinite execution must stop")
+        command("python print(7)")
+        XCTAssertTrue(output("python: not executed").waitForExistence(timeout: 10))
+        XCTAssertEqual(app.webViews.buttons["Run again"].count, 0, "Unsupported execution must remove stale Worker output")
+        command("deploy")
+        XCTAssertTrue(output("deploy: not executed").waitForExistence(timeout: 10), "Model-provided output must never become fake execution")
+        XCTAssertFalse(output("😀").exists)
+        app.webViews.buttons["Reset session"].tap()
+        command("ls")
+        XCTAssertTrue(app.webViews.staticTexts["README.md"].waitForExistence(timeout: 10))
+        XCTAssertFalse(output("deploy: not executed").exists, "Reset must clear the prior actual session")
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "genui-terminal-real-files-worker-and-refusal"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+    }
+
     func testGeneratedCodeCopyEditRunAndInvalidDraftReset() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
