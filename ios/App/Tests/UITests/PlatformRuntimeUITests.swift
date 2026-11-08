@@ -1,6 +1,39 @@
 import XCTest
 
 final class PlatformRuntimeUITests: XCTestCase {
+    func testGeneratedCodeCopyEditRunAndInvalidDraftReset() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated code"].waitForExistence(timeout: 20))
+        app.buttons["Open generated code"].tap()
+        XCTAssertTrue(app.buttons["Copy code"].waitForExistence(timeout: 10))
+        app.buttons["Copy code"].tap()
+        app.buttons["Inspect copied source"].tap()
+        XCTAssertTrue(app.staticTexts["Original source copied"].waitForExistence(timeout: 10), "Copy must not substitute display escapes")
+        app.buttons["Run Code"].tap()
+        let output = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "16 2")).firstMatch
+        XCTAssertTrue(output.waitForExistence(timeout: 15), "Native Run must execute actual Unicode-key computation")
+        app.buttons["Edit"].tap()
+        let editor = app.textViews.firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        XCTAssertFalse((editor.value as? String ?? "").contains("😀"), "Editor must use reversible escapes")
+        editor.tap()
+        editor.typeText("\n\"unterminated")
+        app.buttons["Run Code"].tap()
+        XCTAssertTrue(app.staticTexts["Not executed: correct the JSON-encoded source draft first."].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.webViews.count, 0, "Invalid Run must not leave a stale successful execution visible")
+        app.buttons["Reset"].tap()
+        XCTAssertTrue(app.buttons["Edit"].waitForExistence(timeout: 10))
+        XCTAssertFalse(editor.exists)
+        app.buttons["Run Code"].tap()
+        XCTAssertTrue(output.waitForExistence(timeout: 15), "Reset must restore the original executable source")
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "genui-code-actual-copy-edit-run-reset"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+    }
+
     func testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
