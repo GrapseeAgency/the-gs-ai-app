@@ -312,6 +312,17 @@ jobs:
             -resultBundlePath ios/build/GSApp-react-keyboard.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee ios/build/xcodebuild-genui-test.log
+          cp ios/build/xcodebuild-genui-test.log ios/build/xcodebuild-react-keyboard-test.log
+          python3 - <<'PY'
+          from pathlib import Path
+          log = Path('ios/build/xcodebuild-react-keyboard-test.log').read_text(errors='replace')
+          receipt = [line for line in log.splitlines() if 'Test Case' in line
+                     and 'PlatformRuntimeUITests testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch]' in line
+                     and 'passed (' in line]
+          if len(receipt) != 1:
+              raise SystemExit('Actual inline React test must execute and pass exactly once; zero/skipped tests do not count')
+          print('::notice::Actual inline React keyboard/CRUD/storage receipt: ' + receipt[0].replace('%', '%25'))
+          PY
 
       - name: Focused generated-widget runtime test (before the full suite)
         run: |
