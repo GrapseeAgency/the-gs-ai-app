@@ -1670,21 +1670,17 @@ function Prose({
   )
 }
 
-function isAcademicCitationDomain(domain: string, url: string): boolean {
-  const hay = `${domain} ${url}`.toLowerCase()
-  return (
-    hay.includes('.edu') ||
-    hay.includes('nature.com') ||
-    hay.includes('arxiv.org') ||
-    hay.includes('ieee.org') ||
-    hay.includes('acm.org') ||
-    hay.includes('springer.') ||
-    hay.includes('sciencedirect.') ||
-    hay.includes('oxford') ||
-    hay.includes('cambridge') ||
-    hay.includes('nih.gov') ||
-    hay.includes('pubmed')
-  )
+function citationSourceURL(raw: string): URL | null {
+  try {
+    const url = new URL(raw)
+    return ['https:', 'http:'].includes(url.protocol) && url.hostname && !url.username && !url.password ? url : null
+  } catch { return null }
+}
+
+function isAcademicCitationDomain(_domain: string, raw: string): boolean {
+  const host = citationSourceURL(raw)?.hostname.toLowerCase() ?? ''
+  const publishers = ['nature.com', 'arxiv.org', 'ieee.org', 'acm.org', 'springer.com', 'springernature.com', 'sciencedirect.com', 'oup.com', 'cambridge.org', 'nih.gov']
+  return host.endsWith('.edu') || host.endsWith('.ac.uk') || publishers.some(domain => host === domain || host.endsWith('.' + domain))
 }
 
 function CitationsSourceCards({
@@ -1719,20 +1715,14 @@ function CitationsSourceCards({
         </div>
       )}
       {citations.map((src) => {
-        const domain =
-          src.domain ||
-          (() => {
-            try {
-              return new URL(src.url).hostname.replace(/^www\./, '')
-            } catch {
-              return src.url
-            }
-          })()
+        const link = citationSourceURL(src.url)
+        const domain = link?.hostname.replace(/^www\./, '') ?? 'Invalid source URL'
         const academic = isAcademicCitationDomain(domain, src.url)
         return (
           <a
             key={src.ordinal}
-            href={src.url}
+            href={link?.href}
+            aria-disabled={!link}
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -1808,12 +1798,12 @@ function CitationsSourceCards({
                     borderRadius: 999,
                     fontSize: 11,
                     fontWeight: 700,
-                    background: academic ? 'rgba(124, 92, 252, 0.14)' : 'rgba(18, 154, 90, 0.14)',
-                    color: academic ? '#5B3DF5' : '#129A5A',
+                    background: 'rgba(124, 92, 252, 0.10)',
+                    color: '#5B3DF5',
                   }}
                 >
-                  <GlassIcon name={academic ? 'building-bank' : 'shield-check'} tone={academic ? 'indigo' : 'green'} size={15} glyph={9} />
-                  <span>{academic ? 'Academic' : 'Trusted Source'}</span>
+                  <GlassIcon name={academic ? 'building-bank' : 'external-link'} tone="indigo" size={15} glyph={9} />
+                  <span>{!link ? 'Invalid link' : academic ? 'Academic domain' : 'Source link'}</span>
                 </span>
               </div>
             </div>
