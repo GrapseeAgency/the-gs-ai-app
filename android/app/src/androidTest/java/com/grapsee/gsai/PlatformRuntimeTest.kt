@@ -10,6 +10,8 @@ import android.view.View
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
@@ -44,6 +46,38 @@ import java.util.concurrent.TimeUnit
 class PlatformRuntimeTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
+
+    @Test fun contextualActionsEditActualCodeShowDataAndLaunchPlatformSharing() {
+        val prompts = mutableListOf<String>()
+        var content by androidx.compose.runtime.mutableStateOf("```javascript\nconsole.log(7)\n```")
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    com.grapsee.gsai.ui.chat.content.BlocksContent(content, false, {}, onSendPrompt = { prompts += it })
+                }
+            }
+        }
+        compose.onNodeWithText("Edit Code").performScrollTo().performClick()
+        compose.onNode(hasSetTextAction()).assertTextEquals("console.log(7)")
+        compose.onNode(hasSetTextAction()).performTextReplacement("console.log(42)")
+        compose.onNodeWithText("Done").performScrollTo().performClick()
+        compose.onNodeWithText("Edit Code").performScrollTo().performClick()
+        compose.onNode(hasSetTextAction()).assertTextEquals("console.log(42)")
+        compose.runOnIdle {
+            assertTrue("Local Edit Code must never become a model request", prompts.isEmpty())
+            content = "| Name | Amount |\n| --- | --- |\n| Actual | 42 |"
+        }
+        compose.onNodeWithText("View Full Report").performScrollTo().performClick()
+        compose.onNodeWithText("Actual\t42", substring = true).assertExists()
+        compose.onNodeWithText("Close details").performClick()
+        compose.onNodeWithText("Share").performScrollTo().performClick()
+        val device = UiDevice.getInstance(instrumentation)
+        assertTrue("Share must launch the real Android chooser, not copy text or ask the model",
+            device.wait(Until.hasObject(By.pkg("com.android.intentresolver")), 10_000L) ||
+                device.hasObject(By.text("Share response")))
+        device.pressBack()
+        compose.runOnIdle { assertTrue(prompts.isEmpty()) }
+    }
 
     @Test fun generatedCodeEditorAndWorkerPreserveUnicodeAndStopLoops() {
         val source = """const data = {"😀":7,"🌅":9}; console.log(data["😀"]+data["🌅"], "😀".length);"""
