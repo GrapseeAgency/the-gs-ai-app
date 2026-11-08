@@ -780,7 +780,7 @@ internal fun ChecklistWidgetView(w: ChecklistWidget) {
                 }
             }
             if (adding || editingId != null) {
-                BasicTextField(value = draft, onValueChange = { draft = NexlyIcons.cleanPlainText(it) }, singleLine = true,
+                BasicTextField(value = draft, onValueChange = { draft = NexlyIcons.normalize(it).replace(Regex(":([a-z0-9][a-z0-9-]{1,42}):"), "") }, singleLine = true,
                     textStyle = TextStyle(fontSize = 13.sp, color = c.textPrimary), cursorBrush = SolidColor(accent),
                     modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(8.dp)).padding(10.dp)
                         .semantics { contentDescription = "Task text" })
@@ -1070,11 +1070,12 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
         "checklist" -> {
             val rawItems = (m["items"] ?: m["tasks"] ?: m["todos"] ?: m["checklist"]) as? JsonArray
             if (rawItems != null) {
-                val normItems = rawItems.mapNotNull { ie ->
+                val normItems = rawItems.map { ie ->
                     when (ie) {
-                        is JsonPrimitive -> ie.contentOrNull?.let {
+                        is JsonPrimitive -> if (ie.isString) ie.content.let {
                             JsonObject(mapOf("label" to JsonPrimitive(it), "done" to JsonPrimitive(false)))
                         }
+                        else ie
                         is JsonObject -> {
                             val im = ie.toMutableMap()
                             if ("label" !in im) (ie["title"] ?: ie["text"] ?: ie["task"] ?: ie["name"])?.let { im["label"] = it }
@@ -1084,7 +1085,7 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
                             }
                             JsonObject(im)
                         }
-                        else -> null
+                        else -> ie
                     }
                 }
                 m["items"] = JsonArray(normItems)
