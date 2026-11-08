@@ -1732,7 +1732,7 @@ private struct StatBodyView: View {
                 Text(value)
                     .font(.system(size: compact ? 13 : 17, weight: .bold, design: .rounded))
                     .foregroundStyle(NexlyInk.row)
-                    .lineLimit(1)
+                    .lineLimit(compact ? 1 : nil)
                     .minimumScaleFactor(compact ? 0.75 : 1)
                     .layoutPriority(1)
                 if !unit.isEmpty {
