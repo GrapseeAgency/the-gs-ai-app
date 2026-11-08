@@ -720,7 +720,9 @@ function fallbackIconForCodePoint(cp: number): string | null {
 
 /** Replace known emoji with :icon: tokens, map any remaining emoji block to a semantic :icon: token, and strip pictographs. */
 export function emojiToIconTokens(text: string): string {
-  let out = text
+  // Numeric direction is data, not decoration. Preserve its sign using
+  // non-emoji text arrows before emoji/variation-selector normalization.
+  let out = text.replace(/[↘↗]\uFE0F?(?=\s*[+-]?\s*[$€£¥₹৳]?\s*\d)/gu, arrow => arrow.startsWith('↘') ? '↓' : '↑')
   // Longest first so ZWJ sequences (runner, keycaps, etc.) win over their base glyph.
   const entries = Object.entries(EMOJI_TO_ICON).sort((a, b) => b[0].length - a[0].length)
   for (const [emoji, icon] of entries) {
