@@ -1321,31 +1321,31 @@ internal fun WidgetCardShell(
             }
             val defaultTone = remember(tag) { widgetTagGlassIcon(tag).second }
             if (cleanedTitle.isNotEmpty() || action != null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                NexlyGlassGlyphTile(
-                    name = leadingIcon,
-                    toneName = defaultTone,
-                    size = 24.dp,
-                    glyphSize = 14.dp,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                if (cleanedTitle.isNotEmpty()) {
-                    Text(
-                        cleanedTitle,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = c.textPrimary,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    NexlyGlassGlyphTile(
+                        name = leadingIcon,
+                        toneName = defaultTone,
+                        size = 24.dp,
+                        glyphSize = 14.dp,
+                        modifier = Modifier.padding(end = 8.dp)
                     )
-                } else {
-                    Box(Modifier.weight(1f))
+                    if (cleanedTitle.isNotEmpty()) {
+                        Text(
+                            cleanedTitle,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = c.textPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        Box(Modifier.weight(1f))
+                    }
+                    if (action != null) {
+                        Box(Modifier.padding(end = 8.dp)) { action() }
+                    }
                 }
-                if (action != null) {
-                    Box(Modifier.padding(end = 8.dp)) { action() }
-                }
-            }
             }
             // Inset is a card inside a card: the content sits in its own
             // recessed panel, so a form never reads as a chart with fields.
@@ -2447,24 +2447,27 @@ private fun StatWidgetView(w: StatWidget) {
     val c = GsTheme.colors
     val dark = WidgetPalette.onDarkCanvas()
     WidgetCardShell(NexlyIcons.cleanPlainText(w.title), "stat") {
-        // Metrics are information, not pretend drill-down buttons. A two-column
-        // layout keeps every source card discoverable on an ordinary phone.
+        // The reference presents four short KPIs in one row. Preserve readable
+        // two-column cards for larger type or lengthy source values and units.
+        val compactMetrics = w.cards.size == 4 && androidx.compose.ui.platform.LocalDensity.current.fontScale <= 1.1f &&
+            w.cards.all { it.value.length + it.unit.length <= 10 && it.label.length <= 28 }
+        val columns = if (compactMetrics) 4 else 2
         Column(Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            w.cards.chunked(2).forEachIndexed { rowIndex, row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            w.cards.chunked(columns).forEachIndexed { rowIndex, row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(if (compactMetrics) 5.dp else 8.dp)) {
                     row.forEachIndexed { columnIndex, card ->
-                        val accent = WidgetPalette.legible(WidgetPalette.at(rowIndex * 2 + columnIndex), dark)
+                        val accent = WidgetPalette.legible(WidgetPalette.at(rowIndex * columns + columnIndex), dark)
                         Column(
                             Modifier.weight(1f)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Brush.verticalGradient(listOf(accent.copy(alpha = if (dark) 0.20f else 0.08f), c.surface)))
+                                .background(Brush.verticalGradient(listOf(accent.copy(alpha = if (dark) 0.20f else 0.04f), c.surface)))
                                 .border(1.dp, accent.copy(alpha = if (dark) 0.34f else 0.22f), RoundedCornerShape(12.dp))
-                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                                .padding(horizontal = if (compactMetrics) 6.dp else 10.dp, vertical = 10.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text(NexlyIcons.cleanPlainText(card.label), style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
+                            Text(NexlyIcons.cleanPlainText(card.label), style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactMetrics) 9.5.sp else 11.sp), color = NexlyInk.label)
                             Row(verticalAlignment = Alignment.Bottom) {
-                                Text(NexlyIcons.cleanPlainText(card.value), style = MaterialTheme.typography.titleMedium, color = c.textPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false))
+                                Text(NexlyIcons.cleanPlainText(card.value), style = MaterialTheme.typography.titleMedium.copy(fontSize = if (compactMetrics) 13.sp else 16.sp), color = NexlyInk.row, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false))
                                 if (card.unit.isNotEmpty()) {
                                     Text(NexlyIcons.cleanPlainText(card.unit), style = MaterialTheme.typography.labelSmall, color = c.textSecondary, modifier = Modifier.padding(start = 3.dp, bottom = 2.dp))
                                 }
@@ -2483,7 +2486,7 @@ private fun StatWidgetView(w: StatWidget) {
                             }
                         }
                     }
-                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                    repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
