@@ -94,7 +94,10 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertTrue(formVisible, "The actual inline form submit button must remain touchable above the real keyboard")
         guard formVisible else { return }
         addTask.tap()
-        XCTAssertTrue(complete("0/1 complete").waitForExistence(timeout: 10))
+        let added = complete("0/1 complete").waitForExistence(timeout: 10)
+        if !added { printPresentationDiagnostics(app, label: "REACT") }
+        XCTAssertTrue(added, "The real Add touch must submit the typed draft and change the actual React task count")
+        guard added else { return }
         let toggle = complete("Complete iOS React task")
         XCTAssertTrue(toggle.waitForExistence(timeout: 5)); toggle.tap()
         XCTAssertTrue(complete("1/1 complete").waitForExistence(timeout: 5))
