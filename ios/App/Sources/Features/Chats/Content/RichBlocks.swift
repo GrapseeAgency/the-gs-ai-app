@@ -3028,6 +3028,10 @@ struct CodeBlockCardView: View {
         ["html", "htm", "svg", "jsx", "tsx", "react"].contains(lang)
     }
 
+    private var supportsExecution: Bool {
+        ["html", "htm", "svg", "js", "javascript", "node", "json"].contains(lang)
+    }
+
     private var allLines: [String] {
         currentCode.components(separatedBy: "\n")
     }
@@ -3101,7 +3105,7 @@ struct CodeBlockCardView: View {
                 size: 14,
                 color: Color(red: 0.620, green: 0.525, blue: 1.0)
             )
-            Text((language ?? "code").capitalized)
+            Text(NexlyIcons.cleanPlainText((language ?? "code").capitalized))
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(Color(red: 0.902, green: 0.882, blue: 1.0))
             Spacer()
@@ -3212,7 +3216,7 @@ struct CodeBlockCardView: View {
                 } label: {
                     HStack(spacing: 5) {
                         NexlyGlyph(name: "player-play", size: 12, color: .white)
-                        Text(isBrowserLang ? "Run in Browser" : (lang == "json" ? "Validate JSON" : "Run Code"))
+                        Text(!supportsExecution ? "Source only" : isBrowserLang ? "Run in Browser" : (lang == "json" ? "Validate JSON" : "Run Code"))
                             .font(.system(size: 11.5, weight: .bold))
                     }
                     .foregroundStyle(Color.white)
@@ -3221,6 +3225,8 @@ struct CodeBlockCardView: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
                 }
                 .buttonStyle(.plain)
+                .disabled(!supportsExecution)
+                .opacity(supportsExecution ? 1 : 0.65)
 
                 Spacer()
 
@@ -3353,6 +3359,14 @@ struct CodeBlockCardView: View {
         } else if !open && ["jsx", "tsx", "react"].contains(lang) {
             Text("React source only: this view has no React/TypeScript compiler. No component has been executed. Use a self-contained HTML/JavaScript sandbox for a live preview.")
                 .font(.system(size: 12))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(12)
+        } else if !open && !supportsExecution {
+            Text("Source only: no \(NexlyIcons.cleanPlainText(lang)) runtime is available in this app. Copy this source into a compatible environment; no execution has occurred here.")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(12)
         }
     }
@@ -3395,7 +3409,7 @@ struct CodeBlockCardView: View {
                             Text(CodeDisplayIOS.escape(line.isEmpty ? " " : line))
                                 .font(.system(size: 12, weight: .regular, design: .monospaced))
                         } else {
-                            highlightedCode(CodeDisplayIOS.escape(line.isEmpty ? " " : line), language: language)
+                            highlightedCode(CodeDisplayIOS.escape(line.isEmpty ? " " : line), language: language, darkSurface: true)
                         }
                     }
                     .foregroundStyle(Color(red: 0.933, green: 0.922, blue: 1.0))
