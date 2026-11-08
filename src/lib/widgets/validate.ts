@@ -631,6 +631,68 @@ function normaliseJsonDialect(input: string): string {
   return out
 }
 
+/** Structural repair must never regex-rewrite executable or supplied strings. */
+function normaliseStructuralQuotes(input: string): string {
+  let out = '', quote = '', escaped = false
+  for (const ch of input) {
+    if (quote) {
+      if (escaped) { out += ch; escaped = false }
+      else if (ch === '\\') { out += ch; escaped = true }
+      else if (ch === quote) { out += quote === '”' || quote === '’' ? '"' : ch; quote = '' }
+      else if ((quote === '”' || quote === '’') && ch === '"') out += '\\"'
+      else out += ch
+    } else if (ch === '"' || ch === "'") { quote = ch; out += ch }
+    else if (ch === '“' || ch === '”') { quote = '”'; out += '"' }
+    else if (ch === '‘' || ch === '’') { quote = '’'; out += '"' }
+    else out += ch
+  }
+  return out
+}
+
+function stripJsonTrailingCommas(input: string): string {
+  let out = '', inString = false, escaped = false
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i]
+    if (inString) {
+      out += ch
+      if (escaped) escaped = false
+      else if (ch === '\\') escaped = true
+      else if (ch === '"') inString = false
+    } else if (ch === '"') { inString = true; out += ch }
+    else if (ch === ',') {
+      let next = i + 1
+      while (/\s/.test(input[next] ?? '') && next < input.length) next++
+      if (input[next] !== '}' && input[next] !== ']') out += ch
+    } else out += ch
+  }
+  return out
+}
+
+function endOfJsonRoot(input: string): number {
+  let depth = 0, inString = false, escaped = false
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (ch === '\\') escaped = true
+      else if (ch === '"') inString = false
+    } else if (ch === '"') inString = true
+    else if (ch === '{' || ch === '[') depth++
+    else if (ch === '}' || ch === ']') { depth--; if (depth === 0) return i }
+  }
+  return -1
+}
+
+function hasClosingJsonQuote(input: string, start: number): boolean {
+  let escaped = false
+  for (let i = start; i < input.length; i++) {
+    if (escaped) escaped = false
+    else if (input[i] === '\\') escaped = true
+    else if (input[i] === '"') return true
+  }
+  return false
+}
+
 /**
  * Close what the model left open: an unterminated string (the calendar probe
  * watched `"All day]}` — a missing quote and brace in one payload) and any
@@ -643,9 +705,11 @@ function closeOpenStructures(s: string): string | null {
   let inString = false
   let escaped = false
   const stack: string[] = []
-  for (const ch of s) {
+  let stringCanClose = false
+  for (let index = 0; index < s.length; index++) {
+    const ch = s[index]
     if (inString) {
-      if (!escaped && (ch === ']' || ch === '}' || ch === ',')) {
+      if (!escaped && !stringCanClose && (ch === ']' || ch === '}' || ch === ',')) {
         out += '"'
         inString = false
       } else {
@@ -658,6 +722,7 @@ function closeOpenStructures(s: string): string | null {
     }
     if (ch === '"') {
       inString = true
+      stringCanClose = hasClosingJsonQuote(s, index + 1)
       out += ch
       continue
     }
@@ -693,7 +758,7 @@ function closeOpenStructures(s: string): string | null {
   }
   out = out.replace(/,\s*$/, '')
   while (stack.length > 0) out += stack.pop()
-  out = out.replace(/,\s*([}\]])/g, '$1')
+  out = stripJsonTrailingCommas(out)
   try {
     JSON.parse(out)
     return out
@@ -705,6 +770,7 @@ function closeOpenStructures(s: string): string | null {
 export function repairJson(raw: string): string | null {
   let s = raw.trim()
   if (!s) return null
+  try { JSON.parse(s); return s } catch { /* Repair syntax, never valid source data. */ }
 
   // Strip a prose prefix before the first `{` or `[`.
   const firstBrace = s.indexOf('{')
@@ -713,14 +779,11 @@ export function repairJson(raw: string): string | null {
   const firstOpen = isArrayRoot ? firstBracket : firstBrace
   if (firstOpen < 0) return null
   if (firstOpen > 0) s = s.slice(firstOpen)
-  const lastClose = isArrayRoot ? Math.max(s.lastIndexOf(']'), s.lastIndexOf('}')) : s.lastIndexOf('}')
-  if (lastClose >= 0) s = s.slice(0, lastClose + 1)
-
-  s = stripJsonComments(s)
-    .replace(/[\u201c\u201d]/g, '"')
-    .replace(/[\u2018\u2019]/g, "'")
-
-  s = normaliseJsonDialect(s).replace(/,\s*([}\]])/g, '$1')
+  s = stripJsonComments(normaliseStructuralQuotes(s))
+  s = stripJsonTrailingCommas(normaliseJsonDialect(s))
+  // A brace inside an executable string is not the end of the JSON document.
+  const rootEnd = endOfJsonRoot(s)
+  if (rootEnd >= 0) s = s.slice(0, rootEnd + 1)
 
   try {
     JSON.parse(s)
