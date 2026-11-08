@@ -1676,88 +1676,55 @@ private struct ChartBodyView: View {
 private struct StatBodyView: View {
     let obj: [String: Any]
     let accent: Color
-    @State private var selectedIdx: Int = 0
 
     var body: some View {
         let cards = ((obj["cards"] ?? obj["items"] ?? obj["metrics"] ?? obj["kpis"] ?? obj["stats"]) as? [[String: Any]]) ?? []
-        VStack(alignment: .leading, spacing: 8) {
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                ForEach(Array(cards.prefix(8).enumerated()), id: \.offset) { idx, card in
-                    let isSelected = selectedIdx == idx
-                    let label = str(card, "label", "title", "name", "metric")
-                    let value = str(card, "value", "val", "number", "amount")
-                    let delta = str(card, "delta", "change", "trend", "sub")
-                    let isNeg = delta.contains("-") || delta.hasPrefix("↓") || delta.hasPrefix("↘")
-                    Button {
-                        GSHaptics.select()
-                        selectedIdx = idx
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(label)
-                                .font(.system(size: 11, weight: isSelected ? .bold : .medium))
-                                .foregroundStyle(isSelected ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
-                                .lineLimit(1)
-                            Text(value)
-                                .font(.system(size: 17, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color(red: 0.122, green: 0.094, blue: 0.259))
-                                .lineLimit(1)
-                            if !delta.isEmpty {
-                                let cleanDelta = delta.replacingOccurrences(of: "^[↑↓↗↘\\s]+", with: "", options: .regularExpression)
-                                Text("\(isNeg ? "↘" : "↗") \(cleanDelta)")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(isNeg ? Color(red: 0.878, green: 0.310, blue: 0.373) : Color(red: 0.071, green: 0.604, blue: 0.353))
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(
-                                        Capsule().fill(
-                                            isNeg
-                                                ? Color(red: 0.992, green: 0.925, blue: 0.925)
-                                                : Color(red: 0.902, green: 0.976, blue: 0.941)
-                                        )
-                                    )
-                                    .lineLimit(1)
-                            }
-                        }
-                        .padding(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            (isSelected ? Color(red: 0.953, green: 0.933, blue: 1.0) : Color.white.opacity(0.82)),
-                            in: RoundedRectangle(cornerRadius: 12)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12).stroke(
-                                isSelected ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color(red: 0.886, green: 0.859, blue: 0.980),
-                                lineWidth: isSelected ? 1.5 : 1
-                            )
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            if selectedIdx < cards.count {
-                let selCard = cards[selectedIdx]
-                let selLabel = str(selCard, "label", "title", "name", "metric")
-                let selValue = str(selCard, "value", "val", "number", "amount")
-                let selDelta = str(selCard, "delta", "change", "trend", "sub", "note")
-                HStack(spacing: 8) {
-                    NexlyGlassGlyphTile(name: "chart-bar", tone: .lavender, size: 22, glyphSize: 13)
-                    Text("\(selLabel): \(selValue)")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Aero.text)
-                        .lineLimit(1)
-                    Spacer()
-                    if !selDelta.isEmpty {
-                        Text(selDelta)
-                            .font(Aero.mono(11))
-                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
-                            .lineLimit(1)
-                    }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(Color(red: 0.961, green: 0.945, blue: 1.0), in: RoundedRectangle(cornerRadius: 10))
+        // A metric is not a drill-down button unless there is a real drill-down.
+        // Preserve all supplied cards and units, with no invented trend arrows.
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+            ForEach(Array(cards.enumerated()), id: \.offset) { _, card in
+                metricCard(card)
             }
         }
+    }
+
+    private func metricCard(_ card: [String: Any]) -> some View {
+        let label = NexlyIcons.cleanPlainText(str(card, "label", "title", "name", "metric"))
+        let value = NexlyIcons.cleanPlainText(str(card, "value", "val", "number", "amount"))
+        let unit = NexlyIcons.cleanPlainText(str(card, "unit"))
+        let delta = NexlyIcons.cleanPlainText(str(card, "delta", "change", "trend", "sub", "note"))
+        let numericDelta = Double(delta.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "%$", with: "", options: .regularExpression).replacingOccurrences(of: "−", with: "-"))
+        let explicitDirection = str(card, "direction").lowercased()
+        let direction = !explicitDirection.isEmpty ? explicitDirection : numericDelta.map { $0.isFinite ? ($0 > 0 ? "up" : $0 < 0 ? "down" : "flat") : "" } ?? ""
+        let tone = direction == "up" ? Color(red: 0.071, green: 0.604, blue: 0.353) : direction == "down" ? Color(red: 0.878, green: 0.310, blue: 0.373) : Aero.textSecondary
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Aero.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value)
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.122, green: 0.094, blue: 0.259))
+                    .fixedSize(horizontal: false, vertical: true)
+                if !unit.isEmpty {
+                    Text(unit).font(.system(size: 10, weight: .medium)).foregroundStyle(Aero.textSecondary)
+                }
+            }
+            if !delta.isEmpty {
+                HStack(spacing: 4) {
+                    if direction == "up" || direction == "down" {
+                        NexlyGlyph(name: direction == "up" ? "trending-up" : "trending-down", size: 12, color: tone)
+                    }
+                    Text(delta).font(.system(size: 10, weight: .bold)).foregroundStyle(tone)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.886, green: 0.859, blue: 0.980), lineWidth: 1))
     }
 }
 
