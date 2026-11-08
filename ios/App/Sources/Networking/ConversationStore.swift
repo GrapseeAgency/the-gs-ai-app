@@ -112,12 +112,12 @@ final class ConversationStore: ObservableObject {
                 && !bootstrapDeletedConversationIDs.contains(row.id)
                 && (bootstrapPurgedBefore.map { row.updatedAt >= $0 } ?? true)
         }
+        let retainedConversationIDs = Set(loadedConversations.map(\.id)).union(currentConversationIDs)
         let loadedMessages = bootstrapDiscardLoaded ? [] : messages.filter { row in
             !currentMessageIDs.contains(row.id)
                 && !bootstrapDeletedConversationIDs.contains(row.conversationId)
                 && (bootstrapMessageCutoffs[row.conversationId].map { row.createdAt < $0 } ?? true)
-                && (bootstrapPurgedBefore == nil || loadedConversations.contains { $0.id == row.conversationId }
-                    || currentConversationIDs.contains(row.conversationId))
+                && (bootstrapPurgedBefore == nil || retainedConversationIDs.contains(row.conversationId))
         }
         self.conversations = loadedConversations + self.conversations
         self.messages = loadedMessages + self.messages
