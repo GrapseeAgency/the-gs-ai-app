@@ -136,26 +136,63 @@ private final class ResponseSystemControllerHostIOS: UIViewController {
     }
 }
 
+/// A non-modal anchor in the answer presents Files from the actual window's
+/// visible controller. Files is the single presentation, never a second modal
+/// stacked inside a SwiftUI sheet with a different remote-UI coordinate space.
 struct ResponseDocumentPickerIOS: UIViewControllerRepresentable {
-    let sourceURL: URL
+    let sourceURL: URL?
     let onCompletion: (URL?) -> Void
-    func makeCoordinator() -> Coordinator { Coordinator(onCompletion: onCompletion) }
-    func makeUIViewController(context: Context) -> UIViewController {
-        let picker = UIDocumentPickerViewController(forExporting: [sourceURL], asCopy: true)
-        // Files owns the complete interactive surface. Do not stack an
-        // automatically sized remote provider sheet inside a SwiftUI sheet:
-        // its navigation controls must stay inside the presented viewport.
-        picker.modalPresentationStyle = .fullScreen
-        picker.delegate = context.coordinator
-        picker.presentationController?.delegate = context.coordinator
-        return ResponseSystemControllerHostIOS(picker, delegate: context.coordinator)
+
+    func makeUIViewController(context: Context) -> DocumentPresentationHost {
+        DocumentPresentationHost()
     }
-    func updateUIViewController(_ controller: UIViewController, context: Context) {}
-    final class Coordinator: NSObject, UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate {
-        let onCompletion: (URL?) -> Void
+    func updateUIViewController(_ host: DocumentPresentationHost, context: Context) {
+        host.update(sourceURL: sourceURL, onCompletion: onCompletion)
+    }
+
+    final class DocumentPresentationHost: UIViewController, UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate {
+        private var requestedURL: URL?
+        private var activePicker: UIDocumentPickerViewController?
+        private var completion: ((URL?) -> Void)?
         private var completed = false
-        init(onCompletion: @escaping (URL?) -> Void) { self.onCompletion = onCompletion }
-        private func finish(_ url: URL?) { guard !completed else { return }; completed = true; onCompletion(url) }
+
+        override func viewDidLoad() { super.viewDidLoad(); view.backgroundColor = .clear }
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            presentIfReady()
+        }
+        func update(sourceURL: URL?, onCompletion: @escaping (URL?) -> Void) {
+            requestedURL = sourceURL
+            completion = onCompletion
+            // SwiftUI may be updating the view hierarchy in this call. Wait
+            // until that transaction has installed the anchor in its window.
+            DispatchQueue.main.async { [weak self] in self?.presentIfReady() }
+        }
+        private func presentIfReady() {
+            guard let source = requestedURL, activePicker == nil,
+                  var presenter = viewIfLoaded?.window?.rootViewController else { return }
+            while let presented = presenter.presentedViewController {
+                presenter = presented
+            }
+            guard !presenter.isBeingDismissed, !presenter.isBeingPresented else { return }
+            let picker = UIDocumentPickerViewController(forExporting: [source], asCopy: true)
+            picker.modalPresentationStyle = .fullScreen
+            picker.delegate = self
+            activePicker = picker
+            completed = false
+            presenter.present(picker, animated: true)
+            picker.presentationController?.delegate = self
+        }
+        private func finish(_ destination: URL?) {
+            guard !completed, let picker = activePicker else { return }
+            completed = true
+            requestedURL = nil
+            activePicker = nil
+            // The delegate, not a timeout or an app-owned Cancel button, is the
+            // only source of the export receipt. Dismiss the same controller.
+            picker.dismiss(animated: true)
+            completion?(destination)
+        }
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { finish(urls.first) }
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { finish(nil) }
         func presentationControllerDidDismiss(_ controller: UIPresentationController) { finish(nil) }
