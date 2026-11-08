@@ -33,7 +33,7 @@ async function main() {
   let networkHits=0
   server=http.createServer((req,res)=>{if(req.url==='/react-probe')networkHits++;res.writeHead(200,{'Content-Type':'text/html','Access-Control-Allow-Origin':'*'});res.end('<!doctype html><div id="app"></div>')})
   await new Promise(r=>server.listen(0,'127.0.0.1',r));const endpoint='http://127.0.0.1:'+server.address().port
-  browser=await puppeteer.launch({args:chromium.args,executablePath:await chromium.executablePath(),headless:true,env:{...process.env,LD_LIBRARY_PATH:path.join(libs,'lib')+':'+(process.env.LD_LIBRARY_PATH||'')}})
+  browser=await puppeteer.launch({args:chromium.args.filter(arg=>arg!=='--disable-web-security' && arg!=='--allow-running-insecure-content'),executablePath:await chromium.executablePath(),headless:true,env:{...process.env,LD_LIBRARY_PATH:path.join(libs,'lib')+':'+(process.env.LD_LIBRARY_PATH||'')}})
   page=await browser.newPage();await page.goto(endpoint);await page.addScriptTag({content:compiled.outputFiles[0].text})
   async function run(source, scope='message-a', language='tsx') {
    await page.evaluate((source,scope,language)=>window.gsRenderMessage('```'+language+'\n'+source+'\n```',scope),source,scope,language)
