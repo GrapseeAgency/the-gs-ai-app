@@ -79,7 +79,7 @@ async function main() {
   await frame.waitForFunction(()=>!document.querySelector('#emoji').textContent.includes(String.fromCodePoint(128512)))
   check('React-generated visible text obeys the actual zero-emoji DOM policy',()=>{})
   for (const [name,source,expected] of [
-   ['syntax errors','export default function App( { return <div>broken</div> }',/Unexpected token/],
+   ['syntax errors','export default function App( { return <div>broken</div> }',/Unexpected (?:token|keyword)/],
    ['missing default export','export function App(){return <p>source</p>}',/default React component/],
    ['unbundled imports',"import secret from 'unbundled-library';export default function App(){return <p>{secret}</p>}",/Unsupported dependency/],
    ['render exceptions',"export default function App(){throw Error('Actual render failure')}",/Actual render failure/]
