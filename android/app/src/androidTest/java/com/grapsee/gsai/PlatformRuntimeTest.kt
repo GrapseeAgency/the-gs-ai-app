@@ -111,6 +111,29 @@ class PlatformRuntimeTest {
         compose.onNode(hasSetTextAction()).assertExists()
     }
 
+    @Test fun generatedPollUsesRealTotalsAndResetsForNewPayload() {
+        val payload = androidx.compose.runtime.mutableStateOf("""{"title":"First poll","options":[{"label":"A"},{"label":"B"}]}""")
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                com.grapsee.gsai.ui.chat.content.WidgetBlockView(widget = parseWidget("poll", payload.value)!!)
+            }
+        }
+        compose.onNodeWithText("0 local votes", substring = true).assertExists()
+        compose.onNodeWithText("A").performClick()
+        compose.onNodeWithText("1 local vote", substring = true).assertExists()
+        compose.onNodeWithText("100% (1)").assertExists()
+        compose.onNodeWithText("B").performClick()
+        compose.onNodeWithText("1 local vote", substring = true).assertExists()
+        compose.onNodeWithText("100% (1)").assertExists()
+        compose.runOnIdle { payload.value = """{"title":"New poll","options":[{"label":"C","votes":2},{"label":"D","votes":3}]}""" }
+        compose.onNodeWithText("5 local votes", substring = true).assertExists()
+        compose.onNodeWithText("40% (2)").assertExists()
+        compose.onNodeWithText("C").performClick()
+        compose.onNodeWithText("6 local votes", substring = true).assertExists()
+        compose.onAllNodesWithText("50% (3)").assertCountEquals(2)
+        assertNull(parseWidget("poll", """{"options":[{"label":"Invalid","votes":-1},{"label":"Other"}]}"""))
+    }
+
     @Test fun backgroundReplyAppearsInOsAndSettingsSuppressIt() {
         val context = instrumentation.targetContext
         val manager = context.getSystemService(NotificationManager::class.java)
