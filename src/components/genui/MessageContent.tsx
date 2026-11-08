@@ -1,5 +1,6 @@
 'use client'
 
+import { parseTableNumber } from '@/lib/nexly/table-number'
 import { escapeCodeDisplay } from '@/lib/code/display-source'
 import { downloadResponseFile, responseSourceArchive, responseSourceFile } from '@/lib/code/response-export'
 
@@ -877,21 +878,11 @@ function ProseTableGrid({
 
   const sortedRows = useMemo(() => {
     if (sortCol === null) return block.rows
-    const parseSortableNum = (cell: string): number | null => {
-      const cleaned = cell.replace(/[*_`~,$%€£¥₹↑↓↗↘+,\s]/g, '').trim()
-      const m = cleaned.match(/^(-?\d+(?:\.\d+)?)([kKmMbBtT])?$/)
-      if (!m) return null
-      const base = Number(m[1])
-      if (!Number.isFinite(base)) return null
-      const suf = (m[2] ?? '').toLowerCase()
-      const mult = suf === 'k' ? 1e3 : suf === 'm' ? 1e6 : suf === 'b' ? 1e9 : suf === 't' ? 1e12 : 1
-      return base * mult
-    }
     return [...block.rows].sort((a, b) => {
       const ca = (a[sortCol] ?? '').replace(/[*_`~]/g, '').trim()
       const cb = (b[sortCol] ?? '').replace(/[*_`~]/g, '').trim()
-      const na = parseSortableNum(ca)
-      const nb = parseSortableNum(cb)
+      const na = parseTableNumber(ca)
+      const nb = parseTableNumber(cb)
       const cmp = na !== null && nb !== null ? na - nb : ca.localeCompare(cb, undefined, { numeric: true, sensitivity: 'base' })
       return sortAsc ? cmp : -cmp
     })
