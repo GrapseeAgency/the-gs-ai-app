@@ -99,6 +99,23 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("1 of 1 completed").assertExists()
     }
 
+    @Test fun shortSourceTableShowsEveryProductAndMeasureWithoutHiddenPagesOrColumns() {
+        val payload = """{"title":"Actual short source","columns":["Product","Sales","Revenue","Growth"],"rows":[["Nexly Pro","482","$12,460","18.4%"],["Nexly Starter","361","$7,240","12.1%"],["Nexly Business","284","$5,930","9.7%"],["Nexly Enterprise","126","$3,120","6.2%"]]}"""
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    com.grapsee.gsai.ui.chat.content.WidgetBlockView(
+                        com.grapsee.gsai.ui.chat.content.Block.WidgetBlock("table", payload, false, 0), false)
+                }
+            }
+        }
+        compose.onNodeWithText("Nexly Enterprise").assertIsDisplayed()
+        compose.onNodeWithText("$3,120").assertIsDisplayed()
+        compose.onNodeWithText("Revenue", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Growth", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("1–4 of 4").assertIsDisplayed()
+    }
+
     @Test fun vanishedDashboardTabCannotHideReplacementWithSameBlockCount() {
         var wire by androidx.compose.runtime.mutableStateOf("# Source dashboard\n\n| Name | Value |\n| --- | --- |\n| A | 1 |\n\n- [ ] Source task\n\nSource footer")
         val replacement = "# Replacement dashboard\n\n## Supplied heading\n\nReplacement stays visible\n\nSupplied replacement footer"
