@@ -12,6 +12,8 @@ struct PlatformRuntimeProbe: View {
     @State private var showCalculator = false
     @State private var showTable = false
     @State private var showChart = false
+    @State private var showCode = false
+    @State private var copyStatus = "Copy not inspected"
     @State private var ordinaryTable = false
     @State private var title = ""
     @State private var armed = false
@@ -30,6 +32,7 @@ struct PlatformRuntimeProbe: View {
             Button("Open generated calculator") { showCalculator = true }
             Button("Open generated table") { showTable = true }
             Button("Open generated chart") { showChart = true }
+            Button("Open generated code") { showCode = true }
             if showCalculator {
                 WidgetBlockView(kind: "calc", json: #"{"title":"\ud83d\ude80 Growth","fields":[{"key":"amount","label":"Amount \u00a9\ufe0f \ud83d\ude00","value":100}],"outputs":[{"label":"Double","expr":"amount*2"}]}"#, open: false)
             }
@@ -48,6 +51,15 @@ struct PlatformRuntimeProbe: View {
         }
         .sheet(isPresented: $showChart) {
             ScrollView { WidgetBlockView(kind: "chart", json: Self.chartJSON, open: false).padding() }
+        }
+        .sheet(isPresented: $showCode) {
+            VStack {
+                Button("Inspect copied source") {
+                    copyStatus = UIPasteboard.general.string == Self.codeSource ? "Original source copied" : "Wrong source copied"
+                }
+                Text(copyStatus)
+                ScrollView { BlocksView(blocks: parseBlocks("```javascript\n" + Self.codeSource + "\n```")).padding() }
+            }
         }
         .onAppear {
             let settings = SettingsStore.shared
@@ -74,6 +86,8 @@ struct PlatformRuntimeProbe: View {
             }
         }
     }
+
+    private static let codeSource = #"const data = {"😀":7,"🌅":9}; console.log(data["😀"]+data["🌅"], "😀".length);"#
 
     private static var chartJSON: String {
         let data: [String: Any] = ["type": "line", "labels": (1...31).map { "P\($0)" },
