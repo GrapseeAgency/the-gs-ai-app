@@ -140,11 +140,17 @@ private func keywordSet(for language: String?) -> (Set<String>, caseInsensitive:
 
 /// Returns the highlighted code as styled SwiftUI `Text`; colours come ONLY
 /// from the Aero code tokens.
-func highlightedCode(_ code: String, language: String?) -> Text {
-    let kw = UIColor(Aero.codeKeyword)
-    let st = UIColor(Aero.codeString)
-    let cm = UIColor(Aero.codeComment)
-    let nm = UIColor(Aero.codeNumber)
+func highlightedCode(_ code: String, language: String?, darkSurface: Bool = false) -> Text {
+    // Code cards deliberately remain dark in a light chat. Resolve their
+    // semantic token colours against that real surface, not the app's theme.
+    func ink(_ color: Color) -> UIColor {
+        let semantic = UIColor(color)
+        return darkSurface ? semantic.resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark)) : semantic
+    }
+    let kw = ink(Aero.codeKeyword)
+    let st = ink(Aero.codeString)
+    let cm = ink(Aero.codeComment)
+    let nm = ink(Aero.codeNumber)
     let lang = (language ?? "").lowercased()
     let hashComments = hashCommentLanguages.contains(lang)
     let dashComments = dashCommentLanguages.contains(lang)
