@@ -289,6 +289,7 @@ jobs:
             -destination "$IOS_DESTINATION" \
             -derivedDataPath "$DERIVED_DATA" \
             -only-testing:AppTests/CalcHonestyTests \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedBookingSavesOnlyActualLocalSelectionWithoutReservation \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedChecklistEditsDeletesAddsAndKeepsActualTaskCompletion \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testContextualEditOpensActualCodeAndExportOpensSystemDocumentPicker \
@@ -355,6 +356,7 @@ jobs:
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
               ('PlatformRuntimeUITests', 'testGeneratedChecklistEditsDeletesAddsAndKeepsActualTaskCompletion'),
+              ('PlatformRuntimeUITests', 'testGeneratedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices'),
               ('PlatformRuntimeUITests', 'testGeneratedBookingSavesOnlyActualLocalSelectionWithoutReservation'),
               ('CalcHonestyTests', 'testWholeJSONPreservesMachineStringsBeforeMarkdownAndStreaming'),
               ('CalcHonestyTests', 'testChecklistRefusesMalformedAndOversizedSourceWithoutKindHealing'),
