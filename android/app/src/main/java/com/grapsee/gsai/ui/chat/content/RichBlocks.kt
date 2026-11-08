@@ -1048,7 +1048,7 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
             }
             is InlineSpan.CodeSpan -> builder.withStyle(
                 SpanStyle(fontFamily = FontFamily.Monospace, background = theme.codeBg, fontSize = theme.fontSize * 0.88f)
-            ) { builder.append(NexlyIcons.cleanPlainText(span.code)) }
+            ) { builder.append(CodeDisplay.escape(span.code)) }
             is InlineSpan.LinkSpan -> builder.withLink(
                 LinkAnnotation.Url(
                     span.url,
