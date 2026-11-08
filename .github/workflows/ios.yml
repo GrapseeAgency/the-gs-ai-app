@@ -518,6 +518,7 @@ jobs:
           mkdir -p "$DIR"
           if [ -d "$SRC" ]; then cp "$SRC"/nexly-chat-ios-*.png "$DIR/" 2>/dev/null || true; fi
           if [ -d "$SRC" ]; then cp "$SRC"/genui-reference-ios-*.png "$DIR/" 2>/dev/null || true; fi
+          if [ -d "$SRC" ]; then cp "$SRC"/genui-reference-ios-*-scroll.json "$DIR/" 2>/dev/null || true; fi
           for section in 01-dashboard 02-structured-launch 03-react-code 04-citations 05-data-grid 06-interactive-charts; do
             test -s "$DIR/genui-reference-ios-$section-393x852.png" \
               || { echo "::error::Missing actual iOS reference frame: $section"; exit 1; }
@@ -706,7 +707,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nexly-chat-render-ios
-          path: ios/build/nexly-renders/*.png
+          path: |
+            ios/build/nexly-renders/*.png
+            ios/build/nexly-renders/*-scroll.json
           if-no-files-found: error
           retention-days: 30
 
