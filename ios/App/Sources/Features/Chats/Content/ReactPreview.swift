@@ -29,7 +29,7 @@ enum ReactPreviewRuntimeIOS {
     }
     static func origin(scope: String) -> URL {
         let hash = SHA256.hash(data: Data(scope.utf8)).map { String(format: "%02x", $0) }.joined()
-        return URL(string: "https://\(hash.prefix(48)).gs-react.invalid/")!
+        return URL(string: "https://gs-react-\(hash.prefix(48)).invalid/")!
     }
 }
 
