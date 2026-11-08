@@ -142,6 +142,8 @@ fun CodeBlockCard(
     onCopyCode: (String) -> Unit
 ) {
     val responseActions = LocalResponseCodeActions.current
+    val responsePreviewScope = LocalReactPreviewScope.current
+    val localPreviewScope = remember { java.util.UUID.randomUUID().toString() }
     val sourceId = remember(code, language, sourceStart) { sourceStart ?: Any() }
     var copied by remember { mutableStateOf(false) }
     var sandboxMode by remember(code, language) { mutableStateOf(false) }
@@ -205,7 +207,8 @@ fun CodeBlockCard(
 
     val langLabel = (language ?: "code").trim().ifBlank { "code" }
     val lowerLang = langLabel.lowercase()
-    val isBrowserLang = lowerLang in setOf("html", "htm", "svg", "js", "javascript", "node")
+    val isReact = lowerLang in setOf("jsx", "tsx", "react")
+    val isBrowserLang = isReact || lowerLang in setOf("html", "htm", "svg", "js", "javascript", "node")
     val supportsExecution = isBrowserLang || lowerLang == "json"
 
     Surface(
@@ -382,7 +385,7 @@ fun CodeBlockCard(
                                 if (editing && editorError != null) {
                                     sandboxMode = false
                                     runResult = CodeRunResult("", "Not executed: correct the JSON-encoded source draft first.")
-                                } else if (lowerLang in setOf("html", "htm", "svg", "js", "javascript", "node")) {
+                                } else if (isBrowserLang) {
                                     runCount += 1
                                     runResult = null
                                     sandboxSource = currentCode
@@ -539,7 +542,10 @@ fun CodeBlockCard(
             }
 
             if (sandboxMode && !open) {
-                key(runCount) { CodeSandboxView(code = sandboxSource, language = language ?: "javascript") }
+                key(runCount) {
+                    if (isReact) ReactPreviewAndroid(source = sandboxSource, scope = "${responsePreviewScope ?: localPreviewScope}:${sourceStart ?: 0}")
+                    else CodeSandboxView(code = sandboxSource, language = language ?: "javascript")
+                }
             }
 
             // Visual Data Plot Preview (Screenshot 1: Revenue Trend mini bar chart from Python/JS code)
