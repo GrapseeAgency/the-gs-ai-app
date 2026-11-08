@@ -354,6 +354,11 @@ jobs:
           import re
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
+              ('PlatformRuntimeUITests', 'testGeneratedChecklistEditsDeletesAddsAndKeepsActualTaskCompletion'),
+              ('PlatformRuntimeUITests', 'testGeneratedBookingSavesOnlyActualLocalSelectionWithoutReservation'),
+              ('CalcHonestyTests', 'testWholeJSONPreservesMachineStringsBeforeMarkdownAndStreaming'),
+              ('CalcHonestyTests', 'testChecklistRefusesMalformedAndOversizedSourceWithoutKindHealing'),
+              ('CalcHonestyTests', 'testInvalidWizardCannotBypassIOSWidgetValidation'),
               ('PlatformRuntimeUITests', 'testContextualEditOpensActualCodeAndExportOpensSystemDocumentPicker'),
               ('PlatformRuntimeUITests', 'testContextualReportShowsActualDataAndSharePresentsSystemActivitySheet'),
               ('CalcHonestyTests', 'testContextualCodeActionsRetainActualDraftsAndStayResponseScoped'),
