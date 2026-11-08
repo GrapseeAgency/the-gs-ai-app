@@ -729,7 +729,7 @@ private fun StructuredBlockSequenceContent(
     }
 
     // Bottom Contextual Action Pills (Screenshots 1–6)
-    if (!isStreaming && normalizedBlocks.size >= 2) {
+    if (!isStreaming && normalizedBlocks.isNotEmpty()) {
         val endsWithActionWidget = normalizedBlocks.lastOrNull().let {
             it is Block.WidgetBlock && it.kind in setOf("actions", "followups", "chips", "menu")
         }
