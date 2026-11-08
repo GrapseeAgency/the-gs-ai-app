@@ -17,8 +17,17 @@ struct ReactRuntimeProbe: View {
             Text(otherResponse ? "Other response" : "Original response")
             ScrollView {
                 if let source = Self.source {
-                    BlocksView(blocks: parseBlocks("```tsx\n" + source + "\n```"))
-                        .environment(\.reactPreviewScope, (ProcessInfo.processInfo.environment["GS_REACT_ACCEPTANCE_SCOPE"] ?? "react-ui-acceptance") + (otherResponse ? ":other" : ":original"))
+                    // Exercise actual ChatDetailView message composition and
+                    // its production storage scope, including a freshly created
+                    // UI UUID after relaunch with the same durable row identity.
+                    MessageBubble(
+                        message: ChatViewModel.ChatMessage(
+                            role: "assistant", content: "```tsx\n" + source + "\n```",
+                            createdAt: "2026-10-20T10:30:00Z",
+                            durableID: otherResponse ? "other" : "original"
+                        ),
+                        conversationID: ProcessInfo.processInfo.environment["GS_REACT_ACCEPTANCE_SCOPE"] ?? "react-ui-acceptance"
+                    )
                         .id(otherResponse)
                         .padding(12)
                 } else { Text("Missing React acceptance source") }
