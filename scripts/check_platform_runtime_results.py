@@ -5,6 +5,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 EXPECTED = {
+    'generatedChecklistEditsDeletesAddsAndKeepsCompletionWithTheActualTask',
     'contextualActionsEditActualCodeShowDataAndLaunchPlatformSharing',
     'generatedPollUsesRealTotalsAndResetsForNewPayload',
     'generatedTerminalUsesRealFilesWorkerAndUnsupportedRefusal',
