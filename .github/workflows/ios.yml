@@ -464,6 +464,19 @@ jobs:
         if: failure()
         run: python3 scripts/publish_native_ui_pixels.py ios/build/xcodebuild-genui-test.log REACT
 
+      - name: Publish actual React keyboard layout measurements
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('ios/build/xcodebuild-genui-test.log')
+          if path.exists():
+              actual = [line for line in path.read_text(errors='replace').splitlines()
+                        if 'GS_REACT_KEYBOARD_LAYOUT:' in line or 'GS_REACT_FOCUS_CHECK:' in line]
+              for line in actual[-8:]:
+                  print('::notice::' + line[:3500].replace('%', '%25').replace('\r', '%0D'))
+          PY
+
       - name: Review actual system Share failure pixels
         if: failure()
         run: python3 scripts/publish_native_ui_pixels.py ios/build/xcodebuild-genui-test.log SHARE
