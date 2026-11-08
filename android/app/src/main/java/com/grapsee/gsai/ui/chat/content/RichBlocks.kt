@@ -67,6 +67,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
@@ -2563,11 +2564,15 @@ private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>): Pa
 @Composable
 private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citationUrls: Map<Int, String>) {
     val sectionMode = LocalSectionListMode.current
-    var addedTasks by remember(block.sourceStart) { mutableStateOf(listOf<String>()) }
-    var isAddingTask by remember(block.sourceStart) { mutableStateOf(false) }
-    var draftTaskText by remember(block.sourceStart) { mutableStateOf("") }
+    var addedTasks by remember(block.sourceStart, block.items) { mutableStateOf(listOf<Pair<Int, String>>()) }
+    var nextTaskId by remember(block.sourceStart, block.items) { mutableStateOf(block.items.size) }
+    var removedTasks by remember(block.sourceStart, block.items) { mutableStateOf(setOf<Int>()) }
+    var editedTasks by remember(block.sourceStart, block.items) { mutableStateOf(mapOf<Int, List<InlineSpan>>()) }
+    var editingTask by remember(block.sourceStart, block.items) { mutableStateOf<Int?>(null) }
+    var isAddingTask by remember(block.sourceStart, block.items) { mutableStateOf(false) }
+    var draftTaskText by remember(block.sourceStart, block.items) { mutableStateOf("") }
     val isChecklist = sectionMode == SectionListMode.TODO || block.items.any { it.checked != null }
-    var checkedMap by remember(block.sourceStart, block.items.size) {
+    var checkedMap by remember(block.sourceStart, block.items) {
         mutableStateOf(
             block.items.mapIndexed { idx, item -> idx to (item.checked ?: false) }.toMap()
         )
@@ -2596,8 +2601,8 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
         return
     }
 
-    val totalTaskCount = block.items.size + addedTasks.size
-    val completedTaskCount = (0 until totalTaskCount).count { checkedMap[it] == true }
+    val totalTaskCount = block.items.size - removedTasks.size + addedTasks.size
+    val completedTaskCount = block.items.indices.count { it !in removedTasks && checkedMap[it] == true } + addedTasks.count { checkedMap[it.first] == true }
     val completionPct = if (totalTaskCount > 0) (completedTaskCount * 100) / totalTaskCount else 0
 
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -2633,7 +2638,9 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                 )
             }
         }
-        block.items.forEachIndexed { idx, item ->
+        block.items.forEachIndexed { idx, original ->
+            if (idx in removedTasks) return@forEachIndexed
+            val item = original.copy(spans = editedTasks[idx] ?: original.spans)
             if (item.checked != null || sectionMode == SectionListMode.TODO) {
                 InteractiveChecklistItemRow(
                     initialChecked = checkedMap[idx] ?: (item.checked ?: false),
@@ -2641,7 +2648,9 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                     index = idx,
                     selectable = selectable,
                     citationUrls = citationUrls,
-                    onCheckedChange = { next -> checkedMap = checkedMap + (idx to next) }
+                    onCheckedChange = { next -> checkedMap = checkedMap + (idx to next) },
+                    onEdit = { editingTask = idx; draftTaskText = plainTextOfSpans(item.spans); isAddingTask = true },
+                    onRemove = { removedTasks = removedTasks + idx; editingTask = null; isAddingTask = false }
                 )
             } else if (sectionMode == SectionListMode.CHECKMARK) {
                 ListItemRow(
@@ -2661,8 +2670,7 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                 )
             }
         }
-        addedTasks.forEachIndexed { idx, taskText ->
-            val taskIdx = block.items.size + idx
+        addedTasks.forEach { (taskIdx, taskText) ->
             InteractiveChecklistItemRow(
                 initialChecked = checkedMap[taskIdx] ?: false,
                 item = ListItem(spans = listOf(InlineSpan.TextSpan(taskText)), checked = false),
@@ -2671,8 +2679,10 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                 citationUrls = citationUrls,
                 onCheckedChange = { next -> checkedMap = checkedMap + (taskIdx to next) },
                 onRemove = {
-                    addedTasks = addedTasks.filterIndexed { i, _ -> i != idx }
-                }
+                    addedTasks = addedTasks.filter { it.first != taskIdx }
+                    checkedMap = checkedMap - taskIdx; editingTask = null; isAddingTask = false
+                },
+                onEdit = { editingTask = taskIdx; draftTaskText = taskText; isAddingTask = true }
             )
         }
         if (sectionMode == SectionListMode.TODO || block.items.any { it.checked != null }) {
@@ -2712,17 +2722,19 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                             .clip(RoundedCornerShape(7.dp))
                             .background(Color(0xFF6C4CF6))
                             .clickable {
-                                val clean = draftTaskText.trim()
+                                val clean = NexlyIcons.cleanPlainText(draftTaskText).trim()
                                 if (clean.isNotEmpty()) {
-                                    addedTasks = addedTasks + clean
-                                    draftTaskText = ""
-                                    isAddingTask = false
+                                    val target = editingTask
+                                    if (target == null) addedTasks = addedTasks + (nextTaskId++ to clean)
+                                    else if (target < block.items.size) editedTasks = editedTasks + (target to parseInline(clean))
+                                    else addedTasks = addedTasks.map { if (it.first == target) target to clean else it }
+                                    editingTask = null; draftTaskText = ""; isAddingTask = false
                                 }
                             }
                             .padding(horizontal = 9.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "Add",
+                            text = if (editingTask == null) "Add" else "Save task",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -2735,6 +2747,7 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.clickable {
                             draftTaskText = ""
+                            editingTask = null
                             isAddingTask = false
                         }
                     )
@@ -2746,7 +2759,7 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                         .clip(RoundedCornerShape(999.dp))
                         .background(Color.White.copy(alpha = 0.8f))
                         .border(1.dp, Color(0xFFE0D8FA), RoundedCornerShape(999.dp))
-                        .clickable { isAddingTask = true }
+                        .clickable { editingTask = null; draftTaskText = ""; isAddingTask = true }
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -2781,7 +2794,8 @@ private fun InteractiveChecklistItemRow(
     selectable: Boolean,
     citationUrls: Map<Int, String>,
     onCheckedChange: ((Boolean) -> Unit)? = null,
-    onRemove: (() -> Unit)? = null
+    onRemove: (() -> Unit)? = null,
+    onEdit: (() -> Unit)? = null
 ) {
     var checked by remember(item.spans, initialChecked) { mutableStateOf(initialChecked) }
     var statusIdx by remember(item.spans, index) { mutableStateOf(0) }
@@ -2871,12 +2885,20 @@ private fun InteractiveChecklistItemRow(
                     }
                 )
             }
+            if (onEdit != null) {
+                Box(Modifier.clip(CircleShape).clickable(onClick = onEdit)
+                    .semantics { contentDescription = "Edit task: " + NexlyIcons.cleanPlainText(plainTextOfSpans(item.spans)) }
+                    .padding(5.dp)) {
+                    NexlyGlyph(name = "pencil", size = 12.dp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             if (onRemove != null) {
                 Spacer(Modifier.width(4.dp))
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable { onRemove() }
+                        .semantics { contentDescription = "Delete task: " + NexlyIcons.cleanPlainText(plainTextOfSpans(item.spans)) }
                         .padding(3.dp)
                 ) {
                     NexlyGlyph(
