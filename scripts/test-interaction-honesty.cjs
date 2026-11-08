@@ -436,6 +436,87 @@ async function main() {
       assert.equal(document.querySelectorAll('iframe').length, 0)
     })
   }
+  // Contextual controls must operate locally, not send their labels to the model.
+  let prompts = [], downloads = [], shared = null
+  const urls = new Map()
+  const createURL = URL.createObjectURL, revokeURL = URL.revokeObjectURL
+  const anchorClick = window.HTMLAnchorElement.prototype.click
+  URL.createObjectURL = blob => { const url = 'blob:response-' + urls.size; urls.set(url, blob); return url }
+  URL.revokeObjectURL = () => {}
+  window.HTMLAnchorElement.prototype.click = function () {
+    if (this.download) downloads.push({ name: this.download, blob: urls.get(this.href) })
+    else anchorClick.call(this)
+  }
+  const response = '```javascript\nconsole.log("original")\n```'
+  const renderResponse = text => mount(h(MessageContent, { text, onPrompt: prompt => prompts.push(prompt) }))
+  const contextual = label => buttons().find(button => button.textContent === label)
+  await renderResponse(response)
+  await click(contextual('Edit Code'))
+  check('contextual Edit Code opens the actual editor without requesting a model response', () => {
+    assert.ok(document.querySelector('textarea[aria-label="Source code"]'))
+    assert.deepEqual(prompts, [])
+  })
+  await typeSource('console.log("edited source")')
+  await click(contextual('Download Project'))
+  const archiveBytes = new Uint8Array(await downloads[0].blob.arrayBuffer())
+  const unzip = require('node:child_process').spawnSync('python3', ['-c', 'import sys,io,zipfile,json; z=zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())); print(json.dumps({n:z.read(n).decode("utf-8") for n in z.namelist()}))'], { input: archiveBytes, encoding: 'utf8' })
+  check('Download Project emits a valid ZIP with the actual edited source, not fabricated project files', () => {
+    assert.equal(unzip.status, 0, unzip.stderr)
+    const files = JSON.parse(unzip.stdout)
+    assert.equal(files['snippet-1.js'], 'console.log("edited source")')
+    assert.match(files['README.txt'], /not a complete runnable project/)
+    assert.equal(downloads[0].name, 'gs-ai-source-snippets.zip')
+    assert.deepEqual(prompts, [])
+  })
+  const { responseSourceArchive, responseSourceFile } = from('lib/code/response-export')
+  const lossless = responseSourceArchive([responseSourceFile('বাংলা \r\n' + String.fromCodePoint(0x1f600) + '\u0000', 'python', 0)])
+  const readLossless = require('node:child_process').spawnSync('python3', ['-c', 'import sys,io,zipfile; sys.stdout.buffer.write(zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())).read("snippet-1.py"))'], { input: lossless })
+  check('source ZIP preserves Unicode, line endings and null bytes with independently validated CRCs', () => {
+    assert.equal(readLossless.status, 0)
+    assert.equal(readLossless.stdout.toString(), 'বাংলা \r\n' + String.fromCodePoint(0x1f600) + '\u0000')
+    assert.throws(() => responseSourceArchive([{ name: '../unsafe.js', source: '' }]), /Unsafe/)
+  })
+  const tableResponse = 'Actual table\n\n| Name | Amount |\n| --- | --- |\n| Item | 42 |'
+  await renderResponse(tableResponse)
+  await click(contextual('Share'))
+  check('Share without Web Share copies the response with an explicit fallback notice', () => {
+    assert.equal(copiedSource, tableResponse)
+    assert.match(document.querySelector('[role="status"]').textContent, /Sharing is unavailable.*Response copied/)
+    assert.deepEqual(prompts, [])
+  })
+  navigator.share = async payload => { shared = payload }
+  await click(contextual('Share'))
+  check('Share calls the platform share API with the exact response', () => assert.equal(shared.text, tableResponse))
+  navigator.share = async () => { throw Object.assign(new Error('Cancelled'), { name: 'AbortError' }) }
+  await click(contextual('Share'))
+  check('cancelled sharing does not announce success or create an error', () => assert.equal(document.querySelector('[role="alert"]'), null))
+  delete navigator.share
+  navigator.clipboard.writeText = async () => { throw new Error('Clipboard permission denied') }
+  await click(contextual('Share'))
+  check('denied sharing fallback reports the actual error', () => assert.match(document.querySelector('[role="alert"]').textContent, /permission denied/))
+  navigator.clipboard.writeText = async value => { copiedSource = value }
+  await click(contextual('View Full Report'))
+  check('View Full Report shows the existing source and data instead of silently generating another answer', () => {
+    assert.match(document.querySelector('[aria-label="Response report"]').textContent, /Item.*42/s)
+    assert.deepEqual(prompts, [])
+  })
+  await click(contextual('Close details'))
+  const chartResponse = '```chart\n' + JSON.stringify({ type: 'line', series: [{ name: 'Measured', data: [[0, 3], [1, 7]] }] }) + '\n```'
+  await renderResponse(chartResponse)
+  await click(contextual('Download Report'))
+  check('Download Report emits the response and real dataset as Markdown', () => assert.equal(downloads.at(-1).name, 'gs-ai-response.md'))
+  check('report downloads never send a model prompt', () => assert.deepEqual(prompts, []))
+  assert.equal(await downloads.at(-1).blob.text(), chartResponse)
+  await mount(h(MessageContent, { text: 'Evidence-backed answer.', citations: [{ ordinal: 1, title: 'Original evidence', url: 'https://example.org/evidence' }], onPrompt: prompt => prompts.push(prompt) }))
+  await click(contextual('Copy Citations'))
+  check('Copy Citations copies only the supplied source records', () => {
+    assert.equal(copiedSource, '[1] Original evidence — https://example.org/evidence')
+    assert.deepEqual(prompts, [])
+  })
+  await click(contextual('View All Sources'))
+  check('View All Sources displays the real citation destinations', () => assert.ok(document.querySelector('[aria-label="All sources"] a[href="https://example.org/evidence"]')))
+  URL.createObjectURL = createURL; URL.revokeObjectURL = revokeURL
+  window.HTMLAnchorElement.prototype.click = anchorClick
   await act(async () => root.unmount())
   console.log(`\n${checks} interaction-honesty checks passed`)
 }
