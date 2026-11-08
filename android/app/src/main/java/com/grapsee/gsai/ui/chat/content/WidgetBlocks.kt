@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -2522,7 +2523,7 @@ private fun TableWidgetView(w: TableWidget) {
     var sortCol by remember { mutableIntStateOf(-1) }
     var asc by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }
-    var pageSize by remember(w.rows.size) { mutableIntStateOf(if (w.rows.size in 4..5) 3 else 5) }
+    var pageSize by remember(w.rows.size) { mutableIntStateOf(5) }
     var page by remember { mutableIntStateOf(0) }
     val clipboard = LocalClipboardManager.current
     val c = GsTheme.colors
@@ -2613,6 +2614,17 @@ private fun TableWidgetView(w: TableWidget) {
                 .background(Color.White.copy(alpha = 0.72f))
                 .border(1.dp, Color(0xFFE2DBFA), RoundedCornerShape(12.dp))
         ) {
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val compactTable = w.columns.size in 2..4 && maxWidth >= 280.dp &&
+                androidx.compose.ui.platform.LocalDensity.current.fontScale <= 1.1f &&
+                w.columns.all { it.length <= 14 } && w.rows.all { row ->
+                    row.withIndex().all { (ci, cell) -> cell.length <= if (ci == primaryNameCol) 24 else 10 }
+                }
+            val columnWeights = w.columns.indices.map { if (it == primaryNameCol) 2f else 1f }
+            val columnWidths = w.columns.mapIndexed { ci, col ->
+                if (compactTable) (maxWidth - 20.dp) * columnWeights[ci] / columnWeights.sum()
+                else if (col.trim() == "#" || col.equals("rank", true)) 52.dp else 132.dp
+            }
             Column(Modifier.horizontalScroll(rememberScrollState())) {
                 Row(
                     modifier = Modifier
@@ -2620,7 +2632,7 @@ private fun TableWidgetView(w: TableWidget) {
                         .padding(horizontal = 10.dp)
                 ) {
                     w.columns.forEachIndexed { ci, col ->
-                        val colWidth = if (col.trim() == "#" || col.equals("rank", true)) 52.dp else 132.dp
+                        val colWidth = columnWidths[ci]
                         Text(
                             if (w.sortable) "$col ${if (sortCol == ci) (if (asc) "▲" else "▼") else ""}" else col,
                             style = MaterialTheme.typography.labelSmall,
@@ -2641,7 +2653,7 @@ private fun TableWidgetView(w: TableWidget) {
                     Row(modifier = Modifier.padding(horizontal = 10.dp)) {
                         w.columns.indices.forEach { ci ->
                             val colName = w.columns[ci]
-                            val colWidth = if (colName.trim() == "#" || colName.equals("rank", true)) 52.dp else 132.dp
+                            val colWidth = columnWidths[ci]
                             val rawVal = (row.getOrNull(ci) ?: "").trim()
                             val isTrend = Regex("^[↑↓↗↘+-]?\\s*[+-]?\\d+(?:\\.\\d+)?%$").matches(rawVal) &&
                                 (rawVal.startsWith("+") || rawVal.startsWith("-") || rawVal.startsWith("↑") || rawVal.startsWith("↓") || colName.contains("trend", true) || colName.contains("growth", true) || colName.contains("change", true))
@@ -2667,9 +2679,9 @@ private fun TableWidgetView(w: TableWidget) {
                                     }
                                     Text(
                                         text = displayLabel,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold, fontSize = if (compactTable) 10.5.sp else 12.sp),
                                         color = GsTheme.colors.textPrimary,
-                                        maxLines = 1,
+                                        maxLines = if (compactTable) 2 else 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
@@ -2681,7 +2693,8 @@ private fun TableWidgetView(w: TableWidget) {
                                 Text(
                                     displayStr,
                                     style = MaterialTheme.typography.bodySmall.copy(
-                                        fontWeight = if (isTrend || ci == 0) FontWeight.Bold else FontWeight.Normal
+                                        fontWeight = if (isTrend || ci == 0) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = if (compactTable) 10.5.sp else 12.sp
                                     ),
                                     color = when {
                                         isTrend && isNeg -> Color(0xFFE04F5F)
@@ -2700,6 +2713,7 @@ private fun TableWidgetView(w: TableWidget) {
                     }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(GsTheme.colors.divider.copy(alpha = 0.35f)))
                 }
+            }
             }
             if (rows.isEmpty()) {
                 Text(
