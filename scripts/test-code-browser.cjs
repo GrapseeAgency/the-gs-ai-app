@@ -29,12 +29,38 @@ async function main() {
   const compiled = await esbuild.build({ entryPoints: [path.join(__dirname, 'browser-code-entry.tsx')], bundle: true,
     write: false, platform: 'browser', format: 'iife', jsx: 'automatic', tsconfig: path.join(__dirname, '../tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'silent' })
+  // The fixture serves the actual production route and SQLite-backed broker,
+  // not canned snapshots or invented shared counts.
+  const routeBundle = await esbuild.build({entryPoints:[path.join(__dirname,'../src/app/api/v1/collab/route.ts')],bundle:true,write:false,platform:'node',format:'cjs',external:['next/server'],tsconfig:path.join(__dirname,'../tsconfig.json'),logLevel:'silent'})
+  process.env.COLLAB_DB = path.join(libs,'collab-test.sqlite')
+  const Module = require('node:module')
+  const routeModule = new Module(__filename, module); routeModule.paths = module.paths
+  routeModule._compile(routeBundle.outputFiles[0].text, __filename + '.collab.cjs')
+  const collabRoute = routeModule.exports
+  const {NextRequest} = require('next/server')
+  let collabReadsAvailable = true, collabWritesAvailable = true
   const browser = await puppeteer.launch({ executablePath: await chromium.executablePath(), args: chromium.args.filter(arg => arg !== '--disable-web-security'),
     headless: true, env: { ...process.env, LD_LIBRARY_PATH: path.join(libs, 'lib') + ':' + (process.env.LD_LIBRARY_PATH || '') } })
   let closeProbe = () => {}
   try {
     const probeHits = { '/code-probe': 0, '/terminal-probe': 0 }
-    const server = http.createServer((request, response) => {
+    const server = http.createServer(async (request, response) => {
+      if (request.url.startsWith('/api/v1/collab')) {
+        if ((request.method === 'POST' && !collabWritesAvailable) || (request.method === 'GET' && !collabReadsAvailable)) {
+          response.writeHead(503, {'Content-Type':'application/json'}); response.end('{"error":"test transport unavailable"}'); return
+        }
+        const abort = new AbortController()
+        response.on('close', () => abort.abort())
+        try {
+          const chunks=[]; for await (const chunk of request) chunks.push(chunk)
+          const req = new NextRequest('http://127.0.0.1:'+server.address().port+request.url, {method:request.method,signal:abort.signal,...(request.method==='POST'?{body:Buffer.concat(chunks).toString(),headers:{'Content-Type':'application/json'}}:{})})
+          const result = await collabRoute[request.method](req)
+          response.writeHead(result.status, Object.fromEntries(result.headers))
+          if (result.body) require('node:stream').Readable.fromWeb(result.body).pipe(response)
+          else response.end()
+        } catch (error) { if (!response.headersSent) response.writeHead(500); response.end(String(error)) }
+        return
+      }
       if (request.method === 'GET' && Object.hasOwn(probeHits, request.url)) probeHits[request.url]++
       response.writeHead(200, { 'Content-Type': Object.hasOwn(probeHits, request.url) ? 'application/json' : 'text/html', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' })
       response.end(Object.hasOwn(probeHits, request.url) ? '{"allowed":true}' : '<!doctype html><div id="app"></div>')
@@ -162,6 +188,49 @@ async function main() {
     await page.waitForSelector('[role="status"]')
     const booking = await page.$eval('[role="status"]', node => node.innerText)
     check('actual booking control saves only the selected local slot and never claims a reservation', () => assert.match(booking, /Saved locally: 10:00.*No reservation has been made/))
+    const peer = await pageWithApp()
+    await peer.addScriptTag({content:compiled.outputFiles[0].text})
+    const voteSource = {surface:'vote',room:'real-browser-vote',items:['Ship now','Wait']}
+    for (const viewer of [page,peer]) {
+      await viewer.evaluate(payload=>window.gsRenderCollab(payload),voteSource)
+      await viewer.waitForFunction(()=>document.body.textContent.includes('live · room'))
+    }
+    const initialVotes = await page.$$eval('button[aria-label^="Vote "]',nodes=>nodes.map(node=>node.textContent))
+    check('two real viewers receive actual production-route snapshots without invented initial votes',()=>{assert.equal(initialVotes.length,2); for(const text of initialVotes) assert.match(text,/0$/)})
+    collabWritesAvailable=false
+    await page.click('button[aria-label="Vote Ship now"]')
+    await page.waitForSelector('[role="alert"]')
+    await page.waitForFunction(()=>!document.querySelector('button[aria-label="Vote Ship now"]').disabled)
+    const refusedVote = await page.$eval('button[aria-label="Vote Ship now"]',node=>node.textContent)
+    check('a real rejected HTTP write neither invents a vote nor locks its viewer out of retry',()=>{assert.match(refusedVote,/0$/);assert.doesNotMatch(refusedVote,/yours/)})
+    collabWritesAvailable=true
+    await page.click('button[aria-label="Vote Ship now"]')
+    await peer.waitForFunction(()=>document.querySelector('button[aria-label="Vote Ship now"]')?.textContent.endsWith('1'))
+    await page.waitForFunction(()=>document.querySelector('button[aria-label="Vote Ship now"]')?.disabled)
+    const peerCount=await peer.$eval('button[aria-label="Vote Ship now"]',node=>node.textContent)
+    check('retry applies a real SQLite-backed vote and broadcasts its actual count to another viewer',()=>assert.match(peerCount,/1$/))
+    const todoSource={surface:'todo',room:'real-browser-todo',items:['Provided task']}
+    for(const viewer of [page,peer]) {
+      await viewer.evaluate(payload=>window.gsRenderCollab(payload),todoSource)
+      await viewer.waitForFunction(()=>document.body.textContent.includes('live · room'))
+    }
+    await page.type('input[aria-label="new shared item"]','Actual shared keyboard task')
+    collabWritesAvailable=false; await click('Add')
+    await page.waitForSelector('[role="alert"]')
+    const unsavedDraft=await page.$eval('input[aria-label="new shared item"]',node=>node.value)
+    check('an actual failed shared-task write preserves every typed input character',()=>assert.equal(unsavedDraft,'Actual shared keyboard task'))
+    collabWritesAvailable=true; await click('Add')
+    await peer.waitForFunction(()=>document.body.textContent.includes('Actual shared keyboard task'))
+    await page.waitForFunction(()=>document.querySelector('input[aria-label="new shared item"]')?.value==='')
+    const sharedTask=await peer.$eval('#app',node=>node.innerText)
+    check('confirmed shared-task retry clears only the saved draft and reaches the real second viewer',()=>{assert.match(sharedTask,/Provided task/);assert.match(sharedTask,/Actual shared keyboard task/)})
+    collabReadsAvailable=false
+    await page.evaluate(()=>window.gsRenderCollab({surface:'counter',room:'unavailable-browser-room',start:0}))
+    await page.waitForFunction(()=>document.body.textContent.includes('offline · room'))
+    const disconnected=await page.$$eval('button',nodes=>nodes.every(node=>node.disabled))
+    check('a real unavailable initial event stream is labeled offline and cannot expose dead active shared controls',()=>assert.equal(disconnected,true))
+    collabReadsAvailable=true
+    await peer.close()
     const displaySource = '<div id="shadow-host"></div><canvas id="display-canvas" width="100" height="40"></canvas><svg data-custom-glass="true"><path d="M0 0L8 8"/></svg><script>window.marker=String.fromCodePoint(0x1F600);window.closedRoot=document.getElementById("shadow-host").attachShadow({mode:"closed"});closedRoot.innerHTML="<button>Shadow &#x1F600;</button><output>0</output>";window.shadowClicks=0;closedRoot.querySelector("button").onclick=()=>{shadowClicks++;closedRoot.querySelector("output").textContent=shadowClicks+marker;};const ctx=document.getElementById("display-canvas").getContext("2d");ctx.font="28px sans-serif";ctx.fillText(marker,0,30);ctx.strokeText(marker,40,30);</script>'
     await page.evaluate(source => window.gsRenderHTML(source), displaySource)
     await page.waitForSelector('iframe')
@@ -298,7 +367,7 @@ async function main() {
       await controlPage.close()
     }
     await page.screenshot({ path: path.join(os.tmpdir(), 'gs-terminal-browser-runtime.png'), fullPage: true })
-    assert.equal(checks, 43, 'All required real-browser code, terminal and production widget-control cases must execute')
+    assert.equal(checks, 49, 'All required real-browser code, terminal and production widget-control cases must execute')
     console.log(`\n${checks} real-browser code, terminal and widget-control checks passed`)
   } finally { closeProbe(); await browser.close(); fs.rmSync(libs, { recursive: true, force: true }) }
 }
