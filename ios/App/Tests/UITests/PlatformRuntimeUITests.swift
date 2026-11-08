@@ -1,6 +1,51 @@
 import XCTest
 
 final class PlatformRuntimeUITests: XCTestCase {
+    func testGeneratedChecklistEditsDeletesAddsAndKeepsActualTaskCompletion() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated checklist"].waitForExistence(timeout: 20))
+        app.buttons["Open generated checklist"].tap()
+        XCTAssertTrue(app.staticTexts["0 of 2 completed"].waitForExistence(timeout: 10))
+        app.buttons["Keep source"].tap()
+        XCTAssertEqual(app.buttons["Keep source"].value as? String, "Completed")
+        func replaceTask(_ text: String) {
+            let input = app.textFields["checklist.task.input"]
+            XCTAssertTrue(input.waitForExistence(timeout: 5))
+            let current = input.value as? String ?? ""
+            input.tap()
+            input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count) + text)
+        }
+        app.buttons["Edit task: Original source"].tap()
+        replaceTask("Renamed source")
+        app.buttons["Save task"].tap()
+        XCTAssertTrue(app.buttons["Renamed source, Only supplied detail"].exists)
+        XCTAssertEqual(app.buttons["Keep source"].value as? String, "Completed")
+        app.buttons["Delete task: Renamed source"].tap()
+        XCTAssertTrue(app.staticTexts["1 of 1 completed"].exists)
+        app.buttons["Add Task"].tap()
+        XCTAssertFalse(app.buttons["Add"].isEnabled)
+        let input = app.textFields["checklist.task.input"]
+        input.tap(); input.typeText("Added task")
+        app.buttons["Add"].tap()
+        app.buttons["Added task"].tap()
+        XCTAssertTrue(app.staticTexts["2 of 2 completed"].exists)
+        app.buttons["Edit task: Added task"].tap()
+        replaceTask("Added edited")
+        app.buttons["Save task"].tap()
+        XCTAssertEqual(app.buttons["Added edited"].value as? String, "Completed")
+        app.buttons["Delete task: Keep source"].tap()
+        XCTAssertTrue(app.staticTexts["1 of 1 completed"].exists)
+        XCTAssertEqual(app.buttons["Added edited"].value as? String, "Completed")
+        app.buttons["Use next checklist payload"].tap()
+        XCTAssertTrue(app.staticTexts["0 of 1 completed"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Added edited"].exists)
+        XCTAssertEqual(app.buttons["New supplied task"].value as? String, "Not completed")
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-checklist-actual-task-mutations"; capture.lifetime = .keepAlways; add(capture)
+    }
+
     func testContextualEditOpensActualCodeAndExportOpensSystemDocumentPicker() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
