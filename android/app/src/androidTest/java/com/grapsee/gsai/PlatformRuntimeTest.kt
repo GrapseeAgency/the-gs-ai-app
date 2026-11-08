@@ -99,6 +99,45 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("1 of 1 completed").assertExists()
     }
 
+    @Test fun ordinaryMarkdownTasksEditDeletePreserveDetailsAndDoNotMoveCompletion() {
+        var wire by androidx.compose.runtime.mutableStateOf("## Next actions\n- [ ] Original task\n  Supplied source detail\n- [x] Keep completed")
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    com.grapsee.gsai.ui.chat.content.BlocksContent(wire, false, {})
+                }
+            }
+        }
+        compose.onNodeWithText("1 of 2 completed").assertExists()
+        compose.onNodeWithText("Original task").performClick()
+        compose.onNodeWithText("2 of 2 completed").assertExists()
+        compose.onNodeWithContentDescription("Edit task: Original task").performClick()
+        compose.onNode(hasSetTextAction()).performTextReplacement("Edited source").performImeAction()
+        compose.onNodeWithText("Supplied source detail").assertExists()
+        compose.onNodeWithText("2 of 2 completed").assertExists()
+        compose.onNodeWithContentDescription("Delete task: Keep completed").performClick()
+        compose.onNodeWithText("1 of 1 completed").assertExists()
+        fun add(text: String) {
+            compose.onNodeWithText("Add Task").performClick()
+            compose.onNodeWithText("Add").assertIsNotEnabled()
+            compose.onNode(hasSetTextAction()).performTextReplacement(text).performImeAction()
+        }
+        add("First added task")
+        compose.onNodeWithText("First added task").performClick()
+        add("Second added task")
+        compose.onNodeWithContentDescription("Delete task: First added task").performClick()
+        compose.onNodeWithText("1 of 2 completed").assertExists()
+        compose.onNodeWithContentDescription("Edit task: Second added task").performClick()
+        compose.onNode(hasSetTextAction()).performTextReplacement("Second edited").performImeAction()
+        compose.onNodeWithText("1 of 2 completed").assertExists()
+        compose.onNodeWithText("Second edited").performClick()
+        compose.onNodeWithText("2 of 2 completed").assertExists()
+        compose.runOnIdle { wire = "## Next actions\n- [ ] Replacement source" }
+        compose.onNodeWithText("0 of 1 completed").assertExists()
+        compose.onNodeWithText("Edited source").assertDoesNotExist()
+        compose.onNodeWithText("Replacement source").assertExists()
+    }
+
     @Test fun generatedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices() {
         var payload by androidx.compose.runtime.mutableStateOf("""{"type":"timer","items":[{"title":"Not time","price":25}]}""")
         compose.activity.setContentForPlatformTest {
