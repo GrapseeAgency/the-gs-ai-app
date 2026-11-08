@@ -216,6 +216,7 @@ async function main() {
       assert.ok(response.text.includes(source))
     }
     assert.equal(validateWidget('collab',JSON.stringify({surface:'vote',room:'source-options',items:['First','Second']})).ok,true)
+    assert.equal(validateWidget('collab',JSON.stringify({surface:'unknown',room:'source-options'})).ok,false)
   })
   check('timer generation preserves real explicit seconds without price defaults or unit coercion', () => {
     for (const durationSeconds of [0, -1, 1.5, 604801, null, true, '$25', '25%', '25']) {
