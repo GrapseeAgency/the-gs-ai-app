@@ -97,7 +97,7 @@ class PlatformRuntimeTest {
         val network = """self.addEventListener('securitypolicyviolation', e=>console.log('BLOCKED '+e.effectiveDirective));try{await fetch('https://github.com/');}catch{console.log('FETCH REFUSED');}await new Promise(r=>setTimeout(r,100));"""
         fun load(sourceCode: String) {
             instrumentation.runOnMainSync {
-                web!!.loadDataWithBaseURL(null, com.grapsee.gsai.ui.chat.content.JavaScriptWorkerSandboxAndroid.document(instrumentation.targetContext, sourceCode), "text/html", "UTF-8", null)
+                web!!.loadDataWithBaseURL("https://gsai.local/", com.grapsee.gsai.ui.chat.content.JavaScriptWorkerSandboxAndroid.document(instrumentation.targetContext, sourceCode), "text/html", "UTF-8", null)
             }
         }
         load(network)
