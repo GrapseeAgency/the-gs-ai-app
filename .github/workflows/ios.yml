@@ -166,7 +166,7 @@ jobs:
           test -d GSApp.xcodeproj || { echo "::error::GSApp.xcodeproj was not generated"; exit 1; }
           xcodebuild -list -project GSApp.xcodeproj
 
-      - name: Fetch the GsFfi xcframework from the latest ios-native run
+      - name: Fetch the GsFfi xcframework from a successful native producer job
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -182,21 +182,36 @@ jobs:
           # which uploads it as the GsFfi.xcframework artifact; this pull gate
           # takes the latest successful one -- the same producer/consumer
           # pattern android-device.yml uses for libgs_ffi.so.
-          RUN_ID=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/ios-native.yml/runs?status=success&per_page=1" \
-            | python3 -c 'import json,sys; d=json.load(sys.stdin); runs=d.get("workflow_runs",[]); print(runs[0]["id"] if runs else "")')
-          if [ -z "$RUN_ID" ]; then
-            echo "::error::no successful ios-native run to take GsFfi.xcframework from"
-            exit 1
-          fi
-          echo "ios-native run: $RUN_ID"
-          ART=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
-            | python3 -c 'import json,sys; d=json.load(sys.stdin); arts=[a for a in d.get("artifacts",[]) if a["name"]=="GsFfi.xcframework"]; print(arts[0]["id"] if arts else "")')
-          if [ -z "$ART" ]; then
-            echo "::error::no GsFfi.xcframework artifact in ios-native run $RUN_ID"
-            exit 1
-          fi
+          # A completed native workflow can fail its separate app tests AFTER
+          # successfully producing the framework. Conversely, its last fully
+          # green workflow may have no remaining artifact. Require the actual
+          # xcframework producer job to pass and its artifact to be unexpired;
+          # the app compilation/tests below still gate THIS revision strictly.
+          read -r RUN_ID ART < <(python3 - <<'PYFRAMEWORK'
+          import json, subprocess, sys
+          import os
+          repo = os.environ['GITHUB_REPOSITORY']
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{path}']))
+          runs = api('actions/workflows/ios-native.yml/runs?status=completed&per_page=30')['workflow_runs']
+          for run in runs:
+              if run.get('head_repository', {}).get('full_name') != repo:
+                  continue
+              artifacts = [a for a in api(f"actions/runs/{run['id']}/artifacts?per_page=100")['artifacts']
+                           if a['name'] == 'GsFfi.xcframework' and not a['expired']]
+              if not artifacts:
+                  continue
+              jobs = api(f"actions/runs/{run['id']}/jobs?per_page=100")['jobs']
+              if not any(j['name'] == 'xcframework' and j['conclusion'] == 'success' for j in jobs):
+                  continue
+              print(run['id'], artifacts[0]['id'])
+              break
+          else:
+              sys.exit('No unexpired framework from a successful ios-native xcframework producer job')
+          PYFRAMEWORK
+          )
+          test -n "$RUN_ID" && test -n "$ART"
+          echo "Verified native producer run: $RUN_ID"
           echo "artifact id: $ART"
           XF="$PROJECT_DIR/Frameworks/GsFfi.xcframework"
           rm -rf "$XF"
