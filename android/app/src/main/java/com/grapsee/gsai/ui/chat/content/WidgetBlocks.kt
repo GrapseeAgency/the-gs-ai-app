@@ -2451,7 +2451,7 @@ private fun StatWidgetView(w: StatWidget) {
         // The reference presents four short KPIs in one row. Preserve readable
         // two-column cards for larger type or lengthy source values and units.
         val compactMetrics = w.cards.size == 4 && androidx.compose.ui.platform.LocalDensity.current.fontScale <= 1.1f &&
-            w.cards.all { it.value.length + it.unit.length <= 10 && it.label.length <= 28 }
+            w.cards.all { it.value.length + it.unit.length <= 7 && it.label.length <= 28 }
         val columns = if (compactMetrics) 4 else 2
         Column(Modifier.fillMaxWidth().padding(top = if (w.title.isBlank()) 0.dp else 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             w.cards.chunked(columns).forEachIndexed { rowIndex, row ->
