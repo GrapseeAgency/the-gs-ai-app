@@ -98,6 +98,7 @@ data class AppWidget(
     val submitLabel: String = "",
     val month: String = "",
     val slots: List<String> = emptyList(),
+    val durationSeconds: Double? = null,
     val height: Int = 0
 )
 
@@ -720,32 +721,33 @@ private fun ListLayout(w: AppWidget, onSendPrompt: ((String) -> Unit)?) {
 
 // --- timer -------------------------------------------------------------------
 
-/**
- * Countdown timer app — the Android twin of the web AppTimer: a minutes
- * stepper (payload items[0].price as the default, clamped 1..180), a progress
- * ring, and Start/Pause/Reset. Ticks inside LaunchedEffect so the countdown
- * survives recomposition and stops cleanly at zero.
- */
+/** Real, local countdown. Prices are never durations; elapsed time is monotonic. */
 @Composable
 private fun TimerLayout(w: AppWidget) {
     val c = GsTheme.colors
-    val defaultMinutes = ((w.items.firstOrNull()?.price ?: 25.0).toInt()).coerceIn(1, 180)
-    var minutes by remember(w) { mutableIntStateOf(defaultMinutes) }
-    var left by remember(w) { mutableIntStateOf(defaultMinutes * 60) }
+    val source = w.durationSeconds
+    if (source != null && (!source.isFinite() || source % 1.0 != 0.0 || source < 1 || source > 604800)) {
+        Text("Timer durationSeconds must be whole seconds from 1 through 604800. Source durations are not clamped or taken from prices.", color = c.textPrimary)
+        return
+    }
+    val initial = source?.toLong() ?: 0L
+    var durationText by remember(w) { mutableStateOf(if (initial > 0) initial.toString() else "") }
+    var leftMillis by remember(w) { mutableStateOf(initial * 1000L) }
+    var deadline by remember(w) { mutableStateOf<Long?>(null) }
     var running by remember(w) { mutableStateOf(false) }
-
-    LaunchedEffect(running, left) {
-        if (running && left > 0) {
-            delay(1_000L)
-            left -= 1
-            if (left <= 0) running = false
+    var started by remember(w) { mutableStateOf(false) }
+    val duration = durationText.toLongOrNull()?.takeIf { it in 1L..604800L }
+    LaunchedEffect(running, w) {
+        while (running) {
+            leftMillis = ((deadline ?: break) - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+            if (leftMillis == 0L) { running = false; deadline = null; break }
+            delay(200L)
         }
     }
-
-    val total = (minutes * 60).coerceAtLeast(1)
-    val frac = left.toFloat() / total
-    val mm = (left / 60).toString().padStart(2, '0')
-    val ss = (left % 60).toString().padStart(2, '0')
+    val seconds = (leftMillis + 999L) / 1000L
+    val frac = leftMillis.toFloat() / ((duration ?: 0L) * 1000L).coerceAtLeast(1L)
+    val mm = (seconds / 60L).toString().padStart(2, '0')
+    val ss = (seconds % 60L).toString().padStart(2, '0')
 
     // The draw lambda is DrawScope, not @Composable — resolve the theme colour
     // once, outside it, instead of calling seriesColor() per frame.
@@ -771,23 +773,34 @@ private fun TimerLayout(w: AppWidget) {
             )
         }
         Text(
-            if (left > 0) "$mm:$ss" else "done",
+            "$mm:$ss",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = c.textPrimary
         )
         }
-        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { if (!running) { minutes = (minutes - 5).coerceIn(1, 180); left = minutes * 60 } }) { Text("−5 min") }
-            TextButton(onClick = { running = !running }) { Text(if (running) "Pause" else "Start") }
-            TextButton(onClick = { running = false; left = minutes * 60 }) { Text("Reset") }
-            TextButton(onClick = { if (!running) { minutes = (minutes + 5).coerceIn(1, 180); left = minutes * 60 } }) { Text("+5 min") }
-        }
-        Text(
-            "${w.items.size} preset(s) · default $defaultMinutes min",
-            style = MaterialTheme.typography.labelSmall,
-            color = c.textTertiary,
-            modifier = Modifier.padding(top = 6.dp)
+        OutlinedTextField(
+            value = durationText,
+            onValueChange = { durationText = it; leftMillis = (it.toLongOrNull()?.takeIf { value -> value in 1L..604800L } ?: 0L) * 1000L },
+            label = { Text("Duration (seconds)") },
+            singleLine = true,
+            enabled = !running && !started,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
         )
+        if (duration == null) Text("Enter whole seconds from 1 through 604800 to configure this local countdown.", color = c.textSecondary)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(enabled = duration != null && leftMillis > 0L, onClick = {
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (running) {
+                    leftMillis = ((deadline ?: now) - now).coerceAtLeast(0L)
+                    running = false; deadline = null
+                } else {
+                    deadline = now + leftMillis; started = true; running = true
+                }
+            }) { Text(if (running) "Pause" else "Start") }
+            TextButton(onClick = { running = false; started = false; deadline = null; leftMillis = (duration ?: 0L) * 1000L }) { Text("Reset") }
+        }
+        Text("Local countdown only. No background alarm or notification is scheduled.", style = MaterialTheme.typography.labelSmall, color = c.textTertiary)
+        if (started && leftMillis == 0L) Text("Done — countdown completed.", color = accent)
     }
 }
