@@ -861,6 +861,7 @@ function InteractiveProseChecklistItem({
             {renderInline(c, theme, accent, citations, `lic${idx}-${j}-${ci}`)}
           </div>
         ))}
+        {item.children.length > 0 && <div style={{marginTop: 6}}>{item.children.map((child, childIndex) => renderProseBlock(child, childIndex, theme, accent, citations))}</div>}
       </div>
       {onEdit && <button type="button" aria-label={`Edit task: ${cleanPlainText(item.text)}`} onClick={onEdit} style={{border: 0, background: 'transparent', cursor: 'pointer', padding: 4}}><GlassIcon name="pencil" size={14} tile={22}/></button>}
       {onDelete && <button type="button" aria-label={`Delete task: ${cleanPlainText(item.text)}`} onClick={onDelete} style={{border: 0, background: 'transparent', cursor: 'pointer', padding: 4}}><GlassIcon name="trash" size={14} tile={22}/></button>}
