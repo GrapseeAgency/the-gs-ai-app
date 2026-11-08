@@ -5,6 +5,18 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testTimersAcceptOnlyActualWholeSecondsWithoutPriceDefaults() {
+        for json in [#"{"type":"timer"}"#, #"{"type":"timer","durationSeconds":5}"#, #"{"type":"timer","items":[{"price":25}]}"#] {
+            XCTAssertTrue(isValidWidget(kind: "app", json: json))
+            XCTAssertEqual(validatedWidgetKindIOS(kind: "app", json: json), "app")
+        }
+        for raw in ["0", "-1", "1.5", "604801", "true", "null", #""$25""#, #""25%""#, #""25""#] {
+            let json = "{\"type\":\"timer\",\"durationSeconds\":" + raw + "}"
+            XCTAssertFalse(isValidWidget(kind: "app", json: json))
+            XCTAssertNil(validatedWidgetKindIOS(kind: "app", json: json))
+        }
+    }
+
     func testChecklistRefusesMalformedAndOversizedSourceWithoutKindHealing() throws {
         let overflow = try JSONSerialization.data(withJSONObject: ["items": (1...31).map { ["label": "Task \($0)"] }])
         for json in [#"{"items":[{"label":"Actual"},{"alien":42}]}"#, #"{"items":["Actual",42]}"#, String(decoding: overflow, as: UTF8.self)] {
