@@ -5,6 +5,34 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testWholeJSONPreservesMachineStringsBeforeMarkdownAndStreaming() {
+        let sources = ["{}", "[]", "[1,2,3]", #"[{"literal":"**bold** :rocket: 😀"}]"#,
+            " \r\n" + #"{"literal":"**bold** :rocket: 😀","nested":{"x":true}}"# + "\r\n "]
+        for source in sources {
+            let blocks = parseBlocks(source)
+            XCTAssertEqual(blocks.count, 1)
+            guard case .codeBlock(let language, let code, let open, _)? = blocks.first else {
+                XCTFail("Non-widget JSON must stay source: \(source)"); continue
+            }
+            XCTAssertEqual(language, "json"); XCTAssertFalse(open)
+            XCTAssertEqual(Array(code.utf8), Array(source.utf8))
+            var previous = "", streamed: [Block] = []
+            for end in 1...source.count {
+                let current = String(source.prefix(end))
+                streamed = parseStreamingBlocks(previousContent: previous, previousBlocks: streamed, content: current)
+                XCTAssertEqual(streamed, parseBlocks(current))
+                previous = current
+            }
+        }
+    }
+
+    func testInvalidWizardCannotBypassIOSWidgetValidation() {
+        let source = #"{"type":"wizard","rows":[[42]],"columns":["Actual"]}"#
+        XCTAssertFalse(isValidWidget(kind: "app", json: source))
+        XCTAssertNil(inferWidgetKind(source))
+        XCTAssertNil(validatedWidgetKindIOS(kind: "app", json: source))
+    }
+
     func testContextualCodeActionsRetainActualDraftsAndStayResponseScoped() {
         let first = ResponseCodeActionsIOS(), other = ResponseCodeActionsIOS()
         var edits = 0
