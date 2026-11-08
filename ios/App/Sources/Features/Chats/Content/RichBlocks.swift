@@ -928,7 +928,7 @@ private struct NexlyContextualActionPillsRowView: View {
             .sheet(item: $presentedSheet, onDismiss: { cleanPreparedExport() }) { sheet in
                 switch sheet {
                 case .share:
-                    ActivitySheet(items: [sourceText])
+                    ResponseActivityPresenterIOS(items: [sourceText]) { presentedSheet = nil }
                 case .export(let file):
                     ResponseDocumentPickerIOS(sourceURL: file) { destination in
                         notice = destination == nil ? "Export cancelled." : "Export saved."
