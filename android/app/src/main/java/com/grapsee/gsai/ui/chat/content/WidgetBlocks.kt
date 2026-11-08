@@ -953,6 +953,14 @@ fun inferWidgetKind(json: String): String? {
         null
     } ?: return null
     val keys = obj.keys
+    if (keys == setOf("items")) {
+        val items = obj["items"] as? JsonArray
+        val labels = setOf("label", "text", "title", "name", "task", "todo", "percent", "value", "front", "back", "question", "options", "url", "src", "time", "date", "body")
+        if (items != null && items.none { item ->
+            (item is JsonPrimitive && item.isString && item.content.isNotBlank()) ||
+                (item is JsonObject && item.keys.any { it in labels })
+        }) return null
+    }
     val explicitApp = listOf("kind", "widget", "type").any { key ->
         val value = (obj[key] as? JsonPrimitive)?.contentOrNull
         value != null && widgetKindOf(value) == "app"
