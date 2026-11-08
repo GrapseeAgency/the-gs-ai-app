@@ -22,6 +22,9 @@ class CalcHonestyTest {
         val pie = (parseWidget("chart", """{"type":"pie","labels":["A","B"],"series":[{"data":[[0,10,99],[1,20,88]]}]}""") as Widget.Chart).w
         assertEquals(listOf(10f, 20f), pie.series.map { it.data.single()[1] })
         assertEquals(listOf("A", "B"), pie.series.map { it.name })
+        val namedPie = (parseWidget("chart", """{"type":"pie","series":[{"data":[["Food",10],["Rent",20]]}]}""") as Widget.Chart).w
+        assertEquals(listOf("Food", "Rent"), namedPie.series.map { it.name })
+        assertEquals(listOf(10f, 20f), namedPie.series.map { it.data.single()[1] })
     }
 
     @Test fun actualChartDomainsRetainLossesZeroAndSourcePeakWithoutDoublingTheRange() {
