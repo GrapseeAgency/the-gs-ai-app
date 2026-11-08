@@ -48,78 +48,70 @@ import com.grapsee.gsai.ui.theme.GsTheme
 import kotlinx.coroutines.delay
 import com.grapsee.gsai.ui.icons.GsIcons
 
-private data class CodeRunResult(
+internal data class CodeRunResult(
     val output: String,
     val error: String? = null
 )
 
-private fun formatNumValue(d: Double): String =
-    if (d % 1.0 == 0.0) d.toLong().toString()
-    else String.format(java.util.Locale.US, "%.4f", d).trimEnd('0').trimEnd('.')
+/** Strict JSON lexical checks in addition to the AST parser. Generic JSON
+ * primitives must not silently accept NaN, bare words or leading-zero numbers. */
+internal fun validateCodeJsonSourceAndroid(source: String): String {
+    require(source.length <= 256_000) { "JSON validation limit is 256000 characters" }
+    var quoted = false
+    var depth = 0
+    var i = 0
+    while (i < source.length) {
+        val c = source[i]
+        if (quoted) {
+            when (c) {
+                '"' -> quoted = false
+                '\\' -> {
+                    i++
+                    require(i < source.length) { "Incomplete JSON escape" }
+                    if (source[i] == 'u') {
+                        require(i + 4 < source.length && (1..4).all { source[i + it] in "0123456789abcdefABCDEF" }) { "Invalid Unicode escape" }
+                        i += 4
+                    } else require(source[i] in "\"\\/bfnrt") { "Invalid JSON escape" }
+                }
+                else -> require(c >= ' ') { "Unescaped control character in JSON string" }
+            }
+        } else when (c) {
+            '"' -> quoted = true
+            '{', '[' -> { depth++; require(depth <= 128) { "JSON nesting limit is 128" } }
+            '}', ']' -> { depth--; require(depth >= 0) { "Unexpected closing delimiter" } }
+        }
+        i++
+    }
+    require(!quoted && depth == 0) { "Incomplete JSON document" }
+    val value = kotlinx.serialization.json.Json.parseToJsonElement(source)
+    val number = Regex("""-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?""")
+    fun validate(node: kotlinx.serialization.json.JsonElement) {
+        when (node) {
+            is kotlinx.serialization.json.JsonObject -> node.values.forEach { validate(it) }
+            is kotlinx.serialization.json.JsonArray -> node.forEach { validate(it) }
+            is kotlinx.serialization.json.JsonPrimitive -> require(node.isString || node.content in setOf("true", "false", "null") || number.matches(node.content)) { "Invalid JSON primitive" }
+        }
+    }
+    validate(value)
+    return kotlinx.serialization.json.Json { prettyPrint = true }
+        .encodeToString(kotlinx.serialization.json.JsonElement.serializer(), value)
+}
 
-private fun executeCodePreview(language: String?, code: String): CodeRunResult {
+internal fun executeCodePreview(language: String?, code: String): CodeRunResult {
     val lang = (language ?: "code").lowercase().trim()
     val trimmed = code.trim()
-    if (trimmed.isEmpty()) return CodeRunResult("(empty snippet)")
+    if (trimmed.isEmpty()) return CodeRunResult("", if (lang == "json") "JSONSyntaxError: expected a JSON value" else "Not executed: empty snippet")
 
     if (lang == "json") {
         return try {
-            val tok = org.json.JSONTokener(trimmed).nextValue()
-            val formatted = when (tok) {
-                is org.json.JSONObject -> tok.toString(2)
-                is org.json.JSONArray -> tok.toString(2)
-                else -> tok.toString()
-            }
-            CodeRunResult(formatted)
+            CodeRunResult(validateCodeJsonSourceAndroid(code))
         } catch (t: Throwable) {
             CodeRunResult(output = "", error = "JSONSyntaxError: ${t.message ?: "Invalid JSON"}")
         }
     }
 
     if (lang in setOf("py", "python", "python3")) {
-        // This is an arithmetic preview, NOT a Python runtime. Never skip a
-        // statement or supply missing variables and then report script success.
-        val vars = mutableMapOf<String, Double>()
-        val output = mutableListOf<String>()
-        fun numeric(expr: String): Double {
-            require(expr.matches(Regex("""[a-zA-Z0-9_+*()./\s-]+""")) && "**" !in expr && "//" !in expr) {
-                "Only numbers, variables, +, -, *, / and parentheses are supported"
-            }
-            Regex("""[a-zA-Z_][a-zA-Z0-9_]*""").findAll(expr).forEach {
-                require(vars.containsKey(it.value)) { "Unknown variable: ${it.value}" }
-            }
-            require(!Regex("""[a-zA-Z_]\w*\s*\(""").containsMatchIn(expr)) { "Function calls are not supported" }
-            return (CalcExpr.eval(expr, vars) ?: error("Invalid expression")).also {
-                require(it.isFinite()) { "Result is not finite (check division by zero)" }
-            }
-        }
-        var lineNumber = 0
-        return try {
-            require(trimmed.length <= 32000 && trimmed.lines().size <= 200) { "Preview limit exceeded" }
-            for (raw in trimmed.lines()) {
-                lineNumber++
-                val line = raw.trim()
-                if (line.isEmpty() || line.startsWith("#")) continue
-                val assign = Regex("""^([a-zA-Z_]\w*)\s*=\s*([^=]+)$""").matchEntire(line)
-                if (assign != null) { vars[assign.groupValues[1]] = numeric(assign.groupValues[2]); continue }
-                val print = Regex("""^print\((.*)\)$""").matchEntire(line)
-                if (print != null) {
-                    val arg = print.groupValues[1].trim()
-                    output += when {
-                        arg.isEmpty() -> ""
-                        arg.matches(Regex(""""[^"\\]*"|'[^'\\]*'""")) -> arg.drop(1).dropLast(1)
-                        else -> formatNumValue(numeric(arg))
-                    }
-                    continue
-                }
-                error("Unsupported statement; imports, loops and libraries require a Python runtime")
-            }
-            CodeRunResult("Arithmetic preview (not a Python runtime)\n" + if (output.isEmpty()) "(no print output)" else output.joinToString("\n"))
-        } catch (t: IllegalArgumentException) {
-            CodeRunResult("", "Preview stopped at line $lineNumber: ${t.message}")
-        } catch (t: IllegalStateException) {
-            CodeRunResult("", "Preview stopped at line $lineNumber: ${t.message}")
-        }
+        return CodeRunResult("", "Not executed: no Python runtime is available here. Copy this source into a Python environment.")
     }
     if (lang in setOf("sql", "sqlite", "postgres", "postgresql", "mysql")) {
         return CodeRunResult("", "Not executed: no database is connected. Copy this SQL into your database client.")
