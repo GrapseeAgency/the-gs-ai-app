@@ -116,7 +116,7 @@ export function compileWidgets(input: CompileInput): CompileResult {
     // a ```cards fence holding stat KPIs or flashcards, a ```table fence
     // holding a left/right comparison), infer the true kind from the payload
     // and validate against it before dropping the block.
-    if (!result.ok && fence.kind !== 'checklist') {
+    if (!result.ok && fence.kind !== 'checklist' && fence.kind !== 'collab') {
       const healedKind = inferWidgetKind(fence.json)
       if (healedKind && healedKind !== fence.kind) {
         const healed = validateWidget(healedKind, fence.json)
