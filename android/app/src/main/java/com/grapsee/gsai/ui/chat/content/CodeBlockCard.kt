@@ -178,7 +178,11 @@ fun CodeBlockCard(
         }))
         onDispose { responseActions?.remove(sourceId) }
     }
-    val colors = GsTheme.colors
+    val themeColors = GsTheme.colors
+    val colors = remember(themeColors) {
+        val dark = com.grapsee.gsai.ui.theme.darkGsColors()
+        themeColors.copy(codeText = dark.codeText, codeKeyword = dark.codeKeyword, codeString = dark.codeString, codeComment = dark.codeComment, codeNumber = dark.codeNumber)
+    }
     val wrapCode = LocalNexlyCodeWrap.current
     val allLines = remember(currentCode) { currentCode.lines() }
     val isCollapsible = allLines.size > 14
@@ -202,6 +206,7 @@ fun CodeBlockCard(
     val langLabel = (language ?: "code").trim().ifBlank { "code" }
     val lowerLang = langLabel.lowercase()
     val isBrowserLang = lowerLang in setOf("html", "htm", "svg", "js", "javascript", "node")
+    val supportsExecution = isBrowserLang || lowerLang == "json"
 
     Surface(
         shape = RoundedCornerShape(14.dp),
@@ -211,7 +216,7 @@ fun CodeBlockCard(
             .bringIntoViewRequester(bringIntoView)
             .border(1.dp, Color(0xFF36315C), RoundedCornerShape(14.dp))
             .semantics {
-                contentDescription = if (language != null) "Code block, $language" else "Code block"
+                contentDescription = if (language != null) "Code block, ${NexlyIcons.cleanPlainText(language)}" else "Code block"
             }
     ) {
         Column {
@@ -230,7 +235,7 @@ fun CodeBlockCard(
                     modifier = Modifier.padding(end = 6.dp)
                 )
                 Text(
-                    text = langLabel.replaceFirstChar { it.uppercase() },
+                    text = NexlyIcons.cleanPlainText(langLabel.replaceFirstChar { it.uppercase() }),
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                     color = Color(0xFFE6E1FF),
                     modifier = Modifier.weight(1f)
@@ -373,7 +378,7 @@ fun CodeBlockCard(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color(0xFF6C4CF6))
-                            .clickable {
+                            .clickable(enabled = supportsExecution) {
                                 if (editing && editorError != null) {
                                     sandboxMode = false
                                     runResult = CodeRunResult("", "Not executed: correct the JSON-encoded source draft first.")
@@ -395,7 +400,7 @@ fun CodeBlockCard(
                             color = Color.White
                         )
                         Text(
-                            text = if (isBrowserLang) "Run in Browser" else "Run Code",
+                            text = if (!supportsExecution) "Source only" else if (isBrowserLang) "Run in Browser" else "Validate JSON",
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -522,6 +527,15 @@ fun CodeBlockCard(
                         )
                     }
                 }
+            }
+
+            if (!open && !supportsExecution) {
+                Text(
+                    text = "Source only: no ${NexlyIcons.cleanPlainText(lowerLang)} runtime is available in this app. Copy this source into a compatible environment; no execution has occurred here.",
+                    fontSize = 12.sp,
+                    color = Color(0xFFD8D2EB),
+                    modifier = Modifier.fillMaxWidth().padding(12.dp)
+                )
             }
 
             if (sandboxMode && !open) {
