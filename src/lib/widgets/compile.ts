@@ -182,7 +182,7 @@ export function compileWidgets(input: CompileInput): CompileResult {
   }
 
   const points = pickPoints(reply, priorText)
-  if (points.length < 2) {
+  if (points.length < 2 || (points.some(point => point.percent) && !points.every(point => point.percent))) {
     return { text: strip(reply, invalid), widgets: 0, path: 'none', errors }
   }
 
@@ -361,14 +361,11 @@ function extractPoints(text: string): Point[] {
 
 function buildChart(points: Point[], type: (typeof CHART_TYPES)[number]) {
   const labels = points.map((p) => p.label)
-  const series =
-    type === 'pie' || type === 'donut'
-      ? points.map((p) => ({ name: p.label, data: [[0, p.value]] }))
-      : [{ name: 'Value', data: points.map((p, i) => [i, p.value]) }]
+  const series = [{ name: 'Value', data: points.map((p, i) => [i, p.value]) }]
   return {
     type,
     title: 'From the numbers in this answer',
-    unit: '',
+    unit: points.every(point => point.percent) ? '%' : '',
     labels,
     series,
   }
