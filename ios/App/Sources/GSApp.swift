@@ -122,7 +122,11 @@ struct GSApp: App {
             }
             .overlay {
                 #if DEBUG
-                if ProcessInfo.processInfo.arguments.contains("-gs_test_platform_runtime") {
+                if ProcessInfo.processInfo.arguments.contains("-gs_test_react_preview") {
+                    ReactRuntimeProbe()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.white)
+                } else if ProcessInfo.processInfo.arguments.contains("-gs_test_platform_runtime") {
                     PlatformRuntimeProbe()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color.white)
