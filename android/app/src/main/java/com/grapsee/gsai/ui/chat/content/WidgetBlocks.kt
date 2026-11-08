@@ -139,54 +139,61 @@ internal object PointListSerializer : KSerializer<List<List<Float>>> {
 
     override fun deserialize(decoder: Decoder): List<List<Float>> {
         val input = decoder as? JsonDecoder ?: return delegate.deserialize(decoder)
-        val array = input.decodeJsonElement() as? JsonArray ?: return emptyList()
-        return array.mapIndexedNotNull { index, item -> point(item, index) }
+        val array = requireNotNull(input.decodeJsonElement() as? JsonArray) { "Chart observations must be an array" }
+        return array.mapIndexed { index, item ->
+            requireNotNull(point(item, index)) {
+                "Observation $index is missing or non-finite; preserve source instead of fabricating zero or compacting labels"
+            }
+        }
     }
 
     override fun serialize(encoder: Encoder, value: List<List<Float>>) {
         delegate.serialize(encoder, value)
     }
 
+    private fun number(item: JsonElement?): Float? =
+        (item as? JsonPrimitive)?.floatOrNull?.takeIf { it.isFinite() }
+
+    private fun coordinate(item: JsonElement?, index: Int): Float? =
+        number(item) ?: (item as? JsonPrimitive)?.takeIf { it.isString && it.content.isNotBlank() }?.let { index.toFloat() }
+
     private fun point(item: JsonElement, index: Int): List<Float>? = when (item) {
-        is JsonPrimitive -> item.floatOrNull?.let { listOf(index.toFloat(), it) }
+        is JsonPrimitive -> number(item)?.let { listOf(index.toFloat(), it) }
         is JsonArray -> {
-            val numbers = item.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
             when {
-                // Preserve up to 5 coordinates so 2D [x, y], 3D bubble [x, y, z],
-                // and 4D candlestick [o, h, l, c] all survive intact.
-                numbers.size >= 2 -> numbers.take(5)
-                numbers.size == 1 -> listOf(index.toFloat(), numbers[0])
-                else -> null
+                item.isEmpty() -> null
+                item.size == 1 -> number(item[0])?.let { listOf(index.toFloat(), it) }
+                else -> {
+                    // Only the first coordinate may be a category label. Never
+                    // filter null/invalid coordinates into a different shape:
+                    // [0,null] is missing y, NOT a measurement of zero.
+                    val x = coordinate(item[0], index)
+                    val rest = item.drop(1).map { number(it) }
+                    if (x == null || rest.any { it == null }) null
+                    else listOf(x) + rest.filterNotNull()
+                }
             }
         }
         is JsonObject -> {
-            val o = (item["open"] as? JsonPrimitive)?.floatOrNull ?: (item["o"] as? JsonPrimitive)?.floatOrNull
-            val h = (item["high"] as? JsonPrimitive)?.floatOrNull ?: (item["h"] as? JsonPrimitive)?.floatOrNull
-            val l = (item["low"] as? JsonPrimitive)?.floatOrNull ?: (item["l"] as? JsonPrimitive)?.floatOrNull
-            val c = (item["close"] as? JsonPrimitive)?.floatOrNull ?: (item["c"] as? JsonPrimitive)?.floatOrNull
-            if (o != null && h != null && l != null && c != null) {
-                listOf(o, h, l, c)
+            fun supplied(vararg keys: String): JsonElement? =
+                keys.firstOrNull { it in item }?.let { item[it] }
+            val candleKeys = listOf("open", "o", "high", "h", "low", "l", "close", "c")
+            if (candleKeys.any { it in item }) {
+                val values = listOf(number(supplied("open", "o")), number(supplied("high", "h")),
+                    number(supplied("low", "l")), number(supplied("close", "c")))
+                if (values.any { it == null }) null else values.filterNotNull()
             } else {
-                val y = (item["y"] as? JsonPrimitive)?.floatOrNull
-                    ?: (item["value"] as? JsonPrimitive)?.floatOrNull
-                    ?: (item["val"] as? JsonPrimitive)?.floatOrNull
-                    ?: (item["v"] as? JsonPrimitive)?.floatOrNull
-                    ?: (item["score"] as? JsonPrimitive)?.floatOrNull
-                    ?: (item["count"] as? JsonPrimitive)?.floatOrNull
-                    ?: (item["amount"] as? JsonPrimitive)?.floatOrNull
-                if (y == null) null
-                else {
-                    val x = (item["x"] as? JsonPrimitive)?.floatOrNull ?: index.toFloat()
-                    val z = (item["z"] as? JsonPrimitive)?.floatOrNull
-                        ?: (item["size"] as? JsonPrimitive)?.floatOrNull
-                        ?: (item["r"] as? JsonPrimitive)?.floatOrNull
-                        ?: (item["radius"] as? JsonPrimitive)?.floatOrNull
-                    if (z != null) listOf(x, y, z) else listOf(x, y)
-                }
+                val y = number(supplied("y", "value", "val", "v", "count", "amount", "score"))
+                val x = if ("x" in item) coordinate(item["x"], index) else index.toFloat()
+                val zKey = listOf("z", "size", "r", "radius").firstOrNull { it in item }
+                val z = zKey?.let { number(item[it]) }
+                if (x == null || y == null || (zKey != null && z == null)) null
+                else if (z != null) listOf(x, y, z) else listOf(x, y)
             }
         }
         else -> null
     }
+
 }
 
 @Serializable
