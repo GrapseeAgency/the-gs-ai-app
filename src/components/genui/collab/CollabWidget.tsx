@@ -159,7 +159,7 @@ function CounterSurface({ payload, shared, publish }: { payload: CollabPayload; 
   return (
     <div style={{ textAlign: 'center', padding: '18px 0 14px' }}>
       <div style={{ fontSize: 54, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: accent, lineHeight: 1 }}>{n}</div>
-      <div style={{ fontSize: TYPE.micro, color: theme.text3, margin: '6px 0 12px' }}>{payload.label ?? 'this number is the same for everyone, right now'}</div>
+      <div style={{ fontSize: TYPE.micro, color: theme.text3, margin: '6px 0 12px' }}>{shared.status === 'live' ? payload.label ?? 'Confirmed shared state' : 'Shared state unavailable; controls wait for a live snapshot.'}</div>
       <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
         {[-1, 1, 5].map((d) => (
           <UiButton key={d} disabled={shared.status !== 'live'} buttonStyle={d > 0 ? 'filled' : 'tonal'} onClick={() => void publish({ delta: { n: d } })}>
@@ -195,6 +195,7 @@ function VoteSurface({ payload, shared, publish }: { payload: CollabPayload; sha
           key={i}
           type="button"
           onClick={() => { void cast(i) }}
+          aria-label={`Vote ${label}`}
           disabled={mine.has(i) || pending.has(i) || shared.status !== 'live'}
           style={{
             position: 'relative',
