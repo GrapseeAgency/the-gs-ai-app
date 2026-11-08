@@ -15,6 +15,15 @@ final class CalcHonestyTests: XCTestCase {
         }
     }
 
+    func testActualScenarioFieldSeedsNeverRoundSmallAPRToZeroOrSourceAmountsToCents() {
+        XCTAssertEqual(sourceScenarioNumberTextIOS(0.0012), "0.0012")
+        XCTAssertEqual(sourceScenarioNumberTextIOS(0.0000000012), "0.0000000012")
+        XCTAssertEqual(sourceScenarioNumberTextIOS(100.999), "100.999")
+        XCTAssertEqual(sourceScenarioNumberTextIOS(1.2e20), "120000000000000000000")
+        XCTAssertEqual(sourceScenarioNumberTextIOS(0), "0")
+        XCTAssertEqual(sourceScenarioNumberTextIOS(.nan), "")
+    }
+
     func testSourceLoanPaymentsKeepActualZeroAndSmallRateInterest() throws {
         // Independent 90-digit Decimal amortization references.
         XCTAssertEqual(try XCTUnwrap(sourceLoanMonthlyPaymentIOS(principal: 1000, apr: 0, years: 1)), 1000.0 / 12, accuracy: 1e-9)
