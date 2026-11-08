@@ -270,8 +270,8 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertTrue(provider.waitForExistence(timeout: 10), "Export must expose the actual system Files provider, not an app-owned Cancel label")
         // Files is remote UI. On current iOS, resolving isHittable inside a
         // waiter can itself fail with "remote AX element ... interrupted by
-        // waiter". Dispatch an actual touch to the visible native Cancel
-        // frame instead; only its real delegate receipt can pass this test.
+        // waiter". Resolve once after composition, outside any polling waiter;
+        // only the real Files delegate receipt can pass this test.
         // Screenshot resolves the visible, composited system presentation.
         // Query the touch frame AFTER it, not before: the remote Files AX
         // element can exist while the full-screen presentation is animating.
@@ -288,8 +288,10 @@ final class PlatformRuntimeUITests: XCTestCase {
             XCTFail("The actual native Files Cancel control must occupy the visible viewport")
             return
         }
-        app.coordinate(withNormalizedOffset: .zero)
-            .withOffset(CGVector(dx: cancelFrame.midX - applicationFrame.minX, dy: cancelFrame.midY - applicationFrame.minY)).tap()
+        // Use the remote element's actual activation point. Its bounding-box
+        // centre opened Files' sort menu on iOS 26 instead of cancelling.
+        // No isHittable polling waiter is active while resolving this touch.
+        pickerCancel.tap()
         let cancelled = app.staticTexts["response.action.notice"].firstMatch
         let acknowledged = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             cancelled.exists && cancelled.label == "Export cancelled."
