@@ -138,8 +138,11 @@ fun CodeBlockCard(
     language: String?,
     code: String,
     open: Boolean,
-    onCopyCode: (String) -> Unit
+    onCopyCode: (String) -> Unit,
+    sourceStart: Int? = null
 ) {
+    val responseActions = LocalResponseCodeActions.current
+    val sourceId = remember(code, language, sourceStart) { sourceStart ?: Any() }
     var copied by remember { mutableStateOf(false) }
     var sandboxMode by remember(code, language) { mutableStateOf(false) }
     var sandboxSource by remember(code, language) { mutableStateOf("") }
@@ -147,7 +150,7 @@ fun CodeBlockCard(
     var editorDraft by remember(code, language) { mutableStateOf("") }
     var editorEncoded by remember(code, language) { mutableStateOf(false) }
     var editorError by remember(code, language) { mutableStateOf<String?>(null) }
-    var currentCode by remember(code, language) { mutableStateOf(code) }
+    var currentCode by remember(code, language) { mutableStateOf(responseActions?.source(sourceId)?.second ?: code) }
     var expanded by remember(code, language) { mutableStateOf(false) }
     var runResult by remember(code, language) { mutableStateOf<CodeRunResult?>(null) }
     var runCount by remember(code, language) { mutableStateOf(0) }
@@ -158,8 +161,6 @@ fun CodeBlockCard(
             copied = false
         }
     }
-    val responseActions = LocalResponseCodeActions.current
-    val sourceId = remember(code, language) { Any() }
     val latestSource = rememberUpdatedState(currentCode)
     val bringIntoView = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
