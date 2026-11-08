@@ -74,7 +74,7 @@ def publish(directory: Path, platform: str, section: str | None = None, scroll_i
         # Use that real transport budget (with a small margin), rather than
         # rejecting dense, genuine code screenshots after only eight chunks.
         data = b''
-        for quality in (80, 65, 50, 35, 20):
+        for quality in (80, 65, 50, 35, 20, 15, 10):
             output = io.BytesIO()
             image.save(output, 'JPEG', quality=quality, optimize=True)
             data = output.getvalue()
