@@ -1,5 +1,4 @@
 import SwiftUI
-import JavaScriptCore
 
 /// STEP 5 renderer (iOS twin of RichBlocks.kt) — the consumer half of the
 /// message → blocks seam. iOS parses on FINALIZE only (the streaming bubble
@@ -2953,7 +2952,8 @@ struct CodeBlockCardView: View {
                     } else {
                         editorDraft = CodeDisplayIOS.escape(draft)
                         do {
-                            editedCode = editorEncoded ? try CodeDisplayIOS.decodeEditor(draft) : draft
+                            if editorEncoded { editedCode = try CodeDisplayIOS.decodeEditor(draft) }
+                            else { editedCode = draft }
                             editorError = nil
                         } catch { editorError = "Enter one valid JSON source string. Invalid drafts cannot run." }
                     }
@@ -3127,6 +3127,10 @@ struct CodeBlockCardView: View {
             HtmlBlockView(kind: lang == "svg" ? "svg" : "html", source: currentCode, open: false)
                 .padding(8)
                 .background(Color(red: 0.973, green: 0.961, blue: 1.0))
+        } else if !open && ["js", "javascript", "node"].contains(lang) && runCount > 0 {
+            HtmlBlockView(kind: "html", source: JavaScriptWorkerSandboxIOS.document(source: currentCode), open: false)
+                .id(runCount)
+                .padding(8)
         } else if !open && ["jsx", "tsx", "react"].contains(lang) {
             Text("React source only: this view has no React/TypeScript compiler. No component has been executed. Use a self-contained HTML/JavaScript sandbox for a live preview.")
                 .font(.system(size: 12))
@@ -3279,44 +3283,9 @@ struct CodeBlockCardView: View {
             errorOutput = "Not executed: no \(lang.uppercased()) runtime is available here."
             return
         }
-        guard let ctx = JSContext() else { return }
-        var logs: [String] = []
-        var jsErr: String? = nil
-        ctx.exceptionHandler = { _, exception in
-            if let ex = exception?.toString() {
-                jsErr = ex
-            }
-        }
-        let logBlock: @convention(block) (JSValue) -> Void = { val in
-            logs.append(val.toString() ?? "")
-        }
-        ctx.setObject(logBlock, forKeyedSubscript: "__gsLog" as NSString)
-        _ = ctx.evaluateScript("""
-            var console = {
-              log: function() { __gsLog(Array.prototype.slice.call(arguments).join(' ')); },
-              info: function() { __gsLog(Array.prototype.slice.call(arguments).join(' ')); },
-              warn: function() { __gsLog(Array.prototype.slice.call(arguments).join(' ')); },
-              error: function() { __gsLog(Array.prototype.slice.call(arguments).join(' ')); }
-            };
-            """)
-        let jsSource: String = {
-            guard ["ts", "typescript"].contains(lang) else { return src }
-            return src
-                .replacingOccurrences(of: "(?m)^\\s*(?:export\\s+)?(?:interface|type)\\s+[A-Za-z0-9_]+[^;{]*(?:\\{[\\s\\S]*?\\}|=[^;\\n]+;?)", with: "", options: .regularExpression)
-                .replacingOccurrences(of: ":\\s*(?:string|number|boolean|any|void|unknown|never|Record<[^>]+>|Array<[^>]+>|[A-Z][A-Za-z0-9_<>\\[\\]|\\s]*)(?=\\s*[=,);\\{])", with: "", options: .regularExpression)
-                .replacingOccurrences(of: "\\s+as\\s+[A-Za-z0-9_<>\\[\\]]+", with: "", options: .regularExpression)
-        }()
-        let result = ctx.evaluateScript(jsSource)
-        if let err = jsErr {
-            errorOutput = err
-        } else if let result, !result.isUndefined {
-            logs.append("→ \(result.toString() ?? "")")
-        }
-        if !logs.isEmpty {
-            runOutput = logs.joined(separator: "\n")
-        } else if errorOutput == nil {
-            runOutput = "Completed (no console output)"
-        }
+        // Execution lives in a disposable Worker in WKWebView, never the app UI thread.
+        // Its console, exception, completion and timeout are displayed by that runtime.
+
     }
 }
 
