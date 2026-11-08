@@ -2146,17 +2146,26 @@ private fun NexlyQuantitativeExplorerCard(items: List<SpontaneousMetricItem>) {
     }
 }
 
-private data class SpontaneousConceptItem(
+internal data class SpontaneousConceptItem(
     val term: String,
     val definition: String,
     val icon: String,
     val tone: String
 )
 
-private fun extractSpontaneousConceptsFromBlocks(blocks: List<Block>): List<SpontaneousConceptItem> {
+internal fun extractSpontaneousConceptsFromBlocks(blocks: List<Block>): List<SpontaneousConceptItem> {
     val out = mutableListOf<SpontaneousConceptItem>()
     val sepRegex = Regex("""^([^:—–-]{3,42})\s*(?::|—|–|-)\s*(.{14,})$""")
+    var excludedSection = false
+    val nonLearningSection = Regex("""\b(?:references|bibliography|steps?|plan|instructions|procedure)\b""", RegexOption.IGNORE_CASE)
     blocks.forEachIndexed { idx, b ->
+        if (b is Block.Heading) {
+            val title = NexlyIcons.cleanPlainText(plainTextOfSpans(b.spans))
+            excludedSection = classifySectionListMode(title) in setOf(SectionListMode.SOURCES, SectionListMode.TODO) || nonLearningSection.containsMatchIn(title)
+        }
+        // Publisher records and actionable procedures are not vocabulary
+        // definitions. Their real source/task controls are already rendered.
+        if (excludedSection) return@forEachIndexed
         val rawItems = when (b) {
             is Block.BulletList -> if (b.items.all { it.checked == null }) b.items else emptyList()
             is Block.OrderedList -> b.items
