@@ -5,6 +5,32 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun markdownNumbersKeepDirectionalSignsAndRejectMalformedCells() {
+        for ((raw, expected) in listOf("↓ 1.2%" to -1.2, "↘ -1.2%" to -1.2, "↑ +0.5%" to 0.5, "−0.3%" to -0.3, "-\$1,200.50" to -1200.5, "\$-1.2k" to -1200.0, "৳2M" to 2e6, "2x" to 2.0, "0" to 0.0)) {
+            assertEquals(raw, expected, parseSortableNumberAndroid(raw)!!, 0.0)
+        }
+        for (raw in listOf("1,00", "1+2", "1 2", "1e3", "NaN", "Infinity", "↓+1%", "↑-1%", "--1", "+-1", "growth 12%", "1.2.3")) {
+            assertNull(raw, parseSortableNumberAndroid(raw))
+        }
+    }
+
+    @Test fun markdownChartUsesRealMeasureLabelsUnitsAndEverySourceRow() {
+        fun cell(text: String): List<InlineSpan> = listOf(InlineSpan.TextSpan(text))
+        val headers = listOf("#", "Language", "Popularity").map(::cell)
+        val rows = (1..31).map { listOf(cell("$it"), cell("Language $it"), cell("$it%")) }
+        val table = Block.TableBlock(headers, List(3) { TableAlign.LEFT }, rows, 0)
+        val chart = chartFromTableBlock(table)!!
+        assertEquals("Popularity", chart.title)
+        assertEquals("%", chart.unit)
+        assertEquals(31, chart.series.single().data.size)
+        assertEquals("Language 31", chart.labels.last())
+        assertEquals(31f, chart.series.single().data.last().last(), 0f)
+        for (bad in listOf("not recorded", "\$3")) {
+            val changed = rows.mapIndexed { index, row -> if (index == 2) listOf(row[0], row[1], cell(bad)) else row }
+            assertNull(chartFromTableBlock(table.copy(rows = changed)))
+        }
+    }
+
     @Test fun spontaneousLearningUsesDefinitionsButDoesNotTurnSourcesOrPlansIntoQuizzes() {
         val definitions = "- Atom: A basic unit of a chemical element.\n- Molecule: Two or more atoms bonded together.\n- Element: A substance made of one type of atom."
         assertEquals(3, extractSpontaneousConceptsFromBlocks(parseBlocks("## Core concepts\n\n$definitions")).size)
