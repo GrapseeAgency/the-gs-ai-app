@@ -305,21 +305,42 @@ final class CalcHonestyTests: XCTestCase {
         let program = "try { const response = await fetch('\(endpoint)', {cache:'no-store'}); console.log('PROBE ' + await response.text()); } catch { console.log('FETCH REFUSED'); }"
         let production = JavaScriptWorkerSandboxIOS.document(source: program)
         XCTAssertTrue(production.contains("connect-src 'none'"))
-        for allowed in [false, true] {
-            let document = allowed ? production.replacingOccurrences(of: "connect-src 'none'", with: "connect-src *") : production
-            let host = UIHostingController(rootView: HtmlBlockView(kind: "html", source: document, open: false))
-            let old = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }.first { $0.isKeyWindow }
-            let window: UIWindow
-            if let scene = old?.windowScene { window = UIWindow(windowScene: scene) }
-            else { window = UIWindow(frame: UIScreen.main.bounds) }
-            defer { window.isHidden = true; window.rootViewController = nil; old?.makeKeyAndVisible() }
-            window.rootViewController = host
-            window.makeKeyAndVisible()
-            func findWeb(_ view: UIView) -> WKWebView? {
-                if let web = view as? WKWebView { return web }
-                for child in view.subviews { if let web = findWeb(child) { return web } }
-                return nil
+        // Cold WebKit networking can take longer than the unchanged 2-second
+        // worker execution limit. Initialize the actual network path before
+        // comparing policies, using this same real view and data store. The
+        // warm-up must receive the real response; a fake/unreachable server
+        // cannot turn a blocked request into a passing CSP test.
+        let warmup = "<output id='warmup'></output><script>fetch('\(endpoint)',{cache:'no-store'}).then(r=>r.text()).then(t=>document.getElementById('warmup').textContent=t).catch(e=>document.getElementById('warmup').textContent=String(e))</script>"
+        let host = UIHostingController(rootView: HtmlBlockView(kind: "html", source: warmup, open: false))
+        let old = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }.first { $0.isKeyWindow }
+        let window: UIWindow
+        if let scene = old?.windowScene { window = UIWindow(windowScene: scene) }
+        else { window = UIWindow(frame: UIScreen.main.bounds) }
+        defer { window.isHidden = true; window.rootViewController = nil; old?.makeKeyAndVisible() }
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        func findWeb(_ view: UIView) -> WKWebView? {
+            if let web = view as? WKWebView { return web }
+            for child in view.subviews { if let web = findWeb(child) { return web } }
+            return nil
+        }
+        var warmupResult = ""
+        let warmupDeadline = Date().addingTimeInterval(15)
+        while Date() < warmupDeadline {
+            host.view.layoutIfNeeded()
+            if let web = findWeb(host.view), let text = try? await web.evaluateJavaScript("document.getElementById('warmup')?.textContent || ''") as? String {
+                warmupResult = text
+                if text == "causal-response" { break }
             }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertEqual(warmupResult, "causal-response", "Actual WebKit network initialization must succeed: \(server.requestLines)")
+        XCTAssertEqual(server.requestCount, 1)
+        guard warmupResult == "causal-response", server.requestCount == 1 else { return }
+        for allowed in [false, true] {
+            let baseline = server.requestCount
+            let document = allowed ? production.replacingOccurrences(of: "connect-src 'none'", with: "connect-src *") : production
+            host.rootView = HtmlBlockView(kind: "html", source: document, open: false)
             var observed = ""
             let expected = allowed ? "PROBE causal-response" : "FETCH REFUSED"
             let deadline = Date().addingTimeInterval(15)
@@ -332,7 +353,7 @@ final class CalcHonestyTests: XCTestCase {
                 try await Task.sleep(nanoseconds: 50_000_000)
             }
             XCTAssertTrue(observed.contains(expected), "Policy-only control allowed=\(allowed): \(observed); actual requests=\(server.requestLines)")
-            XCTAssertEqual(server.requestCount, allowed ? 1 : 0, "CSP must prevent the actual request, not merely fail DNS, CORS or ATS")
+            XCTAssertEqual(server.requestCount - baseline, allowed ? 1 : 0, "CSP must prevent the actual request, not merely fail DNS, CORS or ATS")
         }
     }
 
