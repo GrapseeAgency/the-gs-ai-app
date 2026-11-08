@@ -3009,8 +3009,10 @@ private func NestedChildView(block: Block, citations: [Int: String]) -> some Vie
         ParagraphView(spans: spans, citations: citations)
     case .bulletList(let items, _):
         BulletListView(items: items, citations: citations)
+            .environment(\.nexlySectionListMode, .normal)
     case .orderedList(let start, let items, _):
         OrderedListView(start: start, items: items, citations: citations)
+            .environment(\.nexlySectionListMode, .normal)
     case .blockQuote(let inner, _):
         BlockQuoteView(blocks: inner, citations: citations)
     default:
