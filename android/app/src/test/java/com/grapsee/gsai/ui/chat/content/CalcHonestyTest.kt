@@ -5,6 +5,18 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun timersHaveExplicitSecondsNotPricesAndPassTheActualParserWithoutFakeItems() {
+        val configured = parseWidget("app", """{"type":"timer","durationSeconds":5}""") as Widget.App
+        assertEquals(5.0, configured.data.durationSeconds!!, 0.0)
+        val empty = parseWidget("app", """{"type":"timer"}""") as Widget.App
+        assertNull(empty.data.durationSeconds)
+        val monetary = parseWidget("app", """{"type":"timer","items":[{"price":25}]}""") as Widget.App
+        assertNull(monetary.data.durationSeconds)
+        for (duration in listOf("0", "-1", "1.5", "604801", "true", "\"$25\"")) {
+            assertNull(parseWidget("app", "{\"type\":\"timer\",\"durationSeconds\":" + duration + "}"))
+        }
+    }
+
     @Test fun checklistRefusesInvalidEntriesAndOverflowInsteadOfDeletingSourceTasks() {
         for (json in listOf("""{"items":[{"label":"Actual"},{"alien":42}]}""", """{"items":["Actual",42]}""",
             "{\"items\":[" + (1..31).joinToString(",") { "{\"label\":\"Task $it\"}" } + "]}")) {
