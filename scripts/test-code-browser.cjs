@@ -224,6 +224,19 @@ async function main() {
     await page.waitForFunction(()=>document.querySelector('input[aria-label="new shared item"]')?.value==='')
     const sharedTask=await peer.$eval('#app',node=>node.innerText)
     check('confirmed shared-task retry clears only the saved draft and reaches the real second viewer',()=>{assert.match(sharedTask,/Provided task/);assert.match(sharedTask,/Actual shared keyboard task/)})
+    const counterSource={surface:'counter',room:'real-source-start',start:12.5}
+    for(const viewer of [page,peer]) {
+      await viewer.evaluate(payload=>window.gsRenderCollab(payload),counterSource)
+      await viewer.waitForFunction(()=>document.body.textContent.includes('live · room'))
+    }
+    await click('+1')
+    await peer.waitForFunction(()=>document.body.textContent.includes('13.5'))
+    const actualCounter=await peer.$eval('#app',node=>node.innerText)
+    check('a real shared mutation atomically uses the actual fractional source start instead of an invented zero baseline',()=>assert.match(actualCounter,/13\.5/))
+    await peer.evaluate(payload=>window.gsRenderCollab(payload),{...counterSource,start:9000})
+    await peer.waitForFunction(()=>document.body.textContent.includes('live · room'))
+    const rejoinedCounter=await peer.$eval('#app',node=>node.innerText)
+    check('a later viewer cannot overwrite confirmed shared values with another configured source start',()=>{assert.match(rejoinedCounter,/13\.5/);assert.doesNotMatch(rejoinedCounter,/9000/)})
     collabReadsAvailable=false
     await page.evaluate(()=>window.gsRenderCollab({surface:'counter',room:'unavailable-browser-room',start:0}))
     await page.waitForFunction(()=>document.body.textContent.includes('offline · room'))
@@ -367,7 +380,7 @@ async function main() {
       await controlPage.close()
     }
     await page.screenshot({ path: path.join(os.tmpdir(), 'gs-terminal-browser-runtime.png'), fullPage: true })
-    assert.equal(checks, 49, 'All required real-browser code, terminal and production widget-control cases must execute')
+    assert.equal(checks, 51, 'All required real-browser code, terminal and production widget-control cases must execute')
     console.log(`\n${checks} real-browser code, terminal and widget-control checks passed`)
   } finally { closeProbe(); await browser.close(); fs.rmSync(libs, { recursive: true, force: true }) }
 }
