@@ -34,7 +34,7 @@ def check(root):
         data = json.loads(manifest.read_text())
         for group in data if isinstance(data, list) else [data]:
             for attachment in group.get('attachments', []):
-                if 'response-source-archive.zip' not in attachment.get('suggestedHumanReadableName', ''):
+                if not attachment.get('suggestedHumanReadableName', '').startswith('response-source-archive'):
                     continue
                 path = (manifest.parent / attachment['exportedFileName']).resolve()
                 assert path.is_relative_to(root), 'Attachment escapes export directory'
@@ -75,6 +75,10 @@ def self_test():
         (root / 'native.zip').write_bytes(fixture())
         (root / 'manifest.json').write_text(json.dumps([{'attachments': [{
             'suggestedHumanReadableName': 'response-source-archive.zip_0_test.zip',
+            'exportedFileName': 'native.zip'}]}]))
+        check(root)
+        (root / 'manifest.json').write_text(json.dumps([{'attachments': [{
+            'suggestedHumanReadableName': 'response-source-archive_0_12345678-1234-1234-1234-123456789abc.zip',
             'exportedFileName': 'native.zip'}]}]))
         check(root)
     print('PASS archive gate self-tests: valid, altered bytes, extra files, invalid ZIP, missing attachment, native manifest')
