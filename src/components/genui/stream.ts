@@ -167,11 +167,11 @@ export function parseStream(text: string): Segment[] {
         segments.push({ kind: 'widget', widget: v.kind, payload: v.widget, complete: true })
         continue
       }
-      const fallbackPayload = safeJson(injected)
-      if (fallbackPayload) {
-        segments.push({ kind: 'widget', widget: kind, payload: fallbackPayload, complete: true })
-        continue
-      }
+      // Parsing JSON is not validation. Never turn a rejected payload into a
+      // "complete" live widget by falling back to the same unchecked object.
+      segments.push({ kind: 'text', text: 'Interactive content could not be rendered. Original source is preserved below.' })
+      segments.push({ kind: 'code', code: body, language: 'json' })
+      continue
     }
 
     segments.push({ kind: 'code', code: body, language: lower || undefined })
