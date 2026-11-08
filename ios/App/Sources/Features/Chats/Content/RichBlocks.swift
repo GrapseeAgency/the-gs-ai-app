@@ -2986,8 +2986,14 @@ struct CodeBlockCardView: View {
         .onDisappear { responseActions?.remove(sourceID) }
         .onChange(of: currentCode) { source in responseActions?.update(sourceID, source: source) }
         .onChange(of: open) { value in if !value { registerResponseCode(source: currentCode) } }
-        .onChange(of: code) { _ in resetCodeState() }
-        .onChange(of: language) { _ in resetCodeState() }
+        .onChange(of: code) { _ in
+            resetCodeState()
+            if !open { registerResponseCode(source: code) }
+        }
+        .onChange(of: language) { _ in
+            resetCodeState()
+            if !open { registerResponseCode(source: code) }
+        }
     }
 
     private func registerResponseCode(source: String) {
