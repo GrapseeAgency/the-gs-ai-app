@@ -169,6 +169,18 @@ async function main() {
     const code = parseStream(compiled.text).find(segment => segment.kind === 'code')
     assert.equal(code.code, source)
   })
+  check('automatic chart generation preserves actual observations and refuses fabricated range midpoints or signed pie', () => {
+    const range = compileWidgets({reply:'Alpha: 100–200\nBeta: 300–500', userPrompt:'Make a bar chart'})
+    assert.equal(range.widgets, 0)
+    assert.ok(range.text.includes('100–200'))
+    const many = compileWidgets({reply:Array.from({length:12}, (_,i)=>`Category ${i+1}: ${i+1}`).join('\n'), userPrompt:'Make a bar chart'})
+    assert.equal(many.widgets, 1)
+    const widget = parseStream(many.text).find(segment => segment.kind === 'widget')
+    assert.equal(widget.payload.series[0].data.length, 12)
+    const signed = compileWidgets({reply:'Alpha: -5\nBeta: 10', userPrompt:'Make a pie chart'})
+    assert.equal(signed.widgets, 0)
+    assert.ok(signed.text.includes('Alpha: -5'))
+  })
   check('invalid or overflowing checklist tasks are refused without loss or unrelated widget healing', () => {
     for (const items of [[{label:'Actual'}, {alien:42}], Array.from({length:31}, (_,i)=>({label:`Task ${i}`}))]) {
       const source = JSON.stringify({items})
