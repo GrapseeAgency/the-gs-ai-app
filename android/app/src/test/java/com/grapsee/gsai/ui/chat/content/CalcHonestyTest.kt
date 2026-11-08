@@ -6,7 +6,7 @@ import org.junit.Test
 
 class CalcHonestyTest {
     @Test fun actualChartDecoderNeverCompactsMissingObservationsOrFabricatesZero() {
-        for (invalid in listOf("null", "[0,null]", "[0,true]", "[0,1e100]", "[0,10,null]", "[null,10]", "[0,10,\"unknown\"]", "{\"x\":1,\"y\":null}", "{\"x\":null,\"y\":10}", "{\"x\":1,\"y\":10,\"z\":null}", "{\"open\":1,\"high\":2,\"low\":null,\"close\":1}")) {
+        for (invalid in listOf("""null""", """[0,null]""", """[0,true]""", """[0,1e100]""", """[0,10,null]""", """[null,10]""", """[0,10,"unknown"]""", """{"x":1,"y":null}""", """{"x":null,"y":10}""", """{"x":1,"y":10,"z":null}""", """{"open":1,"high":2,"low":null,"close":1}""")) {
             val source = """{"type":"line","labels":["Before","Missing","After"],"series":[{"name":"Actual","data":[[0,10],$invalid,[2,30]]}]}"""
             assertNull("Preserve source rather than chart missing observation: $invalid", parseWidget("chart", source))
         }
