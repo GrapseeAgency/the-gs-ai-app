@@ -554,7 +554,7 @@ class PlatformRuntimeTest {
     }
 
     @Test fun generatedHtmlRunsRealButtonLogicAndSuppressesDynamicEmoji() {
-        val source = """<button id="run" title="Increase &#x1F600;">Increase &#x1F600;</button><output id="result">0</output><svg data-custom-glass="true"><path d="M0 0L8 8"/></svg><script>window.marker=String.fromCodePoint(0x1F600);window.count=0;document.getElementById('run').onclick=function(){window.count++;document.getElementById('result').textContent=window.count+window.marker;};</script>"""
+        val source = """<button id="run" title="Increase &#x1F600;">Increase &#x1F600;</button><output id="result">0</output><svg data-custom-glass="true"><path d="M0 0L8 8"/></svg><script>window.marker=String.fromCodePoint(0x1F600);window.count=0;document.getElementById('run').onclick=function(){window.count++;document.getElementById('result').textContent=window.count+window.marker;};window.closedRoot=document.body.appendChild(document.createElement('div')).attachShadow({mode:'closed'});closedRoot.innerHTML='<button>Shadow &#x1F600;</button><output>0</output>';window.shadowCount=0;closedRoot.querySelector('button').onclick=function(){shadowCount++;closedRoot.querySelector('output').textContent=shadowCount+marker;};var canvas=document.body.appendChild(document.createElement('canvas'));canvas.id='emoji-canvas';canvas.width=100;canvas.height=40;var ctx=canvas.getContext('2d');ctx.font='28px sans-serif';ctx.fillText(marker,0,30);ctx.strokeText(marker,40,30);</script>"""
         compose.activity.setContentForPlatformTest {
             TheGsAiTheme {
                 com.grapsee.gsai.ui.chat.content.HtmlBlockView(
@@ -606,6 +606,13 @@ class PlatformRuntimeTest {
             evaluate("window.count === 1 && document.getElementById('result').textContent === '1'") == "true"
         }
         assertEquals("128512", evaluate("window.marker.codePointAt(0)"))
+        assertEquals("true", evaluate("window.closedRoot.querySelector('button').textContent === 'Shadow '"))
+        evaluate("window.closedRoot.querySelector('button').click(); true")
+        awaitObserved("actual closed-shadow event logic suppresses dynamic emoji without changing source strings") {
+            evaluate("window.shadowCount === 1 && window.closedRoot.querySelector('output').textContent === '1'") == "true"
+        }
+        assertEquals("true", evaluate("Array.from(document.getElementById('emoji-canvas').getContext('2d').getImageData(0,0,100,40).data).every(value=>value===0)"))
+        assertEquals("true", evaluate("(function(){const ctx=document.getElementById('emoji-canvas').getContext('2d');ctx.fillRect(0,0,4,4);return ctx.getImageData(0,0,1,1).data[3]===255;})()"))
         assertEquals("true", evaluate("!!document.querySelector('svg[data-custom-glass] path')"))
     }
 
