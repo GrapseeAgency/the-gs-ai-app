@@ -3512,6 +3512,7 @@ private struct TableBlockView: View {
     let rows: [[[InlineSpan]]]
     var citations: [Int: String] = [:]
 
+    @State private var measuredWidth: CGFloat = 0
     @State private var pageSize: Int
     @State private var page: Int = 0
     @State private var sortCol: Int = -1
@@ -3530,7 +3531,7 @@ private struct TableBlockView: View {
     /// each side, content clamped to the Step-2 640pt column) — deterministic,
     /// no greedy GeometryReader inside the lazy transcript.
     private var availableWidth: CGFloat {
-        min(UIScreen.main.bounds.width - 32, Aero.Layout.contentMaxWidth)
+        measuredWidth > 0 ? measuredWidth : min(UIScreen.main.bounds.width - 32, Aero.Layout.contentMaxWidth)
     }
 
     private var sortedRows: [[[InlineSpan]]] {
@@ -3570,8 +3571,11 @@ private struct TableBlockView: View {
 
     var body: some View {
         let columns = max(headers.count, aligns.count, 1)
-        let minCell: CGFloat = 92
-        let cellWidth = max(minCell, availableWidth / CGFloat(columns))
+        let natural = naturalColumnWidths(columns: columns)
+        let naturalTotal = natural.reduce(0, +)
+        let extra = max(0, availableWidth - naturalTotal) / CGFloat(columns)
+        let widths = natural.map { $0 + extra }
+        let tableWidth = widths.reduce(0, +)
         let theme = SpanTheme(
             monoBackground: Aero.container,
             linkColor: Aero.accentDeep,
@@ -3590,11 +3594,11 @@ private struct TableBlockView: View {
                 WidgetBlockView(kind: "chart", json: chartJson, open: false)
             } else {
                 VStack(alignment: .leading, spacing: 0) {
-                    if CGFloat(columns) * cellWidth <= availableWidth {
-                        table(theme: theme, cellWidth: cellWidth, columns: columns, scrollable: false)
+                    if tableWidth <= availableWidth {
+                        table(theme: theme, widths: widths, columns: columns, scrollable: false)
                     } else {
                         ScrollView(.horizontal, showsIndicators: false) {
-                            table(theme: theme, cellWidth: cellWidth, columns: columns, scrollable: true)
+                            table(theme: theme, widths: widths, columns: columns, scrollable: true)
                         }
                     }
 
@@ -3606,6 +3610,27 @@ private struct TableBlockView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline.opacity(0.4), lineWidth: 1))
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            if width > 0 && abs(width - measuredWidth) > 0.5 { measuredWidth = width }
+        }
+    }
+
+    private func naturalColumnWidths(columns: Int) -> [CGFloat] {
+        let font = UIFont.systemFont(ofSize: 13, weight: .bold)
+        let firstHeader = headers.first.map { NexlyIcons.cleanPlainText(plainTextOfSpans($0)) } ?? ""
+        return (0..<columns).map { column in
+            let header = column < headers.count ? NexlyIcons.cleanPlainText(plainTextOfSpans(headers[column])) : ""
+            var width = (header as NSString).size(withAttributes: [.font: font]).width + 24
+            let isName = column == 0 || (column == 1 && ["#", "Rank", "No", "ID"].contains(firstHeader))
+            for row in rows where column < row.count {
+                let raw = plainTextOfSpans(row[column]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let badge: CGFloat = isName && entityBadge(for: raw) != nil ? 26 : 0
+                let trend: CGFloat = raw.hasSuffix("%") && ["+", "-", "↑", "↓", "↗", "↘"].contains(String(raw.prefix(1))) ? 16 : 0
+                width = max(width, (raw as NSString).size(withAttributes: [.font: font]).width + 20 + badge + trend)
+            }
+            return min(280, max(44, ceil(width)))
         }
     }
 
@@ -3704,7 +3729,7 @@ private struct TableBlockView: View {
     }
 
     @ViewBuilder
-    private func table(theme: SpanTheme, cellWidth: CGFloat, columns: Int, scrollable: Bool) -> some View {
+    private func table(theme: SpanTheme, widths: [CGFloat], columns: Int, scrollable: Bool) -> some View {
         let firstHeaderRaw = headers.first.map { NexlyIcons.cleanPlainText(plainTextOfSpans($0)).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
@@ -3724,7 +3749,7 @@ private struct TableBlockView: View {
                         cell(
                             AttributedString(hRaw + sortSuffix),
                             rawString: hRaw,
-                            width: cellWidth,
+                            width: widths[c],
                             align: c < aligns.count ? aligns[c] : .left,
                             emphasize: true,
                             isPrimaryNameCol: false
@@ -3743,7 +3768,7 @@ private struct TableBlockView: View {
                         cell(
                             attributed(from: c < row.count ? row[c] : [], theme: theme),
                             rawString: c < row.count ? plainTextOfSpans(row[c]) : "",
-                            width: cellWidth,
+                            width: widths[c],
                             align: c < aligns.count ? aligns[c] : .left,
                             emphasize: false,
                             isPrimaryNameCol: isNameCol
@@ -3755,7 +3780,7 @@ private struct TableBlockView: View {
                 }
             }
         }
-        .frame(width: scrollable ? cellWidth * CGFloat(columns) : nil, alignment: .leading)
+        .frame(width: scrollable ? widths.reduce(0, +) : nil, alignment: .leading)
         .textSelection(.enabled)
     }
 
@@ -3788,8 +3813,8 @@ private struct TableBlockView: View {
             Text("\(isNeg ? "↓" : "↑") \(cleanNum)")
                 .font(.system(size: 12.5, weight: .bold))
                 .foregroundStyle(isNeg ? Color(red: 0.878, green: 0.310, blue: 0.373) : Color(red: 0.071, green: 0.604, blue: 0.353))
-                .frame(width: width, alignment: frameAlignment(for: align))
                 .padding(.horizontal, 10)
+                .frame(width: width, alignment: frameAlignment(for: align))
                 .padding(.vertical, 7)
         } else if !emphasize, isPrimaryNameCol, let badge = entityBadge(for: trimmed) {
             HStack(spacing: 6) {
@@ -3804,15 +3829,15 @@ private struct TableBlockView: View {
                     .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
                     .lineLimit(1)
             }
-            .frame(width: width, alignment: frameAlignment(for: align))
             .padding(.horizontal, 10)
+            .frame(width: width, alignment: frameAlignment(for: align))
             .padding(.vertical, 7)
         } else {
             Text(text)
                 .font((emphasize || (isPrimaryNameCol && Int(trimmed) == nil)) ? .system(size: 12.5, weight: .bold) : Aero.caption())
                 .foregroundStyle((emphasize || (isPrimaryNameCol && Int(trimmed) == nil)) ? Color(red: 0.133, green: 0.102, blue: 0.278) : Aero.textSecondary)
-                .frame(width: width, alignment: frameAlignment(for: align))
                 .padding(.horizontal, 10)
+                .frame(width: width, alignment: frameAlignment(for: align))
                 .padding(.vertical, 7)
                 .multilineTextAlignment(alignment(for: align))
         }
