@@ -797,8 +797,7 @@ private struct NexlyContextualActionPillsRowView: View {
             return []
         }
         return Array(Set(Array(citations.values) + embedded)).sorted().filter { raw in
-            guard let url = URL(string: raw), let scheme = url.scheme?.lowercased() else { return false }
-            return ["https", "http"].contains(scheme) && url.host != nil
+            citationSourceURLIOS(raw) != nil
         }
     }
     private var sourceText: String {
@@ -944,7 +943,7 @@ private struct NexlyContextualActionPillsRowView: View {
                             if sourcesOnly {
                                 ForEach(sourceURLs, id: \.self) { raw in
                                     Button {
-                                        if let url = URL(string: raw) { gsOpenURL(url, inApp: inAppBrowser) }
+                                        if let url = citationSourceURLIOS(raw) { gsOpenURL(url, inApp: inAppBrowser) }
                                     } label: {
                                         HStack(alignment: .top, spacing: 8) {
                                             NexlyGlyph(name: "external-link", size: 14, color: .purple)
@@ -4118,7 +4117,7 @@ private struct CitationsBlockView: View {
                 .buttonStyle(.plain)
                 .disabled(link == nil)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Source \(citation.number). \(citation.title), \(citation.domain)")
+                .accessibilityLabel("Source \(citation.number). \(citation.title), \(domain)")
             }
         }
     }
