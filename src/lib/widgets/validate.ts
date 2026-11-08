@@ -2365,11 +2365,8 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
 
   collab: (p) => {
     let repaired = false
-    let surface = asString(p.surface ?? p.type, 'counter')
-    if (!(COLLAB_TYPES as readonly string[]).includes(surface)) {
-      surface = 'counter'
-      repaired = true
-    }
+    const surface = asString(p.surface ?? p.type, 'counter')
+    const invalidSurface = !(COLLAB_TYPES as readonly string[]).includes(surface)
     // room: slug — this is the shared key everyone converges on, so it must
     // survive a low-tier model: lowercase, [a-z0-9-], <=48 chars, default lobby.
     const rawRoom = asString(p.room ?? p.channel ?? p.id, 'lobby')
@@ -2385,8 +2382,8 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     }
     const rawItems = asArray(p.items ?? p.options)
     const invalidItems = rawItems.length > 12 || rawItems.some(item => typeof item !== 'string' || !item.trim())
-    return { widget, errors: invalidItems || (surface === 'vote' && rawItems.length < 2)
-      ? ['Shared widgets need complete supplied labels within 12 items; voting requires at least two actual options, never invented choices or counts'] : [], repaired }
+    return { widget, errors: invalidSurface || invalidItems || (surface === 'vote' && rawItems.length < 2)
+      ? ['Shared widgets require a supported surface and complete supplied labels within 12 items; voting requires at least two actual options, never invented choices or counts'] : [], repaired }
   },
 
   terminal: (p) => {
