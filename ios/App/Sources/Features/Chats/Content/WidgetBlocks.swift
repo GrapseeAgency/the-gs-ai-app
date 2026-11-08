@@ -794,21 +794,21 @@ struct WidgetBlockView: View {
             let tagIcon = widgetTagGlassIconIOS(effectiveKind)
             VStack(alignment: .leading, spacing: 10) {
                 if !cleanTitle.isEmpty {
-                HStack(alignment: .center, spacing: 8) {
-                    NexlyGlassGlyphTile(
-                        name: explicitIcon ?? tagIcon.icon,
-                        tone: tagIcon.tone,
-                        size: 24,
-                        glyphSize: 14
-                    )
-                    if !cleanTitle.isEmpty {
-                        Text(cleanTitle)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Aero.text)
-                            .lineLimit(2)
+                    HStack(alignment: .center, spacing: 8) {
+                        NexlyGlassGlyphTile(
+                            name: explicitIcon ?? tagIcon.icon,
+                            tone: tagIcon.tone,
+                            size: 24,
+                            glyphSize: 14
+                        )
+                        if !cleanTitle.isEmpty {
+                            Text(cleanTitle)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Aero.text)
+                                .lineLimit(2)
+                        }
+                        Spacer(minLength: 4)
                     }
-                    Spacer(minLength: 4)
-                }
                 }
                 WidgetBodyView(kind: effectiveKind, obj: obj, accent: accent)
                     .id(effectiveKind + ":" + json)
@@ -1696,19 +1696,24 @@ private struct ChartBodyView: View {
 private struct StatBodyView: View {
     let obj: [String: Any]
     let accent: Color
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let cards = ((obj["cards"] ?? obj["items"] ?? obj["metrics"] ?? obj["kpis"] ?? obj["stats"]) as? [[String: Any]]) ?? []
         // A metric is not a drill-down button unless there is a real drill-down.
         // Preserve all supplied cards and units, with no invented trend arrows.
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+        let compactMetrics = cards.count == 4 && dynamicTypeSize <= .large && cards.allSatisfy {
+            str($0, "value", "val", "number", "amount").count + str($0, "unit").count <= 10 &&
+                str($0, "label", "title", "name", "metric").count <= 28
+        }
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: compactMetrics ? 5 : 8), count: compactMetrics ? 4 : 2), spacing: 8) {
             ForEach(Array(cards.enumerated()), id: \.offset) { _, card in
-                metricCard(card)
+                metricCard(card, compact: compactMetrics)
             }
         }
     }
 
-    private func metricCard(_ card: [String: Any]) -> some View {
+    private func metricCard(_ card: [String: Any], compact: Bool) -> some View {
         let label = NexlyIcons.cleanPlainText(str(card, "label", "title", "name", "metric"))
         let value = NexlyIcons.cleanPlainText(str(card, "value", "val", "number", "amount"))
         let unit = NexlyIcons.cleanPlainText(str(card, "unit"))
@@ -1719,13 +1724,13 @@ private struct StatBodyView: View {
         let tone = direction == "up" ? Color(red: 0.071, green: 0.604, blue: 0.353) : direction == "down" ? Color(red: 0.878, green: 0.310, blue: 0.373) : Aero.textSecondary
         return VStack(alignment: .leading, spacing: 4) {
             Text(label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Aero.textSecondary)
+                .font(.system(size: compact ? 9.5 : 11, weight: .medium))
+                .foregroundStyle(NexlyInk.label)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.122, green: 0.094, blue: 0.259))
+                    .font(.system(size: compact ? 13 : 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(NexlyInk.row)
                     .fixedSize(horizontal: false, vertical: true)
                 if !unit.isEmpty {
                     Text(unit).font(.system(size: 10, weight: .medium)).foregroundStyle(Aero.textSecondary)
@@ -1741,9 +1746,10 @@ private struct StatBodyView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(10)
+        .padding(.horizontal, compact ? 6 : 10)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.white.opacity(0.46), in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.886, green: 0.859, blue: 0.980), lineWidth: 1))
     }
 }
