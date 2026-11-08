@@ -5,6 +5,27 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun proseScenarioInferenceNeverTreatsMarkupAsAMillionOrChangesUnsupportedSourceTerms() {
+        assertEquals(100.0, extractQuickCalcParams("$100 markup at 10%")!!.first, 0.0)
+        assertEquals(1200.0, extractQuickCalcParams("€1.2k with 10% tax")!!.first, 0.0)
+        assertEquals(2000000.0, extractQuickCalcParams("$2M loan at 6% for 5 years")!!.first, 0.0)
+        for (wire in listOf("$1e6 loan at 10% for 5 years", "$1,00 discount 10%", "-$100 discount 10%", "$100 discount -10%", "$100 discount −10%", "$100 discount 1e2%", "$100 loan at 10%", "$100 loan at 10% for 0 years", "$100 loan at 10% for 99 years")) {
+            assertNull(wire, extractQuickCalcParams(wire))
+        }
+    }
+
+    @Test fun sourceLoanPaymentsKeepTrueZeroAndSmallRateInterestWithoutInventedRounding() {
+        // Independent 90-digit Decimal amortization references.
+        assertEquals(1000.0 / 12, sourceLoanMonthlyPayment(1000.0, 0.0, 1)!!, 1e-9)
+        assertEquals(88.84878867834170734, sourceLoanMonthlyPayment(1000.0, 12.0, 1)!!, 1e-9)
+        assertEquals(2778279.1966664201205, sourceLoanMonthlyPayment(1e9, 0.0012, 30)!!, 1e-6)
+        assertEquals(2777777.7782791666667, sourceLoanMonthlyPayment(1e9, 0.0000000012, 30)!!, 1e-6)
+        assertNull(sourceLoanMonthlyPayment(-1.0, 5.0, 1))
+        assertNull(sourceLoanMonthlyPayment(1000.0, -5.0, 1))
+        assertNull(sourceLoanMonthlyPayment(1000.0, 5.0, 0))
+        assertNull(sourceLoanMonthlyPayment(Double.NaN, 5.0, 1))
+    }
+
     @Test fun ordinaryMarkdownSourcesUseOneHeadingAndOnlyActualCompleteSourceDestinations() {
         for (marker in listOf("1.", "-")) {
             val wire = "## Key Sources\n\n$marker [IEA](https://www.iea.org/) - Supplied report.\n${if (marker == "1.") "2." else "-"} [IRENA](https://www.irena.org/) - Supplied publication."
