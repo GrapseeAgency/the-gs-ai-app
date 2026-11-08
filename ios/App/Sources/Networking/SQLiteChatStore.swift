@@ -82,7 +82,7 @@ final class SQLiteChatStore: @unchecked Sendable {
     END;
     """
 
-    init(databaseURL: URL? = nil) {
+    init(databaseURL: URL? = nil, legacyURL: URL? = nil) {
         usesDefaultDatabase = databaseURL == nil
         let url = databaseURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("gsai-store.sqlite")
@@ -99,7 +99,7 @@ final class SQLiteChatStore: @unchecked Sendable {
         queue.sync {
             exec(schemaSQL)
             migrateSchemaIfNeeded()
-            if usesDefaultDatabase { importLegacyJSONIfNeeded() }
+            if usesDefaultDatabase || legacyURL != nil { importLegacyJSONIfNeeded(legacyURL: legacyURL) }
         }
     }
 
@@ -148,36 +148,42 @@ final class SQLiteChatStore: @unchecked Sendable {
     // MARK: - Row writes (write-through from ConversationStore)
 
     func upsertConversation(_ conversation: StoredConversation) {
-        queue.sync {
-            guard let stmt = prepare(
-                "INSERT OR REPLACE INTO conversations(id, title, modelId, pinned, archived, createdAt, updatedAt) " +
-                "VALUES(?, ?, ?, ?, ?, ?, ?)") else { return }
-            defer { sqlite3_finalize(stmt) }
-            bind(stmt, 1, conversation.id)
-            bind(stmt, 2, conversation.title)
-            bind(stmt, 3, conversation.modelId)
-            sqlite3_bind_int(stmt, 4, conversation.pinned ? 1 : 0)
-            sqlite3_bind_int(stmt, 5, conversation.archived ? 1 : 0)
-            bind(stmt, 6, conversation.createdAt)
-            bind(stmt, 7, conversation.updatedAt)
-            sqlite3_step(stmt)
-        }
+        queue.sync { upsertConversationOnQueue(conversation) }
+    }
+
+    /// Queue-owned helper: migration already holds the same serial queue.
+    private func upsertConversationOnQueue(_ conversation: StoredConversation) {
+        guard let stmt = prepare(
+            "INSERT OR REPLACE INTO conversations(id, title, modelId, pinned, archived, createdAt, updatedAt) " +
+            "VALUES(?, ?, ?, ?, ?, ?, ?)") else { return }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt, 1, conversation.id)
+        bind(stmt, 2, conversation.title)
+        bind(stmt, 3, conversation.modelId)
+        sqlite3_bind_int(stmt, 4, conversation.pinned ? 1 : 0)
+        sqlite3_bind_int(stmt, 5, conversation.archived ? 1 : 0)
+        bind(stmt, 6, conversation.createdAt)
+        bind(stmt, 7, conversation.updatedAt)
+        sqlite3_step(stmt)
     }
 
     func upsertMessage(_ message: StoredMessage) {
-        queue.sync {
-            guard let stmt = prepare(
-                "INSERT OR REPLACE INTO messages(id, conversationId, role, content, createdAt, attachments) " +
-                "VALUES(?, ?, ?, ?, ?, ?)") else { return }
-            defer { sqlite3_finalize(stmt) }
-            bind(stmt, 1, message.id)
-            bind(stmt, 2, message.conversationId)
-            bind(stmt, 3, message.role)
-            bind(stmt, 4, message.content)
-            bind(stmt, 5, message.createdAt)
-            bind(stmt, 6, attachmentsJSON(message.attachments))
-            sqlite3_step(stmt)
-        }
+        queue.sync { upsertMessageOnQueue(message) }
+    }
+
+    /// Queue-owned helper: migration already holds the same serial queue.
+    private func upsertMessageOnQueue(_ message: StoredMessage) {
+        guard let stmt = prepare(
+            "INSERT OR REPLACE INTO messages(id, conversationId, role, content, createdAt, attachments) " +
+            "VALUES(?, ?, ?, ?, ?, ?)") else { return }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt, 1, message.id)
+        bind(stmt, 2, message.conversationId)
+        bind(stmt, 3, message.role)
+        bind(stmt, 4, message.content)
+        bind(stmt, 5, message.createdAt)
+        bind(stmt, 6, attachmentsJSON(message.attachments))
+        sqlite3_step(stmt)
     }
 
     func deleteConversation(id: String) {
@@ -364,19 +370,19 @@ final class SQLiteChatStore: @unchecked Sendable {
 
     // MARK: - Legacy JSON import (runs once, flag-guarded)
 
-    private func importLegacyJSONIfNeeded() {
+    private func importLegacyJSONIfNeeded(legacyURL: URL?) {
         guard let db = db else { return }
         guard scalar("SELECT COUNT(*) FROM store_meta WHERE key = 'json_import'") == 0 else { return }
         defer {
             exec("INSERT OR REPLACE INTO store_meta(key, value) VALUES('json_import', 'done');")
         }
-        let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let url = legacyURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("gsai-store.json")
         guard let data = try? Data(contentsOf: url),
               let document = try? JSONDecoder().decode(LegacyDocument.self, from: data) else { return }
         exec("BEGIN TRANSACTION;")
-        for conversation in document.conversations { upsertConversation(conversation) }
-        for message in document.messages { upsertMessage(message) }
+        for conversation in document.conversations { upsertConversationOnQueue(conversation) }
+        for message in document.messages { upsertMessageOnQueue(message) }
         exec("COMMIT;")
         exec("INSERT INTO conversations_fts(conversations_fts) VALUES('rebuild');")
         exec("INSERT INTO messages_fts(messages_fts) VALUES('rebuild');")
