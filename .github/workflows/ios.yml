@@ -330,89 +330,12 @@ jobs:
           print('::notice::Actual native JSON source-byte receipt: ' + source_receipt[0].replace('%', '%25'))
           PY
 
-      - name: Focused generated-widget runtime test (before the full suite)
-        run: |
-          set -o pipefail
-          rm -rf ios/build/GSApp-genui.xcresult
-          xcodebuild test \
-            -parallel-testing-enabled NO \
-            -project "$PROJECT_FILE" \
-            -scheme "$SCHEME" \
-            -destination "$IOS_DESTINATION" \
-            -derivedDataPath "$DERIVED_DATA" \
-            -only-testing:AppTests/CalcHonestyTests \
-            -only-testing:AppTests/NexlyChatRenderTests/testSixSuppliedResponseSectionReferencesRenderThroughActualChat \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testConversationActionsTapOpensRealOptionsWithoutLeavingChat \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testVanishedDashboardTabCannotHideReplacementSource \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testOrdinaryMarkdownTaskControlsPreserveRealDetailsAndCompletion \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedBookingSavesOnlyActualLocalSelectionWithoutReservation \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedChecklistEditsDeletesAddsAndKeepsActualTaskCompletion \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testContextualEditOpensActualCodeAndExportOpensSystemDocumentPicker \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testContextualReportShowsActualDataAndSharePresentsSystemActivitySheet \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedCodeCopyEditRunAndInvalidDraftReset \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTerminalUsesRealFilesWorkerAndUnsupportedRefusal \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTableAllDisplaysEveryActualRow \
-            -resultBundlePath ios/build/GSApp-genui.xcresult \
-            CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee ios/build/xcodebuild-genui-test.log | awk '
-              {
-                print
-                line = $0
-                gsub(/%/, "%25", line)
-                gsub(/\r/, "%0D", line)
-                if ($0 ~ /^Test Case .* failed/ && failures++ < 10)
-                  print "::error title=Actual XCTest runtime failure::" line
-                if ($0 ~ /^Test Case .*PlatformRuntimeUITests/ &&
-                    $0 ~ /test(ContextualEdit|GeneratedReactCode|OrdinaryMarkdownTask|VanishedDashboardTab)/ &&
-                    events++ < 8)
-                  print "::notice title=Actual native response acceptance::" line
-                fflush()
-              }'
-
-      - name: Independently verify actual XCTest source archive bytes
-        if: always()
-        run: |
-          set -euo pipefail
-          python3 scripts/check_response_archive.py --self-test
-          DIR=ios/build/source-archive
-          mkdir -p "$DIR"
-          if ! xcrun xcresulttool export attachments \
-            --path ios/build/GSApp-genui.xcresult --output-path "$DIR/raw" > "$DIR/export.log" 2>&1; then
-            python3 -c 'from pathlib import Path; print("::error::Native source attachment export failed: " + Path("ios/build/source-archive/export.log").read_text().replace("%", "%25").replace("\n", "%0A"))'
-            exit 1
-          fi
-          python3 -u scripts/check_response_archive.py "$DIR/raw" 2>&1 | tee "$DIR/verification.log"
-
-      - name: Preserve native source archive byte evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-source-archive-${{ github.run_id }}
-          path: ios/build/source-archive
-          if-no-files-found: error
-
-      - name: Isolate full-suite clean-install state from focused acceptance fixtures
-        run: |
-          set -euo pipefail
-          # Focused acceptance intentionally persists real seeded conversations
-          # and proves storage across relaunch WITHIN its tests. Those records
-          # must not masquerade as clean-install Home/history state or displace
-          # the menu suite's four recent rows. Keep every assertion; start the
-          # separate broad suite from an actual fresh app installation.
-          SIM_ID=$(xcrun simctl list devices booted --json | python3 -c '
-          import json, os, sys
-          name = os.environ["IOS_DESTINATION"].split("name=", 1)[1].rsplit(",OS=", 1)[0]
-          devices = [d for group in json.load(sys.stdin)["devices"].values() for d in group
-                     if d["name"] == name and d["state"] == "Booted"]
-          if len(devices) != 1: raise SystemExit("Expected exactly one actual test simulator")
-          print(devices[0]["udid"])
-          ')
-          xcrun simctl uninstall "$SIM_ID" com.grapsee.gsai
-
+      # The complete suite below includes every CalcHonesty, six-section
+      # render and PlatformRuntime test. Do not run the same seeded UI suite
+      # first: its persisted chats invalidate clean-install Home/history and
+      # displace menu recents. The early real React test still independently
+      # requires actual relaunch persistence, and all named full-suite gates
+      # remain mandatory. No booted-simulator-name assumption or test skips.
       - name: Test (XCTest unit tests on iOS simulator)
         run: |
           set -o pipefail
@@ -436,6 +359,37 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee ios/build/xcodebuild-test.log
 
+      - name: Independently verify actual XCTest source archive bytes
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 scripts/check_response_archive.py --self-test
+          DIR=ios/build/source-archive
+          mkdir -p "$DIR"
+          if ! xcrun xcresulttool export attachments \
+            --path ios/build/GSApp-tests.xcresult --output-path "$DIR/raw" > "$DIR/export.log" 2>&1; then
+            python3 -c 'from pathlib import Path; print("::error::Native source attachment export failed: " + Path("ios/build/source-archive/export.log").read_text().replace("%", "%25").replace("\n", "%0A"))'
+            exit 1
+          fi
+          python3 -u scripts/check_response_archive.py "$DIR/raw" 2>&1 | tee "$DIR/verification.log"
+
+      - name: Preserve native source archive byte evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-source-archive-${{ github.run_id }}
+          path: ios/build/source-archive
+          if-no-files-found: error
+
+      - name: Select actual complete-suite diagnostics, not stale early output
+        if: always()
+        run: |
+          if [ -s ios/build/xcodebuild-test.log ]; then
+            cp ios/build/xcodebuild-test.log ios/build/xcodebuild-genui-test.log
+          else
+            echo "No complete-suite log exists; preserve the original early-test evidence, not an inferred full-suite result."
+          fi
+
       - name: Require platform runtime tests to actually pass
         run: |
           python3 - <<'PYRUNTIME'
@@ -446,6 +400,8 @@ jobs:
               ('PlatformRuntimeUITests', 'testConversationActionsTapOpensRealOptionsWithoutLeavingChat'),
               ('CalcHonestyTests', 'testActualMessagePreviewIdentitySurvivesRehydrationWithoutInventingServerIDs'),
               ('CalcHonestyTests', 'testActualSQLiteHistoryAndOlderPagesKeepDurablePreviewIdentity'),
+              ('CalcHonestyTests', 'testActualSQLiteLegacyImportKeepsActualRowsAndCannotReviveClearedHistoryOnReopen'),
+              ('CalcHonestyTests', 'testNativeJSONDelimiterRecoveryPreservesActualSourceBytesAndQuotedPunctuation'),
               ('CalcHonestyTests', 'testActualSQLiteDelayedBootstrapKeepsNewerRenamePinArchiveAndSourceBytes'),
               ('CalcHonestyTests', 'testActualSQLiteDelayedBootstrapCannotResurrectDeletedConversationOrMessages'),
               ('CalcHonestyTests', 'testActualSQLiteDelayedBootstrapCannotUndoClearHistoryOrDropPostClearAnswer'),
