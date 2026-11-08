@@ -1903,8 +1903,10 @@ export function MessageContent({
   citations?: Citation[]
 }) {
   const contentRef = useRef<HTMLDivElement>(null)
-  const [actionNotice, setActionNotice] = useState<{ text: string; error?: boolean } | null>(null)
-  const [detailView, setDetailView] = useState<'report' | 'sources' | null>(null)
+  const [actionNotice, setActionNotice] = useState<{ response: string; text: string; error?: boolean } | null>(null)
+  const [detailState, setDetailState] = useState<{ response: string; kind: 'report' | 'sources' } | null>(null)
+  const detailView = detailState?.response === text ? detailState.kind : null
+  const setDetailView = (kind: 'report' | 'sources' | null) => setDetailState(kind ? { response: text, kind } : null)
   const citationText = (citations ?? []).map(c => `[${c.ordinal}] ${c.title} — ${c.url}`).join('\n')
   const performAction = async (label: string) => {
     setActionNotice(null)
@@ -1915,7 +1917,7 @@ export function MessageContent({
           else {
             if (!navigator.clipboard?.writeText) throw new Error('Sharing and clipboard access are unavailable in this browser.')
             await navigator.clipboard.writeText(text)
-            setActionNotice({ text: 'Sharing is unavailable in this browser. Response copied; paste it where you want to share.' })
+            setActionNotice({ response: text, text: 'Sharing is unavailable in this browser. Response copied; paste it where you want to share.' })
           }
           return
         case 'Copy Citations': {
@@ -1925,18 +1927,18 @@ export function MessageContent({
           if (!sources) throw new Error('No citation URLs are available to copy.')
           if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable in this browser.')
           await navigator.clipboard.writeText(sources)
-          setActionNotice({ text: 'Citations copied.' })
+          setActionNotice({ response: text, text: 'Citations copied.' })
           return
         }
         case 'Download Report':
           downloadResponseFile('gs-ai-response.md', text + (citationText ? '\n\n## Sources\n' + citationText : ''), 'text/markdown;charset=utf-8')
-          setActionNotice({ text: 'Response report exported as Markdown, including its original data.' })
+          setActionNotice({ response: text, text: 'Response report exported as Markdown, including its original data.' })
           return
         case 'Download Project': {
           const blocks = Array.from(contentRef.current?.querySelectorAll<HTMLElement>('[data-code-block]') ?? [])
           const files = blocks.map((block, index) => responseSourceFile(block.dataset.codeSource ?? '', block.dataset.codeLanguage, index))
           downloadResponseFile('gs-ai-source-snippets.zip', responseSourceArchive(files), 'application/zip')
-          setActionNotice({ text: 'Source snippets exported, including valid edits. This is not a complete runnable project; see README.txt.' })
+          setActionNotice({ response: text, text: 'Source snippets exported, including valid edits. This is not a complete runnable project; see README.txt.' })
           return
         }
         case 'Edit Code': {
@@ -1955,7 +1957,7 @@ export function MessageContent({
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return // User cancelled the native share sheet.
-      setActionNotice({ text: error instanceof Error ? error.message : 'The action failed. Please try again.', error: true })
+      setActionNotice({ response: text, text: error instanceof Error ? error.message : 'The action failed. Please try again.', error: true })
     }
   }
   const segments = useMemo(() => parseStream(sanitizeReplyEmojis(text)), [text])
@@ -1998,7 +2000,7 @@ export function MessageContent({
       })}
       {concepts.length >= 3 && <SpontaneousConceptDeck key={text} concepts={concepts} dark={dark} />}
       {citations && citations.length > 0 && <CitationsSourceCards citations={citations} theme={theme} />}
-      {actionNotice && <div role={actionNotice.error ? 'alert' : 'status'}>{actionNotice.text}</div>}
+      {actionNotice?.response === text && <div role={actionNotice.error ? 'alert' : 'status'}>{actionNotice.text}</div>}
       {detailView && (
         <section role="region" aria-label={detailView === 'sources' ? 'All sources' : 'Response report'} style={{ padding: 16, border: `1px solid ${theme.border}`, borderRadius: 16 }}>
           <button type="button" onClick={() => setDetailView(null)}>Close details</button>
