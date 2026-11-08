@@ -118,7 +118,7 @@ private final class ResponseSystemControllerHostIOS: UIViewController {
         systemController = controller
         super.init(nibName: nil, bundle: nil)
     }
-    required init?(coder: NSCoder) { nil }
+    required init?(coder: NSCoder) { return nil }
     override func viewDidLoad() { super.viewDidLoad(); view.backgroundColor = .clear }
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
