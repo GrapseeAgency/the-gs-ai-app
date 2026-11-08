@@ -3381,80 +3381,117 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
         if (showChart && chart != null) {
             WidgetView(Widget.Chart(chart))
         } else {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.White.copy(alpha = 0.72f))
-                .border(1.dp, outline.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-        ) {
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val naturalTotal = naturalWidths.fold(0.dp) { total, width -> total + width }
-                val fits = naturalTotal <= maxWidth
-                val extra = if (fits) (maxWidth - naturalTotal) / columns else 0.dp
-                val widths = naturalWidths.map { it + extra }
-                val tableWidth = widths.fold(0.dp) { total, width -> total + width }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.72f))
+                    .border(1.dp, outline.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+            ) {
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val naturalTotal = naturalWidths.fold(0.dp) { total, width -> total + width }
+                    val fits = naturalTotal <= maxWidth
+                    val extra = if (fits) (maxWidth - naturalTotal) / columns else 0.dp
+                    val widths = naturalWidths.map { it + extra }
+                    val tableWidth = widths.fold(0.dp) { total, width -> total + width }
 
-                val tableHeader: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
-                    headers.forEachIndexed { c, header ->
-                        val sorted = sortCol == c
-                        val cleanHeaderText = NexlyIcons.cleanPlainText(header.text).ifEmpty { "Column ${c + 1}" }
-                        val hLabel = if (sorted) {
-                            AnnotatedString("$cleanHeaderText ${if (sortAsc) "↑" else "↓"}")
-                        } else AnnotatedString(cleanHeaderText)
-                        Box(
-                            modifier = Modifier.clickable {
-                                if (sortCol == c) sortAsc = !sortAsc else {
-                                    sortCol = c
-                                    sortAsc = true
+                    val tableHeader: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+                        headers.forEachIndexed { c, header ->
+                            val sorted = sortCol == c
+                            val cleanHeaderText = NexlyIcons.cleanPlainText(header.text).ifEmpty { "Column ${c + 1}" }
+                            val hLabel = if (sorted) {
+                                AnnotatedString("$cleanHeaderText ${if (sortAsc) "↑" else "↓"}")
+                            } else AnnotatedString(cleanHeaderText)
+                            Box(
+                                modifier = Modifier.clickable {
+                                    if (sortCol == c) sortAsc = !sortAsc else {
+                                        sortCol = c
+                                        sortAsc = true
+                                    }
+                                    page = 0
                                 }
-                                page = 0
-                            }
-                        ) {
-                            Row {
-                                TableCell(
-                                    text = hLabel,
-                                    width = widths[c],
-                                    align = block.aligns.getOrElse(c) { TableAlign.LEFT },
-                                    emphasize = true
-                                )
+                            ) {
+                                Row {
+                                    TableCell(
+                                        text = hLabel,
+                                        width = widths[c],
+                                        align = block.aligns.getOrElse(c) { TableAlign.LEFT },
+                                        emphasize = true
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                if (fits) {
-                    Column {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFFEDE6FF)),
-                            content = tableHeader
-                        )
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(outline.copy(alpha = 0.35f))
-                        )
-                        SelectionContainer {
-                            Column {
-                                rows.forEachIndexed { r, row ->
-                                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                        (0 until columns).forEach { c ->
-                                            TableCell(
-                                                text = row.getOrElse(c) { AnnotatedString("") },
-                                                width = widths[c],
-                                                align = block.aligns.getOrElse(c) { TableAlign.LEFT },
-                                                emphasize = false,
-                                                isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
+                    if (fits) {
+                        Column {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFFEDE6FF)),
+                                content = tableHeader
+                            )
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(outline.copy(alpha = 0.35f))
+                            )
+                            SelectionContainer {
+                                Column {
+                                    rows.forEachIndexed { r, row ->
+                                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                            (0 until columns).forEach { c ->
+                                                TableCell(
+                                                    text = row.getOrElse(c) { AnnotatedString("") },
+                                                    width = widths[c],
+                                                    align = block.aligns.getOrElse(c) { TableAlign.LEFT },
+                                                    emphasize = false,
+                                                    isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
+                                                )
+                                            }
+                                        }
+                                        if (r != rows.lastIndex) {
+                                            Box(
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .height(1.dp)
+                                                    .background(outline.copy(alpha = 0.2f))
                                             )
                                         }
                                     }
-                                    if (r != rows.lastIndex) {
+                                }
+                            }
+                        }
+                    } else {
+                        Column(Modifier.horizontalScroll(rememberScrollState())) {
+                            Row(
+                                modifier = Modifier.background(Color(0xFFEDE6FF)),
+                                content = tableHeader
+                            )
+                            Box(
+                                Modifier
+                                    .width(tableWidth)
+                                    .height(1.dp)
+                                    .background(outline.copy(alpha = 0.35f))
+                            )
+                            SelectionContainer {
+                                Column {
+                                    rows.forEach { row ->
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            (0 until columns).forEach { c ->
+                                                TableCell(
+                                                    text = row.getOrElse(c) { AnnotatedString("") },
+                                                    width = widths[c],
+                                                    align = block.aligns.getOrElse(c) { TableAlign.LEFT },
+                                                    emphasize = false,
+                                                    isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
+                                                )
+                                            }
+                                        }
                                         Box(
                                             Modifier
-                                                .fillMaxWidth()
+                                                .width(tableWidth)
                                                 .height(1.dp)
                                                 .background(outline.copy(alpha = 0.2f))
                                         )
@@ -3463,131 +3500,94 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
                             }
                         }
                     }
-                } else {
-                    Column(Modifier.horizontalScroll(rememberScrollState())) {
+                }
+
+                if (sortedRows.size >= 4) {
+                    val startRow = safePage * effectivePageSize + 1
+                    val endRow = minOf(sortedRows.size, (safePage + 1) * effectivePageSize)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFF6F2FF))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Row(
-                            modifier = Modifier.background(Color(0xFFEDE6FF)),
-                            content = tableHeader
-                        )
-                        Box(
-                            Modifier
-                                .width(tableWidth)
-                                .height(1.dp)
-                                .background(outline.copy(alpha = 0.35f))
-                        )
-                        SelectionContainer {
-                            Column {
-                                rows.forEach { row ->
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        (0 until columns).forEach { c ->
-                                            TableCell(
-                                                text = row.getOrElse(c) { AnnotatedString("") },
-                                                width = widths[c],
-                                                align = block.aligns.getOrElse(c) { TableAlign.LEFT },
-                                                emphasize = false,
-                                                isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
-                                            )
-                                        }
-                                    }
-                                    Box(
-                                        Modifier
-                                            .width(tableWidth)
-                                            .height(1.dp)
-                                            .background(outline.copy(alpha = 0.2f))
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "‹",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable(enabled = safePage > 0) { page = (safePage - 1).coerceAtLeast(0) }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                            (0 until totalPages).forEach { p ->
+                                val active = p == safePage
+                                Box(
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .clip(CircleShape)
+                                        .background(if (active) Color(0xFF6C4CF6) else Color.Transparent)
+                                        .clickable { page = p },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = (p + 1).toString(),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
-                        }
-                    }
-                }
-            }
-
-            if (sortedRows.size >= 4) {
-                val startRow = safePage * effectivePageSize + 1
-                val endRow = minOf(sortedRows.size, (safePage + 1) * effectivePageSize)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFFF6F2FF))
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "‹",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .clickable(enabled = safePage > 0) { page = (safePage - 1).coerceAtLeast(0) }
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                        (0 until totalPages).forEach { p ->
-                            val active = p == safePage
-                            Box(
+                            Text(
+                                text = "›",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier
-                                    .size(22.dp)
                                     .clip(CircleShape)
-                                    .background(if (active) Color(0xFF6C4CF6) else Color.Transparent)
-                                    .clickable { page = p },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = (p + 1).toString(),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                                    .clickable(enabled = safePage < totalPages - 1) { page = (safePage + 1).coerceAtMost(totalPages - 1) }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                            Text(
+                                text = "$startRow–$endRow of ${sortedRows.size}",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
                         }
-                        Text(
-                            text = "›",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Box(
                             modifier = Modifier
-                                .clip(CircleShape)
-                                .clickable(enabled = safePage < totalPages - 1) { page = (safePage + 1).coerceAtMost(totalPages - 1) }
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                        Text(
-                            text = "$startRow–$endRow of ${sortedRows.size}",
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 4.dp)
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(Color.White.copy(alpha = 0.85f))
-                            .border(1.dp, outline.copy(alpha = 0.35f), RoundedCornerShape(7.dp))
-                            .clickable {
-                                pageSize = when (pageSize) {
-                                    3 -> 5
-                                    5 -> 10
-                                    10 -> -1
-                                    else -> 3
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(Color.White.copy(alpha = 0.85f))
+                                .border(1.dp, outline.copy(alpha = 0.35f), RoundedCornerShape(7.dp))
+                                .clickable {
+                                    pageSize = when (pageSize) {
+                                        3 -> 5
+                                        5 -> 10
+                                        10 -> -1
+                                        else -> 3
+                                    }
+                                    page = 0
                                 }
-                                page = 0
-                            }
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = "Show: ${if (pageSize == -1) "All" else pageSize.toString()} ▾",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "Show: ${if (pageSize == -1) "All" else pageSize.toString()} ▾",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }
-        }
         }
     }
 }
