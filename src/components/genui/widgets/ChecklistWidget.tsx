@@ -12,6 +12,10 @@ import { NexlyRichText } from '@/components/nexly/NexlyRichText'
 /** Real local task state, not a static checklist illustration. No fabricated
  * dates/priorities and no claimed sync: tasks live in this mounted widget. */
 export function ChecklistWidget({ payload }: { payload: ChecklistPayload }) {
+  return <ChecklistState key={JSON.stringify({ title: payload.title, items: payload.items })} payload={payload} />
+}
+
+function ChecklistState({ payload }: { payload: ChecklistPayload }) {
   const { accent, theme } = useWidgetIdentity()
   const [items, setItems] = useState(() => (payload.items ?? []).map((i) => ({ ...i })))
   const [draft, setDraft] = useState('')
