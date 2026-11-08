@@ -68,6 +68,30 @@ final class CalcHonestyTests: XCTestCase {
     }
 
     @MainActor
+    func testActualSQLiteLegacyImportKeepsActualRowsAndCannotReviveClearedHistoryOnReopen() throws {
+        let fixture = try actualSQLiteBootstrapFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        struct ActualLegacySnapshot: Encodable {
+            let conversations: [StoredConversation]
+            let messages: [StoredMessage]
+        }
+        let legacyURL = fixture.directory.appendingPathComponent("actual-legacy.json")
+        let data = try JSONEncoder().encode(ActualLegacySnapshot(conversations: fixture.conversations, messages: fixture.messages))
+        try data.write(to: legacyURL)
+        let databaseURL = fixture.directory.appendingPathComponent("imported.sqlite")
+        let imported = SQLiteChatStore(databaseURL: databaseURL, legacyURL: legacyURL)
+        XCTAssertTrue(imported.isAvailable)
+        XCTAssertEqual(imported.loadConversations(), fixture.conversations)
+        XCTAssertEqual(imported.loadMessages(), fixture.messages)
+        imported.deleteAllContent()
+        let reopened = SQLiteChatStore(databaseURL: databaseURL, legacyURL: legacyURL)
+        XCTAssertTrue(reopened.isAvailable)
+        XCTAssertTrue(reopened.loadConversations().isEmpty)
+        XCTAssertTrue(reopened.loadMessages().isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: legacyURL.path), "The unchanged legacy fixture still exists; the genuine migration marker, not missing input, prevents resurrection")
+    }
+
+    @MainActor
     func testActualSQLiteDelayedBootstrapKeepsNewerRenamePinArchiveAndSourceBytes() throws {
         let fixture = try actualSQLiteBootstrapFixture()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
