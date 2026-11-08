@@ -90,7 +90,7 @@ struct PlatformRuntimeProbe: View {
                 if ordinaryChecklist { Button("Replace ordinary tasks") { nextOrdinaryChecklist = true } }
                 ScrollView {
                     if ordinaryChecklist {
-                        BlocksView(blocks: parseBlocks(nextOrdinaryChecklist ? "## Next actions\n- [ ] Replacement source" : "## Next actions\n- [ ] Original task\n  Supplied source detail\n- [x] Keep completed")).padding()
+                        BlocksView(blocks: parseBlocks(nextOrdinaryChecklist ? "## Next actions\n- [ ] Replacement source" : "## Next actions\n- [ ] Original task\n  Supplied source detail\n  - Supplied nested detail\n- [x] Keep completed")).padding()
                     } else {
                     WidgetBlockView(kind: appChecklist ? "app" : "checklist", json: appChecklist
                         ? #"{"type":"tasks","title":"App tasks","items":[{"title":"App first","subtitle":"Supplied app detail","done":true},{"title":"App second"}]}"#
