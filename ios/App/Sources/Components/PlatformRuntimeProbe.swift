@@ -11,6 +11,7 @@ struct PlatformRuntimeProbe: View {
     @State private var status = "idle"
     @State private var showChecklist = false
     @State private var nextChecklist = false
+    @State private var appChecklist = false
     @State private var showCalculator = false
     @State private var showTable = false
     @State private var showChart = false
@@ -41,9 +42,12 @@ struct PlatformRuntimeProbe: View {
         }
         .sheet(isPresented: $showChecklist) {
             VStack {
+                Button("Use app task surface") { appChecklist = true }
                 Button("Use next checklist payload") { nextChecklist = true }
                 ScrollView {
-                    WidgetBlockView(kind: "checklist", json: nextChecklist
+                    WidgetBlockView(kind: appChecklist ? "app" : "checklist", json: appChecklist
+                        ? #"{"type":"tasks","title":"App tasks","items":[{"title":"App first","subtitle":"Supplied app detail","done":true},{"title":"App second"}]}"#
+                        : nextChecklist
                         ? #"{"title":"New tasks","items":[{"label":"New supplied task"}]}"#
                         : #"{"title":"Actual tasks","items":[{"label":"Original source","detail":"Only supplied detail"},{"label":"Keep source"}]}"#, open: false).padding()
                 }
