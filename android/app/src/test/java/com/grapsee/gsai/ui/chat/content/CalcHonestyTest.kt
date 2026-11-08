@@ -5,6 +5,15 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun chartLabelsUseActualCurrencyPositionSignedMagnitudeAndUnits() {
+        assertEquals("$321.9K", axisLabel(321900f, "$"))
+        assertEquals("-$78.4K", axisLabel(-78400f, "$"))
+        assertEquals("1.2K kg", axisLabel(1200f, "kg"))
+        assertEquals("12.5%", axisLabel(12.5f, "%"))
+        assertEquals("৳1.2K", axisLabel(1200f, "৳"))
+        assertEquals("Undefined", axisLabel(Float.POSITIVE_INFINITY, "$"))
+    }
+
     @Test fun sharedChoicesRefuseInventedLabelsAndKeepActualFractionalStarts() {
         val counter = parseWidget("collab", """{"surface":"counter","room":"actual-source","start":12.5}""") as Widget.Collab
         assertEquals(12.5, counter.w.start, 0.0)
