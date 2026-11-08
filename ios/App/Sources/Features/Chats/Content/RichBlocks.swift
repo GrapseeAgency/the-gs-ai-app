@@ -3205,7 +3205,7 @@ struct CodeBlockCardView: View {
             guard let data = src.data(using: .utf8) else { return }
             do {
                 let obj = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
-                let pretty = try JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys])
+                let pretty = try JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys, .fragmentsAllowed])
                 runOutput = String(data: pretty, encoding: .utf8)
             } catch {
                 errorOutput = error.localizedDescription
