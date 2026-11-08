@@ -297,7 +297,10 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
        let ym = yrx.firstMatch(in: bodyText, range: NSRange(bodyText.startIndex..., in: bodyText)),
        let yr = Range(ym.range(at: 1), in: bodyText),
        let y = Int(bodyText[yr]) {
-        yearsVal = min(max(1, y), 40)
+        // The compact horizon control supports 1...40 years. Never silently
+        // turn a supplied 0- or 99-year scenario into a different loan.
+        if needsTerm && !(1...40).contains(y) { return nil }
+        yearsVal = y
     }
 
     guard let amt = currAmount, let rate = pctVal else { return nil }
@@ -363,7 +366,7 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
             currency: currency.isEmpty ? "$" : currency
         )
     }
-    if combined.contains("tax") || combined.contains("tip") || combined.contains("markup") || combined.contains("margin") || combined.contains("growth") || combined.contains("increase") {
+    if combined.contains("tax") || combined.contains("vat") || combined.contains("tip") || combined.contains("markup") || combined.contains("margin") || combined.contains("growth") || combined.contains("increase") {
         return NexlyCalculatorSpec(
             title: cleanTitle.isEmpty ? "Quick Calculator" : cleanTitle,
             amountLabel: "Base",
