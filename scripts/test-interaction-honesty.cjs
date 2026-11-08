@@ -419,6 +419,23 @@ async function main() {
   await mount(h(CodeBlock, { language: 'sql', code: 'SELECT * FROM private_accounts' }))
   await click(buttons().find((b) => b.textContent.includes('Run Code')))
   check('SQL button never fabricates a result', () => { assert.match(document.body.textContent, /no database is connected/); assert.doesNotMatch(document.body.textContent, /Ava Chen|3 rows returned/) })
+  for (const language of ['python', 'typescript', 'jsx']) {
+    await mount(h(CodeBlock, { language, code: language === 'python' ? 'print(6*7)' : 'const value: number = 42' }))
+    await click(buttons().find(b => b.textContent.includes('Run')))
+    check(language + ' Run refuses unsupported execution without a simulated result', () => {
+      assert.match(document.body.textContent, /Not executed/)
+      assert.doesNotMatch(document.body.textContent, /Arithmetic preview/)
+      assert.equal(document.querySelectorAll('iframe').length, 0)
+    })
+  }
+  for (const source of ["{'x':1}", '{x:1}', '{"x":1,}', '[1,]', '{} false', '01', 'NaN', '"raw\nnewline"', '"bad\\x"', '\u00a0{}']) {
+    await mount(h(CodeBlock, { language: 'json', code: source }))
+    await click(buttons().find(b => b.textContent.includes('Validate JSON')))
+    check('JSON validation rejects malformed actual source: ' + JSON.stringify(source), () => {
+      assert.ok(document.querySelector('[role="alert"]'))
+      assert.equal(document.querySelectorAll('iframe').length, 0)
+    })
+  }
   await act(async () => root.unmount())
   console.log(`\n${checks} interaction-honesty checks passed`)
 }
