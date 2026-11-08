@@ -315,7 +315,7 @@ final class CalcHonestyTests: XCTestCase {
     @MainActor
     func testGeneratedHtmlExecutesAndCleansDynamicEmojiInProductionWebView() async throws {
         XCTAssertNotNil(DOMDisplayPolicyIOS.script, "The shared policy must be packaged in the actual app bundle")
-        let source = #"<button id="run" title="Increase &#x1F600;">Increase &#x1F600;</button><output id="result">0</output><svg data-custom-glass="true"><path d="M0 0L8 8"/></svg><script>window.marker=String.fromCodePoint(0x1F600);window.count=0;document.getElementById('run').onclick=function(){window.count++;document.getElementById('result').textContent=window.count+window.marker;};</script>"#
+        let source = #"<button id="run" title="Increase &#x1F600;">Increase &#x1F600;</button><output id="result">0</output><svg data-custom-glass="true"><path d="M0 0L8 8"/></svg><script>window.marker=String.fromCodePoint(0x1F600);window.count=0;document.getElementById('run').onclick=function(){window.count++;document.getElementById('result').textContent=window.count+window.marker;};window.closedRoot=document.body.appendChild(document.createElement('div')).attachShadow({mode:'closed'});closedRoot.innerHTML='<button>Shadow &#x1F600;</button><output>0</output>';window.shadowCount=0;closedRoot.querySelector('button').onclick=function(){shadowCount++;closedRoot.querySelector('output').textContent=shadowCount+marker;};var canvas=document.body.appendChild(document.createElement('canvas'));canvas.id='emoji-canvas';canvas.width=100;canvas.height=40;var ctx=canvas.getContext('2d');ctx.font='28px sans-serif';ctx.fillText(marker,0,30);ctx.strokeText(marker,40,30);</script>"#
         let host = UIHostingController(rootView: HtmlBlockView(kind: "html", source: source, open: false))
         let oldKeyWindow = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
             .flatMap { $0.windows }.first { $0.isKeyWindow }
@@ -352,6 +352,15 @@ final class CalcHonestyTests: XCTestCase {
         XCTAssertEqual(afterClick as? Bool, true)
         let marker = try await web.evaluateJavaScript("window.marker.codePointAt(0)")
         XCTAssertEqual((marker as? NSNumber)?.intValue, 128512)
+        let shadow = try await web.evaluateJavaScript("window.closedRoot.querySelector('button').textContent === 'Shadow '")
+        XCTAssertEqual(shadow as? Bool, true)
+        _ = try await web.evaluateJavaScript("window.closedRoot.querySelector('button').click(); true")
+        let shadowClick = try await web.evaluateJavaScript("window.shadowCount === 1 && window.closedRoot.querySelector('output').textContent === '1'")
+        XCTAssertEqual(shadowClick as? Bool, true)
+        let canvasText = try await web.evaluateJavaScript("Array.from(document.getElementById('emoji-canvas').getContext('2d').getImageData(0,0,100,40).data).every(value=>value===0)")
+        XCTAssertEqual(canvasText as? Bool, true, "Actual canvas fillText/strokeText must not display emoji glyphs")
+        let canvasVector = try await web.evaluateJavaScript("(function(){const ctx=document.getElementById('emoji-canvas').getContext('2d');ctx.fillRect(0,0,4,4);return ctx.getImageData(0,0,1,1).data[3]===255;})()")
+        XCTAssertEqual(canvasVector as? Bool, true, "The display policy must not disable actual canvas rendering")
         let vector = try await web.evaluateJavaScript("!!document.querySelector('svg[data-custom-glass] path')")
         XCTAssertEqual(vector as? Bool, true)
     }
