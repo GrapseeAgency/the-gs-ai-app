@@ -2011,7 +2011,7 @@ private fun ChatTopIconButton(
         Icon(
             icon,
             contentDescription = null,
-            tint = GsTheme.colors.textPrimary,
+            tint = NexlyInk.header,
             modifier = Modifier.size(19.dp)
         )
     }
