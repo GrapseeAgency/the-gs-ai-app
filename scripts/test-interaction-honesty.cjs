@@ -169,6 +169,15 @@ async function main() {
     const code = parseStream(compiled.text).find(segment => segment.kind === 'code')
     assert.equal(code.code, source)
   })
+  check('invalid or overflowing checklist tasks are refused without loss or unrelated widget healing', () => {
+    for (const items of [[{label:'Actual'}, {alien:42}], Array.from({length:31}, (_,i)=>({label:`Task ${i}`}))]) {
+      const source = JSON.stringify({items})
+      assert.equal(validateWidget('checklist', source).ok, false)
+      const compiled = compileWidgets({reply:'```checklist\n' + source + '\n```', userPrompt:'my actual checklist'})
+      assert.equal(compiled.widgets, 0)
+      assert.ok(compiled.text.includes(source))
+    }
+  })
   check('whole non-widget JSON renders exact source without interpreting machine strings as Markdown', () => {
     for (const source of ['{}','[]','[1,2,3]','[{"literal":"**bold** :rocket: 😀"}]',' \r\n{"literal":"**bold** :rocket: 😀","nested":{"x":true}}\r\n ']) {
       const segments = parseStream(source)
