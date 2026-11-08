@@ -52,7 +52,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            cd android && bash -o pipefail -c 'gradle :app:testDebugUnitTest --tests com.grapsee.gsai.ui.chat.content.CalcHonestyTest :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.grapsee.gsai.PlatformRuntimeTest --no-daemon --stacktrace 2>&1 | tee ../platform-runtime.log'
+            cd android && bash -o pipefail -c 'gradle :app:testDebugUnitTest --tests com.grapsee.gsai.ui.chat.content.CalcHonestyTest --tests com.grapsee.gsai.ui.chat.content.ContentBlocksTest :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.grapsee.gsai.PlatformRuntimeTest --no-daemon --stacktrace 2>&1 | tee ../platform-runtime.log'
       - name: Require every runtime test (no skipped or empty reports)
         if: always()
         run: |
