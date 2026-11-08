@@ -1,6 +1,6 @@
 'use client'
 
-import { parseTableNumber } from '@/lib/nexly/table-number'
+import { parseTableNumber, chartFromTableCells } from '@/lib/nexly/table-number'
 import { escapeCodeDisplay } from '@/lib/code/display-source'
 import { downloadResponseFile, responseSourceArchive, responseSourceFile } from '@/lib/code/response-export'
 
@@ -875,6 +875,8 @@ function ProseTableGrid({
   const [page, setPage] = useState<number>(0)
   const [sortCol, setSortCol] = useState<number | null>(null)
   const [sortAsc, setSortAsc] = useState<boolean>(true)
+  const [showChart, setShowChart] = useState(false)
+  const chart = useMemo(() => chartFromTableCells(block.headers, block.rows), [block.headers, block.rows])
 
   const sortedRows = useMemo(() => {
     if (sortCol === null) return block.rows
@@ -933,7 +935,15 @@ function ProseTableGrid({
   }
 
   return (
-    <div
+    <>
+      {chart && <div role="group" aria-label="Data view" style={{display:'flex', gap:4, marginBottom:6}}>
+        {[false, true].map(isChart => <button key={String(isChart)} type="button" aria-pressed={showChart === isChart}
+          onClick={() => setShowChart(isChart)}
+          style={{border:0, borderRadius:999, padding:'4px 10px', fontSize:11, fontWeight:700, cursor:'pointer', background:showChart === isChart ? accent : 'rgba(124,92,252,0.10)', color:showChart === isChart ? '#fff' : theme.text}}>
+          {isChart ? 'Chart' : 'Table'}
+        </button>)}
+      </div>}
+      {showChart && chart ? <WidgetRenderer kind="chart" payload={chart} dark={theme.dark} /> : <div
       style={{
         overflowX: 'auto',
         borderRadius: 14,
@@ -1085,7 +1095,8 @@ function ProseTableGrid({
           </button>
         </div>
       )}
-    </div>
+    </div>}
+    </>
   )
 }
 
