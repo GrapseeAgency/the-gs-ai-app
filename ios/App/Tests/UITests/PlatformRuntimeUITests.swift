@@ -55,6 +55,51 @@ final class PlatformRuntimeUITests: XCTestCase {
         capture.name = "genui-react-actual-task-crud-storage-isolation"; capture.lifetime = .keepAlways; add(capture)
     }
 
+    func testOrdinaryMarkdownTaskControlsPreserveRealDetailsAndCompletion() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated checklist"].waitForExistence(timeout: 20))
+        app.buttons["Open generated checklist"].tap()
+        app.buttons["Use ordinary Markdown tasks"].tap()
+        XCTAssertTrue(app.staticTexts["1/2 completed"].waitForExistence(timeout: 10))
+        func toggle(_ text: String) {
+            let button = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", text)).firstMatch
+            XCTAssertTrue(button.waitForExistence(timeout: 5)); button.tap()
+        }
+        func edit(_ text: String) {
+            let input = app.textFields["prose.task.input"]
+            XCTAssertTrue(input.waitForExistence(timeout: 5))
+            let current = input.value as? String ?? ""
+            input.tap(); input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count) + text + "\n")
+        }
+        func add(_ text: String) {
+            app.buttons["Add Task"].tap()
+            XCTAssertFalse(app.buttons["Add"].isEnabled)
+            edit(text)
+        }
+        toggle("Original task")
+        XCTAssertTrue(app.staticTexts["2/2 completed"].exists)
+        app.buttons["Edit task: Original task"].tap(); edit("Edited source")
+        XCTAssertTrue(app.staticTexts["Supplied source detail"].exists)
+        XCTAssertTrue(app.staticTexts["2/2 completed"].exists)
+        app.buttons["Delete task: Keep completed"].tap()
+        XCTAssertTrue(app.staticTexts["1/1 completed"].exists)
+        add("First added task"); toggle("First added task")
+        add("Second added task")
+        app.buttons["Delete task: First added task"].tap()
+        XCTAssertTrue(app.staticTexts["1/2 completed"].exists, "Completion must remain with its actual task after another row is deleted")
+        app.buttons["Edit task: Second added task"].tap(); edit("Second edited")
+        XCTAssertTrue(app.staticTexts["1/2 completed"].exists)
+        toggle("Second edited")
+        XCTAssertTrue(app.staticTexts["2/2 completed"].exists)
+        app.buttons["Replace ordinary tasks"].tap()
+        XCTAssertTrue(app.staticTexts["0/1 completed"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Edit task: Edited source"].exists)
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-ordinary-markdown-actual-task-controls"; capture.lifetime = .keepAlways; add(capture)
+    }
+
     func testGeneratedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
