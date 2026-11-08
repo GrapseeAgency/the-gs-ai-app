@@ -75,9 +75,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: ios-${{ github.ref }}
-  # Finish the running native audit; newer commits replace only the pending run.
-  # Per-file pushes must not repeatedly cancel Xcode before runtime evidence.
+  # The synchronous React runtime and inset-aware capture generation must not
+  # queue behind an obsolete runtime's long audit. Per-file pushes within this
+  # generation still replace only its pending run, never its active evidence.
+  group: ios-response-runtime-v2-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
