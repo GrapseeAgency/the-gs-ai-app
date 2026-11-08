@@ -1892,14 +1892,14 @@ private struct NexlyQuantitativeExplorerCardIOS: View {
     }
 }
 
-private struct SpontaneousConceptItemIOS {
+struct SpontaneousConceptItemIOS {
     let term: String
     let definition: String
     let icon: String
     let tone: NexlyGlassTone
 }
 
-private func extractSpontaneousConceptsFromBlocksIOS(_ blocks: [Block]) -> [SpontaneousConceptItemIOS] {
+func extractSpontaneousConceptsFromBlocksIOS(_ blocks: [Block]) -> [SpontaneousConceptItemIOS] {
     var out: [SpontaneousConceptItemIOS] = []
     var seen = Set<String>()
     let sepRx = try? NSRegularExpression(pattern: "^([^:—–-]{3,42})\\s*(?::|—|–|-)\\s*(.{14,})$")
@@ -1915,7 +1915,16 @@ private func extractSpontaneousConceptsFromBlocksIOS(_ blocks: [Block]) -> [Spon
         out.append(SpontaneousConceptItemIOS(term: term, definition: String(def.prefix(180)), icon: sem.icon, tone: sem.tone))
     }
 
+    var excludedSection = false
     for (idx, b) in blocks.enumerated() {
+        if case .heading(_, let spans, _) = b {
+            let title = NexlyIcons.cleanPlainText(plainTextOfSpans(spans))
+            let section = classifySectionListMode(title)
+            excludedSection = section == .sources || section == .todo || title.range(of: "\\b(?:references|bibliography|steps?|plan|instructions|procedure)\\b", options: [.regularExpression, .caseInsensitive]) != nil
+        }
+        // A useful learning interaction needs actual definitions, not a quiz
+        // fabricated from citation records or an action plan.
+        if excludedSection { continue }
         let rawItems: [ListItem]
         switch b {
         case .bulletList(let items, _):
