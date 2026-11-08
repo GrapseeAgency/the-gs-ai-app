@@ -318,6 +318,30 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
 }
 
 
+// Syntax repair may change delimiters, never the machine strings they enclose.
+{
+  const source = 'const text = ",} ,] True False None"; const quote = "\\\\\\\""; const smart = "“literal”";'
+  const original = { code: source, title: 'Keep “curly” and ‘single’ quotes', url: 'https://example.org/a//b', values: [1, 2] }
+  const valid = JSON.stringify(original)
+  check('repairJson leaves valid source JSON byte-identical', repairJson(valid) === valid)
+  for (const [name, raw] of [
+    ['trailing comma', valid.slice(0, -1) + ',}'],
+    ['missing root brace', valid.slice(0, -1)],
+    ['suffix prose with braces', valid + ' trailing explanation } ]'],
+    ['dialect beside machine source', '{code:' + JSON.stringify(source) + ', title:' + JSON.stringify(original.title) + ', enabled:True,}'],
+  ]) {
+    const repaired = repairJson(raw)
+    let parsed: Record<string, unknown> | null = null
+    try { parsed = repaired ? JSON.parse(repaired) : null } catch { /* Failed real repair is a failed assertion. */ }
+    check(name + ' preserves actual executable bytes and quoted punctuation', parsed?.code === source, String(repaired))
+    check(name + ' preserves supplied curly-quote text', parsed?.title === original.title, String(repaired))
+  }
+  const smart = repairJson('{“code”:' + JSON.stringify(source) + ',“title”:“Actual title”,}')
+  let smartParsed: Record<string, unknown> | null = null
+  try { smartParsed = smart ? JSON.parse(smart) : null } catch { /* Keep the failure visible. */ }
+  check('typographic structural quotes do not rewrite quotes inside real source', smartParsed?.code === source && smartParsed?.title === 'Actual title', String(smart))
+}
+
 // 22. Data placed at the top level instead of inside a series is still a chart.
 {
   const values = '{"type":"bar","labels":["Q1","Q2","Q3"],"values":[120,180,150]}'
