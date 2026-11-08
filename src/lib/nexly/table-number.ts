@@ -14,10 +14,21 @@ export function parseTableNumber(raw: unknown): number | null {
   return Number.isFinite(value) ? value : null
 }
 
+/** Flatten actual surrounding Markdown, never erase operators inside a cell. */
+export function plainTableCell(text: string): string {
+  let value = text.trim()
+  let previous = ''
+  while (previous !== value) {
+    previous = value
+    value = value.replace(/^(\*\*|__|~~|\*|_|`)([\s\S]*)\1$/, '$2').trim()
+  }
+  return value.replace(/:([a-z0-9][a-z0-9-]{1,42}):/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim()
+}
+
 /** A chart is offered only for a complete, compatible source column. */
 export function chartFromTableCells(headers: string[], rows: string[][]): Record<string, unknown> | null {
   if (headers.length < 2 || rows.length < 2) return null
-  const plain = (text: string) => text.replace(/[*_`~]/g, '').replace(/:([a-z0-9][a-z0-9-]{1,42}):/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim()
+  const plain = plainTableCell
   const ranked = headers.length >= 3 && ['#', 'rank', 'no', 'id'].includes(plain(headers[0]).toLowerCase())
   const labelColumn = ranked ? 1 : 0
   const labels = rows.map(row => plain(row[labelColumn] ?? ''))
