@@ -132,6 +132,49 @@ async function main() {
     assert.doesNotMatch(html, /\p{Extended_Pictographic}/u)
     assert.match(html, /nx-glyph/)
   })
+  const { validateWidget } = from('lib/widgets/validate')
+  const { compileWidgets } = from('lib/widgets/compile')
+  check('model pie payload retains every observation beyond the former series-expansion cap', () => {
+    const result = validateWidget('chart', JSON.stringify({ type: 'pie', labels: Array.from({length: 24}, (_, i) => 'P' + i), series: [{ name: 'Actual', data: Array.from({length: 24}, (_, i) => [i, i + 1]) }] }))
+    assert.equal(result.ok, true)
+    assert.equal(result.widget.series.reduce((count, series) => count + series.data.length, 0), 24)
+  })
+  check('model chart normalization never slides another dimension into a missing coordinate', () => {
+    for (const data of [[[0,null],[1,2]], [[0,1,null],[1,2,3]], [[0,1],{x:1,y:null}]]) {
+      assert.equal(validateWidget('chart', JSON.stringify({ type: 'line', series: [{ name: 'Actual', data }] })).ok, false)
+    }
+  })
+  check('model chart normalization preserves every real singleton series and blank category position', () => {
+    const result = validateWidget('chart', JSON.stringify({ type: 'line', labels: ['', 'B'], series: Array.from({length: 10}, (_, i) => ({ name: 'S' + i, data: [[0, i]] })) }))
+    assert.equal(result.ok, true); assert.equal(result.widget.series.length, 10)
+    assert.deepEqual(result.widget.labels, ['', 'B'])
+  })
+  check('missing named table cells never borrow an unrelated field by object position', () => {
+    const result = validateWidget('table', JSON.stringify({ columns: ['Name','Amount'], rows: [{ Name: 'Actual', Unrelated: 42 }] }))
+    assert.equal(result.ok, true); assert.deepEqual(result.widget.rows, [['Actual','']])
+  })
+  check('inferred table columns retain fields introduced after the first row', () => {
+    const result = validateWidget('table', JSON.stringify({ rows: [{ Name: 'Actual' }, { Amount: 42 }] }))
+    assert.equal(result.ok, true); assert.deepEqual(result.widget.columns, ['Name','Amount'])
+    assert.deepEqual(result.widget.rows, [['Actual',''],['','42']])
+  })
+  check('over-capacity model data is visibly refused with lossless source, never silently truncated', () => {
+    const data = { columns: ['Name','Amount'], rows: Array.from({length: 101}, (_, i) => ['Actual ' + (i+1), i+1]) }
+    const source = JSON.stringify(data)
+    assert.equal(validateWidget('table', source).ok, false)
+    const compiled = compileWidgets({ reply: '```table\n' + source + '\n```', userPrompt: 'Make a chart of this dataset' })
+    assert.equal(compiled.widgets, 0)
+    assert.match(compiled.text, /Original source is preserved/)
+    assert.ok(compiled.text.includes(source))
+    const code = parseStream(compiled.text).find(segment => segment.kind === 'code')
+    assert.equal(code.code, source)
+  })
+  check('answer widget overflow preserves its original source and announces the limit', () => {
+    const reply = Array.from({length: 13}, (_, i) => '```table\n' + JSON.stringify({ columns: ['Value'], rows: [[i + 1]] }) + '\n```').join('\n\n')
+    const result = compileWidgets({ reply, userPrompt: 'Show these tables' })
+    assert.equal(result.widgets, 12); assert.match(result.text, /exceeds this response’s widget limit/)
+    assert.ok(result.text.includes('[[13]]'))
+  })
   // Execute the EXACT generated worker source. This is runtime validation,
   // not matching a prewritten expected log from the source text.
   const doc = javascriptSandboxDocument('irrelevant')
