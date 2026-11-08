@@ -135,15 +135,23 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertFalse((editor.value as? String ?? "").contains("😀"))
         app.buttons["Done"].tap()
         app.buttons["Download Project"].tap()
-        let pickerCancel = app.buttons["Cancel"].firstMatch
+        // Modern Files remote UI may expose its action as Other rather than
+        // Button. Verify the real provider and actual cancellation callback,
+        // not one OS version's accessibility class spelling.
+        let pickerCancel = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Cancel")).firstMatch
         let shown = pickerCancel.waitForExistence(timeout: 15)
         if !shown { printPresentationDiagnostics(app, label: "EXPORT") }
         XCTAssertTrue(shown, "Export must present the real system document picker; notice=\(app.staticTexts["response.action.notice"].firstMatch.label); hierarchy=\(app.debugDescription.suffix(5000))")
         guard shown else { return }
-        XCTAssertGreaterThan(app.navigationBars.count, 0)
+        let provider = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@ OR label CONTAINS %@ OR label == %@", "On My iPhone", "iCloud Drive", "Browse")).firstMatch
+        XCTAssertTrue(provider.waitForExistence(timeout: 10), "Export must expose the actual system Files provider, not an app-owned Cancel label")
+        XCTAssertTrue(pickerCancel.isHittable, "The actual Files action must be usable")
         let capture = XCTAttachment(screenshot: app.screenshot())
         capture.name = "genui-contextual-real-source-export-picker"; capture.lifetime = .keepAlways; add(capture)
-        app.buttons["Cancel"].firstMatch.tap()
+        pickerCancel.tap()
+        let cancelled = app.staticTexts["response.action.notice"].firstMatch
+        XCTAssertTrue(cancelled.waitForExistence(timeout: 10))
+        XCTAssertEqual(cancelled.label, "Export cancelled.", "The actual document-picker delegate must acknowledge cancellation; no simulated save is allowed")
     }
 
     func testContextualReportShowsActualDataAndSharePresentsSystemActivitySheet() {
@@ -157,12 +165,20 @@ final class PlatformRuntimeUITests: XCTestCase {
         app.buttons["View Full Report"].tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Item 31")).firstMatch.waitForExistence(timeout: 10), "Report must include every supplied row, not just the visible page")
         app.buttons["Close details"].tap()
+        app.buttons["Prepare report share check"].tap()
         app.buttons["Share"].tap()
-        let shareShown = app.buttons["Copy"].firstMatch.waitForExistence(timeout: 15)
+        let copyAction = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Copy")).firstMatch
+        let shareShown = copyAction.waitForExistence(timeout: 15)
         if !shareShown { printPresentationDiagnostics(app, label: "SHARE") }
         XCTAssertTrue(shareShown, "Share must present the real activity sheet, not copy silently")
         let capture = XCTAttachment(screenshot: app.screenshot())
         capture.name = "genui-contextual-real-system-share-sheet"; capture.lifetime = .keepAlways; add(capture)
+        guard shareShown else { return }
+        XCTAssertTrue(copyAction.isHittable)
+        copyAction.tap()
+        XCTAssertTrue(app.buttons["Inspect shared report"].waitForExistence(timeout: 10))
+        app.buttons["Inspect shared report"].tap()
+        XCTAssertEqual(app.staticTexts["report.copy.inspection"].label, "Original complete report shared", "Real system Copy must replace the sentinel with all 31 actual source records")
     }
 
     func testGeneratedTerminalUsesRealFilesWorkerAndUnsupportedRefusal() {
