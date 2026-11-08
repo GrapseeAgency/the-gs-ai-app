@@ -3533,7 +3533,8 @@ func parseSortableNumberIOS(_ raw: String) -> Double? {
     let sign = outer.isEmpty ? inner : outer
     let down = arrow == "↓" || arrow == "↘"
     guard arrow.isEmpty || !((down && sign == "+") || (!down && sign == "-")) else { return nil }
-    let multiplier = ["k": 1e3, "m": 1e6, "b": 1e9, "t": 1e12][group(5).lowercased()] ?? 1
+    let multipliers: [String: Double] = ["k": 1e3, "m": 1e6, "b": 1e9, "t": 1e12]
+    let multiplier: Double = multipliers[group(5).lowercased()] ?? 1.0
     guard let base = Double(group(4).replacingOccurrences(of: ",", with: "")) else { return nil }
     let value = base * multiplier * (sign == "-" || down ? -1 : 1)
     return value.isFinite ? value : nil
