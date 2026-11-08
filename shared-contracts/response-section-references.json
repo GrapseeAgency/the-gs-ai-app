@@ -1,0 +1,49 @@
+{
+  "description": "Six supplied visual-reference coverage fixtures, with ordinary Markdown, real source data and explicit unsupported React coverage. Rendering these is necessary evidence, not a visual-fidelity or live-model acceptance verdict.",
+  "fixtures": [
+    {
+      "id": "01-dashboard",
+      "question": "Build me a project dashboard with analytics, top products, a todo list and a discount calculator. Use sample data.",
+      "wire": "# Project Dashboard\n\nSample data, not live analytics. Revenue below totals the seven supplied daily observations.\n\n```stat\n{\"items\":[{\"label\":\"Total Revenue\",\"value\":\"$45,242\"},{\"label\":\"Total Orders\",\"value\":\"1,842\"},{\"label\":\"Conversion Rate\",\"value\":\"4.8%\"},{\"label\":\"Active Users\",\"value\":\"12,491\"}]}\n```\n\n```chart\n{\"type\":\"line\",\"title\":\"Revenue Overview\",\"unit\":\"$\",\"labels\":[\"Apr 22\",\"Apr 23\",\"Apr 24\",\"Apr 25\",\"Apr 26\",\"Apr 27\",\"Apr 28\"],\"series\":[{\"name\":\"Revenue\",\"data\":[[0,3000],[1,6000],[2,4800],[3,7400],[4,6200],[5,8000],[6,9842]]}]}\n```\n\n```table\n{\"title\":\"Top Products\",\"columns\":[\"Product\",\"Sales\",\"Revenue\",\"Growth\"],\"rows\":[[\"Nexly Pro\",\"482\",\"$12,460\",\"18.4%\"],[\"Nexly Starter\",\"361\",\"$7,240\",\"12.1%\"],[\"Nexly Business\",\"284\",\"$5,930\",\"9.7%\"],[\"Nexly Enterprise\",\"126\",\"$3,120\",\"6.2%\"]]}\n```\n\n```checklist\n{\"title\":\"Your Todo List\",\"items\":[{\"label\":\"Review Q2 marketing strategy\",\"done\":true},{\"label\":\"Update product roadmap\",\"done\":true},{\"label\":\"Prepare investor deck\",\"date\":\"2026-04-28\"},{\"label\":\"Design new onboarding flow\",\"date\":\"2026-04-30\"}]}\n```\n\n```calc\n{\"type\":\"discount\",\"title\":\"Quick Calculator\",\"fields\":[{\"key\":\"amount\",\"label\":\"Amount\",\"value\":1200,\"unit\":\"$\"},{\"key\":\"discount\",\"label\":\"Discount\",\"value\":10,\"unit\":\"%\"}],\"outputs\":[{\"label\":\"Total\",\"expr\":\"amount*(1-discount/100)\",\"unit\":\"$\",\"format\":\"money\",\"primary\":true}]}\n```",
+      "widgetKinds": [
+        "stat",
+        "chart",
+        "table",
+        "checklist",
+        "calc"
+      ]
+    },
+    {
+      "id": "02-structured-launch",
+      "question": "Help me plan a successful product launch.",
+      "wire": "# Your Product Launch Plan\n\nA successful product launch is all about the right strategy, clear messaging and a well-executed plan. Here is a complete, easy-to-follow plan to get you started.\n\n## Quick summary\n\nFocus on clear positioning, targeted marketing and a smooth rollout.\n\n## Key priorities\n\n- Understand your audience and validate demand.\n- Create compelling messaging and build hype.\n- Plan a phased launch and measure results.\n\n## Important\n\nStart early, keep it simple, and focus on delivering real value to your users.\n\n## Step-by-step plan\n\n1. **Validate & Prepare** — Confirm your value proposition and audience fit.\n2. **Plan Your Launch** — Set goals, choose channels and prepare assets.\n3. **Execute** — Launch across your selected channels.\n4. **Analyze & Improve** — Track performance and iterate.\n\n## Next actions\n\n- [ ] Create a launch timeline\n- [ ] Prepare marketing content",
+      "widgetKinds": []
+    },
+    {
+      "id": "03-react-code",
+      "question": "Create a React and Tailwind task management app with full code.",
+      "wire": "# React + Tailwind Code\n\nThis source implements task add, edit, complete, delete, filtering and local storage. A source listing is not evidence that a React preview or persistence has run.\n\n```jsx\nimport React, { useEffect, useState } from 'react';\nexport default function TasksApp() {\n  const [tasks, setTasks] = useState(() => JSON.parse(localStorage.getItem('tasks') || '[]'));\n  const [title, setTitle] = useState('');\n  const [filter, setFilter] = useState('all');\n  useEffect(() => localStorage.setItem('tasks', JSON.stringify(tasks)), [tasks]);\n  const visible = tasks.filter(t => filter === 'all' || (filter === 'completed' ? t.done : !t.done));\n  return <main className=\"p-6 rounded-2xl bg-white\">\n    <h1>My Tasks</h1>\n    <form onSubmit={e => { e.preventDefault(); if (!title.trim()) return; setTasks([...tasks, {id:crypto.randomUUID(), title:title.trim(), done:false}]); setTitle(''); }}>\n      <input aria-label=\"New task\" value={title} onChange={e => setTitle(e.target.value)} />\n      <button>Add Task</button>\n    </form>\n    <select aria-label=\"Task filter\" value={filter} onChange={e => setFilter(e.target.value)}>\n      <option value=\"all\">All</option><option value=\"active\">Active</option><option value=\"completed\">Completed</option>\n    </select>\n    {visible.map(task => <article key={task.id}>\n      <input type=\"checkbox\" aria-label={task.title} checked={task.done} onChange={() => setTasks(tasks.map(t => t.id === task.id ? {...t, done:!t.done} : t))} />\n      <input aria-label={'Edit '+task.title} value={task.title} onChange={e => setTasks(tasks.map(t => t.id === task.id ? {...t,title:e.target.value} : t))} />\n      <button onClick={() => setTasks(tasks.filter(t => t.id !== task.id))}>Delete</button>\n    </article>)}\n  </main>;\n}\n```\n\n## Sources\n\n- [React Docs](https://react.dev/)\n- [Tailwind CSS](https://tailwindcss.com/)\n- [Local Storage MDN](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage)",
+      "widgetKinds": []
+    },
+    {
+      "id": "04-citations",
+      "question": "Show me sources about renewable energy and its future.",
+      "wire": "# Citations & References\n\nThese example links are supplied source records, not independently verified findings or a guarantee that a particular report exists.\n\n## Key Sources\n\n1. [IEA — Renewable Energy](https://www.iea.org/) — Energy data and reports.\n2. [IRENA — Renewable Energy](https://www.irena.org/) — Renewable energy publications.\n3. [Nature — Energy Research](https://www.nature.com/) — Research publisher.\n\n## References\n\n- IEA: the supplied renewable-energy source.\n- IRENA: the supplied renewable-energy source.\n- Nature: the supplied research publisher.\n\n## Quick Fact\n\nA source link and a domain category do not establish that its claims have been checked.",
+      "widgetKinds": []
+    },
+    {
+      "id": "05-data-grid",
+      "question": "Show these supplied programming-language popularity figures in a sortable, paginated grid.",
+      "wire": "# Top Programming Languages\n\nSupplied example figures, not a verified current TIOBE ranking.\n\n| # | Language | Popularity | Trend |\n|---|---|---|---|\n| 1 | Python | 26.98% | +0.62% |\n| 2 | Java | 17.12% | -0.03% |\n| 3 | C++ | 9.80% | +0.24% |\n| 4 | C | 8.77% | -0.10% |\n| 5 | JavaScript | 8.14% | +0.10% |\n| 6 | Go | 2.20% | +0.05% |\n| 7 | Rust | 1.50% | +0.04% |\n| 8 | Swift | 1.20% | -0.02% |\n| 9 | Kotlin | 1.10% | +0.01% |\n| 10 | Ruby | 0.90% | -0.01% |\n| 11 | Lua | 0.70% | +0.01% |\n\n## Key Insights\n\nPython has the largest popularity figure in this supplied dataset. The rows contain both positive and negative trends.",
+      "widgetKinds": []
+    },
+    {
+      "id": "06-interactive-charts",
+      "question": "Show me interactive charts for this supplied monthly sales data.",
+      "wire": "# Interactive Charts\n\nExplore the six actual monthly observations. Chart totals, tooltips and range insights must come from those observations, not from decorative KPI defaults.\n\n```chart\n{\"type\":\"line\",\"title\":\"Sales Performance\",\"unit\":\"$\",\"labels\":[\"Jan\",\"Feb\",\"Mar\",\"Apr\",\"May\",\"Jun\"],\"series\":[{\"name\":\"Sales Performance\",\"data\":[[0,22800],[1,34200],[2,50400],[3,75600],[4,60500],[5,78400]]}]}\n```",
+      "widgetKinds": [
+        "chart"
+      ]
+    }
+  ]
+}
