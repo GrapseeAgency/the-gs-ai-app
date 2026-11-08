@@ -450,6 +450,10 @@ jobs:
         if: failure()
         run: python3 scripts/publish_native_ui_pixels.py ios/build/xcodebuild-genui-test.log REACT
 
+      - name: Review actual system Share failure pixels
+        if: failure()
+        run: python3 scripts/publish_native_ui_pixels.py ios/build/xcodebuild-genui-test.log SHARE
+
       - name: Publish actual Files presentation and cancellation diagnostics
         if: failure()
         run: |
