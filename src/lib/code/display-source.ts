@@ -4,7 +4,8 @@
 export function escapeCodeDisplay(source: string): string {
   const displaySymbol = /\p{Emoji}|[\u200D\u20E3\uFE0E\uFE0F\u{E0020}-\u{E007F}]/u
   return Array.from(source, char => {
-    if (char.codePointAt(0)! <= 0x7f || !displaySymbol.test(char)) return char
+    const cp = char.codePointAt(0)!
+    if (cp <= 0x7f || (!displaySymbol.test(char) && !(cp >= 0x1f000 && cp <= 0x1faff))) return char
     return char.split('').map(unit => `\\u${unit.charCodeAt(0).toString(16).padStart(4, '0')}`).join('')
   }).join('')
 }
