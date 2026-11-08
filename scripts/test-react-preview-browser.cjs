@@ -88,6 +88,33 @@ async function main() {
   const isolation=await frame.evaluate(()=>{let parentDenied=false;try{parent.document.body}catch{parentDenied=true};return{parentDenied,origin:location.origin,sandbox:typeof window.Android,webkit:typeof window.webkit}})
   assert.equal(isolation.parentDenied,true);assert.equal(isolation.sandbox,'undefined');assert.equal(isolation.webkit,'undefined')
   check('The actual iframe has no parent DOM or native application bridge access',()=>{})
+  // Execute the actual six-reference answer's app, not only the small
+  // runtime contract: its own form, UUID creation and filters must really work.
+  const referenceWire=require('../shared-contracts/response-section-references.json').fixtures.find(f=>f.id==='03-react-code').wire
+  const referenceSource=referenceWire.match(/```jsx\n([\s\S]*?)```/)[1]
+  frame=await run(referenceSource,'reference-task-app','jsx');await running(frame)
+  async function addReferenceTask(title) { await frame.type('[aria-label="New task"]',title);await frame.click('form button');await frame.waitForFunction(title=>[...document.querySelectorAll('article input[type=checkbox]')].some(n=>n.getAttribute('aria-label')===title),{},title) }
+  await addReferenceTask('Reference completed');await addReferenceTask('Reference active')
+  await frame.click('input[aria-label="Reference completed"]')
+  await frame.select('[aria-label="Task filter"]','completed')
+  await frame.waitForFunction(()=>document.querySelectorAll('article').length===1 && document.querySelector('article input[type=checkbox]').checked)
+  assert.equal(await frame.$eval('article input[type=checkbox]',n=>n.getAttribute('aria-label')),'Reference completed')
+  check('The actual reference JSX app creates real UUID tasks and Completed filters genuine completed state',()=>{})
+  await frame.select('[aria-label="Task filter"]','active')
+  await frame.waitForFunction(()=>document.querySelectorAll('article').length===1 && document.querySelector('article input[type=checkbox]').getAttribute('aria-label')==='Reference active')
+  await frame.click('[aria-label="Edit Reference active"]',{clickCount:3});await frame.type('[aria-label="Edit Reference active"]','Reference edited')
+  await frame.waitForFunction(()=>JSON.parse(localStorage.getItem('tasks')).some(t=>t.title==='Reference edited' && !t.done))
+  check('The actual reference Active filter and editable task update real persisted source state',()=>{})
+  await frame.select('[aria-label="Task filter"]','all');await frame.waitForFunction(()=>document.querySelectorAll('article').length===2)
+  frame=await run(referenceSource,'reference-task-app','jsx');await running(frame)
+  assert.equal(await frame.$$eval('article',nodes=>nodes.length),2)
+  assert.equal(await frame.$eval('[aria-label="Reference completed"]',n=>n.checked),true)
+  assert.equal(await frame.$eval('[aria-label="Edit Reference edited"]',n=>n.value),'Reference edited')
+  check('The actual reference All filter and rerun preserve both edited and completed records',()=>{})
+  await frame.select('[aria-label="Task filter"]','completed');await frame.waitForFunction(()=>document.querySelectorAll('article').length===1)
+  await frame.click('article button');await frame.waitForFunction(()=>document.querySelectorAll('article').length===0)
+  assert.deepEqual(await frame.evaluate(()=>JSON.parse(localStorage.getItem('tasks')).map(t=>t.title)),['Reference edited'])
+  check('Deleting through the reference filtered view removes only its actual selected record',()=>{})
   await page.screenshot({path:path.join(os.tmpdir(),'gs-react-preview-browser.png'),fullPage:true})
   await page.evaluate(()=>window.gsRenderMessage('## Next actions\n- [ ] Original task\n  Supplied source detail\n  - Supplied nested detail\n- [x] Keep completed','ordinary-tasks'))
   await page.waitForSelector('button[role="checkbox"]')
