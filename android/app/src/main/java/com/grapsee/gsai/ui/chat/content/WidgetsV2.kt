@@ -54,6 +54,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -902,10 +903,12 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
             if ("series" !in m) {
                 val datasets = m["datasets"] as? JsonArray
                 if (datasets != null) {
-                    val converted = datasets.mapNotNull { ds ->
-                        val o = ds as? JsonObject ?: return@mapNotNull null
+                    val converted = datasets.map { ds ->
+                        val o = ds as? JsonObject ?: return@map ds
                         val name = (o["name"] ?: o["label"] ?: o["title"]) as? JsonPrimitive ?: JsonPrimitive("Series")
-                        val data = (o["data"] ?: o["values"] ?: o["points"]) as? JsonArray ?: return@mapNotNull null
+                        // Preserve invalid/missing data for strict decoding;
+                        // dropping a dataset changes what the answer claims.
+                        val data = o["data"] ?: o["values"] ?: o["points"] ?: JsonNull
                         JsonObject(mapOf("name" to name, "data" to data))
                     }
                     m["series"] = JsonArray(converted)
@@ -921,6 +924,24 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
                     if (flat != null) {
                         m["series"] = JsonArray(listOf(JsonObject(mapOf("name" to JsonPrimitive("Value"), "data" to flat))))
                     }
+                }
+            }
+            // The numeric point decoder cannot retain a string x/category.
+            // Preserve source labels before decoding, for both axis text and
+            // selected-value tooltips. Explicit labels always win.
+            if ("labels" !in m) {
+                val series = m["series"] as? JsonArray
+                val data = (series?.firstOrNull() as? JsonObject)?.get("data") as? JsonArray
+                val labels = data?.map { point ->
+                    val source = when (point) {
+                        is JsonArray -> point.firstOrNull()
+                        is JsonObject -> point["label"] ?: point["name"] ?: point["category"] ?: point["x"]
+                        else -> null
+                    }
+                    (source as? JsonPrimitive)?.takeIf { it != JsonNull && it.content.isNotBlank() }
+                }
+                if (labels != null && labels.any { it != null }) {
+                    m["labels"] = JsonArray(labels.mapIndexed { index, source -> source ?: JsonPrimitive("#${index + 1}") })
                 }
             }
             // Expand single-series pie/donut with multiple points into one series per slice.
