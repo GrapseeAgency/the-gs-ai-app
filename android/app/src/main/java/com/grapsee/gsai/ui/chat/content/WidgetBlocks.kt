@@ -1697,7 +1697,9 @@ private fun ChartWidgetView(w: ChartWidget) {
                 val (totalStr, peakPair, pct) = kpiStats
                 val pos = pct != null && pct >= 0.0
                 val pctStr = pct?.let { String.format(java.util.Locale.US, "%s%.1f%%", if (pos) "+" else "", it) } ?: if (activeType in setOf("pie", "donut")) "N/A (slice values)" else "N/A (zero baseline)"
-                val deltaText = if (pct == null) "No defined baseline" else "${if (pos) "↑" else "↓"} $pctStr"
+                val summaryPointCount = slicedWidget.series.firstOrNull()?.data?.size ?: 0
+                val comparisonPeriod = if (activeType in setOf("pie", "donut")) "Not a time trend" else
+                    slicedWidget.labels.firstOrNull()?.let { first -> slicedWidget.labels.getOrNull(summaryPointCount - 1)?.let { last -> "$first–$last" } } ?: "First–last point"
                 val pillBg = if (pct == null) Color(0xFFF0EDF5) else if (pos) Color(0xFFE6F9F0) else Color(0xFFFDECEC)
                 val pillFg = if (pct == null) Color(0xFF655E70) else if (pos) Color(0xFF129A5A) else Color(0xFFE04F5F)
                 Row(
@@ -1726,14 +1728,14 @@ private fun ChartWidgetView(w: ChartWidget) {
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
-                                .background(pillBg)
+                                .background(Color(0xFFEFEAFF))
                                 .padding(horizontal = 6.dp, vertical = 1.5.dp)
                         ) {
                             Text(
-                                text = deltaText,
+                                text = "$summaryPointCount points",
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = pillFg
+                                color = Color(0xFF5B3DF5)
                             )
                         }
                     }
@@ -1791,7 +1793,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                             fontWeight = FontWeight.Bold,
                             color = GsTheme.colors.textPrimary
                         )
-                        Text("Growth Rate", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.Medium, maxLines = 1)
+                        Text(if (activeType in setOf("pie", "donut")) "Category data" else "First–last", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.Medium)
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
@@ -1799,7 +1801,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                                 .padding(horizontal = 6.dp, vertical = 1.5.dp)
                         ) {
                             Text(
-                                text = deltaText,
+                                text = comparisonPeriod,
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = pillFg
