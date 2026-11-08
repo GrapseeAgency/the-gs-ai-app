@@ -91,7 +91,7 @@ struct ReactPreviewIOS: UIViewRepresentable {
             // to generated code, and no task value/state is changed. A nested
             // inline WK view cannot itself move its SwiftUI chat scroll parent
             // when the native keyboard covers the form's submit button.
-            web.evaluateJavaScript("(function(){const a=document.activeElement;if(!a||a===document.body)return null;const r=(a.closest('form')||a).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,viewport:innerWidth};})()") { [weak self, weak web] result, _ in
+            web.evaluateJavaScript("(function(){const a=document.activeElement;if(!a||a===document.body)return null;const r=(a.closest('form')||a).getBoundingClientRect(),v=window.visualViewport;return {x:r.x-(v?v.offsetLeft:0),y:r.y-(v?v.offsetTop:0),width:r.width,height:r.height,viewport:v?v.width:innerWidth};})()") { [weak self, weak web] result, _ in
                 guard let self, let web, let window = web.window, self.ownsFirstResponder(web),
                       let rect = result as? [String: Double],
                       let x = rect["x"], let y = rect["y"], let width = rect["width"], let height = rect["height"],
