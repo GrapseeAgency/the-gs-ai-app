@@ -9,6 +9,8 @@ import UserNotifications
 @MainActor
 struct PlatformRuntimeProbe: View {
     @State private var status = "idle"
+    @State private var showBooking = false
+    @State private var nextBooking = false
     @State private var showChecklist = false
     @State private var nextChecklist = false
     @State private var appChecklist = false
@@ -33,12 +35,23 @@ struct PlatformRuntimeProbe: View {
             Button("Arm messages-disabled notice") { Task { await arm(mode: "messages") } }
             Button("Inspect OS delivery") { Task { await inspect() } }
             Button("Restore runtime settings") { Task { await restore() } }
+            Button("Open generated booking") { showBooking = true }
             Button("Open generated checklist") { showChecklist = true }
             Button("Open generated calculator") { showCalculator = true }
             Button("Open generated table") { showTable = true }
             Button("Open generated chart") { showChart = true }
             Button("Open generated code") { showCode = true }
             Button("Open generated terminal") { showTerminal = true }
+        }
+        .sheet(isPresented: $showBooking) {
+            VStack {
+                Button("Use next booking payload") { nextBooking = true }
+                ScrollView {
+                    WidgetBlockView(kind: "app", json: nextBooking
+                        ? #"{"type":"booking","title":"New slots","slots":["11:00"]}"#
+                        : #"{"type":"booking","title":"Actual slots","slots":["09:00","10:00"]}"#, open: false).padding()
+                }
+            }
         }
         .sheet(isPresented: $showChecklist) {
             VStack {
