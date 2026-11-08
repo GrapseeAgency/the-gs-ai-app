@@ -1252,7 +1252,7 @@ final class ChatViewModel: ObservableObject {
             conversationId: conversationID,
             role: "assistant",
             content: content,
-            createdAt: messages[index].createdAt))
+            createdAt: ConversationStore.now()))
     }
 
     // MARK: - GS Lite (on-device responder)
