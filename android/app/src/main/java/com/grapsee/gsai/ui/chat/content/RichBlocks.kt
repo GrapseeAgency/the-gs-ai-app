@@ -1,5 +1,14 @@
 package com.grapsee.gsai.ui.chat.content
 
+import android.app.Activity
+import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -19,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -456,6 +466,23 @@ private fun StructuredBlockSequenceView(
     statusAtEnd: Boolean,
     onStatusPlaced: () -> Unit
 ) {
+    val codeActions = remember(blocks) { ResponseCodeActions() }
+    CompositionLocalProvider(LocalResponseCodeActions provides codeActions) {
+        StructuredBlockSequenceContent(blocks, isStreaming, onCopyCode, citationUrls, onSendPrompt, statusCard, statusAtEnd, onStatusPlaced)
+    }
+}
+
+@Composable
+private fun StructuredBlockSequenceContent(
+    blocks: List<Block>,
+    isStreaming: Boolean,
+    onCopyCode: (String) -> Unit,
+    citationUrls: Map<Int, String>,
+    onSendPrompt: ((String) -> Unit)?,
+    statusCard: (@Composable () -> Unit)?,
+    statusAtEnd: Boolean,
+    onStatusPlaced: () -> Unit
+) {
     val normalizedBlocks = remember(blocks) { promoteStandaloneBoldHeadings(blocks) }
     // 1. Detect if this response is a multi-section dashboard (Screenshot 1)
     val dashboardTabs = remember(normalizedBlocks) {
@@ -710,7 +737,9 @@ private fun StructuredBlockSequenceView(
             NexlyContextualActionPillsRow(
                 blocks = normalizedBlocks,
                 onCopyCode = onCopyCode,
-                onSendPrompt = onSendPrompt
+                onSendPrompt = onSendPrompt,
+                citationUrls = citationUrls,
+                onShowCode = { activeDashboardTab = "Dashboard" }
             )
         }
     }
@@ -720,13 +749,63 @@ private fun StructuredBlockSequenceView(
 private fun NexlyContextualActionPillsRow(
     blocks: List<Block>,
     onCopyCode: (String) -> Unit,
-    onSendPrompt: ((String) -> Unit)?
+    onSendPrompt: ((String) -> Unit)?,
+    citationUrls: Map<Int, String>,
+    onShowCode: () -> Unit
 ) {
-    val actions = remember(blocks) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val codeActions = LocalResponseCodeActions.current
+    var pendingSave by remember { mutableStateOf<ByteArray?>(null) }
+    var detailView by remember(blocks) { mutableStateOf<String?>(null) }
+    fun notify(message: String) { Toast.makeText(context, message, Toast.LENGTH_LONG).show() }
+    val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val bytes = pendingSave
+        pendingSave = null
+        val uri = result.data?.data
+        if (result.resultCode == Activity.RESULT_OK && uri != null && bytes != null) scope.launch {
+            val failure = withContext(Dispatchers.IO) {
+                runCatching {
+                    val output = context.contentResolver.openOutputStream(uri) ?: error("The selected destination cannot be opened.")
+                    output.use { it.write(bytes) }
+                }.exceptionOrNull()
+            }
+            notify(if (failure == null) "Export saved" else "Could not save export: ${failure.message}")
+        }
+    }
+    val sourceText = remember(blocks, citationUrls) {
+        extractCopyableBlockSummary(blocks, false) + if (citationUrls.isEmpty()) "" else
+            "\n\nSources\n" + citationUrls.toSortedMap().entries.joinToString("\n") { "[${it.key}] ${it.value}" }
+    }
+    val citationText = remember(blocks, citationUrls) {
+        listOf(extractCopyableBlockSummary(blocks, true), citationUrls.toSortedMap().entries.joinToString("\n") { "[${it.key}] ${it.value}" })
+            .filter { it.isNotBlank() }.joinToString("\n")
+    }
+    fun saveFile(name: String, mime: String, bytes: ByteArray) {
+        pendingSave = bytes
+        runCatching {
+            saveLauncher.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE); type = mime; putExtra(Intent.EXTRA_TITLE, name)
+            })
+        }.onFailure { pendingSave = null; notify("No file picker is available: ${it.message}") }
+    }
+    if (detailView != null) AlertDialog(
+        onDismissRequest = { detailView = null },
+        title = { Text(if (detailView == "sources") "All sources" else "Response report — original source and data") },
+        text = {
+            SelectionContainer {
+                Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
+                    Text(CodeDisplay.escape(if (detailView == "sources") citationText.ifBlank { "No source URLs were supplied." } else sourceText))
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { detailView = null }) { Text("Close details") } }
+    )
+    val actions = remember(blocks, citationUrls) {
         val hasChart = blocks.any { it is Block.WidgetBlock && it.kind == "chart" }
         val hasTable = blocks.any { it is Block.TableBlock || (it is Block.WidgetBlock && it.kind == "table") }
         val hasCode = blocks.any { it is Block.CodeBlock }
-        val hasSources = blocks.any {
+        val hasSources = citationUrls.isNotEmpty() || blocks.any {
             it is Block.CitationsBlock ||
                 (it is Block.Heading && classifySectionListMode(plainTextOfSpans(it.spans)) == SectionListMode.SOURCES)
         }
@@ -785,16 +864,29 @@ private fun NexlyContextualActionPillsRow(
                     .background(Color.White.copy(alpha = 0.82f))
                     .border(1.dp, Color(0xFFE1DAFA), RoundedCornerShape(999.dp))
                     .clickable {
-                        if (label.contains("Copy", ignoreCase = true) || label.contains("Share", ignoreCase = true)) {
-                            onCopyCode(
-                                extractCopyableBlockSummary(
-                                    blocks = blocks,
-                                    citationsOnly = label.contains("Citation", ignoreCase = true)
-                                )
-                            )
-                        } else {
-                            onSendPrompt?.invoke(label)
-                        }
+                        runCatching {
+                            when (label) {
+                                "Share" -> context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"; putExtra(Intent.EXTRA_TEXT, sourceText)
+                                }, "Share response"))
+                                "Copy Citations" -> if (citationText.isBlank()) notify("No citation URLs are available to copy.") else onCopyCode(citationText)
+                                "Download Report" -> saveFile("gs-ai-response.md", "text/markdown", sourceText.toByteArray(Charsets.UTF_8))
+                                "Download Project" -> {
+                                    val sources = blocks.filterIsInstance<Block.CodeBlock>().filterNot { it.open }.map {
+                                        codeActions?.source(it.sourceStart) ?: (it.language to it.code)
+                                    }
+                                    saveFile("gs-ai-source-snippets.zip", "application/zip", responseSourceArchive(sources))
+                                    notify("Source snippets only, not a complete runnable project. See README.txt.")
+                                }
+                                "Edit Code" -> {
+                                    onShowCode()
+                                    codeActions?.editFirst() ?: notify("No editable code block is available.")
+                                }
+                                "View All Sources" -> detailView = "sources"
+                                "View Details", "View Full Report" -> detailView = "report"
+                                else -> if (onSendPrompt != null) onSendPrompt(label) else notify("Follow-up requests are unavailable in this view.")
+                            }
+                        }.onFailure { notify("The action failed: ${it.message}") }
                     }
                     .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
@@ -815,7 +907,7 @@ private fun NexlyContextualActionPillsRow(
     }
 }
 
-private fun extractCopyableBlockSummary(blocks: List<Block>, citationsOnly: Boolean): String {
+internal fun extractCopyableBlockSummary(blocks: List<Block>, citationsOnly: Boolean): String {
     val lines = mutableListOf<String>()
     for (block in blocks) {
         when (block) {
@@ -844,10 +936,19 @@ private fun extractCopyableBlockSummary(blocks: List<Block>, citationsOnly: Bool
                 }
             }
             is Block.CodeBlock -> if (!citationsOnly) lines += block.code
+            is Block.WidgetBlock -> if (!citationsOnly) lines += "${block.kind} data\n${block.json}"
+            is Block.HtmlBlock -> if (!citationsOnly) lines += block.code
+            is Block.TableBlock -> if (!citationsOnly) {
+                lines += block.headers.joinToString("\t") { plainTextOfSpans(it) }
+                lines += block.rows.map { row -> row.joinToString("\t") { plainTextOfSpans(it) } }
+            }
+            is Block.BlockQuote -> if (!citationsOnly) lines += extractCopyableBlockSummary(block.blocks, false)
+            is Block.MathBlock -> if (!citationsOnly) lines += block.latex
+            is Block.MermaidBlock -> if (!citationsOnly) lines += block.source
             else -> {}
         }
     }
-    return lines.joinToString("\n").trim().ifEmpty { "Copied from Nexly" }
+    return lines.joinToString("\n").trim()
 }
 
 /**
@@ -921,6 +1022,7 @@ private fun BlockView(
                     language = block.language,
                     code = block.code,
                     open = block.open || isStreaming,
+                    sourceStart = block.sourceStart,
                     onCopyCode = onCopyCode
                 )
             }
