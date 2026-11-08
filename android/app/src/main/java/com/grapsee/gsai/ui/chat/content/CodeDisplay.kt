@@ -19,8 +19,7 @@ internal object CodeDisplay {
     fun encodeEditor(source: String): String = escape(org.json.JSONObject.quote(source))
     private val jsonString = Regex("""\A"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"\z""")
     fun decodeEditor(draft: String): String {
-        val encoded = draft.trim(' ', '	', '', '
-')
+        val encoded = draft.trim(' ', '\t', '\r', '\n')
         require(jsonString.matches(encoded)) { "Enter one valid JSON-encoded source string." }
         return org.json.JSONTokener(encoded).nextValue() as String
     }
