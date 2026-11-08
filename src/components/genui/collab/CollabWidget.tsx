@@ -251,7 +251,7 @@ function TodoSurface({ payload, shared, publish }: { payload: CollabPayload; sha
           }}
         />
         <UiButton buttonStyle="filled" disabled={adding || shared.status !== 'live' || !draft.trim() || rows.length >= 12} onClick={() => { void add() }}>
-          Add
+          {adding ? 'Saving…' : 'Add'}
         </UiButton>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -355,7 +355,7 @@ function StatusRow({ room, status, note }: { room: string; status: Shared['statu
     <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 10, fontSize: TYPE.micro, color: theme.text3, flexWrap: 'wrap' }}>
       <span style={{ width: 7, height: 7, borderRadius: 999, background: dot, display: 'inline-block' }} />
       <span>
-        {status} · room <code style={{ color: theme.text2 }}>{room}</code> · shared prototype: public room, per-server memory, last-write-wins, resets on restart
+        {status} · room <code style={{ color: theme.text2 }}>{room}</code> · shared prototype: public SQLite-backed room, last-write-wins; state can survive restarts and idle rooms may be evicted
       </span>
       {note ? <span>· {note}</span> : null}
     </div>
