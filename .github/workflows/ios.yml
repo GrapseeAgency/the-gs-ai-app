@@ -401,16 +401,18 @@ jobs:
               lines = log.read_text(errors='replace').splitlines()
               failures = [line for line in lines if 'Ignoring failure to get hierarchy' not in line and any(word in line.lower() for word in ['error:', 'testing failed:', '** test failed **', 'timed out', 'could not'])]
               failures += [line for line in lines if 'Test Case' in line and 'failed' in line]
+              for line in failures[-8:]:
+                  print('::error::' + line[:1800].replace('%', '%25').replace('\r', '%0D'))
+              passes = [line for line in lines if 'Test Case' in line and 'passed' in line and ('PlatformRuntimeUITests' in line or 'CalcHonestyTests' in line)]
+              print('::notice::Actual executed native passes: ' + ' | '.join(passes).replace('%', '%25'))
               for line in lines:
                   if 'GS_PRESENTATION_' in line:
-                      print('::error::' + line.replace('%', '%25').replace('\r', '%0D'))
+                      print('::notice::' + line.replace('%', '%25').replace('\r', '%0D'))
                   elif any(name in line for name in ['testWorkerCSPPreventsActualHTTPAndPolicyOnlyCounterfactualCanFetch', 'testSourceArchivePreservesRealBytesAndKnownCRCWithoutInventingAProject']) and 'passed' in line:
                       print('::notice::Actual native unit proof: ' + line.replace('%', '%25'))
               for archive_log in [Path('ios/build/source-archive/export.log'), Path('ios/build/source-archive/verification.log')]:
                   if archive_log.exists():
                       print('::notice::Native archive diagnostic: ' + archive_log.read_text(errors='replace')[-8000:].replace('%', '%25').replace('\n', '%0A'))
-              for line in failures[-35:]:
-                  print('::error::' + line[:1800].replace('%', '%25').replace('\r', '%0D'))
           PYTEST
           for RESULT in ios/build/GSApp-genui.xcresult ios/build/GSApp-tests.xcresult; do
             [ -d "$RESULT" ] || continue
