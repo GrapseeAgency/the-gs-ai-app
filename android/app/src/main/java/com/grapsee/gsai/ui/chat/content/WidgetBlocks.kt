@@ -2124,13 +2124,21 @@ private fun niceStep(raw: Float): Float {
 
 /** 1234 -> "1.2K", 0.5 -> "0.5", 100 -> "100" (+ the widget's unit). */
 internal fun axisLabel(value: Float, unit: String): String {
+    if (!value.isFinite()) return "Undefined"
+    val magnitude = kotlin.math.abs(value)
     val n = when {
-        value >= 1_000_000f -> String.format(java.util.Locale.US, "%.1fM", value / 1_000_000f)
-        value >= 1_000f -> String.format(java.util.Locale.US, "%.1fK", value / 1_000f)
-        value == value.toInt().toFloat() -> value.toInt().toString()
-        else -> String.format(java.util.Locale.US, "%.1f", value)
+        magnitude >= 1_000_000_000f -> String.format(java.util.Locale.US, "%.1fB", magnitude / 1_000_000_000f)
+        magnitude >= 1_000_000f -> String.format(java.util.Locale.US, "%.1fM", magnitude / 1_000_000f)
+        magnitude >= 1_000f -> String.format(java.util.Locale.US, "%.1fK", magnitude / 1_000f)
+        magnitude == magnitude.toInt().toFloat() -> magnitude.toInt().toString()
+        else -> String.format(java.util.Locale.US, "%.1f", magnitude)
     }
-    return n + unit
+    val sign = if (value < 0f) "-" else ""
+    return when (unit) {
+        "$", "€", "£", "¥", "₹", "৳", "₩" -> sign + unit + n
+        "", "%", "°", "°C", "°F" -> sign + n + unit
+        else -> sign + n + " " + unit
+    }
 }
 
 @Composable
