@@ -11,6 +11,9 @@ from PIL import Image
 log, label = sys.argv[1:]
 if label not in ('FILES', 'EXPORT', 'REACT'):
     raise SystemExit('Only non-user-data native acceptance fixture screenshots are eligible')
+if not Path(log).is_file():
+    print('No actual XCTest log exists; no substitute image is created')
+    raise SystemExit(0)
 chunks = {}
 count = 0
 for line in Path(log).read_text(errors='replace').splitlines():
