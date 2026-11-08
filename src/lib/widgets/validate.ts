@@ -2379,11 +2379,14 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       room,
       title: asString(p.title),
       label: asString(p.label),
-      items: asArray(p.items ?? p.options).map((i) => asString(i)).filter(Boolean).slice(0, 12),
+      items: asArray(p.items ?? p.options).map((i) => asString(i)),
       start: asNumber(p.start ?? p.value) ?? 0,
       note: asString(p.note),
     }
-    return { widget, errors: [], repaired }
+    const rawItems = asArray(p.items ?? p.options)
+    const invalidItems = rawItems.length > 12 || rawItems.some(item => typeof item !== 'string' || !item.trim())
+    return { widget, errors: invalidItems || (surface === 'vote' && rawItems.length < 2)
+      ? ['Shared widgets need complete supplied labels within 12 items; voting requires at least two actual options, never invented choices or counts'] : [], repaired }
   },
 
   terminal: (p) => {
