@@ -459,7 +459,7 @@ private fun promoteStandaloneBoldHeadings(rawBlocks: List<Block>): List<Block> =
     }
 
 internal fun sourceCardForHeading(heading: Block, following: Block?): Pair<Block.CitationsBlock, String>? {
-    if (heading !is Block.Heading) return null
+    if (heading !is Block.Heading || following == null) return null
     val title = NexlyIcons.cleanPlainText(plainTextOfSpans(heading.spans)).trim()
     if (classifySectionListMode(title) != SectionListMode.SOURCES) return null
     if (following is Block.CitationsBlock) return following to title
