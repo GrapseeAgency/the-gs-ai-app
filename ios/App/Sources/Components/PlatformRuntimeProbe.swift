@@ -9,6 +9,8 @@ import UserNotifications
 @MainActor
 struct PlatformRuntimeProbe: View {
     @State private var status = "idle"
+    @State private var showChecklist = false
+    @State private var nextChecklist = false
     @State private var showCalculator = false
     @State private var showTable = false
     @State private var showChart = false
@@ -30,11 +32,22 @@ struct PlatformRuntimeProbe: View {
             Button("Arm messages-disabled notice") { Task { await arm(mode: "messages") } }
             Button("Inspect OS delivery") { Task { await inspect() } }
             Button("Restore runtime settings") { Task { await restore() } }
+            Button("Open generated checklist") { showChecklist = true }
             Button("Open generated calculator") { showCalculator = true }
             Button("Open generated table") { showTable = true }
             Button("Open generated chart") { showChart = true }
             Button("Open generated code") { showCode = true }
             Button("Open generated terminal") { showTerminal = true }
+        }
+        .sheet(isPresented: $showChecklist) {
+            VStack {
+                Button("Use next checklist payload") { nextChecklist = true }
+                ScrollView {
+                    WidgetBlockView(kind: "checklist", json: nextChecklist
+                        ? #"{"title":"New tasks","items":[{"label":"New supplied task"}]}"#
+                        : #"{"title":"Actual tasks","items":[{"label":"Original source","detail":"Only supplied detail"},{"label":"Keep source"}]}"#, open: false).padding()
+                }
+            }
         }
         .sheet(isPresented: $showCalculator) {
             ScrollView {
