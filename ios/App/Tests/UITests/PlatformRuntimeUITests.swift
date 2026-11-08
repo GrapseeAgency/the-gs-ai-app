@@ -1,4 +1,5 @@
 import XCTest
+import CoreGraphics
 
 final class PlatformRuntimeUITests: XCTestCase {
     private func printScreenshotPixels(_ screenshot: XCUIScreenshot, label: String) {
@@ -7,6 +8,49 @@ final class PlatformRuntimeUITests: XCTestCase {
         for (index, start) in stride(from: 0, to: encoded.count, by: 3500).enumerated() {
             print("GS_UI_PNG_V1 \(label) \(index + 1)/\(count) " + String(encoded.dropFirst(start).prefix(3500)))
         }
+    }
+
+    /// iOS 26 Files exposes its ellipsis as an AX element named Cancel. Find
+    /// the actual leading navigation glyph in the composited toolbar pixels,
+    /// not that incorrect label or a guessed fraction of the phone screen.
+    private func visibleFilesNavigationPoint(_ screenshot: XCUIScreenshot, application: CGRect, toolbar: CGRect) -> CGPoint? {
+        guard let image = screenshot.image.cgImage, application.width > 0, application.height > 0 else { return nil }
+        let width = image.width, height = image.height
+        let sx = CGFloat(width) / application.width, sy = CGFloat(height) / application.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else { return nil }
+        let y0 = max(0, Int((toolbar.minY - application.minY) * sy))
+        let y1 = min(height - 1, Int((toolbar.maxY - application.minY) * sy))
+        guard y0 < y1 else { return nil }
+        let x1 = width / 2
+        func dark(_ x: Int, _ y: Int) -> Bool {
+            let p = (y * width + x) * 4
+            return pixels[p + 3] > 200 && max(pixels[p], pixels[p + 1], pixels[p + 2]) < 120
+        }
+        var seed: (Int, Int)?
+        for x in 0..<x1 {
+            if let y = (y0...y1).first(where: { dark(x, $0) }) { seed = (x, y); break }
+        }
+        guard let seed else { return nil }
+        var pending = [seed], visited = Set<Int>()
+        var minX = seed.0, maxX = seed.0, minY = seed.1, maxY = seed.1
+        while let (x, y) = pending.popLast() {
+            guard x >= 0, x < x1, y >= y0, y <= y1, visited.insert(y * width + x).inserted, dark(x, y) else { continue }
+            minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+            for dx in -1...1 { for dy in -1...1 where dx != 0 || dy != 0 { pending.append((x + dx, y + dy)) } }
+        }
+        let glyphWidth = CGFloat(maxX - minX + 1) / sx, glyphHeight = CGFloat(maxY - minY + 1) / sy
+        guard glyphWidth >= 2, glyphWidth <= 36, glyphHeight >= 6, glyphHeight <= 44 else { return nil }
+        let point = CGPoint(x: application.minX + CGFloat(minX + maxX) / (2 * sx), y: application.minY + CGFloat(minY + maxY) / (2 * sy))
+        print("GS_FILES_VISIBLE_GLYPH: bounds=(\(minX),\(minY),\(maxX),\(maxY)); touch=\(point)")
+        return point
     }
 
     private func printPresentationDiagnostics(_ app: XCUIApplication, label: String) {
@@ -288,11 +332,23 @@ final class PlatformRuntimeUITests: XCTestCase {
             XCTFail("The actual native Files Cancel control must occupy the visible viewport")
             return
         }
-        // Use the remote element's actual activation point. Its bounding-box
-        // centre opened Files' sort menu on iOS 26 instead of cancelling.
-        // No isHittable polling waiter is active while resolving this touch.
-        pickerCancel.tap()
         let cancelled = app.staticTexts["response.action.notice"].firstMatch
+        // The genuine screenshot shows a leading Back/Close control. Leave a
+        // provider directory first if necessary, then activate native Close.
+        // Each touch is measured from fresh real pixels. Only the delegate's
+        // receipt below can acknowledge cancellation; no app state is forced.
+        for _ in 0..<2 {
+            guard let point = visibleFilesNavigationPoint(app.screenshot(), application: applicationFrame, toolbar: cancelFrame) else {
+                printPresentationDiagnostics(app, label: "EXPORT")
+                XCTFail("The visible native Files navigation glyph must be identifiable in actual pixels")
+                return
+            }
+            app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: point.x - applicationFrame.minX, dy: point.y - applicationFrame.minY)).tap()
+            let receipt = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                cancelled.exists && cancelled.label == "Export cancelled."
+            }, object: app)
+            if XCTWaiter.wait(for: [receipt], timeout: 2) == .completed { break }
+        }
         let acknowledged = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             cancelled.exists && cancelled.label == "Export cancelled."
         }, object: app)
