@@ -2828,6 +2828,9 @@ struct CodeBlockCardView: View {
     var open: Bool = false
 
     @State private var editing = false
+    @State private var editorDraft = ""
+    @State private var editorEncoded = false
+    @State private var editorError: String? = nil
     @State private var expanded = false
     @State private var editedCode: String? = nil
     @State private var runOutput: String? = nil
@@ -2860,6 +2863,13 @@ struct CodeBlockCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             codeHeaderBar
+            if CodeDisplayIOS.requiresEncoding(currentCode) {
+                Text("Unicode symbols are shown as escapes; Copy and Run keep original source.").font(.caption).foregroundStyle(Color.white.opacity(0.8)).padding(8)
+            }
+            if editing && editorEncoded {
+                Text("Unicode-safe editor: edit one JSON-encoded source string.").font(.caption).foregroundStyle(Color.white.opacity(0.8)).padding(8)
+            }
+            if let editorError { Text(editorError).font(.caption).foregroundStyle(Color.red).padding(8) }
             codeEditorSurface
             codeExecutionBar
             codeOutputDrawer
@@ -2869,6 +2879,8 @@ struct CodeBlockCardView: View {
         .background(RoundedRectangle(cornerRadius: 14).fill(Color(red: 0.133, green: 0.122, blue: 0.231)))
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.212, green: 0.192, blue: 0.361), lineWidth: 1))
+        .onChange(of: code) { _ in resetCodeState() }
+        .onChange(of: language) { _ in resetCodeState() }
     }
 
     @ViewBuilder
@@ -2896,7 +2908,12 @@ struct CodeBlockCardView: View {
             }
             if !open && !code.isEmpty {
                 Button(editing ? "Done" : "Edit") {
-                    if editedCode == nil { editedCode = code }
+                    if editing && editorError != nil { return }
+                    if !editing {
+                        editorEncoded = CodeDisplayIOS.requiresEncoding(currentCode)
+                        editorDraft = editorEncoded ? CodeDisplayIOS.encodeEditor(currentCode) : currentCode
+                        editorError = nil
+                    }
                     editing.toggle()
                 }
                 .font(.system(size: 11, weight: .semibold))
@@ -2911,13 +2928,13 @@ struct CodeBlockCardView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background(Color(red: 0.106, green: 0.094, blue: 0.188))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Code block\(language.map { ", " + $0 } ?? "")")
     }
 
     @ViewBuilder
     private var codeEditorSurface: some View {
-        if currentCode.isEmpty {
+        if currentCode.isEmpty && !editing {
             Text("…")
                 .font(.system(size: 12, weight: .regular, design: .monospaced))
                 .foregroundStyle(Color(red: 0.925, green: 0.910, blue: 1.0))
@@ -2926,8 +2943,21 @@ struct CodeBlockCardView: View {
                 .textSelection(.enabled)
         } else if editing {
             TextEditor(text: Binding(
-                get: { editedCode ?? code },
-                set: { editedCode = $0 }
+                get: { editorDraft },
+                set: { draft in
+                    if !editorEncoded && CodeDisplayIOS.requiresEncoding(draft) {
+                        editorEncoded = true
+                        editorDraft = CodeDisplayIOS.encodeEditor(draft)
+                        editedCode = draft
+                        editorError = nil
+                    } else {
+                        editorDraft = CodeDisplayIOS.escape(draft)
+                        do {
+                            editedCode = editorEncoded ? try CodeDisplayIOS.decodeEditor(draft) : draft
+                            editorError = nil
+                        } catch { editorError = "Enter one valid JSON source string. Invalid drafts cannot run." }
+                    }
+                }
             ))
             .font(.system(size: 12, weight: .regular, design: .monospaced))
             .foregroundStyle(Color(red: 0.925, green: 0.910, blue: 1.0))
@@ -3039,7 +3069,7 @@ struct CodeBlockCardView: View {
                 }
 
                 if let out = runOutput, !out.isEmpty {
-                    Text(out)
+                    Text(CodeDisplayIOS.escape(out))
                         .font(.system(size: 11.5, weight: .regular, design: .monospaced))
                         .foregroundStyle(Color(red: 0.847, green: 0.953, blue: 0.863))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3047,7 +3077,7 @@ struct CodeBlockCardView: View {
 
                 if let err = errorOutput ?? (["error", "stderr", "traceback", "exception"].contains(lang) ? currentCode : nil),
                    !err.isEmpty {
-                    Text(err)
+                    Text(CodeDisplayIOS.escape(err))
                         .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                         .foregroundStyle(Color(red: 0.988, green: 0.647, blue: 0.647))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3137,18 +3167,27 @@ struct CodeBlockCardView: View {
 
             Group {
                 if open {
-                    Text(displayedCode)
+                    Text(CodeDisplayIOS.escape(displayedCode))
                         .font(.system(size: 12, weight: .regular, design: .monospaced))
                         .foregroundStyle(Color(red: 0.933, green: 0.922, blue: 1.0))
                 } else {
-                    highlightedCode(displayedCode, language: language)
+                    highlightedCode(CodeDisplayIOS.escape(displayedCode), language: language)
                         .foregroundStyle(Color(red: 0.933, green: 0.922, blue: 1.0))
                 }
             }
         }
     }
 
+    private func resetCodeState() {
+        editedCode = nil; editing = false; editorDraft = ""; editorError = nil
+        editorEncoded = false; expanded = false; runOutput = nil; errorOutput = nil; runCount = 0
+    }
+
     private func executeCode() {
+        if editing && editorError != nil {
+            errorOutput = "Not executed: correct the JSON-encoded source draft first."
+            return
+        }
         runCount += 1
         runOutput = nil
         errorOutput = nil
