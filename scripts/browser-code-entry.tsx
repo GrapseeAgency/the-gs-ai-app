@@ -21,16 +21,17 @@ window.gsRenderHTML = source => root.render(<HtmlBlock source={source} fallbackH
 import { ChecklistWidget } from '../src/components/genui/widgets/ChecklistWidget'
 import { AppWizard } from '../src/components/genui/apps/AppWizard'
 import { AppOnboarding } from '../src/components/genui/apps/AppOnboarding'
+import { AppTimer } from '../src/components/genui/apps/AppTimer'
 import { AppBooking } from '../src/components/genui/apps/AppBooking'
 import { WidgetSurface } from '../src/components/genui/theme/WidgetSurface'
 declare global {
   interface Window {
     gsRenderChecklist: (payload: Parameters<typeof ChecklistWidget>[0]['payload']) => void
-    gsRenderApp: (kind: 'wizard' | 'onboarding' | 'booking', payload: Parameters<typeof AppWizard>[0]['payload']) => void
+    gsRenderApp: (kind: 'wizard' | 'onboarding' | 'booking' | 'timer', payload: Parameters<typeof AppWizard>[0]['payload']) => void
   }
 }
 window.gsRenderChecklist = payload => root.render(<WidgetSurface dark={false}><ChecklistWidget payload={payload} /></WidgetSurface>)
 window.gsRenderApp = (kind, payload) => {
-  const Component = kind === 'wizard' ? AppWizard : kind === 'onboarding' ? AppOnboarding : AppBooking
+  const Component = kind === 'wizard' ? AppWizard : kind === 'onboarding' ? AppOnboarding : kind === 'timer' ? AppTimer : AppBooking
   root.render(<WidgetSurface dark={false}><Component key={JSON.stringify(payload)} payload={payload} /></WidgetSurface>)
 }
