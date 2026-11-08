@@ -5,7 +5,8 @@ import { escapeCodeDisplay } from './display-source'
  * replaced; async work must be awaited before the worker completes. */
 export function javascriptSandboxDocument(source: string): string {
   const worker = `self.onmessage = async ({data: source}) => {
-    const send = (kind, value) => self.postMessage({kind, value: String(value).slice(0, 16000)});
+    let sent = 0;
+    const send = (kind, value) => { if (kind === 'log' && sent++ >= 100) return; self.postMessage({kind, value: String(value).slice(0, 16000)}); };
     const fmt = v => { try { return typeof v === 'string' ? v : JSON.stringify(v); } catch { return String(v); } };
     const console = Object.fromEntries(['log','info','warn','error'].map(k => [k, (...args) => send('log', args.map(fmt).join(' '))]));
     try {
@@ -26,13 +27,13 @@ let worker, timer;
 function run(){
   if(worker)worker.terminate();clearTimeout(timer);
   const out=document.getElementById('out');out.textContent='';let count=0;
-  function line(text){if(count++<100)out.textContent+=escapeCodeDisplay(String(text))+'\\n';}
+  function line(text, final=false){if(final||count++<100)out.textContent+=escapeCodeDisplay(String(text))+'\\n';}
   try{
     const url=URL.createObjectURL(new Blob([${literal(worker)}],{type:'text/javascript'}));
     worker=new Worker(url);URL.revokeObjectURL(url);
-    worker.onmessage=({data})=>{line(data.value);if(data.kind==='done'||data.kind==='error'){clearTimeout(timer);worker.terminate();}};
+    worker.onmessage=({data})=>{line(data.value,data.kind!=='log');if(data.kind==='done'||data.kind==='error'){clearTimeout(timer);worker.terminate();}};
     worker.onerror=(event)=>{line('Worker error: '+event.message);clearTimeout(timer);worker.terminate();};
-    timer=setTimeout(()=>{worker.terminate();line('Stopped: execution exceeded 2 seconds.');},2000);
+    timer=setTimeout(()=>{worker.terminate();line('Stopped: execution exceeded 2 seconds.',true);},2000);
     worker.postMessage(${literal(source)});
   }catch(error){line('Cannot start worker: '+error.message);}
 }
