@@ -1803,7 +1803,7 @@ func widgetTablePrecedesIOS(_ left: String, _ right: String, ascending: Bool) ->
 
 func widgetTablePageSizeIOS(selection: Int, rowCount: Int) -> Int {
     if selection == -1 { return max(1, rowCount) }
-    return selection > 0 ? selection : ((4...5).contains(rowCount) ? 3 : 5)
+    return selection > 0 ? selection : 5
 }
 
 private struct TableBodyView: View {
