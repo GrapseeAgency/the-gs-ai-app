@@ -230,7 +230,8 @@ function rewrite(
 }
 
 function widgetSourceFallback(source: string, message: string): string {
-  const longest = (source.match(/`+/g) ?? []).reduce((max, run) => Math.max(max, run.length), 0)
+  const runs: string[] = source.match(/`+/g) ?? []
+  const longest = runs.reduce<number>((max, run) => Math.max(max, run.length), 0)
   const fence = '`'.repeat(Math.max(3, longest + 1))
   // A text fence cannot be re-promoted into the same invalid widget by clients.
   return `> ${message}\n\n${fence}text\n${source}\n${fence}`
