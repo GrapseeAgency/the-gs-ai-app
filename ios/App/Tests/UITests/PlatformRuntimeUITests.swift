@@ -1,12 +1,22 @@
 import XCTest
 
 final class PlatformRuntimeUITests: XCTestCase {
+    private func printScreenshotPixels(_ screenshot: XCUIScreenshot, label: String) {
+        let encoded = screenshot.pngRepresentation.base64EncodedString()
+        let count = (encoded.count + 3499) / 3500
+        for (index, start) in stride(from: 0, to: encoded.count, by: 3500).enumerated() {
+            print("GS_UI_PNG_V1 \(label) \(index + 1)/\(count) " + String(encoded.dropFirst(start).prefix(3500)))
+        }
+    }
+
     private func printPresentationDiagnostics(_ app: XCUIApplication, label: String) {
         let hierarchy = app.debugDescription.replacingOccurrences(of: "\n", with: " | ")
         for start in stride(from: 0, to: hierarchy.count, by: 1400) {
             print("GS_PRESENTATION_\(label)_\(start): " + String(hierarchy.dropFirst(start).prefix(1400)))
         }
-        let capture = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = app.screenshot()
+        printScreenshotPixels(screenshot, label: label)
+        let capture = XCTAttachment(screenshot: screenshot)
         capture.name = "genui-actual-\(label.lowercased())-failure"; capture.lifetime = .keepAlways; add(capture)
     }
 
@@ -260,7 +270,9 @@ final class PlatformRuntimeUITests: XCTestCase {
         // Screenshot resolves the visible, composited system presentation.
         // Query the touch frame AFTER it, not before: the remote Files AX
         // element can exist while the full-screen presentation is animating.
-        let capture = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = app.screenshot()
+        printScreenshotPixels(screenshot, label: "FILES")
+        let capture = XCTAttachment(screenshot: screenshot)
         capture.name = "genui-contextual-real-source-export-picker"; capture.lifetime = .keepAlways; add(capture)
         let cancelFrame = pickerCancel.frame
         let applicationFrame = app.frame
