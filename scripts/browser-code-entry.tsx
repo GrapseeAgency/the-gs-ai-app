@@ -35,3 +35,7 @@ window.gsRenderApp = (kind, payload) => {
   const Component = kind === 'wizard' ? AppWizard : kind === 'onboarding' ? AppOnboarding : kind === 'timer' ? AppTimer : AppBooking
   root.render(<WidgetSurface dark={false}><Component key={kind === 'timer' ? 'timer' : JSON.stringify(payload)} payload={payload} /></WidgetSurface>)
 }
+
+import { CollabWidget, type CollabPayload } from '../src/components/genui/collab/CollabWidget'
+declare global { interface Window { gsRenderCollab: (payload: CollabPayload) => void } }
+window.gsRenderCollab = payload => root.render(<WidgetSurface dark={false}><CollabWidget payload={payload} /></WidgetSurface>)
