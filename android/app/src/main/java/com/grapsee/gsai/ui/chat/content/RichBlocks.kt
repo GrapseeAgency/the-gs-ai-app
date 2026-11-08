@@ -1594,6 +1594,9 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
     }
 }
 
+internal fun sourceScenarioNumberText(value: Double): String =
+    if (value.isFinite()) java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString() else ""
+
 internal fun sourceLoanMonthlyPayment(principal: Double, apr: Double, years: Int): Double? {
     if (!principal.isFinite() || !apr.isFinite() || principal < 0 || apr < 0 || years <= 0) return null
     val months = years.toDouble() * 12.0
@@ -1640,15 +1643,13 @@ private fun NexlyQuickCalculatorCard(
     var amountText by remember(initialAmount, initialMode) {
         val seedAmt = if (initialMode == 5 && initialAmount > 300.0) 75.0 else initialAmount
         mutableStateOf(
-            if (seedAmt % 1.0 == 0.0) seedAmt.toLong().toString()
-            else String.format(java.util.Locale.US, "%.2f", seedAmt)
+sourceScenarioNumberText(seedAmt)
         )
     }
     var rateText by remember(initialDiscount, initialMode) {
         val seedRate = if (initialMode == 5 && initialDiscount > 5.0) 2.0 else initialDiscount
         mutableStateOf(
-            if (seedRate % 1.0 == 0.0) seedRate.toLong().toString()
-            else String.format(java.util.Locale.US, "%.1f", seedRate)
+sourceScenarioNumberText(seedRate)
         )
     }
     val amount = amountText.replace(",", "").toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0.0 } ?: Double.NaN
@@ -1759,10 +1760,8 @@ private fun NexlyQuickCalculatorCard(
                     modifier = Modifier.clickable {
                         mode = initialMode
                         years = initialYears.coerceIn(1, 40)
-                        amountText = if (initialAmount % 1.0 == 0.0) initialAmount.toLong().toString()
-                        else String.format(java.util.Locale.US, "%.2f", initialAmount)
-                        rateText = if (initialDiscount % 1.0 == 0.0) initialDiscount.toLong().toString()
-                        else String.format(java.util.Locale.US, "%.1f", initialDiscount)
+                        amountText = sourceScenarioNumberText(initialAmount)
+                        rateText = sourceScenarioNumberText(initialDiscount)
                     }
                 )
             }
@@ -1854,7 +1853,7 @@ private fun NexlyQuickCalculatorCard(
             ) {
                 Text(if (mode == 3) "Loan Term" else "Compounding Horizon", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    (if (mode == 3) listOf(5, 10, 15, 20, 30) else listOf(1, 3, 5, 10, 20)).forEach { yr ->
+                    ((if (mode == 3) listOf(5, 10, 15, 20, 30) else listOf(1, 3, 5, 10, 20)) + initialYears).distinct().sorted().forEach { yr ->
                         val active = years == yr
                         Box(
                             modifier = Modifier
