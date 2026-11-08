@@ -105,3 +105,23 @@ struct ResponseExportDocument: FileDocument {
     init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
 }
+
+/// UIKit owns the real Files export. The URL is an actual, already-written
+/// source file; the picker copies it only after the user chooses a destination.
+struct ResponseDocumentPickerIOS: UIViewControllerRepresentable {
+    let sourceURL: URL
+    let onCompletion: (URL?) -> Void
+    func makeCoordinator() -> Coordinator { Coordinator(onCompletion: onCompletion) }
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forExporting: [sourceURL], asCopy: true)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onCompletion: (URL?) -> Void
+        init(onCompletion: @escaping (URL?) -> Void) { self.onCompletion = onCompletion }
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { onCompletion(urls.first) }
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { onCompletion(nil) }
+    }
+}
