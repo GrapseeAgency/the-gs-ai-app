@@ -99,6 +99,34 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("1 of 1 completed").assertExists()
     }
 
+    @Test fun generatedBookingSavesOnlyActualLocalSelectionWithoutReservation() {
+        var payload by androidx.compose.runtime.mutableStateOf("""{"type":"booking","title":"Actual slots","slots":["09:00","10:00"]}""")
+        val prompts = mutableListOf<String>()
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    com.grapsee.gsai.ui.chat.content.WidgetBlockView(
+                        com.grapsee.gsai.ui.chat.content.Block.WidgetBlock("app", payload, false, 0), false, { prompts += it })
+                }
+            }
+        }
+        compose.onNodeWithText("Save slot locally").assertIsNotEnabled()
+        compose.onNodeWithText("09:00").performClick()
+        compose.onNodeWithText("Save slot locally").assertIsEnabled().performClick()
+        compose.onNodeWithText("Saved locally: 09:00. Preview only; no reservation has been made.").assertExists()
+        compose.onNodeWithText("10:00").performClick()
+        compose.onAllNodes(hasText("Saved locally:", substring = true)).assertCountEquals(0)
+        compose.onNodeWithText("Save slot locally").performClick()
+        compose.onNodeWithText("Saved locally: 10:00. Preview only; no reservation has been made.").assertExists()
+        compose.runOnIdle {
+            assertTrue("Local selection must never silently send a model booking request", prompts.isEmpty())
+            payload = """{"type":"booking","title":"New slots","slots":["11:00"]}"""
+        }
+        compose.onAllNodes(hasText("Saved locally:", substring = true)).assertCountEquals(0)
+        compose.onNodeWithText("Save slot locally").assertIsNotEnabled()
+        compose.onNodeWithText("11:00").assertExists()
+    }
+
     @Test fun contextualActionsEditActualCodeShowDataAndLaunchPlatformSharing() {
         val prompts = mutableListOf<String>()
         var content by androidx.compose.runtime.mutableStateOf("```javascript\nconsole.log(7)\n```")
