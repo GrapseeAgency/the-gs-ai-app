@@ -6,7 +6,7 @@ import org.junit.Test
 
 class CalcHonestyTest {
     @Test fun nativeFencesPreserveEverySourceSeparatorAndBlankLine() {
-        val sources = listOf("", "\n", "\r\n", "\n\nconst value = 7;\n\n", "\r\nconst value = 7;\r\n\r\n", "বাংলা 日本語\r\n\n\r\n", "const key = \"😀\";\r")
+        val sources = listOf("", "\n", "\r\n", "\n\nconst value = 7;\n\n", "\r\nconst value = 7;\r\n\r\n", "বাংলা 日本語\r\n\n\r\n", "const key = \"😀\";\rkeep")
         for (marker in listOf("```", "````", "~~~~~")) {
             for (separator in listOf("\n", "\r\n")) {
                 for (source in sources) {
@@ -17,6 +17,7 @@ class CalcHonestyTest {
                 }
             }
         }
+        assertEquals("const value = 7;\r", (parseBlocks("```javascript\nconst value = 7;\r").single() as Block.CodeBlock).code)
         val source = "first\n```\n~~~\nlast\n\n"
         val block = parseBlocks("````javascript\n" + source + "\n`````").single() as Block.CodeBlock
         assertEquals(source, block.code)
