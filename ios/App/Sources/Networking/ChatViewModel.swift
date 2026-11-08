@@ -398,7 +398,11 @@ final class ChatViewModel: ObservableObject {
         /// The actual offline row identity, retained without pretending that a
         /// local UUID is a server row eligible for the feedback API.
         var durableID: String? = nil
-        var reactPreviewIdentity: String { serverId ?? durableID ?? id.uuidString }
+        var reactPreviewIdentity: String {
+            if let serverId, !serverId.isEmpty { return serverId }
+            if let durableID, !durableID.isEmpty { return durableID }
+            return id.uuidString
+        }
     }
 
     // MARK: - Published state
