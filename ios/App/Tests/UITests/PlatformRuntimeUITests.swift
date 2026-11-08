@@ -72,7 +72,9 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["1 of 1 completed"].exists)
         XCTAssertEqual(app.buttons["Added edited"].value as? String, "Completed")
         app.buttons["Use next checklist payload"].tap()
-        XCTAssertTrue(app.staticTexts["0 of 1 completed"].waitForExistence(timeout: 5))
+        let sourceReset = app.staticTexts["0 of 1 completed"].waitForExistence(timeout: 5)
+        if !sourceReset { printPresentationDiagnostics(app, label: "CHECKLIST_RESET") }
+        XCTAssertTrue(sourceReset, "The source replacement must reset actual task count and completion")
         XCTAssertFalse(app.buttons["Added edited"].exists)
         XCTAssertEqual(app.buttons["New supplied task"].value as? String, "Not completed")
         app.buttons["Use app task surface"].tap()
