@@ -528,6 +528,7 @@ private fun StructuredBlockSequenceContent(
         if (tabs.size >= 3) tabs else emptyList()
     }
     var activeDashboardTab by remember(normalizedBlocks.size) { mutableStateOf("Dashboard") }
+    val visibleDashboardTab = activeDashboardTab.takeIf { it in dashboardTabs } ?: "Dashboard"
 
     if (dashboardTabs.isNotEmpty()) {
         Row(
@@ -540,7 +541,7 @@ private fun StructuredBlockSequenceContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             dashboardTabs.forEach { tab ->
-                val selected = activeDashboardTab == tab
+                val selected = visibleDashboardTab == tab
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(9.dp))
@@ -568,7 +569,7 @@ private fun StructuredBlockSequenceContent(
         val nextBlock = normalizedBlocks.getOrNull(i + 1)
 
         // Filter by dashboard tab when user selects Table / Todo / Calculator / Code
-        val skipForTab = when (activeDashboardTab) {
+        val skipForTab = when (visibleDashboardTab) {
             "Table" -> block !is Block.TableBlock && !(block is Block.WidgetBlock && block.kind == "table") &&
                 !(block is Block.Heading && ("table" in plainTextOfSpans(block.spans).lowercase() || "product" in plainTextOfSpans(block.spans).lowercase() || "language" in plainTextOfSpans(block.spans).lowercase()))
             "Todo" -> !(block is Block.BulletList) && !(block is Block.WidgetBlock && block.kind == "checklist") &&
