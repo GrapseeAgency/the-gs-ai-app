@@ -19,6 +19,7 @@ on:
       - "shared-contracts/**"
       - ".github/workflows/ios.yml"
       - "scripts/check_response_archive.py"
+      - "scripts/publish_response_section_frames.py"
   workflow_dispatch:
   push:
     branches:
@@ -28,6 +29,7 @@ on:
       - "shared-contracts/**"
       - ".github/workflows/ios.yml"
       - "scripts/check_response_archive.py"
+      - "scripts/publish_response_section_frames.py"
       - "scripts/ios_static_gates.py"
       - "scripts/swift_structure_gate.py"
       # The pixel gate below runs this script and blocks on its verdict, so a
@@ -303,6 +305,11 @@ jobs:
             -resultBundlePath ios/build/GSApp-genui.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee ios/build/xcodebuild-genui-test.log
+
+      - name: Publish actual response-section frames for visual review
+        if: always()
+        run: |
+          python3 scripts/publish_response_section_frames.py /tmp/gs-nexly-renders ios
 
       - name: Independently verify actual XCTest source archive bytes
         if: always()
