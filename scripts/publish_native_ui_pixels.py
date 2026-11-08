@@ -9,7 +9,7 @@ from pathlib import Path
 from PIL import Image
 
 log, label = sys.argv[1:]
-if label not in ('FILES', 'EXPORT', 'REACT'):
+if label not in ('FILES', 'EXPORT', 'REACT', 'SHARE'):
     raise SystemExit('Only non-user-data native acceptance fixture screenshots are eligible')
 if not Path(log).is_file():
     print('No actual XCTest log exists; no substitute image is created')
