@@ -28,7 +28,7 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertTrue(output("exceeded 2 seconds").waitForExistence(timeout: 15), "Actual infinite execution must stop")
         command("python print(7)")
         XCTAssertTrue(output("python: not executed").waitForExistence(timeout: 10))
-        XCTAssertEqual(app.webViews.buttons["Run again"].count, 0, "Unsupported execution must remove stale Worker output")
+        XCTAssertFalse(app.webViews.buttons["Run again"].exists, "Unsupported execution must remove stale Worker output")
         command("deploy")
         XCTAssertTrue(output("deploy: not executed").waitForExistence(timeout: 10), "Model-provided output must never become fake execution")
         XCTAssertFalse(output("😀").exists)
