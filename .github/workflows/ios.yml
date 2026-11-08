@@ -75,10 +75,11 @@ permissions:
   contents: read
 
 concurrency:
-  # The synchronous React runtime and inset-aware capture generation must not
-  # queue behind an obsolete runtime's long audit. Per-file pushes within this
-  # generation still replace only its pending run, never its active evidence.
-  group: ios-response-runtime-v2-${{ github.ref }}
+  # This generation exercises the actual MessageBubble parent/storage and
+  # normal header tap, not merely standalone rich blocks. Preserve the older
+  # focused acceptance/full audit while the production-wrapper generation runs.
+  # Per-file pushes replace only this generation's pending run, not its evidence.
+  group: ios-response-runtime-v3-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
