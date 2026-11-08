@@ -347,7 +347,11 @@ object NexlyIcons {
     /** Replace known emoji with `:icon:` tokens, map any remaining emoji block
      * to a semantic `:icon:` token, and drop variation selectors and ZWJs. */
     fun normalize(text: String): String {
-        var out = text
+        // Numeric direction is source data; canonical non-emoji arrows keep
+        // its sign intact when decorative emoji/variation selectors are removed.
+        var out = text.replace(Regex("[↘↗]\\uFE0F?(?=\\s*[+-]?\\s*[\$€£¥₹৳]?\\s*\\d)")) {
+            if (it.value.startsWith("↘")) "↓" else "↑"
+        }
         for ((symbol, icon) in emoji.entries.sortedByDescending { it.key.length }) {
             out = out.replace(symbol, ":$icon:")
         }
