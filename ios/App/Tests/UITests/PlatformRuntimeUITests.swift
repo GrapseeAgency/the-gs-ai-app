@@ -145,25 +145,26 @@ final class PlatformRuntimeUITests: XCTestCase {
         guard shown else { return }
         let provider = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@ OR label CONTAINS %@ OR label == %@", "On My iPhone", "iCloud Drive", "Browse")).firstMatch
         XCTAssertTrue(provider.waitForExistence(timeout: 10), "Export must expose the actual system Files provider, not an app-owned Cancel label")
-        // The first exact-label match may be a non-actionable accessibility
-        // container, and existence can precede the native sheet transition.
-        // Find an actually usable system action, then prove its delegate effect.
-        let actionableCancel = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Cancel"))
-                .allElementsBoundByIndex.contains { $0.isHittable }
-        }, object: app)
-        let becameUsable = XCTWaiter.wait(for: [actionableCancel], timeout: 10) == .completed
-        guard becameUsable, let nativeCancel = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Cancel"))
-            .allElementsBoundByIndex.first(where: { $0.isHittable }) else {
+        // Files is remote UI. On current iOS, resolving isHittable inside a
+        // waiter can itself fail with "remote AX element ... interrupted by
+        // waiter". Dispatch an actual touch to the visible native Cancel
+        // frame instead; only its real delegate receipt can pass this test.
+        let cancelFrame = pickerCancel.frame
+        let applicationFrame = app.frame
+        guard !cancelFrame.isEmpty, !cancelFrame.isNull,
+              applicationFrame.contains(CGPoint(x: cancelFrame.midX, y: cancelFrame.midY)) else {
             printPresentationDiagnostics(app, label: "EXPORT")
-            XCTFail("The actual Files action must be usable")
+            XCTFail("The actual native Files Cancel control must occupy the visible viewport")
             return
         }
         let capture = XCTAttachment(screenshot: app.screenshot())
         capture.name = "genui-contextual-real-source-export-picker"; capture.lifetime = .keepAlways; add(capture)
-        nativeCancel.tap()
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: cancelFrame.midX - applicationFrame.minX, dy: cancelFrame.midY - applicationFrame.minY)).tap()
         let cancelled = app.staticTexts["response.action.notice"].firstMatch
-        let acknowledged = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Export cancelled."), object: cancelled)
+        let acknowledged = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            cancelled.exists && cancelled.label == "Export cancelled."
+        }, object: app)
         let didAcknowledge = XCTWaiter.wait(for: [acknowledged], timeout: 10) == .completed
         if !didAcknowledge { printPresentationDiagnostics(app, label: "EXPORT") }
         XCTAssertTrue(didAcknowledge, "The actual document-picker delegate must acknowledge cancellation; no simulated save is allowed")
