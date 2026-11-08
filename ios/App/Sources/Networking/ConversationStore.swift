@@ -362,11 +362,11 @@ final class ConversationStore: ObservableObject {
             let legacy = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("gsai-store.json")
             try? FileManager.default.removeItem(at: legacy)
+            AttachmentStore.shared.purgeAllStagedFiles()
         }
         conversations.removeAll()
         messages.removeAll()
         lastMessageByConversation.removeAll()
-        AttachmentStore.shared.purgeAllStagedFiles()
     }
 
     /// Privacy → Clear local data: every conversation, message and library
