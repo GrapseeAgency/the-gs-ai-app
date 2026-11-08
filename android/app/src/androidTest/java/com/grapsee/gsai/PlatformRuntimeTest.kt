@@ -348,9 +348,19 @@ class PlatformRuntimeTest {
         val device = UiDevice.getInstance(instrumentation)
         fun requireWorkerOutput(text: String) {
             if (!device.wait(Until.hasObject(By.textContains(text)), 15_000L)) {
+                // This is failure diagnostics only; scrolling must NOT turn a
+                // clipped terminal into a passing auto-layout test. It reveals
+                // whether execution failed or its genuine output was hidden.
+                val position = IntArray(2)
+                var width = 0
+                var height = 0
+                instrumentation.runOnMainSync {
+                    web!!.getLocationOnScreen(position); width = web!!.width; height = web!!.height
+                }
+                repeat(2) { device.swipe(position[0] + width / 2, position[1] + height * 4 / 5, position[0] + width / 2, position[1] + height / 5, 20) }
                 val dump = java.io.ByteArrayOutputStream()
                 device.dumpWindowHierarchy(dump)
-                val state = evaluate("JSON.stringify({text:document.body.innerText,height:innerHeight,bodyHeight:document.body.scrollHeight,bridge:typeof GsHost,installed:!!window.__gsNativeHeightBridge,frame:document.querySelector('#execution iframe')?.getBoundingClientRect().toJSON()})")
+                val state = evaluate("JSON.stringify({text:document.body.innerText,height:innerHeight,bodyHeight:document.body.scrollHeight,bridge:typeof GsHost,installed:!!window.__gsNativeHeightBridge,reportedHeight:window.__gsReportedHeight,bridgeError:window.__gsHeightBridgeError,frame:document.querySelector('#execution iframe')?.getBoundingClientRect().toJSON()})")
                 val tree = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
                     .parse(java.io.ByteArrayInputStream(dump.toByteArray())).getElementsByTagName("node")
                 val labels = (0 until tree.length).mapNotNull { index ->
