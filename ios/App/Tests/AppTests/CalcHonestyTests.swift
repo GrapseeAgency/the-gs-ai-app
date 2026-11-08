@@ -34,6 +34,16 @@ final class CalcHonestyTests: XCTestCase {
         XCTAssertNil(chartJsonFromTableIOS(headers: headers, rows: rows), "Incompatible units cannot become one numerical series")
     }
 
+    func testLearningKeepsCompleteDefinitionsAndDoesNotCreateAmbiguousDuplicateAnswerChoices() {
+        let definition = Array(repeating: "A supplied definition with an important source qualification.", count: 6).joined(separator: " ")
+        let source = ["Alpha", "Beta", "Gamma"].map { "- **\($0)**: \(definition) \($0)." }.joined(separator: "\n")
+        let concepts = extractSpontaneousConceptsFromBlocksIOS(parseBlocks(source))
+        XCTAssertEqual(concepts.count, 3)
+        XCTAssertEqual(concepts.first?.definition, definition + " Alpha.")
+        let duplicates = ["Alpha", "Beta", "Gamma"].map { "- **\($0)**: \(definition)" }.joined(separator: "\n")
+        XCTAssertEqual(extractSpontaneousConceptsFromBlocksIOS(parseBlocks(duplicates)).count, 1)
+    }
+
     func testSpontaneousLearningUsesDefinitionsWithoutQuizzingSourceRecordsOrActionPlans() {
         let definitions = "- Atom: A basic unit of a chemical element.\n- Molecule: Two or more atoms bonded together.\n- Element: A substance made of one type of atom."
         XCTAssertEqual(extractSpontaneousConceptsFromBlocksIOS(parseBlocks("## Core concepts\n\n\(definitions)")).count, 3)
