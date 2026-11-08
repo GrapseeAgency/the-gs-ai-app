@@ -19,7 +19,7 @@ export function ReactPreview({source, storageKey}: {source: string; storageKey: 
       }
     } catch { /* Explicit temporary-storage notice inside the preview. */ }
     const bootstrap = `
-      const memory=Object.assign(Object.create(null),${JSON.stringify(initial).replace(/</g,'\\u003c')});
+      const memory=Object.assign(Object.create(null),JSON.parse(${JSON.stringify(JSON.stringify(initial)).replace(/</g,'\\u003c')}));
       function storageNotice(message){let p=document.getElementById('storage-status');if(!p){p=document.createElement('p');p.id='storage-status';p.setAttribute('role','alert');document.body.prepend(p);}p.textContent=message;}
       window.addEventListener('message',event=>{if(event.source===parent&&event.data?.type==='gs-react-storage-error')storageNotice(event.data.message);});
       ${available ? '' : "document.addEventListener('DOMContentLoaded',()=>storageNotice('Persistent storage unavailable. Changes in this preview are temporary.'));"}
