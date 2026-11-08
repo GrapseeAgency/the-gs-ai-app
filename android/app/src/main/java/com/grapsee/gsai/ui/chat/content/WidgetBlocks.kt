@@ -1848,6 +1848,14 @@ private fun ChartWidgetView(w: ChartWidget) {
 
 private data class LineGeom(val minX: Float, val minY: Float, val spanX: Float, val spanY: Float)
 
+/** Thin axis labels without assigning the first eight labels to all points. */
+internal fun chartAxisLabelIndicesAndroid(count: Int, limit: Int = 8): List<Int> = when {
+    count <= 0 || limit <= 0 -> emptyList()
+    count <= limit -> (0 until count).toList()
+    limit == 1 -> listOf(count - 1)
+    else -> (0 until limit).map { kotlin.math.round(it.toDouble() * (count - 1) / (limit - 1)).toInt() }.distinct()
+}
+
 @Composable
 private fun LineChart(w: ChartWidget, filled: Boolean) {
     var animate by remember { mutableStateOf(false) }
@@ -2085,22 +2093,23 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
         }
     }
     ChartInspectBar(probe, w.unit, "Tap a point to read it", colors.firstOrNull() ?: GsTheme.colors.accent)
-    // X labels in equal cells, so they line up with the points above them.
+    // Sample across the complete source domain, and place each label at its
+    // actual plotted x coordinate. Taking the first eight and stretching them
+    // across a 31-point plot attached the wrong labels to the later points.
     if (xLabels.isNotEmpty()) {
-        Row(Modifier.fillMaxWidth().padding(top = 4.dp, start = 34.dp)) {
-            xLabels.take(8).forEach { label ->
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = GsTheme.colors.textTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f)
-                )
+        Canvas(Modifier.fillMaxWidth().height(20.dp).padding(top = 4.dp)) {
+            val left = 34.dp.toPx()
+            val plotWidth = (size.width - left).coerceAtLeast(1f)
+            chartAxisLabelIndicesAndroid(xLabels.size).forEach { index ->
+                val x = w.series.firstOrNull()?.data?.getOrNull(index)?.getOrNull(0)
+                val fraction = if (x != null) (x - minX) / spanX else index.toFloat() / (xLabels.size - 1).coerceAtLeast(1)
+                val label = measurer.measure(xLabels[index], axisStyle)
+                val textLeft = (left + plotWidth * fraction - label.size.width / 2f).coerceIn(0f, (size.width - label.size.width).coerceAtLeast(0f))
+                drawText(label, topLeft = Offset(textLeft, 0f))
             }
         }
     }
+
 }
 
 /**
