@@ -259,8 +259,8 @@ func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> NexlyCalcul
     let combined = "\(cleanTitle) \(bodyText)".lowercased()
     if ["calorie", "protein", "macro", "tdee", "bmi", "margin", "roi", "budget", "salary", "income"].contains(where: { combined.contains($0) }) { return nil }
     guard ["discount", "tax", "tip", "markup", "vat", "loan", "mortgage", "emi", "compound", "apy", "apr"].contains(where: { combined.contains($0) }) else { return nil }
-    let amountPattern = try? NSRegularExpression(pattern: "[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)(?:\\s*([kKmMbB])(?![A-Za-z]))?(?![\\dA-Za-z.,])")
-    let ratePattern = try? NSRegularExpression(pattern: "(?<![\\d.,−-])(\\d+(?:\\.\\d+)?)\\s*(?:%|percent\\b)", options: .caseInsensitive)
+    let amountPattern = try? NSRegularExpression(pattern: "(?<![\\dA-Za-z_(−-])[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)(?:\\s*([kKmMbB])(?![A-Za-z]))?(?![\\dA-Za-z.,])")
+    let ratePattern = try? NSRegularExpression(pattern: "(?<![\\dA-Za-z_.,−-])(\\d+(?:\\.\\d+)?)\\s*(?:%|percent\\b)", options: .caseInsensitive)
     let sourceRange = NSRange(bodyText.startIndex..., in: bodyText)
     guard amountPattern?.numberOfMatches(in: bodyText, range: sourceRange) == 1,
           ratePattern?.numberOfMatches(in: bodyText, range: sourceRange) == 1 else { return nil }
@@ -269,7 +269,7 @@ func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> NexlyCalcul
 
 
     var currAmount: Double? = nil
-    if let crx = try? NSRegularExpression(pattern: "[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)(?:\\s*([kKmMbB])(?![A-Za-z]))?(?![\\dA-Za-z.,])"),
+    if let crx = try? NSRegularExpression(pattern: "(?<![\\dA-Za-z_(−-])[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)(?:\\s*([kKmMbB])(?![A-Za-z]))?(?![\\dA-Za-z.,])"),
        let cm = crx.firstMatch(in: bodyText, range: NSRange(bodyText.startIndex..., in: bodyText)),
        let numRange = Range(cm.range(at: 1), in: bodyText),
        let base = Double(bodyText[numRange].replacingOccurrences(of: ",", with: "")) {
@@ -286,7 +286,7 @@ func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> NexlyCalcul
     }
 
     var pctVal: Double? = nil
-    if let prx = try? NSRegularExpression(pattern: "(?<![\\d.,−-])(\\d+(?:\\.\\d+)?)\\s*(?:%|percent\\b)", options: [.caseInsensitive]),
+    if let prx = try? NSRegularExpression(pattern: "(?<![\\dA-Za-z_.,−-])(\\d+(?:\\.\\d+)?)\\s*(?:%|percent\\b)", options: [.caseInsensitive]),
        let pm = prx.firstMatch(in: bodyText, range: NSRange(bodyText.startIndex..., in: bodyText)),
        let pr = Range(pm.range(at: 1), in: bodyText) {
         pctVal = Double(bodyText[pr])
