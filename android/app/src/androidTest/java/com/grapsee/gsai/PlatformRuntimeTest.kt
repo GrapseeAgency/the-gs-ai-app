@@ -119,7 +119,7 @@ class PlatformRuntimeTest {
     }
 
     @Test fun ordinaryMarkdownTasksEditDeletePreserveDetailsAndDoNotMoveCompletion() {
-        var wire by androidx.compose.runtime.mutableStateOf("## Next actions\n- [ ] Original task\n  Supplied source detail\n- [x] Keep completed")
+        var wire by androidx.compose.runtime.mutableStateOf("## Next actions\n- [ ] Original task\n  Supplied source detail\n  - Supplied nested detail\n- [x] Keep completed")
         compose.activity.setContentForPlatformTest {
             TheGsAiTheme {
                 androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
@@ -134,6 +134,8 @@ class PlatformRuntimeTest {
         compose.onNode(hasSetTextAction()).performTextReplacement("Edited source")
         compose.onNode(hasSetTextAction()).performImeAction()
         compose.onNodeWithText("Supplied source detail").assertExists()
+        compose.onNodeWithText("Supplied nested detail").assertExists()
+        compose.onNodeWithContentDescription("Edit task: Supplied nested detail").assertDoesNotExist()
         compose.onNodeWithText("2 of 2 completed").assertExists()
         compose.onNodeWithContentDescription("Delete task: Keep completed").performClick()
         compose.onNodeWithText("1 of 1 completed").assertExists()
