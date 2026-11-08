@@ -25,16 +25,21 @@ final class PlatformRuntimeUITests: XCTestCase {
         app.launchArguments = ["-gs_test_session_active", "-gs_test_react_preview"]
         app.launchEnvironment["GS_REACT_ACCEPTANCE_SCOPE"] = UUID().uuidString
         app.launch()
-        func run() {
+        func run() -> Bool {
             let button = app.buttons["Run in Browser"]
-            XCTAssertTrue(button.waitForExistence(timeout: 20))
+            let offered = button.waitForExistence(timeout: 20)
+            XCTAssertTrue(offered)
+            guard offered else { printPresentationDiagnostics(app, label: "REACT"); return false }
             button.tap()
-            XCTAssertTrue(app.webViews.staticTexts["React preview running"].waitForExistence(timeout: 20), "An actual React component must mount, not just a source card")
+            let mounted = app.webViews.staticTexts["React preview running"].waitForExistence(timeout: 20)
+            XCTAssertTrue(mounted, "An actual React component must mount, not just a source card")
+            if !mounted { printPresentationDiagnostics(app, label: "REACT") }
+            return mounted
         }
         func complete(_ text: String) -> XCUIElement {
             app.webViews.descendants(matching: .any).matching(NSPredicate(format: "label == %@", text)).firstMatch
         }
-        run()
+        guard run() else { return }
         let input = app.webViews.textFields["New task"]
         XCTAssertTrue(input.waitForExistence(timeout: 10)); input.tap(); input.typeText("iOS React task")
         app.webViews.buttons["Add task"].tap()
@@ -47,20 +52,20 @@ final class PlatformRuntimeUITests: XCTestCase {
         let edited = title.value as? String ?? ""
         XCTAssertTrue(edited.contains("edited"), "Real keyboard input must update the React task, not just its DOM label")
         app.webViews.staticTexts["Response tasks"].tap()
-        run()
+        guard run() else { return }
         XCTAssertEqual(app.webViews.textFields["Task title"].value as? String, edited)
         XCTAssertTrue(complete("1/1 complete").exists)
-        app.buttons["Use other response"].tap(); run()
+        app.buttons["Use other response"].tap(); guard run() else { return }
         XCTAssertTrue(complete("0/0 complete").waitForExistence(timeout: 5))
         XCTAssertFalse(app.webViews.textFields["Task title"].exists)
-        app.buttons["Use original response"].tap(); run()
+        app.buttons["Use original response"].tap(); guard run() else { return }
         XCTAssertEqual(app.webViews.textFields["Task title"].value as? String, edited)
-        app.terminate(); app.launch(); run()
+        app.terminate(); app.launch(); guard run() else { return }
         XCTAssertEqual(app.webViews.textFields["Task title"].value as? String, edited, "Real WebKit persistence must survive killing and relaunching the app")
         XCTAssertTrue(complete("1/1 complete").exists)
         app.webViews.buttons["Delete task"].tap()
         XCTAssertTrue(complete("0/0 complete").waitForExistence(timeout: 5))
-        run(); XCTAssertFalse(app.webViews.textFields["Task title"].exists)
+        guard run() else { return }; XCTAssertFalse(app.webViews.textFields["Task title"].exists)
         let capture = XCTAttachment(screenshot: app.screenshot())
         capture.name = "genui-react-actual-task-crud-storage-isolation"; capture.lifetime = .keepAlways; add(capture)
     }
