@@ -70,7 +70,9 @@ permissions:
 
 concurrency:
   group: ios-${{ github.ref }}
-  cancel-in-progress: true
+  # Finish the running native audit; newer commits replace only the pending run.
+  # Per-file pushes must not repeatedly cancel Xcode before runtime evidence.
+  cancel-in-progress: false
 
 jobs:
   ios-build-test:
