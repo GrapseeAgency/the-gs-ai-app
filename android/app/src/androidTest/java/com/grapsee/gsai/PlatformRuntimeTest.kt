@@ -394,7 +394,7 @@ class PlatformRuntimeTest {
                 repeat(2) { device.swipe(position[0] + width / 2, position[1] + height * 4 / 5, position[0] + width / 2, position[1] + height / 5, 20) }
                 val dump = java.io.ByteArrayOutputStream()
                 device.dumpWindowHierarchy(dump)
-                val state = evaluate("JSON.stringify({text:document.body.innerText,height:innerHeight,bodyHeight:document.body.scrollHeight,bridge:typeof GsHost,installed:!!window.__gsNativeHeightBridge,reportedHeight:window.__gsReportedHeight,bridgeError:window.__gsHeightBridgeError,frame:document.querySelector('#execution iframe')?.getBoundingClientRect().toJSON()})")
+                val state = evaluate("JSON.stringify({text:document.body.innerText,height:innerHeight,bodyHeight:document.body.scrollHeight,bridge:typeof GsHost,installed:!!window.__gsNativeHeightBridge,reportedHeight:window.__gsReportedHeight,bridgeError:window.__gsHeightBridgeError,nativeBridgeReceived:window.__gsNativeBridgeReceived,composeHeight:window.__gsComposeHeight,nativeMeasuredHeight:window.__gsNativeMeasuredHeight,frame:document.querySelector('#execution iframe')?.getBoundingClientRect().toJSON()})")
                 val tree = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
                     .parse(java.io.ByteArrayInputStream(dump.toByteArray())).getElementsByTagName("node")
                 val labels = (0 until tree.length).mapNotNull { index ->
