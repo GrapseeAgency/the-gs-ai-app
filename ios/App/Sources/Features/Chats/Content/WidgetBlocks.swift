@@ -605,6 +605,7 @@ private struct HtmlSandboxWebView: UIViewRepresentable {
             config.userContentController.addUserScript(WKUserScript(
                 source: policy, injectionTime: .atDocumentStart, forMainFrameOnly: false))
         }
+        config.userContentController.addUserScript(WKUserScript(source: Self.resizeScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         config.userContentController.add(context.coordinator, name: "gsResize")
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
@@ -618,10 +619,7 @@ private struct HtmlSandboxWebView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         let displayHTML = DOMDisplayPolicyIOS.script == nil
             ? "<p>Interactive preview unavailable: display policy could not be loaded.</p>" : html
-        let wrapped = """
-        <!doctype html>
-        <html>
-        <head>
+        let head = """
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
         <style>
@@ -650,29 +648,26 @@ private struct HtmlSandboxWebView: UIViewRepresentable {
         }
         svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
         </style>
-        </head>
-        <body>
-        \(displayHTML)
-        <script>
-        function reportHeight() {
-          var h = Math.max(document.body.scrollHeight || 0, document.documentElement.scrollHeight || 0, 80);
-          if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.gsResize) {
-            window.webkit.messageHandlers.gsResize.postMessage(h);
-          }
-        }
-        window.addEventListener('load', reportHeight);
-        window.addEventListener('click', function() { setTimeout(reportHeight, 50); });
-        window.addEventListener('input', function() { setTimeout(reportHeight, 50); });
-        setTimeout(reportHeight, 120);
-        </script>
-        </body>
-        </html>
         """
+        let wrapped = HTMLDocumentIOS.withHead(displayHTML, head: head)
         if context.coordinator.lastLoaded != wrapped {
             context.coordinator.lastLoaded = wrapped
             webView.loadHTMLString(wrapped, baseURL: nil)
         }
     }
+
+    private static let resizeScript = """
+    function reportHeight() {
+      var h = Math.max(document.body ? document.body.scrollHeight : 0, document.documentElement.scrollHeight || 0, 80);
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.gsResize) {
+        window.webkit.messageHandlers.gsResize.postMessage(h);
+      }
+    }
+    window.addEventListener('load', reportHeight);
+    window.addEventListener('click', function() { setTimeout(reportHeight, 50); });
+    window.addEventListener('input', function() { setTimeout(reportHeight, 50); });
+    setTimeout(reportHeight, 120);
+    """
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         var parent: HtmlSandboxWebView
