@@ -31,13 +31,15 @@ original = base64.b64decode(''.join(chunks[i] for i in range(1, count + 1)), val
 with Image.open(io.BytesIO(original)) as source:
     original_size = f'{source.width}x{source.height}'
     image = source.convert('RGB').resize((393, round(source.height * 393 / source.width)), Image.Resampling.LANCZOS)
-for quality in (80, 65, 50, 35, 20):
+# Keep full 393px geometry and the real image; dense keyboards/source can
+# need the complete ten-notice budget. Lossless originals stay in artifacts.
+for quality in (80, 65, 50, 35, 20, 15, 10):
     output = io.BytesIO()
     image.save(output, 'JPEG', quality=quality, optimize=True)
     data = output.getvalue()
-    if len(data) <= 23500:
+    if len(data) <= 29300:
         break
-if len(data) > 23500:
+if len(data) > 29300:
     raise SystemExit('Actual native UI preview exceeds the annotation bound')
 digest = hashlib.sha256(data).hexdigest()
 encoded = base64.b64encode(data).decode('ascii')
