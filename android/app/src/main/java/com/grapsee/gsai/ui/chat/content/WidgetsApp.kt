@@ -127,7 +127,7 @@ internal fun AppWidgetView(w: AppWidget, onSendPrompt: ((String) -> Unit)? = nul
                 "sheet" -> SheetLayout(w)
                 "dashboard", "analytics", "report", "scenario" -> DashboardLayout(w, onSendPrompt)
                 "config", "configurator" -> ConfiguratorLayout(w, onSendPrompt)
-                "booking", "schedule" -> BookingLayout(w, onSendPrompt)
+                "booking", "schedule" -> BookingLayout(w)
                 "search" -> SearchLayout(w, onSendPrompt)
                 "filter" -> FilterLayout(w, onSendPrompt)
                 "files", "connected" -> ListLayout(w, onSendPrompt)
@@ -583,55 +583,38 @@ private fun ConfiguratorLayout(w: AppWidget, onSendPrompt: ((String) -> Unit)?) 
 // --- booking -----------------------------------------------------------------
 
 @Composable
-private fun BookingLayout(w: AppWidget, onSendPrompt: ((String) -> Unit)?) {
+private fun BookingLayout(w: AppWidget) {
     val c = GsTheme.colors
-    val slots = w.slots.take(16).filter { it.isNotBlank() }
-    val days = w.items.take(14).filter { it.title.isNotBlank() }
-    var day by remember { mutableStateOf(days.firstOrNull()?.title.orEmpty()) }
-    var slot by remember { mutableStateOf("") }
+    val slots = w.slots.filter { it.isNotBlank() }
+    val days = w.items.filter { it.title.isNotBlank() }
+    var day by remember(w) { mutableStateOf("") }
+    var slot by remember(w) { mutableStateOf("") }
+    var saved by remember(w) { mutableStateOf(false) }
+    Text("Local selection only. No booking service is connected and no reservation will be made.", style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
     if (days.isNotEmpty()) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            days.forEach { d ->
-                val selected = day == d.title
-                Column(
-                    Modifier.clip(RoundedCornerShape(10.dp))
-                        .background(if (selected) c.accent else c.surface)
-                        .clickable { day = d.title }
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(d.title, style = MaterialTheme.typography.labelMedium, color = if (selected) c.onAccent else c.textPrimary)
-                    if (d.subtitle.isNotBlank()) {
-                        Text(d.subtitle, style = MaterialTheme.typography.labelSmall, color = if (selected) c.onAccent else c.textTertiary)
-                    }
+            days.forEach { item ->
+                TextButton(onClick = { day = item.title; saved = false }) {
+                    Text(item.title, color = if (day == item.title) c.accent else c.textPrimary)
                 }
             }
         }
     }
     if (slots.isNotEmpty()) {
-        Row(Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            slots.forEach { s ->
-                val selected = slot == s
-                Box(
-                    Modifier.clip(RoundedCornerShape(8.dp))
-                        .background(if (selected) c.accent else c.surface)
-                        .clickable { slot = s }
-                        .padding(horizontal = 10.dp, vertical = 7.dp)
-                ) {
-                    Text(s, style = MaterialTheme.typography.labelSmall, color = if (selected) c.onAccent else c.textSecondary)
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            slots.forEach { value ->
+                TextButton(onClick = { slot = value; saved = false }) {
+                    Text(value, color = if (slot == value) c.accent else c.textPrimary)
                 }
             }
         }
     }
-    val ready = day.isNotBlank() && (slots.isEmpty() || slot.isNotBlank())
-    Text(
-        w.submitLabel.ifBlank { "Confirm booking" },
-        style = MaterialTheme.typography.labelMedium,
-        color = if (ready) c.accent else c.textTertiary,
-        modifier = Modifier.padding(top = 10.dp).clickable {
-            if (ready) onSendPrompt?.invoke("Book ${w.title.ifEmpty { "appointment" }}: $day${if (slot.isBlank()) "" else " at $slot"}")
-        }
-    )
+    val ready = (days.isEmpty() || day.isNotBlank()) && (slots.isEmpty() || slot.isNotBlank()) && (day.isNotBlank() || slot.isNotBlank())
+    TextButton(enabled = ready, onClick = { saved = true }) { Text(w.submitLabel.ifBlank { "Save slot locally" }) }
+    if (saved) {
+        val selection = listOf(day, slot).filter { it.isNotBlank() }.joinToString(" at ")
+        Text("Saved locally: $selection. Preview only; no reservation has been made.", style = MaterialTheme.typography.bodySmall, color = c.textPrimary)
+    }
 }
 
 // --- search ------------------------------------------------------------------
