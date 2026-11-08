@@ -5,6 +5,21 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun actualChartDecoderNeverCompactsMissingObservationsOrFabricatesZero() {
+        for (invalid in listOf("null", "[0,null]", "[0,true]", "[0,1e100]", "[0,10,null]", "[null,10]", "[0,10,\"unknown\"]", "{\"x\":1,\"y\":null}", "{\"x\":null,\"y\":10}", "{\"x\":1,\"y\":10,\"z\":null}", "{\"open\":1,\"high\":2,\"low\":null,\"close\":1}")) {
+            val source = """{"type":"line","labels":["Before","Missing","After"],"series":[{"name":"Actual","data":[[0,10],$invalid,[2,30]]}]}"""
+            assertNull("Preserve source rather than chart missing observation: $invalid", parseWidget("chart", source))
+        }
+        val source = """{"type":"line","labels":["Loss","Zero","Gain"],"series":[{"name":"Actual","data":[[0,-10],[1,0],[2,30]]}]}"""
+        val actual = (parseWidget("chart", source) as Widget.Chart).w.series.single().data
+        assertEquals(listOf(-10f, 0f, 30f), actual.map { it[1] })
+        assertEquals(listOf(0f, 1f, 2f), actual.map { it[0] })
+        val categories = (parseWidget("chart", """{"type":"bar","series":[{"data":[["Jan",10],["Feb",20]]}]}""") as Widget.Chart).w.series.single().data
+        assertEquals(listOf(listOf(0f, 10f), listOf(1f, 20f)), categories)
+        val candle = (parseWidget("chart", """{"type":"candlestick","series":[{"data":[{"open":10,"high":20,"low":5,"close":15}]}]}""") as Widget.Chart).w.series.single().data.single()
+        assertEquals(listOf(10f, 20f, 5f, 15f), candle)
+    }
+
     @Test fun actualChartDomainsRetainLossesZeroAndSourcePeakWithoutDoublingTheRange() {
         val signed = chartValueDomainAndroid(listOf(-20f, 0f, 10f))
         assertEquals(-20.0, signed.lower, 0.0)
