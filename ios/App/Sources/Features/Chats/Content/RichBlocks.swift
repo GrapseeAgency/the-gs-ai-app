@@ -3127,8 +3127,8 @@ struct CodeBlockCardView: View {
             HtmlBlockView(kind: lang == "svg" ? "svg" : "html", source: currentCode, open: false)
                 .padding(8)
                 .background(Color(red: 0.973, green: 0.961, blue: 1.0))
-        } else if !open && ["js", "javascript", "node"].contains(lang) && runCount > 0 {
-            HtmlBlockView(kind: "html", source: JavaScriptWorkerSandboxIOS.document(source: currentCode), open: false)
+        } else if !open && ["js", "javascript", "node"].contains(lang), let workerDocument {
+            HtmlBlockView(kind: "html", source: workerDocument, open: false)
                 .id(runCount)
                 .padding(8)
         } else if !open && ["jsx", "tsx", "react"].contains(lang) {
@@ -3184,7 +3184,7 @@ struct CodeBlockCardView: View {
 
     private func resetCodeState() {
         editedCode = nil; editing = false; editorDraft = ""; editorError = nil
-        editorEncoded = false; expanded = false; runOutput = nil; errorOutput = nil; runCount = 0
+        editorEncoded = false; expanded = false; runOutput = nil; errorOutput = nil; runCount = 0; workerDocument = nil
     }
 
     private func executeCode() {
@@ -3195,6 +3195,7 @@ struct CodeBlockCardView: View {
         runCount += 1
         runOutput = nil
         errorOutput = nil
+        workerDocument = nil
         let src = currentCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !src.isEmpty else {
             runOutput = "(empty snippet)"
@@ -3283,6 +3284,7 @@ struct CodeBlockCardView: View {
             errorOutput = "Not executed: no \(lang.uppercased()) runtime is available here."
             return
         }
+        workerDocument = JavaScriptWorkerSandboxIOS.document(source: currentCode)
         // Execution lives in a disposable Worker in WKWebView, never the app UI thread.
         // Its console, exception, completion and timeout are displayed by that runtime.
 
