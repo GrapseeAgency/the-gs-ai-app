@@ -1410,7 +1410,8 @@ fun WidgetBlockView(block: Block.WidgetBlock, streaming: Boolean, onSendPrompt: 
     }
     val widget = remember(block.kind, block.json) {
         parseWidget(block.kind, block.json)
-            ?: inferWidgetKind(block.json)?.let { inferred -> parseWidget(inferred, block.json) }
+            ?: if (widgetKindOf(block.kind) == "checklist") null
+            else inferWidgetKind(block.json)?.let { inferred -> parseWidget(inferred, block.json) }
     }
     if (widget == null) {
         WidgetFallback(block)
