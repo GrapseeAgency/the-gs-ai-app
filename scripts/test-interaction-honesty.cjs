@@ -619,13 +619,16 @@ async function main() {
     assert.ok(!document.querySelector('textarea').value.includes('😀'))
   })
   await mount(h(CodeBlock, { language: 'sql', code: 'SELECT * FROM private_accounts' }))
-  await click(buttons().find((b) => b.textContent.includes('Run Code')))
-  check('SQL button never fabricates a result', () => { assert.match(document.body.textContent, /no database is connected/); assert.doesNotMatch(document.body.textContent, /Ava Chen|3 rows returned/) })
+  check('SQL discloses its unavailable connection without advertising a fake Run action', () => {
+    assert.match(document.body.textContent, /no database is connected/)
+    assert.doesNotMatch(document.body.textContent, /Ava Chen|3 rows returned/)
+    assert.ok(!buttons().some(button => /Run/.test(button.textContent)))
+  })
   for (const language of ['python', 'typescript', 'jsx']) {
     await mount(h(CodeBlock, { language, code: language === 'python' ? 'print(6*7)' : 'const value: number = 42' }))
-    await click(buttons().find(b => b.textContent.includes('Run')))
-    check(language + ' Run refuses unsupported execution without a simulated result', () => {
-      assert.match(document.body.textContent, /Not executed/)
+    check(language + ' immediately discloses unsupported execution without a nonworking Run control', () => {
+      assert.match(document.body.textContent, /Not executed|Source only/)
+      assert.ok(!buttons().some(button => /Run/.test(button.textContent)))
       assert.doesNotMatch(document.body.textContent, /Arithmetic preview/)
       assert.equal(document.querySelectorAll('iframe').length, 0)
     })
