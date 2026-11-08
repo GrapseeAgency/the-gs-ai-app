@@ -1703,7 +1703,7 @@ private struct StatBodyView: View {
         // A metric is not a drill-down button unless there is a real drill-down.
         // Preserve all supplied cards and units, with no invented trend arrows.
         let compactMetrics = cards.count == 4 && dynamicTypeSize <= .large && cards.allSatisfy {
-            str($0, "value", "val", "number", "amount").count + str($0, "unit").count <= 10 &&
+            str($0, "value", "val", "number", "amount").count + str($0, "unit").count <= 7 &&
                 str($0, "label", "title", "name", "metric").count <= 28
         }
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: compactMetrics ? 5 : 8), count: compactMetrics ? 4 : 2), spacing: 8) {
@@ -1732,7 +1732,9 @@ private struct StatBodyView: View {
                 Text(value)
                     .font(.system(size: compact ? 13 : 17, weight: .bold, design: .rounded))
                     .foregroundStyle(NexlyInk.row)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(1)
+                    .minimumScaleFactor(compact ? 0.75 : 1)
+                    .layoutPriority(1)
                 if !unit.isEmpty {
                     Text(unit).font(.system(size: 10, weight: .medium)).foregroundStyle(Aero.textSecondary)
                 }
@@ -1747,7 +1749,7 @@ private struct StatBodyView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.horizontal, compact ? 6 : 10)
+        .padding(.horizontal, compact ? 4 : 10)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white.opacity(0.46), in: RoundedRectangle(cornerRadius: 12))
