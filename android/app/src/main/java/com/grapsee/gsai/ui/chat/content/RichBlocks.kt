@@ -2176,9 +2176,9 @@ internal fun extractSpontaneousConceptsFromBlocks(blocks: List<Block>): List<Spo
             if (first is InlineSpan.BoldSpan) {
                 val term = NexlyIcons.cleanPlainText(plainTextOfSpans(first.children)).trimEnd(':', '-', '—', '–').trim()
                 val rest = NexlyIcons.cleanPlainText(plainTextOfSpans(li.spans.drop(1))).replace(Regex("""^[\s:—–-]+"""), "").trim()
-                if (term.length in 3..44 && rest.length >= 14 && "http" !in rest.lowercase()) {
+                if (term.length in 3..44 && rest.length in 14..600 && "http" !in rest.lowercase()) {
                     val (icon, tone) = NexlyIcons.semanticIconFor("$term $rest", "bulb")
-                    out += SpontaneousConceptItem(term, rest.take(180), icon, tone)
+                    out += SpontaneousConceptItem(term, rest, icon, tone)
                 }
             } else {
                 val plain = NexlyIcons.cleanPlainText(plainTextOfSpans(li.spans))
@@ -2186,9 +2186,9 @@ internal fun extractSpontaneousConceptsFromBlocks(blocks: List<Block>): List<Spo
                 if (m != null) {
                     val term = m.groupValues[1].trim()
                     val rest = m.groupValues[2].trim()
-                    if (term.length in 3..44 && rest.length >= 14 && "http" !in rest.lowercase()) {
+                    if (term.length in 3..44 && rest.length in 14..600 && "http" !in rest.lowercase()) {
                         val (icon, tone) = NexlyIcons.semanticIconFor("$term $rest", "bulb")
-                        out += SpontaneousConceptItem(term, rest.take(180), icon, tone)
+                        out += SpontaneousConceptItem(term, rest, icon, tone)
                     }
                 }
             }
@@ -2198,14 +2198,14 @@ internal fun extractSpontaneousConceptsFromBlocks(blocks: List<Block>): List<Spo
             val next = blocks[idx + 1]
             if (next is Block.Paragraph && classifyCalloutHeaderTitle(hText) == null && classifySectionListMode(hText) == SectionListMode.DEFAULT) {
                 val pText = NexlyIcons.cleanPlainText(plainTextOfSpans(next.spans)).trim()
-                if (hText.length in 3..44 && pText.length >= 20) {
+                if (hText.length in 3..44 && pText.length in 20..600) {
                     val (icon, tone) = NexlyIcons.semanticIconFor("$hText $pText", "bulb")
-                    out += SpontaneousConceptItem(hText, pText.take(180), icon, tone)
+                    out += SpontaneousConceptItem(hText, pText, icon, tone)
                 }
             }
         }
     }
-    return out.distinctBy { it.term.lowercase() }.take(8)
+    return out.distinctBy { it.term.lowercase() }.distinctBy { it.definition.lowercase() }.take(8)
 }
 
 @Composable
