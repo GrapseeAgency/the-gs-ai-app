@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// STEP 5 renderer (iOS twin of RichBlocks.kt) — the consumer half of the
 /// message → blocks seam. iOS parses on FINALIZE only (the streaming bubble
@@ -456,6 +457,7 @@ private struct StructuredProseSequenceView: View {
     let showThinkingStages: Bool
 
     @State private var activeDashboardTab: String = "Dashboard"
+    @StateObject private var codeActions = ResponseCodeActionsIOS()
 
     private var normalizedProse: [Block] {
         promoteStandaloneBoldHeadingsIOS(prose)
@@ -572,6 +574,11 @@ private struct StructuredProseSequenceView: View {
     }
 
     var body: some View {
+        sequenceBody.environment(\.responseCodeActions, codeActions)
+    }
+
+    @ViewBuilder
+    private var sequenceBody: some View {
         let tabs = dashboardTabs
         if !tabs.isEmpty {
             HStack(spacing: 4) {
@@ -668,12 +675,8 @@ private struct StructuredProseSequenceView: View {
                 return false
             }()
             if !endsWithAction {
-                NexlyContextualActionPillsRowView(prose: normalizedProse, onAction: { prompt in
-                    if prompt.lowercased().contains("copy") || prompt.lowercased().contains("share") {
-                        UIPasteboard.general.string = extractCopyableProseSummary(normalizedProse, citationsOnly: prompt.lowercased().contains("citation"))
-                    } else {
-                        widgetAction?(prompt)
-                    }
+                NexlyContextualActionPillsRowView(prose: normalizedProse, citations: citations, onShowCode: {
+                    activeDashboardTab = "Dashboard"
                 })
             }
         }
@@ -710,7 +713,7 @@ private struct StructuredProseSequenceView: View {
     }
 }
 
-private func extractCopyableProseSummary(_ prose: [Block], citationsOnly: Bool) -> String {
+func extractCopyableProseSummary(_ prose: [Block], citationsOnly: Bool) -> String {
     var lines: [String] = []
     for block in prose {
         switch block {
@@ -739,17 +742,84 @@ private func extractCopyableProseSummary(_ prose: [Block], citationsOnly: Bool) 
             }
         case .codeBlock(_, let code, _, _):
             if !citationsOnly { lines.append(code) }
+        case .widget(let kind, let json, _, _):
+            if !citationsOnly { lines.append("\(kind) data\n\(json)") }
+        case .html(_, let source, _, _):
+            if !citationsOnly { lines.append(source) }
+        case .table(let headers, _, let rows, _):
+            if !citationsOnly {
+                lines.append(headers.map { plainTextOfSpans($0) }.joined(separator: "\t"))
+                lines += rows.map { row in row.map { plainTextOfSpans($0) }.joined(separator: "\t") }
+            }
+        case .blockQuote(let blocks, _):
+            if !citationsOnly { lines.append(extractCopyableProseSummary(blocks, citationsOnly: false)) }
+        case .mathBlock(let latex, _):
+            if !citationsOnly { lines.append(latex) }
+        case .mermaid(let source, _):
+            if !citationsOnly { lines.append(source) }
         default:
             break
         }
     }
     let joined = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-    return joined.isEmpty ? "Copied from Nexly" : joined
+    return joined
 }
 
 private struct NexlyContextualActionPillsRowView: View {
+    @Environment(\.gsWidgetAction) private var widgetAction
+    @Environment(\.responseCodeActions) private var codeActions
     let prose: [Block]
-    let onAction: (String) -> Void
+    let citations: [Int: String]
+    let onShowCode: () -> Void
+    @State private var showShare = false
+    @State private var showExport = false
+    @State private var showDetails = false
+    @State private var sourcesOnly = false
+    @State private var exportDocument: ResponseExportDocument? = nil
+    @State private var exportType: UTType = .data
+    @State private var exportName = "gs-ai-response.md"
+    @State private var notice: String? = nil
+
+    private var citationText: String {
+        [extractCopyableProseSummary(prose, citationsOnly: true), citations.sorted { $0.key < $1.key }.map { "[\($0.key)] \($0.value)" }.joined(separator: "\n")]
+            .filter { !$0.isEmpty }.joined(separator: "\n")
+    }
+    private var sourceText: String {
+        let body = extractCopyableProseSummary(prose, citationsOnly: false)
+        return body + (citations.isEmpty ? "" : "\n\nSources\n" + citations.sorted { $0.key < $1.key }.map { "[\($0.key)] \($0.value)" }.joined(separator: "\n"))
+    }
+    private func perform(_ label: String) {
+        notice = nil
+        switch label {
+        case "Share": showShare = true
+        case "Copy Citations":
+            if citationText.isEmpty { notice = "No citation URLs are available to copy." }
+            else { UIPasteboard.general.string = citationText; notice = "Citations copied." }
+        case "Download Report":
+            exportDocument = ResponseExportDocument(data: Data(sourceText.utf8))
+            exportType = UTType(filenameExtension: "md") ?? .plainText
+            exportName = "gs-ai-response.md"; showExport = true
+        case "Download Project":
+            let sources: [(String?, String)] = prose.compactMap { block in
+                guard case .codeBlock(let language, let source, let open, let id) = block, !open else { return nil }
+                return codeActions?.source(AnyHashable(id)) ?? (language, source)
+            }
+            do {
+                exportDocument = ResponseExportDocument(data: try responseSourceArchiveIOS(sources))
+                exportType = .zip; exportName = "gs-ai-source-snippets.zip"; showExport = true
+                notice = "Source snippets only, not a complete runnable project. See README.txt."
+            } catch { notice = error.localizedDescription }
+        case "Edit Code":
+            onShowCode()
+            if let codeActions { codeActions.editFirst() }
+            else { notice = "No editable code block is available." }
+        case "View All Sources": sourcesOnly = true; showDetails = true
+        case "View Details", "View Full Report": sourcesOnly = false; showDetails = true
+        default:
+            if let widgetAction { widgetAction(label) }
+            else { notice = "Follow-up requests are unavailable in this view." }
+        }
+    }
 
     private var actions: [(String, String)] {
         let hasChart = prose.contains { if case .widget(let k, _, _, _) = $0 { return k == "chart" }; return false }
@@ -759,7 +829,7 @@ private struct NexlyContextualActionPillsRowView: View {
             return false
         }
         let hasCode = prose.contains { if case .codeBlock = $0 { return true }; return false }
-        let hasSources = prose.contains {
+        let hasSources = !citations.isEmpty || prose.contains {
             if case .citations = $0 { return true }
             if case .heading(_, let spans, _) = $0 { return classifySectionListMode(plainTextOfSpans(spans)) == .sources }
             return false
@@ -793,12 +863,13 @@ private struct NexlyContextualActionPillsRowView: View {
     var body: some View {
         let list = actions
         if !list.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(Array(list.enumerated()), id: \.offset) { _, pair in
                         Button {
                             GSHaptics.select()
-                            onAction(pair.1)
+                            perform(pair.1)
                         } label: {
                             HStack(spacing: 6) {
                                 NexlyGlyph(
@@ -819,6 +890,26 @@ private struct NexlyContextualActionPillsRowView: View {
                     }
                 }
                 .padding(.top, 4)
+            }
+            if let notice { Text(notice).font(.caption).accessibilityIdentifier("response.action.notice") }
+            }
+            .sheet(isPresented: $showShare) { ActivitySheet(items: [sourceText]) }
+            .sheet(isPresented: $showDetails) {
+                NavigationStack {
+                    ScrollView {
+                        Text(CodeDisplayIOS.escape(sourcesOnly ? (citationText.isEmpty ? "No source URLs were supplied." : citationText) : sourceText))
+                            .frame(maxWidth: .infinity, alignment: .leading).padding().textSelection(.enabled)
+                    }
+                    .navigationTitle(sourcesOnly ? "All sources" : "Response source and data")
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Close details") { showDetails = false } } }
+                }
+            }
+            .fileExporter(isPresented: $showExport, document: exportDocument, contentType: exportType, defaultFilename: exportName) { result in
+                switch result {
+                case .success: notice = "Export saved."
+                case .failure(let error): notice = "Could not save export: \(error.localizedDescription)"
+                }
+                exportDocument = nil
             }
         }
     }
@@ -854,8 +945,8 @@ func BlockView(block: Block, isLast: Bool, citations: [Int: String]) -> some Vie
         OrderedListView(start: start, items: items, citations: citations)
     case .blockQuote(let inner, _):
         BlockQuoteView(blocks: inner, citations: citations)
-    case .codeBlock(let language, let code, let open, _):
-        CodeBlockCardView(language: language, code: code, open: open)
+    case .codeBlock(let language, let code, let open, let sourceStart):
+        CodeBlockCardView(language: language, code: code, open: open, sourceStart: sourceStart)
     case .table(let headers, let aligns, let rows, _):
         TableBlockView(headers: headers, aligns: aligns, rows: rows, citations: citations)
     case .plan(let plan, let open, _):
@@ -2822,9 +2913,14 @@ private struct BlockQuoteView: View {
 
 struct CodeBlockCardView: View {
     @Environment(\.nexlyCodeWrap) private var wrapCode
+    @Environment(\.responseCodeActions) private var responseActions
+    @State private var localSourceID = UUID()
+    @FocusState private var sourceFocused: Bool
     let language: String?
     let code: String
     var open: Bool = false
+    var sourceStart: Int? = nil
+    private var sourceID: AnyHashable { sourceStart.map(AnyHashable.init) ?? AnyHashable(localSourceID) }
 
     @State private var workerDocument: String? = nil
     @State private var browserDocument: String? = nil
@@ -2880,8 +2976,27 @@ struct CodeBlockCardView: View {
         .background(RoundedRectangle(cornerRadius: 14).fill(Color(red: 0.133, green: 0.122, blue: 0.231)))
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.212, green: 0.192, blue: 0.361), lineWidth: 1))
+        .onAppear {
+            if !open {
+                let restored = responseActions?.source(sourceID)?.1 ?? code
+                if restored != code { editedCode = restored }
+                registerResponseCode(source: restored)
+            }
+        }
+        .onDisappear { responseActions?.remove(sourceID) }
+        .onChange(of: currentCode) { source in responseActions?.update(sourceID, source: source) }
+        .onChange(of: open) { value in if !value { registerResponseCode(source: currentCode) } }
         .onChange(of: code) { _ in resetCodeState() }
         .onChange(of: language) { _ in resetCodeState() }
+    }
+
+    private func registerResponseCode(source: String) {
+        responseActions?.register(sourceID, entry: ResponseCodeActionsIOS.Entry(language: language, source: source, edit: {
+            editorEncoded = CodeDisplayIOS.requiresEncoding(currentCode)
+            editorDraft = editorEncoded ? CodeDisplayIOS.encodeEditor(currentCode) : currentCode
+            editorError = nil; editing = true
+            DispatchQueue.main.async { sourceFocused = true }
+        }))
     }
 
     @ViewBuilder
@@ -2964,6 +3079,7 @@ struct CodeBlockCardView: View {
                     }
                 }
             ))
+            .focused($sourceFocused)
             .font(.system(size: 12, weight: .regular, design: .monospaced))
             .foregroundStyle(Color(red: 0.925, green: 0.910, blue: 1.0))
             .frame(minHeight: 110, maxHeight: 260)
