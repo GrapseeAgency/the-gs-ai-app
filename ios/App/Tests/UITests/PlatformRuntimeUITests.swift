@@ -1,5 +1,6 @@
 import XCTest
 import CoreGraphics
+import UIKit
 
 final class PlatformRuntimeUITests: XCTestCase {
     private func printScreenshotPixels(_ screenshot: XCUIScreenshot, label: String) {
@@ -22,7 +23,7 @@ final class PlatformRuntimeUITests: XCTestCase {
             guard let context = CGContext(data: buffer.baseAddress, width: width, height: height,
                 bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
                 bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
-            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
             return true
         }
         guard drawn else { return nil }
@@ -32,7 +33,7 @@ final class PlatformRuntimeUITests: XCTestCase {
         let x1 = width / 2
         func dark(_ x: Int, _ y: Int) -> Bool {
             let p = (y * width + x) * 4
-            return pixels[p + 3] > 200 && max(pixels[p], pixels[p + 1], pixels[p + 2]) < 120
+            return pixels[p + 3] > 200 && max(pixels[p], max(pixels[p + 1], pixels[p + 2])) < 120
         }
         var seed: (Int, Int)?
         for x in 0..<x1 {
