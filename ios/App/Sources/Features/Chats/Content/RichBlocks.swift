@@ -790,15 +790,11 @@ private struct NexlyContextualActionPillsRowView: View {
     let citations: [Int: String]
     let onShowCode: () -> Void
     private enum PresentedSheet: Identifiable {
-        case share, details
-        var id: String {
-            switch self {
-            case .share: return "share"
-            case .details: return "details"
-            }
-        }
+        case details
+        var id: String { "details" }
     }
     @State private var presentedSheet: PresentedSheet? = nil
+    @State private var activityItems: [Any]? = nil
     @State private var sourcesOnly = false
     @State private var preparedExportURL: URL? = nil
     @State private var documentExportRequest: URL? = nil
@@ -842,7 +838,7 @@ private struct NexlyContextualActionPillsRowView: View {
     private func perform(_ label: String) {
         notice = nil
         switch label {
-        case "Share": presentedSheet = .share
+        case "Share": activityItems = [sourceText]
         case "Copy Citations":
             if citationText.isEmpty { notice = "No citation URLs are available to copy." }
             else { UIPasteboard.general.string = citationText; notice = "Citations copied." }
@@ -943,6 +939,8 @@ private struct NexlyContextualActionPillsRowView: View {
             if let notice { Text(notice).font(.caption).accessibilityIdentifier("response.action.notice") }
             }
             .background {
+                ResponseActivityPresenterIOS(items: activityItems) { activityItems = nil }
+                    .frame(width: 0, height: 0)
                 ResponseDocumentPickerIOS(sourceURL: documentExportRequest) { destination in
                     notice = destination == nil ? "Export cancelled." : "Export saved."
                     documentExportRequest = nil
@@ -952,8 +950,6 @@ private struct NexlyContextualActionPillsRowView: View {
             }
             .sheet(item: $presentedSheet, onDismiss: { cleanPreparedExport() }) { sheet in
                 switch sheet {
-                case .share:
-                    ResponseActivityPresenterIOS(items: [sourceText]) { presentedSheet = nil }
                 case .details:
                 NavigationStack {
                     ScrollView {
@@ -3484,6 +3480,7 @@ struct CodeBlockCardView: View {
     }
 
     private func executeCode() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         if editing && editorError != nil {
             workerDocument = nil; browserDocument = nil; runOutput = nil
             errorOutput = "Not executed: correct the JSON-encoded source draft first."
