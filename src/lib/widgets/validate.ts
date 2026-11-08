@@ -1236,6 +1236,13 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     // single source series to maxChartSeries slices discarded the remainder.
 
     if (series.length === 0) errors.push('chart needs at least one series with enough points')
+    if (pieLike) {
+      const observations = series.flatMap(item => item.data)
+      const total = observations.reduce((sum, point) => sum + point[1], 0)
+      if (observations.some(point => point.length !== 2 || point[1] < 0) || !Number.isFinite(total) || total <= 0) {
+        errors.push('Pie/donut needs actual nonnegative observations with a finite positive total; source data is not discarded or made absolute')
+      }
+    }
 
     return {
       widget: { type, title: asString(p.title), unit: asString(p.unit), labels, series },
