@@ -27,6 +27,22 @@ class CalcHonestyTest {
         assertEquals(listOf(10f, 20f), namedPie.series.map { it.data.single()[1] })
     }
 
+    @Test fun nativeDialectRepairNeverRewritesQuotedSourceOrSuppliedText() {
+        val source = "const text = " + 34.toChar() + " True False None " + 34.toChar() + "; const slash = " + 92.toChar() + 34.toChar() + " True " + 92.toChar() + 34.toChar()
+        val payload = kotlinx.serialization.json.JsonObject(mapOf(
+            "code" to kotlinx.serialization.json.JsonPrimitive(source),
+            "title" to kotlinx.serialization.json.JsonPrimitive(" True False None ")
+        )).toString()
+        assertEquals(payload, cleanWidgetDialectLiteralsAndroid(payload))
+        val normalized = kotlinx.serialization.json.Json.parseToJsonElement(normalizeWidgetJson("app", payload)) as kotlinx.serialization.json.JsonObject
+        assertEquals(source, (normalized["code"] as kotlinx.serialization.json.JsonPrimitive).content)
+        assertEquals(" True False None ", (normalized["title"] as kotlinx.serialization.json.JsonPrimitive).content)
+        assertEquals("""{"enabled":true,"selected":false,"value":null,"text":" True False None "}""",
+            cleanWidgetDialectLiteralsAndroid("""{"enabled":True,"selected":False,"value":None,"text":" True False None "}"""))
+        assertEquals("""{"True":" False ","NotTrue":" None "}""",
+            cleanWidgetDialectLiteralsAndroid("""{"True":" False ","NotTrue":" None "}"""))
+    }
+
     @Test fun actualCategoryLabelsAndDatasetCountsSurviveModelShapeNormalization() {
         val pairs = (parseWidget("chart", """{"type":"line","series":[{"data":[["January",10],["February",20]]}]}""") as Widget.Chart).w
         assertEquals(listOf("January", "February"), pairs.labels)
