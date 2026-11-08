@@ -1457,11 +1457,9 @@ struct MessageBubble: View, Equatable {
                 showOrb: false
             )
             .environment(\.reactPreviewScope, "\(conversationID ?? "chat"):\(message.id)")
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            // The reference answer sits in a lit glass card, not raw on the
-            // backdrop; a search hit is a rim, not a fill.
-            .gsGlass(.floatingControl, corner: 20)
+            // RichBlocks owns each prose/plan glass surface and its inset.
+            // A second turn-wide surface/padding nests every real answer,
+            // narrows interactive controls, and diverges from render captures.
             .overlay {
                 if highlight {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
