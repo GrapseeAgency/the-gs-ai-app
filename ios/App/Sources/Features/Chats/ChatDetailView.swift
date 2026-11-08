@@ -306,7 +306,7 @@ struct ChatDetailView: View {
                 }
             },
             // The reference leads with a back arrow inside a conversation.
-            onBack: isWorkspaceRoot ? nil : { dismiss() },
+            onBack: isWorkspaceRoot || vm.conversationID == nil ? nil : { dismiss() },
             sparkleMenu: {
                 if let newChat = onNewChat {
                     Button(action: newChat) {
