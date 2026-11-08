@@ -2641,136 +2641,111 @@ private struct FlashcardsBodyView: View {
     }
 }
 
+private struct ChecklistTaskIOS: Identifiable {
+    let id: String
+    var label: String
+    var detail: String
+    var done: Bool
+}
+
 private struct ChecklistBodyView: View {
     let obj: [String: Any]
     let accent: Color
-    @State private var toggled: Set<Int> = []
-    @State private var addedTasks: [(text: String, done: Bool)] = []
-    @State private var addingTask = false
-    @State private var newTaskText = ""
+    @State private var tasks: [ChecklistTaskIOS]
+    @State private var editingID: String? = nil
+    @State private var adding = false
+    @State private var draft = ""
 
-    var body: some View {
+    init(obj: [String: Any], accent: Color) {
+        self.obj = obj; self.accent = accent
+        _tasks = State(initialValue: Self.sourceTasks(obj))
+    }
+    private static func sourceTasks(_ obj: [String: Any]) -> [ChecklistTaskIOS] {
         let items = ((obj["items"] ?? obj["tasks"] ?? obj["todos"]) as? [Any]) ?? []
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(items.enumerated()), id: \.offset) { idx, raw in
-                let dict = raw as? [String: Any] ?? [:]
-                let label = NexlyIcons.cleanPlainText((raw as? String) ?? str(dict, "label", "title", "text", "task", "name"))
-                let initialDone = (dict["done"] as? Bool) ?? (dict["checked"] as? Bool) ?? false
-                let isDone = toggled.contains(idx) ? !initialDone : initialDone
-                Button {
-                    GSHaptics.select()
-                    if toggled.contains(idx) { toggled.remove(idx) } else { toggled.insert(idx) }
-                } label: {
-                    HStack(spacing: 9) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 5)
-                                .fill(isDone ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.white.opacity(0.85))
-                                .frame(width: 18, height: 18)
-                            if !isDone {
-                                RoundedRectangle(cornerRadius: 5)
-                                    .stroke(Color(red: 0.612, green: 0.533, blue: 0.973), lineWidth: 1.5)
-                                    .frame(width: 18, height: 18)
-                            } else {
-                                NexlyGlyph(name: "check", size: 11, color: .white)
-                            }
-                        }
-                        Text(label)
-                            .font(.system(size: 13))
-                            .strikethrough(isDone)
-                            .foregroundStyle(isDone ? Aero.textSecondary : Aero.text)
-                    }
-                    .padding(.vertical, 2)
-                }
-                .buttonStyle(.plain)
-            }
-            ForEach(Array(addedTasks.enumerated()), id: \.offset) { aIdx, task in
-                HStack(spacing: 9) {
+        return items.enumerated().map { index, raw in
+            let dict = raw as? [String: Any] ?? [:]
+            let label = NexlyIcons.cleanPlainText((raw as? String) ?? str(dict, "label", "title", "text", "task", "name"))
+            let rawDone = (dict["done"] ?? dict["checked"]) as? NSNumber
+            let done = rawDone.map { CFGetTypeID($0) == CFBooleanGetTypeID() && $0.boolValue } ?? false
+            return ChecklistTaskIOS(id: "source-\(index)", label: label,
+                detail: NexlyIcons.cleanPlainText(str(dict, "detail", "description")), done: done)
+        }
+    }
+    private var sourceIdentity: Data {
+        (try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])) ?? Data()
+    }
+    private func cancelEdit() { editingID = nil; adding = false; draft = "" }
+    private func saveTask() {
+        let text = NexlyIcons.cleanPlainText(draft).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        if let id = editingID, let index = tasks.firstIndex(where: { $0.id == id }) { tasks[index].label = text }
+        else { tasks.append(ChecklistTaskIOS(id: UUID().uuidString, label: text, detail: "", done: false)) }
+        cancelEdit()
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(tasks.filter(\.done).count) of \(tasks.count) completed")
+                .font(.caption).foregroundStyle(Aero.textSecondary).accessibilityIdentifier("checklist.progress")
+            ForEach(tasks) { task in
+                HStack(spacing: 8) {
                     Button {
+                        if let index = tasks.firstIndex(where: { $0.id == task.id }) { tasks[index].done.toggle() }
                         GSHaptics.select()
-                        addedTasks[aIdx].done.toggle()
                     } label: {
                         HStack(spacing: 9) {
                             ZStack {
-                                RoundedRectangle(cornerRadius: 5)
-                                    .fill(task.done ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color.white.opacity(0.85))
-                                    .frame(width: 18, height: 18)
-                                if !task.done {
-                                    RoundedRectangle(cornerRadius: 5)
-                                        .stroke(Color(red: 0.612, green: 0.533, blue: 0.973), lineWidth: 1.5)
-                                        .frame(width: 18, height: 18)
-                                } else {
-                                    NexlyGlyph(name: "check", size: 11, color: .white)
-                                }
+                                RoundedRectangle(cornerRadius: 5).fill(task.done ? accent : Color.white.opacity(0.85)).frame(width: 18, height: 18)
+                                RoundedRectangle(cornerRadius: 5).stroke(accent, lineWidth: 1).frame(width: 18, height: 18)
+                                if task.done { NexlyGlyph(name: "check", size: 11, color: .white) }
                             }
-                            Text(task.text)
-                                .font(.system(size: 13))
-                                .strikethrough(task.done)
-                                .foregroundStyle(task.done ? Aero.textSecondary : Aero.text)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(task.label).strikethrough(task.done).foregroundStyle(task.done ? Aero.textSecondary : Aero.text)
+                                if !task.detail.isEmpty { Text(task.detail).font(.caption).foregroundStyle(Aero.textSecondary) }
+                            }
+                            Spacer(minLength: 0)
                         }
+                        .font(.system(size: 13)).padding(.vertical, 4)
                     }
-                    .buttonStyle(.plain)
-                    Spacer()
+                    .buttonStyle(.plain).accessibilityLabel(task.label)
+                    .accessibilityValue(task.done ? "Completed" : "Not completed")
+                    Button { editingID = task.id; adding = false; draft = task.label } label: {
+                        NexlyGlyph(name: "pencil", size: 13, color: accent)
+                    }
+                    .buttonStyle(.plain).accessibilityLabel("Edit task: \(task.label)")
                     Button {
-                        addedTasks.remove(at: aIdx)
-                    } label: {
-                        NexlyGlyph(name: "x", size: 12, color: Aero.textTertiary)
-                    }
-                    .buttonStyle(.plain)
+                        tasks.removeAll { $0.id == task.id }
+                        if editingID == task.id { cancelEdit() }
+                    } label: { NexlyGlyph(name: "trash", size: 13, color: Aero.textSecondary) }
+                    .buttonStyle(.plain).accessibilityLabel("Delete task: \(task.label)")
                 }
-                .padding(.vertical, 2)
             }
-            if addingTask {
-                HStack(spacing: 6) {
-                    TextField("Type a new task…", text: $newTaskText)
-                        .font(.system(size: 12.5))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.92)))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.847, green: 0.808, blue: 0.976), lineWidth: 1))
-                    Button("Add") {
-                        let trimmed = newTaskText.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            addedTasks.append((trimmed, false))
-                            newTaskText = ""
-                            addingTask = false
-                        }
+            if adding || editingID != nil {
+                TextField("Task text", text: $draft).textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("checklist.task.input")
+                    .onChange(of: draft) { value in
+                        let clean = NexlyIcons.cleanPlainText(value)
+                        if clean != value { draft = clean }
                     }
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
-                    .buttonStyle(.plain)
-
-                    Button {
-                        newTaskText = ""
-                        addingTask = false
-                    } label: {
-                        NexlyGlyph(name: "x", size: 13, color: Aero.textSecondary)
-                    }
-                    .buttonStyle(.plain)
+                HStack {
+                    Button(editingID == nil ? "Add" : "Save task") { saveTask() }
+                        .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Cancel task edit") { cancelEdit() }
                 }
-                .padding(.top, 2)
+                .font(.caption)
             } else {
-                Button {
-                    GSHaptics.select()
-                    addingTask = true
-                } label: {
+                Button { adding = true; draft = "" } label: {
                     HStack(spacing: 5) {
-                        NexlyGlyph(name: "plus", size: 11, color: Color(red: 0.357, green: 0.239, blue: 0.961))
-                        Text("Add Task")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
+                        NexlyGlyph(name: "plus", size: 11, color: accent)
+                        Text("Add Task").font(.system(size: 11, weight: .bold))
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
                     .background(Capsule().fill(Color.white.opacity(0.82)))
-                    .overlay(Capsule().stroke(Color(red: 0.878, green: 0.847, blue: 0.980), lineWidth: 1))
+                    .overlay(Capsule().stroke(accent.opacity(0.2), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
-                .padding(.top, 2)
             }
         }
+        .onChange(of: sourceIdentity) { _ in tasks = Self.sourceTasks(obj); cancelEdit() }
     }
 }
 
