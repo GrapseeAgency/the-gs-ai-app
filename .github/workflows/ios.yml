@@ -20,6 +20,7 @@ on:
       - ".github/workflows/ios.yml"
       - "scripts/check_response_archive.py"
       - "scripts/publish_response_section_frames.py"
+      - ".github/workflows/review-native-response-sections.yml"
   workflow_dispatch:
   push:
     branches:
@@ -30,6 +31,7 @@ on:
       - ".github/workflows/ios.yml"
       - "scripts/check_response_archive.py"
       - "scripts/publish_response_section_frames.py"
+      - ".github/workflows/review-native-response-sections.yml"
       - "scripts/ios_static_gates.py"
       - "scripts/swift_structure_gate.py"
       # The pixel gate below runs this script and blocks on its verdict, so a
@@ -305,25 +307,6 @@ jobs:
             -resultBundlePath ios/build/GSApp-genui.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee ios/build/xcodebuild-genui-test.log
-
-      - name: Review actual iOS reference 01-dashboard
-        if: always()
-        run: python3 scripts/publish_response_section_frames.py /tmp/gs-nexly-renders ios 01-dashboard
-      - name: Review actual iOS reference 02-structured-launch
-        if: always()
-        run: python3 scripts/publish_response_section_frames.py /tmp/gs-nexly-renders ios 02-structured-launch
-      - name: Review actual iOS reference 03-react-code
-        if: always()
-        run: python3 scripts/publish_response_section_frames.py /tmp/gs-nexly-renders ios 03-react-code
-      - name: Review actual iOS reference 04-citations
-        if: always()
-        run: python3 scripts/publish_response_section_frames.py /tmp/gs-nexly-renders ios 04-citations
-      - name: Review actual iOS reference 05-data-grid
-        if: always()
-        run: python3 scripts/publish_response_section_frames.py /tmp/gs-nexly-renders ios 05-data-grid
-      - name: Review actual iOS reference 06-interactive-charts
-        if: always()
-        run: python3 scripts/publish_response_section_frames.py /tmp/gs-nexly-renders ios 06-interactive-charts
 
       - name: Independently verify actual XCTest source archive bytes
         if: always()
@@ -980,3 +963,11 @@ jobs:
             ios/build/GSApp-tests.xcresult
             ios/build/GSApp-genui.xcresult
           if-no-files-found: ignore
+
+  response-section-review:
+    needs: ios-build-test
+    if: always()
+    uses: ./.github/workflows/review-native-response-sections.yml
+    with:
+      platform: ios
+      artifact: nexly-chat-render-ios
