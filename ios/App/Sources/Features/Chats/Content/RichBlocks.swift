@@ -3520,57 +3520,50 @@ struct CodeCopyButton: View {
 
 // MARK: - Table (06. Tables & Data Grids — Screenshot 5)
 
-private func parseSortableNumberIOS(_ raw: String) -> Double? {
-    let cleaned = raw
-        .replacingOccurrences(of: ",", with: "")
-        .replacingOccurrences(of: "^[↑↓↗↘\\s+$€£¥#]+", with: "", options: .regularExpression)
-        .replacingOccurrences(of: "[%xX\\s]+$", with: "", options: .regularExpression)
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-    let mult: Double = {
-        if cleaned.hasSuffix("T") || cleaned.hasSuffix("t") { return 1_000_000_000_000.0 }
-        if cleaned.hasSuffix("B") || cleaned.hasSuffix("b") { return 1_000_000_000.0 }
-        if cleaned.hasSuffix("M") || cleaned.hasSuffix("m") { return 1_000_000.0 }
-        if cleaned.hasSuffix("K") || cleaned.hasSuffix("k") { return 1_000.0 }
-        return 1.0
-    }()
-    let numPart = cleaned.replacingOccurrences(of: "[TtBbMmKk]$", with: "", options: .regularExpression)
-    return Double(numPart).map { $0 * mult }
+func parseSortableNumberIOS(_ raw: String) -> Double? {
+    let text = raw.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "−", with: "-")
+    guard let regex = try? NSRegularExpression(pattern: "^(?:([↑↓↗↘])\\s*)?([+-]?)\\s*[$€£¥₹৳#]?\\s*([+-]?)\\s*((?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?)\\s*([kKmMbBtT]?)\\s*[%xX]?$"),
+          let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) else { return nil }
+    func group(_ index: Int) -> String {
+        guard let range = Range(match.range(at: index), in: text) else { return "" }
+        return String(text[range])
+    }
+    let arrow = group(1), outer = group(2), inner = group(3)
+    guard outer.isEmpty || inner.isEmpty else { return nil }
+    let sign = outer.isEmpty ? inner : outer
+    let down = arrow == "↓" || arrow == "↘"
+    guard arrow.isEmpty || !((down && sign == "+") || (!down && sign == "-")) else { return nil }
+    let multiplier = ["k": 1e3, "m": 1e6, "b": 1e9, "t": 1e12][group(5).lowercased()] ?? 1
+    guard let base = Double(group(4).replacingOccurrences(of: ",", with: "")) else { return nil }
+    let value = base * multiplier * (sign == "-" || down ? -1 : 1)
+    return value.isFinite ? value : nil
 }
 
-private func chartJsonFromTableIOS(headers: [[InlineSpan]], rows: [[[InlineSpan]]]) -> String? {
+func chartJsonFromTableIOS(headers: [[InlineSpan]], rows: [[[InlineSpan]]]) -> String? {
     guard rows.count >= 2, headers.count >= 2 else { return nil }
     let headerTexts = headers.map { NexlyIcons.cleanPlainText(plainTextOfSpans($0)).trimmingCharacters(in: .whitespacesAndNewlines) }
-    let firstHeader = headerTexts.first ?? ""
-    let labelCol = (["#", "Rank", "No", "ID"].contains(firstHeader) && headers.count >= 3) ? 1 : 0
-    var numCol: Int? = nil
-    for c in 0..<headers.count where c != labelCol {
-        let validCount = rows.filter { row in
-            guard c < row.count else { return false }
-            return parseSortableNumberIOS(plainTextOfSpans(row[c])) != nil
-        }.count
-        if validCount >= max(2, rows.count / 2) {
-            numCol = c
-            break
+    let ranked = ["#", "rank", "no", "id"].contains(headerTexts[0].lowercased()) && headers.count >= 3
+    let labelCol = ranked ? 1 : 0
+    // Identifiers are categories, never the measure. Incomplete columns do not
+    // become partial charts that quietly hide observations with missing data.
+    for column in 0..<headers.count where column != labelCol && !(ranked && column == 0) {
+        var dataItems: [[String: Any]] = []
+        var units = Set<String>()
+        for row in rows {
+            guard labelCol < row.count, column < row.count else { break }
+            let raw = plainTextOfSpans(row[column]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let label = NexlyIcons.cleanPlainText(plainTextOfSpans(row[labelCol])).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let value = parseSortableNumberIOS(raw), !label.isEmpty else { break }
+            let currency = raw.first(where: { "$€£¥₹৳".contains($0) }).map(String.init) ?? ""
+            units.insert(raw.hasSuffix("%") ? "%" : (!currency.isEmpty ? currency : (raw.lowercased().hasSuffix("x") ? "x" : "")))
+            dataItems.append(["label": label, "value": value])
         }
+        guard dataItems.count == rows.count, units.count == 1 else { continue }
+        let payload: [String: Any] = ["type": "bar", "title": headerTexts[column], "unit": units.first ?? "", "data": dataItems]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload), let json = String(data: data, encoding: .utf8) else { return nil }
+        return json
     }
-    guard let vc = numCol else { return nil }
-    var dataItems: [[String: Any]] = []
-    for row in rows.prefix(12) {
-        guard labelCol < row.count, vc < row.count,
-              let val = parseSortableNumberIOS(plainTextOfSpans(row[vc])) else { continue }
-        let label = NexlyIcons.cleanPlainText(plainTextOfSpans(row[labelCol])).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !label.isEmpty else { continue }
-        dataItems.append(["label": label, "value": val])
-    }
-    guard dataItems.count >= 2 else { return nil }
-    let payload: [String: Any] = [
-        "type": "bar",
-        "title": headerTexts[vc].isEmpty ? "Comparison" : headerTexts[vc],
-        "data": dataItems
-    ]
-    guard let data = try? JSONSerialization.data(withJSONObject: payload),
-          let str = String(data: data, encoding: .utf8) else { return nil }
-    return str
+    return nil
 }
 
 private struct TableBlockView: View {
