@@ -16,7 +16,7 @@ function fail(error) { status.textContent='React preview error'; errorPanel.hidd
 window.addEventListener('error', event=>fail(event.error || event.message));
 window.addEventListener('unhandledrejection', event=>fail(event.reason));
 try {
-  const {React, createRoot, transform} = window.GSReact;
+  const {React, createRoot, flushSync, transform} = window.GSReact;
   const source = __GS_REACT_SOURCE_LITERAL__;
   if (source.length > 128000) throw Error('Not executed: React source exceeds the 128,000 character limit.');
   const compiled = transform(source, {filename:'component.tsx',presets:[['react',{runtime:'classic'}],['typescript',{allExtensions:true,isTSX:true}]],plugins:['transform-modules-commonjs']}).code;
@@ -36,7 +36,8 @@ try {
     render(){return this.state.failed ? null : this.props.children;}
   }
   function Mounted(){React.useLayoutEffect(()=>{status.textContent='React preview running';},[]);return React.createElement(App);}
-  createRoot(document.getElementById('app'),{onUncaughtError:fail}).render(React.createElement(Boundary,null,React.createElement(Mounted)));
+  const root = createRoot(document.getElementById('app'),{onUncaughtError:fail});
+  flushSync(()=>root.render(React.createElement(Boundary,null,React.createElement(Mounted))));
 } catch(error) { fail(error); }
 `;
 const template = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'"><style>body{margin:0;padding:12px;font:14px system-ui;background:transparent}#status{font:11px system-ui;color:#5b5378;margin:0 0 10px}#error{white-space:pre-wrap;overflow-wrap:anywhere;background:#fff0f0;color:#9d1628;padding:12px;border-radius:10px}</style><script>${safeScript(bundle)}</script><script>${safeScript(tailwind)}</script><script>__GS_REACT_STORAGE_BOOTSTRAP__</script></head><body><p id="status" role="status">Compiling React source…</p><pre id="error" role="alert" hidden></pre><main id="app"></main><script>${safeScript(launcher)}</script></body></html>`;
