@@ -144,14 +144,13 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
   }, [visibleLines])
 
   const runCode = () => {
-    if (editing && editorError) { setErrorText('Not executed: correct the JSON-encoded source draft first.'); return }
+    if (editing && editorError) { setHtmlPreview(null); setOutput(null); setErrorText('Not executed: correct the JSON-encoded source draft first.'); return }
     setRunCount((c) => c + 1)
     setErrorText(null)
     setOutput(null)
     setHtmlPreview(null)
     if (RUNNABLE_HTML.has(lang)) {
       setHtmlPreview(source)
-      setOutput('Live HTML/SVG preview opened in sandbox')
       return
     }
     if (lang === 'json') {
@@ -244,7 +243,7 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
             }} style={chipStyle}>
             {editing ? 'Done' : 'Edit'}
           </button>
-          {source !== code ? (
+          {source !== code || editorError !== null ? (
             <button
               type="button"
               onClick={() => {
@@ -391,7 +390,7 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
       )}
 
       {/* Sandboxed HTML Preview */}
-      {htmlPreview ? <HtmlBlock source={htmlPreview} fallbackHeight={220} /> : null}
+      {htmlPreview ? <HtmlBlock key={runCount} source={htmlPreview} fallbackHeight={220} /> : null}
 
       {/* Terminal-Style Execution Output Drawer (05. Code Execution) */}
       {(output !== null || errorText !== null) && (
