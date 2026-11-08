@@ -1261,7 +1261,9 @@ private struct ChartBodyView: View {
 
     @ViewBuilder
     private func chartHeaderBar(rangeLabel: String) -> some View {
-        HStack(spacing: 6) {
+        // Do not hide Pie behind the range selector on phone-width cards.
+        // Every chart type stays visible; range is a separate trailing control.
+        VStack(alignment: .trailing, spacing: 6) {
             ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 3) {
                 ForEach(Array(Self.chartTypeTabs.enumerated()), id: \.offset) { _, tab in
