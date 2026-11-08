@@ -9,6 +9,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { alpha, RADIUS, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { CopyChip } from '../primitives/CopyChip'
+import { HtmlBlock } from './HtmlBlock'
 import { GlassIcon } from '@/components/nexly/GlassIcon'
 import { arithmeticPreview } from '@/lib/code/arithmetic-preview'
 import { javascriptSandboxDocument } from '@/lib/code/javascript-sandbox'
@@ -248,6 +249,10 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
               type="button"
               onClick={() => {
                 setSource(code)
+                const encoded = requiresEncodedEditor(code)
+                setEditorEncoded(encoded)
+                setEditorDraft(encoded ? encodeSourceEditor(code) : code)
+                setEditorError(null)
                 setOutput(null)
                 setErrorText(null)
                 setHtmlPreview(null)
@@ -263,7 +268,7 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
 
       {/* Code Surface */}
       {requiresEncodedEditor(source) && <div style={{ padding: '6px 12px', fontSize: 11, color: '#C5BCFF' }}>Unicode symbols are shown as escapes; Copy and Run use the original source.</div>}
-      {editing && editorEncoded && <label htmlFor="gs-code-json-editor" style={{ padding: '6px 12px', fontSize: 11, color: '#C5BCFF' }}>Unicode-safe editor: edit one JSON-encoded source string.</label>}
+      {editing && editorEncoded && <div style={{ padding: '6px 12px', fontSize: 11, color: '#C5BCFF' }}>Unicode-safe editor: edit one JSON-encoded source string.</div>}
       {editorError && <div role="alert" style={{ padding: '6px 12px', color: '#FCA5A5' }}>{editorError}</div>}
       {editing ? (
         <textarea
@@ -386,20 +391,7 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
       )}
 
       {/* Sandboxed HTML Preview */}
-      {htmlPreview ? (
-        <iframe
-          title="Code preview"
-          sandbox="allow-scripts"
-          srcDoc={htmlPreview}
-          style={{
-            width: '100%',
-            height: 220,
-            border: 'none',
-            borderTop: '1px solid rgba(255,255,255,0.1)',
-            background: '#fff',
-          }}
-        />
-      ) : null}
+      {htmlPreview ? <HtmlBlock source={htmlPreview} fallbackHeight={220} /> : null}
 
       {/* Terminal-Style Execution Output Drawer (05. Code Execution) */}
       {(output !== null || errorText !== null) && (
