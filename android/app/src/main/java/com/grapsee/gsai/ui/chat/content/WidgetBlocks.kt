@@ -1553,6 +1553,8 @@ private fun ChartWidgetView(w: ChartWidget) {
             ) {
                 Row(
                     modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState())
                         .clip(RoundedCornerShape(10.dp))
                         .background(Color(0xFFEDE6FF))
                         .padding(3.dp),
@@ -1588,6 +1590,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier
+                        .padding(start = 6.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.White.copy(alpha = 0.8f))
                         .border(1.dp, Color(0xFFDFD7FA), RoundedCornerShape(8.dp))
@@ -1601,6 +1604,8 @@ private fun ChartWidgetView(w: ChartWidget) {
                     )
                     Text(
                         text = "$rangeLabel ▾",
+                        maxLines = 1,
+                        softWrap = false,
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF433B6B)
