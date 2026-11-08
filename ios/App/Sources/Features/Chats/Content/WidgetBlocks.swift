@@ -1822,7 +1822,7 @@ private struct TableBodyView: View {
             VStack(alignment: .leading, spacing: 0) {
                 if !cols.isEmpty {
                     HStack(spacing: 8) {
-                        ForEach(Array(cols.prefix(6).enumerated()), id: \.offset) { ci, col in
+                        ForEach(Array(cols.enumerated()), id: \.offset) { ci, col in
                             Button {
                                 if sortCol == ci { sortAsc.toggle() } else { sortCol = ci; sortAsc = true }
                             } label: {
@@ -1843,7 +1843,7 @@ private struct TableBodyView: View {
 
                 ForEach(Array(visibleRows.enumerated()), id: \.offset) { rIdx, row in
                     HStack(spacing: 8) {
-                        ForEach(Array(row.prefix(6).enumerated()), id: \.offset) { ci, cell in
+                        ForEach(Array(row.enumerated()), id: \.offset) { ci, cell in
                             let trimmed = cell.trimmingCharacters(in: .whitespacesAndNewlines)
                             let isTrend = trimmed.range(of: "^[↑↓↗↘+-]?\\s*[+-]?\\d+(?:\\.\\d+)?%$", options: .regularExpression) != nil &&
                                 (trimmed.hasPrefix("+") || trimmed.hasPrefix("-") || trimmed.hasPrefix("↑") || trimmed.hasPrefix("↓") || (ci < cols.count && cols[ci].lowercased().contains("trend")))
