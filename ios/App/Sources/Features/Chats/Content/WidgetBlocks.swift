@@ -656,6 +656,16 @@ private struct HtmlSandboxWebView: UIViewRepresentable {
         }
     }
 
+    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+        // A reset or route change must discard the old document and its
+        // Workers/timers, and release the script-handler -> binding cycle.
+        webView.stopLoading()
+        webView.navigationDelegate = nil
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "gsResize")
+        webView.configuration.userContentController.removeAllUserScripts()
+        webView.loadHTMLString("<!doctype html><html><body></body></html>", baseURL: nil)
+    }
+
     private static let resizeScript = """
     function reportHeight() {
       var h = Math.max(document.body ? document.body.scrollHeight : 0, document.documentElement.scrollHeight || 0, 80);
