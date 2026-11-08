@@ -786,6 +786,7 @@ struct WidgetBlockView: View {
                         .background(accent.opacity(0.14), in: Capsule())
                 }
                 WidgetBodyView(kind: effectiveKind, obj: obj, accent: accent)
+                    .id(effectiveKind + ":" + json)
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
