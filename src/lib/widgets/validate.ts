@@ -1919,7 +1919,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       widget.slots.length > 0
     return {
       widget,
-      errors: (type === 'wizard' || type === 'onboarding') && !widget.steps.length ? ['wizard/onboarding needs actual steps'] : hasBody ? [] : ['app needs steps, columns, items, groups, rows or slots'],
+      errors: type === 'tasks' && (rawItems.length > LIMITS.maxChecklistItems || !rawItems.length || widget.items.some(item => !asString(item.title).trim())) ? ['Task app needs complete labelled tasks within capacity; source tasks are not silently discarded'] : (type === 'wizard' || type === 'onboarding') && !widget.steps.length ? ['wizard/onboarding needs actual steps'] : hasBody ? [] : ['app needs steps, columns, items, groups, rows or slots'],
       repaired,
     }
   },
