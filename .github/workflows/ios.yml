@@ -289,6 +289,7 @@ jobs:
             -destination "$IOS_DESTINATION" \
             -derivedDataPath "$DERIVED_DATA" \
             -only-testing:AppTests/CalcHonestyTests \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedChecklistEditsDeletesAddsAndKeepsActualTaskCompletion \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testContextualEditOpensActualCodeAndExportOpensSystemDocumentPicker \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testContextualReportShowsActualDataAndSharePresentsSystemActivitySheet \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedCodeCopyEditRunAndInvalidDraftReset \
