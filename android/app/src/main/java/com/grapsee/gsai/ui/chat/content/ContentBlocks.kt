@@ -362,11 +362,14 @@ private fun parseCore(lines: List<Line>): List<Block> {
             else -> {
                 val paragraph = StringBuilder()
                 val start = line.offset
+                val firstLine = i
                 while (i < lines.size && isProse(lines, i)) {
                     if (paragraph.isNotEmpty()) paragraph.append('\n')
                     paragraph.append(lines[i].text.trimEnd())
                     i++
                 }
+                // A malformed/split marker must never stall the UI parser.
+                if (i == firstLine) { paragraph.append(lines[i].text.trimEnd()); i++ }
                 blocks += Block.Paragraph(parseInline(paragraph.toString()), start)
             }
         }
@@ -383,8 +386,8 @@ private fun isProse(lines: List<Line>, index: Int): Boolean {
     if (t.trimStart().startsWith("$$")) return false
     if (headingLineRegex.matchEntire(t) != null) return false
     if (hrLineRegex.matchEntire(t) != null) return false
-    if (quoteLineRegex.matchEntire(t) != null) return false
-    if (bulletItemRegex.matchEntire(t) != null || orderedItemRegex.matchEntire(t) != null) return false
+    if (quoteLineRegex.matchEntire(text) != null) return false
+    if (bulletItemRegex.matchEntire(text) != null || orderedItemRegex.matchEntire(text) != null) return false
     if (detailsOpenRegex.matchEntire(t) != null || detailsInlineRegex.matchEntire(t) != null) return false
     // A table opener also ends the paragraph (header + separator follow).
     if (t.contains('|') && index + 1 < lines.size && isTableSeparator(lines[index + 1].text)) return false
