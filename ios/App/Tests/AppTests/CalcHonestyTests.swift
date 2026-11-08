@@ -203,7 +203,7 @@ final class CalcHonestyTests: XCTestCase {
                 }
                 try await Task.sleep(nanoseconds: 50_000_000)
             }
-            XCTAssertTrue(observed.contains(expected), "Policy-only control allowed=\(allowed): \(observed)")
+            XCTAssertTrue(observed.contains(expected), "Policy-only control allowed=\(allowed): \(observed); actual requests=\(server.requestLines)")
             XCTAssertEqual(server.requestCount, allowed ? 1 : 0, "CSP must prevent the actual request, not merely fail DNS, CORS or ATS")
         }
     }
@@ -358,6 +358,10 @@ private final class WorkerHTTPProbe {
     let listener: NWListener
     private let lock = NSLock()
     private var requests = 0
+    private var lines: [String] = []
+    var requestLines: [String] {
+        lock.lock(); defer { lock.unlock() }; return lines
+    }
     var requestCount: Int {
         lock.lock(); defer { lock.unlock() }
         return requests
@@ -368,13 +372,31 @@ private final class WorkerHTTPProbe {
         listener.newConnectionHandler = { [weak self] connection in
             guard let self = self else { connection.cancel(); return }
             connection.start(queue: self.queue)
-            connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [weak self] data, _, _, _ in
-                guard let self = self, let data = data, !data.isEmpty else { connection.cancel(); return }
-                self.lock.lock(); self.requests += 1; self.lock.unlock()
-                let body = "causal-response"
-                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-store\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n" + body
-                connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
-            }
+            self.receiveRequest(connection, buffer: Data())
         }
     }
+    private func receiveRequest(_ connection: NWConnection, buffer: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [weak self] data, _, complete, error in
+            guard let self, let data, !data.isEmpty, buffer.count + data.count <= 65_536 else { connection.cancel(); return }
+            let request = buffer + data
+            guard request.range(of: Data("\r\n\r\n".utf8)) != nil else {
+                if complete || error != nil { connection.cancel() }
+                else { self.receiveRequest(connection, buffer: request) }
+                return
+            }
+            self.lock.lock()
+            self.requests += 1
+            self.lines.append(String(decoding: request, as: UTF8.self).components(separatedBy: "\r\n").first ?? "")
+            self.lock.unlock()
+            let body = "causal-response"
+            let response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-store\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n" + body
+            // Send a real TCP FIN after the body. Cancelling immediately after
+            // contentProcessed can reset the socket before WebKit reads it.
+            connection.send(content: Data(response.utf8), contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { error in
+                if error != nil { connection.cancel(); return }
+                connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, _, _ in connection.cancel() }
+            })
+        }
+    }
+
 }
