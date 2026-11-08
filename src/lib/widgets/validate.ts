@@ -868,7 +868,7 @@ export function validationErrors(result: ValidationResult): string[] {
  * Only the first used to pass, so the other three were dropped as invalid —
  * our own validator threw away correct answers.
  */
-function normalisePoints(raw: unknown[], labelHints: string[]): number[][] {
+function normalisePoints(raw: unknown[], labelHints: string[], errors: string[]): number[][] {
   const out: number[][] = []
   raw.forEach((item, index) => {
     const direct = asNumber(item)
@@ -878,6 +878,11 @@ function normalisePoints(raw: unknown[], labelHints: string[]): number[][] {
     }
     if (Array.isArray(item)) {
       const first = item[0]
+      const numbers = typeof first === 'string' && first.trim() && asNumber(first) === null ? item.slice(1) : item
+      if (numbers.some(value => asNumber(value) === null)) {
+        errors.push(`chart point ${index + 1} contains a missing or invalid coordinate`)
+        return
+      }
       if (typeof first === 'string' && first.trim() && asNumber(first) === null) {
         labelHints.push(first.trim())
         const restNums = item.slice(1).map(asNumber).filter((n): n is number => n !== null)
@@ -1203,11 +1208,13 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       .map((l) => asString(l))
       .filter(Boolean)
 
+    if (rawSeries.length > LIMITS.maxChartSeries) errors.push(`chart exceeds ${LIMITS.maxChartSeries} series; data was not silently truncated`)
     let series = rawSeries
       .map((s) => {
         const row = isObj(s) ? s : {}
         const rawPoints = asArray(row.data).length > 0 ? asArray(row.data) : asArray(row.values).length > 0 ? asArray(row.values) : asArray(row.points)
-        const data = normalisePoints(rawPoints, labelHints)
+        if (rawPoints.length > LIMITS.maxPointsPerSeries) errors.push(`chart series exceeds ${LIMITS.maxPointsPerSeries} points; data was not silently truncated`)
+        const data = normalisePoints(rawPoints, labelHints, errors)
         return { name: asString(row.name ?? row.label ?? row.title ?? row.id, 'Series'), data }
       })
       .filter((s) => s.data.length >= minPoints)
@@ -1215,19 +1222,8 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
 
     const labels = declared.length > 0 ? declared : labelHints
 
-    // If a pie/donut arrived as a SINGLE series with multiple slice points
-    // ({"type":"pie","labels":["A","B"],"series":[{"name":"Share","data":[[0,40],[1,60]]}]}),
-    // expand it to the canonical one-series-per-slice form so every renderer
-    // (Web & Android) draws all slices instead of only the first point.
-    if (pieLike && series.length === 1 && series[0].data.length > 1) {
-      series = series[0].data
-        .slice(0, LIMITS.maxChartSeries)
-        .map((pt, idx) => ({
-          name: labels[idx] ?? `${series[0].name} ${idx + 1}`,
-          data: [[0, pt[pt.length - 1] ?? 0]],
-        }))
-      repaired = true
-    }
+    // Every client now renders every pie observation directly. Expanding a
+    // single source series to maxChartSeries slices discarded the remainder.
 
     if (series.length === 0) errors.push('chart needs at least one series with enough points')
 
@@ -1318,13 +1314,16 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
         if (isObj(r)) {
           repaired = true
           const keys = colKeys.length > 0 ? colKeys.slice(0, columns.length) : columns
-          return keys.map((k, idx) => asString(r[k] ?? r[columns[idx]] ?? Object.values(r)[idx]))
+          return keys.map((k, idx) => asString(r[k] ?? r[columns[idx]]))
         }
         return []
       })
       .filter((r) => r.length > 0)
       .slice(0, LIMITS.maxTableRows)
     const errors: string[] = []
+    if (rawRows.length > LIMITS.maxTableRows) errors.push(`table exceeds ${LIMITS.maxTableRows} rows; data was not silently truncated`)
+    if (rawCols.length > LIMITS.maxTableColumns) errors.push(`table exceeds ${LIMITS.maxTableColumns} columns; data was not silently truncated`)
+    if (rawRows.some(row => Array.isArray(row) && row.length > columns.length)) errors.push('table row contains cells without declared columns')
     if (!columns.length) errors.push('table needs columns')
     if (!rows.length) errors.push('table needs rows')
     return {
