@@ -3026,6 +3026,7 @@ private struct BlockQuoteView: View {
 struct CodeBlockCardView: View {
     @Environment(\.nexlyCodeWrap) private var wrapCode
     @Environment(\.responseCodeActions) private var responseActions
+    @Environment(\.reactPreviewScope) private var reactScope
     @State private var localSourceID = UUID()
     @FocusState private var sourceFocused: Bool
     let language: String?
@@ -3053,7 +3054,7 @@ struct CodeBlockCardView: View {
     }
 
     private var supportsExecution: Bool {
-        ["html", "htm", "svg", "js", "javascript", "node", "json"].contains(lang)
+        ["html", "htm", "svg", "js", "javascript", "node", "json", "jsx", "tsx", "react"].contains(lang)
     }
 
     private var allLines: [String] {
@@ -3380,12 +3381,11 @@ struct CodeBlockCardView: View {
             HtmlBlockView(kind: "html", source: workerDocument, open: false)
                 .id(runCount)
                 .padding(8)
-        } else if !open && ["jsx", "tsx", "react"].contains(lang) {
-            Text("React source only: this view has no React/TypeScript compiler. No component has been executed. Use a self-contained HTML/JavaScript sandbox for a live preview.")
-                .font(.system(size: 12))
-                .foregroundStyle(Color.white.opacity(0.85))
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(12)
+        } else if !open && ["jsx", "tsx", "react"].contains(lang), browserDocument != nil {
+            ReactPreviewIOS(source: currentCode, scope: "\(reactScope ?? localSourceID.uuidString):\(sourceStart ?? 0)")
+                .id(runCount)
+                .frame(height: 420)
+                .padding(8)
         } else if !open && !supportsExecution {
             Text("Source only: no \(NexlyIcons.cleanPlainText(lang)) runtime is available in this app. Copy this source into a compatible environment; no execution has occurred here.")
                 .font(.system(size: 12))
@@ -3475,7 +3475,7 @@ struct CodeBlockCardView: View {
             }
             return
         }
-        if ["html", "htm", "svg"].contains(lang) {
+        if ["html", "htm", "svg", "jsx", "tsx", "react"].contains(lang) {
             browserDocument = currentCode
             return
         }
