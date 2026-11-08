@@ -352,11 +352,19 @@ class PlatformRuntimeTest {
         var scope by androidx.compose.runtime.mutableStateOf(originalScope)
         compose.activity.setContentForPlatformTest {
             TheGsAiTheme {
-                androidx.compose.runtime.CompositionLocalProvider(com.grapsee.gsai.ui.chat.content.LocalReactPreviewScope provides scope) {
-                    androidx.compose.runtime.key(scope, source) {
-                        androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
-                            com.grapsee.gsai.ui.chat.content.BlocksContent("```tsx\n$source\n```", false, {})
-                        }
+                androidx.compose.runtime.key(scope, source) {
+                    androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                        // Use the real ChatScreen parent and its actual message
+                        // storage identity, not a manually scoped child renderer.
+                        com.grapsee.gsai.ui.chat.AssistantMessage(
+                            message = com.grapsee.gsai.ui.chat.ChatUiMessage(
+                                id = scope, role = "assistant", content = "```tsx\n$source\n```",
+                                createdAt = "2026-10-20T10:30:00Z"
+                            ),
+                            conversationId = "react-runtime-acceptance",
+                            isSpeaking = false, showIdentity = false,
+                            onCopy = {}, onRegenerate = {}
+                        )
                     }
                 }
             }
