@@ -5,6 +5,13 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testAxisLabelsCoverTheCompleteSourceDomainWithoutInventingObservationIndices() {
+        XCTAssertEqual(chartAxisLabelIndicesIOS(count: 31), [0, 4, 9, 13, 17, 21, 26, 30])
+        XCTAssertEqual(chartAxisLabelIndicesIOS(count: 6), Array(0..<6))
+        XCTAssertEqual(chartAxisLabelIndicesIOS(count: 0), [])
+        XCTAssertEqual(chartAxisLabelIndicesIOS(count: 31, limit: 1), [30])
+    }
+
     func testMarkdownNumbersKeepActualDirectionalSignsAndRejectMalformedCells() {
         for (raw, expected) in [("↓ 1.2%", -1.2), ("↘ -1.2%", -1.2), ("↑ +0.5%", 0.5), ("−0.3%", -0.3), ("-$1,200.50", -1200.5), ("$-1.2k", -1200), ("৳2M", 2e6), ("2x", 2), ("0", 0)] {
             XCTAssertEqual(parseSortableNumberIOS(raw), expected, raw)
