@@ -92,7 +92,8 @@ class PlatformRuntimeTest {
         awaitObserved("actual Unicode-key computation reaches native worker console") {
             evaluate("!!document.getElementById('out') && document.getElementById('out').textContent.includes('16 2') && document.getElementById('out').textContent.includes('Completed.')") == "true"
         }
-        assertEquals("false", evaluate("document.body.textContent.includes(String.fromCodePoint(0x1f600))"))
+        // Script literals MUST retain source bytes; innerText measures the rendered surface.
+        assertEquals("false", evaluate("document.body.innerText.includes(String.fromCodePoint(0x1f600))"))
         val network = """self.addEventListener('securitypolicyviolation', e=>console.log('BLOCKED '+e.effectiveDirective));try{await fetch('https://github.com/');}catch{console.log('FETCH REFUSED');}await new Promise(r=>setTimeout(r,100));"""
         fun load(sourceCode: String) {
             instrumentation.runOnMainSync {
