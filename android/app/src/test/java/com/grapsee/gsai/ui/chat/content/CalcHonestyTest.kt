@@ -5,6 +5,13 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun axisLabelsCoverTheCompleteActualObservationDomain() {
+        assertEquals(listOf(0, 4, 9, 13, 17, 21, 26, 30), chartAxisLabelIndicesAndroid(31))
+        assertEquals((0 until 6).toList(), chartAxisLabelIndicesAndroid(6))
+        assertEquals(emptyList<Int>(), chartAxisLabelIndicesAndroid(0))
+        assertEquals(listOf(30), chartAxisLabelIndicesAndroid(31, 1))
+    }
+
     @Test fun markdownNumbersKeepDirectionalSignsAndRejectMalformedCells() {
         for ((raw, expected) in listOf("↓ 1.2%" to -1.2, "↘ -1.2%" to -1.2, "↑ +0.5%" to 0.5, "−0.3%" to -0.3, "-\$1,200.50" to -1200.5, "\$-1.2k" to -1200.0, "৳2M" to 2e6, "2x" to 2.0, "0" to 0.0)) {
             assertEquals(raw, expected, parseSortableNumberAndroid(raw)!!, 0.0)
