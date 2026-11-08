@@ -122,8 +122,22 @@ struct GSLine {
 }
 
 func parseBlocks(_ content: String, metadata: RichMetadata? = nil) -> [Block] {
-    let lines = toLines(content)
-    var blocks = parseCore(lines).map(promoteBarePayload)
+    let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+    let wholeJSON = trimmed.count >= 2 && trimmed.count <= 65_536 &&
+        ((trimmed.hasPrefix("{") && trimmed.hasSuffix("}")) || (trimmed.hasPrefix("[") && trimmed.hasSuffix("]"))) &&
+        (try? JSONSerialization.jsonObject(with: Data(trimmed.utf8))) != nil
+    var blocks: [Block]
+    if wholeJSON {
+        if let kind = inferWidgetKind(trimmed), kind == "plan", let plan = parseNexlyPlan(trimmed) {
+            blocks = [.plan(plan, open: false, sourceStart: 0)]
+        } else if let kind = inferWidgetKind(trimmed), isValidWidget(kind: kind, json: trimmed) {
+            blocks = [.widget(kind: kind, json: trimmed, open: false, sourceStart: 0)]
+        } else {
+            blocks = [.codeBlock(language: "json", code: content, open: false, sourceStart: 0)]
+        }
+    } else {
+        blocks = parseCore(toLines(content)).map(promoteBarePayload)
+    }
     if let metadata = metadata {
         let tools = metadata.toolResults.map { Block.toolResult($0, sourceStart: 0) }
         let citations = metadata.citations.isEmpty ? [] : [Block.citations(metadata.citations, sourceStart: 0)]
