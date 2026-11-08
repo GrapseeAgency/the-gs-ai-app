@@ -1,6 +1,7 @@
 'use client'
 
 import { escapeCodeDisplay } from '@/lib/code/display-source'
+import { downloadResponseFile, responseSourceArchive, responseSourceFile } from '@/lib/code/response-export'
 
 /**
  * MessageContent — the full assistant answer: rich markdown prose and widgets
@@ -16,7 +17,7 @@ import { escapeCodeDisplay } from '@/lib/code/display-source'
  * glass glyphs.
  */
 
-import { Fragment, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useMemo, useRef, useState, type ReactNode } from 'react'
 import { parseStream, type Segment } from './stream'
 import { WidgetRenderer } from './WidgetRenderer'
 import { SpontaneousConceptDeck } from './SpontaneousConceptDeck'
@@ -1901,6 +1902,62 @@ export function MessageContent({
   streaming?: boolean
   citations?: Citation[]
 }) {
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [actionNotice, setActionNotice] = useState<{ text: string; error?: boolean } | null>(null)
+  const [detailView, setDetailView] = useState<'report' | 'sources' | null>(null)
+  const citationText = (citations ?? []).map(c => `[${c.ordinal}] ${c.title} — ${c.url}`).join('\n')
+  const performAction = async (label: string) => {
+    setActionNotice(null)
+    try {
+      switch (label) {
+        case 'Share':
+          if (navigator.share) await navigator.share({ title: 'GS AI response', text })
+          else {
+            if (!navigator.clipboard?.writeText) throw new Error('Sharing and clipboard access are unavailable in this browser.')
+            await navigator.clipboard.writeText(text)
+            setActionNotice({ text: 'Sharing is unavailable in this browser. Response copied; paste it where you want to share.' })
+          }
+          return
+        case 'Copy Citations': {
+          // Prefer persisted source records; otherwise copy only source-bearing
+          // lines, never claim the entire answer is a bibliography.
+          const sources = citationText || text.split('\n').filter(line => /https?:\/\//.test(line)).join('\n')
+          if (!sources) throw new Error('No citation URLs are available to copy.')
+          if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable in this browser.')
+          await navigator.clipboard.writeText(sources)
+          setActionNotice({ text: 'Citations copied.' })
+          return
+        }
+        case 'Download Report':
+          downloadResponseFile('gs-ai-response.md', text + (citationText ? '\n\n## Sources\n' + citationText : ''), 'text/markdown;charset=utf-8')
+          setActionNotice({ text: 'Response report exported as Markdown, including its original data.' })
+          return
+        case 'Download Project': {
+          const blocks = Array.from(contentRef.current?.querySelectorAll<HTMLElement>('[data-code-block]') ?? [])
+          const files = blocks.map((block, index) => responseSourceFile(block.dataset.codeSource ?? '', block.dataset.codeLanguage, index))
+          downloadResponseFile('gs-ai-source-snippets.zip', responseSourceArchive(files), 'application/zip')
+          setActionNotice({ text: 'Source snippets exported, including valid edits. This is not a complete runnable project; see README.txt.' })
+          return
+        }
+        case 'Edit Code': {
+          const editor = contentRef.current?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Source code"], textarea[aria-label="JSON-encoded source"]')
+          const edit = contentRef.current?.querySelector<HTMLButtonElement>('[data-code-edit]')
+          if (editor) { editor.scrollIntoView?.({ block: 'center', behavior: 'smooth' }); editor.focus() }
+          else if (edit) { edit.scrollIntoView?.({ block: 'center', behavior: 'smooth' }); edit.click() }
+          else throw new Error('No editable code block is available.')
+          return
+        }
+        case 'View All Sources': setDetailView('sources'); return
+        case 'View Details': case 'View Full Report': setDetailView('report'); return
+        default:
+          if (!onPrompt) throw new Error('Follow-up requests are unavailable in this view.')
+          onPrompt(label)
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return // User cancelled the native share sheet.
+      setActionNotice({ text: error instanceof Error ? error.message : 'The action failed. Please try again.', error: true })
+    }
+  }
   const segments = useMemo(() => parseStream(sanitizeReplyEmojis(text)), [text])
   const theme = useMemo(() => themeFor(dark), [dark])
   const concepts = useMemo(() => !streaming && segments.every((s) => s.kind === 'text') ? extractConceptDeck(text) : [], [text, segments, streaming])
@@ -1910,7 +1967,7 @@ export function MessageContent({
     [segments, text, citations, streaming]
   )
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: TYPE.body, lineHeight: 1.65 }}>
+    <div ref={contentRef} style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: TYPE.body, lineHeight: 1.65 }}>
       {segments.map((segment, i) => {
         switch (segment.kind) {
           case 'text':
@@ -1941,13 +1998,23 @@ export function MessageContent({
       })}
       {concepts.length >= 3 && <SpontaneousConceptDeck key={text} concepts={concepts} dark={dark} />}
       {citations && citations.length > 0 && <CitationsSourceCards citations={citations} theme={theme} />}
+      {actionNotice && <div role={actionNotice.error ? 'alert' : 'status'}>{actionNotice.text}</div>}
+      {detailView && (
+        <section role="region" aria-label={detailView === 'sources' ? 'All sources' : 'Response report'} style={{ padding: 16, border: `1px solid ${theme.border}`, borderRadius: 16 }}>
+          <button type="button" onClick={() => setDetailView(null)}>Close details</button>
+          <h3>{detailView === 'sources' ? 'All sources' : 'Response report — original source and data'}</h3>
+          {detailView === 'sources' && citations?.length
+            ? <CitationsSourceCards citations={citations} theme={theme} />
+            : <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{detailView === 'sources' ? citationText || text.split('\n').filter(line => /https?:\/\//.test(line)).join('\n') || 'No source URLs were supplied.' : sanitizeReplyEmojis(text)}</pre>}
+        </section>
+      )}
       {contextualPills.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
           {contextualPills.map((pill, idx) => (
             <button
               key={idx}
               type="button"
-              onClick={() => onPrompt?.(pill.label)}
+              onClick={() => { void performAction(pill.label) }}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
