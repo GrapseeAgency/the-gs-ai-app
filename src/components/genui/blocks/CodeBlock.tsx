@@ -2,7 +2,7 @@
 
 /**
  * CodeBlock — full code experience: syntax highlighting, inline editing,
- * execution preview (JS/TS console runner, HTML/SVG sandboxed iframe, JSON
+ * execution (bounded JavaScript Worker, HTML/SVG sandboxed iframe, JSON
  * validator), and error diagnostics.
  */
 import { useMemo, useState, type ReactNode } from 'react'
@@ -11,7 +11,6 @@ import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { CopyChip } from '../primitives/CopyChip'
 import { HtmlBlock } from './HtmlBlock'
 import { GlassIcon } from '@/components/nexly/GlassIcon'
-import { arithmeticPreview } from '@/lib/code/arithmetic-preview'
 import { javascriptSandboxDocument } from '@/lib/code/javascript-sandbox'
 import { escapeCodeDisplay, requiresEncodedEditor, encodeSourceEditor, decodeSourceEditor } from '@/lib/code/display-source'
 
@@ -26,7 +25,7 @@ const RUNNABLE_SH = new Set(['sh', 'bash', 'zsh', 'shell'])
 const ERROR_LANGS = new Set(['error', 'stderr', 'traceback', 'stacktrace', 'exception'])
 
 function previewNonJsExecution(lang: string, source: string): { output: string; error?: string } {
-  if (RUNNABLE_PY.has(lang)) return arithmeticPreview(source)
+  if (RUNNABLE_PY.has(lang)) return { output: '', error: 'Not executed: no Python runtime is available here. Copy this source into a Python environment.' }
   if (RUNNABLE_SQL.has(lang)) return { output: '', error: 'Not executed: no database is connected. Copy this SQL into your database client.' }
   return { output: '', error: `Not executed: no ${lang.toUpperCase()} runtime is available here.` }
 }
