@@ -331,7 +331,8 @@ export function inferWidgetKind(json: string): WidgetKind | null {
   // as an unrelated empty app just to obtain a successful widget result.
   const explicitApp = [obj.kind, obj.widget].some(value => value === 'app') ||
     (typeof obj.type === 'string' && (APP_TYPES as readonly string[]).includes(obj.type))
-  if (!explicitApp && (has('columns') || has('headers')) && (has('rows') || has('data'))) {
+  if (explicitApp) return validateWidget('app', repaired).ok ? 'app' : null
+  if ((has('columns') || has('headers')) && (has('rows') || has('data'))) {
     return validateWidget('table', repaired).ok ? 'table' : null
   }
   if (has('series') || has('datasets')) return validateWidget('chart', repaired).ok ? 'chart' : null
