@@ -55,6 +55,22 @@ final class PlatformRuntimeUITests: XCTestCase {
         capture.name = "genui-react-actual-task-crud-storage-isolation"; capture.lifetime = .keepAlways; add(capture)
     }
 
+    func testVanishedDashboardTabCannotHideReplacementSource() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated dashboard"].waitForExistence(timeout: 20))
+        app.buttons["Open generated dashboard"].tap()
+        XCTAssertTrue(app.buttons["Table"].firstMatch.waitForExistence(timeout: 10))
+        app.buttons["Table"].firstMatch.tap()
+        XCTAssertFalse(app.staticTexts["Source footer"].exists)
+        app.buttons["Replace dashboard source"].tap()
+        XCTAssertTrue(app.staticTexts["Replacement stays visible"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Supplied replacement footer"].exists)
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-dashboard-actual-source-replacement"; capture.lifetime = .keepAlways; add(capture)
+    }
+
     func testOrdinaryMarkdownTaskControlsPreserveRealDetailsAndCompletion() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
