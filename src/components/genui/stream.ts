@@ -57,7 +57,7 @@ export function parseStream(text: string): Segment[] {
   }
 
   const segments: Segment[] = []
-  const fence = /^[ \t]{0,8}(```|~~~)([a-zA-Z][\w:./+-]*)?[ \t]*[^\r\n]*\r?\n/gm
+  const fence = /^[ \t]{0,8}(`{3,}|~{3,})([a-zA-Z][\w:./+-]*)?[ \t]*[^\r\n]*\r?\n/gm
   let cursor = 0
 
   const pushText = (chunk: string) => {
@@ -89,7 +89,7 @@ export function parseStream(text: string): Segment[] {
     const marker = open[1]
     const lang = open[2] ?? ''
     const bodyStart = open.index + open[0].length
-    const closeRe = new RegExp(`\\r?\\n[ \\t]{0,8}${marker}[ \\t]*(?=\\r?\\n|$)`, 'g')
+    const closeRe = new RegExp(`\\r?\\n[ \\t]{0,8}${marker[0]}{${marker.length},}[ \\t]*(?=\\r?\\n|$)`, 'g')
     closeRe.lastIndex = bodyStart
     const closeMatch = closeRe.exec(text)
     const complete = closeMatch !== null
@@ -107,11 +107,11 @@ export function parseStream(text: string): Segment[] {
       continue
     }
     if (lower === 'svg') {
-      segments.push({ kind: 'svg', source: trimmedBody })
+      segments.push(complete ? { kind: 'svg', source: body } : { kind: 'widget', widget: 'svg', payload: {}, complete: false })
       continue
     }
     if (HTML_FENCES.has(lower) || ((lower === 'app' || lower === 'ui' || lower === 'site') && !isJsonBody && trimmedBody.startsWith('<'))) {
-      segments.push({ kind: 'html', source: trimmedBody })
+      segments.push(complete ? { kind: 'html', source: body } : { kind: 'widget', widget: 'html', payload: {}, complete: false })
       continue
     }
     if (MAP_FENCES.has(lower) && isJsonBody) {
@@ -174,7 +174,7 @@ export function parseStream(text: string): Segment[] {
       }
     }
 
-    segments.push({ kind: 'code', code: body.replace(/\n?$/, ''), language: lower || undefined })
+    segments.push({ kind: 'code', code: body, language: lower || undefined })
   }
   return segments
 }
