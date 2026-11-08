@@ -5,6 +5,16 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun sharedChoicesRefuseInventedLabelsAndKeepActualFractionalStarts() {
+        val counter = parseWidget("collab", """{"surface":"counter","room":"actual-source","start":12.5}""") as Widget.Collab
+        assertEquals(12.5, counter.w.start, 0.0)
+        for (items in listOf("[]", "[\"Only choice\"]", "[\"Actual\",\"\"]", "[\"Actual\",{}]")) {
+            assertNull(parseWidget("collab", """{"surface":"vote","room":"actual-source","items":$items}"""))
+        }
+        val valid = parseWidget("collab", """{"surface":"vote","room":"actual-source","items":["First","Second"]}""") as Widget.Collab
+        assertEquals(listOf("First", "Second"), valid.w.items)
+    }
+
     @Test fun citationsCannotForgeTrustOrAcademicAuthorityThroughLabelsPathsOrCredentials() {
         assertEquals("www.nature.com", citationSourceUrl("https://www.nature.com/article")?.host)
         assertEquals(true, isAcademicSourceDomain("untrusted.example", "https://www.nature.com/article"))
