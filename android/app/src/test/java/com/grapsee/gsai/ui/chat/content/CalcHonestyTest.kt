@@ -5,6 +5,35 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun wholeJsonPreservesMachineStringsBeforeMarkdownAndStreaming() {
+        val documents = listOf("{}", "[]", "[1,2,3]", "[{\"literal\":\"**bold** :rocket: 😀\"}]",
+            " \r\n{\"literal\":\"**bold** :rocket: 😀\",\"nested\":{\"x\":true}}\r\n ")
+        for (source in documents) {
+            val blocks = parseBlocks(source)
+            assertEquals(1, blocks.size)
+            val block = blocks.single() as Block.CodeBlock
+            assertEquals("json", block.language)
+            assertEquals(source, block.code)
+            var previous = ""
+            var streamed: List<Block> = emptyList()
+            for (end in 1..source.length) {
+                val current = source.substring(0, end)
+                streamed = parseStreamingBlocks(previous, streamed, current)
+                assertEquals(parseBlocks(current), streamed)
+                previous = current
+            }
+        }
+    }
+
+    @Test fun invalidDataDoesNotEscapeNativeCapacityAsAnUnrelatedEditor() {
+        val table = "{\"columns\":[\"Actual\"],\"rows\":[" + (1..101).joinToString(",") { "[$it]" } + "]}"
+        assertNull(parseWidget("table", table))
+        assertNull(inferWidgetKind(table))
+        val series = (1..10).joinToString(",") { "{\"name\":\"S$it\",\"data\":[[0,$it]]}" }
+        val chart = parseWidget("chart", "{\"type\":\"line\",\"series\":[$series]}") as Widget.Chart
+        assertEquals(10, chart.w.series.size)
+    }
+
     @Test fun contextualCodeActionsAreResponseScopedAndPreserveRealDrafts() {
         val first = ResponseCodeActions()
         val other = ResponseCodeActions()
