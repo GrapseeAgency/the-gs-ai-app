@@ -3206,11 +3206,11 @@ struct CodeBlockCardView: View {
         browserDocument = nil
         let src = currentCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !src.isEmpty else {
-            runOutput = "(empty snippet)"
+            errorOutput = "Not executed: empty snippet."
             return
         }
         if lang == "json" {
-            guard let data = src.data(using: .utf8) else { return }
+            guard let data = currentCode.data(using: .utf8) else { return }
             do {
                 let obj = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
                 let pretty = try JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys, .fragmentsAllowed])
@@ -3225,59 +3225,7 @@ struct CodeBlockCardView: View {
             return
         }
         if ["py", "python", "python3"].contains(lang) {
-            var vars: [String: Double] = [:]
-            var output: [String] = []
-            var lineNumber = 0
-            func numeric(_ expr: String) throws -> Double {
-                guard expr.range(of: "^[a-zA-Z0-9_+*()./\\s-]+$", options: .regularExpression) != nil,
-                      !expr.contains("**"), !expr.contains("//") else {
-                    throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Only numbers, variables, +, -, *, / and parentheses are supported"])
-                }
-                let names = try NSRegularExpression(pattern: "[a-zA-Z_][a-zA-Z0-9_]*")
-                for match in names.matches(in: expr, range: NSRange(expr.startIndex..., in: expr)) {
-                    let name = (expr as NSString).substring(with: match.range)
-                    guard vars[name] != nil else {
-                        throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unknown variable: \(name)"])
-                    }
-                }
-                guard expr.range(of: "[a-zA-Z_]\\w*\\s*\\(", options: .regularExpression) == nil,
-                      let value = CalcExprIOS.evalOptional(expr, vars: vars), value.isFinite else {
-                    throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid expression, function call or non-finite result"])
-                }
-                return value
-            }
-            do {
-                let lines = src.components(separatedBy: "\n")
-                guard src.count <= 32000, lines.count <= 200 else {
-                    throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Preview limit exceeded"])
-                }
-                let assignment = try NSRegularExpression(pattern: "^([a-zA-Z_]\\w*)\\s*=\\s*([^=]+)$")
-                for raw in lines {
-                    lineNumber += 1
-                    let line = raw.trimmingCharacters(in: .whitespaces)
-                    if line.isEmpty || line.hasPrefix("#") { continue }
-                    if let match = assignment.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) {
-                        let ns = line as NSString
-                        vars[ns.substring(with: match.range(at: 1))] = try numeric(ns.substring(with: match.range(at: 2)))
-                        continue
-                    }
-                    if line.hasPrefix("print("), line.hasSuffix(")") {
-                        let arg = String(line.dropFirst(6).dropLast()).trimmingCharacters(in: .whitespaces)
-                        if arg.isEmpty { output.append("") }
-                        else if arg.range(of: "^\"[^\"\\\\]*\"$|^'[^'\\\\]*'$", options: .regularExpression) != nil {
-                            output.append(String(arg.dropFirst().dropLast()))
-                        } else {
-                            let value = try numeric(arg)
-                            output.append(value.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", value) : String(value))
-                        }
-                        continue
-                    }
-                    throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unsupported statement; imports, loops and libraries require a Python runtime"])
-                }
-                runOutput = "Arithmetic preview (not a Python runtime)\n" + (output.isEmpty ? "(no print output)" : output.joined(separator: "\n"))
-            } catch {
-                errorOutput = "Preview stopped at line \(lineNumber): \(error.localizedDescription)"
-            }
+            errorOutput = "Not executed: no Python runtime is available here. Copy this source into a Python environment."
             return
         }
         if ["sql", "sqlite", "postgres", "postgresql", "mysql"].contains(lang) {
