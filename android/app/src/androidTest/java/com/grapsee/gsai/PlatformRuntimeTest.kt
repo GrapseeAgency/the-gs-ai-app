@@ -99,6 +99,40 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("1 of 1 completed").assertExists()
     }
 
+    @Test fun generatedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices() {
+        var payload by androidx.compose.runtime.mutableStateOf("""{"type":"timer","items":[{"title":"Not time","price":25}]}""")
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    com.grapsee.gsai.ui.chat.content.WidgetBlockView(
+                        com.grapsee.gsai.ui.chat.content.Block.WidgetBlock("app", payload, false, 0), false)
+                }
+            }
+        }
+        compose.onNodeWithText("00:00").assertExists()
+        compose.onNodeWithText("Start").assertIsNotEnabled()
+        compose.onNode(hasSetTextAction()).performTextReplacement("2")
+        compose.onNodeWithText("Start").assertIsEnabled().performClick()
+        compose.onNodeWithText("Pause").performClick()
+        val paused = compose.onAllNodes(SemanticsMatcher("countdown display") { node -> node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.any { it.text.matches(Regex("\\d+:\\d{2}")) } == true }).fetchSemanticsNodes().single().config[androidx.compose.ui.semantics.SemanticsProperties.Text].single().text
+        android.os.SystemClock.sleep(1100)
+        compose.onNodeWithText(paused).assertExists()
+        compose.onNodeWithText("Reset").performClick()
+        compose.onNodeWithText("00:02").assertExists()
+        compose.onNode(hasSetTextAction()).assertIsEnabled()
+        compose.onNodeWithText("Start").performClick()
+        compose.waitUntil(5000) { compose.onAllNodesWithText("Done — countdown completed.").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("00:00").assertExists()
+        compose.runOnIdle { payload = """{"type":"timer","durationSeconds":5}""" }
+        compose.onNodeWithText("00:05").assertExists()
+        compose.onNodeWithText("Start").performClick()
+        compose.runOnIdle { payload = """{"type":"timer","items":[{"price":999}]}""" }
+        compose.onNodeWithText("00:00").assertExists()
+        compose.onNodeWithText("Start").assertIsNotEnabled()
+        compose.onAllNodesWithText("Done — countdown completed.").assertCountEquals(0)
+        compose.onNodeWithText("Local countdown only. No background alarm or notification is scheduled.").assertExists()
+    }
+
     @Test fun generatedBookingSavesOnlyActualLocalSelectionWithoutReservation() {
         var payload by androidx.compose.runtime.mutableStateOf("""{"type":"booking","title":"Actual slots","slots":["09:00","10:00"]}""")
         val prompts = mutableListOf<String>()
