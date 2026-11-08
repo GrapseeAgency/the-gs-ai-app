@@ -166,8 +166,19 @@ data class RichMetadata(
 private data class Line(val text: String, val offset: Int, val ending: String = "\n")
 
 fun parseBlocks(content: String, metadata: RichMetadata? = null): List<Block> {
-    val lines = toLines(content)
-    val blocks = parseCore(lines).map { promoteBarePayload(it) }
+    val trimmed = content.trim()
+    val wholeJson = trimmed.length in 2..65_536 &&
+        ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) &&
+        runCatching { validateCodeJsonSourceAndroid(trimmed) }.isSuccess
+    val blocks = if (wholeJson) {
+        val kind = inferWidgetKind(trimmed)
+        val promoted = when {
+            kind == "plan" -> parseNexlyPlanData(trimmed)?.let { Block.PlanBlock(it, false, 0) }
+            kind != null && parseWidget(kind, trimmed) != null -> Block.WidgetBlock(kind, trimmed, false, 0)
+            else -> null
+        }
+        listOf(promoted ?: Block.CodeBlock("json", content, false, 0))
+    } else parseCore(toLines(content)).map { promoteBarePayload(it) }
     val toolBlocks = metadata?.toolResults?.map { Block.ToolResultBlock(it, 0) } ?: emptyList()
     val citations = metadata?.citations.orEmpty()
     val citationBlock = if (citations.isEmpty()) emptyList() else listOf(Block.CitationsBlock(citations, 0))
