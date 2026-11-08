@@ -115,14 +115,15 @@ class PlatformRuntimeTest {
         val payload = androidx.compose.runtime.mutableStateOf("""{"title":"First poll","options":[{"label":"A"},{"label":"B"}]}""")
         compose.activity.setContentForPlatformTest {
             TheGsAiTheme {
-                com.grapsee.gsai.ui.chat.content.WidgetBlockView(widget = parseWidget("poll", payload.value)!!)
+                com.grapsee.gsai.ui.chat.content.WidgetBlockView(
+                    com.grapsee.gsai.ui.chat.content.Block.WidgetBlock("poll", payload.value, false, 0), false)
             }
         }
         compose.onNodeWithText("0 local votes", substring = true).assertExists()
         compose.onNodeWithText("A").performClick()
         compose.onNodeWithText("1 local vote", substring = true).assertExists()
         compose.onNodeWithText("100% (1)").assertExists()
-        compose.onNodeWithText("B").performClick()
+        compose.onNodeWithText("B").performTouchInput { click() }
         compose.onNodeWithText("1 local vote", substring = true).assertExists()
         compose.onNodeWithText("100% (1)").assertExists()
         compose.runOnIdle { payload.value = """{"title":"New poll","options":[{"label":"C","votes":2},{"label":"D","votes":3}]}""" }
