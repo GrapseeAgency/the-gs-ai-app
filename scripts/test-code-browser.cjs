@@ -162,6 +162,32 @@ async function main() {
     await page.waitForSelector('[role="status"]')
     const booking = await page.$eval('[role="status"]', node => node.innerText)
     check('actual booking control saves only the selected local slot and never claims a reservation', () => assert.match(booking, /Saved locally: 10:00.*No reservation has been made/))
+    const displaySource = '<div id="shadow-host"></div><canvas id="display-canvas" width="100" height="40"></canvas><svg data-custom-glass="true"><path d="M0 0L8 8"/></svg><script>window.marker=String.fromCodePoint(0x1F600);window.closedRoot=document.getElementById("shadow-host").attachShadow({mode:"closed"});closedRoot.innerHTML="<button>Shadow &#x1F600;</button><output>0</output>";window.shadowClicks=0;closedRoot.querySelector("button").onclick=()=>{shadowClicks++;closedRoot.querySelector("output").textContent=shadowClicks+marker;};const ctx=document.getElementById("display-canvas").getContext("2d");ctx.font="28px sans-serif";ctx.fillText(marker,0,30);ctx.strokeText(marker,40,30);</script>'
+    await page.evaluate(source => window.gsRenderHTML(source), displaySource)
+    await page.waitForSelector('iframe')
+    const displayFrame = await (await page.$('iframe')).contentFrame()
+    await displayFrame.waitForFunction(() => window.closedRoot?.querySelector('button').textContent === 'Shadow ')
+    await displayFrame.evaluate(() => window.closedRoot.querySelector('button').click())
+    await displayFrame.waitForFunction(() => window.closedRoot.querySelector('output').textContent === '1')
+    const shadowState = await displayFrame.evaluate(() => ({counter:window.shadowClicks,marker:window.marker.codePointAt(0),button:window.closedRoot.querySelector('button').textContent}))
+    check('actual closed-shadow-root controls run real logic and suppress static and dynamic emoji without changing machine strings', () => assert.deepEqual(shadowState, {counter:1,marker:128512,button:'Shadow '}))
+    const canvasPolicy = await displayFrame.evaluate(() => {
+      const ctx=document.getElementById('display-canvas').getContext('2d')
+      const clear=ctx.getImageData(0,0,100,40).data.every(value=>value===0)
+      ctx.fillStyle='#123456';ctx.fillRect(0,0,4,4)
+      return {clear,vector:ctx.getImageData(0,0,1,1).data[3],glass:!!document.querySelector('svg[data-custom-glass] path')}
+    })
+    check('actual canvas fill/stroke suppress emoji text while preserving real canvas vectors and custom glass SVG', () => assert.deepEqual(canvasPolicy, {clear:true,vector:255,glass:true}))
+    const displayContract = require('../shared-contracts/emoji-dom-policy.json')
+    const originalDocument = await page.$eval('iframe', node => node.srcdoc)
+    const withoutDisplayPolicy = originalDocument.replace('<script>'+displayContract.script+'</script>', '')
+    assert.notEqual(withoutDisplayPolicy, originalDocument)
+    await page.evaluate(source => { const frame=document.createElement('iframe');frame.id='display-counterfactual';frame.setAttribute('sandbox','allow-scripts');frame.srcdoc=source;document.body.append(frame) }, withoutDisplayPolicy)
+    const displayCounterfactual = await (await page.$('#display-counterfactual')).contentFrame()
+    await displayCounterfactual.waitForFunction(() => typeof window.marker === 'string')
+    const unfilteredDisplay = await displayCounterfactual.evaluate(() => ({ink:document.getElementById('display-canvas').getContext('2d').getImageData(0,0,100,40).data.some(value=>value!==0),shadow:window.closedRoot.querySelector('button').textContent.includes(window.marker)}))
+    check('removing only the production display policy really restores shadow emoji and canvas glyph pixels', () => assert.deepEqual(unfilteredDisplay, {ink:true,shadow:true}))
+    await page.$eval('#display-counterfactual', node => node.remove())
     await page.evaluate(() => window.gsRenderApp('timer',{type:'timer',items:[{title:'Not time',price:25}]}))
     await page.waitForSelector('[role="timer"]')
     const unconfigured = await page.$eval('[role="timer"]', node => node.textContent)
@@ -272,7 +298,7 @@ async function main() {
       await controlPage.close()
     }
     await page.screenshot({ path: path.join(os.tmpdir(), 'gs-terminal-browser-runtime.png'), fullPage: true })
-    assert.equal(checks, 40, 'All required real-browser code, terminal and production widget-control cases must execute')
+    assert.equal(checks, 43, 'All required real-browser code, terminal and production widget-control cases must execute')
     console.log(`\n${checks} real-browser code, terminal and widget-control checks passed`)
   } finally { closeProbe(); await browser.close(); fs.rmSync(libs, { recursive: true, force: true }) }
 }
