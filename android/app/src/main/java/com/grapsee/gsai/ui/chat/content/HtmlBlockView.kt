@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,7 +83,11 @@ private val BRIDGE_SCRIPT = """
     var v=Math.max(b?(b.scrollHeight||b.offsetHeight):0,d?d.scrollHeight:0);
     var svg=document.querySelector('svg');
     if(svg){var r=svg.getBoundingClientRect();if(r.height>0&&r.bottom>v)v=r.bottom;}
-    if(v>0)GsHost.setHeight(Math.ceil(v));
+    if(v>0){
+      window.__gsReportedHeight=Math.ceil(v);
+      try{GsHost.setHeight(Math.ceil(v));window.__gsHeightBridgeError=null;}
+      catch(error){window.__gsHeightBridgeError=String(error);throw error;}
+    }
   }
   document.addEventListener('submit',function(e){e.preventDefault();},true);
   document.addEventListener('click',function(e){
@@ -234,8 +239,18 @@ internal fun HarnessWebView(doc: String, fileBase: Boolean) {
     // NOT physical screen pixels. Dividing by Android density clips the app.
     var heightCss by remember(doc) { mutableStateOf(0) }
     val heightDp = if (heightCss <= 0) DEFAULT_HEIGHT_DP.dp else heightCss.coerceIn(120, 2400).dp
+    // AndroidView may reuse its native View when doc changes. Its factory's
+    // callback must write the CURRENT document's state, not a captured old one.
+    val reportHeight by rememberUpdatedState<(Int) -> Unit> { h -> heightCss = h }
     AndroidView(
-        factory = { ctx -> createHarnessWebView(ctx, serveAssets = fileBase) { h -> heightCss = h } },
+        factory = { ctx -> createHarnessWebView(ctx, serveAssets = fileBase) { h -> reportHeight(h) } },
+        onReset = null,
+        onRelease = { view ->
+            view.stopLoading()
+            view.removeJavascriptInterface("GsHost")
+            view.loadUrl("about:blank")
+            view.destroy()
+        },
         update = { view ->
             if (view.tag != protectedDoc) {
                 view.tag = protectedDoc
@@ -849,10 +864,14 @@ fun CodeSandboxView(code: String, language: String, title: String = "") {
 // ---------------------------------------------------------------------------
 
 private class HeightBridge(val onHeight: (Int) -> Unit) {
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
     @JavascriptInterface
     fun setHeight(px: Int) {
         val v = if (px < 0) 0 else px.coerceAtMost(6000)
-        onHeight(v)
+        // JavascriptInterface invokes on WebView's bridge thread, not the UI
+        // thread. Publish layout changes through the main Compose snapshot.
+        main.post { onHeight(v) }
     }
 }
 
