@@ -73,7 +73,7 @@ final class PlatformRuntimeUITests: XCTestCase {
             let current = input.value as? String ?? ""
             input.tap(); input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count) + text + "\n")
         }
-        func add(_ text: String) {
+        func addTask(_ text: String) {
             app.buttons["Add Task"].tap()
             XCTAssertFalse(app.buttons["Add"].isEnabled)
             edit(text)
@@ -85,8 +85,8 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["2/2 completed"].exists)
         app.buttons["Delete task: Keep completed"].tap()
         XCTAssertTrue(app.staticTexts["1/1 completed"].exists)
-        add("First added task"); toggle("First added task")
-        add("Second added task")
+        addTask("First added task"); toggle("First added task")
+        addTask("Second added task")
         app.buttons["Delete task: First added task"].tap()
         XCTAssertTrue(app.staticTexts["1/2 completed"].exists, "Completion must remain with its actual task after another row is deleted")
         app.buttons["Edit task: Second added task"].tap(); edit("Second edited")
