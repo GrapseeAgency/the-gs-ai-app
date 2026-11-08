@@ -287,8 +287,8 @@ struct ChatDetailView: View {
     private var brandHeader: some View {
         NexlyBrandHeader(
             sparkleLabel: onNewChat != nil ? "New chat" : "Search in chat",
-            menuGlyph: "menu-2",
-            menuLabel: isWorkspaceRoot && onOpenDrawer != nil ? "Open menu" : "Conversation actions",
+            menuGlyph: isWorkspaceRoot && onOpenDrawer != nil ? "menu-2" : "dots-vertical",
+            menuLabel: isWorkspaceRoot && onOpenDrawer != nil ? "Open menu" : vm.conversationID != nil ? "Conversation actions" : "Back",
             onSparkle: {
                 if let newChat = onNewChat {
                     newChat()
@@ -299,6 +299,8 @@ struct ChatDetailView: View {
             onMenu: {
                 if isWorkspaceRoot, let openDrawer = onOpenDrawer {
                     openDrawer()
+                } else if vm.conversationID != nil {
+                    showOptions = true
                 } else {
                     dismiss()
                 }
