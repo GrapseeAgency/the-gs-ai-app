@@ -782,6 +782,13 @@ private fun NexlyContextualActionPillsRow(
         listOf(extractCopyableBlockSummary(blocks, true), citationUrls.toSortedMap().entries.joinToString("\n") { "[${it.key}] ${it.value}" })
             .filter { it.isNotBlank() }.joinToString("\n")
     }
+    val sourceUrls = remember(blocks, citationUrls) {
+        (citationUrls.values + blocks.filterIsInstance<Block.CitationsBlock>().flatMap { block -> block.citations.map { it.url } })
+            .distinct().filter { raw ->
+                val uri = android.net.Uri.parse(raw)
+                uri.scheme?.lowercase() in setOf("https", "http") && !uri.host.isNullOrBlank()
+            }
+    }
     fun saveFile(name: String, mime: String, bytes: ByteArray) {
         pendingSave = bytes
         runCatching {
@@ -797,6 +804,13 @@ private fun NexlyContextualActionPillsRow(
             SelectionContainer {
                 Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
                     Text(CodeDisplay.escape(if (detailView == "sources") citationText.ifBlank { "No source URLs were supplied." } else sourceText))
+                    if (detailView == "sources") sourceUrls.forEach { url ->
+                        TextButton(onClick = { com.grapsee.gsai.ui.components.GsLinks.openInApp(context, url) }) {
+                            NexlyGlassGlyphTile(name = "external-link", size = 20.dp, glyphSize = 12.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(CodeDisplay.escape(url))
+                        }
+                    }
                 }
             }
         },
@@ -1020,7 +1034,7 @@ private fun BlockView(
             var editPromotedSource by remember(block.sourceStart, block.code) { mutableStateOf(false) }
             DisposableEffect(codeActions, block.sourceStart, block.code, visual) {
                 if (visual != null) codeActions?.register(block.sourceStart, ResponseCodeActions.Entry(block.language, { block.code }, {
-                    codeActions.editOnRegistration(block.sourceStart)
+                    codeActions?.editOnRegistration(block.sourceStart)
                     editPromotedSource = true
                 }))
                 onDispose { if (visual != null) codeActions?.remove(block.sourceStart) }
