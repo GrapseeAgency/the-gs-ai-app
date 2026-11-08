@@ -55,6 +55,18 @@ final class CalcHonestyTests: XCTestCase {
         XCTAssertFalse(firstOpen.hasOlder)
     }
 
+    @MainActor
+    func testChartDataInkUsesActualSuppliedAccentAndKeepsDifferentSeriesDistinct() {
+        let supplied = chartSeriesColorIOS(["accent": "#00FF00"], index: 0)
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        XCTAssertTrue(UIColor(supplied).getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+        XCTAssertEqual(red, 0, accuracy: 0.001)
+        XCTAssertEqual(green, 1, accuracy: 0.001)
+        XCTAssertEqual(blue, 0, accuracy: 0.001)
+        XCTAssertNotEqual(UIColor(supplied), UIColor(chartSeriesColorIOS(["accent": "#00FF00"], index: 1)))
+        XCTAssertEqual(UIColor(chartSeriesColorIOS([:], index: 0)), UIColor(chartSeriesColorIOS(["accent": "invalid"], index: 0)))
+    }
+
     func testAxisLabelsCoverTheCompleteSourceDomainWithoutInventingObservationIndices() {
         XCTAssertEqual(chartAxisLabelIndicesIOS(count: 31), [0, 4, 9, 13, 17, 21, 26, 30])
         XCTAssertEqual(chartAxisLabelIndicesIOS(count: 6), Array(0..<6))
