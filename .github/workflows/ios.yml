@@ -18,6 +18,7 @@ on:
       - "ios/**"
       - "shared-contracts/**"
       - ".github/workflows/ios.yml"
+      - "scripts/check_response_archive.py"
   workflow_dispatch:
   push:
     branches:
@@ -26,6 +27,7 @@ on:
       - "ios/**"
       - "shared-contracts/**"
       - ".github/workflows/ios.yml"
+      - "scripts/check_response_archive.py"
       - "scripts/ios_static_gates.py"
       - "scripts/swift_structure_gate.py"
       # The pixel gate below runs this script and blocks on its verdict, so a
@@ -297,6 +299,25 @@ jobs:
             -resultBundlePath ios/build/GSApp-genui.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee ios/build/xcodebuild-genui-test.log
+
+      - name: Independently verify actual XCTest source archive bytes
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 scripts/check_response_archive.py --self-test
+          DIR=ios/build/source-archive
+          mkdir -p "$DIR"
+          xcrun xcresulttool export attachments \
+            --path ios/build/GSApp-genui.xcresult --output-path "$DIR/raw"
+          python3 scripts/check_response_archive.py "$DIR/raw" | tee "$DIR/verification.log"
+
+      - name: Preserve native source archive byte evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-source-archive-${{ github.run_id }}
+          path: ios/build/source-archive
+          if-no-files-found: error
 
       - name: Test (XCTest unit tests on iOS simulator)
         run: |
