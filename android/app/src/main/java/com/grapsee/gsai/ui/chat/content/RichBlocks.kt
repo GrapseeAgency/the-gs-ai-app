@@ -1417,8 +1417,8 @@ private fun NexlyCalloutCard(
     val isWarn = callout.tone == CalloutTone.WARNING
     val bgColor = if (isWarn) Color(0xFFFFF4E6) else Color(0xFFF2ECFF)
     val borderColor = if (isWarn) Color(0xFFF6C88F) else Color(0xFFD9CCFF)
-    val titleColor = if (isWarn) Color(0xFF6B3206) else Color(0xFF211845)
-    val bodyColor = if (isWarn) Color(0xFF5A3310) else Color(0xFF39325C)
+    val titleColor = NexlyInk.title
+    val bodyColor = NexlyInk.prose
 
     val bodyStyle = LocalNexlyProseStyle.current ?: MaterialTheme.typography.bodyMedium
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, bodyColor)
@@ -1549,7 +1549,9 @@ private fun stripLeadingIconFromSpans(spans: List<InlineSpan>): List<InlineSpan>
 
 @Composable
 private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: Map<Int, String>) {
-    val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize, citationUrls)
+    val compact = LocalNexlyProseStyle.current != null
+    val headingInk = if (compact) NexlyInk.title else if (block.level == 6) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+    val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize, citationUrls, headingInk)
     val rawHeadingText = remember(block.spans) { plainTextOfSpans(block.spans) }
     val badge = remember(rawHeadingText, block.level) {
         if (block.level in 2..3) sectionBadgeForHeadingText(rawHeadingText)
@@ -1560,7 +1562,10 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
     }
     val styled = remember(cleanSpans, theme) { spansToAnnotatedString(cleanSpans, theme) }
     val inlineContent = rememberNexlyInlineContent(styled)
-    val style = when (block.level) {
+    val style = if (compact) {
+        val size = if (block.level <= 1) 18.sp else if (block.level == 2) 16.sp else 14.sp
+        TextStyle(fontSize = size, lineHeight = (size.value + 5).sp, fontWeight = FontWeight.Bold, color = headingInk)
+    } else when (block.level) {
         1 -> MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
         2 -> MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
         3 -> MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
@@ -1586,7 +1591,7 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
                 Text(
                     text = styled,
                     style = style,
-                    color = if (block.level == 6) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    color = headingInk,
                     inlineContent = inlineContent,
                     modifier = Modifier.semantics { heading() }
                 )
