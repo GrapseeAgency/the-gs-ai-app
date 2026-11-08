@@ -424,6 +424,37 @@ class PlatformRuntimeTest {
         compose.runOnIdle { source = "export default function App( { return <p>Invalid</p> }" }
         run(expectError = true)
         assertEquals("true", evaluate("document.getElementById('error').textContent.includes('Unexpected')"))
+        // Also run the exact reference answer via its actual parser and the
+        // production AssistantMessage scope/parent, not a static source card.
+        val references = org.json.JSONObject(instrumentation.targetContext.assets.open("response-section-references.json").bufferedReader().use { it.readText() }).getJSONArray("fixtures")
+        val reference = (0 until references.length()).map { references.getJSONObject(it) }.single { it.getString("id") == "03-react-code" }
+        val referenceSource = com.grapsee.gsai.ui.chat.content.parseBlocks(reference.getString("wire"))
+            .filterIsInstance<com.grapsee.gsai.ui.chat.content.Block.CodeBlock>().single { it.language == "jsx" }.code
+        compose.runOnIdle { source = referenceSource; scope = originalScope + ":reference" }
+        run()
+        for (title in listOf("Reference completed", "Reference active")) {
+            replaceInput("[aria-label='New task']", title)
+            evaluate("document.querySelector('form button').click();true")
+            awaitObserved("reference form saves its actual UUID task") { evaluate("JSON.parse(localStorage.getItem('tasks') || '[]').some(t=>t.title===${org.json.JSONObject.quote(title)})") == "true" }
+        }
+        evaluate("document.querySelector('article input[type=checkbox]').click();true")
+        fun selectFilter(value: String) {
+            evaluate("(function(){const select=document.querySelector('[aria-label=\"Task filter\"]');select.value=${org.json.JSONObject.quote(value)};select.dispatchEvent(new Event('change',{bubbles:true}));return true;})()")
+        }
+        selectFilter("completed")
+        awaitObserved("reference Completed exposes only the true completed task") { evaluate("document.querySelectorAll('article').length===1 && document.querySelector('article input[type=checkbox]').checked") == "true" }
+        selectFilter("active")
+        awaitObserved("reference Active exposes the actual remaining task") { evaluate("document.querySelectorAll('article').length===1 && document.querySelector('article input[type=checkbox]').getAttribute('aria-label')==='Reference active'") == "true" }
+        replaceInput("[aria-label='Edit Reference active']", "Reference edited")
+        awaitObserved("reference edit really persists") { evaluate("JSON.parse(localStorage.getItem('tasks')).some(t=>t.title==='Reference edited' && !t.done)") == "true" }
+        selectFilter("all")
+        awaitObserved("reference All exposes both actual tasks") { evaluate("document.querySelectorAll('article').length===2") == "true" }
+        run()
+        awaitObserved("reference remount restores both edited and completed state") { evaluate("document.querySelectorAll('article').length===2 && document.querySelector('[aria-label=\"Reference completed\"]').checked && document.querySelector('[aria-label=\"Edit Reference edited\"]').value==='Reference edited'") == "true" }
+        selectFilter("completed")
+        awaitObserved("reference filtered delete selects only its actual completed record") { evaluate("document.querySelectorAll('article').length===1") == "true" }
+        evaluate("document.querySelector('article button').click();true")
+        awaitObserved("reference filtered delete preserves the other real record") { evaluate("document.querySelectorAll('article').length===0 && JSON.parse(localStorage.getItem('tasks')).length===1 && JSON.parse(localStorage.getItem('tasks'))[0].title==='Reference edited'") == "true" }
     }
 
     @Test fun generatedPollUsesRealTotalsAndResetsForNewPayload() {
