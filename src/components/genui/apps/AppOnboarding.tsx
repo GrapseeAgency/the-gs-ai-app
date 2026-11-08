@@ -10,13 +10,15 @@ import { UiButton } from '../controls/UiButton'
 /** Onboarding — swipeable welcome steps ending in a single CTA. */
 export function AppOnboarding({ payload }: { payload: AppPayload }) {
   const { accent, theme } = useWidgetIdentity()
-  const steps = (payload.steps ?? []).slice(0, 8)
+  const steps = (payload.steps ?? [])
   const [i, setI] = useState(0)
+  const [completed, setCompleted] = useState(false)
   if (!steps.length) return null
   const step = steps[Math.min(i, steps.length - 1)]
   const last = i === steps.length - 1
+  if (completed) return <AppShell title={payload.title}><div role="status">Introduction completed locally.</div><UiButton onClick={() => { setCompleted(false); setI(0) }}>Start again</UiButton></AppShell>
   return (
-    <AppShell submitLabel={last ? (payload.submitLabel ?? 'Get started') : undefined}>
+    <AppShell onSubmit={() => setCompleted(true)} submitLabel={last ? (payload.submitLabel ?? 'Get started') : undefined}>
       <div
         style={{
           minHeight: 150,
