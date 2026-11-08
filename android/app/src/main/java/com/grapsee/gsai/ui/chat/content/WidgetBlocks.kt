@@ -850,7 +850,8 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
                 else w.type?.takeIf { it in COLLAB_TYPES } ?: "counter"
                 val room = w.room.lowercase().replace(Regex("[^a-z0-9-]+"), "-")
                     .trim('-').take(48).ifEmpty { "lobby" }
-                Widget.Collab(w.copy(surface = surface, room = room, items = w.items.filter { it.isNotBlank() }.take(12)))
+                if (!w.start.isFinite() || w.items.size > 12 || w.items.any { it.isBlank() } || (surface == "vote" && w.items.size < 2)) return null
+                Widget.Collab(w.copy(surface = surface, room = room))
             }
             // v2 — layout, navigation, and interactive controls.
             "tabs" -> widgetJson.decodeFromString<TabsWidget>(json).let { w ->
