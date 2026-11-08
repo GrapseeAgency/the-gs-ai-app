@@ -12,11 +12,22 @@ import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { Skeleton } from '../primitives/Skeleton'
 import emojiDOMPolicy from '../../../../shared-contracts/emoji-dom-policy.json'
 
-export function HtmlBlock({ source, fallbackHeight = 320 }: { source: string; fallbackHeight?: number }) {
+export function HtmlBlock({ source, fallbackHeight = 320, onSandboxMessage }: { source: string; fallbackHeight?: number; onSandboxMessage?: (data: unknown) => unknown }) {
   const { accent, theme } = useWidgetIdentity()
   const [loaded, setLoaded] = useState(false)
   const [height, setHeight] = useState(fallbackHeight)
   const frame = useRef<HTMLIFrameElement>(null)
+
+  useEffect(() => {
+    if (!onSandboxMessage) return
+    const receive = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow) return
+      const reply = onSandboxMessage(event.data)
+      if (reply !== undefined) frame.current?.contentWindow?.postMessage(reply, '*')
+    }
+    window.addEventListener('message', receive)
+    return () => window.removeEventListener('message', receive)
+  }, [onSandboxMessage])
 
   const themed = useMemo(() => {
     const hueVars = Array.from({ length: 12 }, (_, i) => `--gs-hue-${i + 1}`)
