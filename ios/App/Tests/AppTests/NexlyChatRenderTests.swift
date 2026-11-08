@@ -326,7 +326,7 @@ private struct NexlyFullChatView: View {
                 VStack(spacing: 0) {
                     NexlyBrandHeader(
                         sparkleLabel: "New chat",
-                        menuGlyph: "menu-2",
+                        menuGlyph: "dots-vertical",
                         menuLabel: "Open menu",
                         onSparkle: {},
                         onMenu: {},
@@ -395,7 +395,7 @@ private struct NexlyFlashQuestionView: View {
                 VStack(spacing: 0) {
                     NexlyBrandHeader(
                         sparkleLabel: "New chat",
-                        menuGlyph: "menu-2",
+                        menuGlyph: "dots-vertical",
                         menuLabel: "Open menu",
                         onSparkle: {},
                         onMenu: {},
@@ -460,7 +460,7 @@ private struct NexlyFullProseView: View {
                 VStack(spacing: 0) {
                     NexlyBrandHeader(
                         sparkleLabel: "New chat",
-                        menuGlyph: "menu-2",
+                        menuGlyph: "dots-vertical",
                         menuLabel: "Open menu",
                         onSparkle: {},
                         onMenu: {},
