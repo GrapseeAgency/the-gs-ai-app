@@ -849,10 +849,10 @@ internal fun cleanWidgetDialectLiteralsAndroid(raw: String): String {
         if (quote != null) {
             result.append(c)
             if (escaped) escaped = false
-            else if (c == '\\') escaped = true
+            else if (c.code == 92) escaped = true // Backslash escapes the following character.
             else if (c == quote) quote = null
             index++
-        } else if (c == '"' || c == '\'') {
+        } else if (c.code == 34 || c.code == 39) { // Double or single quote.
             quote = c; result.append(c); index++
         } else if (c.isLetter() || c == '_') {
             var end = index + 1
