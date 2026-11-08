@@ -13,3 +13,24 @@ export function parseTableNumber(raw: unknown): number | null {
   const value = Number(digits.replace(/,/g, '')) * multiplier * (sign === '-' || down ? -1 : 1)
   return Number.isFinite(value) ? value : null
 }
+
+/** A chart is offered only for a complete, compatible source column. */
+export function chartFromTableCells(headers: string[], rows: string[][]): Record<string, unknown> | null {
+  if (headers.length < 2 || rows.length < 2) return null
+  const plain = (text: string) => text.replace(/[*_`~]/g, '').replace(/:([a-z0-9][a-z0-9-]{1,42}):/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim()
+  const ranked = headers.length >= 3 && ['#', 'rank', 'no', 'id'].includes(plain(headers[0]).toLowerCase())
+  const labelColumn = ranked ? 1 : 0
+  const labels = rows.map(row => plain(row[labelColumn] ?? ''))
+  if (labels.some(label => !label)) return null
+  for (let column = 0; column < headers.length; column++) {
+    if (column === labelColumn || (ranked && column === 0)) continue
+    const source = rows.map(row => plain(row[column] ?? ''))
+    const values = source.map(parseTableNumber)
+    if (values.some(value => value === null)) continue
+    const units = new Set(source.map(raw => raw.endsWith('%') ? '%' : raw.match(/[$€£¥₹৳]/)?.[0] ?? (/x$/i.test(raw) ? 'x' : '')))
+    if (units.size !== 1) continue
+    const title = plain(headers[column])
+    return { type: 'bar', title, unit: [...units][0], labels, series: [{ name: title, data: values.map((value, index) => [index, value]) }] }
+  }
+  return null
+}
