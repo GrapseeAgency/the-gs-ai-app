@@ -766,6 +766,7 @@ func extractCopyableProseSummary(_ prose: [Block], citationsOnly: Bool) -> Strin
 }
 
 private struct NexlyContextualActionPillsRowView: View {
+    @Environment(\.gsOpenInApp) private var inAppBrowser
     @Environment(\.gsWidgetAction) private var widgetAction
     @Environment(\.responseCodeActions) private var codeActions
     let prose: [Block]
@@ -783,6 +784,16 @@ private struct NexlyContextualActionPillsRowView: View {
     private var citationText: String {
         [extractCopyableProseSummary(prose, citationsOnly: true), citations.sorted { $0.key < $1.key }.map { "[\($0.key)] \($0.value)" }.joined(separator: "\n")]
             .filter { !$0.isEmpty }.joined(separator: "\n")
+    }
+    private var sourceURLs: [String] {
+        let embedded = prose.flatMap { block -> [String] in
+            if case .citations(let entries, _) = block { return entries.map(\.url) }
+            return []
+        }
+        return Array(Set(Array(citations.values) + embedded)).sorted().filter { raw in
+            guard let url = URL(string: raw), let scheme = url.scheme?.lowercased() else { return false }
+            return ["https", "http"].contains(scheme) && url.host != nil
+        }
     }
     private var sourceText: String {
         let body = extractCopyableProseSummary(prose, citationsOnly: false)
@@ -897,8 +908,24 @@ private struct NexlyContextualActionPillsRowView: View {
             .sheet(isPresented: $showDetails) {
                 NavigationStack {
                     ScrollView {
-                        Text(CodeDisplayIOS.escape(sourcesOnly ? (citationText.isEmpty ? "No source URLs were supplied." : citationText) : sourceText))
-                            .frame(maxWidth: .infinity, alignment: .leading).padding().textSelection(.enabled)
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text(CodeDisplayIOS.escape(sourcesOnly ? (citationText.isEmpty ? "No source URLs were supplied." : citationText) : sourceText))
+                                .textSelection(.enabled)
+                            if sourcesOnly {
+                                ForEach(sourceURLs, id: \.self) { raw in
+                                    Button {
+                                        if let url = URL(string: raw) { gsOpenURL(url, inApp: inAppBrowser) }
+                                    } label: {
+                                        HStack(alignment: .top, spacing: 8) {
+                                            NexlyGlyph(name: "external-link", size: 14, color: .purple)
+                                            Text(CodeDisplayIOS.escape(raw)).multilineTextAlignment(.leading)
+                                        }
+                                    }
+                                    .accessibilityIdentifier("response.source.link")
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading).padding()
                     }
                     .navigationTitle(sourcesOnly ? "All sources" : "Response source and data")
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Close details") { showDetails = false } } }
