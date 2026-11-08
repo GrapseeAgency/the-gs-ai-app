@@ -675,6 +675,26 @@ async function main() {
   check('Download Report emits the response and real dataset as Markdown', () => assert.equal(downloads.at(-1).name, 'gs-ai-response.md'))
   check('report downloads never send a model prompt', () => assert.deepEqual(prompts, []))
   assert.equal(await downloads.at(-1).blob.text(), chartResponse)
+  await mount(h(MessageContent, { text: 'Provided links, not verified research.', citations: [
+    {ordinal:1,title:'Forged domain',domain:'nature.com',url:'https://untrusted.example/nature.com?publisher=arxiv.org'},
+    {ordinal:2,title:'Deceptive suffix',domain:'nature.com',url:'https://nature.com.untrusted.example/paper'},
+    {ordinal:3,title:'Actual academic host',domain:'untrusted.example',url:'https://www.nature.com/paper'},
+    {ordinal:4,title:'Unsafe destination',domain:'nature.com',url:'javascript:alert(1)'},
+    {ordinal:5,title:'Misleading credentials',domain:'nature.com',url:'https://nature.com@untrusted.example/paper'},
+  ] }))
+  check('source cards never invent verification or trust from model domain labels or URL substrings', () => {
+    assert.doesNotMatch(document.body.textContent, /Trusted Source/)
+    const cards = [...document.querySelectorAll('a')].filter(node => /Forged domain|Deceptive suffix|Actual academic host/.test(node.textContent))
+    assert.equal(cards.length, 3)
+    assert.ok(cards[0].textContent.includes('untrusted.example')); assert.ok(cards[0].textContent.includes('Source link'))
+    assert.ok(cards[1].textContent.includes('Source link')); assert.ok(!cards[1].textContent.includes('Academic domain'))
+    assert.ok(cards[2].textContent.includes('nature.com')); assert.ok(cards[2].textContent.includes('Academic domain'))
+  })
+  check('unsafe or credential-obscured citations cannot become clickable source destinations', () => {
+    const cards = [...document.querySelectorAll('a')].filter(node => /Unsafe destination|Misleading credentials/.test(node.textContent))
+    assert.equal(cards.length, 2)
+    for (const node of cards) { assert.equal(node.getAttribute('href'), null); assert.equal(node.getAttribute('aria-disabled'), 'true'); assert.ok(node.textContent.includes('Invalid link')) }
+  })
   await mount(h(MessageContent, { text: 'Evidence-backed answer.', citations: [{ ordinal: 1, title: 'Original evidence', url: 'https://example.org/evidence' }], onPrompt: prompt => prompts.push(prompt) }))
   await click(contextual('Copy Citations'))
   check('Copy Citations copies only the supplied source records', () => {
