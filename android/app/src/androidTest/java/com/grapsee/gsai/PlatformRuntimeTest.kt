@@ -48,12 +48,13 @@ class PlatformRuntimeTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
 
     @Test fun generatedChecklistEditsDeletesAddsAndKeepsCompletionWithTheActualTask() {
+        var kind by androidx.compose.runtime.mutableStateOf("checklist")
         var payload by androidx.compose.runtime.mutableStateOf("""{"title":"Actual tasks","items":[{"label":"Original source","detail":"Only supplied detail"},{"label":"Keep source"}]}""")
         compose.activity.setContentForPlatformTest {
             TheGsAiTheme {
                 androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
                     com.grapsee.gsai.ui.chat.content.WidgetBlockView(
-                        com.grapsee.gsai.ui.chat.content.Block.WidgetBlock("checklist", payload, false, 0), false)
+                        com.grapsee.gsai.ui.chat.content.Block.WidgetBlock(kind, payload, false, 0), false)
                 }
             }
         }
@@ -84,6 +85,18 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("0 of 1 completed").assertExists()
         compose.onNodeWithText("Added edited").assertDoesNotExist()
         compose.onNodeWithText("New supplied task").assertIsOff()
+        compose.runOnIdle {
+            kind = "app"
+            payload = """{"type":"tasks","title":"App tasks","items":[{"title":"App first","subtitle":"Supplied app detail","done":true},{"title":"App second"}]}"""
+        }
+        compose.onNodeWithText("1 of 2 completed").assertExists()
+        compose.onNodeWithText("Supplied app detail").assertExists()
+        compose.onNodeWithContentDescription("Edit task: App first").performClick()
+        compose.onNode(hasSetTextAction()).performTextReplacement("App first edited")
+        compose.onNodeWithText("Save task").performClick()
+        compose.onNodeWithText("App first edited").assertIsOn()
+        compose.onNodeWithContentDescription("Delete task: App second").performClick()
+        compose.onNodeWithText("1 of 1 completed").assertExists()
     }
 
     @Test fun contextualActionsEditActualCodeShowDataAndLaunchPlatformSharing() {
