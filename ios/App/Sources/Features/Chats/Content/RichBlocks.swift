@@ -1309,8 +1309,8 @@ private struct NexlyCalloutCardView: View {
         let isWarn = callout.tone == .warning
         let bg = isWarn ? Color(red: 1.0, green: 0.957, blue: 0.902) : Color(red: 0.949, green: 0.925, blue: 1.0)
         let border = isWarn ? Color(red: 0.965, green: 0.784, blue: 0.561) : Color(red: 0.851, green: 0.800, blue: 1.0)
-        let titleColor = isWarn ? Color(red: 0.420, green: 0.196, blue: 0.024) : Color(red: 0.129, green: 0.094, blue: 0.271)
-        let bodyColor = isWarn ? Color(red: 0.353, green: 0.200, blue: 0.063) : Color(red: 0.224, green: 0.196, blue: 0.361)
+        let titleColor = NexlyInk.title
+        let bodyColor = NexlyInk.prose
 
         let theme = SpanTheme(
             monoBackground: Aero.container,
@@ -2388,6 +2388,7 @@ private func stripLeadingIconFromSpans(_ spans: [InlineSpan]) -> [InlineSpan] {
 }
 
 private struct HeadingView: View {
+    @Environment(\.nexlyProseCompact) private var compact
     let level: Int
     let spans: [InlineSpan]
     var isFirst: Bool = false
@@ -2397,7 +2398,7 @@ private struct HeadingView: View {
         let theme = SpanTheme(
             monoBackground: Aero.container,
             linkColor: Aero.accentDeep,
-            textColor: Aero.text,
+            textColor: compact ? NexlyInk.title : Aero.text,
             baseSize: 15,
             citations: citations
         )
@@ -2427,7 +2428,7 @@ private struct HeadingView: View {
                 }
                 Text(attributed(from: cleanedSpans, theme: theme))
                     .font(font)
-                    .foregroundStyle(level == 6 ? Aero.textSecondary : Aero.text)
+                    .foregroundStyle(compact ? NexlyInk.title : (level == 6 ? Aero.textSecondary : Aero.text))
                     .textSelection(.enabled)
                     .accessibilityAddTraits(.isHeader)
             }
@@ -2435,6 +2436,7 @@ private struct HeadingView: View {
     }
 
     private var font: Font {
+        if compact { return .system(size: level <= 1 ? 18 : (level == 2 ? 16 : 14), weight: .bold) }
         switch level {
         case 1: return Aero.responsive(22, .bold, relativeTo: .title2)
         case 2: return Aero.responsive(19, .bold, relativeTo: .title3)
