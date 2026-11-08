@@ -291,13 +291,17 @@ class NexlyChatScreenshotTest {
                             createdAt = "2026-10-23T10:30:00Z"
                         )
                     )
-                    BlocksContent(
-                        content = wire,
-                        isStreaming = false,
-                        onCopyCode = {},
-                        glassAssistant = true,
-                        statusCard = null,
-                        planTimestamp = "2026-10-23T10:31:00Z"
+                    // Match the production ChatScreen wrapper, identity and
+                    // footer, not only its nested block renderer.
+                    AssistantMessage(
+                        message = ChatUiMessage(
+                            id = "flash-assistant", role = "assistant", content = wire,
+                            createdAt = "2026-10-23T10:31:00Z"
+                        ),
+                        isSpeaking = false,
+                        showIdentity = false,
+                        onCopy = {},
+                        onRegenerate = {}
                     )
                 }
                 Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
