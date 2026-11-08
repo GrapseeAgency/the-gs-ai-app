@@ -169,6 +169,20 @@ async function main() {
     const code = parseStream(compiled.text).find(segment => segment.kind === 'code')
     assert.equal(code.code, source)
   })
+  check('client streaming parser cannot bypass dataset validation with a merely parseable JSON object', () => {
+    const invalidPayloads = [
+      ['chart', { type: 'line', series: [{ name: 'Actual', data: [[0,null],[1,2]] }] }],
+      ['table', { columns: ['Actual'], rows: Array.from({length: 101}, (_, i) => [i]) }],
+      ['app', { type: 'wizard', rows: [[42]], columns: ['Actual'] }],
+    ]
+    for (const [kind, payload] of invalidPayloads) {
+      const source = JSON.stringify(payload)
+      const segments = parseStream('```' + kind + '\n' + source + '\n```')
+      assert.equal(segments.filter(segment => segment.kind === 'widget').length, 0)
+      assert.equal(segments.find(segment => segment.kind === 'code').code, source)
+      assert.match(segments.find(segment => segment.kind === 'text').text, /could not be rendered/)
+    }
+  })
   check('answer widget overflow preserves its original source and announces the limit', () => {
     const reply = Array.from({length: 13}, (_, i) => '```table\n' + JSON.stringify({ columns: ['Value'], rows: [[i + 1]] }) + '\n```').join('\n\n')
     const result = compileWidgets({ reply, userPrompt: 'Show these tables' })
