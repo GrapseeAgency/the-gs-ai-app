@@ -70,6 +70,7 @@ struct ReactPreviewIOS: UIViewRepresentable {
         override init() {
             super.init()
             NotificationCenter.default.addObserver(self, selector: #selector(keyboardChanged(_:)), name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
+            NotificationCenter.default.addObserver(self, selector: #selector(keyboardChanged(_:)), name: UIResponder.keyboardDidShowNotification, object: nil)
         }
         deinit { NotificationCenter.default.removeObserver(self) }
         func restoreKeyboardInset() {
@@ -78,25 +79,16 @@ struct ReactPreviewIOS: UIViewRepresentable {
             }
             adjustedScroll = nil; originalBottomInset = nil
         }
-        private func ownsFirstResponder(_ view: UIView) -> Bool {
-            view.isFirstResponder || view.subviews.contains { ownsFirstResponder($0) }
-        }
         @objc private func keyboardChanged(_ note: Notification) {
             guard let web = webView, let window = web.window,
                   let keyboardValue = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue else { return }
             let keyboard = window.convert(keyboardValue.cgRectValue, from: nil)
             guard keyboard.minY < window.bounds.maxY else { restoreKeyboardInset(); return }
-            guard ownsFirstResponder(web) else { return }
-            // Read the ACTUAL focused form bounds. No runtime bridge is exposed
-            // to generated code, and no task value/state is changed. A nested
-            // inline WK view cannot itself move its SwiftUI chat scroll parent
-            // when the native keyboard covers the form's submit button.
-            web.evaluateJavaScript("(function(){const a=document.activeElement;if(!a||a===document.body)return null;const r=(a.closest('form')||a).getBoundingClientRect(),v=window.visualViewport;return {x:r.x-(v?v.offsetLeft:0),y:r.y-(v?v.offsetTop:0),width:r.width,height:r.height,viewport:v?v.width:innerWidth};})()") { [weak self, weak web] result, _ in
-                guard let self, let web, let window = web.window, self.ownsFirstResponder(web),
-                      let rect = result as? [String: Double],
-                      let x = rect["x"], let y = rect["y"], let width = rect["width"], let height = rect["height"],
-                      let viewport = rect["viewport"], viewport > 0,
-                      [x, y, width, height, viewport].allSatisfy({ $0.isFinite }) else { return }
+            // Establish actual DOM input focus, not a guessed UIKit responder
+            // inside WebKit's private remote-input hierarchy. Read no values,
+            // inject no events, and expose no generated-code native bridge.
+            web.evaluateJavaScript("(function(){const e=document.activeElement;return !!(document.hasFocus()&&e&&e!==document.body&&(e.matches('input,textarea,select')||e.isContentEditable));})()") { [weak self, weak web] result, _ in
+                guard let self, let web, let window = web.window, result as? Bool == true else { return }
                 var ancestor = web.superview
                 var parent: UIScrollView?
                 while let current = ancestor {
@@ -104,6 +96,7 @@ struct ReactPreviewIOS: UIViewRepresentable {
                     ancestor = current.superview
                 }
                 let scroll = parent ?? web.scrollView
+                scroll.superview?.layoutIfNeeded()
                 let visible = scroll.convert(scroll.bounds, to: window)
                 let overlap = visible.intersection(keyboard)
                 if self.adjustedScroll !== scroll { self.restoreKeyboardInset() }
@@ -112,12 +105,25 @@ struct ReactPreviewIOS: UIViewRepresentable {
                     self.adjustedScroll = scroll
                     var inset = scroll.contentInset
                     inset.bottom = max(self.originalBottomInset ?? 0, overlap.height)
-                    scroll.contentInset = inset
+                    if inset != scroll.contentInset { scroll.contentInset = inset }
                 } else { self.restoreKeyboardInset() }
-                let scale = web.bounds.width / CGFloat(viewport)
-                let actualForm = CGRect(x: CGFloat(x) * scale, y: CGFloat(y) * scale,
-                                        width: CGFloat(width) * scale, height: CGFloat(height) * scale)
-                scroll.scrollRectToVisible(scroll.convert(actualForm, from: web).insetBy(dx: 0, dy: -8), animated: true)
+                // Actual failure pixels showed the WHOLE inline WK canvas below
+                // the keyboard. Bring that native canvas into the measured
+                // parent viewport, rather than subtracting visualViewport offsets
+                // a second time from WebKit's already-panned DOM coordinates.
+                let canvas = web.convert(web.bounds, to: window)
+                let top = max(visible.minY, window.safeAreaInsets.top) + 8
+                if canvas.maxY > keyboard.minY || canvas.minY < top {
+                    let minimum = -scroll.adjustedContentInset.top
+                    let maximum = max(minimum, scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)
+                    let y = min(maximum, max(minimum, scroll.contentOffset.y + canvas.minY - top))
+                    if abs(y - scroll.contentOffset.y) > 0.5 {
+                        scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: y), animated: false)
+                    }
+                }
+                #if DEBUG
+                print("GS_REACT_KEYBOARD_LAYOUT: parent=\(type(of: scroll)); viewport=\(visible); canvas=\(canvas); keyboard=\(keyboard); offset=\(scroll.contentOffset); size=\(scroll.contentSize)")
+                #endif
             }
         }
         var lastSource: String?
