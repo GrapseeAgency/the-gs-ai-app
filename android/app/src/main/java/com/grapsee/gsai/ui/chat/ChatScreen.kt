@@ -1943,21 +1943,11 @@ internal fun NexlyChatHeader(
                 )
             }
             Spacer(Modifier.width(10.dp))
-            // One word, not a wordmark plus a tagline. "Your AI companion" was
-            // a second line of chrome that said nothing the sparkle and the
-            // name had not already said, and it made the title sit high in the
-            // row. The name alone, centred on the discs.
-            Text(
-                text = "Nexly",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontSize = 16.5.sp,
-                    lineHeight = 20.sp,
-                    fontWeight = FontWeight.SemiBold
-                ),
-                color = NexlyInk.header,
-                maxLines = 1,
-                modifier = Modifier.weight(1f)
-            )
+            // Both brand lines are present in the supplied response references.
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Nexly", style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.5.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold), color = NexlyInk.header, maxLines = 1)
+                Text("Your AI companion", fontSize = 10.5.sp, lineHeight = 13.sp, color = NexlyInk.headerMeta, maxLines = 1)
+            }
             ChatTopIconButton(
                 icon = GsIcons.Sparkles,
                 label = sparkleLabel,
