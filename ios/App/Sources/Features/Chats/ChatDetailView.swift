@@ -1456,7 +1456,7 @@ struct MessageBubble: View, Equatable {
                 conversationID: conversationID,
                 showOrb: false
             )
-            .environment(\.reactPreviewScope, "\(conversationID ?? "chat"):\(message.id)")
+            .environment(\.reactPreviewScope, "\(conversationID ?? "chat"):\(message.reactPreviewIdentity)")
             // RichBlocks owns each prose/plan glass surface and its inset.
             // A second turn-wide surface/padding nests every real answer,
             // narrows interactive controls, and diverges from render captures.
