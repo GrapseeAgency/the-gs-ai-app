@@ -112,11 +112,17 @@ struct RichMetadata: Equatable {
 struct GSLine {
     let text: String
     let offset: Int
+    let ending: String
+
+    init(text: String, offset: Int, ending: String = "\n") {
+        self.text = text
+        self.offset = offset
+        self.ending = ending
+    }
 }
 
 func parseBlocks(_ content: String, metadata: RichMetadata? = nil) -> [Block] {
-    let normalized = content.replacingOccurrences(of: "\r\n", with: "\n")
-    let lines = toLines(normalized)
+    let lines = toLines(content)
     var blocks = parseCore(lines).map(promoteBarePayload)
     if let metadata = metadata {
         let tools = metadata.toolResults.map { Block.toolResult($0, sourceStart: 0) }
@@ -156,9 +162,13 @@ private func promoteBarePayload(_ block: Block) -> Block {
 private func toLines(_ text: String) -> [GSLine] {
     var out: [GSLine] = []
     var offset = 0
-    for raw in text.components(separatedBy: "\n") {
-        out.append(GSLine(text: raw, offset: offset))
-        offset += raw.count + 1
+    let rows = text.components(separatedBy: "\n")
+    for (index, raw) in rows.enumerated() {
+        let ending = index == rows.count - 1 ? "" : (raw.hasSuffix("\r") ? "\r\n" : "\n")
+        let value = ending == "\r\n" ? String(raw.dropLast()) : raw
+        out.append(GSLine(text: value, offset: offset, ending: ending))
+        // Swift offsets count Characters: CRLF is one extended grapheme.
+        offset += value.count + ending.count
     }
     return out
 }
@@ -242,7 +252,7 @@ private func parseCore(_ lines: [GSLine]) -> [Block] {
             continue
         }
 
-        if lead.hasPrefix("```") || lead.hasPrefix("~~~") {
+        if fenceOpening(lead) != nil {
             let (block, next) = parseFence(lines, start: i)
             blocks.append(block)
             i = next
@@ -280,7 +290,7 @@ private func parseCore(_ lines: [GSLine]) -> [Block] {
         if text.captureGroups(quoteLineRegex) != nil {
             var inner: [GSLine] = []
             while i < lines.count, let g = lines[i].text.captureGroups(quoteLineRegex) {
-                inner.append(GSLine(text: g[0], offset: lines[i].offset))
+                inner.append(GSLine(text: g[0], offset: lines[i].offset, ending: lines[i].ending))
                 i += 1
             }
             blocks.append(.blockQuote(blocks: parseCore(inner), sourceStart: line.offset))
@@ -326,7 +336,7 @@ private func isProse(_ lines: [GSLine], index: Int) -> Bool {
     if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return false }
     let t = text.trimmedEnd
     let lead = t.trimmingCharacters(in: .whitespaces)
-    if lead.hasPrefix("```") || lead.hasPrefix("~~~") { return false }
+    if fenceOpening(lead) != nil { return false }
     if lead.hasPrefix("$$") { return false }
     if headingLineRegex.firstMatch(in: t, range: NSRange(location: 0, length: (t as NSString).length)) != nil { return false }
     if t.matchesEntire(hrLineRegex) { return false }
@@ -344,29 +354,37 @@ private let nexlyPlanFenceLanguages: Set<String> = [
     "plan", "schedule", "timetable", "itinerary", "routine", "day",
 ]
 
+/// A shorter or different marker stays inside the source, never closes it.
+private func fenceOpening(_ text: String) -> (marker: Character, width: Int)? {
+    let lead = text.trimmingCharacters(in: .whitespaces)
+    guard let marker = lead.first, marker == "`" || marker == "~" else { return nil }
+    let width = lead.prefix { $0 == marker }.count
+    guard width >= 3, marker != "`" || !lead.dropFirst(width).contains("`") else { return nil }
+    return (marker, width)
+}
+
 private func parseFence(_ lines: [GSLine], start: Int) -> (Block, Int) {
-    let leadLine = lines[start].text.trimmingCharacters(in: .whitespaces)
-    let fenceMarker = leadLine.hasPrefix("~~~") ? "~~~" : "```"
-    let opener = leadLine
-        .dropFirst(3)
-        .trimmingCharacters(in: .whitespaces)
-    let language = opener
-        .components(separatedBy: .whitespacesAndNewlines)
-        .first { !$0.isEmpty }
+    guard let opening = fenceOpening(lines[start].text) else { preconditionFailure("Expected fence") }
+    let opener = lines[start].text.trimmingCharacters(in: .whitespaces)
+        .dropFirst(opening.width).trimmingCharacters(in: .whitespaces)
+    let language = opener.components(separatedBy: .whitespacesAndNewlines).first { !$0.isEmpty }
     var body = ""
+    var previousEnding = ""
     var i = start + 1
     while i < lines.count {
         let trimmed = lines[i].text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasPrefix(fenceMarker) && trimmed.dropFirst(3).trimmingCharacters(in: .whitespaces).isEmpty {
-            let code = String(body.dropLast(body.hasSuffix("\n") ? 1 : 0))
-            return (fenceToBlock(language: language, code: code, open: false, offset: lines[start].offset), i + 1)
+        let closingWidth = trimmed.prefix { $0 == opening.marker }.count
+        if closingWidth >= opening.width && trimmed.dropFirst(closingWidth).trimmingCharacters(in: .whitespaces).isEmpty {
+            return (fenceToBlock(language: language, code: body, open: false, offset: lines[start].offset), i + 1)
         }
-        if !body.isEmpty { body.append("\n") }
+        // Only the final newline before a closing fence is markup. Preserve
+        // every actual source separator, including blank lines and CRLF.
+        if i > start + 1 { body.append(previousEnding) }
         body.append(lines[i].text)
+        previousEnding = lines[i].ending
         i += 1
     }
-    let openCode = String(body.dropLast(body.hasSuffix("\n") ? 1 : 0))
-    return (fenceToBlock(language: language, code: openCode, open: true, offset: lines[start].offset), lines.count)
+    return (fenceToBlock(language: language, code: body, open: true, offset: lines[start].offset), lines.count)
 }
 
 private let mermaidFenceAliases: Set<String> = [
@@ -596,42 +614,21 @@ private func parseDetails(_ lines: [GSLine], start: Int) -> (Block, Int) {
 // MARK: - Streaming incremental parse (TASK 1b)
 
 /**
- * Streaming parse: the exact twin of Android ContentBlocks.kt's
- * `parseStreamingBlocks`. The reply must render THROUGH the block renderer
- * while it streams, not as a plain-text blob that re-renders on finalize,
- * but a full grammar parse at every ~30 Hz flush is quadratic.
- *
- * The grammar is append-only per LINE RUN: every family (paragraphs, lists,
- * quotes, tables, fences, math, details) absorbs only CONSECUTIVE lines. So a
- * flush re-parses only the LAST contiguous line-run and freezes everything
- * before it: earlier block instances stay byte-identical across flushes, the
- * LazyVStack skips completed rows, and only the live tail re-renders. A full
- * parse happens only when genuinely necessary:
- *   - cache cold ([previousBlocks] empty), or
- *   - the append-only contract broke (content does not extend previousContent).
- *
- * The tail boundary is the whole last line-RUN, not just the last block: a
- * flush can cut a line in a state that parses as a different family (a bare
- * "-" or "1." pending marker parses as prose today, a list item tomorrow).
- * Re-parsing from the last BLOCK alone would freeze a still-open list and
- * spawn a duplicate sibling list on the next flush.
- *
- * The streaming path is metadata-free by contract, so every block carries a
- * real source offset. Normalization collapses CRLF to LF and drops a trailing
- * lone CR (a flush may split a CRLF pair; the normalized previous text must
- * stay a strict prefix of the normalized current text).
+ * Reparse the last line-run, snapped to its containing block's opener.
+ * Fences, math, quotes and details may span blank lines. Earlier blocks keep
+ * their instances; executable source and original line endings stay intact.
  */
 func parseStreamingBlocks(
     previousContent: String,
     previousBlocks: [Block],
     content: String
 ) -> [Block] {
-    let previous = normalizeStreamText(previousContent)
-    let current = normalizeStreamText(content)
+    let previous = previousContent
+    let current = content
     if previousBlocks.isEmpty || !current.hasPrefix(previous) {
         return parseBlocks(current)
     }
-    let tailStart = lastLineRunStart(previous)
+    let tailStart = streamingTailStart(previous, blocks: previousBlocks)
     let head = previousBlocks.prefix { $0.sourceStart < tailStart }
     if head.isEmpty { return parseBlocks(current) }
     let tailText = String(current[current.index(current.startIndex, offsetBy: tailStart)...])
@@ -639,9 +636,9 @@ func parseStreamingBlocks(
     return Array(head) + tail
 }
 
-private func normalizeStreamText(_ text: String) -> String {
-    let replaced = text.replacingOccurrences(of: "\r\n", with: "\n")
-    return replaced.hasSuffix("\r") ? String(replaced.dropLast()) : replaced
+func streamingTailStart(_ text: String, blocks: [Block]) -> Int {
+    let runStart = lastLineRunStart(text)
+    return blocks.last(where: { $0.sourceStart <= runStart })?.sourceStart ?? 0
 }
 
 /**
@@ -654,7 +651,7 @@ private func lastLineRunStart(_ text: String) -> Int {
     var end = chars.count
     while end > 0 {
         let c = chars[end - 1]
-        if c == "\n" || c == " " || c == "\t" || c == "\r" { end -= 1 } else { break }
+        if c == "\n" || c == "\r\n" || c == " " || c == "\t" || c == "\r" { end -= 1 } else { break }
     }
     if end == 0 { return 0 }
     var runStart = 0
@@ -663,7 +660,7 @@ private func lastLineRunStart(_ text: String) -> Int {
         var lineStart = 0
         if searchEnd > 0 {
             var idx = searchEnd - 1
-            while idx >= 0, chars[idx] != "\n" { idx -= 1 }
+            while idx >= 0, chars[idx] != "\n", chars[idx] != "\r\n" { idx -= 1 }
             lineStart = idx + 1
         }
         var blank = true
