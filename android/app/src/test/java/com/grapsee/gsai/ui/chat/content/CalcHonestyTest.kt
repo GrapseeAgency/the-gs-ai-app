@@ -5,6 +5,15 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun spontaneousLearningUsesDefinitionsButDoesNotTurnSourcesOrPlansIntoQuizzes() {
+        val definitions = "- Atom: A basic unit of a chemical element.\n- Molecule: Two or more atoms bonded together.\n- Element: A substance made of one type of atom."
+        assertEquals(3, extractSpontaneousConceptsFromBlocks(parseBlocks("## Core concepts\n\n$definitions")).size)
+        for (heading in listOf("Sources", "Key Sources", "References", "Step-by-step plan", "Next actions")) {
+            assertEquals(heading, 0, extractSpontaneousConceptsFromBlocks(parseBlocks("## $heading\n\n$definitions")).size)
+        }
+        assertEquals(3, extractSpontaneousConceptsFromBlocks(parseBlocks("## Sources\n\n- A supplied source record.\n\n## Core concepts\n\n$definitions")).size)
+    }
+
     @Test fun proseScenarioInferenceNeverTreatsMarkupAsAMillionOrChangesUnsupportedSourceTerms() {
         assertEquals(100.0, extractQuickCalcParams("$100 markup at 10%")!!.first, 0.0)
         assertEquals(1200.0, extractQuickCalcParams("€1.2k with 10% tax")!!.first, 0.0)
