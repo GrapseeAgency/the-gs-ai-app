@@ -1308,6 +1308,7 @@ export default function Home() {
                           }}
                         >
                           <MessageContent
+                            responseScope={m.id}
                             text={m.content}
                             dark
                             onPrompt={(prompt) => sendRef.current(prompt)}
