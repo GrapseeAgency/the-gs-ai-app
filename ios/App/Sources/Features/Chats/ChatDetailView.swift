@@ -1454,6 +1454,7 @@ struct MessageBubble: View, Equatable {
                 conversationID: conversationID,
                 showOrb: false
             )
+            .environment(\.reactPreviewScope, "\(conversationID ?? "chat"):\(message.id)")
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             // The reference answer sits in a lit glass card, not raw on the
