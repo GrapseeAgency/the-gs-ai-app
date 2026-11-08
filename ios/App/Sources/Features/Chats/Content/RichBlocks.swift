@@ -786,18 +786,18 @@ private struct NexlyContextualActionPillsRowView: View {
     let citations: [Int: String]
     let onShowCode: () -> Void
     private enum PresentedSheet: Identifiable {
-        case share, export(URL), details
+        case share, details
         var id: String {
             switch self {
             case .share: return "share"
             case .details: return "details"
-            case .export(let url): return url.absoluteString
             }
         }
     }
     @State private var presentedSheet: PresentedSheet? = nil
     @State private var sourcesOnly = false
     @State private var preparedExportURL: URL? = nil
+    @State private var documentExportRequest: URL? = nil
     @State private var notice: String? = nil
 
     private var citationText: String {
@@ -825,7 +825,7 @@ private struct NexlyContextualActionPillsRowView: View {
             let file = directory.appendingPathComponent(filename)
             try data.write(to: file, options: .atomic)
             preparedExportURL = file
-            presentedSheet = .export(file)
+            documentExportRequest = file
         } catch {
             try? FileManager.default.removeItem(at: directory)
             throw error
@@ -938,15 +938,18 @@ private struct NexlyContextualActionPillsRowView: View {
             }
             if let notice { Text(notice).font(.caption).accessibilityIdentifier("response.action.notice") }
             }
+            .background {
+                ResponseDocumentPickerIOS(sourceURL: documentExportRequest) { destination in
+                    notice = destination == nil ? "Export cancelled." : "Export saved."
+                    documentExportRequest = nil
+                    cleanPreparedExport()
+                }
+                .frame(width: 0, height: 0)
+            }
             .sheet(item: $presentedSheet, onDismiss: { cleanPreparedExport() }) { sheet in
                 switch sheet {
                 case .share:
                     ResponseActivityPresenterIOS(items: [sourceText]) { presentedSheet = nil }
-                case .export(let file):
-                    ResponseDocumentPickerIOS(sourceURL: file) { destination in
-                        notice = destination == nil ? "Export cancelled." : "Export saved."
-                        presentedSheet = nil
-                    }
                 case .details:
                 NavigationStack {
                     ScrollView {
