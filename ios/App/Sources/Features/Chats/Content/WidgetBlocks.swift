@@ -3806,6 +3806,94 @@ private struct BookingBodyView: View {
     }
 }
 
+/// User-configured or source-timed countdown, not a price or a simulated timer.
+private struct CountdownBodyView: View {
+    let obj: [String: Any]
+    let accent: Color
+    @State private var durationText: String
+    @State private var left: Double
+    @State private var running = false
+    @State private var started = false
+    @State private var deadline: ContinuousClock.Instant?
+
+    private static func sourceSeconds(_ obj: [String: Any]) -> Int? {
+        guard let number = obj["durationSeconds"] as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let value = number.doubleValue
+        guard value.isFinite, value.rounded() == value, value >= 1, value <= 604800 else { return nil }
+        return Int(value)
+    }
+    init(obj: [String: Any], accent: Color) {
+        self.obj = obj; self.accent = accent
+        let seconds = Self.sourceSeconds(obj)
+        _durationText = State(initialValue: seconds.map { String($0) } ?? "")
+        _left = State(initialValue: Double(seconds ?? 0))
+    }
+    private var duration: Int? {
+        guard let value = Int(durationText), (1...604800).contains(value) else { return nil }
+        return value
+    }
+    private var sourceIdentity: Data { (try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])) ?? Data() }
+    private static func remaining(until deadline: ContinuousClock.Instant) -> Double {
+        let parts = ContinuousClock().now.duration(to: deadline).components
+        return max(0, Double(parts.seconds) + Double(parts.attoseconds) / 1e18)
+    }
+    var body: some View {
+        VStack(spacing: 12) {
+            if obj["durationSeconds"] != nil && Self.sourceSeconds(obj) == nil {
+                Text("Timer durationSeconds must be whole seconds from 1 through 604800. Source durations are not clamped or taken from prices.")
+            } else {
+                let seconds = Int(ceil(left))
+                let fraction = min(1, max(0, left / Double(duration ?? 1)))
+                ZStack {
+                    Circle().stroke(accent.opacity(0.12), lineWidth: 11)
+                    Circle().trim(from: 0, to: fraction).stroke(accent, style: StrokeStyle(lineWidth: 11, lineCap: .round)).rotationEffect(.degrees(-90))
+                    Text(String(format: "%02d:%02d", seconds / 60, seconds % 60))
+                        .font(.system(size: 26, weight: .bold, design: .monospaced))
+                        .accessibilityIdentifier("timer.remaining")
+                }.frame(width: 150, height: 150)
+                TextField("Duration (seconds)", text: $durationText)
+                    .keyboardType(.numberPad).textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("timer.duration")
+                    .disabled(running || started)
+                if duration == nil {
+                    Text("Enter whole seconds from 1 through 604800 to configure this local countdown.").font(.caption)
+                }
+                HStack(spacing: 20) {
+                    Button(running ? "Pause" : "Start") {
+                        if running {
+                            if let deadline { left = Self.remaining(until: deadline) }
+                            deadline = nil; running = false
+                        } else {
+                            deadline = ContinuousClock().now.advanced(by: .seconds(left))
+                            started = true; running = true
+                        }
+                    }.disabled(duration == nil || left <= 0).accessibilityIdentifier("timer.toggle")
+                    Button("Reset") {
+                        running = false; started = false; deadline = nil; left = Double(duration ?? 0)
+                    }.accessibilityIdentifier("timer.reset")
+                }
+                Text("Local countdown only. No background alarm or notification is scheduled.").font(.caption)
+                if started && left <= 0 { Text("Done — countdown completed.").foregroundStyle(accent).accessibilityIdentifier("timer.completed") }
+            }
+        }
+        .onChange(of: durationText) { _ in if !started && !running { left = Double(duration ?? 0) } }
+        .onChange(of: sourceIdentity) { _ in
+            running = false; started = false; deadline = nil
+            let seconds = Self.sourceSeconds(obj)
+            durationText = seconds.map { String($0) } ?? ""; left = Double(seconds ?? 0)
+        }
+        .task(id: running) {
+            guard running else { return }
+            while !Task.isCancelled, let target = deadline {
+                left = Self.remaining(until: target)
+                if left <= 0 { running = false; deadline = nil; break }
+                do { try await Task.sleep(nanoseconds: 200_000_000) } catch { break }
+            }
+        }
+    }
+}
+
 private struct AppBodyView: View {
     @Environment(\.gsWidgetAction) private var widgetAction
     let obj: [String: Any]
@@ -3814,8 +3902,6 @@ private struct AppBodyView: View {
     @State private var stepIdx: Int = 0
     @State private var selectedSlot: Int = 0
     @State private var selectedConfig: [Int: Int] = [:]
-    @State private var timerSeconds: Int = 0
-    @State private var timerRunning: Bool = false
 
     private struct KanbanCardItem: Identifiable {
         let id: String
@@ -3832,7 +3918,9 @@ private struct AppBodyView: View {
         let groups = (obj["groups"] ?? obj["categories"] ?? obj["tiers"]) as? [[String: Any]] ?? []
         let items = (obj["items"] ?? obj["cards"] ?? obj["metrics"] ?? obj["kpis"]) as? [[String: Any]] ?? []
 
-        if aType == "tasks" {
+        if aType == "timer" {
+            CountdownBodyView(obj: obj, accent: accent)
+        } else if aType == "tasks" {
             ChecklistBodyView(obj: obj, accent: accent)
         } else if ["booking", "schedule"].contains(aType) {
             BookingBodyView(obj: obj, accent: accent)
