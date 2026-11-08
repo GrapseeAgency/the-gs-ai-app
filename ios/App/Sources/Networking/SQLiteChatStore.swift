@@ -28,6 +28,9 @@ final class SQLiteChatStore: @unchecked Sendable {
     /// An explicit URL allows real SQLite integration tests without touching
     /// the app's conversations or importing somebody else's legacy document.
     let usesDefaultDatabase: Bool
+    /// Empty tables are valid data, not evidence that storage failed. In
+    /// particular, Clear History must not revive an already-imported JSON file.
+    var isAvailable: Bool { db != nil }
 
     /// Serializes every statement against the single connection, and keeps
     /// bootstrap/load/write order deterministic across threads.
