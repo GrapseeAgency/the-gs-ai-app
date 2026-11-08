@@ -75,11 +75,10 @@ permissions:
   contents: read
 
 concurrency:
-  # Final acceptance adds actual SQLite reopen/older-page identity and the
-  # exact reference React application's filters and persisted records, beyond
-  # the standalone preview contract. Keep previous real evidence intact while
-  # this generation runs; only pending runs within this generation are replaced.
-  group: ios-response-runtime-v6-${{ github.ref }}
+  # Final acceptance requires an executed, passing native keyboard/CRUD/storage
+  # receipt before the full production-message, SQLite and visual audit. Keep
+  # prior diagnostic runs intact; coalesce pending changes in this generation.
+  group: ios-response-runtime-v7-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
