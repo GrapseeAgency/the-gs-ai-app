@@ -23,6 +23,36 @@ final class NexlyChatRenderTests: XCTestCase {
 
     private static let scale: CGFloat = 3
 
+    /// Real native composition for each supplied reference section. These
+    /// captures need review; file existence is not a visual-fidelity verdict.
+    func testSixSuppliedResponseSectionReferencesRenderThroughActualChat() async throws {
+        let source = try XCTUnwrap(Bundle.main.url(forResource: "response-section-references", withExtension: "json"))
+        let contract = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: source)) as? [String: Any])
+        let fixtures = try XCTUnwrap(contract["fixtures"] as? [[String: Any]])
+        XCTAssertEqual(fixtures.count, 6)
+        XCTAssertEqual(Set(fixtures.compactMap { $0["id"] as? String }).count, 6)
+        let directory = Self.outputDirectory()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        for fixture in fixtures {
+            let id = try XCTUnwrap(fixture["id"] as? String)
+            let question = try XCTUnwrap(fixture["question"] as? String)
+            let wire = try XCTUnwrap(fixture["wire"] as? String)
+            let expected = try XCTUnwrap(fixture["widgetKinds"] as? [String])
+            let widgets = parseBlocks(wire).compactMap { block -> (String, String)? in
+                if case .widget(let kind, let json, _, _) = block { return (kind, json) }
+                return nil
+            }
+            XCTAssertEqual(widgets.map { $0.0 }, expected, id)
+            for (kind, json) in widgets { XCTAssertTrue(isValidWidget(kind: kind, json: json), "\(id) cannot silently fall back to raw JSON") }
+            let image = try XCTUnwrap(try await Self.renderFlash(question: question, wire: wire, size: CGSize(width: 393, height: 852)))
+            let data = try XCTUnwrap(image.pngData())
+            XCTAssertGreaterThan(data.count, 20_000, id)
+            let name = "genui-reference-ios-\(id)-393x852"
+            try data.write(to: directory.appendingPathComponent(name + ".png"))
+            let capture = XCTAttachment(image: image); capture.name = name; capture.lifetime = .keepAlways; add(capture)
+        }
+    }
+
     func testNexlyResponseRendersAtEveryWidth() async throws {
         let dir = Self.outputDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
