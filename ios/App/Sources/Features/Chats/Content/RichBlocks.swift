@@ -231,7 +231,7 @@ private func classifyCalloutHeaderTitle(_ raw: String) -> (CalloutTone, String)?
     return nil
 }
 
-private enum QuickCalcMode: String, CaseIterable {
+enum QuickCalcMode: String, CaseIterable {
     case discount = "-%"
     case markup = "+%"
     case percentOf = "Budget %"
@@ -240,7 +240,7 @@ private enum QuickCalcMode: String, CaseIterable {
     case macros = "Macros"
 }
 
-private struct NexlyCalculatorSpec {
+struct NexlyCalculatorSpec {
     let title: String
     let amountLabel: String
     let rateLabel: String
@@ -252,15 +252,15 @@ private struct NexlyCalculatorSpec {
     let currency: String
 }
 
-private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> NexlyCalculatorSpec? {
+func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> NexlyCalculatorSpec? {
     let (_, strippedTitle) = NexlyIcons.extractLeadingIcon(titleRaw)
     let cleanTitle = NexlyIcons.cleanPlainText(strippedTitle)
         .trimmingCharacters(in: CharacterSet(charactersIn: ":-—– "))
     let combined = "\(cleanTitle) \(bodyText)".lowercased()
     if ["calorie", "protein", "macro", "tdee", "bmi", "margin", "roi", "budget", "salary", "income"].contains(where: { combined.contains($0) }) { return nil }
     guard ["discount", "tax", "tip", "markup", "vat", "loan", "mortgage", "emi", "compound", "apy", "apr"].contains(where: { combined.contains($0) }) else { return nil }
-    let amountPattern = try? NSRegularExpression(pattern: "[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)\\s*([kKmMbB])?")
-    let ratePattern = try? NSRegularExpression(pattern: "(\\d+(?:\\.\\d+)?)\\s*(?:%|percent\\b)", options: .caseInsensitive)
+    let amountPattern = try? NSRegularExpression(pattern: "[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)(?:\\s*([kKmMbB])(?![A-Za-z]))?(?![\\dA-Za-z.,])")
+    let ratePattern = try? NSRegularExpression(pattern: "(?<![\\d.,−-])(\\d+(?:\\.\\d+)?)\\s*(?:%|percent\\b)", options: .caseInsensitive)
     let sourceRange = NSRange(bodyText.startIndex..., in: bodyText)
     guard amountPattern?.numberOfMatches(in: bodyText, range: sourceRange) == 1,
           ratePattern?.numberOfMatches(in: bodyText, range: sourceRange) == 1 else { return nil }
@@ -269,7 +269,7 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
 
 
     var currAmount: Double? = nil
-    if let crx = try? NSRegularExpression(pattern: "[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)\\s*([kKmMbB])?"),
+    if let crx = try? NSRegularExpression(pattern: "[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)(?:\\s*([kKmMbB])(?![A-Za-z]))?(?![\\dA-Za-z.,])"),
        let cm = crx.firstMatch(in: bodyText, range: NSRange(bodyText.startIndex..., in: bodyText)),
        let numRange = Range(cm.range(at: 1), in: bodyText),
        let base = Double(bodyText[numRange].replacingOccurrences(of: ",", with: "")) {
@@ -286,7 +286,7 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
     }
 
     var pctVal: Double? = nil
-    if let prx = try? NSRegularExpression(pattern: "(\\d+(?:\\.\\d+)?)\\s*(?:%|percent\\b)", options: [.caseInsensitive]),
+    if let prx = try? NSRegularExpression(pattern: "(?<![\\d.,−-])(\\d+(?:\\.\\d+)?)\\s*(?:%|percent\\b)", options: [.caseInsensitive]),
        let pm = prx.firstMatch(in: bodyText, range: NSRange(bodyText.startIndex..., in: bodyText)),
        let pr = Range(pm.range(at: 1), in: bodyText) {
         pctVal = Double(bodyText[pr])
@@ -303,7 +303,7 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
         yearsVal = y
     }
 
-    guard let amt = currAmount, let rate = pctVal else { return nil }
+    guard let amt = currAmount, let rate = pctVal, amt.isFinite, rate.isFinite, amt >= 0, rate >= 0 else { return nil }
 
     let currency: String = {
         if bodyText.contains("€") { return "€" }
@@ -1350,6 +1350,14 @@ private struct NexlyCalloutCardView: View {
     }
 }
 
+func sourceLoanMonthlyPaymentIOS(principal: Double, apr: Double, years: Int) -> Double? {
+    guard principal.isFinite, apr.isFinite, principal >= 0, apr >= 0, years > 0 else { return nil }
+    let months = Double(years) * 12
+    let rate = apr / 1200
+    let payment = rate == 0 ? principal / months : principal * (rate / -expm1(-months * log1p(rate)))
+    return payment.isFinite ? payment : nil
+}
+
 private struct NexlyQuickCalculatorCardView: View {
     let spec: NexlyCalculatorSpec
 
@@ -1374,19 +1382,17 @@ private struct NexlyQuickCalculatorCardView: View {
     }
 
     private var amountVal: Double {
-        max(0, Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0)
+        guard let value = Double(amountText.replacingOccurrences(of: ",", with: "")), value.isFinite, value >= 0 else { return .nan }
+        return value
     }
 
     private var rateVal: Double {
-        min(max(0, Double(rateText.replacingOccurrences(of: ",", with: "")) ?? 0), 1000)
+        guard let value = Double(rateText.replacingOccurrences(of: ",", with: "")), value.isFinite, value >= 0 else { return .nan }
+        return value
     }
 
     private var monthlyLoanPayment: Double {
-        let n = Double(max(1, years * 12))
-        let r = (rateVal / 100.0) / 12.0
-        if r <= 0.000001 { return amountVal / n }
-        let factor = pow(1.0 + r, n)
-        return amountVal * (r * factor) / (factor - 1.0)
+        sourceLoanMonthlyPaymentIOS(principal: amountVal, apr: rateVal, years: years) ?? .nan
     }
 
     private var totalLoanPaid: Double {
@@ -1413,8 +1419,9 @@ private struct NexlyQuickCalculatorCardView: View {
     }
 
     private var formattedResultText: String {
+        guard total.isFinite else { return "Undefined" }
         switch mode {
-        case .loan: return String(format: "%@%.0f/mo", spec.currency.isEmpty ? "$" : spec.currency, total)
+        case .loan: return String(format: "%@%.2f/mo", spec.currency.isEmpty ? "$" : spec.currency, total)
         case .macros: return String(format: "%.0f kcal", total)
         default: return String(format: "%@%.2f", spec.currency, total)
         }
@@ -1482,10 +1489,11 @@ private struct NexlyQuickCalculatorCardView: View {
     }
 
     private var summaryBadgeText: String {
+        guard total.isFinite else { return "Enter valid amount and rate." }
         let curr = spec.currency.isEmpty ? "$" : spec.currency
         switch mode {
         case .loan:
-            return String(format: "Interest %@%.0f · Total %@%.0f", curr, totalLoanInterest, curr, totalLoanPaid)
+            return String(format: "Interest %@%.2f · Total %@%.2f", curr, totalLoanInterest, curr, totalLoanPaid)
         case .macros:
             return String(format: "Protein %.0fg · Water %.1fL", amountVal * max(1.2, rateVal), amountVal * 0.035)
         case .discount:
@@ -1650,7 +1658,7 @@ private struct NexlyQuickCalculatorCardView: View {
         VStack(alignment: .leading, spacing: 4) {
             Slider(
                 value: Binding(
-                    get: { min(max(0.0, rateVal), maxR) },
+                    get: { rateVal.isFinite ? min(max(0.0, rateVal), maxR) : 0 },
                     set: { (newVal: Double) in
                         rateText = useDec ? String(format: "%.1f", newVal) : String(format: "%.0f", newVal)
                     }
@@ -1659,6 +1667,7 @@ private struct NexlyQuickCalculatorCardView: View {
                 step: stepR
             )
             .tint(Color(red: 0.424, green: 0.298, blue: 0.965))
+            .disabled(!rateVal.isFinite)
 
             HStack {
                 HStack(spacing: 4) {
