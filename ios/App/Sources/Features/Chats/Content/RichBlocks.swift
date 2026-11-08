@@ -2474,6 +2474,20 @@ private struct BulletListView: View {
     @State private var checkedStates: [Int: Bool] = [:]
     @State private var addingTask: Bool = false
     @State private var newTaskText: String = ""
+    @State private var removedTasks: Set<Int> = []
+    @State private var editedTasks: [Int: [InlineSpan]] = [:]
+    @State private var editingTarget: Int? = nil
+
+    private func saveTask() {
+        let text = NexlyIcons.cleanPlainText(newTaskText).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        if let target = editingTarget {
+            if target >= 0 { editedTasks[target] = parseInline(text) }
+            else if addedTasks.indices.contains(-target - 1) { addedTasks[-target - 1].text = text }
+        } else { addedTasks.append((text, false)) }
+        editingTarget = nil; newTaskText = ""; addingTask = false
+    }
+
 
     private var extractedSources: [CitationEntry] {
         guard sectionMode == .sources else { return [] }
@@ -2488,12 +2502,12 @@ private struct BulletListView: View {
     }
 
     private var totalTasks: Int {
-        items.count + addedTasks.count
+        items.count - removedTasks.count + addedTasks.count
     }
 
     private var completedTasks: Int {
         let baseDone = items.enumerated().filter { idx, item in
-            checkedStates[idx] ?? (item.checked ?? false)
+            !removedTasks.contains(idx) && (checkedStates[idx] ?? (item.checked ?? false))
         }.count
         let addedDone = addedTasks.filter { $0.checked }.count
         return baseDone + addedDone
@@ -2508,6 +2522,10 @@ private struct BulletListView: View {
                 checklistProgressHeader
                 bulletItemsList
                 checklistAddTaskSection
+            }
+            .onChange(of: items) { _ in
+                addedTasks = []; checkedStates = [:]; removedTasks = []; editedTasks = [:]
+                addingTask = false; editingTarget = nil; newTaskText = ""
             }
         }
     }
@@ -2570,13 +2588,16 @@ private struct BulletListView: View {
 
     @ViewBuilder
     private var bulletItemsList: some View {
-        ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
-            if item.checked != nil || sectionMode == .todo {
+        ForEach(Array(items.enumerated()), id: \.offset) { idx, sourceItem in
+            let item = ListItem(number: sourceItem.number, spans: editedTasks[idx] ?? sourceItem.spans, children: sourceItem.children, checked: sourceItem.checked)
+            if removedTasks.contains(idx) { EmptyView() }
+            else if item.checked != nil || sectionMode == .todo {
                 let currentChecked = checkedStates[idx] ?? (item.checked ?? false)
                 InteractiveChecklistItemRowView(
                     checked: currentChecked,
                     onToggle: { checkedStates[idx] = !currentChecked },
-                    onDelete: nil,
+                    onDelete: { removedTasks.insert(idx); editingTarget = nil; addingTask = false },
+                    onEdit: { editingTarget = idx; newTaskText = plainTextOfSpans(item.spans); addingTask = true },
                     item: item,
                     citations: citations
                 )
@@ -2590,7 +2611,8 @@ private struct BulletListView: View {
             InteractiveChecklistItemRowView(
                 checked: taskPair.checked,
                 onToggle: { addedTasks[idx].checked.toggle() },
-                onDelete: { addedTasks.remove(at: idx) },
+                onDelete: { addedTasks.remove(at: idx); editingTarget = nil; addingTask = false },
+                onEdit: { editingTarget = -idx - 1; newTaskText = taskPair.text; addingTask = true },
                 item: ListItem(spans: [.text(taskPair.text)], checked: taskPair.checked),
                 citations: citations
             )
@@ -2603,19 +2625,15 @@ private struct BulletListView: View {
             if addingTask {
                 HStack(spacing: 6) {
                     TextField("Type a new task…", text: $newTaskText)
+                        .accessibilityIdentifier("prose.task.input")
+                        .onSubmit(saveTask)
                         .font(.system(size: 12.5))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.92)))
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.847, green: 0.808, blue: 0.976), lineWidth: 1))
-                    Button("Add") {
-                        let trimmed = newTaskText.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            addedTasks.append((trimmed, false))
-                            newTaskText = ""
-                            addingTask = false
-                        }
-                    }
+                    Button(editingTarget == nil ? "Add" : "Save task", action: saveTask)
+                    .disabled(NexlyIcons.cleanPlainText(newTaskText).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(Color.white)
                     .padding(.horizontal, 10)
@@ -2625,6 +2643,7 @@ private struct BulletListView: View {
 
                     Button {
                         newTaskText = ""
+                        editingTarget = nil
                         addingTask = false
                     } label: {
                         NexlyGlyph(name: "x", size: 13, color: Aero.textSecondary)
@@ -2635,6 +2654,7 @@ private struct BulletListView: View {
             } else {
                 Button {
                     GSHaptics.select()
+                    editingTarget = nil; newTaskText = ""
                     addingTask = true
                 } label: {
                     HStack(spacing: 5) {
@@ -2663,6 +2683,7 @@ private struct InteractiveChecklistItemRowView: View {
     let checked: Bool
     let onToggle: () -> Void
     let onDelete: (() -> Void)?
+    var onEdit: (() -> Void)? = nil
     let item: ListItem
     var citations: [Int: String] = [:]
 
@@ -2711,6 +2732,11 @@ private struct InteractiveChecklistItemRowView: View {
                 }
                 .buttonStyle(.plain)
 
+                if let onEdit {
+                    Button(action: onEdit) { NexlyGlyph(name: "pencil", size: 12, color: Aero.textTertiary) }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Edit task: " + NexlyIcons.cleanPlainText(plainTextOfSpans(item.spans)))
+                }
                 if let onDelete {
                     Button {
                         GSHaptics.select()
@@ -2719,6 +2745,7 @@ private struct InteractiveChecklistItemRowView: View {
                         NexlyGlyph(name: "x", size: 12, color: Aero.textTertiary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Delete task: " + NexlyIcons.cleanPlainText(plainTextOfSpans(item.spans)))
                 }
             }
             .padding(.vertical, 3)
