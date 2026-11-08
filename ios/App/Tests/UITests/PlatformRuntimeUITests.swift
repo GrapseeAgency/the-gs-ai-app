@@ -115,6 +115,22 @@ final class PlatformRuntimeUITests: XCTestCase {
         capture.name = "genui-react-actual-task-crud-storage-isolation"; capture.lifetime = .keepAlways; add(capture)
     }
 
+    func testConversationActionsTapOpensRealOptionsWithoutLeavingChat() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_seed_chats"]
+        app.launch()
+        let chats = app.buttons["Chats"].firstMatch
+        XCTAssertTrue(chats.waitForExistence(timeout: 20)); chats.tap()
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Weekend in Kyoto")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 20)); row.tap()
+        let actions = app.buttons["Conversation actions"].firstMatch
+        XCTAssertTrue(actions.waitForExistence(timeout: 15)); actions.tap()
+        XCTAssertTrue(app.buttons["Rename"].waitForExistence(timeout: 5), "A normal tap must open actual actions, not navigate away or require a long press")
+        XCTAssertTrue(app.buttons["Back"].exists, "Opening actions must keep the user in the conversation")
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-actual-conversation-actions-tap"; capture.lifetime = .keepAlways; add(capture)
+    }
+
     func testVanishedDashboardTabCannotHideReplacementSource() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
