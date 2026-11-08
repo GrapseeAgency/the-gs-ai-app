@@ -1350,6 +1350,26 @@ private struct NexlyCalloutCardView: View {
     }
 }
 
+func sourceScenarioNumberTextIOS(_ value: Double) -> String {
+    guard value.isFinite else { return "" }
+    if value == 0 { return "0" }
+    let text = String(value).lowercased()
+    let parts = text.split(separator: "e")
+    guard parts.count == 2, let exponent = Int(parts[1]) else {
+        return text.hasSuffix(".0") ? String(text.dropLast(2)) : text
+    }
+    let negative = parts[0].hasPrefix("-")
+    let mantissa = negative ? String(parts[0].dropFirst()) : String(parts[0])
+    let decimal = mantissa.split(separator: ".", omittingEmptySubsequences: false)
+    let digits = decimal.joined()
+    let position = decimal[0].count + exponent
+    let plain: String
+    if position <= 0 { plain = "0." + String(repeating: "0", count: -position) + digits }
+    else if position >= digits.count { plain = digits + String(repeating: "0", count: position - digits.count) }
+    else { plain = String(digits.prefix(position)) + "." + String(digits.dropFirst(position)) }
+    return (negative ? "-" : "") + plain
+}
+
 func sourceLoanMonthlyPaymentIOS(principal: Double, apr: Double, years: Int) -> Double? {
     guard principal.isFinite, apr.isFinite, principal >= 0, apr >= 0, years > 0 else { return nil }
     let months = Double(years) * 12
@@ -1369,12 +1389,8 @@ private struct NexlyQuickCalculatorCardView: View {
 
     init(spec: NexlyCalculatorSpec) {
         self.spec = spec
-        let amtFmt = spec.initialAmount.truncatingRemainder(dividingBy: 1.0) == 0
-            ? String(format: "%.0f", spec.initialAmount)
-            : String(format: "%.2f", spec.initialAmount)
-        let rateFmt = spec.initialRate.truncatingRemainder(dividingBy: 1.0) == 0
-            ? String(format: "%.0f", spec.initialRate)
-            : String(format: "%.1f", spec.initialRate)
+        let amtFmt = sourceScenarioNumberTextIOS(spec.initialAmount)
+        let rateFmt = sourceScenarioNumberTextIOS(spec.initialRate)
         _amountText = State(initialValue: amtFmt)
         _rateText = State(initialValue: rateFmt)
         _years = State(initialValue: spec.initialYears)
@@ -1470,7 +1486,7 @@ private struct NexlyQuickCalculatorCardView: View {
     }
 
     private var horizonOptions: [Int] {
-        mode == .loan ? [5, 10, 15, 20, 30] : [1, 3, 5, 10, 20]
+        Array(Set((mode == .loan ? [5, 10, 15, 20, 30] : [1, 3, 5, 10, 20]) + [spec.initialYears])).sorted()
     }
 
     private var sliderMax: Double {
@@ -1542,12 +1558,8 @@ private struct NexlyQuickCalculatorCardView: View {
 
                 Button("Reset") {
                     GSHaptics.select()
-                    amountText = spec.initialAmount.truncatingRemainder(dividingBy: 1.0) == 0
-                        ? String(format: "%.0f", spec.initialAmount)
-                        : String(format: "%.2f", spec.initialAmount)
-                    rateText = spec.initialRate.truncatingRemainder(dividingBy: 1.0) == 0
-                        ? String(format: "%.0f", spec.initialRate)
-                        : String(format: "%.1f", spec.initialRate)
+                    amountText = sourceScenarioNumberTextIOS(spec.initialAmount)
+                    rateText = sourceScenarioNumberTextIOS(spec.initialRate)
                     years = spec.initialYears
                     mode = spec.mode
                 }
