@@ -397,18 +397,18 @@ private fun isCalculatorHeadingTitle(raw: String): Boolean {
     return "calculator" in lower || "estimator" in lower || "simulator" in lower || "pricing model" in lower
 }
 
-private fun extractQuickCalcParams(text: String): Triple<Double, Double, Int>? {
+internal fun extractQuickCalcParams(text: String): Triple<Double, Double, Int>? {
     val low = text.lowercase()
     // A generic percentage tool cannot infer a medical model, profit margin,
     // investment cash flows or a 50/30/20 allocation from nearby numbers.
     if (listOf("calorie", "protein", "macro", "tdee", "bmi", "margin", "roi", "budget", "salary", "income").any { it in low }) return null
-    val amounts = Regex("""[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmMbB])?""").findAll(text).toList()
-    val rates = Regex("""(\d+(?:\.\d+)?)\s*(?:%|percent\b)""", RegexOption.IGNORE_CASE).findAll(text).toList()
+    val amounts = Regex("""[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*([kKmMbB])(?![A-Za-z]))?(?![\dA-Za-z.,])""").findAll(text).toList()
+    val rates = Regex("""(?<![\d.,−-])(\d+(?:\.\d+)?)\s*(?:%|percent\b)""", RegexOption.IGNORE_CASE).findAll(text).toList()
     if (amounts.size != 1 || rates.size != 1) return null
     if (listOf("discount", "tax", "tip", "markup", "vat", "loan", "mortgage", "emi", "compound", "apy", "apr").none { it in low }) return null
     val needsTerm = listOf("loan", "mortgage", "emi", "amortiz", "compound", "invest", "apy", "apr").any { it in low }
     if (needsTerm && !Regex("""\b\d{1,2}\s*(?:-\s*)?(?:years?|yrs?\b)""", RegexOption.IGNORE_CASE).containsMatchIn(text)) return null
-    val currMatch = Regex("""[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmMbB])?""").find(text)
+    val currMatch = Regex("""[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*([kKmMbB])(?![A-Za-z]))?(?![\dA-Za-z.,])""").find(text)
     val currAmount = currMatch?.let { m ->
         val base = m.groupValues[1].replace(",", "").toDoubleOrNull() ?: return@let null
         val mult = when (m.groupValues[2].lowercase()) {
@@ -419,7 +419,7 @@ private fun extractQuickCalcParams(text: String): Triple<Double, Double, Int>? {
         }
         base * mult
     }
-    val pctMatch = Regex("""(\d+(?:\.\d+)?)\s*(?:%|percent\b)""", RegexOption.IGNORE_CASE).find(text)
+    val pctMatch = Regex("""(?<![\d.,−-])(\d+(?:\.\d+)?)\s*(?:%|percent\b)""", RegexOption.IGNORE_CASE).find(text)
     val pctVal = pctMatch?.groupValues?.get(1)?.toDoubleOrNull()
 
     val yrMatch = Regex("""(\d{1,2})\s*(?:-\s*)?(?:years?|yrs?\b)""", RegexOption.IGNORE_CASE).find(text)
@@ -427,8 +427,8 @@ private fun extractQuickCalcParams(text: String): Triple<Double, Double, Int>? {
     if (needsTerm && (suppliedYears == null || suppliedYears !in 1..40)) return null
     val yearsVal = suppliedYears ?: 5
 
-    val amt = currAmount ?: return null
-    val rate = pctVal ?: return null
+    val amt = currAmount?.takeIf { it.isFinite() && it >= 0.0 } ?: return null
+    val rate = pctVal?.takeIf { it.isFinite() && it >= 0.0 } ?: return null
     return Triple(amt, rate, yearsVal)
 }
 
@@ -1594,6 +1594,17 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
     }
 }
 
+internal fun sourceLoanMonthlyPayment(principal: Double, apr: Double, years: Int): Double? {
+    if (!principal.isFinite() || !apr.isFinite() || principal < 0 || apr < 0 || years <= 0) return null
+    val months = years.toDouble() * 12.0
+    val rate = apr / 1200.0
+    // log1p/expm1 retain real interest at small rates; a tolerance-based
+    // zero-rate substitution silently erased interest on large principals.
+    val payment = if (rate == 0.0) principal / months
+        else principal * (rate / -kotlin.math.expm1(-months * kotlin.math.ln1p(rate)))
+    return payment.takeIf { it.isFinite() }
+}
+
 @Composable
 private fun NexlyQuickCalculatorCard(
     title: String,
@@ -1640,17 +1651,11 @@ private fun NexlyQuickCalculatorCard(
             else String.format(java.util.Locale.US, "%.1f", seedRate)
         )
     }
-    val amount = amountText.replace(",", "").toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
-    val ratePct = rateText.replace("%", "").toDoubleOrNull()?.coerceIn(0.0, 100.0) ?: 0.0
+    val amount = amountText.replace(",", "").toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0.0 } ?: Double.NaN
+    val ratePct = rateText.replace("%", "").toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0.0 } ?: Double.NaN
 
     val monthlyLoanPayment = remember(amount, ratePct, years) {
-        val n = (years * 12).coerceAtLeast(1)
-        val r = (ratePct / 100.0) / 12.0
-        if (r <= 0.000001) amount / n
-        else {
-            val factor = Math.pow(1.0 + r, n.toDouble())
-            amount * (r * factor) / (factor - 1.0)
-        }
+        sourceLoanMonthlyPayment(amount, ratePct, years) ?: Double.NaN
     }
     val totalLoanPaid = monthlyLoanPayment * years * 12
     val totalLoanInterest = (totalLoanPaid - amount).coerceAtLeast(0.0)
@@ -1686,8 +1691,8 @@ private fun NexlyQuickCalculatorCard(
         5 -> "Daily Target"
         else -> "Result"
     }
-    val formattedResult = when (mode) {
-        3 -> String.format(java.util.Locale.US, "%s%.0f/mo", currency, total)
+    val formattedResult = if (!total.isFinite()) "Undefined" else when (mode) {
+        3 -> String.format(java.util.Locale.US, "%s%.2f/mo", currency, total)
         5 -> String.format(java.util.Locale.US, "%.0f kcal", total)
         else -> String.format(java.util.Locale.US, "%s%.2f", currency, total)
     }
@@ -1870,7 +1875,8 @@ private fun NexlyQuickCalculatorCard(
             }
         }
         Slider(
-            value = ratePct.toFloat().coerceIn(0f, if (mode == 5) 4f else 100f),
+            value = (ratePct.takeIf { it.isFinite() } ?: 0.0).toFloat().coerceIn(0f, if (mode == 5) 4f else 100f),
+            enabled = ratePct.isFinite(),
             onValueChange = { v ->
                 rateText = if (mode == 5 || mode == 3) String.format(java.util.Locale.US, "%.1f", v)
                 else String.format(java.util.Locale.US, "%.0f", v)
@@ -1910,10 +1916,10 @@ private fun NexlyQuickCalculatorCard(
                 }
             }
             Text(
-                text = when (mode) {
+                text = if (!total.isFinite()) "Enter valid amount and rate." else when (mode) {
                     1 -> "+${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
                     2 -> "Gain +${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
-                    3 -> "Interest ${String.format(java.util.Locale.US, "%s%.0f · Total %s%.0f", currency, totalLoanInterest, currency, totalLoanPaid)}"
+                    3 -> "Interest ${String.format(java.util.Locale.US, "%s%.2f · Total %s%.2f", currency, totalLoanInterest, currency, totalLoanPaid)}"
                     4 -> "Needs ${String.format(java.util.Locale.US, "%s%.0f · Annual +%s%.0f", currency, amount * 0.5, currency, total * 12)}"
                     5 -> "Protein ${String.format(java.util.Locale.US, "%.0fg · Water %.1fL", amount * ratePct.coerceAtLeast(1.2), amount * 0.035)}"
                     else -> "Saved ${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
