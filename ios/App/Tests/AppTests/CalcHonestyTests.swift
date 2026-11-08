@@ -5,6 +5,7 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    @MainActor
     func testActualMessagePreviewIdentitySurvivesRehydrationWithoutInventingServerIDs() {
         let live = ChatViewModel.ChatMessage(role: "assistant", content: "actual source", serverId: "actual-server-row")
         let reopened = ChatViewModel.ChatMessage(role: "assistant", content: "actual source", durableID: "actual-server-row")
