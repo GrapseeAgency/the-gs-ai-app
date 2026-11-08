@@ -5,6 +5,28 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testProseScenariosPreserveRealAmountsVATAndUnsupportedSourceTerms() throws {
+        XCTAssertEqual(try XCTUnwrap(parseQuickCalculatorSpec(titleRaw: "Calculator", bodyText: "$100 markup at 10%")).initialAmount, 100)
+        XCTAssertEqual(try XCTUnwrap(parseQuickCalculatorSpec(titleRaw: "Calculator", bodyText: "€1.2k with 10% tax")).initialAmount, 1200)
+        XCTAssertEqual(try XCTUnwrap(parseQuickCalculatorSpec(titleRaw: "Calculator", bodyText: "$2M loan at 6% for 5 years")).initialAmount, 2000000)
+        XCTAssertEqual(try XCTUnwrap(parseQuickCalculatorSpec(titleRaw: "Calculator", bodyText: "$100 VAT at 10%")).mode, .markup)
+        for wire in ["$1e6 loan at 10% for 5 years", "$1,00 discount 10%", "-$100 discount 10%", "$100 discount -10%", "$100 discount −10%", "$100 discount 1e2%", "$100 loan at 10%", "$100 loan at 10% for 0 years", "$100 loan at 10% for 99 years"] {
+            XCTAssertNil(parseQuickCalculatorSpec(titleRaw: "Calculator", bodyText: wire), wire)
+        }
+    }
+
+    func testSourceLoanPaymentsKeepActualZeroAndSmallRateInterest() throws {
+        // Independent 90-digit Decimal amortization references.
+        XCTAssertEqual(try XCTUnwrap(sourceLoanMonthlyPaymentIOS(principal: 1000, apr: 0, years: 1)), 1000.0 / 12, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(sourceLoanMonthlyPaymentIOS(principal: 1000, apr: 12, years: 1)), 88.84878867834170734, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(sourceLoanMonthlyPaymentIOS(principal: 1e9, apr: 0.0012, years: 30)), 2778279.1966664201205, accuracy: 1e-6)
+        XCTAssertEqual(try XCTUnwrap(sourceLoanMonthlyPaymentIOS(principal: 1e9, apr: 0.0000000012, years: 30)), 2777777.7782791666667, accuracy: 1e-6)
+        XCTAssertNil(sourceLoanMonthlyPaymentIOS(principal: -1, apr: 5, years: 1))
+        XCTAssertNil(sourceLoanMonthlyPaymentIOS(principal: 1000, apr: -5, years: 1))
+        XCTAssertNil(sourceLoanMonthlyPaymentIOS(principal: 1000, apr: 5, years: 0))
+        XCTAssertNil(sourceLoanMonthlyPaymentIOS(principal: .nan, apr: 5, years: 1))
+    }
+
     func testOrdinaryMarkdownSourcesUseOneHeadingAndOnlyActualCompleteSourceDestinations() throws {
         for marker in ["1.", "-"] {
             let second = marker == "1." ? "2." : "-"
