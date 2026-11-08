@@ -1061,6 +1061,15 @@ func chartSliceLabelIOS(name: String, labels: [String], seriesIndex: Int) -> Str
     return seriesIndex < labels.count ? labels[seriesIndex] : "Series \(seriesIndex + 1)"
 }
 
+/// Preserve the response's actual chart accent. Controls keep their brand
+/// tint, but data ink must not silently force every model chart to purple.
+func chartSeriesColorIOS(_ obj: [String: Any], index: Int) -> Color {
+    if index == 0 {
+        return WidgetPalette.parseHex(obj["accent"] as? String) ?? Color(red: 0.424, green: 0.298, blue: 0.965)
+    }
+    return WidgetPalette.at(index + 1)
+}
+
 private struct ChartBodyView: View {
     let obj: [String: Any]
     let accent: Color
@@ -1115,7 +1124,7 @@ private struct ChartBodyView: View {
             for (sIdx, s) in series.enumerated() {
                 if !isSliceSeries && sIdx != min(selectedSeriesIndex, max(0, series.count - 1)) { continue }
                 let sName = str(s, "name", "label")
-                let color = WidgetPalette.at(sIdx)
+                let color = chartSeriesColorIOS(obj, index: sIdx)
                 if let data = s["data"] as? [Any] {
                     for (pIdx, pt) in data.enumerated() {
                         let sliceLabel = chartSliceLabelIOS(name: sName, labels: labels, seriesIndex: sIdx)
@@ -1138,7 +1147,7 @@ private struct ChartBodyView: View {
             for (idx, d) in data.enumerated() {
                 let lbl = str(d, "label", "name", "x", "category")
                 guard let val = chartObservationValueIOS(d) else { continue }
-                out.append(BarPoint(index: idx, seriesName: "", label: lbl.isEmpty ? "#\(idx + 1)" : lbl, value: val, color: WidgetPalette.at(idx)))
+                out.append(BarPoint(index: idx, seriesName: "", label: lbl.isEmpty ? "#\(idx + 1)" : lbl, value: val, color: chartSeriesColorIOS(obj, index: currentType == "pie" || currentType == "donut" ? idx : 0)))
             }
         }
         return out
@@ -1296,7 +1305,7 @@ private struct ChartBodyView: View {
             let stepColor = stepPct == nil ? Aero.textSecondary : ((stepPct ?? 0) >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
             HStack(spacing: 8) {
                 Circle()
-                    .fill(Color(red: 0.424, green: 0.298, blue: 0.965))
+                    .fill(selPt.color)
                     .frame(width: 8, height: 8)
                 Text(selPt.label)
                     .font(.system(size: 12, weight: .semibold))
@@ -1319,6 +1328,7 @@ private struct ChartBodyView: View {
     @ViewBuilder
     private func chartVisualizationSurface(pts: [BarPoint], activeIdx: Int, maxVal: Double, totalVal: Double, unit: String) -> some View {
         let domain = chartDomainIOS(pts.map { $0.value })
+        let plotColor = pts.first?.color ?? chartSeriesColorIOS(obj, index: 0)
         if (currentType == "pie" || currentType == "donut") &&
             (pts.contains { $0.value < 0 } || totalVal <= 0) {
             Text("Pie shares require nonnegative values and a positive total. Choose Line or Bar for this dataset.")
@@ -1383,8 +1393,8 @@ private struct ChartBodyView: View {
                             areaPath.fill(
                                 LinearGradient(
                                     colors: [
-                                        Color(red: 0.424, green: 0.298, blue: 0.965).opacity(currentType == "area" ? 0.34 : 0.18),
-                                        Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.01)
+                                        plotColor.opacity(currentType == "area" ? 0.34 : 0.18),
+                                        plotColor.opacity(0.01)
                                     ],
                                     startPoint: .top,
                                     endPoint: .bottom
@@ -1392,7 +1402,7 @@ private struct ChartBodyView: View {
                             )
 
                             linePath.stroke(
-                                Color(red: 0.424, green: 0.298, blue: 0.965),
+                                plotColor,
                                 style: StrokeStyle(lineWidth: 2.8, lineCap: .round, lineJoin: .round)
                             )
 
@@ -1403,7 +1413,7 @@ private struct ChartBodyView: View {
                                     p.addLine(to: CGPoint(x: selCoord.x, y: h))
                                 }
                                 .stroke(
-                                    Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.45),
+                                    plotColor.opacity(0.45),
                                     style: StrokeStyle(lineWidth: 1.2, dash: [4, 3])
                                 )
                             }
@@ -1411,11 +1421,11 @@ private struct ChartBodyView: View {
                             ForEach(Array(coords.enumerated()), id: \.offset) { idx, c in
                                 let isSel = idx == activeIdx
                                 Circle()
-                                    .fill(isSel ? Color.white : Color(red: 0.424, green: 0.298, blue: 0.965))
+                                    .fill(isSel ? Color.white : plotColor)
                                     .frame(width: isSel ? 11 : 7, height: isSel ? 11 : 7)
                                     .overlay(
                                         Circle()
-                                            .stroke(Color(red: 0.424, green: 0.298, blue: 0.965), lineWidth: isSel ? 3 : 0)
+                                            .stroke(plotColor, lineWidth: isSel ? 3 : 0)
                                     )
                                     .position(c)
                                     .onTapGesture {
@@ -1463,7 +1473,7 @@ private struct ChartBodyView: View {
                                         path.addLine(to: CGPoint(x: geo.size.width, y: zeroY))
                                     }.stroke(Color.gray.opacity(0.4), lineWidth: 1)
                                     RoundedRectangle(cornerRadius: 3)
-                                        .fill(Color(red: 0.424, green: 0.298, blue: 0.965).opacity(isSel ? 1 : 0.45))
+                                        .fill(plotColor.opacity(isSel ? 1 : 0.45))
                                         .frame(width: geo.size.width, height: abs(valueY - zeroY))
                                         .position(x: geo.size.width / 2, y: (valueY + zeroY) / 2)
                                 }
