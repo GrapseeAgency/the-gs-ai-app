@@ -518,7 +518,12 @@ enum NexlyIcons {
     }
 
     static func emojiToIconTokens(_ text: String) -> String {
+        // Direction before a numeric value carries a sign. Canonical text
+        // arrows preserve that data without allowing an emoji glyph through.
         var out = text
+        for (arrow, replacement) in [("↘", "↓"), ("↗", "↑")] {
+            out = out.replacingOccurrences(of: arrow + "\\uFE0F?(?=\\s*[+-]?\\s*[$€£¥₹৳]?\\s*\\d)", with: replacement, options: .regularExpression)
+        }
         for (emoji, icon) in emoji.sorted(by: { $0.key.count > $1.key.count }) {
             out = out.replacingOccurrences(of: emoji, with: ":\(icon):")
         }
