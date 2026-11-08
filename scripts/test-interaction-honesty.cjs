@@ -22,6 +22,9 @@ const { WidgetRenderer } = from('components/genui/WidgetRenderer')
 const { WIDGET_PROMPT } = from('lib/widgets/prompt')
 const { sanitizeReplyEmojis } = from('lib/nexly/icons')
 const { javascriptSandboxDocument } = from('lib/code/javascript-sandbox')
+const { escapeCodeDisplay, encodeSourceEditor, decodeSourceEditor } = from('lib/code/display-source')
+const { ensureWidgets } = from('lib/widgets/compile')
+const { parseStream } = from('components/genui/stream')
 const { MessageContent } = from('components/genui/MessageContent')
 const { SpontaneousConceptDeck } = from('components/genui/SpontaneousConceptDeck')
 const { CalcWidget } = from('components/genui/widgets/CalcWidget')
@@ -143,6 +146,72 @@ async function main() {
   check('JavaScript errors are actual exceptions', () => assert.match(messages[0].value, /actual failure/))
   check('worker source escapes script terminators', () => assert.ok(!javascriptSandboxDocument('</script><img src=x>').includes('</script><img')))
   check('worker network is forbidden and execution is bounded', () => { assert.match(doc, /connect-src 'none'/); assert.match(doc, /worker\.terminate\(\)/); assert.match(doc, /2000/) })
+
+  const unicodeSource = 'const data = {"😀": 7, "🌅": 9};\nconsole.log(data["😀"] + data["🌅"], "😀".length);'.replace('\\n', '\n')
+  // The reply normalizer, compiler, parser and runtime all receive the actual
+  // source. A text-only no-emoji assertion would miss corrupted computation.
+  for (const marker of ['```', '~~~', '````']) {
+    const reply = 'Ready 😀\n' + marker + 'javascript\n' + unicodeSource + '\n' + marker + '\nDone 😀'
+    const normalized = sanitizeReplyEmojis(reply)
+    check('machine fence survives normalization: ' + marker, () => {
+      assert.ok(normalized.includes(unicodeSource)); assert.ok(!normalized.split(marker)[0].includes('😀'))
+      assert.equal(sanitizeReplyEmojis(normalized), normalized)
+    })
+    const compiled = ensureWidgets(reply, { userPrompt: 'Explain this JavaScript code' })
+    const parsed = parseStream(compiled.text).find(segment => segment.kind === 'code')
+    check('actual compiler and parser preserve source: ' + marker, () => assert.equal(parsed?.code, unicodeSource))
+    messages = []; await self.onmessage({ data: parsed.code })
+    check('parsed Unicode-key computation is genuine: ' + marker, () => assert.equal(messages[0].value, '16 2'))
+    for (let boundary = reply.indexOf(marker) + marker.length + 'javascript\n'.length; boundary < reply.indexOf('\n' + marker, reply.indexOf(marker) + 1); boundary++) {
+      const prefix = reply.slice(0, boundary)
+      assert.ok(sanitizeReplyEmojis(prefix).endsWith(prefix.slice(prefix.indexOf(marker))), 'Accumulated stream boundary ' + boundary)
+    }
+    check('every accumulated source boundary preserves machine bytes: ' + marker, () => assert.ok(true))
+  }
+  check('whole JSON keys and escaped/literal strings survive preparse normalization', () => {
+    const payload = JSON.stringify({ '😀': '🌅', code: unicodeSource, nested: { '🔑': 7 } })
+    assert.equal(sanitizeReplyEmojis(payload), payload)
+    assert.deepEqual(JSON.parse(sanitizeReplyEmojis(payload)), JSON.parse(payload))
+  })
+  check('inline source and Unicode link destinations are not rewritten', () => {
+    const raw = 'Use `"😀".length` and [Open 😀](https://example.test/😀?key=🌅).'
+    const normalized = sanitizeReplyEmojis(raw)
+    assert.ok(normalized.includes('`"😀".length`'))
+    assert.ok(normalized.includes('(https://example.test/😀?key=🌅)'))
+    const html = new JSDOM(renderToString(h(MessageContent, { text: raw })))
+    assert.equal(html.window.document.querySelector('code').textContent, '"\\ud83d\\ude00".length')
+    assert.equal(html.window.document.querySelector('a').getAttribute('href'), 'https://example.test/😀?key=🌅')
+    assert.ok(!html.window.document.body.textContent.includes('😀'))
+    html.window.close()
+  })
+  check('intentional source whitespace survives the fence parser', () => {
+    const raw = '  console.log(7);\n\n'
+    assert.equal(parseStream('```js\n' + raw + '\n```')[0].code, raw)
+    const html = '  <pre>  exact  </pre>  '
+    assert.equal(parseStream('```html\n' + html + '\n```')[0].source, html)
+  })
+  check('incomplete executable HTML has no iframe to run partial source', () => {
+    const output = new JSDOM(renderToString(h(MessageContent, { text: '```html\n<button>Partial</button><script>throw 7;', streaming: true })))
+    assert.equal(output.window.document.querySelectorAll('iframe').length, 0)
+    assert.match(output.window.document.body.textContent, /Building html/)
+    output.window.close()
+  })
+  for (const source of [unicodeSource, 'console.log("\\ud83d\\ude00")', 'const cost = "বাংলা 日本語";', '"\\n\\t\\u2600"', '\u200d\ufe0f\u20e3', 'flag 🏳️‍🌈']) {
+    check('Unicode-safe editor is lossless: ' + JSON.stringify(source).slice(0, 45), () => {
+      const encoded = encodeSourceEditor(source)
+      assert.equal(decodeSourceEditor(encoded), source)
+      assert.equal(escapeCodeDisplay(encoded), encoded)
+    })
+  }
+  for (const draft of ['{"code":"x"}', '[]', 'null', '"unfinished', '"ok" false']) {
+    check('invalid source draft rejected: ' + draft, () => assert.throws(() => decodeSourceEditor(draft)))
+  }
+  messages = []
+  await self.onmessage({ data: 'for(let i=0;i<10000;i++) console.log(i);' })
+  check('worker throttles before postMessage and still completes after 100 logs', () => {
+    assert.equal(messages.length, 101)
+    assert.equal(messages.at(-1).kind, 'done')
+  })
 
   const calendarLabels = ['2025-11', '2026-01', '2026-04', '2026-06', '2026-11']
   const clock = new Date('2026-06-15T12:00:00Z')
@@ -276,6 +345,62 @@ async function main() {
   check('task edit saves the actual new label', () => { assert.match(document.body.textContent, /Confirm train tickets/); assert.doesNotMatch(document.body.textContent, /Book actual tickets/) })
   await click(document.querySelector('button[aria-label="Delete Confirm train tickets"]'))
   check('delete removes the task and resets progress', () => { assert.equal(document.querySelectorAll('[role="checkbox"]').length, 0); assert.equal(document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '0') })
+  let copiedSource = null
+  Object.defineProperty(global, 'navigator', { configurable: true, value: { clipboard: { writeText: async source => { copiedSource = source } } } })
+  const typeSource = async value => {
+    const input = document.querySelector('textarea')
+    assert.ok(input, 'real code editor exists')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set.call(input, value)
+      input.dispatchEvent(new window.Event('input', { bubbles: true }))
+    })
+  }
+  await mount(h(CodeBlock, { language: 'javascript', code: unicodeSource }))
+  check('visible source is escaped without leaking raw Unicode emoji', () => {
+    assert.ok(!document.body.textContent.includes('😀'))
+    assert.ok(document.body.textContent.includes('\\ud83d\\ude00'))
+  })
+  await click(buttons().find(b => b.textContent === 'Copy'))
+  check('Copy receives exact original source rather than display escapes', () => assert.equal(copiedSource, unicodeSource))
+  await click(buttons().find(b => b.textContent === 'Edit'))
+  check('Unicode source starts a reversible JSON editor', () => {
+    assert.equal(document.querySelector('textarea').getAttribute('aria-label'), 'JSON-encoded source')
+    assert.equal(decodeSourceEditor(document.querySelector('textarea').value), unicodeSource)
+  })
+  await typeSource('"unterminated')
+  await click(buttons().find(b => b.textContent.includes('Run Code')))
+  check('invalid live editor draft cannot execute stale valid source', () => {
+    assert.match(document.body.textContent, /Not executed: correct/)
+    assert.equal(document.querySelectorAll('iframe').length, 0)
+  })
+  await click(buttons().find(b => b.textContent === 'Done'))
+  check('Done cannot conceal invalid draft errors', () => assert.ok(document.querySelector('textarea')))
+  const updated = unicodeSource + '\nconsole.log("actual edit");'
+  await typeSource(encodeSourceEditor(updated))
+  await click(buttons().find(b => b.textContent === 'Done'))
+  await click(buttons().find(b => b.textContent === 'Copied' || b.textContent === 'Copy'))
+  check('valid Unicode editor changes preserve the actual source', () => assert.equal(copiedSource, updated))
+  await click(buttons().find(b => b.textContent === 'Reset'))
+  await click(buttons().find(b => b.textContent === 'Copied' || b.textContent === 'Copy'))
+  check('Reset restores exact original source and clears prior error state', () => {
+    assert.equal(copiedSource, unicodeSource)
+    assert.equal(document.querySelector('[role="alert"]'), null)
+  })
+  await mount(h(CodeBlock, { language: 'json', code: '{"fresh":7}' }))
+  check('new code/language resets editor, output and execution state', () => {
+    assert.equal(document.querySelector('textarea'), null)
+    assert.equal(document.querySelector('iframe'), null)
+    assert.ok(!document.body.textContent.includes('actual edit'))
+  })
+  await click(buttons().find(b => b.textContent === 'Edit'))
+  await typeSource('')
+  check('cleared source remains editable', () => assert.equal(document.querySelector('textarea').value, ''))
+  await typeSource('"😀"')
+  check('pasting emoji in ordinary editor switches losslessly to encoded mode', () => {
+    assert.equal(decodeSourceEditor(document.querySelector('textarea').value), '"😀"')
+    assert.equal(document.querySelector('textarea').getAttribute('aria-label'), 'JSON-encoded source')
+    assert.ok(!document.querySelector('textarea').value.includes('😀'))
+  })
   await mount(h(CodeBlock, { language: 'sql', code: 'SELECT * FROM private_accounts' }))
   await click(buttons().find((b) => b.textContent.includes('Run Code')))
   check('SQL button never fabricates a result', () => { assert.match(document.body.textContent, /no database is connected/); assert.doesNotMatch(document.body.textContent, /Ava Chen|3 rows returned/) })
