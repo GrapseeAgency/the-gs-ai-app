@@ -8,6 +8,9 @@ package com.grapsee.gsai.ui.chat.content
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -730,160 +733,71 @@ internal fun FlashcardsWidgetView(w: FlashcardsWidget) {
 internal fun ChecklistWidgetView(w: ChecklistWidget) {
     val c = GsTheme.colors
     val accent = seriesColor(0)
-    var addedTasks by remember(w.items) { mutableStateOf(listOf<ChecklistItem>()) }
-    var addingTask by remember { mutableStateOf(false) }
-    var newTaskInput by remember { mutableStateOf("") }
-    val allItems = remember(w.items, addedTasks) { w.items + addedTasks }
-    val checked = remember(w.items) {
-        mutableStateMapOf<Int, Boolean>().apply {
-            w.items.forEachIndexed { idx, item -> put(idx, item.done) }
-        }
-    }
-    val doneCount = allItems.indices.count { checked[it] == true }
-    val total = allItems.size.coerceAtLeast(1)
+    // Stable identities keep completion attached to the task after deletions.
+    var tasks by remember(w) { mutableStateOf(w.items.mapIndexed { index, item -> index to item }) }
+    var nextId by remember(w) { mutableIntStateOf(w.items.size) }
+    var editingId by remember(w) { mutableStateOf<Int?>(null) }
+    var adding by remember(w) { mutableStateOf(false) }
+    var draft by remember(w) { mutableStateOf("") }
+    val doneCount = tasks.count { it.second.done }
+    val progress = doneCount.toFloat() / tasks.size.coerceAtLeast(1)
     WidgetCardShell(NexlyIcons.cleanPlainText(w.title).ifEmpty { "Your Todo List" }, "checklist") {
         Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("$doneCount of ${allItems.size} completed", style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
-                Text("${((doneCount.toFloat() / total.toFloat()) * 100f).toInt()}%", style = MaterialTheme.typography.labelSmall, color = accent)
-            }
-            LinearProgressIndicator(
-                progress = { (doneCount.toFloat() / total.toFloat()).coerceIn(0f, 1f) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(5.dp)
-                    .clip(RoundedCornerShape(99.dp)),
-                color = accent,
-                trackColor = c.border.copy(alpha = 0.25f)
-            )
-            allItems.forEachIndexed { idx, item ->
-                val isDone = checked[idx] == true
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { checked[idx] = !isDone }
-                        .padding(vertical = 5.dp, horizontal = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clip(RoundedCornerShape(5.dp))
-                            .background(if (isDone) Color(0xFF6C4CF6) else Color.White.copy(alpha = 0.85f))
-                            .then(
-                                if (!isDone) Modifier.border(1.5.dp, Color(0xFF9C88F8), RoundedCornerShape(5.dp))
-                                else Modifier
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (isDone) {
-                            NexlyGlyph(name = "check", size = 11.dp, color = Color.White)
-                        }
-                    }
-                    Spacer(Modifier.width(9.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            NexlyIcons.cleanPlainText(item.label),
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                textDecoration = if (isDone) TextDecoration.LineThrough else TextDecoration.None
-                            ),
-                            color = if (isDone) c.textTertiary else c.textPrimary
-                        )
-                        if (item.detail.isNotBlank()) {
-                            Text(NexlyIcons.cleanPlainText(item.detail), style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
-                        }
-                    }
-                    if (idx >= w.items.size) {
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .clickable {
-                                    val customIdx = idx - w.items.size
-                                    addedTasks = addedTasks.filterIndexed { i, _ -> i != customIdx }
-                                    checked.remove(idx)
-                                }
-                                .padding(4.dp)
+            Text("$doneCount of ${tasks.size} completed", style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
+            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(99.dp)), color = accent, trackColor = c.border.copy(alpha = 0.25f))
+            tasks.forEach { (id, item) ->
+                androidx.compose.runtime.key(id) {
+                    val label = NexlyIcons.cleanPlainText(item.label)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                                .toggleable(value = item.done, role = androidx.compose.ui.semantics.Role.Checkbox, onValueChange = { checked ->
+                                    tasks = tasks.map { if (it.first == id) id to item.copy(done = checked) else it }
+                                }).padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            NexlyGlyph(name = "x", size = 12.dp, color = c.textTertiary)
+                            Box(Modifier.size(18.dp).clip(RoundedCornerShape(5.dp))
+                                .background(if (item.done) accent else Color.White.copy(alpha = 0.85f))
+                                .border(1.dp, accent, RoundedCornerShape(5.dp)), contentAlignment = Alignment.Center) {
+                                if (item.done) NexlyGlyph(name = "check", size = 11.dp, color = Color.White)
+                            }
+                            Spacer(Modifier.width(9.dp))
+                            Column {
+                                Text(label, style = MaterialTheme.typography.bodyMedium.copy(textDecoration = if (item.done) TextDecoration.LineThrough else TextDecoration.None), color = if (item.done) c.textTertiary else c.textPrimary)
+                                if (item.detail.isNotBlank()) Text(NexlyIcons.cleanPlainText(item.detail), style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                            }
+                        }
+                        TextButton(onClick = { editingId = id; adding = false; draft = label }, modifier = Modifier.semantics { contentDescription = "Edit task: $label" }) {
+                            NexlyGlyph(name = "pencil", size = 13.dp, color = accent)
+                        }
+                        TextButton(onClick = {
+                            tasks = tasks.filterNot { it.first == id }
+                            if (editingId == id) { editingId = null; draft = "" }
+                        }, modifier = Modifier.semantics { contentDescription = "Delete task: $label" }) {
+                            NexlyGlyph(name = "trash", size = 13.dp, color = c.textTertiary)
                         }
                     }
                 }
             }
-            if (addingTask) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.White.copy(alpha = 0.92f))
-                            .border(1.dp, Color(0xFFD8CEFA), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        if (newTaskInput.isEmpty()) {
-                            Text("Type a new task…", fontSize = 12.sp, color = Color(0xFF958BB8))
-                        }
-                        BasicTextField(
-                            value = newTaskInput,
-                            onValueChange = { newTaskInput = it },
-                            singleLine = true,
-                            textStyle = TextStyle(fontSize = 12.5.sp, color = Color(0xFF1F1638)),
-                            cursorBrush = SolidColor(Color(0xFF6C4CF6)),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF6C4CF6))
-                            .clickable {
-                                val trimmed = newTaskInput.trim()
-                                if (trimmed.isNotEmpty()) {
-                                    val nextIdx = allItems.size
-                                    addedTasks = addedTasks + ChecklistItem(label = trimmed, done = false)
-                                    checked[nextIdx] = false
-                                    newTaskInput = ""
-                                    addingTask = false
-                                }
-                            }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Text("Add", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                newTaskInput = ""
-                                addingTask = false
-                            }
-                            .padding(horizontal = 6.dp, vertical = 6.dp)
-                    ) {
-                        NexlyGlyph(name = "x", size = 13.dp, color = c.textSecondary)
-                    }
+            if (adding || editingId != null) {
+                BasicTextField(value = draft, onValueChange = { draft = NexlyIcons.cleanPlainText(it) }, singleLine = true,
+                    textStyle = TextStyle(fontSize = 13.sp, color = c.textPrimary), cursorBrush = SolidColor(accent),
+                    modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(8.dp)).padding(10.dp)
+                        .semantics { contentDescription = "Task text" })
+                Row {
+                    TextButton(enabled = draft.trim().isNotEmpty(), onClick = {
+                        val text = draft.trim()
+                        val target = editingId
+                        tasks = if (target == null) tasks + (nextId++ to ChecklistItem(label = text))
+                            else tasks.map { if (it.first == target) it.first to it.second.copy(label = text) else it }
+                        editingId = null; adding = false; draft = ""
+                    }) { Text(if (editingId == null) "Add" else "Save task") }
+                    TextButton(onClick = { editingId = null; adding = false; draft = "" }) { Text("Cancel task edit") }
                 }
             } else {
-                Row(
-                    modifier = Modifier
-                        .padding(top = 2.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color.White.copy(alpha = 0.8f))
-                        .border(1.dp, Color(0xFFE0D8FA), RoundedCornerShape(999.dp))
-                        .clickable { addingTask = true }
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    NexlyGlyph(name = "plus", size = 11.dp, color = Color(0xFF5B3DF5))
-                    Text(
-                        text = "Add Task",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = Color(0xFF5B3DF5)
-                    )
+                TextButton(onClick = { adding = true; draft = "" }) {
+                    NexlyGlyph(name = "plus", size = 11.dp, color = accent)
+                    Spacer(Modifier.width(5.dp)); Text("Add Task")
                 }
             }
         }
