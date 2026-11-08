@@ -5,6 +5,24 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun actualChartDomainsRetainLossesZeroAndSourcePeakWithoutDoublingTheRange() {
+        val signed = chartValueDomainAndroid(listOf(-20f, 0f, 10f))
+        assertEquals(-20.0, signed.lower, 0.0)
+        assertEquals(10.0, signed.upper, 0.0)
+        assertEquals(1f, signed.heightFraction(-20f), 0f)
+        assertEquals(1f / 3f, signed.heightFraction(0f), 0.000001f)
+        assertEquals(0f, signed.heightFraction(10f), 0f)
+        val sales = chartValueDomainAndroid(listOf(22800f, 34200f, 50400f, 75600f, 60500f, 78400f))
+        assertEquals(78400.0, sales.upper, 0.0)
+        assertEquals(0f, sales.heightFraction(78400f), 0f)
+        assertEquals(0.0, chartValueDomainAndroid(listOf(-5f, -2f)).upper, 0.0)
+        assertEquals(1.0, chartValueDomainAndroid(listOf(0f, 0f)).upper, 0.0)
+        val extreme = chartValueDomainAndroid(listOf(-Float.MAX_VALUE, Float.MAX_VALUE))
+        assertEquals(0.5f, extreme.heightFraction(0f), 0f)
+        assertEquals(Float.MAX_VALUE, extreme.axisValue(0f), 0f)
+        assertEquals(-Float.MAX_VALUE, extreme.axisValue(1f), 0f)
+    }
+
     @Test fun axisLabelsCoverTheCompleteActualObservationDomain() {
         assertEquals(listOf(0, 4, 9, 13, 17, 21, 26, 30), chartAxisLabelIndicesAndroid(31))
         assertEquals((0 until 6).toList(), chartAxisLabelIndicesAndroid(6))
