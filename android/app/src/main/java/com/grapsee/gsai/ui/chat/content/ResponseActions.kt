@@ -36,7 +36,7 @@ internal fun responseSourceExtension(language: String?): String = when (language
     "rust" -> "rs"
     "bash", "shell", "sh" -> "sh"
     "htm", "html" -> "html"
-    "swift", "java", "cpp", "c", "go", "css", "json", "sql", "svg", "jsx", "tsx" -> language.lowercase()
+    "swift", "java", "cpp", "c", "go", "css", "json", "sql", "svg", "jsx", "tsx" -> language.orEmpty().lowercase()
     else -> "txt"
 }
 
