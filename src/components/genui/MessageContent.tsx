@@ -1,6 +1,6 @@
 'use client'
 
-import { parseTableNumber, chartFromTableCells } from '@/lib/nexly/table-number'
+import { parseTableNumber, chartFromTableCells, plainTableCell } from '@/lib/nexly/table-number'
 import { escapeCodeDisplay } from '@/lib/code/display-source'
 import { downloadResponseFile, responseSourceArchive, responseSourceFile } from '@/lib/code/response-export'
 
@@ -881,8 +881,8 @@ function ProseTableGrid({
   const sortedRows = useMemo(() => {
     if (sortCol === null) return block.rows
     return [...block.rows].sort((a, b) => {
-      const ca = (a[sortCol] ?? '').replace(/[*_`~]/g, '').trim()
-      const cb = (b[sortCol] ?? '').replace(/[*_`~]/g, '').trim()
+      const ca = plainTableCell(a[sortCol] ?? '')
+      const cb = plainTableCell(b[sortCol] ?? '')
       const na = parseTableNumber(ca)
       const nb = parseTableNumber(cb)
       const cmp = na !== null && nb !== null ? na - nb : ca.localeCompare(cb, undefined, { numeric: true, sensitivity: 'base' })
@@ -893,11 +893,11 @@ function ProseTableGrid({
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize))
   const safePage = Math.min(page, totalPages - 1)
   const visibleRows = sortedRows.slice(safePage * pageSize, safePage * pageSize + pageSize)
-  const firstHeaderClean = (block.headers[0] ?? '').replace(/[*_`]/g, '').trim()
+  const firstHeaderClean = plainTableCell(block.headers[0] ?? '')
   const primaryNameCol = ['#', 'Rank', 'No', 'ID'].includes(firstHeaderClean) ? 1 : 0
 
   const renderCellContent = (raw: string, colIdx: number, keyPrefix: string) => {
-    const clean = raw.replace(/[*_`]/g, '').trim()
+    const clean = plainTableCell(raw)
     const m = clean.match(/^([↑↓↗↘+-])?\s*([+-]?\d+(?:\.\d+)?%)$/)
     if (m && (clean.startsWith('+') || clean.startsWith('-') || clean.startsWith('↑') || clean.startsWith('↓') || clean.startsWith('↗') || clean.startsWith('↘'))) {
       const isNeg = clean.startsWith('-') || clean.startsWith('↓') || clean.startsWith('↘')
