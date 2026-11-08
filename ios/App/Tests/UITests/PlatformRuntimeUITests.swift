@@ -10,6 +10,37 @@ final class PlatformRuntimeUITests: XCTestCase {
         capture.name = "genui-actual-\(label.lowercased())-failure"; capture.lifetime = .keepAlways; add(capture)
     }
 
+    func testGeneratedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated timer"].waitForExistence(timeout: 20))
+        app.buttons["Open generated timer"].tap()
+        let remaining = app.staticTexts["timer.remaining"]
+        let toggle = app.buttons["timer.toggle"]
+        let duration = app.textFields["timer.duration"]
+        XCTAssertTrue(remaining.waitForExistence(timeout: 10))
+        XCTAssertEqual(remaining.label, "00:00"); XCTAssertFalse(toggle.isEnabled)
+        duration.tap(); duration.typeText("2")
+        XCTAssertTrue(toggle.isEnabled); toggle.tap()
+        XCTAssertEqual(toggle.label, "Pause"); toggle.tap()
+        let paused = remaining.label
+        let changesWhilePaused = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", paused), object: remaining)
+        changesWhilePaused.isInverted = true
+        XCTAssertEqual(XCTWaiter.wait(for: [changesWhilePaused], timeout: 1.2), .completed)
+        app.buttons["timer.reset"].tap()
+        XCTAssertEqual(remaining.label, "00:02"); XCTAssertTrue(duration.isEnabled)
+        toggle.tap()
+        XCTAssertTrue(app.staticTexts["timer.completed"].waitForExistence(timeout: 5))
+        XCTAssertEqual(remaining.label, "00:00"); XCTAssertFalse(toggle.isEnabled)
+        app.buttons["Use next timer payload"].tap()
+        XCTAssertEqual(remaining.label, "00:05"); XCTAssertTrue(toggle.isEnabled)
+        XCTAssertFalse(app.staticTexts["timer.completed"].exists)
+        XCTAssertTrue(app.staticTexts["Local countdown only. No background alarm or notification is scheduled."].exists)
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-timer-actual-seconds-pause-reset-source-replacement"; capture.lifetime = .keepAlways; add(capture)
+    }
+
     func testGeneratedBookingSavesOnlyActualLocalSelectionWithoutReservation() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
