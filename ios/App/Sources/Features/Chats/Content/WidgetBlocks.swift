@@ -520,7 +520,17 @@ func isValidWidget(kind: String, json: String) -> Bool {
             return ((obj["steps"] ?? obj["stages"]) as? [Any])?.isEmpty == false
         }
         return !obj.isEmpty
-    case "media", "sim", "stage3d", "canvas", "editor", "terminal", "collab":
+    case "collab":
+        let surface = (obj["surface"] ?? obj["type"]) as? String ?? "counter"
+        guard COLLAB_TYPES.contains(surface) else { return false }
+        let rawItems = (obj["items"] ?? obj["options"]) as? [Any] ?? []
+        guard rawItems.count <= 12, rawItems.allSatisfy({ ($0 as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }) else { return false }
+        if surface == "vote" && rawItems.count < 2 { return false }
+        if let raw = obj["start"] {
+            guard let number = raw as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite else { return false }
+        }
+        return true
+    case "media", "sim", "stage3d", "canvas", "editor", "terminal":
         return !obj.isEmpty
     default:
         return false
