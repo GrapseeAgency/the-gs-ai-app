@@ -760,6 +760,19 @@ export function emojiToIconTokens(text: string): string {
  * without changing what Copy/Run receive. Never apply this to isolated SSE
  * chunks: fence markers and Unicode sequences can cross chunk boundaries.
  */
+/** Inline code and navigation destinations are also machine data. */
+export function sanitizeProseEmojis(text: string): string {
+  const machine = /(?<!`)(`+)(?!`)([^\r\n]*?)\1(?!`)|(!?\[[^\]\r\n]*\]\()([^)\r\n]*)(\))|https?:\/\/[^\s<>]+/g
+  let out = '', cursor = 0
+  for (const match of text.matchAll(machine)) {
+    const start = match.index ?? 0
+    out += emojiToIconTokens(text.slice(cursor, start))
+    out += match[3] !== undefined ? emojiToIconTokens(match[3]) + match[4] + match[5] : match[0]
+    cursor = start + match[0].length
+  }
+  return out + emojiToIconTokens(text.slice(cursor))
+}
+
 export function sanitizeReplyEmojis(markdown: string): string {
   if (!markdown) return markdown
   const whole = markdown.trim()
@@ -781,7 +794,7 @@ export function sanitizeReplyEmojis(markdown: string): string {
       marker = fence[1][0]; width = fence[1].length
       return line
     }
-    return emojiToIconTokens(line)
+    return sanitizeProseEmojis(line)
   }).join('')
 }
 
