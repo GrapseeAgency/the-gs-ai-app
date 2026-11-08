@@ -431,6 +431,15 @@ async function main() {
     assert.match(document.body.textContent, /sum of observations is 30/)
     assert.doesNotMatch(document.body.textContent, /cumulative volume/)
   })
+  check('a chart sum never claims the individual points growth as aggregate-period growth', () => {
+    const label = Array.from(document.querySelectorAll('div')).find(node => node.textContent === 'Sum')
+    assert.ok(label)
+    const card = label.parentElement.textContent
+    assert.match(card, /30/)
+    assert.match(card, /2 points/)
+    assert.doesNotMatch(card, /%|↑|↓/)
+    assert.match(document.body.textContent, /First–last change/)
+  })
   await click(buttons().find(b => b.textContent.includes('All')))
   check('range uses longest series and does not restore short out-of-window history', () => {
     assert.match(document.body.textContent, /Last 3 points/)
