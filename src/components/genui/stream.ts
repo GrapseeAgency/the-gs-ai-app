@@ -54,6 +54,12 @@ export function parseStream(text: string): Segment[] {
         return [{ kind: 'widget', widget: v.kind, payload: v.widget, complete: true }]
       }
     }
+    try {
+      JSON.parse(trimmedWhole)
+      // Valid non-widget JSON is source, not Markdown. Parsing it as prose
+      // changes strings containing emphasis, links, icon tokens or escapes.
+      return [{ kind: 'code', code: text, language: 'json' }]
+    } catch { /* Not a whole JSON document; continue ordinary prose parsing. */ }
   }
 
   const segments: Segment[] = []
