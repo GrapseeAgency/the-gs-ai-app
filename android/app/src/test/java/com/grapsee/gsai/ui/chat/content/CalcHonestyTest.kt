@@ -5,6 +5,25 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun ordinaryMarkdownSourcesUseOneHeadingAndOnlyActualCompleteSourceDestinations() {
+        for (marker in listOf("1.", "-")) {
+            val wire = "## Key Sources\n\n$marker [IEA](https://www.iea.org/) - Supplied report.\n${if (marker == "1.") "2." else "-"} [IRENA](https://www.irena.org/) - Supplied publication."
+            val parsed = parseBlocks(wire)
+            val card = requireNotNull(sourceCardForHeading(parsed[0], parsed[1]))
+            assertEquals("Key Sources", card.second)
+            assertEquals(listOf("https://www.iea.org/", "https://www.irena.org/"), card.first.citations.map { it.url })
+        }
+        // Recognising a publisher's name is not evidence for any destination.
+        for (name in listOf("IEA", "IRENA", "Nature", "React", "Tailwind", "MDN", "Python", "Nexly", "arXiv", "IEEE")) {
+            val parsed = parseBlocks("## Sources\n\n1. $name: supplied name only")
+            assertNull(sourceCardForHeading(parsed[0], parsed[1]))
+        }
+        val mixed = parseBlocks("## Sources\n\n1. [Actual source](https://example.org/report)\n2. Missing destination must remain visible.")
+        assertNull(sourceCardForHeading(mixed[0], mixed[1]))
+        val unrelated = parseBlocks("## Priorities\n\n1. [Actual link](https://example.org/)")
+        assertNull(sourceCardForHeading(unrelated[0], unrelated[1]))
+    }
+
     @Test fun chartLabelsUseActualCurrencyPositionSignedMagnitudeAndUnits() {
         assertEquals("$321.9K", axisLabel(321900f, "$"))
         assertEquals("-$78.4K", axisLabel(-78400f, "$"))
