@@ -12,6 +12,7 @@ import { CopyChip } from '../primitives/CopyChip'
 import { GlassIcon } from '@/components/nexly/GlassIcon'
 import { arithmeticPreview } from '@/lib/code/arithmetic-preview'
 import { javascriptSandboxDocument } from '@/lib/code/javascript-sandbox'
+import { escapeCodeDisplay, requiresEncodedEditor, encodeSourceEditor, decodeSourceEditor } from '@/lib/code/display-source'
 
 const KEYWORD_RE =
   /\b(const|let|var|function|return|if|else|for|while|switch|case|break|continue|new|class|extends|import|from|export|default|async|await|try|catch|finally|throw|typeof|instanceof|in|of|def|elif|lambda|yield|with|as|pass|raise|True|False|None|fun|val|when|object|interface|struct|enum|guard|protocol|impl|pub|fn|match|mut|use|SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|GROUP|BY|ORDER|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|LIMIT)\b/g
@@ -88,10 +89,17 @@ function highlightLine(line: string, dark: boolean): ReactNode[] {
 }
 
 export function CodeBlock({ code, language }: { code: string; language?: string }) {
+  return <CodeControls key={JSON.stringify([code, language])} code={code} language={language} />
+}
+
+function CodeControls({ code, language }: { code: string; language?: string }) {
   const { accent } = useWidgetIdentity()
   const lang = (language ?? 'code').toLowerCase().trim()
   const [source, setSource] = useState(code)
   const [editing, setEditing] = useState(false)
+  const [editorDraft, setEditorDraft] = useState('')
+  const [editorEncoded, setEditorEncoded] = useState(false)
+  const [editorError, setEditorError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [runCount, setRunCount] = useState(0)
   const [output, setOutput] = useState<string | null>(null)
@@ -129,12 +137,13 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
         >
           {idx + 1}
         </span>
-        <span style={{ flex: 1, minWidth: 0 }}>{highlightLine(line, true)}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>{highlightLine(escapeCodeDisplay(line), true)}</span>
       </div>
     ))
   }, [visibleLines])
 
   const runCode = () => {
+    if (editing && editorError) { setErrorText('Not executed: correct the JSON-encoded source draft first.'); return }
     setRunCount((c) => c + 1)
     setErrorText(null)
     setOutput(null)
@@ -222,7 +231,16 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
               {expanded ? 'Collapse' : `Expand (${allLines.length})`}
             </button>
           )}
-          <button type="button" onClick={() => setEditing((v) => !v)} style={chipStyle}>
+          <button type="button" onClick={() => {
+              if (editing && editorError) return
+              if (!editing) {
+                const encoded = requiresEncodedEditor(source)
+                setEditorEncoded(encoded)
+                setEditorDraft(encoded ? encodeSourceEditor(source) : source)
+                setEditorError(null)
+              }
+              setEditing(value => !value)
+            }} style={chipStyle}>
             {editing ? 'Done' : 'Edit'}
           </button>
           {source !== code ? (
@@ -244,10 +262,24 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
       </div>
 
       {/* Code Surface */}
+      {requiresEncodedEditor(source) && <div style={{ padding: '6px 12px', fontSize: 11, color: '#C5BCFF' }}>Unicode symbols are shown as escapes; Copy and Run use the original source.</div>}
+      {editing && editorEncoded && <label htmlFor="gs-code-json-editor" style={{ padding: '6px 12px', fontSize: 11, color: '#C5BCFF' }}>Unicode-safe editor: edit one JSON-encoded source string.</label>}
+      {editorError && <div role="alert" style={{ padding: '6px 12px', color: '#FCA5A5' }}>{editorError}</div>}
       {editing ? (
         <textarea
-          value={source}
-          onChange={(e) => setSource(e.target.value)}
+          aria-label={editorEncoded ? 'JSON-encoded source' : 'Source code'}
+          value={editorDraft}
+          onChange={(e) => {
+            const draft = e.target.value
+            if (!editorEncoded && requiresEncodedEditor(draft)) {
+              setEditorEncoded(true); setEditorDraft(encodeSourceEditor(draft)); setSource(draft); setEditorError(null); return
+            }
+            setEditorDraft(escapeCodeDisplay(draft))
+            try {
+              setSource(editorEncoded ? decodeSourceEditor(draft) : draft)
+              setEditorError(null)
+            } catch { setEditorError('Enter one valid JSON string. The invalid draft has not replaced executable source.') }
+          }}
           spellCheck={false}
           rows={Math.min(18, Math.max(4, allLines.length + 1))}
           style={{
@@ -424,7 +456,7 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
                 whiteSpace: 'pre-wrap',
               }}
             >
-              {output}
+              {escapeCodeDisplay(output)}
             </pre>
           ) : null}
           {errorText ? (
@@ -440,7 +472,7 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
                 whiteSpace: 'pre-wrap',
               }}
             >
-              {errorText}
+              {escapeCodeDisplay(errorText)}
             </pre>
           ) : null}
         </div>
