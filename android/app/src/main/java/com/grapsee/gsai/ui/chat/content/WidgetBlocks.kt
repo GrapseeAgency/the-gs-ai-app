@@ -1350,6 +1350,7 @@ internal fun WidgetCardShell(
             }
             // Inset is a card inside a card: the content sits in its own
             // recessed panel, so a form never reads as a chart with fields.
+            CompositionLocalProvider(LocalWidgetStyle provides WidgetStyle(chosenHue, chosenTone)) {
             if (chosenTone == CardTone.Inset) {
                 Box(
                     Modifier
@@ -1362,6 +1363,7 @@ internal fun WidgetCardShell(
                 ) { content() }
             } else {
                 content()
+            }
             }
         }
     }
@@ -1521,8 +1523,8 @@ private fun ChartWidgetView(w: ChartWidget) {
     WidgetCardShell(
         NexlyIcons.cleanPlainText(w.title).ifEmpty { "Chart" },
         "chart",
-        hue = WidgetPalette.at(CHART_HUE_SLOTS[activeType] ?: 0),
-        tone = if (activeType in EDITORIAL_CHARTS) CardTone.Editorial else CardTone.Tinted
+        hue = if (isSwitchable) Color(0xFF6C4CF6) else WidgetPalette.at(CHART_HUE_SLOTS[activeType] ?: 0),
+        tone = if (!isSwitchable && activeType in EDITORIAL_CHARTS) CardTone.Editorial else CardTone.Tinted
     ) {
         if (isSwitchable) {
             // 07. Interactive Charts: Type Switcher Pills + Range Selector (Screenshot 6)
@@ -1681,7 +1683,9 @@ private fun ChartWidgetView(w: ChartWidget) {
                 } else null
             }
             if (kpiStats != null) {
-                Text("Summary: ${slicedWidget.series.firstOrNull()?.name?.ifEmpty { "Series 1" } ?: "Series 1"}", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textSecondary)
+                if (slicedWidget.series.size > 1) {
+                    Text("Summary: ${slicedWidget.series.firstOrNull()?.name?.ifEmpty { "Series 1" } ?: "Series 1"}", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textSecondary)
+                }
                 val (totalStr, peakPair, pct) = kpiStats
                 val pos = pct != null && pct >= 0.0
                 val pctStr = pct?.let { String.format(java.util.Locale.US, "%s%.1f%%", if (pos) "+" else "", it) } ?: if (activeType in setOf("pie", "donut")) "N/A (slice values)" else "N/A (zero baseline)"
@@ -1909,6 +1913,7 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
         }
     }
     val activeDatum = probe.datum
+    Box(Modifier.fillMaxWidth().heightIn(min = 56.dp), contentAlignment = Alignment.Center) {
     if (activeDatum != null) {
         val selectedSeries = w.series.firstOrNull { it.name == activeDatum.series } ?: w.series.firstOrNull()
         val pts = selectedSeries?.data.orEmpty()
@@ -1928,6 +1933,9 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
                     .border(1.dp, Color(0xFFDCD3FA), RoundedCornerShape(10.dp))
                     .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
+                if (w.series.size > 1 && !activeDatum.series.isNullOrBlank()) {
+                    Text(activeDatum.series.orEmpty(), fontSize = 10.sp, color = GsTheme.colors.textTertiary, maxLines = 1)
+                }
                 Text(
                     text = activeDatum.label,
                     fontSize = 10.5.sp,
@@ -1953,6 +1961,9 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
                 }
             }
         }
+    } else {
+        Text("Tap a point to read it", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)
+    }
     }
     Canvas(
         Modifier
@@ -2085,7 +2096,6 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
             }
         }
     }
-    ChartInspectBar(probe, w.unit, "Tap a point to read it", colors.firstOrNull() ?: GsTheme.colors.accent)
     // Sample across the complete source domain, and place each label at its
     // actual plotted x coordinate. Taking the first eight and stretching them
     // across a 31-point plot attached the wrong labels to the later points.
