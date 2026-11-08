@@ -32,6 +32,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -185,6 +187,17 @@ fun HtmlBlockView(block: Block.HtmlBlock, streaming: Boolean) {
     }
     val tokens = rememberDocTokens()
     val context = LocalContext.current
+    if (block.mode == "sandbox") {
+        val clipboard = LocalClipboardManager.current
+        val payload = remember(block.code) { runCatching { widgetJson.decodeFromString<SandboxPayload>(block.code) }.getOrNull() }
+        if (payload == null) Text("Not executed: invalid code sandbox payload.")
+        else Column {
+            if (payload.title.isNotBlank()) Text(CodeDisplay.escape(payload.title))
+            CodeBlockCard(language = payload.language, code = payload.code, open = block.open,
+                onCopyCode = { clipboard.setText(AnnotatedString(it)) })
+        }
+        return
+    }
     val doc by produceState<String?>(null, block.mode, block.code, tokens) {
         value = if (block.code.length > MAX_DOC_CHARS) null
         else withContext(Dispatchers.IO) { buildDocument(block.mode, block.code, tokens) }
@@ -810,117 +823,20 @@ private data class SandboxPayload(
     val height: Int = 0
 )
 
-private fun buildSandboxDoc(code: String, textHex: String, accentHex: String): String? {
-    val p = try {
-        widgetJson.decodeFromString<SandboxPayload>(code)
-    } catch (_: Throwable) {
-        null
-    } ?: return null
-    if (p.code.isBlank()) return null
-    return sandboxDoc(p.language, p.code, p.title, textHex, accentHex, p.height)
-}
+// Structured sandbox payloads use the same native source editor as code fences.
+// They are never evaluated synchronously in a WebView host script.
+private fun buildSandboxDoc(code: String, textHex: String, accentHex: String): String? = null
 
-private fun htmlEscapeText(s: String): String =
-    s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-private fun sandboxDoc(
-    language: String,
-    code: String,
-    title: String,
-    textHex: String,
-    accentHex: String,
-    rawHeight: Int = 0
-): String {
-    val lang = language.lowercase()
-    val runnable = lang in setOf("javascript", "js", "html", "htm", "svg")
-    val isHtml = lang in setOf("html", "htm", "svg")
-    val h = if (rawHeight in 120..520) rawHeight else 150
-    val titleHtml = if (title.isEmpty()) "" else "<div class=\"ttl\">${jsString(title)}</div>"
-    val langLabel = if (lang.isBlank()) "text" else lang
-    val runLabel = if (isHtml) "Preview" else "Run"
-    val notice = if (runnable) "" else
-        "<div class=\"note\">$langLabel can be edited and copied here. Execution is JavaScript/HTML only — running other languages on-device is not supported.</div>"
-    return """
-<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; frame-src 'self' data: blob:;">
-<style>
-html,body{margin:0;background:transparent;color:$textHex;font-family:Roboto,system-ui,sans-serif;font-size:13px}
-.ttl{font-size:13px;font-weight:600;margin:0 0 6px}
-.bar{display:flex;align-items:center;gap:8px;margin:0 0 6px}
-.bar .sp{flex:1}
-.tag{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;opacity:.6}
-button{font:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:0;background:$accentHex;color:#fff;cursor:pointer}
-button.ghost{background:rgba(128,128,128,.18);color:$textHex}
-textarea{width:100%;box-sizing:border-box;min-height:${h}px;resize:vertical;border-radius:9px;border:1px solid rgba(128,128,128,.35);background:rgba(128,128,128,.08);color:$textHex;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.5;padding:9px 10px;outline:none}
-#out{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;padding:8px 10px;margin-top:8px;border-radius:9px;background:rgba(128,128,128,.1);display:none}
-#out.err{color:#c0392b}
-iframe{width:100%;border:0;border-radius:9px;margin-top:8px;background:#fff}
-.note{font-size:11.5px;opacity:.7;margin-top:8px;line-height:1.45}
-</style></head><body>
-$titleHtml
-<div class="bar"><span class="tag">$langLabel</span><span class="sp"></span>
-<button class="ghost" id="copy">Copy</button>
-<button id="run" ${if (runnable) "" else "style=\"display:none\""}>$runLabel</button></div>
-<textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off">${htmlEscapeText(code)}</textarea>
-<pre id="out"></pre>
-<div id="frame"></div>
-$notice
-<script>
-var IS_HTML=$isHtml;
-function out(t,err){
-  var o=document.getElementById('out');
-  o.style.display='block';o.className=err?'err':'';o.textContent=t;
-}
-function fmt(v){
-  if(typeof v==='string')return v;
-  try{return JSON.stringify(v);}catch(e){return String(v);}
-}
-function run(){
-  var src=document.getElementById('src').value;
-  document.getElementById('frame').innerHTML='';
-  document.getElementById('out').style.display='none';
-  if(IS_HTML){
-    var f=document.createElement('iframe');
-    f.setAttribute('sandbox','allow-scripts');
-    f.style.height='220px';
-    f.srcdoc=src;
-    document.getElementById('frame').appendChild(f);
-    return;
-  }
-  var lines=[];
-  var real={log:console.log,error:console.error,warn:console.warn,info:console.info};
-  function cap(prefix){return function(){var a=[];for(var i=0;i<arguments.length;i++)a.push(fmt(arguments[i]));lines.push(prefix+a.join(' '));};}
-  console.log=cap('');console.info=cap('');console.warn=cap('[warn] ');console.error=cap('[error] ');
-  var err=null;
-  try{ (new Function(src))(); }catch(e){ err=(e&&e.message)?e.message:String(e); }
-  console.log=real.log;console.error=real.error;console.warn=real.warn;console.info=real.info;
-  var text=lines.join('\n');
-  if(err){ text=(text?text+'\n':'')+'Error: '+err; out(text,true); }
-  else if(text){ out(text,false); }
-  else { out('(no output)',false); }
-}
-document.getElementById('run').addEventListener('click',run);
-setTimeout(run,60);
-document.getElementById('copy').addEventListener('click',function(){
-  var t=document.getElementById('src');
-  t.select();t.setSelectionRange(0,999999);
-  try{document.execCommand('copy');}catch(e){}
-  var b=document.getElementById('copy');var old=b.textContent;b.textContent='Copied';setTimeout(function(){b.textContent=old;},1200);
-});
-</script>
-${injectBridge("")}
-</body></html>
-    """.trimIndent()
-}
-
-/** Editable, runnable code card used by `media` type=code and the sandbox kind. */
 @Composable
 fun CodeSandboxView(code: String, language: String, title: String = "") {
-    val c = GsTheme.colors
-    val textHex = remember(c.textPrimary) { hex6(c.textPrimary) }
-    val accentHex = remember(c.accent) { hex6(c.accent) }
-    val doc = remember(code, language, title, textHex, accentHex) {
-        sandboxDoc(language, code, title, textHex, accentHex)
+    val context = LocalContext.current
+    val tokens = rememberDocTokens()
+    val doc = remember(context, code, language, tokens) {
+        when (language.lowercase().trim()) {
+            "javascript", "js", "node" -> JavaScriptWorkerSandboxAndroid.document(context, code)
+            "html", "htm", "svg" -> buildHtmlDoc(code, tokens)
+            else -> "<p>Not executed: this language has no available runtime.</p>"
+        }
     }
     HarnessCard(tag = "code") {
         HarnessWebView(doc = doc, fileBase = false)
