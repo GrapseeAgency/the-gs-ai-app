@@ -6,7 +6,6 @@ import { alpha, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { AppShell } from './AppShell'
 import { UiButton } from '../controls/UiButton'
-import { UiField } from '../controls/UiField'
 
 /** Timer — countdown with start/pause/reset and a progress ring. */
 export function AppTimer({ payload }: { payload: AppPayload }) {
@@ -69,10 +68,11 @@ export function AppTimer({ payload }: { payload: AppPayload }) {
             {mm}:{ss}
           </div>
         </div>
-        <UiField label="Duration (seconds)">
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, color: theme.text2, fontSize: TYPE.label }}>
+          Duration (seconds)
           <input aria-label="Duration (seconds)" type="number" min={1} max={604800} step={1} value={durationText} disabled={running || started}
             onChange={event => { const text = event.target.value; setDurationText(text); setLeft(Number.isInteger(Number(text)) && Number(text) >= 1 && Number(text) <= 604800 ? Number(text) : 0) }} />
-        </UiField>
+        </label>
         {!validDuration && <span role="status">Enter whole seconds from 1 through 604800 to configure this local countdown.</span>}
         <div style={{ display: 'flex', gap: 8 }}>
           <UiButton buttonStyle="filled" onClick={() => {
