@@ -245,17 +245,22 @@ fun chartFromTableBlock(block: Block.TableBlock): ChartWidget? {
     val header = block.headers.map { flattenSpans(it) }
     val rows = block.rows.map { row -> row.map { flattenSpans(it) } }
     if (header.size < 2 || rows.size < 2) return null
-    val numericCol = (1 until header.size).firstOrNull { c ->
-        rows.count { parseNumber(it.getOrElse(c) { "" }) != null } >= maxOf(2, rows.size * 2 / 3)
-    } ?: return null
-    val points = rows.mapIndexedNotNull { i, row ->
-        val v = parseNumber(row.getOrElse(numericCol) { "" }) ?: return@mapIndexedNotNull null
-        listOf(i.toFloat(), v)
+    val ranked = header[0].trim().lowercase() in setOf("#", "rank", "no", "id") && header.size >= 3
+    val labelColumn = if (ranked) 1 else 0
+    for (column in header.indices.filter { it != labelColumn && !(ranked && it == 0) }) {
+        val rawValues = rows.map { it.getOrNull(column)?.trim() ?: "" }
+        val values = rawValues.map { parseSortableNumberAndroid(it)?.toFloat()?.takeIf { value -> value.isFinite() } }
+        val labels = rows.map { NexlyIcons.cleanPlainText(it.getOrNull(labelColumn).orEmpty()).trim() }
+        if (values.any { it == null } || labels.any { it.isEmpty() }) continue
+        val units = rawValues.map { raw ->
+            val currency = raw.firstOrNull { it in "$€£¥₹৳" }?.toString().orEmpty()
+            when { raw.endsWith("%") -> "%"; currency.isNotEmpty() -> currency; raw.endsWith("x", true) -> "x"; else -> "" }
+        }.toSet()
+        if (units.size != 1) continue
+        return ChartWidget(
+            type = "bar", title = header[column], unit = units.first(), labels = labels,
+            series = listOf(ChartSeries(name = header[column], data = values.mapIndexed { index, value -> listOf(index.toFloat(), value!!) }))
+        )
     }
-    if (points.size < 2) return null
-    return ChartWidget(
-        type = "bar",
-        series = listOf(ChartSeries(name = header.getOrElse(numericCol) { "Value" }, data = points)),
-        labels = rows.map { it.first().take(20) }
-    )
+    return null
 }
