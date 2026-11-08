@@ -109,20 +109,69 @@ struct ResponseExportDocument: FileDocument {
 
 /// UIKit owns the real Files export. The URL is an actual, already-written
 /// source file; the picker copies it only after the user chooses a destination.
+/// System pickers must be PRESENTED controllers, not embedded as SwiftUI child
+/// views. In particular, their remote Files/activity UI needs a real presenter.
+private final class ResponseSystemControllerHostIOS: UIViewController {
+    let systemController: UIViewController
+    private var presented = false
+    init(_ controller: UIViewController) {
+        systemController = controller
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { nil }
+    override func viewDidLoad() { super.viewDidLoad(); view.backgroundColor = .clear }
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !presented, view.window != nil else { return }
+        presented = true
+        if let popover = systemController.popoverPresentationController {
+            popover.sourceView = view
+            popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1)
+            popover.permittedArrowDirections = []
+        }
+        present(systemController, animated: true)
+    }
+}
+
 struct ResponseDocumentPickerIOS: UIViewControllerRepresentable {
     let sourceURL: URL
     let onCompletion: (URL?) -> Void
     func makeCoordinator() -> Coordinator { Coordinator(onCompletion: onCompletion) }
-    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+    func makeUIViewController(context: Context) -> UIViewController {
         let picker = UIDocumentPickerViewController(forExporting: [sourceURL], asCopy: true)
         picker.delegate = context.coordinator
-        return picker
+        picker.presentationController?.delegate = context.coordinator
+        return ResponseSystemControllerHostIOS(picker)
     }
-    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
-    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+    func updateUIViewController(_ controller: UIViewController, context: Context) {}
+    final class Coordinator: NSObject, UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate {
         let onCompletion: (URL?) -> Void
+        private var completed = false
         init(onCompletion: @escaping (URL?) -> Void) { self.onCompletion = onCompletion }
-        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { onCompletion(urls.first) }
-        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { onCompletion(nil) }
+        private func finish(_ url: URL?) { guard !completed else { return }; completed = true; onCompletion(url) }
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { finish(urls.first) }
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { finish(nil) }
+        func presentationControllerDidDismiss(_ controller: UIPresentationController) { finish(nil) }
+    }
+}
+
+struct ResponseActivityPresenterIOS: UIViewControllerRepresentable {
+    let items: [Any]
+    let onDismiss: () -> Void
+    func makeCoordinator() -> Coordinator { Coordinator(onDismiss: onDismiss) }
+    func makeUIViewController(context: Context) -> UIViewController {
+        let activity = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        let coordinator = context.coordinator
+        activity.completionWithItemsHandler = { _, _, _, _ in coordinator.finish() }
+        activity.presentationController?.delegate = coordinator
+        return ResponseSystemControllerHostIOS(activity)
+    }
+    func updateUIViewController(_ controller: UIViewController, context: Context) {}
+    final class Coordinator: NSObject, UIAdaptivePresentationControllerDelegate {
+        let onDismiss: () -> Void
+        private var completed = false
+        init(onDismiss: @escaping () -> Void) { self.onDismiss = onDismiss }
+        func finish() { guard !completed else { return }; completed = true; onDismiss() }
+        func presentationControllerDidDismiss(_ controller: UIPresentationController) { finish() }
     }
 }
