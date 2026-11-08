@@ -525,17 +525,19 @@ internal fun RatingWidgetView(w: RatingWidget, onSendPrompt: ((String) -> Unit)?
 internal fun PollWidgetView(w: PollWidget) {
     val c = GsTheme.colors
     val accent = seriesColor(0)
-    var votedIdx by remember { mutableIntStateOf(-1) }
-    val baseTotal = w.options.sumOf { it.votes.coerceAtLeast(0) }
-    val total = (baseTotal + if (votedIdx >= 0) 1 else 0).coerceAtLeast(1)
+    var votedIdx by remember(w) { mutableIntStateOf(-1) }
+    val baseTotal = w.options.sumOf { it.votes.toLong() }
+    val total = baseTotal + if (votedIdx >= 0) 1L else 0L
     WidgetCardShell(w.title.ifEmpty { "Poll" }, "poll") {
         Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (w.question.isNotBlank()) {
                 Text(w.question, style = MaterialTheme.typography.bodyMedium, color = c.textPrimary, fontWeight = FontWeight.Medium)
             }
+            Text("$total local vote${if (total == 1L) "" else "s"} — source counts plus your selection; not a live audience vote.",
+                style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
             w.options.forEachIndexed { idx, opt ->
-                val votes = opt.votes.coerceAtLeast(0) + if (votedIdx == idx) 1 else 0
-                val pct = ((votes.toFloat() / total.toFloat()) * 100f).toInt().coerceIn(0, 100)
+                val votes = opt.votes.toLong() + if (votedIdx == idx) 1L else 0L
+                val pct = if (total == 0L) 0 else ((votes.toDouble() / total.toDouble()) * 100.0).toInt().coerceIn(0, 100)
                 val isSelected = votedIdx == idx
                 Column(
                     Modifier
@@ -543,7 +545,7 @@ internal fun PollWidgetView(w: PollWidget) {
                         .clip(RoundedCornerShape(10.dp))
                         .background(c.raisedSurface)
                         .border(1.dp, if (isSelected) accent else c.border.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
-                        .clickable { votedIdx = idx }
+                        .clickable(enabled = votedIdx < 0) { votedIdx = idx }
                         .padding(10.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -552,7 +554,7 @@ internal fun PollWidgetView(w: PollWidget) {
                         Text("$pct% ($votes)", style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
                     }
                     LinearProgressIndicator(
-                        progress = { (votes.toFloat() / total.toFloat()).coerceIn(0f, 1f) },
+                        progress = { if (total == 0L) 0f else (votes.toDouble() / total.toDouble()).toFloat().coerceIn(0f, 1f) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(6.dp)
