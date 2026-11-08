@@ -932,19 +932,17 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
                     val firstSeries = seriesArr[0] as? JsonObject
                     val dataArr = firstSeries?.get("data") as? JsonArray
                     if (dataArr != null && dataArr.size > 1) {
-                        val expanded = dataArr.mapIndexedNotNull { idx, pt ->
+                        val expanded = dataArr.mapIndexed { idx, pt ->
                             val sliceName = (labelsArr?.getOrNull(idx) as? JsonPrimitive)?.contentOrNull
                                 ?: (pt as? JsonObject)?.let { (it["name"] ?: it["label"]) as? JsonPrimitive }?.contentOrNull
                                 ?: "Slice ${idx + 1}"
-                            val valueElem: JsonElement = when (pt) {
-                                is JsonPrimitive -> pt
-                                is JsonArray -> pt.lastOrNull() ?: JsonPrimitive(0)
-                                is JsonObject -> (pt["y"] ?: pt["value"] ?: pt["val"]) ?: JsonPrimitive(0)
-                            }
+                            // Keep the actual point for the shared strict decoder:
+                            // missing values are not zero, and [x,y,z] means y,
+                            // not whichever coordinate happens to be last.
                             JsonObject(
                                 mapOf(
                                     "name" to JsonPrimitive(sliceName),
-                                    "data" to JsonArray(listOf(JsonArray(listOf(JsonPrimitive(0), valueElem))))
+                                    "data" to JsonArray(listOf(pt))
                                 )
                             )
                         }
