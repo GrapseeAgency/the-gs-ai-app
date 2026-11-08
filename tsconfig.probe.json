@@ -13,6 +13,7 @@
   "include": [
     "src/lib/design/**/*",
     "src/lib/calc/**/*",
+    "src/lib/code/**/*",
     "src/lib/widgets/prompt.ts",
     "src/lib/widgets/compile.ts",
     "src/components/**/*",
