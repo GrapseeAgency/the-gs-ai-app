@@ -5,6 +5,18 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun citationsCannotForgeTrustOrAcademicAuthorityThroughLabelsPathsOrCredentials() {
+        assertEquals("www.nature.com", citationSourceUrl("https://www.nature.com/article")?.host)
+        assertEquals(true, isAcademicSourceDomain("untrusted.example", "https://www.nature.com/article"))
+        for (raw in listOf("https://untrusted.example/nature.com?publisher=arxiv.org", "https://nature.com.untrusted.example/paper", "https://untrusted.example/?from=university.edu")) {
+            assertEquals(false, isAcademicSourceDomain("nature.com", raw))
+        }
+        for (raw in listOf("javascript:alert(1)", "file:///private/file", "https://nature.com@untrusted.example/paper", "https://example.org:99999/a")) {
+            assertNull(citationSourceUrl(raw))
+            assertEquals(false, isAcademicSourceDomain("nature.com", raw))
+        }
+    }
+
     @Test fun timersHaveExplicitSecondsNotPricesAndPassTheActualParserWithoutFakeItems() {
         val configured = parseWidget("app", """{"type":"timer","durationSeconds":5}""") as Widget.App
         assertEquals(5.0, configured.w.durationSeconds!!, 0.0)
