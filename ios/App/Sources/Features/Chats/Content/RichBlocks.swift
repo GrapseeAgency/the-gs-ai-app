@@ -511,14 +511,11 @@ private struct StructuredProseSequenceView: View {
             let block = sourceBlocks[i]
             let nextBlock: Block? = (i + 1 < sourceBlocks.count) ? sourceBlocks[i + 1] : nil
 
-            if case .heading(_, let spans, _) = block,
-               let next = nextBlock, case .citations(let sources, _) = next {
-                let title = NexlyIcons.cleanPlainText(plainTextOfSpans(spans)).trimmingCharacters(in: .whitespacesAndNewlines)
-                if classifySectionListMode(title) == .sources {
-                    out.append(SequenceEntry(index: i, consumedCount: 2, block: block, sectionMode: mode, coalescedCallout: nil, coalescedCalculator: nil, coalescedSources: (sources, title)))
-                    i += 2
-                    continue
-                }
+            if let sourceCard = sourceCardForHeadingIOS(block, following: nextBlock) {
+                mode = .sources
+                out.append(SequenceEntry(index: i, consumedCount: 2, block: block, sectionMode: mode, coalescedCallout: nil, coalescedCalculator: nil, coalescedSources: (sourceCard.citations, sourceCard.title)))
+                i += 2
+                continue
             }
 
             // Coalesce Heading("Quick Calculator" | "Calculator") + BulletList/Paragraph into interactive NexlyQuickCalculatorCardView (Screenshot 1)
@@ -2193,23 +2190,26 @@ private struct NexlyInteractiveConceptDeckCardIOS: View {
     }
 }
 
-private func inferSourceDomain(from text: String) -> (domain: String, url: String)? {
-    let low = text.lowercased()
-    if low.contains("iea") { return ("www.iea.org", "https://www.iea.org") }
-    if low.contains("irena") { return ("www.irena.org", "https://www.irena.org") }
-    if low.contains("nature") { return ("www.nature.com", "https://www.nature.com") }
-    if low.contains("react") { return ("react.dev", "https://react.dev") }
-    if low.contains("tailwind") { return ("tailwindcss.com", "https://tailwindcss.com") }
-    if low.contains("mdn") || low.contains("mozilla") { return ("developer.mozilla.org", "https://developer.mozilla.org") }
-    if low.contains("python") { return ("docs.python.org", "https://docs.python.org") }
-    if low.contains("clickhouse") { return ("clickhouse.com", "https://clickhouse.com") }
-    if low.contains("nexly") { return ("nexly-analytics.com", "https://nexly-analytics.com") }
-    if low.contains("arxiv") { return ("arxiv.org", "https://arxiv.org") }
-    if low.contains("ieee") { return ("www.ieee.org", "https://www.ieee.org") }
-    return nil
+func sourceCardForHeadingIOS(_ heading: Block, following: Block?) -> (citations: [CitationEntry], title: String)? {
+    guard case .heading(_, let spans, _) = heading, let following else { return nil }
+    let title = NexlyIcons.cleanPlainText(plainTextOfSpans(spans)).trimmingCharacters(in: .whitespacesAndNewlines)
+    guard classifySectionListMode(title) == .sources else { return nil }
+    if case .citations(let citations, _) = following { return (citations, title) }
+    let items: [ListItem]
+    let start: Int
+    switch following {
+    case .orderedList(let number, let list, _): items = list; start = number
+    case .bulletList(let list, _): items = list; start = 1
+    default: return nil
+    }
+    let entries = items.enumerated().compactMap { index, item in
+        extractSourceEntryFromItem(number: item.number ?? (start + index), item: item)
+    }
+    guard !entries.isEmpty, entries.count == items.count else { return nil }
+    return (entries, title)
 }
 
-private func extractSourceEntryFromItem(number: Int, item: ListItem, allowInference: Bool = false) -> CitationEntry? {
+private func extractSourceEntryFromItem(number: Int, item: ListItem) -> CitationEntry? {
     var combinedSpans = item.spans
     for child in item.children {
         if case .paragraph(let cSpans, _) = child {
@@ -2217,10 +2217,10 @@ private func extractSourceEntryFromItem(number: Int, item: ListItem, allowInfere
             combinedSpans.append(contentsOf: cSpans)
         }
     }
-    return extractSourceEntryFromSpans(number: number, spans: combinedSpans, allowInference: allowInference)
+    return extractSourceEntryFromSpans(number: number, spans: combinedSpans)
 }
 
-private func extractSourceEntryFromSpans(number: Int, spans: [InlineSpan], allowInference: Bool = false) -> CitationEntry? {
+private func extractSourceEntryFromSpans(number: Int, spans: [InlineSpan]) -> CitationEntry? {
     var linkUrl = ""
     var linkTitle = ""
     func walk(_ list: [InlineSpan]) {
@@ -2247,11 +2247,6 @@ private func extractSourceEntryFromSpans(number: Int, spans: [InlineSpan], allow
        let r = Range(m.range, in: fullText) {
         let found = String(fullText[r])
         linkUrl = found.hasPrefix("http") ? found : "https://\(found)"
-    }
-    if linkUrl.isEmpty && allowInference {
-        if let inferred = inferSourceDomain(from: fullText) {
-            linkUrl = inferred.url
-        }
     }
     guard !linkUrl.isEmpty else { return nil }
     let afterProto = linkUrl.components(separatedBy: "://").last ?? linkUrl
@@ -2447,7 +2442,7 @@ private struct BulletListView: View {
     private var extractedSources: [CitationEntry] {
         guard sectionMode == .sources else { return [] }
         let entries = items.enumerated().compactMap { idx, item in
-            extractSourceEntryFromItem(number: idx + 1, item: item, allowInference: true)
+            extractSourceEntryFromItem(number: idx + 1, item: item)
         }
         return entries.count == items.count ? entries : []
     }
@@ -2715,11 +2710,10 @@ private struct OrderedListView: View {
         let entries = items.enumerated().compactMap { idx, item in
             extractSourceEntryFromItem(
                 number: item.number ?? (start + idx),
-                item: item,
-                allowInference: sectionMode == .sources
+                item: item
             )
         }
-        if !entries.isEmpty && (sectionMode == .sources || entries.count == items.count) {
+        if !entries.isEmpty && entries.count == items.count {
             return entries
         }
         return []
@@ -2729,6 +2723,21 @@ private struct OrderedListView: View {
         let sources = extractedSources
         if !sources.isEmpty {
             CitationsBlockView(citations: sources)
+        } else if sectionMode == .sources {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("\(item.number ?? (start + index)).").font(.system(size: 12, weight: .medium))
+                        VStack(alignment: .leading, spacing: 4) {
+                            ParagraphView(spans: item.spans, citations: citations)
+                            ForEach(Array(item.children.enumerated()), id: \.offset) { _, child in
+                                NestedChildView(block: child, citations: citations)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 if !completedSet.isEmpty && items.count >= 2 {
