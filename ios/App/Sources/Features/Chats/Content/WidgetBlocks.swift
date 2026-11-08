@@ -733,6 +733,7 @@ private struct HtmlSandboxWebView: UIViewRepresentable {
 
 func validatedWidgetKindIOS(kind: String, json: String) -> String? {
     if isValidWidget(kind: kind, json: json) { return kind }
+    if widgetKindOf(kind) == "checklist" { return nil }
     guard let inferred = inferWidgetKind(json), isValidWidget(kind: inferred, json: json) else { return nil }
     return inferred
 }
