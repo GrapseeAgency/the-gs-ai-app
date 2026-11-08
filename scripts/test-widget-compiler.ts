@@ -577,15 +577,19 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   check('editor timeline clamps duration', editor.ok && (editor.widget as Record<string, unknown>).duration !== 9999)
 }
 
-// 37. v3.1 — collab: shared-state kind validates, slugs, clamps, repairs.
+// 37. Shared state validates real source; unsupported surfaces and over-capacity data must not be silently changed.
 {
   const vote = validateWidget('collab', '{"surface":"vote","room":"Launch Day!!","items":["a","b"],"junk":1}')
   const w = vote.ok ? vote.widget : null
   check('collab vote validates with slugified room', !!w && w.room === 'launch-day' && w.surface === 'vote')
-  const junk = validateWidget('collab', '{"surface":"whiteboard","items":"x"}')
-  check('collab junk surface repairs to counter', junk.ok && junk.widget.surface === 'counter' && junk.repaired === true)
-  const clamped = validateWidget('collab', '{"surface":"todo","room":"r","items":' + JSON.stringify(Array.from({ length: 20 }, (_, i) => `i${i}`)) + '}')
-  check('collab items clamp to 12', clamped.ok && (clamped.widget.items as unknown[]).length === 12)
+  const unsupportedSource = '{"surface":"whiteboard","items":"x"}'
+  const oversizedSource = '{"surface":"todo","room":"r","items":' + JSON.stringify(Array.from({ length: 20 }, (_, i) => `i${i}`)) + '}'
+  check('unsupported collab surface is refused rather than changed into a counter', !validateWidget('collab', unsupportedSource).ok)
+  check('oversized collab source is refused rather than silently discarding eight items', !validateWidget('collab', oversizedSource).ok)
+  for (const source of [unsupportedSource, oversizedSource]) {
+    const refused = compileWidgets({ reply: '```collab\n' + source + '\n```', userPrompt: 'Show the supplied shared control' })
+    check('refused collab retains its complete original source without a fake working control', refused.widgets === 0 && refused.errors.length > 0 && refused.text.includes(source))
+  }
   const counterFence = extractWidgetFences('```counter\n{"room":"taps"}\n```')
   check('counter fence -> collab kind', counterFence[0]?.kind === 'collab', JSON.stringify(counterFence[0]?.kind))
   const pointerFence = extractWidgetFences('```pointer\n{}\n```')
