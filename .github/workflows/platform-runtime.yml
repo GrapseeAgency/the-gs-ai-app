@@ -52,7 +52,19 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            cd android && bash -o pipefail -c 'gradle :app:testDebugUnitTest --tests com.grapsee.gsai.ui.chat.content.CalcHonestyTest --tests com.grapsee.gsai.ui.chat.content.ContentBlocksTest :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.grapsee.gsai.PlatformRuntimeTest --no-daemon --stacktrace 2>&1 | tee ../platform-runtime.log'
+            cd android && bash -o pipefail -c 'gradle :app:testDebugUnitTest --tests com.grapsee.gsai.ui.chat.content.CalcHonestyTest --tests com.grapsee.gsai.ui.chat.content.ContentBlocksTest --tests "com.grapsee.gsai.ui.chat.NexlyChatScreenshotTest.sectionReference*" -PgsShots=true :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.grapsee.gsai.PlatformRuntimeTest --no-daemon --stacktrace 2>&1 | tee ../platform-runtime.log'
+      - name: Require all six actual response-section frames
+        if: always()
+        run: |
+          python3 - <<'PYFRAMES'
+          from pathlib import Path
+          expected = ['01-dashboard', '02-structured-launch', '03-react-code', '04-citations', '05-data-grid', '06-interactive-charts']
+          for section in expected:
+              image = Path('android/app/build/screenshots') / ('genui-reference-android-' + section + '-393x852.png')
+              if not image.is_file() or image.stat().st_size < 20000:
+                  raise SystemExit('Missing actual native section frame: ' + str(image))
+          print('All six actual Android section frames captured; visual review remains required')
+          PYFRAMES
       - name: Require every runtime test (no skipped or empty reports)
         if: always()
         run: |
@@ -77,6 +89,7 @@ jobs:
           name: android-platform-runtime
           path: |
             platform-runtime.log
+            android/app/build/screenshots/genui-reference-*.png
             android/app/build/outputs/androidTest-results/connected/**
             android/app/build/reports/androidTests/connected/**
           if-no-files-found: error
