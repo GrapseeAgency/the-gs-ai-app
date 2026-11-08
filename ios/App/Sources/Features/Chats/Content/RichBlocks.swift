@@ -2318,6 +2318,7 @@ private struct ParagraphView: View {
                             .lineSpacing(compact ? 2 : 0)
                             .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
                             .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 } else {
                     Text(attributed(from: displaySpans, theme: theme))
@@ -2325,6 +2326,7 @@ private struct ParagraphView: View {
                         .lineSpacing(compact ? 2 : 0)
                         .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
                         .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -3156,11 +3158,14 @@ struct CodeBlockCardView: View {
             .padding(.bottom, 8)
         } else {
             if wrapCode {
-                codeSurfaceWithLineNumbers
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 10)
-                    .textSelection(.enabled)
+                ScrollView(.vertical) {
+                    codeSurfaceWithLineNumbers
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 10)
+                        .textSelection(.enabled)
+                }
+                .frame(maxHeight: 320)
             } else {
                 ScrollView([.horizontal, .vertical]) {
                     codeSurfaceWithLineNumbers
@@ -3353,21 +3358,25 @@ struct CodeBlockCardView: View {
 
     @ViewBuilder
     private var codeSurfaceWithLineNumbers: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(lineNumbersText)
-                .font(.system(size: 12, weight: .regular, design: .monospaced))
-                .foregroundStyle(Color(red: 0.431, green: 0.412, blue: 0.588))
-                .multilineTextAlignment(.trailing)
-                .frame(minWidth: 22, alignment: .trailing)
-
-            Group {
-                if open {
-                    Text(CodeDisplayIOS.escape(displayedCode))
+        // A line number belongs to one original source line, even when that
+        // line wraps. Separate number/code text columns drifted out of sync.
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(displayedCode.components(separatedBy: "\n").enumerated()), id: \.offset) { index, line in
+                HStack(alignment: .top, spacing: 8) {
+                    Text("\(index + 1)")
                         .font(.system(size: 12, weight: .regular, design: .monospaced))
-                        .foregroundStyle(Color(red: 0.933, green: 0.922, blue: 1.0))
-                } else {
-                    highlightedCode(CodeDisplayIOS.escape(displayedCode), language: language)
-                        .foregroundStyle(Color(red: 0.933, green: 0.922, blue: 1.0))
+                        .foregroundStyle(Color(red: 0.431, green: 0.412, blue: 0.588))
+                        .frame(width: 22, alignment: .trailing)
+                    Group {
+                        if open {
+                            Text(CodeDisplayIOS.escape(line.isEmpty ? " " : line))
+                                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                        } else {
+                            highlightedCode(CodeDisplayIOS.escape(line.isEmpty ? " " : line), language: language)
+                        }
+                    }
+                    .foregroundStyle(Color(red: 0.933, green: 0.922, blue: 1.0))
+                    .fixedSize(horizontal: !wrapCode, vertical: true)
                 }
             }
         }
@@ -3611,7 +3620,7 @@ private struct TableBlockView: View {
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline.opacity(0.4), lineWidth: 1))
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
             if width > 0 && abs(width - measuredWidth) > 0.5 { measuredWidth = width }
         }
