@@ -4003,12 +4003,10 @@ private fun CitationsBlockView(block: Block.CitationsBlock) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "↗ ${citation.domain.ifBlank { citation.url }}",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = Color(0xFF5B3DF5),
-                            maxLines = 1
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                            NexlyGlyph(name = "external-link", size = 11.dp, color = Color(0xFF5B3DF5))
+                            Text(text = domain, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = Color(0xFF5B3DF5), maxLines = 1)
+                        }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
