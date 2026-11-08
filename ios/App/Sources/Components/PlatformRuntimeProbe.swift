@@ -13,6 +13,7 @@ struct PlatformRuntimeProbe: View {
     @State private var showTable = false
     @State private var showChart = false
     @State private var showCode = false
+    @State private var showTerminal = false
     @State private var copyStatus = "Copy not inspected"
     @State private var ordinaryTable = false
     @State private var title = ""
@@ -33,8 +34,16 @@ struct PlatformRuntimeProbe: View {
             Button("Open generated table") { showTable = true }
             Button("Open generated chart") { showChart = true }
             Button("Open generated code") { showCode = true }
-            if showCalculator {
-                WidgetBlockView(kind: "calc", json: #"{"title":"\ud83d\ude80 Growth","fields":[{"key":"amount","label":"Amount \u00a9\ufe0f \ud83d\ude00","value":100}],"outputs":[{"label":"Double","expr":"amount*2"}]}"#, open: false)
+            Button("Open generated terminal") { showTerminal = true }
+        }
+        .sheet(isPresented: $showCalculator) {
+            ScrollView {
+                WidgetBlockView(kind: "calc", json: #"{"title":"\ud83d\ude80 Growth","fields":[{"key":"amount","label":"Amount \u00a9\ufe0f \ud83d\ude00","value":100}],"outputs":[{"label":"Double","expr":"amount*2"}]}"#, open: false).padding()
+            }
+        }
+        .sheet(isPresented: $showTerminal) {
+            ScrollView {
+                WidgetBlockView(kind: "terminal", json: #"{"welcome":"Provided \ud83d\ude00 $& $$ __GS_WORKER_CONTRACT_LITERAL__","commands":[{"name":"deploy","description":"Help only","output":"deployed"}]}"#, open: false).padding()
             }
         }
         .sheet(isPresented: $showTable) {
