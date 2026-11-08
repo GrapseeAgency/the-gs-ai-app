@@ -432,6 +432,18 @@ jobs:
           print('All required iOS platform runtime tests executed and passed')
           PYRUNTIME
 
+      - name: Review actual Files before the real Cancel touch
+        if: failure()
+        run: python3 scripts/publish_native_ui_pixels.py ios/build/xcodebuild-genui-test.log FILES
+
+      - name: Review actual Files after an unacknowledged Cancel touch
+        if: failure()
+        run: python3 scripts/publish_native_ui_pixels.py ios/build/xcodebuild-genui-test.log EXPORT
+
+      - name: Review actual React native UI failure pixels
+        if: failure()
+        run: python3 scripts/publish_native_ui_pixels.py ios/build/xcodebuild-genui-test.log REACT
+
       - name: Publish actual Files presentation and cancellation diagnostics
         if: failure()
         run: |
