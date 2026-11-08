@@ -413,12 +413,17 @@ private struct NexlyFlashQuestionView: View {
                                 ),
                                 editEnabled: false
                             )
-                            NexlyAssistantBlocksView(
-                                blocks: parseBlocks(wire),
-                                isStreaming: false,
-                                showStatus: false,
-                                isPlanTurn: false,
-                                planTimestamp: "2026-10-23T10:31:00Z"
+                            // Render the SAME settled message composition as
+                            // ChatDetailView, including its real wrapper/footer.
+                            // Mounting only RichBlocks hid double glass/insets
+                            // and added an orb absent from production.
+                            MessageBubble(
+                                message: ChatViewModel.ChatMessage(
+                                    role: "assistant",
+                                    content: wire,
+                                    createdAt: "2026-10-23T10:31:00Z"
+                                ),
+                                editEnabled: false
                             )
                         }
                         .padding(.horizontal, 16)
