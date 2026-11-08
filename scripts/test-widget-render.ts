@@ -187,8 +187,8 @@ total++
       '- C++ and JavaScript continue to show steady growth',
       '',
       '## Key Sources',
-      '1. **IEA – Renewable Energy Market Update** — Global renewable capacity additions are set to soar by 107 gigawatts. https://www.iea.org/reports/renewable-energy-market-update',
-      '2. **Nature Energy – Solar & Wind Growth Analysis** — Peer-reviewed study on global clean energy adoption. https://www.nature.com/articles/s41560-025-001',
+      '1. **IEA – Renewable Energy** — Supplied source record, not an independently verified finding. https://www.iea.org/',
+      '2. **Nature – Energy Research** — Supplied publisher record, not proof of a particular study. https://www.nature.com/',
       '',
       '| # | Language | Popularity | Trend |',
       '| --- | --- | --- | --- |',
@@ -202,7 +202,12 @@ total++
       'import pandas as pd',
       "data = {'Month': ['Jan', 'Feb', 'Mar', 'Apr', 'May'], 'Revenue': [120, 150, 180, 210, 250]}",
       'df = pd.DataFrame(data)',
-      'print("Growth +201.3%")',
+      "print(df['Revenue'].sum())",
+      '```',
+      '',
+      '```javascript',
+      'const revenue = [120, 150, 180, 210, 250];',
+      'console.log(revenue.reduce((sum, value) => sum + value, 0));',
       '```',
       '',
       '```chart',
@@ -231,23 +236,26 @@ total++
       '#gs-coffee', // 06: Custom 3D glassy icon badge for Java in Markdown table
       '0/2 completed', // 01 & 02: Live checklist completion counter on Todo / Next actions checklist
       'Show: <!-- -->All<!-- --> ▾', // 06: Table pagination display control on 5-row table
-      'Run Code', // 04 & 05: Code block execution bar
+      'Run Code', // 04 & 05: A genuinely supported JavaScript execution action
       'Revenue Trend', // 04 & 05: Visual data series bar chart preview extracted from Python code
       'Line Chart', // 07: Interactive chart type switcher
       'Bar Chart',
       'Area Chart',
       'Pie Chart',
       'All', // 07: Honest initial full-data range; calendar/point slicing is behavior-tested separately
-      'Trusted Source', // 03: Ordinary Markdown source list elevated to Trusted Source green pill
+      'Source link', // 03: An actual supplied link, not an invented verification badge
       'Academic', // 03: Ordinary Markdown source list elevated to Academic lavender pill
       '#gs-building-bank', // 03: Academic source custom glassy icon
-      '#gs-shield-check', // 03: Trusted source custom glassy icon
+      '#gs-external-link', // 03: Custom link glyph without a false trust claim
       'Ask follow-up', // 01-07: Bottom contextual action pills
     ]
     const missing = requiredMarkers.filter((m) => !html.includes(m))
+    const fabricatedTrust = /Trusted Source|Verified Source/.test(html)
     const emojiMatch = html.match(/[\u{1F300}-\u{1FAFF}]/u)
     if (missing.length > 0) {
       holes.push(`Section 01 & 02 proof: missing markers: ${missing.join(', ')}`)
+    } else if (fabricatedTrust) {
+      holes.push('Section 01 & 02 proof: ordinary links falsely claim source verification')
     } else if (emojiMatch) {
       holes.push(`Section 01 & 02 proof: forbidden emoji leaked into rendered HTML: ${emojiMatch[0]}`)
     } else {
