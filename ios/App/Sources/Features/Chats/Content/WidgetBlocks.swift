@@ -1727,6 +1727,7 @@ private struct StatBodyView: View {
                 .font(.system(size: compact ? 9.5 : 11, weight: .medium))
                 .foregroundStyle(NexlyInk.label)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: compact ? 24 : 0, alignment: .topLeading)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
                     .font(.system(size: compact ? 13 : 17, weight: .bold, design: .rounded))
