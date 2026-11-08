@@ -2145,7 +2145,8 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
   },
 
   checklist: (p) => {
-    const items = asArray(p.items ?? p.tasks ?? p.todos ?? p.steps ?? p.list)
+    const rawItems = asArray(p.items ?? p.tasks ?? p.todos ?? p.steps ?? p.list)
+    const items = rawItems
       .map((i) => {
         const o = isObj(i) ? i : {}
         return {
@@ -2154,11 +2155,13 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
           done: o.done === true || o.checked === true || o.completed === true || o.status === 'done',
         }
       })
-      .filter((i) => i.label)
-      .slice(0, LIMITS.maxChecklistItems)
+    const errors: string[] = []
+    if (!items.length) errors.push('checklist needs items')
+    if (items.some(item => !item.label.trim())) errors.push('Every checklist task needs an actual label; invalid tasks are not silently discarded')
+    if (items.length > LIMITS.maxChecklistItems) errors.push('Checklist exceeds capacity; tasks are not silently truncated')
     return {
       widget: { title: asString(p.title), items },
-      errors: items.length ? [] : ['checklist needs items'],
+      errors,
       repaired: false,
     }
   },
