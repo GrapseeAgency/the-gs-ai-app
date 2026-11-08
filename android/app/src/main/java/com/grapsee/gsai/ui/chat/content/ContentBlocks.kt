@@ -163,11 +163,10 @@ data class RichMetadata(
 // Parser
 // ---------------------------------------------------------------------------
 
-private data class Line(val text: String, val offset: Int)
+private data class Line(val text: String, val offset: Int, val ending: String = "\n")
 
 fun parseBlocks(content: String, metadata: RichMetadata? = null): List<Block> {
-    val normalized = content.replace("\r\n", "\n")
-    val lines = toLines(normalized)
+    val lines = toLines(content)
     val blocks = parseCore(lines).map { promoteBarePayload(it) }
     val toolBlocks = metadata?.toolResults?.map { Block.ToolResultBlock(it, 0) } ?: emptyList()
     val citations = metadata?.citations.orEmpty()
@@ -234,9 +233,12 @@ private fun promoteBarePayload(block: Block): Block {
 private fun toLines(text: String): List<Line> {
     val out = ArrayList<Line>()
     var offset = 0
-    for (raw in text.split('\n')) {
-        out += Line(raw, offset)
-        offset += raw.length + 1
+    val rows = text.split('\n')
+    for ((index, raw) in rows.withIndex()) {
+        val ending = if (index == rows.lastIndex) "" else if (raw.endsWith('\r')) "\r\n" else "\n"
+        val value = if (ending == "\r\n") raw.dropLast(1) else raw
+        out += Line(value, offset, ending)
+        offset += raw.length + if (index < rows.lastIndex) 1 else 0
     }
     return out
 }
@@ -293,7 +295,7 @@ private fun parseCore(lines: List<Line>): List<Block> {
         when {
             text.isBlank() -> { i++; continue }
 
-            trimmed.trimStart().startsWith("```") -> {
+            fenceOpening(trimmed) != null -> {
                 val (block, next) = parseFence(lines, i)
                 blocks += block
                 i = next
@@ -328,7 +330,7 @@ private fun parseCore(lines: List<Line>): List<Block> {
                 val innerLines = mutableListOf<Line>()
                 while (i < lines.size) {
                     val m = quoteLineRegex.matchEntire(lines[i].text) ?: break
-                    innerLines += Line(m.groupValues[1], lines[i].offset)
+                    innerLines += Line(m.groupValues[1], lines[i].offset, lines[i].ending)
                     i++
                 }
                 blocks += Block.BlockQuote(parseCore(innerLines), line.offset)
@@ -377,7 +379,7 @@ private fun isProse(lines: List<Line>, index: Int): Boolean {
     val text = lines[index].text
     if (text.isBlank()) return false
     val t = text.trimEnd()
-    if (t.trimStart().startsWith("```")) return false
+    if (fenceOpening(t) != null) return false
     if (t.trimStart().startsWith("$$")) return false
     if (headingLineRegex.matchEntire(t) != null) return false
     if (hrLineRegex.matchEntire(t) != null) return false
@@ -389,26 +391,38 @@ private fun isProse(lines: List<Line>, index: Int): Boolean {
     return true
 }
 
+/** Return the actual marker and width; a shorter or different fence is source. */
+private fun fenceOpening(text: String): Pair<Char, Int>? {
+    val lead = text.trimStart()
+    val marker = lead.firstOrNull() ?: return null
+    if (marker != '`' && marker != '~') return null
+    val width = lead.takeWhile { it == marker }.length
+    if (width < 3 || (marker == '`' && lead.drop(width).contains('`'))) return null
+    return marker to width
+}
+
 private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
-    val opener = lines[start].text.trimStart().removePrefix("```").trim()
+    val (marker, width) = checkNotNull(fenceOpening(lines[start].text))
+    val opener = lines[start].text.trimStart().drop(width).trim()
     val language = opener.split(Regex("\\s+")).firstOrNull { it.isNotBlank() }
     val body = StringBuilder()
+    var previousEnding = ""
     var i = start + 1
     while (i < lines.size) {
         val trimmed = lines[i].text.trim()
-        if (trimmed.startsWith("```") && trimmed.removePrefix("```").isBlank()) {
+        val closingWidth = trimmed.takeWhile { it == marker }.length
+        if (closingWidth >= width && trimmed.drop(closingWidth).isBlank()) {
             return Pair(
-                fenceToBlock(
-                    language = language,
-                    code = body.toString().trimEnd('\n'),
-                    open = false,
-                    offset = lines[start].offset
-                ),
+                fenceToBlock(language, body.toString(), open = false, offset = lines[start].offset),
                 i + 1
             )
         }
-        if (body.isNotEmpty()) body.append('\n')
+        // The newline immediately before a closing fence is its delimiter.
+        // All other original separators (including leading/trailing blank
+        // source lines and CRLF) belong to the executable source, not prose.
+        if (i > start + 1) body.append(previousEnding)
         body.append(lines[i].text)
+        previousEnding = lines[i].ending
         i++
     }
     // Unterminated trailing fence — mid-stream. Widget fences become an OPEN
@@ -417,7 +431,7 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
     if (language.equals("plan", ignoreCase = true)) {
         return Pair(
             Block.PlanBlock(
-                plan = parseNexlyPlanData(body.toString().trimEnd('\n')) ?: placeholderPlanData(),
+                plan = parseNexlyPlanData(body.toString()) ?: placeholderPlanData(),
                 open = true,
                 sourceStart = lines[start].offset
             ),
@@ -429,7 +443,7 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
         return Pair(
             Block.WidgetBlock(
                 kind = openKind,
-                json = body.toString().trimEnd('\n'),
+                json = body.toString(),
                 open = true,
                 sourceStart = lines[start].offset
             ),
@@ -437,12 +451,7 @@ private fun parseFence(lines: List<Line>, start: Int): Pair<Block, Int> {
         )
     }
     return Pair(
-        Block.CodeBlock(
-            language = language,
-            code = body.toString().trimEnd('\n'),
-            open = true,
-            sourceStart = lines[start].offset
-        ),
+        fenceToBlock(language, body.toString(), open = true, offset = lines[start].offset),
         lines.size
     )
 }
@@ -979,51 +988,23 @@ private fun parseDetails(lines: List<Line>, start: Int): Pair<Block, Int> {
 // ---------------------------------------------------------------------------
 
 /**
- * Appending a delta can only affect blocks in the LAST contiguous non-blank
- * line-run of the document — every line-run separated from the end by a blank
- * line is closed forever (every family in this grammar — paragraphs, lists,
- * quotes, tables, fences, math, details — absorbs only CONSECUTIVE lines).
- *
- * So a flush re-parses at most [lastLineRunStart] and freezes everything
- * before it: earlier block instances stay byte-identical across ~30 Hz
- * flushes, the renderer skips all completed blocks, and only the live tail
- * recomposes. A full parse happens only when genuinely necessary:
- *  - cache cold ([previousBlocks] empty), or
- *  - the append-only contract broke ([content] does not extend
- *    [previousContent] — content replaced, history jump).
- *
- * The tail boundary is the whole last line-RUN, not just the last block:
- * a flush can cut a line in a state that parses as a different family
- * (a bare "-" or "1." pending marker parses as prose today, a list item
- * tomorrow). Re-parsing from the last BLOCK alone then froze a still-open
- * list and spawned a duplicate sibling list on the next flush. The run
- * boundary makes that state impossible by construction.
- *
- * Streaming contract note: this path is metadata-free (StreamBlockCache only
- * ever feeds plain content), so every block here carries a real source
- * offset — never a fake 0.
- *
- * All arithmetic happens in the CRLF-normalized space ([parseBlocks]
- * normalizes internally, so offsets are normalized-space offsets); both
- * inputs are normalized up front to keep the two spaces identical. A flush
- * may split a CRLF pair; the trailing lone CR is dropped so the normalized
- * previous text stays a strict prefix of the normalized current text (a
- * retained trailing CR would break that prefix property and force one full
- * reparse per split pair). The dropped CR is trailing whitespace — no block
- * or offset can depend on it. On an LF-only stream Kotlin's replace returns
- * the receiver — zero cost.
+ * Reparse the last line-run, snapped back to the start of its containing
+ * block. Fences, math, quotes and details CAN span blank lines: freezing a
+ * block merely because its opener precedes the last run corrupts live source.
+ * Earlier blocks keep their instances. Offsets stay in the original UTF-16
+ * source space; executable CRLF and a split trailing CR are never normalized.
  */
 fun parseStreamingBlocks(
     previousContent: String,
     previousBlocks: List<Block>,
     content: String
 ): List<Block> {
-    val previous = normalizeStreamText(previousContent)
-    val current = normalizeStreamText(content)
+    val previous = previousContent
+    val current = content
     if (previousBlocks.isEmpty() || !current.startsWith(previous)) {
         return parseBlocks(current)
     }
-    val tailStart = lastLineRunStart(previous)
+    val tailStart = streamingTailStart(previous, previousBlocks)
     val head = previousBlocks.takeWhile { it.sourceStart < tailStart }
     if (head.isEmpty()) return parseBlocks(current) // defensive: boundary sanity
     val tail = parseBlocks(current.substring(tailStart)).map { block ->
@@ -1032,18 +1013,10 @@ fun parseStreamingBlocks(
     return head + tail
 }
 
-/**
- * Streaming normalisation: CRLF pairs collapse to LF, and a trailing lone CR
- * is dropped — a flush may split a CRLF pair, and the normalized previous
- * text must stay a strict prefix of the normalized current text (a retained
- * trailing CR would break that prefix property and force one full reparse
- * per split pair). The dropped CR is trailing whitespace: no block or offset
- * can depend on it ([parseCore] trims it away; [lastLineRunStart] already
- * treats CR as blank). On LF-only input this is the identity.
- */
-private fun normalizeStreamText(text: String): String {
-    val replaced = text.replace("\r\n", "\n")
-    return if (replaced.endsWith('\r')) replaced.dropLast(1) else replaced
+/** Snap a line-run boundary out of a possibly multi-run block. */
+internal fun streamingTailStart(text: String, blocks: List<Block>): Int {
+    val runStart = lastLineRunStart(text)
+    return blocks.lastOrNull { it.sourceStart <= runStart }?.sourceStart ?: 0
 }
 
 /**
