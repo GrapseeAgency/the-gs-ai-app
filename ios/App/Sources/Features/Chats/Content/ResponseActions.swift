@@ -142,6 +142,10 @@ struct ResponseDocumentPickerIOS: UIViewControllerRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(onCompletion: onCompletion) }
     func makeUIViewController(context: Context) -> UIViewController {
         let picker = UIDocumentPickerViewController(forExporting: [sourceURL], asCopy: true)
+        // Files owns the complete interactive surface. Do not stack an
+        // automatically sized remote provider sheet inside a SwiftUI sheet:
+        // its navigation controls must stay inside the presented viewport.
+        picker.modalPresentationStyle = .fullScreen
         picker.delegate = context.coordinator
         picker.presentationController?.delegate = context.coordinator
         return ResponseSystemControllerHostIOS(picker, delegate: context.coordinator)
