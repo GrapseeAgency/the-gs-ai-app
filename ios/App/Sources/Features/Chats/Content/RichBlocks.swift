@@ -2826,6 +2826,8 @@ struct CodeBlockCardView: View {
     let code: String
     var open: Bool = false
 
+    @State private var workerDocument: String? = nil
+    @State private var browserDocument: String? = nil
     @State private var editing = false
     @State private var editorDraft = ""
     @State private var editorEncoded = false
