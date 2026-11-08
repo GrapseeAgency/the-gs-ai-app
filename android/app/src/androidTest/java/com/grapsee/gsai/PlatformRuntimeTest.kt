@@ -101,8 +101,12 @@ class PlatformRuntimeTest {
             }
         }
         load(network)
-        awaitObserved("real Worker CSP blocks network, not merely a DNS or CORS failure") {
-            evaluate("!!document.getElementById('out') && document.getElementById('out').textContent.includes('BLOCKED connect-src')") == "true"
+        try {
+            awaitObserved("real Worker CSP blocks network, not merely a DNS or CORS failure") {
+                evaluate("!!document.getElementById('out') && document.getElementById('out').textContent.includes('BLOCKED connect-src')") == "true"
+            }
+        } catch (error: Throwable) {
+            throw AssertionError("Actual worker output: " + evaluate("document.body.innerText"), error)
         }
         load("while(true) {}")
         awaitObserved("infinite worker loop is actually terminated while native UI remains responsive") {
