@@ -11,9 +11,12 @@ internal class ResponseCodeActions {
     private val entries = linkedMapOf<Any, Entry>()
     private val snapshots = mutableMapOf<Any, Pair<String?, String>>()
     private var pendingEdit = false
+    private var pendingTarget: Any? = null
     fun register(id: Any, entry: Entry) {
         entries[id] = entry
-        if (pendingEdit) { pendingEdit = false; entry.edit() }
+        if (pendingEdit || pendingTarget == id) {
+            pendingEdit = false; pendingTarget = null; entry.edit()
+        }
     }
     fun source(id: Any): Pair<String?, String>? = entries[id]?.let { it.language to it.source() } ?: snapshots[id]
     fun remove(id: Any) {
@@ -24,6 +27,7 @@ internal class ResponseCodeActions {
         val first = entries.values.firstOrNull()
         if (first == null) pendingEdit = true else first.edit()
     }
+    fun editOnRegistration(id: Any) { pendingTarget = id }
     fun sources(): List<Pair<String?, String>> = entries.values.map { it.language to it.source() }
 }
 internal val LocalResponseCodeActions = staticCompositionLocalOf<ResponseCodeActions?> { null }
