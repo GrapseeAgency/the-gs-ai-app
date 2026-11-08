@@ -42,7 +42,7 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
             // the touch target is 44pt and invisible.
             if let onBack {
                 Button(action: onBack) {
-                    NexlyGlyph(name: "arrow-left", size: 19, color: Aero.text)
+                    NexlyGlyph(name: "arrow-left", size: 19, color: NexlyInk.header)
                         .frame(width: 44, height: 44)
                         .gsGlass(.elevated, corner: 22)
                         .overlay(Circle().strokeBorder(rimColor, lineWidth: 1))
@@ -102,7 +102,7 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
         @ViewBuilder menu: () -> Menu
     ) -> some View {
         Button(action: action) {
-            NexlyGlyph(name: glyph, size: 19, color: Aero.text)
+            NexlyGlyph(name: glyph, size: 19, color: NexlyInk.header)
                 .frame(width: 44, height: 44)
                 .gsGlass(.elevated, corner: 22)
                 .overlay(Circle().strokeBorder(rimColor, lineWidth: 1))
