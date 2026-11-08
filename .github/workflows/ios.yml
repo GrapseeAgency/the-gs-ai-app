@@ -418,6 +418,30 @@ jobs:
           print('All required iOS platform runtime tests executed and passed')
           PYRUNTIME
 
+      - name: Publish actual Files presentation and cancellation diagnostics
+        if: failure()
+        run: |
+          python3 - <<'PYFILES'
+          import re
+          from pathlib import Path
+          path = Path('ios/build/xcodebuild-genui-test.log')
+          if not path.exists(): raise SystemExit(0)
+          lines = path.read_text(errors='replace').splitlines()
+          chunks = {}
+          for line in lines:
+              match = re.search(r'GS_PRESENTATION_EXPORT_(\d+): (.*)', line)
+              if match: chunks[int(match.group(1))] = match.group(2)
+              if 'GS_FILES_CANCEL_FRAME:' in line:
+                  print('::notice::' + line[-3000:].replace('%', '%25'))
+          hierarchy = ''.join(chunks[key] for key in sorted(chunks))
+          # This dedicated step owns its annotation budget. Unit-pass notices
+          # in a different step must never hide the actual system UI evidence.
+          if len(hierarchy) > 28000:
+              hierarchy = ' | '.join(part for part in hierarchy.split(' | ') if any(word in part for word in ['Window,', 'NavigationBar,', 'Button,', "label: 'Cancel'", "label: 'Save'", "label: 'Browse'", 'DocumentPicker', 'frame:']))
+          for start in range(0, min(len(hierarchy), 28000), 3500):
+              print('::notice::GS_FILES_HIERARCHY_' + str(start) + ': ' + hierarchy[start:start+3500].replace('%', '%25'))
+          PYFILES
+
       - name: Publish XCTest failure diagnostics as annotations
         if: failure()
         run: |
