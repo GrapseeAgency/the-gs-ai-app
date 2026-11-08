@@ -202,7 +202,7 @@ async function main() {
       assert.deepEqual(parseStream(compiled.text).filter(segment=>segment.kind==='widget').map(segment=>segment.widget), fixture.widgetKinds, fixture.id)
       assert.doesNotThrow(()=>renderToString(h(MessageContent,{text:compiled.text,dark:false})), fixture.id)
     }
-    const grid = parseProseBlocks(fixtures.find(f=>f.id==='05-data-grid').wire).find(block=>block.type==='table')
+    const grid = parseProseBlocks(fixtures.find(f=>f.id==='05-data-grid').wire).find(block=>block.kind==='table')
     assert.equal(grid.rows.length, 11)
     const code = parseStream(fixtures.find(f=>f.id==='03-react-code').wire).find(segment=>segment.kind==='code')
     assert.equal(code.language, 'jsx'); assert.ok(code.code.includes('localStorage'))
