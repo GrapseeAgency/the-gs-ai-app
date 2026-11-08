@@ -5,11 +5,12 @@
  * execution (bounded JavaScript Worker, HTML/SVG sandboxed iframe, JSON
  * validator), and error diagnostics.
  */
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, useId, type ReactNode } from 'react'
 import { alpha, RADIUS, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { CopyChip } from '../primitives/CopyChip'
 import { HtmlBlock } from './HtmlBlock'
+import { ReactPreview } from './ReactPreview'
 import { GlassIcon } from '@/components/nexly/GlassIcon'
 import { javascriptSandboxDocument } from '@/lib/code/javascript-sandbox'
 import { escapeCodeDisplay, requiresEncodedEditor, encodeSourceEditor, decodeSourceEditor } from '@/lib/code/display-source'
@@ -87,11 +88,13 @@ function highlightLine(line: string, dark: boolean): ReactNode[] {
   return tokens
 }
 
-export function CodeBlock({ code, language }: { code: string; language?: string }) {
-  return <CodeControls key={JSON.stringify([code, language])} code={code} language={language} />
+export function CodeBlock({ code, language, storageKey }: { code: string; language?: string; storageKey?: string }) {
+  return <CodeControls key={JSON.stringify([code, language])} code={code} language={language} storageKey={storageKey} />
 }
 
-function CodeControls({ code, language }: { code: string; language?: string }) {
+function CodeControls({ code, language, storageKey }: { code: string; language?: string; storageKey?: string }) {
+  const sessionStorageKey = useId()
+  const isReact = ['jsx','tsx','react'].includes((language ?? '').toLowerCase().trim())
   const { accent } = useWidgetIdentity()
   const lang = (language ?? 'code').toLowerCase().trim()
   const [source, setSource] = useState(code)
@@ -107,7 +110,7 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
   )
   const [htmlPreview, setHtmlPreview] = useState<string | null>(null)
 
-  const canRun = ['js', 'javascript', 'node'].includes(lang) || RUNNABLE_HTML.has(lang) || lang === 'json'
+  const canRun = isReact || ['js', 'javascript', 'node'].includes(lang) || RUNNABLE_HTML.has(lang) || lang === 'json'
   const unsupportedNotice = ['ts', 'typescript', 'jsx', 'tsx', 'react'].includes(lang)
     ? 'Source only: no TypeScript/React compiler is available here. No component has been executed. Use self-contained HTML/JavaScript for a live preview.'
     : previewNonJsExecution(lang, source).error
@@ -144,6 +147,7 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
     setErrorText(null)
     setOutput(null)
     setHtmlPreview(null)
+    if (isReact) { setHtmlPreview(source); return }
     if (RUNNABLE_HTML.has(lang)) {
       setHtmlPreview(source)
       return
@@ -395,7 +399,7 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
       )}
 
       {/* Sandboxed HTML Preview */}
-      {htmlPreview ? <HtmlBlock key={runCount} source={htmlPreview} fallbackHeight={220} /> : null}
+      {htmlPreview ? isReact ? <ReactPreview key={runCount} source={htmlPreview} storageKey={storageKey ?? sessionStorageKey} /> : <HtmlBlock key={runCount} source={htmlPreview} fallbackHeight={220} /> : null}
 
       {/* Terminal-Style Execution Output Drawer (05. Code Execution) */}
       {(output !== null || errorText !== null) && (
