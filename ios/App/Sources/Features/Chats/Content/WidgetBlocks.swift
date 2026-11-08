@@ -1206,6 +1206,7 @@ private struct ChartBodyView: View {
     @ViewBuilder
     private func chartHeaderBar(rangeLabel: String) -> some View {
         HStack(spacing: 6) {
+            ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 3) {
                 ForEach(Array(Self.chartTypeTabs.enumerated()), id: \.offset) { _, tab in
                     let tabId = tab.id
@@ -1221,6 +1222,8 @@ private struct ChartBodyView: View {
                                 color: isSel ? .white : Color(red: 0.243, green: 0.212, blue: 0.400)
                             )
                             Text(tab.label)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(isSel ? Color.white : Color(red: 0.243, green: 0.212, blue: 0.400))
                         }
@@ -1236,8 +1239,10 @@ private struct ChartBodyView: View {
             }
             .padding(3)
             .background(RoundedRectangle(cornerRadius: 10).fill(Color(red: 0.929, green: 0.902, blue: 1.0)))
-
-            Spacer(minLength: 4)
+            }
+            .frame(minWidth: 0, maxWidth: .infinity)
+            .frame(height: 34)
+            .accessibilityIdentifier("chart.type.controls")
 
             Button {
                 GSHaptics.select()
@@ -1260,6 +1265,7 @@ private struct ChartBodyView: View {
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.875, green: 0.843, blue: 0.980), lineWidth: 1))
             }
             .buttonStyle(.plain)
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 
