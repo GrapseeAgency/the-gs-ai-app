@@ -9,12 +9,17 @@ import java.util.zip.ZipOutputStream
 internal class ResponseCodeActions {
     data class Entry(val language: String?, val source: () -> String, val edit: () -> Unit)
     private val entries = linkedMapOf<Any, Entry>()
+    private val snapshots = mutableMapOf<Any, Pair<String?, String>>()
     private var pendingEdit = false
     fun register(id: Any, entry: Entry) {
         entries[id] = entry
         if (pendingEdit) { pendingEdit = false; entry.edit() }
     }
-    fun remove(id: Any) { entries.remove(id) }
+    fun source(id: Any): Pair<String?, String>? = entries[id]?.let { it.language to it.source() } ?: snapshots[id]
+    fun remove(id: Any) {
+        source(id)?.let { snapshots[id] = it }
+        entries.remove(id)
+    }
     fun editFirst() {
         val first = entries.values.firstOrNull()
         if (first == null) pendingEdit = true else first.edit()
