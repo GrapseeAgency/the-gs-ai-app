@@ -435,6 +435,28 @@ async function main() {
   check('task edit saves the actual new label', () => { assert.match(document.body.textContent, /Confirm train tickets/); assert.doesNotMatch(document.body.textContent, /Book actual tickets/) })
   await click(document.querySelector('button[aria-label="Delete Confirm train tickets"]'))
   check('delete removes the task and resets progress', () => { assert.equal(document.querySelectorAll('[role="checkbox"]').length, 0); assert.equal(document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '0') })
+  await mount(h(ChecklistWidget, { payload: { title: 'Fresh source', items: [{label:'New supplied task', done:false}] } }))
+  check('replacement checklist source resets task edits and completion', () => {
+    assert.ok(document.querySelector('button[aria-label="Edit New supplied task"]'))
+    assert.equal(document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '0')
+  })
+  const { AppTasks } = require('../dist/probe/src/components/genui/apps/AppTasks')
+  await mount(h(AppTasks, {payload:{type:'tasks',title:'Actual app tasks',items:[
+    {title:'First source',subtitle:'Supplied app detail',meta:'Supplied app meta',done:true},
+    {title:'Second source',done:false}]}}))
+  check('app tasks preserve supplied completion and metadata without invented dates or priorities', () => {
+    assert.equal(document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '50')
+    assert.match(document.body.textContent, /Supplied app detail.*Supplied app meta/)
+    assert.doesNotMatch(document.body.textContent, /High priority|Due today|2026/)
+  })
+  await click(document.querySelector('button[aria-label="Delete Second source"]'))
+  check('app task deletion keeps completion attached to the surviving source task', () => {
+    assert.equal(document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '100')
+  })
+  await click(document.querySelector('button[aria-label="Edit First source"]'))
+  await typeIn(document.querySelector('input[aria-label="Edit task"]'), 'Changed app task')
+  await click(buttons().find(button => button.textContent === 'Save'))
+  check('app source tasks have real editable labels', () => assert.ok(document.querySelector('button[aria-label="Delete Changed app task"]')))
   let copiedSource = null
   Object.defineProperty(global, 'navigator', { configurable: true, value: { clipboard: { writeText: async source => { copiedSource = source } } } })
   const typeSource = async value => {
