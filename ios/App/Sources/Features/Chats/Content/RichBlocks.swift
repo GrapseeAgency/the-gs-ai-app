@@ -499,6 +499,7 @@ private struct StructuredProseSequenceView: View {
         let sectionMode: SectionListMode
         let coalescedCallout: (CalloutParsed, [ListItem])?
         let coalescedCalculator: NexlyCalculatorSpec?
+        var coalescedSources: ([CitationEntry], String)? = nil
     }
 
     private var entries: [SequenceEntry] {
@@ -509,6 +510,16 @@ private struct StructuredProseSequenceView: View {
         while i < sourceBlocks.count {
             let block = sourceBlocks[i]
             let nextBlock: Block? = (i + 1 < sourceBlocks.count) ? sourceBlocks[i + 1] : nil
+
+            if case .heading(_, let spans, _) = block,
+               let next = nextBlock, case .citations(let sources, _) = next {
+                let title = NexlyIcons.cleanPlainText(plainTextOfSpans(spans)).trimmingCharacters(in: .whitespacesAndNewlines)
+                if classifySectionListMode(title) == .sources {
+                    out.append(SequenceEntry(index: i, consumedCount: 2, block: block, sectionMode: mode, coalescedCallout: nil, coalescedCalculator: nil, coalescedSources: (sources, title)))
+                    i += 2
+                    continue
+                }
+            }
 
             // Coalesce Heading("Quick Calculator" | "Calculator") + BulletList/Paragraph into interactive NexlyQuickCalculatorCardView (Screenshot 1)
             if case .heading(_, let hSpans, _) = block {
@@ -608,7 +619,9 @@ private struct StructuredProseSequenceView: View {
 
         ForEach(entries, id: \.index) { entry in
             if shouldShowEntryForTab(entry.block, tab: activeDashboardTab) {
-                if let calc = entry.coalescedCalculator {
+                if let (sources, title) = entry.coalescedSources {
+                    CitationsBlockView(citations: sources, title: title)
+                } else if let calc = entry.coalescedCalculator {
                     NexlyQuickCalculatorCardView(spec: calc)
                 } else if let (callout, extraItems) = entry.coalescedCallout {
                     NexlyCalloutCardView(callout: callout, extraItems: extraItems, citations: citations)
@@ -4012,6 +4025,7 @@ func isAcademicCitationDomain(_ domain: String, _ raw: String) -> Bool {
 
 private struct CitationsBlockView: View {
     let citations: [CitationEntry]
+    var title: String = "Key Sources"
     @Environment(\.gsOpenInApp) private var inAppBrowser
 
     var body: some View {
@@ -4024,7 +4038,7 @@ private struct CitationsBlockView: View {
                         size: 24,
                         glyphSize: 14
                     )
-                    Text("Key Sources")
+                    Text(title)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Aero.text)
                 }
