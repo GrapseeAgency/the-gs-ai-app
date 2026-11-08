@@ -19,6 +19,37 @@ final class CalcHonestyTests: XCTestCase {
         XCTAssertNotEqual(reopened.reactPreviewIdentity, ChatViewModel.ChatMessage(role: "assistant", content: "another answer").reactPreviewIdentity)
     }
 
+    @MainActor
+    func testActualSQLiteHistoryAndOlderPagesKeepDurablePreviewIdentity() throws {
+        let store = ConversationStore.shared
+        let conversation = store.createLocalConversation(title: "Preview identity acceptance")
+        defer { store.delete(id: conversation.id) }
+        let prefix = "actual-stored-row-" + UUID().uuidString
+        for index in 0...60 {
+            store.append(StoredMessage(
+                id: "\(prefix)-\(index)", conversationId: conversation.id,
+                role: "assistant", content: "Supplied answer \(index)",
+                createdAt: String(format: "2026-10-20T10:%02d:%02d.000Z", index / 60, index % 60)
+            ))
+        }
+        let firstOpen = ChatViewModel(conversationID: conversation.id)
+        let reopened = ChatViewModel(conversationID: conversation.id)
+        XCTAssertEqual(firstOpen.messages.count, 60)
+        XCTAssertEqual(reopened.messages.count, 60)
+        let first = try XCTUnwrap(firstOpen.messages.first)
+        let again = try XCTUnwrap(reopened.messages.first)
+        XCTAssertNotEqual(first.id, again.id)
+        XCTAssertEqual(first.reactPreviewIdentity, "\(prefix)-1")
+        XCTAssertEqual(first.reactPreviewIdentity, again.reactPreviewIdentity)
+        XCTAssertNil(again.serverId)
+        firstOpen.armOlderPages()
+        firstOpen.loadOlder()
+        XCTAssertEqual(firstOpen.messages.count, 61)
+        XCTAssertEqual(firstOpen.messages.first?.reactPreviewIdentity, "\(prefix)-0")
+        XCTAssertEqual(firstOpen.messages[1].reactPreviewIdentity, first.reactPreviewIdentity)
+        XCTAssertFalse(firstOpen.hasOlder)
+    }
+
     func testAxisLabelsCoverTheCompleteSourceDomainWithoutInventingObservationIndices() {
         XCTAssertEqual(chartAxisLabelIndicesIOS(count: 31), [0, 4, 9, 13, 17, 21, 26, 30])
         XCTAssertEqual(chartAxisLabelIndicesIOS(count: 6), Array(0..<6))
