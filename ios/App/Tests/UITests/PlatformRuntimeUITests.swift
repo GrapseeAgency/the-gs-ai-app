@@ -1,6 +1,44 @@
 import XCTest
 
 final class PlatformRuntimeUITests: XCTestCase {
+    func testContextualEditOpensActualCodeAndExportOpensSystemDocumentPicker() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated code"].waitForExistence(timeout: 20))
+        app.buttons["Open generated code"].tap()
+        XCTAssertTrue(app.buttons["Edit Code"].waitForExistence(timeout: 10))
+        app.buttons["Edit Code"].tap()
+        let editor = app.textViews.firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "Contextual Edit must open the existing editor, not request another model answer")
+        XCTAssertTrue((editor.value as? String ?? "").contains("console.log"))
+        XCTAssertFalse((editor.value as? String ?? "").contains("😀"))
+        app.buttons["Done"].tap()
+        app.buttons["Download Project"].tap()
+        XCTAssertTrue(app.buttons["Cancel"].firstMatch.waitForExistence(timeout: 15), "Export must present the real system document picker")
+        XCTAssertGreaterThan(app.navigationBars.count, 0)
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-contextual-real-source-export-picker"; capture.lifetime = .keepAlways; add(capture)
+        app.buttons["Cancel"].firstMatch.tap()
+    }
+
+    func testContextualReportShowsActualDataAndSharePresentsSystemActivitySheet() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated table"].waitForExistence(timeout: 20))
+        app.buttons["Open generated table"].tap()
+        app.buttons["Use ordinary Markdown"].tap()
+        XCTAssertTrue(app.buttons["View Full Report"].waitForExistence(timeout: 10))
+        app.buttons["View Full Report"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Item 31")).firstMatch.waitForExistence(timeout: 10), "Report must include every supplied row, not just the visible page")
+        app.buttons["Close details"].tap()
+        app.buttons["Share"].tap()
+        XCTAssertTrue(app.buttons["Copy"].firstMatch.waitForExistence(timeout: 15), "Share must present the real activity sheet, not copy silently")
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-contextual-real-system-share-sheet"; capture.lifetime = .keepAlways; add(capture)
+    }
+
     func testGeneratedTerminalUsesRealFilesWorkerAndUnsupportedRefusal() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
