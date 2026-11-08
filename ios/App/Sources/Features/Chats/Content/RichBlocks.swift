@@ -1907,12 +1907,12 @@ func extractSpontaneousConceptsFromBlocksIOS(_ blocks: [Block]) -> [SpontaneousC
     func appendConcept(termRaw: String, defRaw: String) {
         let term = NexlyIcons.cleanPlainText(termRaw).trimmingCharacters(in: CharacterSet(charactersIn: ":-—– "))
         let def = NexlyIcons.cleanPlainText(defRaw).trimmingCharacters(in: CharacterSet(charactersIn: ":-—– "))
-        guard term.count >= 3, term.count <= 44, def.count >= 14, !def.lowercased().contains("http") else { return }
+        guard term.count >= 3, term.count <= 44, (14...600).contains(def.count), !def.lowercased().contains("http") else { return }
         let key = term.lowercased()
-        guard !seen.contains(key) else { return }
+        guard !seen.contains(key), !out.contains(where: { $0.definition.lowercased() == def.lowercased() }) else { return }
         seen.insert(key)
         let sem = NexlyIcons.semanticIcon(for: "\(term) \(def)", fallback: "bulb")
-        out.append(SpontaneousConceptItemIOS(term: term, definition: String(def.prefix(180)), icon: sem.icon, tone: sem.tone))
+        out.append(SpontaneousConceptItemIOS(term: term, definition: def, icon: sem.icon, tone: sem.tone))
     }
 
     var excludedSection = false
