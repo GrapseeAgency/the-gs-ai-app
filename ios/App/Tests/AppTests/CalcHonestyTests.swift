@@ -42,6 +42,10 @@ final class CalcHonestyTests: XCTestCase {
     /// Capture an actual SQLite snapshot before later main-actor mutations.
     /// Applying that stored snapshot explicitly makes the real startup race
     /// deterministic, without mocking SQL or erasing the shared app history.
+    /// Fixtures live in the test host's OS-managed temporary directory. Do
+    /// not unlink an open WAL database in a method-level defer: bootstrap can
+    /// still own its connection, and SQLite correctly reports API misuse.
+    /// The isolated test container/runner owns this temporary-file cleanup.
     @MainActor
     private func actualSQLiteBootstrapFixture() throws -> (directory: URL, sql: SQLiteChatStore, store: ConversationStore, conversations: [StoredConversation], messages: [StoredMessage]) {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("gs-bootstrap-" + UUID().uuidString)
@@ -70,7 +74,6 @@ final class CalcHonestyTests: XCTestCase {
     @MainActor
     func testActualSQLiteLegacyImportKeepsActualRowsAndCannotReviveClearedHistoryOnReopen() throws {
         let fixture = try actualSQLiteBootstrapFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.directory) }
         struct ActualLegacySnapshot: Encodable {
             let conversations: [StoredConversation]
             let messages: [StoredMessage]
@@ -94,7 +97,6 @@ final class CalcHonestyTests: XCTestCase {
     @MainActor
     func testActualSQLiteDelayedBootstrapKeepsNewerRenamePinArchiveAndSourceBytes() throws {
         let fixture = try actualSQLiteBootstrapFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.directory) }
         let original = try XCTUnwrap(fixture.conversations.first { $0.id == "actual-existing" })
         fixture.store.upsert(original)
         fixture.store.rename(id: original.id, to: "Actual newer title")
@@ -118,7 +120,6 @@ final class CalcHonestyTests: XCTestCase {
     @MainActor
     func testActualSQLiteDelayedBootstrapCannotResurrectDeletedConversationOrMessages() throws {
         let fixture = try actualSQLiteBootstrapFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.directory) }
         fixture.store.delete(id: "actual-existing")
         fixture.store.applyBootstrap(conversations: fixture.conversations, messages: fixture.messages)
         XCTAssertNil(fixture.store.conversation(withID: "actual-existing"))
@@ -131,7 +132,6 @@ final class CalcHonestyTests: XCTestCase {
     @MainActor
     func testActualSQLiteDelayedBootstrapCannotUndoClearHistoryOrDropPostClearAnswer() throws {
         let fixture = try actualSQLiteBootstrapFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.directory) }
         fixture.store.clearHistory()
         XCTAssertTrue(fixture.sql.loadConversations().isEmpty)
         XCTAssertTrue(fixture.sql.loadMessages().isEmpty)
@@ -148,7 +148,6 @@ final class CalcHonestyTests: XCTestCase {
     @MainActor
     func testActualSQLiteDelayedBootstrapCannotRestoreEditedAwayMessageTail() throws {
         let fixture = try actualSQLiteBootstrapFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.directory) }
         let original = try XCTUnwrap(fixture.conversations.first { $0.id == "actual-existing" })
         fixture.store.upsert(original)
         for message in fixture.messages where message.conversationId == original.id { fixture.store.append(message) }
@@ -163,7 +162,6 @@ final class CalcHonestyTests: XCTestCase {
     @MainActor
     func testActualSQLiteDelayedBootstrapCannotRestoreRetentionPurgedHistory() throws {
         let fixture = try actualSQLiteBootstrapFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.directory) }
         fixture.store.upsert(try XCTUnwrap(fixture.conversations.first { $0.id == "actual-existing" }))
         XCTAssertEqual(fixture.store.purgeConversations(updatedBefore: "2026-10-10T00:00:00.000Z"), 1)
         fixture.store.applyBootstrap(conversations: fixture.conversations, messages: fixture.messages)
