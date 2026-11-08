@@ -26,7 +26,7 @@ try {
     if (name==='react-dom/client') return {createRoot};
     throw Error('Unsupported dependency: '+name+'. Only bundled React and Tailwind are available; external imports are not fetched.');
   };
-  new Function('require','module','exports',compiled)(require,module,module.exports);
+  new Function('require','module','exports','React',compiled)(require,module,module.exports,React);
   const App = module.exports.default;
   if (typeof App!=='function' && (typeof App!=='object' || App===null)) throw Error('Export a default React component to preview this source.');
   class Boundary extends React.Component {
