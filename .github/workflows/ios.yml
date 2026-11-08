@@ -286,6 +286,7 @@ jobs:
             -derivedDataPath "$DERIVED_DATA" \
             -only-testing:AppTests/CalcHonestyTests \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedCodeCopyEditRunAndInvalidDraftReset \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTerminalUsesRealFilesWorkerAndUnsupportedRefusal \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTableAllDisplaysEveryActualRow \
@@ -324,6 +325,7 @@ jobs:
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
               ('PlatformRuntimeUITests', 'testGeneratedCodeCopyEditRunAndInvalidDraftReset'),
+              ('PlatformRuntimeUITests', 'testGeneratedTerminalUsesRealFilesWorkerAndUnsupportedRefusal'),
               ('CalcHonestyTests', 'testCodeDisplayAndEditorPreserveActualSource'),
               ('CalcHonestyTests', 'testGeneratedJavaScriptWorkerPreservesUnicodeStopsLoopsAndRejectsNetwork'),
               ('CalcHonestyTests', 'testWorkerCSPPreventsActualHTTPAndPolicyOnlyCounterfactualCanFetch'),
