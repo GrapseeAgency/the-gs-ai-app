@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 
 EXPECTED = {
     'generatedPollUsesRealTotalsAndResetsForNewPayload',
+    'generatedTerminalUsesRealFilesWorkerAndUnsupportedRefusal',
     'generatedCodeEditorAndWorkerPreserveUnicodeAndStopLoops',
     'generatedChartRangeAndPieSwitchUseOnlyActualWindowObservations',
     'generatedHtmlRunsRealButtonLogicAndSuppressesDynamicEmoji',
