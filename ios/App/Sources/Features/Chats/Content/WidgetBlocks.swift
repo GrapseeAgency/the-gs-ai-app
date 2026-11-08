@@ -270,7 +270,7 @@ private func recoverPlainTextWidgetIOS(kind: String, raw: String) -> [String: An
         let items = (!bullets.isEmpty ? bullets : kvPairs.map { "\($0.0): \($0.1)" })
         guard !items.isEmpty else { return nil }
         if kind == "poll" || kind == "menu" || kind == "chips" {
-            return ["options": items.map { ["label": $0, "votes": 1] }]
+            return ["options": items.map { ["label": $0, "votes": 0] }]
         }
         if kind == "followups" {
             return ["prompts": items]
@@ -502,8 +502,12 @@ func isValidWidget(kind: String, json: String) -> Bool {
         let cards = (obj["cards"] ?? obj["items"] ?? obj["deck"]) as? [[String: Any]]
         return cards?.contains(where: { ($0["front"] ?? $0["question"] ?? $0["term"]) != nil && ($0["back"] ?? $0["answer"] ?? $0["definition"]) != nil }) == true
     case "checklist":
-        let items = (obj["items"] ?? obj["tasks"] ?? obj["todos"]) as? [Any]
-        return items?.isEmpty == false
+        guard let items = (obj["items"] ?? obj["tasks"] ?? obj["todos"]) as? [Any], !items.isEmpty, items.count <= 30 else { return false }
+        return items.allSatisfy { item in
+            let fields = item as? [String: Any] ?? [:]
+            guard let label = (item as? String) ?? ((fields["label"] ?? fields["title"] ?? fields["text"] ?? fields["task"] ?? fields["name"]) as? String) else { return false }
+            return !NexlyIcons.cleanPlainText(label).isEmpty
+        }
     case "app":
         let type = (obj["type"] as? String ?? "wizard").lowercased()
         if type == "wizard" || type == "onboarding" {
@@ -2723,7 +2727,7 @@ private struct ChecklistBodyView: View {
                 TextField("Task text", text: $draft).textFieldStyle(.roundedBorder)
                     .accessibilityIdentifier("checklist.task.input")
                     .onChange(of: draft) { value in
-                        let clean = NexlyIcons.cleanPlainText(value)
+                        let clean = NexlyIcons.emojiToIconTokens(value).replacingOccurrences(of: ":([a-z0-9][a-z0-9-]{1,42}):", with: "", options: .regularExpression)
                         if clean != value { draft = clean }
                     }
                 HStack {
