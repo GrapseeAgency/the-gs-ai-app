@@ -466,6 +466,10 @@ private struct StructuredProseSequenceView: View {
         promoteStandaloneBoldHeadingsIOS(prose)
     }
 
+    private var visibleDashboardTab: String {
+        dashboardTabs.contains(activeDashboardTab) ? activeDashboardTab : "Dashboard"
+    }
+
     private var dashboardTabs: [String] {
         var tabs = ["Dashboard"]
         let hasTable = normalizedProse.contains {
@@ -594,7 +598,7 @@ private struct StructuredProseSequenceView: View {
         if !tabs.isEmpty {
             HStack(spacing: 4) {
                 ForEach(tabs, id: \.self) { (tab: String) in
-                    let selected = activeDashboardTab == tab
+                    let selected = visibleDashboardTab == tab
                     Button {
                         GSHaptics.select()
                         activeDashboardTab = tab
@@ -618,7 +622,7 @@ private struct StructuredProseSequenceView: View {
         }
 
         ForEach(entries, id: \.index) { entry in
-            if shouldShowEntryForTab(entry.block, tab: activeDashboardTab) {
+            if shouldShowEntryForTab(entry.block, tab: visibleDashboardTab) {
                 if let (sources, title) = entry.coalescedSources {
                     CitationsBlockView(citations: sources, title: title)
                 } else if let calc = entry.coalescedCalculator {
@@ -649,7 +653,7 @@ private struct StructuredProseSequenceView: View {
             let hasNum = proseText.range(of: "\\b\\d{2,}\\b", options: .regularExpression) != nil
             let hasDomainSignal = hasNum && (lowProse.contains("mortgage") || lowProse.contains("amortiz") || lowProse.contains("compound interest") || (lowProse.contains("loan") && (lowProse.contains("apr") || lowProse.contains("monthly"))) || (lowProse.contains("budget") && lowProse.contains("50/30/20")) || (lowProse.contains("calorie") && lowProse.contains("protein")) || lowProse.contains("tdee") || ((hasCurrency || hasNum) && hasPercent && (lowProse.contains("discount") || lowProse.contains("tax") || lowProse.contains("tip") || lowProse.contains("margin") || lowProse.contains("roi") || lowProse.contains("interest") || lowProse.contains("salary"))))
             let spontaneousSpec = parseQuickCalculatorSpec(titleRaw: "Interactive Scenario Calculator", bodyText: proseText)
-            let shouldShowSpontaneousCalc = spontaneousSpec != nil && !hasExplicitCalc && (activeDashboardTab == "Dashboard" || activeDashboardTab == "Calculator") && ((hasCurrency && hasPercent) || hasDomainSignal)
+            let shouldShowSpontaneousCalc = spontaneousSpec != nil && !hasExplicitCalc && (visibleDashboardTab == "Dashboard" || visibleDashboardTab == "Calculator") && ((hasCurrency && hasPercent) || hasDomainSignal)
             if shouldShowSpontaneousCalc, let spec = spontaneousSpec {
                 NexlyQuickCalculatorCardView(spec: spec)
             }
@@ -659,7 +663,7 @@ private struct StructuredProseSequenceView: View {
                 if case .widget(let k, _, _, _) = $0, ["chart", "table", "stat", "progress", "gauge"].contains(k) { return true }
                 return false
             }
-            let spontaneousMetrics = (!hasVisualDataBlock && activeDashboardTab == "Dashboard")
+            let spontaneousMetrics = (!hasVisualDataBlock && visibleDashboardTab == "Dashboard")
                 ? extractSpontaneousMetricsFromBlocksIOS(normalizedProse)
                 : []
             let shouldShowQuantitativeExplorer = spontaneousMetrics.count >= 3
@@ -673,7 +677,7 @@ private struct StructuredProseSequenceView: View {
                 if case .html = $0 { return true }
                 return false
             }
-            if !hasExplicitCalc && !shouldShowSpontaneousCalc && !shouldShowQuantitativeExplorer && !hasAnyWidgetOrHtml && activeDashboardTab == "Dashboard" {
+            if !hasExplicitCalc && !shouldShowSpontaneousCalc && !shouldShowQuantitativeExplorer && !hasAnyWidgetOrHtml && visibleDashboardTab == "Dashboard" {
                 let spontaneousConcepts = extractSpontaneousConceptsFromBlocksIOS(normalizedProse)
                 if spontaneousConcepts.count >= 3 {
                     NexlyInteractiveConceptDeckCardIOS(concepts: spontaneousConcepts)
