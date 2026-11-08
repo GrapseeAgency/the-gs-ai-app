@@ -145,13 +145,28 @@ final class PlatformRuntimeUITests: XCTestCase {
         guard shown else { return }
         let provider = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@ OR label CONTAINS %@ OR label == %@", "On My iPhone", "iCloud Drive", "Browse")).firstMatch
         XCTAssertTrue(provider.waitForExistence(timeout: 10), "Export must expose the actual system Files provider, not an app-owned Cancel label")
-        XCTAssertTrue(pickerCancel.isHittable, "The actual Files action must be usable")
+        // The first exact-label match may be a non-actionable accessibility
+        // container, and existence can precede the native sheet transition.
+        // Find an actually usable system action, then prove its delegate effect.
+        let actionableCancel = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Cancel"))
+                .allElementsBoundByIndex.contains { $0.isHittable }
+        }, object: app)
+        let becameUsable = XCTWaiter.wait(for: [actionableCancel], timeout: 10) == .completed
+        guard becameUsable, let nativeCancel = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Cancel"))
+            .allElementsBoundByIndex.first(where: { $0.isHittable }) else {
+            printPresentationDiagnostics(app, label: "EXPORT")
+            XCTFail("The actual Files action must be usable")
+            return
+        }
         let capture = XCTAttachment(screenshot: app.screenshot())
         capture.name = "genui-contextual-real-source-export-picker"; capture.lifetime = .keepAlways; add(capture)
-        pickerCancel.tap()
+        nativeCancel.tap()
         let cancelled = app.staticTexts["response.action.notice"].firstMatch
-        XCTAssertTrue(cancelled.waitForExistence(timeout: 10))
-        XCTAssertEqual(cancelled.label, "Export cancelled.", "The actual document-picker delegate must acknowledge cancellation; no simulated save is allowed")
+        let acknowledged = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Export cancelled."), object: cancelled)
+        let didAcknowledge = XCTWaiter.wait(for: [acknowledged], timeout: 10) == .completed
+        if !didAcknowledge { printPresentationDiagnostics(app, label: "EXPORT") }
+        XCTAssertTrue(didAcknowledge, "The actual document-picker delegate must acknowledge cancellation; no simulated save is allowed")
     }
 
     func testContextualReportShowsActualDataAndSharePresentsSystemActivitySheet() {
