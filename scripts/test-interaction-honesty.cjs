@@ -169,6 +169,13 @@ async function main() {
     const code = parseStream(compiled.text).find(segment => segment.kind === 'code')
     assert.equal(code.code, source)
   })
+  check('whole non-widget JSON renders exact source without interpreting machine strings as Markdown', () => {
+    for (const source of ['{}','[]','[1,2,3]','[{"literal":"**bold** :rocket: 😀"}]',' \r\n{"literal":"**bold** :rocket: 😀","nested":{"x":true}}\r\n ']) {
+      const segments = parseStream(source)
+      assert.equal(segments.length, 1); assert.equal(segments[0].kind, 'code')
+      assert.equal(segments[0].language, 'json'); assert.equal(segments[0].code, source)
+    }
+  })
   check('client streaming parser cannot bypass dataset validation with a merely parseable JSON object', () => {
     const invalidPayloads = [
       ['chart', { type: 'line', series: [{ name: 'Actual', data: [[0,null],[1,2]] }] }],
