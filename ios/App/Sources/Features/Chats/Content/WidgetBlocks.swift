@@ -3763,6 +3763,48 @@ private struct MediaBodyView: View {
     }
 }
 
+private struct BookingBodyView: View {
+    let obj: [String: Any]
+    let accent: Color
+    @State private var day: String? = nil
+    @State private var slot: String? = nil
+    @State private var saved = false
+    private var sourceIdentity: Data { (try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])) ?? Data() }
+    var body: some View {
+        let slots = (obj["slots"] as? [String] ?? []).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let days = (obj["items"] as? [[String: Any]] ?? []).map { str($0, "title", "label", "date") }.filter { !$0.isEmpty }
+        let ready = (days.isEmpty || day != nil) && (slots.isEmpty || slot != nil) && (day != nil || slot != nil)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Local selection only. No booking service is connected and no reservation will be made.").font(.caption).foregroundStyle(Aero.textSecondary)
+            ForEach(Array(days.enumerated()), id: \.offset) { _, value in
+                Button { day = value; saved = false } label: {
+                    HStack {
+                        Text(NexlyIcons.cleanPlainText(value))
+                        if day == value { NexlyGlyph(name: "check", size: 12, color: accent) }
+                    }
+                }
+                .accessibilityValue(day == value ? "Selected" : "Not selected")
+            }
+            ForEach(Array(slots.enumerated()), id: \.offset) { _, value in
+                Button { slot = value; saved = false } label: {
+                    HStack {
+                        Text(NexlyIcons.cleanPlainText(value))
+                        if slot == value { NexlyGlyph(name: "check", size: 12, color: accent) }
+                    }
+                }
+                .accessibilityValue(slot == value ? "Selected" : "Not selected")
+            }
+            Button(str(obj, "submitLabel").isEmpty ? "Save slot locally" : str(obj, "submitLabel")) { saved = true }
+                .disabled(!ready)
+            if saved {
+                Text("Saved locally: \([day, slot].compactMap { $0 }.joined(separator: " at ")). Preview only; no reservation has been made.")
+                    .font(.caption).accessibilityIdentifier("booking.local.receipt")
+            }
+        }
+        .onChange(of: sourceIdentity) { _ in day = nil; slot = nil; saved = false }
+    }
+}
+
 private struct AppBodyView: View {
     @Environment(\.gsWidgetAction) private var widgetAction
     let obj: [String: Any]
@@ -3791,6 +3833,8 @@ private struct AppBodyView: View {
 
         if aType == "tasks" {
             ChecklistBodyView(obj: obj, accent: accent)
+        } else if ["booking", "schedule"].contains(aType) {
+            BookingBodyView(obj: obj, accent: accent)
         } else if !cols.isEmpty || aType == "kanban" {
             kanbanView(cols: cols)
         } else if ["wizard", "onboarding", "stepper", "decision"].contains(aType) && !steps.isEmpty {
