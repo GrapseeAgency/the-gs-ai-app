@@ -181,6 +181,18 @@ async function main() {
     assert.equal(signed.widgets, 0)
     assert.ok(signed.text.includes('Alpha: -5'))
   })
+  check('automatic charts retain every pie category and percentage unit without mixing incomparable counts', () => {
+    const pie = compileWidgets({reply:Array.from({length:31}, (_,i)=>`Category ${i+1}: ${i+1}`).join('\n'), userPrompt:'Make a pie chart'})
+    assert.equal(pie.widgets, 1)
+    const widget = parseStream(pie.text).find(segment => segment.kind === 'widget')
+    assert.equal(widget.payload.series.length, 1)
+    assert.equal(widget.payload.series[0].data.length, 31)
+    const percent = compileWidgets({reply:'Alpha: 40%\nBeta: 60%', userPrompt:'Make a bar chart'})
+    assert.equal(parseStream(percent.text).find(segment => segment.kind === 'widget').payload.unit, '%')
+    const mixed = compileWidgets({reply:'Count: 100\nRate: 10%', userPrompt:'Make a bar chart'})
+    assert.equal(mixed.widgets, 0)
+    assert.ok(mixed.text.includes('Rate: 10%'))
+  })
   check('invalid or overflowing checklist tasks are refused without loss or unrelated widget healing', () => {
     for (const items of [[{label:'Actual'}, {alien:42}], Array.from({length:31}, (_,i)=>({label:`Task ${i}`}))]) {
       const source = JSON.stringify({items})
