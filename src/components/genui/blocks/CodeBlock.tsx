@@ -189,6 +189,9 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
 
   return (
     <div
+      data-code-block="true"
+      data-code-source={source}
+      data-code-language={lang}
       style={{
         borderRadius: 14,
         border: '1px solid #353059',
@@ -230,7 +233,7 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
               {expanded ? 'Collapse' : `Expand (${allLines.length})`}
             </button>
           )}
-          <button type="button" onClick={() => {
+          <button type="button" data-code-edit={editing ? undefined : "true"} onClick={() => {
               if (editing && editorError) return
               if (!editing) {
                 const encoded = requiresEncodedEditor(source)
@@ -270,6 +273,7 @@ function CodeControls({ code, language }: { code: string; language?: string }) {
       {editorError && <div role="alert" style={{ padding: '6px 12px', color: '#FCA5A5' }}>{editorError}</div>}
       {editing ? (
         <textarea
+          autoFocus
           aria-label={editorEncoded ? 'JSON-encoded source' : 'Source code'}
           value={editorDraft}
           onChange={(e) => {
