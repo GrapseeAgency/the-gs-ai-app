@@ -19,6 +19,29 @@ from PIL import Image
 SECTIONS = ['01-dashboard', '02-structured-launch', '03-react-code', '04-citations', '05-data-grid', '06-interactive-charts']
 
 
+def scroll_manifest(directory: Path, platform: str, section: str) -> dict:
+    if platform not in ('ios', 'android') or section not in SECTIONS:
+        raise ValueError('Unknown actual native response fixture')
+    stem = f'genui-reference-{platform}-{section}-393x852'
+    manifest = json.loads((directory / (stem + '-scroll.json')).read_text())
+    frames = manifest['frames']
+    viewport = float(manifest['viewportHeight'])
+    maximum = float(manifest['maximumOffsetY'])
+    if not math.isfinite(viewport) or viewport <= 0 or not math.isfinite(maximum) or maximum < 0:
+        raise ValueError('Invalid actual scroll geometry')
+    if not 1 <= len(frames) <= 20:
+        raise ValueError('Actual scroll evidence exceeds the renderer capture cap')
+    offsets = [float(frame['offsetY']) for frame in frames]
+    if any(not math.isfinite(value) for value in offsets) or abs(offsets[0]) > 1 or abs(offsets[-1] - maximum) > 1:
+        raise ValueError('Full-scroll evidence must cover both the actual top and bottom')
+    if any(not 0 < end - start <= viewport * 0.76 + 1 for start, end in zip(offsets, offsets[1:])):
+        raise ValueError('Actual scroll viewports must advance with overlap, never omit content')
+    for index, frame in enumerate(frames):
+        if frame['file'] != f'{stem}-scroll-{index}.png' or not (directory / frame['file']).is_file():
+            raise ValueError('Missing or misidentified actual scroll viewport')
+    return manifest
+
+
 def publish(directory: Path, platform: str, section: str | None = None, scroll_index: int | None = None) -> None:
     if platform not in ('ios', 'android'):
         raise ValueError('Expected actual native platform ios or android')
@@ -28,24 +51,11 @@ def publish(directory: Path, platform: str, section: str | None = None, scroll_i
         stem = f'genui-reference-{platform}-{section}-393x852'
         name = stem + '.png'
         if scroll_index is not None:
-            if scroll_index < 0 or scroll_index > 5:
-                raise ValueError('Scroll review index must be 0 through 5')
-            manifest = json.loads((directory / (stem + '-scroll.json')).read_text())
+            if scroll_index < 0 or scroll_index > 19:
+                raise ValueError('Scroll review index must be 0 through 19')
+            manifest = scroll_manifest(directory, platform, section)
             frames = manifest['frames']
-            viewport = float(manifest['viewportHeight'])
             maximum = float(manifest['maximumOffsetY'])
-            if not math.isfinite(viewport) or viewport <= 0 or not math.isfinite(maximum) or maximum < 0:
-                raise ValueError('Invalid actual scroll geometry')
-            if not 1 <= len(frames) <= 6:
-                raise ValueError('Every actual scroll viewport must fit the six scheduled review positions; extend review before accepting longer content')
-            offsets = [float(frame['offsetY']) for frame in frames]
-            if any(not math.isfinite(value) for value in offsets) or abs(offsets[0]) > 1 or abs(offsets[-1] - maximum) > 1:
-                raise ValueError('Full-scroll evidence must cover both the actual top and bottom')
-            if any(not 0 < end - start <= viewport * 0.76 + 1 for start, end in zip(offsets, offsets[1:])):
-                raise ValueError('Actual scroll viewports must advance with overlap, never omit content')
-            for index, frame in enumerate(frames):
-                if frame['file'] != f'{stem}-scroll-{index}.png' or not (directory / frame['file']).is_file():
-                    raise ValueError('Missing or misidentified actual scroll viewport')
             if scroll_index >= len(frames):
                 print(f'Full-scroll coverage: {platform} {section} has {len(frames)} genuine viewports through offset {maximum}; no further viewport exists')
                 continue
