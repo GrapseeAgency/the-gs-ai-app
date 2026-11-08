@@ -2448,72 +2448,44 @@ internal val NUMERIC_CELL = Regex("""^[^\p{L}]{0,3}[-+]?\d[\d.,]*\s*(?:%|[a-zA-Z
 private fun StatWidgetView(w: StatWidget) {
     val c = GsTheme.colors
     val dark = WidgetPalette.onDarkCanvas()
-    var selectedIdx by remember { mutableIntStateOf(0) }
-    val safeSelected = selectedIdx.coerceIn(0, (w.cards.size - 1).coerceAtLeast(0))
     WidgetCardShell(NexlyIcons.cleanPlainText(w.title).ifEmpty { "Stats" }, "stat") {
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()).padding(top = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            w.cards.forEachIndexed { i, card ->
-                val accent = WidgetPalette.legible(WidgetPalette.at(i), dark)
-                val isSelected = i == safeSelected
-                Column(
-                    Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(accent.copy(alpha = if (isSelected) (if (dark) 0.32f else 0.22f) else (if (dark) 0.20f else 0.12f)), c.surface)
-                            )
-                        )
-                        .border(if (isSelected) 1.5.dp else 1.dp, accent.copy(alpha = if (isSelected) 0.65f else (if (dark) 0.34f else 0.22f)), RoundedCornerShape(12.dp))
-                        .clickable { selectedIdx = i }
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
-                        .width(130.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(card.value, style = MaterialTheme.typography.titleLarge, color = accent, fontWeight = FontWeight.Bold)
-                        if (card.unit.isNotEmpty()) {
-                            Text(card.unit, style = MaterialTheme.typography.labelMedium, color = c.textSecondary, modifier = Modifier.padding(start = 3.dp, bottom = 2.dp))
-                        }
-                        if (card.delta.isNotEmpty()) {
-                            val up = card.direction == "up"
-                            Text(
-                                card.delta,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (card.direction == "flat") c.textTertiary else if (up) c.success else c.error,
-                                modifier = Modifier.padding(start = 6.dp, bottom = 2.dp)
-                            )
+        // Metrics are information, not pretend drill-down buttons. A two-column
+        // layout keeps every source card discoverable on an ordinary phone.
+        Column(Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            w.cards.chunked(2).forEachIndexed { rowIndex, row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEachIndexed { columnIndex, card ->
+                        val accent = WidgetPalette.legible(WidgetPalette.at(rowIndex * 2 + columnIndex), dark)
+                        Column(
+                            Modifier.weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Brush.verticalGradient(listOf(accent.copy(alpha = if (dark) 0.20f else 0.08f), c.surface)))
+                                .border(1.dp, accent.copy(alpha = if (dark) 0.34f else 0.22f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(NexlyIcons.cleanPlainText(card.label), style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(NexlyIcons.cleanPlainText(card.value), style = MaterialTheme.typography.titleMedium, color = c.textPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false))
+                                if (card.unit.isNotEmpty()) {
+                                    Text(NexlyIcons.cleanPlainText(card.unit), style = MaterialTheme.typography.labelSmall, color = c.textSecondary, modifier = Modifier.padding(start = 3.dp, bottom = 2.dp))
+                                }
+                            }
+                            if (card.delta.isNotEmpty()) {
+                                val delta = NexlyIcons.cleanPlainText(card.delta)
+                                val number = delta.trim().removeSuffix("%").replace('−', '-').toDoubleOrNull()?.takeIf { it.isFinite() }
+                                val direction = card.direction.ifEmpty { when { number == null -> ""; number > 0 -> "up"; number < 0 -> "down"; else -> "flat" } }
+                                val tone = when (direction) { "up" -> c.success; "down" -> c.error; else -> c.textSecondary }
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    if (direction == "up" || direction == "down") {
+                                        NexlyGlyph(name = if (direction == "up") "trending-up" else "trending-down", size = 12.dp, color = tone)
+                                    }
+                                    Text(delta, style = MaterialTheme.typography.labelSmall, color = tone)
+                                }
+                            }
                         }
                     }
-                    Text(card.label, style = MaterialTheme.typography.labelSmall, color = c.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
-        val activeCard = w.cards.getOrNull(safeSelected)
-        if (activeCard != null && w.cards.size > 1) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(c.raisedSurface)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "${activeCard.label}: ${activeCard.value}${if (activeCard.unit.isNotEmpty()) " ${activeCard.unit}" else ""}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = c.textPrimary,
-                    fontWeight = FontWeight.SemiBold
-                )
-                if (activeCard.delta.isNotEmpty()) {
-                    Text(
-                        activeCard.delta,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (activeCard.direction == "up") c.success else if (activeCard.direction == "down") c.error else c.textSecondary
-                    )
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
         }
