@@ -623,7 +623,7 @@ private struct StructuredProseSequenceView: View {
             }
         }
 
-        if !isStreaming && normalizedProse.count >= 2 {
+        if !isStreaming && !normalizedProse.isEmpty {
             let hasExplicitCalc = entries.contains { e in
                 if e.coalescedCalculator != nil { return true }
                 if case .widget(let k, _, _, _) = e.block, ["calc", "calculator", "converter"].contains(k) { return true }
