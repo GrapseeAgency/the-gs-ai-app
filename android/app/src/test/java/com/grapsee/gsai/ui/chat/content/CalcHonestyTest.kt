@@ -31,6 +31,16 @@ class CalcHonestyTest {
         }
     }
 
+    @Test fun learningKeepsCompleteDefinitionsAndRejectsAmbiguousAnswerAlternatives() {
+        val definition = List(6) { "A supplied definition with an important source qualification." }.joinToString(" ")
+        val source = listOf("Alpha", "Beta", "Gamma").joinToString("\n") { "- **$it**: $definition $it." }
+        val concepts = extractSpontaneousConceptsFromBlocks(parseBlocks(source))
+        assertEquals(3, concepts.size)
+        assertEquals("$definition Alpha.", concepts.first().definition)
+        val duplicates = listOf("Alpha", "Beta", "Gamma").joinToString("\n") { "- **$it**: $definition" }
+        assertEquals(1, extractSpontaneousConceptsFromBlocks(parseBlocks(duplicates)).size)
+    }
+
     @Test fun spontaneousLearningUsesDefinitionsButDoesNotTurnSourcesOrPlansIntoQuizzes() {
         val definitions = "- Atom: A basic unit of a chemical element.\n- Molecule: Two or more atoms bonded together.\n- Element: A substance made of one type of atom."
         assertEquals(3, extractSpontaneousConceptsFromBlocks(parseBlocks("## Core concepts\n\n$definitions")).size)
