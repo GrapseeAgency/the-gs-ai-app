@@ -1330,7 +1330,7 @@ fun ChatScreen(
             .navigationBarsPadding()
     ) {
         NexlyChatHeader(
-            sparkleLabel = "New chat",
+            sparkleLabel = if (newChatAction != null) "New chat" else "Search in chat",
             onSparkle = {
                 if (newChatAction != null) newChatAction()
                 else {
@@ -1348,7 +1348,11 @@ fun ChatScreen(
                     searchActiveIndex = 0
                 }
             },
-            menuIcon = if (atWorkspaceRoot && menuAction != null) GsIcons.Menu else GsIcons.MoreVertical,
+            menuIcon = when {
+                atWorkspaceRoot && menuAction != null -> GsIcons.Menu
+                activeConversationId != null -> GsIcons.MoreVertical
+                else -> GsIcons.ArrowLeft
+            },
             // Labelled for what the tap DOES. Inside a conversation this control opens
             // the conversation-options sheet, not the drawer and not "back" — the old
             // constant "Back" announced a navigation that never happened, which is both
