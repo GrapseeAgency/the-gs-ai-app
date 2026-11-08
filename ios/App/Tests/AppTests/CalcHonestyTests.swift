@@ -4,6 +4,58 @@ import WebKit
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testCodeDisplayAndEditorPreserveActualSource() throws {
+        let source = #"const data = {"😀":7,"🌅":9}; console.log(data["😀"]+data["🌅"], "😀".length);"#
+        let blocks = parseBlocks("```javascript\n\(source)\n```")
+        guard case .codeBlock(_, let parsed, _, _) = blocks.first else { return XCTFail("Source must parse as code") }
+        XCTAssertEqual(parsed, source)
+        for value in [source, #"console.log("\ud83d\ude00")"#, "বাংলা 日本語", "🏳️‍🌈"] {
+            let encoded = CodeDisplayIOS.encodeEditor(value)
+            XCTAssertEqual(try CodeDisplayIOS.decodeEditor(encoded), value)
+            XCTAssertEqual(CodeDisplayIOS.escape(encoded), encoded)
+        }
+        for invalid in ["'not JSON'", "\"unfinished", "\"ok\" false", "[]", "\"bad\\x\""] {
+            XCTAssertThrowsError(try CodeDisplayIOS.decodeEditor(invalid))
+        }
+    }
+
+    @MainActor
+    func testGeneratedJavaScriptWorkerPreservesUnicodeStopsLoopsAndRejectsNetwork() async throws {
+        let source = #"const data = {"😀":7,"🌅":9}; console.log(data["😀"]+data["🌅"], "😀".length);"#
+        let cases = [
+            (source, "16 2\nCompleted."),
+            ("self.addEventListener('securitypolicyviolation',e=>console.log('BLOCKED '+e.effectiveDirective));try{await fetch('https://github.com/');}catch{console.log('FETCH REFUSED');}await new Promise(r=>setTimeout(r,100));", "BLOCKED connect-src"),
+            ("while(true) {}", "Stopped: execution exceeded 2 seconds.")
+        ]
+        let old = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }.first { $0.isKeyWindow }
+        let window: UIWindow
+        if let scene = old?.windowScene { window = UIWindow(windowScene: scene) }
+        else { window = UIWindow(frame: UIScreen.main.bounds) }
+        defer { window.isHidden = true; window.rootViewController = nil; old?.makeKeyAndVisible() }
+        func findWeb(_ view: UIView) -> WKWebView? {
+            if let web = view as? WKWebView { return web }
+            for child in view.subviews { if let web = findWeb(child) { return web } }
+            return nil
+        }
+        for (program, expected) in cases {
+            let host = UIHostingController(rootView: HtmlBlockView(kind: "html", source: JavaScriptWorkerSandboxIOS.document(source: program), open: false))
+            window.rootViewController = host; window.makeKeyAndVisible()
+            let deadline = Date().addingTimeInterval(20)
+            var observed = ""
+            while Date() < deadline {
+                host.view.layoutIfNeeded()
+                if let web = findWeb(host.view), let output = try? await web.evaluateJavaScript("document.getElementById('out')?.textContent || ''") as? String {
+                    observed = output
+                    if output.contains(expected) { break }
+                }
+                try await Task.sleep(nanoseconds: 50_000_000)
+            }
+            XCTAssertTrue(observed.contains(expected), "Actual WKWebView worker: expected \(expected), observed \(observed)")
+            XCTAssertFalse(observed.contains("😀"))
+        }
+    }
+
     func testPieLabelsUseActualCategoryInsteadOfFirstAxisLabelForEverySeries() {
         XCTAssertEqual(chartSliceLabelIOS(name: "Organic", labels: ["A", "B"], seriesIndex: 1), "Organic")
         XCTAssertEqual(chartSliceLabelIOS(name: "", labels: ["A", "B"], seriesIndex: 1), "B")
