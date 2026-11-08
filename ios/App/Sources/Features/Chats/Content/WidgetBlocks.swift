@@ -511,6 +511,11 @@ func isValidWidget(kind: String, json: String) -> Bool {
     case "app":
         let type = (obj["type"] as? String ?? "wizard").lowercased()
         if type == "tasks" { return isValidWidget(kind: "checklist", json: json) }
+        if type == "timer", let raw = obj["durationSeconds"] {
+            guard let number = raw as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return false }
+            let seconds = number.doubleValue
+            return seconds.isFinite && seconds.rounded() == seconds && seconds >= 1 && seconds <= 604800
+        }
         if type == "wizard" || type == "onboarding" {
             return ((obj["steps"] ?? obj["stages"]) as? [Any])?.isEmpty == false
         }
