@@ -2672,8 +2672,9 @@ private struct ChecklistBodyView: View {
             let label = NexlyIcons.cleanPlainText((raw as? String) ?? str(dict, "label", "title", "text", "task", "name"))
             let rawDone = (dict["done"] ?? dict["checked"]) as? NSNumber
             let done = rawDone.map { CFGetTypeID($0) == CFBooleanGetTypeID() && $0.boolValue } ?? false
-            return ChecklistTaskIOS(id: "source-\(index)", label: label,
-                detail: NexlyIcons.cleanPlainText(str(dict, "detail", "description")), done: done)
+            let detail = [str(dict, "detail", "description", "subtitle"), str(dict, "meta"), str(dict, "badge", "priority"), str(dict, "date")]
+                .filter { !$0.isEmpty }.map { NexlyIcons.cleanPlainText($0) }.joined(separator: " · ")
+            return ChecklistTaskIOS(id: "source-\(index)", label: label, detail: detail, done: done)
         }
     }
     private var sourceIdentity: Data {
@@ -3787,7 +3788,9 @@ private struct AppBodyView: View {
         let groups = (obj["groups"] ?? obj["categories"] ?? obj["tiers"]) as? [[String: Any]] ?? []
         let items = (obj["items"] ?? obj["cards"] ?? obj["metrics"] ?? obj["kpis"]) as? [[String: Any]] ?? []
 
-        if !cols.isEmpty || aType == "kanban" {
+        if aType == "tasks" {
+            ChecklistBodyView(obj: obj, accent: accent)
+        } else if !cols.isEmpty || aType == "kanban" {
             kanbanView(cols: cols)
         } else if ["wizard", "onboarding", "stepper", "decision"].contains(aType) && !steps.isEmpty {
             wizardView(steps: steps)
