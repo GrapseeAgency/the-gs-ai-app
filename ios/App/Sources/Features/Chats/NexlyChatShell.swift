@@ -61,13 +61,16 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
                 .overlay(Circle().strokeBorder(brandInk.opacity(0.30), lineWidth: 1))
                 .accessibilityHidden(true)
 
-            // One word. The tagline was a second line of chrome that repeated
-            // what the sparkle and the name already said, and it pushed the
-            // title high in a row of 44pt discs.
-            Text("Nexly")
-                .font(.system(size: 16.5, weight: .semibold))
-                .foregroundStyle(NexlyInk.header)
-                .lineLimit(1)
+            // Preserve both brand lines from the supplied response references.
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Nexly")
+                    .font(.system(size: 16.5, weight: .semibold))
+                    .foregroundStyle(NexlyInk.header)
+                Text("Your AI companion")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(NexlyInk.headerMeta)
+            }
+            .lineLimit(1)
 
             Spacer(minLength: 8)
 
