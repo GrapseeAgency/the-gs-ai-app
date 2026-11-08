@@ -182,7 +182,7 @@ fun CodeBlockCard(
 
     val langLabel = (language ?: "code").trim().ifBlank { "code" }
     val lowerLang = langLabel.lowercase()
-    val isBrowserLang = lowerLang in setOf("html", "htm", "svg", "js", "javascript")
+    val isBrowserLang = lowerLang in setOf("html", "htm", "svg", "js", "javascript", "node")
 
     Surface(
         shape = RoundedCornerShape(14.dp),
@@ -247,6 +247,12 @@ fun CodeBlockCard(
                             .padding(horizontal = 7.dp, vertical = 3.dp)
                     )
                     Spacer(Modifier.width(4.dp))
+                }
+                if (currentCode != code || editorError != null) {
+                    Text("Reset", color = Color(0xFFC5BCFF), modifier = Modifier.clickable {
+                        currentCode = code; editing = false; editorDraft = ""; editorError = null
+                        editorEncoded = false; sandboxMode = false; runResult = null; runCount = 0
+                    }.padding(horizontal = 6.dp))
                 }
                 IconButton(onClick = { onCopyCode(currentCode); copied = true }, modifier = Modifier.size(26.dp)) {
                     Icon(
@@ -349,8 +355,9 @@ fun CodeBlockCard(
                             .background(Color(0xFF6C4CF6))
                             .clickable {
                                 if (editing && editorError != null) {
+                                    sandboxMode = false
                                     runResult = CodeRunResult("", "Not executed: correct the JSON-encoded source draft first.")
-                                } else if (lowerLang in setOf("html", "htm", "svg", "js", "javascript")) {
+                                } else if (lowerLang in setOf("html", "htm", "svg", "js", "javascript", "node")) {
                                     runCount += 1
                                     runResult = null
                                     sandboxSource = currentCode
