@@ -1971,7 +1971,7 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
                     w.series.forEach { s ->
                         s.data.forEachIndexed { i, pt ->
                             val px = padL + cw * ((pt.getOrElse(0) { 0f } - minX) / spanX)
-                            val py = padT + ch * (1f - ((pt.getOrElse(1) { 0f } - minY) / spanY))
+                            val py = padT + ch * domain.heightFraction(pt.getOrElse(1) { 0f })
                             val dx = px - tapX
                             val dy = py - tapY
                             val d = dx * dx + dy * dy
