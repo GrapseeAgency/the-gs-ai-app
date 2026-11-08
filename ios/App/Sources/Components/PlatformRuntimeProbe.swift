@@ -16,6 +16,8 @@ struct PlatformRuntimeProbe: View {
     @State private var showChecklist = false
     @State private var nextChecklist = false
     @State private var appChecklist = false
+    @State private var showDashboard = false
+    @State private var nextDashboard = false
     @State private var ordinaryChecklist = false
     @State private var nextOrdinaryChecklist = false
     @State private var showCalculator = false
@@ -43,6 +45,7 @@ struct PlatformRuntimeProbe: View {
             Button("Open generated timer") { showTimer = true }
             Button("Open generated booking") { showBooking = true }
             Button("Open generated checklist") { showChecklist = true }
+            Button("Open generated dashboard") { showDashboard = true }
             Button("Open generated calculator") { showCalculator = true }
             Button("Open generated table") { showTable = true }
             Button("Open generated chart") { showChart = true }
@@ -66,6 +69,16 @@ struct PlatformRuntimeProbe: View {
                     WidgetBlockView(kind: "app", json: nextBooking
                         ? #"{"type":"booking","title":"New slots","slots":["11:00"]}"#
                         : #"{"type":"booking","title":"Actual slots","slots":["09:00","10:00"]}"#, open: false).padding()
+                }
+            }
+        }
+        .sheet(isPresented: $showDashboard) {
+            VStack {
+                Button("Replace dashboard source") { nextDashboard = true }
+                ScrollView {
+                    BlocksView(blocks: parseBlocks(nextDashboard
+                        ? "# Replacement dashboard\n\n## Supplied heading\n\nReplacement stays visible\n\nSupplied replacement footer"
+                        : "# Source dashboard\n\n| Name | Value |\n| --- | --- |\n| A | 1 |\n\n- [ ] Source task\n\nSource footer")).padding()
                 }
             }
         }
