@@ -308,9 +308,12 @@ jobs:
           python3 scripts/check_response_archive.py --self-test
           DIR=ios/build/source-archive
           mkdir -p "$DIR"
-          xcrun xcresulttool export attachments \
-            --path ios/build/GSApp-genui.xcresult --output-path "$DIR/raw"
-          python3 scripts/check_response_archive.py "$DIR/raw" | tee "$DIR/verification.log"
+          if ! xcrun xcresulttool export attachments \
+            --path ios/build/GSApp-genui.xcresult --output-path "$DIR/raw" > "$DIR/export.log" 2>&1; then
+            python3 -c 'from pathlib import Path; print("::error::Native source attachment export failed: " + Path("ios/build/source-archive/export.log").read_text().replace("%", "%25").replace("\n", "%0A"))'
+            exit 1
+          fi
+          python3 -u scripts/check_response_archive.py "$DIR/raw" 2>&1 | tee "$DIR/verification.log"
 
       - name: Preserve native source archive byte evidence
         if: always()
@@ -390,6 +393,14 @@ jobs:
               lines = log.read_text(errors='replace').splitlines()
               failures = [line for line in lines if 'Ignoring failure to get hierarchy' not in line and any(word in line.lower() for word in ['error:', 'testing failed:', '** test failed **', 'timed out', 'could not'])]
               failures += [line for line in lines if 'Test Case' in line and 'failed' in line]
+              for line in lines:
+                  if 'GS_PRESENTATION_' in line:
+                      print('::error::' + line.replace('%', '%25').replace('\r', '%0D'))
+                  elif any(name in line for name in ['testWorkerCSPPreventsActualHTTPAndPolicyOnlyCounterfactualCanFetch', 'testSourceArchivePreservesRealBytesAndKnownCRCWithoutInventingAProject']) and 'passed' in line:
+                      print('::notice::Actual native unit proof: ' + line.replace('%', '%25'))
+              for archive_log in [Path('ios/build/source-archive/export.log'), Path('ios/build/source-archive/verification.log')]:
+                  if archive_log.exists():
+                      print('::notice::Native archive diagnostic: ' + archive_log.read_text(errors='replace')[-8000:].replace('%', '%25').replace('\n', '%0A'))
               for line in failures[-35:]:
                   print('::error::' + line[:1800].replace('%', '%25').replace('\r', '%0D'))
           PYTEST
