@@ -101,6 +101,8 @@ targets:
         buildPhase: resources
       - path: ../shared-contracts/javascript-worker-sandbox.json
         buildPhase: resources
+      - path: ../shared-contracts/terminal-runtime.json
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.grapsee.gsai
