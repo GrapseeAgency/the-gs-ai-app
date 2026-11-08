@@ -4770,8 +4770,10 @@ private struct TerminalBodyView: View {
 private struct CollabBodyView: View {
     let obj: [String: Any]
     let accent: Color
-    @State private var counterVal: Int? = nil
+    @State private var counterVal: Double? = nil
     @State private var votes: [Int: Int] = [:]
+    @State private var voted: Set<Int> = []
+    @State private var checked: Set<Int> = []
     @State private var addedItems: [String] = []
     @State private var removedIndices: Set<Int> = []
     @State private var draftItem: String = ""
@@ -4779,7 +4781,7 @@ private struct CollabBodyView: View {
     var body: some View {
         let surface = str(obj, "surface", "type").lowercased()
         let startObj = (obj["start"] as? [String: Any]) ?? [:]
-        let initialCount = Int(dbl(startObj, "count", "value", fallback: dbl(obj, "count", "value", fallback: 0)))
+        let initialCount = dbl(obj, "start", "count", "value", fallback: dbl(startObj, "count", "value", fallback: 0))
         let currentCount = counterVal ?? initialCount
         let rawItems = ((obj["items"] ?? obj["options"] ?? obj["tasks"] ?? obj["notes"]) as? [Any])?.map { item -> String in
             if let s = item as? String { return NexlyIcons.cleanPlainText(s) }
@@ -4788,7 +4790,11 @@ private struct CollabBodyView: View {
         } ?? []
 
         VStack(alignment: .leading, spacing: 8) {
-            if surface == "counter" {
+            Text("Local preview only. Changes are not shared with other viewers or saved on a server.")
+                .font(.caption).foregroundStyle(Aero.textSecondary)
+            if surface == "pointer" {
+                Text("Live pointer synchronization is not connected. No remote cursors have been observed.").font(.caption)
+            } else if surface == "counter" {
                 HStack(spacing: 12) {
                     Button {
                         GSHaptics.select()
@@ -4828,18 +4834,20 @@ private struct CollabBodyView: View {
                     .buttonStyle(.plain)
                 }
             } else if surface == "vote" {
-                let opts = rawItems.isEmpty ? ["Approve", "Needs Review"] : rawItems
-                let total = max(1, opts.indices.reduce(0) { $0 + (votes[$1] ?? 1) })
+                let opts = rawItems
+                if opts.count < 2 { Text("Voting requires at least two supplied options.").font(.caption) }
+                let total = opts.indices.reduce(0) { $0 + (votes[$1] ?? 0) }
                 ForEach(Array(opts.enumerated()), id: \.offset) { idx, label in
-                    let v = votes[idx] ?? 1
+                    let v = votes[idx] ?? 0
                     Button {
                         GSHaptics.select()
-                        votes[idx] = v + 1
+                        guard !voted.contains(idx) else { return }
+                        voted.insert(idx); votes[idx] = v + 1
                     } label: {
                         HStack {
                             Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
                             Spacer()
-                            Text("\(v) (\(Int(round(Double(v) / Double(total) * 100)))%)")
+                            Text("\(v) (\(total > 0 ? Int(round(Double(v) / Double(total) * 100)) : 0)%)")
                                 .font(Aero.mono(11))
                                 .foregroundStyle(accent)
                         }
@@ -4847,13 +4855,19 @@ private struct CollabBodyView: View {
                         .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 8))
                     }
                     .buttonStyle(.plain)
+                    .disabled(voted.contains(idx))
                 }
             } else {
                 let allItems = rawItems + addedItems
                 ForEach(Array(allItems.enumerated()), id: \.offset) { idx, item in
                     if !removedIndices.contains(idx) {
                         HStack {
-                            NexlyGlyph(name: "circle-check", size: 13, color: accent)
+                            Button {
+                                if checked.contains(idx) { checked.remove(idx) } else { checked.insert(idx) }
+                            } label: { NexlyGlyph(name: checked.contains(idx) ? "square-check" : "square", size: 13, color: accent) }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Toggle task: " + item)
+                                .accessibilityValue(checked.contains(idx) ? "Completed" : "Not completed")
                             Text(item)
                                 .font(.system(size: 12))
                                 .foregroundStyle(Aero.text)
