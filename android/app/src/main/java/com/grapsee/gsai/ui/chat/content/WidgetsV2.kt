@@ -838,15 +838,46 @@ internal fun sanitizeWidgetPresentationAndroid(value: JsonElement, key: String =
     }
 }
 
+/** Repair only unquoted dialect literals; executable/human strings are data. */
+internal fun cleanWidgetDialectLiteralsAndroid(raw: String): String {
+    val result = StringBuilder(raw.length)
+    var quote: Char? = null
+    var escaped = false
+    var index = 0
+    while (index < raw.length) {
+        val c = raw[index]
+        if (quote != null) {
+            result.append(c)
+            if (escaped) escaped = false
+            else if (c == '\\') escaped = true
+            else if (c == quote) quote = null
+            index++
+        } else if (c == '"' || c == '\'') {
+            quote = c; result.append(c); index++
+        } else if (c.isLetter() || c == '_') {
+            var end = index + 1
+            while (end < raw.length && (raw[end].isLetterOrDigit() || raw[end] == '_')) end++
+            val word = raw.substring(index, end)
+            var next = end
+            while (next < raw.length && raw[next].isWhitespace()) next++
+            result.append(if (next < raw.length && raw[next] == ':') word else when (word) {
+                "True" -> "true"
+                "False" -> "false"
+                "None" -> "null"
+                else -> word
+            })
+            index = end
+        } else { result.append(c); index++ }
+    }
+    return result.toString()
+}
+
 internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
     val trimmed = rawJson.trim()
     if (trimmed.isEmpty()) return rawJson
 
-    // 1. Pre-clean Python/JS literals (`True`/`False`/`None`) outside strings.
-    val dialectCleaned = trimmed
-        .replace(Regex("(?<=[:\\[\\s,])True(?=[,\\]\\}\\s]|$)"), "true")
-        .replace(Regex("(?<=[:\\[\\s,])False(?=[,\\]\\}\\s]|$)"), "false")
-        .replace(Regex("(?<=[:\\[\\s,])None(?=[,\\]\\}\\s]|$)"), "null")
+    // 1. Preserve every quoted byte, including code/HTML/URLs and escapes.
+    val dialectCleaned = cleanWidgetDialectLiteralsAndroid(trimmed)
 
     val element = try {
         widgetJson.parseToJsonElement(dialectCleaned)
