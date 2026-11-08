@@ -75,11 +75,11 @@ permissions:
   contents: read
 
 concurrency:
-  # This generation exercises the actual MessageBubble parent/storage and
-  # normal header tap, not merely standalone rich blocks. Preserve the older
-  # focused acceptance/full audit while the production-wrapper generation runs.
-  # Per-file pushes replace only this generation's pending run, not its evidence.
-  group: ios-response-runtime-v3-${{ github.ref }}
+  # Final acceptance adds actual SQLite reopen/older-page identity and the
+  # exact reference React application's filters and persisted records, beyond
+  # the standalone preview contract. Keep previous real evidence intact while
+  # this generation runs; only pending runs within this generation are replaced.
+  group: ios-response-runtime-v4-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -394,6 +394,9 @@ jobs:
           import re
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
+              ('PlatformRuntimeUITests', 'testConversationActionsTapOpensRealOptionsWithoutLeavingChat'),
+              ('CalcHonestyTests', 'testActualMessagePreviewIdentitySurvivesRehydrationWithoutInventingServerIDs'),
+              ('CalcHonestyTests', 'testActualSQLiteHistoryAndOlderPagesKeepDurablePreviewIdentity'),
               ('PlatformRuntimeUITests', 'testOrdinaryMarkdownTaskControlsPreserveRealDetailsAndCompletion'),
               ('PlatformRuntimeUITests', 'testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch'),
               ('CalcHonestyTests', 'testGeneratedReactTsxUsesActualWebKitTasksPersistenceAndResponseIsolation'),
