@@ -342,6 +342,15 @@ private func normalizeJSONRoot(kind: String, value: Any) -> [String: Any]? {
 func inferWidgetKind(_ raw: String) -> String? {
     guard let obj = parseRelaxedJSONObject(kind: "json", raw: raw) else { return nil }
     let keys = Set(obj.keys)
+    if keys == Set(["items"]), let items = obj["items"] as? [Any] {
+        let labels: Set<String> = ["label", "text", "title", "name", "task", "todo", "percent", "value", "front", "back", "question", "options", "url", "src", "time", "date", "body"]
+        let meaningful = items.contains { item in
+            if let text = item as? String { return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            if let object = item as? [String: Any] { return !labels.isDisjoint(with: object.keys) }
+            return false
+        }
+        if !meaningful { return nil }
+    }
     let explicitApp = ["kind", "widget", "type"].contains { key in
         guard let value = obj[key] as? String else { return false }
         return widgetKindOf(value) == "app"
