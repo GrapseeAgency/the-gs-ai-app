@@ -48,6 +48,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -1007,7 +1008,7 @@ private fun BlockView(
             // grid, a dated log, percentages. When it parses as one of those
             // it renders as the native widget directly — no tabs, no
             // placeholder, nothing for the user to configure.
-            val visual = remember(block.code) {
+            val visual = remember(block.code, block.open, isStreaming, block.language) {
                 if (block.open || isStreaming) null
                 else {
                     val lang = block.language?.lowercase()
@@ -1015,7 +1016,16 @@ private fun BlockView(
                     else null
                 }
             }
-            if (visual != null) {
+            val codeActions = LocalResponseCodeActions.current
+            var editPromotedSource by remember(block.sourceStart, block.code) { mutableStateOf(false) }
+            DisposableEffect(codeActions, block.sourceStart, block.code, visual) {
+                if (visual != null) codeActions?.register(block.sourceStart, ResponseCodeActions.Entry(block.language, { block.code }, {
+                    codeActions.editOnRegistration(block.sourceStart)
+                    editPromotedSource = true
+                }))
+                onDispose { if (visual != null) codeActions?.remove(block.sourceStart) }
+            }
+            if (visual != null && !editPromotedSource) {
                 WidgetView(visual, onSendPrompt)
             } else {
                 CodeBlockCard(
