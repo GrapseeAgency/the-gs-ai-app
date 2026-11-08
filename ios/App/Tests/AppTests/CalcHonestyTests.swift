@@ -5,6 +5,59 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testContextualCodeActionsRetainActualDraftsAndStayResponseScoped() {
+        let first = ResponseCodeActionsIOS(), other = ResponseCodeActionsIOS()
+        var edits = 0
+        first.editFirst()
+        first.register(7, entry: .init(language: "javascript", source: "original", edit: { edits += 1 }))
+        XCTAssertEqual(edits, 1)
+        first.update(7, source: "actually edited")
+        XCTAssertEqual(first.source(7)?.1, "actually edited")
+        first.remove(7)
+        XCTAssertEqual(first.source(7)?.1, "actually edited")
+        XCTAssertNil(other.source(7))
+        first.register(7, entry: .init(language: "javascript", source: "actually edited", edit: { edits += 1 }))
+        first.editFirst()
+        XCTAssertEqual(edits, 2)
+    }
+
+    func testSourceArchivePreservesRealBytesAndKnownCRCWithoutInventingAProject() throws {
+        let source = "বাংলা 日本語\r\n😀\u{0000}"
+        let archive = try responseSourceArchiveIOS([("python", source), ("../../unsafe", "123456789")])
+        func number(_ offset: Int, _ length: Int) -> UInt32 {
+            (0..<length).reduce(0) { $0 | (UInt32(archive[offset + $1]) << UInt32($1 * 8)) }
+        }
+        var files: [String: Data] = [:], cursor = 0
+        while number(cursor, 4) == 0x04034b50 {
+            XCTAssertEqual(number(cursor + 8, 2), 0) // Stored ZIP, no fake compressed size.
+            let size = Int(number(cursor + 18, 4)), nameSize = Int(number(cursor + 26, 2))
+            let name = String(decoding: archive[(cursor + 30)..<(cursor + 30 + nameSize)], as: UTF8.self)
+            let dataStart = cursor + 30 + nameSize + Int(number(cursor + 28, 2))
+            files[name] = archive.subdata(in: dataStart..<(dataStart + size))
+            if name == "snippet-2.txt" { XCTAssertEqual(number(cursor + 14, 4), 0xcbf43926) } // Published CRC-32 test vector.
+            cursor = dataStart + size
+        }
+        XCTAssertEqual(number(cursor, 4), 0x02014b50)
+        XCTAssertEqual(number(archive.count - 22, 4), 0x06054b50)
+        XCTAssertEqual(number(archive.count - 12, 2), 3)
+        XCTAssertEqual(number(archive.count - 6, 4), UInt32(cursor))
+        XCTAssertEqual(files.keys.sorted(), ["README.txt", "snippet-1.py", "snippet-2.txt"])
+        XCTAssertEqual(files["snippet-1.py"], Data(source.utf8))
+        XCTAssertTrue(String(decoding: files["README.txt"]!, as: UTF8.self).contains("not a complete runnable project"))
+        XCTAssertEqual(responseSourceExtensionIOS("JAVASCRIPT"), "js")
+        XCTAssertThrowsError(try responseSourceArchiveIOS([]))
+        let attachment = XCTAttachment(data: archive, uniformTypeIdentifier: "public.zip-archive")
+        attachment.name = "response-source-archive.zip"; attachment.lifetime = .keepAlways; add(attachment)
+    }
+
+    func testSharedResponseReportIncludesActualTableAndWidgetData() {
+        let blocks = parseBlocks("| Name | Amount |\n| --- | --- |\n| Actual | 42 |\n\n```chart\n{\"labels\":[\"A\"],\"values\":[73]}\n```")
+        let report = extractCopyableProseSummary(blocks, citationsOnly: false)
+        XCTAssertTrue(report.contains("Actual\t42"))
+        XCTAssertTrue(report.contains("73"))
+        XCTAssertEqual(extractCopyableProseSummary([], citationsOnly: true), "")
+    }
+
     func testNativeFencesPreserveEverySourceSeparatorAndBlankLine() throws {
         let sources = ["", "\n", "\r\n", "\n\nconst value = 7;\n\n", "\r\nconst value = 7;\r\n\r\n", "বাংলা 日本語\r\n\n\r\n", "const key = \"😀\";\rkeep"]
         for marker in ["```", "````", "~~~~~"] {
