@@ -39,3 +39,7 @@ window.gsRenderApp = (kind, payload) => {
 import { CollabWidget, type CollabPayload } from '../src/components/genui/collab/CollabWidget'
 declare global { interface Window { gsRenderCollab: (payload: CollabPayload) => void } }
 window.gsRenderCollab = payload => root.render(<WidgetSurface dark={false}><CollabWidget payload={payload} /></WidgetSurface>)
+
+import { MessageContent } from '../src/components/genui/MessageContent'
+declare global { interface Window { gsRenderMessage: (text: string) => void } }
+window.gsRenderMessage = text => root.render(<MessageContent text={text} dark={false} />)
