@@ -36,7 +36,7 @@ export type CollabPayload = {
 type Presence = { id: string; name: string; color: string }
 type Shared = { status: 'connecting' | 'live' | 'offline'; state: Record<string, unknown>; presence: Presence[] }
 
-function useCollabRoom(room: string, me: Presence): Shared {
+function useCollabRoom(room: string, me: Presence, initial: Record<string, unknown>): Shared {
   const [shared, setShared] = useState<Shared>({ status: 'connecting', state: {}, presence: [] })
   const meRef = useRef(me)
 
@@ -70,14 +70,14 @@ function useCollabRoom(room: string, me: Presence): Shared {
     void fetch('/api/v1/collab', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ room, heartbeat: { id: me.id, name: me.name, color: me.color } }),
+      body: JSON.stringify({ room, initial, heartbeat: { id: me.id, name: me.name, color: me.color } }),
     }).catch(() => {})
 
     return () => {
       clearInterval(beat)
       es.close()
     }
-  }, [room, me.id, me.name, me.color])
+  }, [room, me.id, me.name, me.color, initial])
 
   return shared
 }
@@ -117,14 +117,17 @@ function CollabControls({ payload }: { payload: CollabPayload }) {
   const { ramp } = useWidgetIdentity()
   const me = useMemo(() => makeMe((payload.room ?? '').length + 1), [payload.room])
   const room = payload.room ?? 'lobby'
-  const shared = useCollabRoom(room, me)
+  const initial = useMemo(() => payload.surface === 'todo'
+    ? { todos: (payload.items ?? []).map(text => ({ text, done: false })) }
+    : payload.surface === 'counter' || !payload.surface ? { n: payload.start ?? 0 } : {}, [payload])
+  const shared = useCollabRoom(room, me, initial)
   const requestPublish = usePublish(room)
   const [publishError, setPublishError] = useState<string | null>(null)
   const publish = useCallback(async (body: Record<string, unknown>) => {
-    const response = await requestPublish(body)
+    const response = await requestPublish({ ...body, initial })
     setPublishError(response ? null : 'Not saved: the shared server did not confirm this change. Your current input is retained.')
     return response
-  }, [requestPublish])
+  }, [requestPublish, initial])
   const surface = payload.surface ?? 'counter'
 
   return (
@@ -159,7 +162,7 @@ function CounterSurface({ payload, shared, publish }: { payload: CollabPayload; 
   return (
     <div style={{ textAlign: 'center', padding: '18px 0 14px' }}>
       <div style={{ fontSize: 54, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: accent, lineHeight: 1 }}>{n}</div>
-      <div style={{ fontSize: TYPE.micro, color: theme.text3, margin: '6px 0 12px' }}>{shared.status === 'live' ? payload.label ?? 'Confirmed shared state' : 'Shared state unavailable; controls wait for a live snapshot.'}</div>
+      <div style={{ fontSize: TYPE.micro, color: theme.text3, margin: '6px 0 12px' }}>{shared.status === 'live' && typeof shared.state.n === 'number' ? payload.label ?? 'Confirmed shared state' : 'Configured start; awaiting a confirmed shared counter value.'}</div>
       <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
         {[-1, 1, 5].map((d) => (
           <UiButton key={d} disabled={shared.status !== 'live'} buttonStyle={d > 0 ? 'filled' : 'tonal'} onClick={() => void publish({ delta: { n: d } })}>
