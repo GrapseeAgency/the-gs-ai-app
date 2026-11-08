@@ -5,6 +5,78 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun actualChartDecoderNeverCompactsMissingObservationsOrFabricatesZero() {
+        for (invalid in listOf("""null""", """[0,null]""", """[0,true]""", """[0,1e100]""", """[0,10,null]""", """[null,10]""", """[0,10,"unknown"]""", """{"x":1,"y":null}""", """{"x":null,"y":10}""", """{"x":1,"y":10,"z":null}""", """{"open":1,"high":2,"low":null,"close":1}""")) {
+            val source = """{"type":"line","labels":["Before","Missing","After"],"series":[{"name":"Actual","data":[[0,10],$invalid,[2,30]]}]}"""
+            assertNull("Preserve source rather than chart missing observation: $invalid", parseWidget("chart", source))
+            assertNull("Pie expansion must not hide a missing measurement: $invalid", parseWidget("chart", source.replace("\"line\"", "\"pie\"")))
+        }
+        val source = """{"type":"line","labels":["Loss","Zero","Gain"],"series":[{"name":"Actual","data":[[0,-10],[1,0],[2,30]]}]}"""
+        val actual = (parseWidget("chart", source) as Widget.Chart).w.series.single().data
+        assertEquals(listOf(-10f, 0f, 30f), actual.map { it[1] })
+        assertEquals(listOf(0f, 1f, 2f), actual.map { it[0] })
+        val categories = (parseWidget("chart", """{"type":"bar","series":[{"data":[["Jan",10],["Feb",20]]}]}""") as Widget.Chart).w.series.single().data
+        assertEquals(listOf(listOf(0f, 10f), listOf(1f, 20f)), categories)
+        val candle = (parseWidget("chart", """{"type":"candlestick","series":[{"data":[{"open":10,"high":20,"low":5,"close":15}]}]}""") as Widget.Chart).w.series.single().data.single()
+        assertEquals(listOf(10f, 20f, 5f, 15f), candle)
+        val pie = (parseWidget("chart", """{"type":"pie","labels":["A","B"],"series":[{"data":[[0,10,99],[1,20,88]]}]}""") as Widget.Chart).w
+        assertEquals(listOf(10f, 20f), pie.series.map { it.data.single()[1] })
+        assertEquals(listOf("A", "B"), pie.series.map { it.name })
+        val namedPie = (parseWidget("chart", """{"type":"pie","series":[{"data":[["Food",10],["Rent",20]]}]}""") as Widget.Chart).w
+        assertEquals(listOf("Food", "Rent"), namedPie.series.map { it.name })
+        assertEquals(listOf(10f, 20f), namedPie.series.map { it.data.single()[1] })
+    }
+
+    @Test fun nativeDialectRepairNeverRewritesQuotedSourceOrSuppliedText() {
+        val source = "const text = " + 34.toChar() + " True False None " + 34.toChar() + "; const slash = " + 92.toChar() + 34.toChar() + " True " + 92.toChar() + 34.toChar()
+        val payload = kotlinx.serialization.json.JsonObject(mapOf(
+            "code" to kotlinx.serialization.json.JsonPrimitive(source),
+            "title" to kotlinx.serialization.json.JsonPrimitive(" True False None ")
+        )).toString()
+        assertEquals(payload, cleanWidgetDialectLiteralsAndroid(payload))
+        val normalized = kotlinx.serialization.json.Json.parseToJsonElement(normalizeWidgetJson("app", payload)) as kotlinx.serialization.json.JsonObject
+        assertEquals(source, (normalized["code"] as kotlinx.serialization.json.JsonPrimitive).content)
+        assertEquals(" True False None ", (normalized["title"] as kotlinx.serialization.json.JsonPrimitive).content)
+        assertEquals("""{"enabled":true,"selected":false,"value":null,"text":" True False None "}""",
+            cleanWidgetDialectLiteralsAndroid("""{"enabled":True,"selected":False,"value":None,"text":" True False None "}"""))
+        assertEquals("""{"True":" False ","NotTrue":" None "}""",
+            cleanWidgetDialectLiteralsAndroid("""{"True":" False ","NotTrue":" None "}"""))
+    }
+
+    @Test fun actualCategoryLabelsAndDatasetCountsSurviveModelShapeNormalization() {
+        val pairs = (parseWidget("chart", """{"type":"line","series":[{"data":[["January",10],["February",20]]}]}""") as Widget.Chart).w
+        assertEquals(listOf("January", "February"), pairs.labels)
+        val objects = (parseWidget("chart", """{"type":"bar","data":[{"label":"Food","value":10},{"name":"Rent","value":20}]}""") as Widget.Chart).w
+        assertEquals(listOf("Food", "Rent"), objects.labels)
+        val explicit = (parseWidget("chart", """{"type":"bar","labels":["Supplied A","Supplied B"],"series":[{"data":[["Other A",10],["Other B",20]]}]}""") as Widget.Chart).w
+        assertEquals(listOf("Supplied A", "Supplied B"), explicit.labels)
+        val dataset = (parseWidget("chart", """{"type":"line","datasets":[{"label":"Actual","values":[["Jan",10],["Feb",20]]}]}""") as Widget.Chart).w
+        assertEquals(listOf("Jan", "Feb"), dataset.labels)
+        assertEquals("Actual", dataset.series.single().name)
+        for (bad in listOf("""null""", """{"label":"Missing"}""", """{"data":null}""", """{"values":"not observations"}""")) {
+            assertNull("Never drop the malformed dataset beside a valid one: $bad",
+                parseWidget("chart", """{"type":"line","datasets":[{"data":[10,20]},$bad]}"""))
+        }
+    }
+
+    @Test fun actualChartDomainsRetainLossesZeroAndSourcePeakWithoutDoublingTheRange() {
+        val signed = chartValueDomainAndroid(listOf(-20f, 0f, 10f))
+        assertEquals(-20.0, signed.lower, 0.0)
+        assertEquals(10.0, signed.upper, 0.0)
+        assertEquals(1f, signed.heightFraction(-20f), 0f)
+        assertEquals(1f / 3f, signed.heightFraction(0f), 0.000001f)
+        assertEquals(0f, signed.heightFraction(10f), 0f)
+        val sales = chartValueDomainAndroid(listOf(22800f, 34200f, 50400f, 75600f, 60500f, 78400f))
+        assertEquals(78400.0, sales.upper, 0.0)
+        assertEquals(0f, sales.heightFraction(78400f), 0f)
+        assertEquals(0.0, chartValueDomainAndroid(listOf(-5f, -2f)).upper, 0.0)
+        assertEquals(1.0, chartValueDomainAndroid(listOf(0f, 0f)).upper, 0.0)
+        val extreme = chartValueDomainAndroid(listOf(-Float.MAX_VALUE, Float.MAX_VALUE))
+        assertEquals(0.5f, extreme.heightFraction(0f), 0f)
+        assertEquals(Float.MAX_VALUE, extreme.axisValue(0f), 0f)
+        assertEquals(-Float.MAX_VALUE, extreme.axisValue(1f), 0f)
+    }
+
     @Test fun axisLabelsCoverTheCompleteActualObservationDomain() {
         assertEquals(listOf(0, 4, 9, 13, 17, 21, 26, 30), chartAxisLabelIndicesAndroid(31))
         assertEquals((0 until 6).toList(), chartAxisLabelIndicesAndroid(6))

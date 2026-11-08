@@ -99,6 +99,86 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("1 of 1 completed").assertExists()
     }
 
+    @Test fun shortSourceTableShowsEveryProductAndMeasureWithoutHiddenPagesOrColumns() {
+        val payload = """{"title":"Actual short source","columns":["Product","Sales","Revenue","Growth"],"rows":[["Nexly Pro","482","$12,460","18.4%"],["Nexly Starter","361","$7,240","12.1%"],["Nexly Business","284","$5,930","9.7%"],["Nexly Enterprise","126","$3,120","6.2%"]]}"""
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    com.grapsee.gsai.ui.chat.content.WidgetBlockView(
+                        com.grapsee.gsai.ui.chat.content.Block.WidgetBlock("table", payload, false, 0), false)
+                }
+            }
+        }
+        compose.onNodeWithText("Nexly Enterprise").assertIsDisplayed()
+        compose.onNodeWithText("$3,120").assertIsDisplayed()
+        compose.onNodeWithText("Revenue", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Growth", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("1–4 of 4").assertIsDisplayed()
+    }
+
+    @Test fun vanishedDashboardTabCannotHideReplacementWithSameBlockCount() {
+        var wire by androidx.compose.runtime.mutableStateOf("# Source dashboard\n\n| Name | Value |\n| --- | --- |\n| A | 1 |\n\n- [ ] Source task\n\nSource footer")
+        val replacement = "# Replacement dashboard\n\n## Supplied heading\n\nReplacement stays visible\n\nSupplied replacement footer"
+        assertEquals(com.grapsee.gsai.ui.chat.content.parseBlocks(wire).size,
+            com.grapsee.gsai.ui.chat.content.parseBlocks(replacement).size)
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    com.grapsee.gsai.ui.chat.content.BlocksContent(wire, false, {})
+                }
+            }
+        }
+        compose.onNodeWithText("Table").performClick()
+        compose.onNodeWithText("Source footer").assertDoesNotExist()
+        compose.runOnIdle { wire = replacement }
+        compose.onNodeWithText("Replacement stays visible").assertExists()
+        compose.onNodeWithText("Supplied replacement footer").assertExists()
+    }
+
+    @Test fun ordinaryMarkdownTasksEditDeletePreserveDetailsAndDoNotMoveCompletion() {
+        var wire by androidx.compose.runtime.mutableStateOf("## Next actions\n- [ ] Original task\n  Supplied source detail\n  - Supplied nested detail\n- [x] Keep completed")
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    com.grapsee.gsai.ui.chat.content.BlocksContent(wire, false, {})
+                }
+            }
+        }
+        compose.onNodeWithText("1 of 2 completed").assertExists()
+        compose.onNodeWithText("Original task").performClick()
+        compose.onNodeWithText("2 of 2 completed").assertExists()
+        compose.onNodeWithContentDescription("Edit task: Original task").performClick()
+        compose.onNode(hasSetTextAction()).performTextReplacement("Edited source")
+        compose.onNode(hasSetTextAction()).performImeAction()
+        compose.onNodeWithText("Supplied source detail").assertExists()
+        compose.onNodeWithText("Supplied nested detail").assertExists()
+        compose.onNodeWithContentDescription("Edit task: Supplied nested detail").assertDoesNotExist()
+        compose.onNodeWithText("2 of 2 completed").assertExists()
+        compose.onNodeWithContentDescription("Delete task: Keep completed").performClick()
+        compose.onNodeWithText("1 of 1 completed").assertExists()
+        fun add(text: String) {
+            compose.onNodeWithText("Add Task").performClick()
+            compose.onNodeWithText("Add").assertIsNotEnabled()
+            compose.onNode(hasSetTextAction()).performTextReplacement(text)
+            compose.onNode(hasSetTextAction()).performImeAction()
+        }
+        add("First added task")
+        compose.onNodeWithText("First added task").performClick()
+        add("Second added task")
+        compose.onNodeWithContentDescription("Delete task: First added task").performClick()
+        compose.onNodeWithText("1 of 2 completed").assertExists()
+        compose.onNodeWithContentDescription("Edit task: Second added task").performClick()
+        compose.onNode(hasSetTextAction()).performTextReplacement("Second edited")
+        compose.onNode(hasSetTextAction()).performImeAction()
+        compose.onNodeWithText("1 of 2 completed").assertExists()
+        compose.onNodeWithText("Second edited").performClick()
+        compose.onNodeWithText("2 of 2 completed").assertExists()
+        compose.runOnIdle { wire = "## Next actions\n- [ ] Replacement source" }
+        compose.onNodeWithText("0 of 1 completed").assertExists()
+        compose.onNodeWithText("Edited source").assertDoesNotExist()
+        compose.onNodeWithText("Replacement source").assertExists()
+    }
+
     @Test fun generatedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices() {
         var payload by androidx.compose.runtime.mutableStateOf("""{"type":"timer","items":[{"title":"Not time","price":25}]}""")
         compose.activity.setContentForPlatformTest {
@@ -262,6 +342,119 @@ class PlatformRuntimeTest {
         }
         compose.onNodeWithText("Edit").performScrollTo().performClick()
         compose.onNode(hasSetTextAction()).assertExists()
+    }
+
+    @Test fun generatedReactTsxRunsActualTasksPersistsAndIsolatesResponses() {
+        val contract = instrumentation.targetContext.assets.open("react-preview-acceptance.json").bufferedReader().use { org.json.JSONObject(it.readText()) }
+        val tasks = contract.getString("source")
+        var source by androidx.compose.runtime.mutableStateOf(tasks)
+        val originalScope = "react-acceptance:" + java.util.UUID.randomUUID()
+        var scope by androidx.compose.runtime.mutableStateOf(originalScope)
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.runtime.key(scope, source) {
+                    androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                        // Use the real ChatScreen parent and its actual message
+                        // storage identity, not a manually scoped child renderer.
+                        com.grapsee.gsai.ui.chat.AssistantMessage(
+                            message = com.grapsee.gsai.ui.chat.ChatUiMessage(
+                                id = scope, role = "assistant", content = "```tsx\n$source\n```",
+                                createdAt = "2026-10-20T10:30:00Z"
+                            ),
+                            conversationId = "react-runtime-acceptance",
+                            isSpeaking = false, showIdentity = false,
+                            onCopy = {}, onRegenerate = {}
+                        )
+                    }
+                }
+            }
+        }
+        fun findWeb(view: View): android.webkit.WebView? {
+            if (view is android.webkit.WebView) return view
+            if (view is android.view.ViewGroup) for (i in 0 until view.childCount) findWeb(view.getChildAt(i))?.let { return it }
+            return null
+        }
+        var web: android.webkit.WebView? = null
+        fun evaluate(script: String): String? {
+            val done = CountDownLatch(1); var result: String? = null
+            instrumentation.runOnMainSync { web!!.evaluateJavascript(script) { result = it; done.countDown() } }
+            assertTrue(done.await(5, TimeUnit.SECONDS)); return result
+        }
+        fun run(expectError: Boolean = false) {
+            compose.onNodeWithText("Run in Browser").performScrollTo().performClick()
+            awaitObserved("real native React WebView exists") {
+                instrumentation.runOnMainSync { web = findWeb(compose.activity.window.decorView) }; web != null
+            }
+            try {
+                awaitObserved("actual TSX compiler and React mount settle") {
+                    evaluate("document.getElementById('status')?.textContent === '${if (expectError) "React preview error" else "React preview running"}'") == "true"
+                }
+            } catch (error: Throwable) { throw AssertionError("Actual React document: " + evaluate("document.body.innerText"), error) }
+        }
+        fun replaceInput(selector: String, text: String) {
+            evaluate("(function(){const input=document.querySelector(${org.json.JSONObject.quote(selector)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${org.json.JSONObject.quote(text)});input.dispatchEvent(new Event('input',{bubbles:true}));return true;})()")
+        }
+        run()
+        awaitObserved("offline Tailwind applies actual task layout") {
+            evaluate("getComputedStyle(document.querySelector('section')).paddingTop === getComputedStyle(document.documentElement).fontSize && getComputedStyle(document.querySelector('h1')).fontWeight === '700'") == "true"
+        }
+        replaceInput("[aria-label='New task']", "Android actual task")
+        assertEquals("true", evaluate("document.querySelector('button[type=submit]').click();true"))
+        awaitObserved("actual React add handler updates source-derived count") { evaluate("document.getElementById('count').textContent === '0/1 complete'") == "true" }
+        evaluate("document.querySelector('input[type=checkbox]').click();true")
+        awaitObserved("actual React toggle handler changes completion") { evaluate("document.getElementById('count').textContent === '1/1 complete'") == "true" }
+        replaceInput("[aria-label='Task title']", "Edited Android task")
+        awaitObserved("actual React edit effect persists to WebView storage") { evaluate("JSON.parse(localStorage.getItem('tasks'))[0].title === 'Edited Android task'") == "true" }
+        run()
+        assertEquals("true", evaluate("document.querySelector('[aria-label=\"Task title\"]').value === 'Edited Android task' && document.querySelector('input[type=checkbox]').checked"))
+        compose.runOnIdle { scope = originalScope + ":other-response" }
+        run()
+        assertEquals("true", evaluate("document.getElementById('count').textContent === '0/0 complete'"))
+        compose.runOnIdle { scope = originalScope }
+        run()
+        assertEquals("true", evaluate("document.querySelector('[aria-label=\"Task title\"]').value === 'Edited Android task'"))
+        evaluate("document.querySelector('li button').click();true")
+        awaitObserved("delete changes actual task data and count") { evaluate("document.getElementById('count').textContent === '0/0 complete' && localStorage.getItem('tasks') === '[]'") == "true" }
+        run()
+        assertEquals("true", evaluate("document.querySelectorAll('li').length === 0"))
+        assertEquals("true", evaluate("!window.Android && !window.webkit && window.__gsDisplayEmojiPolicy === true"))
+        compose.runOnIdle { source = "import missing from 'not-bundled';export default function App(){return <p>{missing}</p>}" }
+        run(expectError = true)
+        assertEquals("true", evaluate("document.getElementById('error').textContent.includes('Unsupported dependency')"))
+        compose.runOnIdle { source = "export default function App( { return <p>Invalid</p> }" }
+        run(expectError = true)
+        assertEquals("true", evaluate("document.getElementById('error').textContent.includes('Unexpected')"))
+        // Also run the exact reference answer via its actual parser and the
+        // production AssistantMessage scope/parent, not a static source card.
+        val references = org.json.JSONObject(instrumentation.targetContext.assets.open("response-section-references.json").bufferedReader().use { it.readText() }).getJSONArray("fixtures")
+        val reference = (0 until references.length()).map { references.getJSONObject(it) }.single { it.getString("id") == "03-react-code" }
+        val referenceSource = com.grapsee.gsai.ui.chat.content.parseBlocks(reference.getString("wire"))
+            .filterIsInstance<com.grapsee.gsai.ui.chat.content.Block.CodeBlock>().single { it.language == "jsx" }.code
+        compose.runOnIdle { source = referenceSource; scope = originalScope + ":reference" }
+        run()
+        for (title in listOf("Reference completed", "Reference active")) {
+            replaceInput("[aria-label='New task']", title)
+            evaluate("document.querySelector('form button').click();true")
+            awaitObserved("reference form saves its actual UUID task") { evaluate("JSON.parse(localStorage.getItem('tasks') || '[]').some(t=>t.title===${org.json.JSONObject.quote(title)})") == "true" }
+        }
+        evaluate("document.querySelector('article input[type=checkbox]').click();true")
+        fun selectFilter(value: String) {
+            evaluate("(function(){const select=document.querySelector('[aria-label=\"Task filter\"]');select.value=${org.json.JSONObject.quote(value)};select.dispatchEvent(new Event('change',{bubbles:true}));return true;})()")
+        }
+        selectFilter("completed")
+        awaitObserved("reference Completed exposes only the true completed task") { evaluate("document.querySelectorAll('article').length===1 && document.querySelector('article input[type=checkbox]').checked") == "true" }
+        selectFilter("active")
+        awaitObserved("reference Active exposes the actual remaining task") { evaluate("document.querySelectorAll('article').length===1 && document.querySelector('article input[type=checkbox]').getAttribute('aria-label')==='Reference active'") == "true" }
+        replaceInput("[aria-label='Edit Reference active']", "Reference edited")
+        awaitObserved("reference edit really persists") { evaluate("JSON.parse(localStorage.getItem('tasks')).some(t=>t.title==='Reference edited' && !t.done)") == "true" }
+        selectFilter("all")
+        awaitObserved("reference All exposes both actual tasks") { evaluate("document.querySelectorAll('article').length===2") == "true" }
+        run()
+        awaitObserved("reference remount restores both edited and completed state") { evaluate("document.querySelectorAll('article').length===2 && document.querySelector('[aria-label=\"Reference completed\"]').checked && document.querySelector('[aria-label=\"Edit Reference edited\"]').value==='Reference edited'") == "true" }
+        selectFilter("completed")
+        awaitObserved("reference filtered delete selects only its actual completed record") { evaluate("document.querySelectorAll('article').length===1") == "true" }
+        evaluate("document.querySelector('article button').click();true")
+        awaitObserved("reference filtered delete preserves the other real record") { evaluate("document.querySelectorAll('article').length===0 && JSON.parse(localStorage.getItem('tasks')).length===1 && JSON.parse(localStorage.getItem('tasks'))[0].title==='Reference edited'") == "true" }
     }
 
     @Test fun generatedPollUsesRealTotalsAndResetsForNewPayload() {

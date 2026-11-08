@@ -67,6 +67,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
@@ -527,6 +528,7 @@ private fun StructuredBlockSequenceContent(
         if (tabs.size >= 3) tabs else emptyList()
     }
     var activeDashboardTab by remember(normalizedBlocks.size) { mutableStateOf("Dashboard") }
+    val visibleDashboardTab = activeDashboardTab.takeIf { it in dashboardTabs } ?: "Dashboard"
 
     if (dashboardTabs.isNotEmpty()) {
         Row(
@@ -539,7 +541,7 @@ private fun StructuredBlockSequenceContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             dashboardTabs.forEach { tab ->
-                val selected = activeDashboardTab == tab
+                val selected = visibleDashboardTab == tab
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(9.dp))
@@ -567,7 +569,7 @@ private fun StructuredBlockSequenceContent(
         val nextBlock = normalizedBlocks.getOrNull(i + 1)
 
         // Filter by dashboard tab when user selects Table / Todo / Calculator / Code
-        val skipForTab = when (activeDashboardTab) {
+        val skipForTab = when (visibleDashboardTab) {
             "Table" -> block !is Block.TableBlock && !(block is Block.WidgetBlock && block.kind == "table") &&
                 !(block is Block.Heading && ("table" in plainTextOfSpans(block.spans).lowercase() || "product" in plainTextOfSpans(block.spans).lowercase() || "language" in plainTextOfSpans(block.spans).lowercase()))
             "Todo" -> !(block is Block.BulletList) && !(block is Block.WidgetBlock && block.kind == "checklist") &&
@@ -1416,8 +1418,8 @@ private fun NexlyCalloutCard(
     val isWarn = callout.tone == CalloutTone.WARNING
     val bgColor = if (isWarn) Color(0xFFFFF4E6) else Color(0xFFF2ECFF)
     val borderColor = if (isWarn) Color(0xFFF6C88F) else Color(0xFFD9CCFF)
-    val titleColor = if (isWarn) Color(0xFF6B3206) else Color(0xFF211845)
-    val bodyColor = if (isWarn) Color(0xFF5A3310) else Color(0xFF39325C)
+    val titleColor = NexlyInk.title
+    val bodyColor = NexlyInk.prose
 
     val bodyStyle = LocalNexlyProseStyle.current ?: MaterialTheme.typography.bodyMedium
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, bodyColor)
@@ -1548,7 +1550,9 @@ private fun stripLeadingIconFromSpans(spans: List<InlineSpan>): List<InlineSpan>
 
 @Composable
 private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: Map<Int, String>) {
-    val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize, citationUrls)
+    val compact = LocalNexlyProseStyle.current != null
+    val headingInk = if (compact) NexlyInk.title else if (block.level == 6) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+    val theme = rememberSpanTheme(MaterialTheme.typography.bodyMedium.fontSize, citationUrls, headingInk)
     val rawHeadingText = remember(block.spans) { plainTextOfSpans(block.spans) }
     val badge = remember(rawHeadingText, block.level) {
         if (block.level in 2..3) sectionBadgeForHeadingText(rawHeadingText)
@@ -1559,7 +1563,10 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
     }
     val styled = remember(cleanSpans, theme) { spansToAnnotatedString(cleanSpans, theme) }
     val inlineContent = rememberNexlyInlineContent(styled)
-    val style = when (block.level) {
+    val style = if (compact) {
+        val size = if (block.level <= 1) 18.sp else if (block.level == 2) 16.sp else 14.sp
+        TextStyle(fontSize = size, lineHeight = (size.value + 5).sp, fontWeight = FontWeight.Bold, color = headingInk)
+    } else when (block.level) {
         1 -> MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
         2 -> MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
         3 -> MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
@@ -1585,7 +1592,7 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
                 Text(
                     text = styled,
                     style = style,
-                    color = if (block.level == 6) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    color = headingInk,
                     inlineContent = inlineContent,
                     modifier = Modifier.semantics { heading() }
                 )
@@ -2563,14 +2570,29 @@ private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>): Pa
 @Composable
 private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citationUrls: Map<Int, String>) {
     val sectionMode = LocalSectionListMode.current
-    var addedTasks by remember(block.sourceStart) { mutableStateOf(listOf<String>()) }
-    var isAddingTask by remember(block.sourceStart) { mutableStateOf(false) }
-    var draftTaskText by remember(block.sourceStart) { mutableStateOf("") }
+    var addedTasks by remember(block.sourceStart, block.items) { mutableStateOf(listOf<Pair<Int, String>>()) }
+    var nextTaskId by remember(block.sourceStart, block.items) { mutableStateOf(block.items.size) }
+    var removedTasks by remember(block.sourceStart, block.items) { mutableStateOf(setOf<Int>()) }
+    var editedTasks by remember(block.sourceStart, block.items) { mutableStateOf(mapOf<Int, List<InlineSpan>>()) }
+    var editingTask by remember(block.sourceStart, block.items) { mutableStateOf<Int?>(null) }
+    var isAddingTask by remember(block.sourceStart, block.items) { mutableStateOf(false) }
+    var draftTaskText by remember(block.sourceStart, block.items) { mutableStateOf("") }
     val isChecklist = sectionMode == SectionListMode.TODO || block.items.any { it.checked != null }
-    var checkedMap by remember(block.sourceStart, block.items.size) {
+    var checkedMap by remember(block.sourceStart, block.items) {
         mutableStateOf(
             block.items.mapIndexed { idx, item -> idx to (item.checked ?: false) }.toMap()
         )
+    }
+
+    val saveTask = {
+        val clean = NexlyIcons.cleanPlainText(draftTaskText).trim()
+        if (clean.isNotEmpty()) {
+            val target = editingTask
+            if (target == null) addedTasks = addedTasks + (nextTaskId++ to clean)
+            else if (target < block.items.size) editedTasks = editedTasks + (target to parseInline(clean))
+            else addedTasks = addedTasks.map { if (it.first == target) target to clean else it }
+            editingTask = null; draftTaskText = ""; isAddingTask = false
+        }
     }
 
     val sourceItems = remember(block.items, sectionMode) {
@@ -2596,12 +2618,12 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
         return
     }
 
-    val totalTaskCount = block.items.size + addedTasks.size
-    val completedTaskCount = (0 until totalTaskCount).count { checkedMap[it] == true }
+    val totalTaskCount = block.items.size - removedTasks.size + addedTasks.size
+    val completedTaskCount = block.items.indices.count { it !in removedTasks && checkedMap[it] == true } + addedTasks.count { checkedMap[it.first] == true }
     val completionPct = if (totalTaskCount > 0) (completedTaskCount * 100) / totalTaskCount else 0
 
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        if (isChecklist && totalTaskCount >= 2) {
+        if (isChecklist) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2633,7 +2655,9 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                 )
             }
         }
-        block.items.forEachIndexed { idx, item ->
+        block.items.forEachIndexed { idx, original ->
+            if (idx in removedTasks) return@forEachIndexed
+            val item = original.copy(spans = editedTasks[idx] ?: original.spans)
             if (item.checked != null || sectionMode == SectionListMode.TODO) {
                 InteractiveChecklistItemRow(
                     initialChecked = checkedMap[idx] ?: (item.checked ?: false),
@@ -2641,7 +2665,9 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                     index = idx,
                     selectable = selectable,
                     citationUrls = citationUrls,
-                    onCheckedChange = { next -> checkedMap = checkedMap + (idx to next) }
+                    onCheckedChange = { next -> checkedMap = checkedMap + (idx to next) },
+                    onEdit = { editingTask = idx; draftTaskText = plainTextOfSpans(item.spans); isAddingTask = true },
+                    onRemove = { removedTasks = removedTasks + idx; editingTask = null; isAddingTask = false }
                 )
             } else if (sectionMode == SectionListMode.CHECKMARK) {
                 ListItemRow(
@@ -2661,8 +2687,7 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                 )
             }
         }
-        addedTasks.forEachIndexed { idx, taskText ->
-            val taskIdx = block.items.size + idx
+        addedTasks.forEach { (taskIdx, taskText) ->
             InteractiveChecklistItemRow(
                 initialChecked = checkedMap[taskIdx] ?: false,
                 item = ListItem(spans = listOf(InlineSpan.TextSpan(taskText)), checked = false),
@@ -2671,8 +2696,10 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                 citationUrls = citationUrls,
                 onCheckedChange = { next -> checkedMap = checkedMap + (taskIdx to next) },
                 onRemove = {
-                    addedTasks = addedTasks.filterIndexed { i, _ -> i != idx }
-                }
+                    addedTasks = addedTasks.filter { it.first != taskIdx }
+                    checkedMap = checkedMap - taskIdx; editingTask = null; isAddingTask = false
+                },
+                onEdit = { editingTask = taskIdx; draftTaskText = taskText; isAddingTask = true }
             )
         }
         if (sectionMode == SectionListMode.TODO || block.items.any { it.checked != null }) {
@@ -2700,6 +2727,8 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                             value = draftTaskText,
                             onValueChange = { draftTaskText = it },
                             singleLine = true,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { saveTask() }),
                             textStyle = TextStyle(
                                 fontSize = 12.5.sp,
                                 color = Color(0xFF211845)
@@ -2711,18 +2740,11 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                         modifier = Modifier
                             .clip(RoundedCornerShape(7.dp))
                             .background(Color(0xFF6C4CF6))
-                            .clickable {
-                                val clean = draftTaskText.trim()
-                                if (clean.isNotEmpty()) {
-                                    addedTasks = addedTasks + clean
-                                    draftTaskText = ""
-                                    isAddingTask = false
-                                }
-                            }
+                            .clickable(enabled = NexlyIcons.cleanPlainText(draftTaskText).isNotBlank(), onClick = saveTask)
                             .padding(horizontal = 9.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "Add",
+                            text = if (editingTask == null) "Add" else "Save task",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -2735,6 +2757,7 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.clickable {
                             draftTaskText = ""
+                            editingTask = null
                             isAddingTask = false
                         }
                     )
@@ -2746,7 +2769,7 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
                         .clip(RoundedCornerShape(999.dp))
                         .background(Color.White.copy(alpha = 0.8f))
                         .border(1.dp, Color(0xFFE0D8FA), RoundedCornerShape(999.dp))
-                        .clickable { isAddingTask = true }
+                        .clickable { editingTask = null; draftTaskText = ""; isAddingTask = true }
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -2781,7 +2804,8 @@ private fun InteractiveChecklistItemRow(
     selectable: Boolean,
     citationUrls: Map<Int, String>,
     onCheckedChange: ((Boolean) -> Unit)? = null,
-    onRemove: (() -> Unit)? = null
+    onRemove: (() -> Unit)? = null,
+    onEdit: (() -> Unit)? = null
 ) {
     var checked by remember(item.spans, initialChecked) { mutableStateOf(initialChecked) }
     var statusIdx by remember(item.spans, index) { mutableStateOf(0) }
@@ -2871,12 +2895,20 @@ private fun InteractiveChecklistItemRow(
                     }
                 )
             }
+            if (onEdit != null) {
+                Box(Modifier.clip(CircleShape).clickable(onClick = onEdit)
+                    .semantics { contentDescription = "Edit task: " + NexlyIcons.cleanPlainText(plainTextOfSpans(item.spans)) }
+                    .padding(5.dp)) {
+                    NexlyGlyph(name = "pencil", size = 12.dp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             if (onRemove != null) {
                 Spacer(Modifier.width(4.dp))
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable { onRemove() }
+                        .semantics { contentDescription = "Delete task: " + NexlyIcons.cleanPlainText(plainTextOfSpans(item.spans)) }
                         .padding(3.dp)
                 ) {
                     NexlyGlyph(
@@ -3225,6 +3257,7 @@ private fun ListItemRow(
 
 @Composable
 private fun NestedChildView(block: Block, selectable: Boolean, citationUrls: Map<Int, String>) {
+    CompositionLocalProvider(LocalSectionListMode provides SectionListMode.DEFAULT) {
     when (block) {
         is Block.Paragraph -> ParagraphBlock(block, showCaret = false, selectable = selectable, citationUrls = citationUrls)
         is Block.BulletList -> BulletListBlock(block, selectable, citationUrls)
@@ -3232,6 +3265,7 @@ private fun NestedChildView(block: Block, selectable: Boolean, citationUrls: Map
         is Block.BlockQuote -> BlockQuoteView(block, selectable, citationUrls)
         else -> BlockView(block, isLast = false, isStreaming = false, onCopyCode = {}, citationUrls = citationUrls)
     }
+}
 }
 
 @Composable

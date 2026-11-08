@@ -1,0 +1,113 @@
+name: Review stored native failure evidence
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: 'Existing iOS run containing genuine fixture failure logs'
+        required: true
+        type: number
+      evidence:
+        description: 'Original native control evidence or full-suite failure log'
+        type: choice
+        options: [controls, full-suite]
+        default: controls
+permissions:
+  contents: read
+  actions: read
+jobs:
+  review:
+    if: github.event_name == 'workflow_dispatch' && inputs.evidence != 'full-suite'
+    name: Actual stored ${{ matrix.label }} from iOS ${{ inputs.source_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        label: [REACT, SHARE]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # Recover existing genuine fixture evidence, not a new render and never
+      # user data. Separate read-only Linux jobs avoid repeating a Mac suite
+      # merely because dense pixels exceeded the earlier annotation budget.
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-build-logs-${{ inputs.source_run }}
+          run-id: ${{ inputs.source_run }}
+          github-token: ${{ github.token }}
+          path: stored-native-fixture
+      - name: Locate actual stored XCTest output
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check 'pillow==11.0.0'
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          logs = list(Path('stored-native-fixture').rglob('xcodebuild-genui-test.log'))
+          if len(logs) != 1: raise SystemExit('Expected exactly one original XCTest fixture log')
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('GS_STORED_FIXTURE_LOG=' + str(logs[0]) + '\n')
+          PY
+      - name: Publish original composited failure pixels
+        run: python3 scripts/publish_native_ui_pixels.py "$GS_STORED_FIXTURE_LOG" '${{ matrix.label }}'
+      - name: Publish actual stored execution receipts
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          names = ['testContextualReportShowsActualDataAndSharePresentsSystemActivitySheet',
+                   'testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch']
+          for line in Path(os.environ['GS_STORED_FIXTURE_LOG']).read_text(errors='replace').splitlines():
+              if 'Test Case' in line and any(name in line for name in names) and ('passed (' in line or 'failed (' in line):
+                  print('::notice::Actual stored XCTest receipt: ' + line[:3500].replace('%', '%25'))
+          PY
+      - name: Publish actual relevant accessibility geometry
+        env:
+          GS_REVIEW_LABEL: ${{ matrix.label }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          chunks = {}
+          for line in Path(os.environ['GS_STORED_FIXTURE_LOG']).read_text(errors='replace').splitlines():
+              match = re.search(r'GS_PRESENTATION_' + os.environ['GS_REVIEW_LABEL'] + r'_(\d+): (.*)', line)
+              if match: chunks[int(match.group(1))] = match.group(2)
+          hierarchy = ''.join(chunks[index] for index in sorted(chunks))
+          parts = [part for part in hierarchy.split(' | ') if any(term in part for term in [
+              'Window,', 'WebView,', 'Keyboard,', 'TextField,', 'Button,',
+              "label: 'Response tasks'", "label: 'React preview running'", "label: '0/0 complete'", "label: '0/1 complete'"])]
+          actual = ' | '.join(parts)
+          for start in range(0, min(len(actual), 28000), 3500):
+              print('::notice::GS_STORED_' + os.environ['GS_REVIEW_LABEL'] + '_GEOMETRY: ' + actual[start:start+3500].replace('%', '%25').replace('\r', '%0D'))
+          if not chunks: print('No original failure hierarchy exists for this label; no substitute is emitted')
+          PY
+
+  inspect-stored-full-suite:
+    if: github.event_name == 'workflow_dispatch' && inputs.evidence == 'full-suite'
+    name: Actual full-suite failure from iOS ${{ inputs.source_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-build-logs-${{ inputs.source_run }}
+          run-id: ${{ inputs.source_run }}
+          github-token: ${{ github.token }}
+          path: stored-full-suite
+      - name: Publish actual full-suite failures, not focused-log noise
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          paths = list(Path('stored-full-suite').rglob('xcodebuild-test.log'))
+          if len(paths) != 1: raise SystemExit('Expected the original full-suite XCTest log')
+          lines = paths[0].read_text(errors='replace').splitlines()
+          actual = [line for line in lines if re.search(r'error:|failed \(|Testing failed:|XCTAssert|Failing tests:|TEST FAILED|crash(?:ed|ing|:)|fatal error|Abort trap', line, re.I)
+                    and 'ProcessSuspension' not in line and not re.search(r"Test Case .* (?:passed|started)", line)]
+          for line in actual[-10:]:
+              print('::error title=Actual stored full-suite XCTest failure::' + line[:3500].replace('%', '%25').replace('\r', '%0D'))
+          if not actual:
+              print('::notice::No matching actual XCTest error lines; no substitute diagnosis is produced')
+              for line in lines[-8:]: print('::notice::Actual stored log tail: ' + line[:3500].replace('%', '%25'))
+          PY

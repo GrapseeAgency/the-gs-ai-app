@@ -94,6 +94,7 @@ jobs:
           path: |
             platform-runtime.log
             android/app/build/screenshots/genui-reference-*.png
+            android/app/build/screenshots/genui-reference-*-scroll.json
             android/app/build/outputs/androidTest-results/connected/**
             android/app/build/reports/androidTests/connected/**
           if-no-files-found: error

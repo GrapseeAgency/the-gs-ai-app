@@ -249,7 +249,11 @@ total++
       '#gs-external-link', // 03: Custom link glyph without a false trust claim
       'Ask follow-up', // 01-07: Bottom contextual action pills
     ]
-    const missing = requiredMarkers.filter((m) => !html.includes(m))
+    // React's SSR separators between dynamic text nodes are not visible
+    // content. Keep the exact required counter and every structural marker,
+    // but do not confuse hydration comments with displayed characters.
+    const markerHtml = html.replace(/<!-- -->/g, '')
+    const missing = requiredMarkers.filter((m) => !markerHtml.includes(m.replace(/<!-- -->/g, '')))
     const fabricatedTrust = /Trusted Source|Verified Source/.test(html)
     const emojiMatch = html.match(/[\u{1F300}-\u{1FAFF}]/u)
     if (missing.length > 0) {

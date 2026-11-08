@@ -101,6 +101,12 @@ targets:
         buildPhase: resources
       - path: ../shared-contracts/javascript-worker-sandbox.json
         buildPhase: resources
+      - path: ../shared-contracts/react-preview-runtime.json
+        buildPhase: resources
+      - path: ../shared-contracts/react-preview-acceptance.json
+        buildPhase: resources
+      - path: ../shared-contracts/react-preview-LICENSES.txt
+        buildPhase: resources
       - path: ../shared-contracts/terminal-runtime.json
         buildPhase: resources
       - path: ../shared-contracts/response-section-references.json

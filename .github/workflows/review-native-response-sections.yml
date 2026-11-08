@@ -11,8 +11,10 @@ on:
 permissions:
   contents: read
 jobs:
-  review:
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.coverage.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,7 +24,52 @@ jobs:
         with:
           name: ${{ inputs.artifact }}
           path: native-frame-evidence
-      - name: Locate genuine captured fixtures
+      - name: Validate complete actual scroll coverage and schedule every viewport
+        id: coverage
+        env:
+          GS_REVIEW_PLATFORM: ${{ inputs.platform }}
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check "pillow==11.0.0"
+          python3 - <<'PY'
+          import importlib.util, json, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('native_review', 'scripts/publish_response_section_frames.py')
+          review = importlib.util.module_from_spec(spec); spec.loader.exec_module(review)
+          platform = os.environ['GS_REVIEW_PLATFORM']
+          roots = list(Path('native-frame-evidence').rglob(f'genui-reference-{platform}-01-dashboard-393x852.png'))
+          if len(roots) != 1: raise SystemExit('Expected exactly one genuine native fixture capture directory')
+          directory = roots[0].parent
+          groups = []
+          for section in review.SECTIONS:
+              manifest = review.scroll_manifest(directory, platform, section)
+              count = len(manifest['frames'])
+              print(f'Actual {platform} {section}: {count} viewports cover top through offset {manifest["maximumOffsetY"]}')
+              for start in range(0, count, 3):
+                  groups.append({'section': section, 'first': start,
+                                 'second': start + 1 if start + 1 < count else -1,
+                                 'third': start + 2 if start + 2 < count else -1})
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('matrix=' + json.dumps({'include': groups}, separators=(',', ':')) + '\n')
+          PY
+
+  review:
+    needs: prepare
+    name: ${{ matrix.section }} viewports from ${{ matrix.first }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact }}
+          path: native-frame-evidence
+      - name: Locate captured native fixtures
         env:
           GS_REVIEW_PLATFORM: ${{ inputs.platform }}
         run: |
@@ -31,23 +78,18 @@ jobs:
           import os
           from pathlib import Path
           platform = os.environ['GS_REVIEW_PLATFORM']
-          if platform not in ('ios', 'android'): raise SystemExit('Unknown native platform')
-          frames = list(Path('native-frame-evidence').rglob(f'genui-reference-{platform}-01-dashboard-393x852.png'))
-          if len(frames) != 1: raise SystemExit('Expected exactly one genuine native fixture capture directory')
+          roots = list(Path('native-frame-evidence').rglob(f'genui-reference-{platform}-01-dashboard-393x852.png'))
+          if len(roots) != 1: raise SystemExit('Expected exactly one genuine native fixture capture directory')
           with open(os.environ['GITHUB_ENV'], 'a') as env:
-              env.write('GS_NATIVE_FRAME_DIR=' + str(frames[0].parent) + '\n')
+              env.write('GS_NATIVE_FRAME_DIR=' + str(roots[0].parent) + '\n')
           PY
-      # A separate job owns the bounded image-annotation budget. Native test
-      # failures and actual system-control diagnostics must not be displaced.
-      - name: Review actual dashboard
-        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 01-dashboard
-      - name: Review actual structured launch
-        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 02-structured-launch
-      - name: Review actual React source
-        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 03-react-code
-      - name: Review actual citations
-        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 04-citations
-      - name: Review actual data grid
-        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 05-data-grid
-      - name: Review actual interactive charts
-        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 06-interactive-charts
+      # At most three real images per job and one per step. This respects both
+      # the ten-notice step bound and the overall job annotation budget.
+      - name: Review first actual viewport
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' '${{ matrix.section }}' '${{ matrix.first }}'
+      - name: Review second actual viewport
+        if: matrix.second >= 0
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' '${{ matrix.section }}' '${{ matrix.second }}'
+      - name: Review third actual viewport
+        if: matrix.third >= 0
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' '${{ matrix.section }}' '${{ matrix.third }}'

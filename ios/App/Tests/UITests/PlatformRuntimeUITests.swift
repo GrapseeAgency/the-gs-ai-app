@@ -1,13 +1,206 @@
 import XCTest
+import CoreGraphics
+import UIKit
 
 final class PlatformRuntimeUITests: XCTestCase {
+    private func printScreenshotPixels(_ screenshot: XCUIScreenshot, label: String) {
+        let encoded = screenshot.pngRepresentation.base64EncodedString()
+        let count = (encoded.count + 3499) / 3500
+        for (index, start) in stride(from: 0, to: encoded.count, by: 3500).enumerated() {
+            print("GS_UI_PNG_V1 \(label) \(index + 1)/\(count) " + String(encoded.dropFirst(start).prefix(3500)))
+        }
+    }
+
+    /// iOS 26 Files exposes its ellipsis as an AX element named Cancel. Find
+    /// the actual leading navigation glyph in the composited toolbar pixels,
+    /// not that incorrect label or a guessed fraction of the phone screen.
+    private func visibleFilesNavigationPoint(_ screenshot: XCUIScreenshot, application: CGRect, toolbar: CGRect) -> CGPoint? {
+        guard let image = screenshot.image.cgImage, application.width > 0, application.height > 0 else { return nil }
+        let width = image.width, height = image.height
+        let sx = CGFloat(width) / application.width, sy = CGFloat(height) / application.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+            return true
+        }
+        guard drawn else { return nil }
+        let y0 = max(0, Int((toolbar.minY - application.minY) * sy))
+        let y1 = min(height - 1, Int((toolbar.maxY - application.minY) * sy))
+        guard y0 < y1 else { return nil }
+        let x1 = width / 2
+        func dark(_ x: Int, _ y: Int) -> Bool {
+            let p = (y * width + x) * 4
+            return pixels[p + 3] > 200 && max(pixels[p], max(pixels[p + 1], pixels[p + 2])) < 120
+        }
+        var seed: (Int, Int)?
+        for x in 0..<x1 {
+            if let y = (y0...y1).first(where: { dark(x, $0) }) { seed = (x, y); break }
+        }
+        guard let seed else { return nil }
+        var pending = [seed], visited = Set<Int>()
+        var minX = seed.0, maxX = seed.0, minY = seed.1, maxY = seed.1
+        while let (x, y) = pending.popLast() {
+            guard x >= 0, x < x1, y >= y0, y <= y1, visited.insert(y * width + x).inserted, dark(x, y) else { continue }
+            minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+            for dx in -1...1 { for dy in -1...1 where dx != 0 || dy != 0 { pending.append((x + dx, y + dy)) } }
+        }
+        let glyphWidth = CGFloat(maxX - minX + 1) / sx, glyphHeight = CGFloat(maxY - minY + 1) / sy
+        guard glyphWidth >= 2, glyphWidth <= 36, glyphHeight >= 6, glyphHeight <= 44 else { return nil }
+        let point = CGPoint(x: application.minX + CGFloat(minX + maxX) / (2 * sx), y: application.minY + CGFloat(minY + maxY) / (2 * sy))
+        print("GS_FILES_VISIBLE_GLYPH: bounds=(\(minX),\(minY),\(maxX),\(maxY)); touch=\(point)")
+        return point
+    }
+
     private func printPresentationDiagnostics(_ app: XCUIApplication, label: String) {
         let hierarchy = app.debugDescription.replacingOccurrences(of: "\n", with: " | ")
         for start in stride(from: 0, to: hierarchy.count, by: 1400) {
             print("GS_PRESENTATION_\(label)_\(start): " + String(hierarchy.dropFirst(start).prefix(1400)))
         }
-        let capture = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = app.screenshot()
+        printScreenshotPixels(screenshot, label: label)
+        let capture = XCTAttachment(screenshot: screenshot)
         capture.name = "genui-actual-\(label.lowercased())-failure"; capture.lifetime = .keepAlways; add(capture)
+    }
+
+    func testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_react_preview"]
+        app.launchEnvironment["GS_REACT_ACCEPTANCE_SCOPE"] = UUID().uuidString
+        app.launch()
+        func run() -> Bool {
+            let button = app.buttons["Run in Browser"]
+            let offered = button.waitForExistence(timeout: 20)
+            XCTAssertTrue(offered)
+            guard offered else { printPresentationDiagnostics(app, label: "REACT"); return false }
+            button.tap()
+            let mounted = app.webViews.staticTexts["React preview running"].waitForExistence(timeout: 20)
+            XCTAssertTrue(mounted, "An actual React component must mount, not just a source card")
+            if !mounted { printPresentationDiagnostics(app, label: "REACT") }
+            return mounted
+        }
+        func complete(_ text: String) -> XCUIElement {
+            app.webViews.descendants(matching: .any).matching(NSPredicate(format: "label == %@", text)).firstMatch
+        }
+        guard run() else { return }
+        let input = app.webViews.textFields["New task"]
+        XCTAssertTrue(input.waitForExistence(timeout: 10)); input.tap(); input.typeText("iOS React task")
+        let addTask = app.webViews.buttons["Add task"]
+        let reachable = NSPredicate { _, _ in addTask.exists && addTask.isHittable }
+        let formVisible = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: reachable, object: nil)], timeout: 5) == .completed
+        if !formVisible { printPresentationDiagnostics(app, label: "REACT") }
+        XCTAssertTrue(formVisible, "The actual inline form submit button must remain touchable above the real keyboard")
+        guard formVisible else { return }
+        addTask.tap()
+        let added = complete("0/1 complete").waitForExistence(timeout: 10)
+        if !added { printPresentationDiagnostics(app, label: "REACT") }
+        XCTAssertTrue(added, "The real Add touch must submit the typed draft and change the actual React task count")
+        guard added else { return }
+        let toggle = complete("Complete iOS React task")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5)); toggle.tap()
+        XCTAssertTrue(complete("1/1 complete").waitForExistence(timeout: 5))
+        let title = app.webViews.textFields["Task title"]
+        title.tap(); title.typeText(" edited")
+        let edited = title.value as? String ?? ""
+        XCTAssertTrue(edited.contains("edited"), "Real keyboard input must update the React task, not just its DOM label")
+        app.webViews.staticTexts["Response tasks"].tap()
+        guard run() else { return }
+        XCTAssertEqual(app.webViews.textFields["Task title"].value as? String, edited)
+        XCTAssertTrue(complete("1/1 complete").exists)
+        app.buttons["Use other response"].tap(); guard run() else { return }
+        XCTAssertTrue(complete("0/0 complete").waitForExistence(timeout: 5))
+        XCTAssertFalse(app.webViews.textFields["Task title"].exists)
+        app.buttons["Use original response"].tap(); guard run() else { return }
+        XCTAssertEqual(app.webViews.textFields["Task title"].value as? String, edited)
+        app.terminate(); app.launch(); guard run() else { return }
+        XCTAssertEqual(app.webViews.textFields["Task title"].value as? String, edited, "Real WebKit persistence must survive killing and relaunching the app")
+        XCTAssertTrue(complete("1/1 complete").exists)
+        app.webViews.buttons["Delete task"].tap()
+        XCTAssertTrue(complete("0/0 complete").waitForExistence(timeout: 5))
+        guard run() else { return }; XCTAssertFalse(app.webViews.textFields["Task title"].exists)
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-react-actual-task-crud-storage-isolation"; capture.lifetime = .keepAlways; add(capture)
+    }
+
+    func testConversationActionsTapOpensRealOptionsWithoutLeavingChat() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_seed_chats"]
+        app.launch()
+        let chats = app.buttons["Chats"].firstMatch
+        XCTAssertTrue(chats.waitForExistence(timeout: 20)); chats.tap()
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Weekend in Kyoto")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 20)); row.tap()
+        let actions = app.buttons["Conversation actions"].firstMatch
+        XCTAssertTrue(actions.waitForExistence(timeout: 15)); actions.tap()
+        XCTAssertTrue(app.buttons["Rename"].waitForExistence(timeout: 5), "A normal tap must open actual actions, not navigate away or require a long press")
+        XCTAssertTrue(app.buttons["Back"].exists, "Opening actions must keep the user in the conversation")
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-actual-conversation-actions-tap"; capture.lifetime = .keepAlways; add(capture)
+    }
+
+    func testVanishedDashboardTabCannotHideReplacementSource() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated dashboard"].waitForExistence(timeout: 20))
+        app.buttons["Open generated dashboard"].tap()
+        XCTAssertTrue(app.buttons["Table"].firstMatch.waitForExistence(timeout: 10))
+        app.buttons["Table"].firstMatch.tap()
+        XCTAssertFalse(app.staticTexts["Source footer"].exists)
+        app.buttons["Replace dashboard source"].tap()
+        XCTAssertTrue(app.staticTexts["Replacement stays visible"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Supplied replacement footer"].exists)
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-dashboard-actual-source-replacement"; capture.lifetime = .keepAlways; add(capture)
+    }
+
+    func testOrdinaryMarkdownTaskControlsPreserveRealDetailsAndCompletion() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated checklist"].waitForExistence(timeout: 20))
+        app.buttons["Open generated checklist"].tap()
+        app.buttons["Use ordinary Markdown tasks"].tap()
+        XCTAssertTrue(app.staticTexts["1/2 completed"].waitForExistence(timeout: 10))
+        func toggle(_ text: String) {
+            let button = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", text)).firstMatch
+            XCTAssertTrue(button.waitForExistence(timeout: 5)); button.tap()
+        }
+        func edit(_ text: String) {
+            let input = app.textFields["prose.task.input"]
+            XCTAssertTrue(input.waitForExistence(timeout: 5))
+            let current = input.value as? String ?? ""
+            input.tap(); input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count) + text + "\n")
+        }
+        func addTask(_ text: String) {
+            app.buttons["Add Task"].tap()
+            XCTAssertFalse(app.buttons["Add"].isEnabled)
+            edit(text)
+        }
+        toggle("Original task")
+        XCTAssertTrue(app.staticTexts["2/2 completed"].exists)
+        app.buttons["Edit task: Original task"].tap(); edit("Edited source")
+        XCTAssertTrue(app.staticTexts["Supplied source detail"].exists)
+        XCTAssertTrue(app.staticTexts["Supplied nested detail"].exists)
+        XCTAssertFalse(app.buttons["Edit task: Supplied nested detail"].exists)
+        XCTAssertTrue(app.staticTexts["2/2 completed"].exists)
+        app.buttons["Delete task: Keep completed"].tap()
+        XCTAssertTrue(app.staticTexts["1/1 completed"].exists)
+        addTask("First added task"); toggle("First added task")
+        addTask("Second added task")
+        app.buttons["Delete task: First added task"].tap()
+        XCTAssertTrue(app.staticTexts["1/2 completed"].exists, "Completion must remain with its actual task after another row is deleted")
+        app.buttons["Edit task: Second added task"].tap(); edit("Second edited")
+        XCTAssertTrue(app.staticTexts["1/2 completed"].exists)
+        toggle("Second edited")
+        XCTAssertTrue(app.staticTexts["2/2 completed"].exists)
+        app.buttons["Replace ordinary tasks"].tap()
+        XCTAssertTrue(app.staticTexts["0/1 completed"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Edit task: Edited source"].exists)
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-ordinary-markdown-actual-task-controls"; capture.lifetime = .keepAlways; add(capture)
     }
 
     func testGeneratedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices() {
@@ -147,21 +340,41 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertTrue(provider.waitForExistence(timeout: 10), "Export must expose the actual system Files provider, not an app-owned Cancel label")
         // Files is remote UI. On current iOS, resolving isHittable inside a
         // waiter can itself fail with "remote AX element ... interrupted by
-        // waiter". Dispatch an actual touch to the visible native Cancel
-        // frame instead; only its real delegate receipt can pass this test.
+        // waiter". Resolve once after composition, outside any polling waiter;
+        // only the real Files delegate receipt can pass this test.
+        // Screenshot resolves the visible, composited system presentation.
+        // Query the touch frame AFTER it, not before: the remote Files AX
+        // element can exist while the full-screen presentation is animating.
+        let screenshot = app.screenshot()
+        printScreenshotPixels(screenshot, label: "FILES")
+        let capture = XCTAttachment(screenshot: screenshot)
+        capture.name = "genui-contextual-real-source-export-picker"; capture.lifetime = .keepAlways; add(capture)
         let cancelFrame = pickerCancel.frame
         let applicationFrame = app.frame
+        print("GS_FILES_CANCEL_FRAME: cancel=\(cancelFrame); application=\(applicationFrame)")
         guard !cancelFrame.isEmpty, !cancelFrame.isNull,
               applicationFrame.contains(CGPoint(x: cancelFrame.midX, y: cancelFrame.midY)) else {
             printPresentationDiagnostics(app, label: "EXPORT")
             XCTFail("The actual native Files Cancel control must occupy the visible viewport")
             return
         }
-        let capture = XCTAttachment(screenshot: app.screenshot())
-        capture.name = "genui-contextual-real-source-export-picker"; capture.lifetime = .keepAlways; add(capture)
-        app.coordinate(withNormalizedOffset: .zero)
-            .withOffset(CGVector(dx: cancelFrame.midX - applicationFrame.minX, dy: cancelFrame.midY - applicationFrame.minY)).tap()
         let cancelled = app.staticTexts["response.action.notice"].firstMatch
+        // The genuine screenshot shows a leading Back/Close control. Leave a
+        // provider directory first if necessary, then activate native Close.
+        // Each touch is measured from fresh real pixels. Only the delegate's
+        // receipt below can acknowledge cancellation; no app state is forced.
+        for _ in 0..<2 {
+            guard let point = visibleFilesNavigationPoint(app.screenshot(), application: applicationFrame, toolbar: cancelFrame) else {
+                printPresentationDiagnostics(app, label: "EXPORT")
+                XCTFail("The visible native Files navigation glyph must be identifiable in actual pixels")
+                return
+            }
+            app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: point.x - applicationFrame.minX, dy: point.y - applicationFrame.minY)).tap()
+            let receipt = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                cancelled.exists && cancelled.label == "Export cancelled."
+            }, object: app)
+            if XCTWaiter.wait(for: [receipt], timeout: 2) == .completed { break }
+        }
         let acknowledged = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             cancelled.exists && cancelled.label == "Export cancelled."
         }, object: app)

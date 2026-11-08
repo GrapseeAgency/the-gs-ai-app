@@ -18,7 +18,7 @@ import { downloadResponseFile, responseSourceArchive, responseSourceFile } from 
  * glass glyphs.
  */
 
-import { Fragment, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useMemo, useRef, useState, useId, type ReactNode } from 'react'
 import { parseStream, type Segment } from './stream'
 import { WidgetRenderer } from './WidgetRenderer'
 import { SpontaneousConceptDeck } from './SpontaneousConceptDeck'
@@ -796,6 +796,8 @@ function InteractiveProseChecklistItem({
   citations,
   checkedOverride,
   onToggleOverride,
+  onEdit,
+  onDelete,
 }: {
   item: ListItemNode
   idx: number
@@ -805,12 +807,13 @@ function InteractiveProseChecklistItem({
   citations?: Citation[]
   checkedOverride?: boolean
   onToggleOverride?: () => void
+  onEdit?: () => void
+  onDelete?: () => void
 }) {
   const [localChecked, setLocalChecked] = useState(Boolean(item.checked))
   const checked = checkedOverride !== undefined ? checkedOverride : localChecked
   return (
     <li
-      onClick={() => (onToggleOverride ? onToggleOverride() : setLocalChecked((prev) => !prev))}
       style={{
         listStyleType: 'none',
         display: 'flex',
@@ -823,10 +826,15 @@ function InteractiveProseChecklistItem({
         transition: 'background 0.15s ease',
       }}
     >
-      <span
+      <button
+        type="button"
+        onClick={() => (onToggleOverride ? onToggleOverride() : setLocalChecked((prev) => !prev))}
+        aria-label={`Complete task: ${cleanPlainText(item.text)}`}
         role="checkbox"
         aria-checked={checked}
         style={{
+          padding: 0,
+          cursor: 'pointer',
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -843,7 +851,7 @@ function InteractiveProseChecklistItem({
         }}
       >
         {checked && <GlassIcon name="check" size={11} tile={16} />}
-      </span>
+      </button>
       <div style={{ flex: 1, minWidth: 0 }}>
         <span style={{ textDecoration: checked ? 'line-through' : 'none', opacity: checked ? 0.68 : 1 }}>
           {renderInline(item.text, theme, accent, citations, `li${idx}-${j}`)}
@@ -853,7 +861,10 @@ function InteractiveProseChecklistItem({
             {renderInline(c, theme, accent, citations, `lic${idx}-${j}-${ci}`)}
           </div>
         ))}
+        {item.children.length > 0 && <div style={{marginTop: 6}}>{item.children.map((child, childIndex) => renderProseBlock(child, childIndex, theme, accent, citations))}</div>}
       </div>
+      {onEdit && <button type="button" aria-label={`Edit task: ${cleanPlainText(item.text)}`} onClick={onEdit} style={{border: 0, background: 'transparent', cursor: 'pointer', padding: 4}}><GlassIcon name="pencil" size={14} tile={22}/></button>}
+      {onDelete && <button type="button" aria-label={`Delete task: ${cleanPlainText(item.text)}`} onClick={onDelete} style={{border: 0, background: 'transparent', cursor: 'pointer', padding: 4}}><GlassIcon name="trash" size={14} tile={22}/></button>}
     </li>
   )
 }
@@ -1100,184 +1111,43 @@ function ProseTableGrid({
   )
 }
 
-function InteractiveProseTodoList({
-  block,
-  idx,
-  theme,
-  accent,
-  citations,
-}: {
+function InteractiveProseTodoList({ block, idx, theme, accent, citations }: {
   block: Extract<ProseBlock, { kind: 'bulletList' }>
   idx: number
   theme: Theme
   accent: string
   citations?: Citation[]
 }) {
-  const [checkedMap, setCheckedMap] = useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {}
-    block.items.forEach((it, j) => {
-      init[`base-${j}`] = Boolean(it.checked)
-    })
-    return init
-  })
-  const [extraTasks, setExtraTasks] = useState<string[]>([])
-  const [isAdding, setIsAdding] = useState(false)
-  const [newTaskText, setNewTaskText] = useState('')
-
-  const totalCount = block.items.length + extraTasks.length
-  const completedCount =
-    block.items.reduce((acc, it, j) => acc + ((checkedMap[`base-${j}`] ?? Boolean(it.checked)) ? 1 : 0), 0) +
-    extraTasks.reduce((acc, _, ti) => acc + (checkedMap[`extra-${ti}`] ? 1 : 0), 0)
-  const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {totalCount > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            fontSize: 11,
-            fontWeight: 650,
-            color: theme.text2,
-            padding: '2px 4px',
-          }}
-        >
-          <span>{`${completedCount}/${totalCount} completed`}</span>
-          <span style={{ color: completedCount === totalCount ? '#129A5A' : '#5B3DF5', fontWeight: 700 }}>{pct}%</span>
-        </div>
-      )}
-      <ul
-        style={{
-          margin: 0,
-          paddingLeft: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 4,
-          color: theme.text,
-          listStyleType: 'none',
-        }}
-      >
-        {block.items.map((item, j) => {
-          const isC = checkedMap[`base-${j}`] ?? Boolean(item.checked)
-          return (
-            <InteractiveProseChecklistItem
-              key={j}
-              item={item.checked !== undefined ? item : { ...item, checked: false }}
-              idx={idx}
-              j={j}
-              theme={theme}
-              accent={accent}
-              citations={citations}
-              checkedOverride={isC}
-              onToggleOverride={() => setCheckedMap((prev) => ({ ...prev, [`base-${j}`]: !isC }))}
-            />
-          )
-        })}
-        {extraTasks.map((task, ti) => {
-          const isC = Boolean(checkedMap[`extra-${ti}`])
-          return (
-            <InteractiveProseChecklistItem
-              key={`extra-${ti}`}
-              item={{ checked: false, text: task, continuations: [], children: [] }}
-              idx={idx}
-              j={block.items.length + ti}
-              theme={theme}
-              accent={accent}
-              citations={citations}
-              checkedOverride={isC}
-              onToggleOverride={() => setCheckedMap((prev) => ({ ...prev, [`extra-${ti}`]: !isC }))}
-            />
-          )
-        })}
-      </ul>
-      {isAdding ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-          <input
-            type="text"
-            value={newTaskText}
-            onChange={(e) => setNewTaskText(e.target.value)}
-            placeholder="Type a new task…"
-            style={{
-              flex: 1,
-              padding: '5px 10px',
-              borderRadius: 8,
-              border: '1px solid rgba(124, 92, 252, 0.35)',
-              background: theme.card,
-              color: theme.text,
-              fontSize: 12.5,
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              const t = newTaskText.trim()
-              if (t) {
-                setExtraTasks((prev) => [...prev, t])
-                setNewTaskText('')
-                setIsAdding(false)
-              }
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '4px 10px',
-              borderRadius: 999,
-              border: 'none',
-              background: '#6C4CF6',
-              color: '#FFFFFF',
-              fontSize: 11.5,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            Add
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setNewTaskText('')
-              setIsAdding(false)
-            }}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              color: theme.text2,
-              fontSize: 11.5,
-              cursor: 'pointer',
-            }}
-          >
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <div>
-          <button
-            type="button"
-            onClick={() => setIsAdding(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '4px 10px',
-              borderRadius: 999,
-              fontSize: 11,
-              fontWeight: 700,
-              color: '#5B3DF5',
-              background: 'rgba(124, 92, 252, 0.10)',
-              border: '1px solid rgba(124, 92, 252, 0.24)',
-              cursor: 'pointer',
-            }}
-          >
-            <GlassIcon name="plus" tone="lavender" size={16} glyph={10} />
-            <span>Add Task</span>
-          </button>
-        </div>
-      )}
+  const [tasks, setTasks] = useState(() => block.items.map((item, index) => ({id: `source-${index}`, item, checked: Boolean(item.checked)})))
+  const nextId = useRef(0)
+  const [editor, setEditor] = useState<{id: string | null; draft: string} | null>(null)
+  const completed = tasks.filter(task => task.checked).length
+  const buttonStyle = {border: '1px solid rgba(124,92,252,0.24)', borderRadius: 999, background: 'rgba(124,92,252,0.10)', color: theme.text, padding: '5px 10px', cursor: 'pointer', fontSize: 12} as const
+  return <div style={{display: 'flex', flexDirection: 'column', gap: 6}}>
+    <div style={{display: 'flex', justifyContent: 'space-between', color: theme.text2, fontSize: 11}}>
+      <span>{completed}/{tasks.length} completed</span>
+      <span>{tasks.length ? Math.round(completed / tasks.length * 100) : 0}%</span>
     </div>
-  )
+    <ul style={{margin: 0, padding: 0, listStyle: 'none', color: theme.text}}>
+      {tasks.map((task, index) => <InteractiveProseChecklistItem key={task.id} item={task.item} idx={idx} j={index} theme={theme} accent={accent} citations={citations}
+        checkedOverride={task.checked}
+        onToggleOverride={() => setTasks(rows => rows.map(row => row.id === task.id ? {...row, checked: !row.checked} : row))}
+        onEdit={() => setEditor({id: task.id, draft: task.item.text})}
+        onDelete={() => {setTasks(rows => rows.filter(row => row.id !== task.id));setEditor(current => current?.id === task.id ? null : current)}}/>) }
+    </ul>
+    {editor ? <form aria-label={editor.id === null ? 'Add task' : 'Edit task'} onSubmit={event => {
+      event.preventDefault()
+      const text = sanitizeReplyEmojis(editor.draft).trim()
+      if (!text) return
+      if (editor.id === null) setTasks(rows => [...rows, {id: `local-${nextId.current++}`, item: {text, continuations: [], children: [], checked: false}, checked: false}])
+      else setTasks(rows => rows.map(row => row.id === editor.id ? {...row, item: {...row.item, text}} : row))
+      setEditor(null)
+    }} style={{display: 'flex', gap: 6}}>
+      <input autoFocus aria-label="Task text" value={editor.draft} onChange={event => setEditor({...editor, draft: event.target.value})} onKeyDown={event => {if(event.key === 'Escape')setEditor(null)}} style={{flex: 1, minWidth: 0, padding: '6px 10px', color: theme.text, background: theme.card, border: '1px solid rgba(124,92,252,0.35)', borderRadius: 8}}/>
+      <button type="submit" disabled={!sanitizeReplyEmojis(editor.draft).trim()} style={buttonStyle}>{editor.id === null ? 'Add' : 'Save task'}</button>
+      <button type="button" onClick={() => setEditor(null)} style={buttonStyle}>Cancel</button>
+    </form> : <div><button type="button" onClick={() => setEditor({id: null, draft: ''})} style={buttonStyle}><GlassIcon name="plus" size={14} tile={18}/> Add Task</button></div>}
+  </div>
 }
 
 function renderProseBlock(
@@ -1424,7 +1294,7 @@ function renderProseBlock(
       if (isTodoSection) {
         return (
           <InteractiveProseTodoList
-            key={idx}
+            key={`${idx}:${JSON.stringify(block.items)}`}
             block={block}
             idx={idx}
             theme={theme}
@@ -1887,13 +1757,16 @@ export function MessageContent({
   onPrompt,
   streaming = false,
   citations,
+  responseScope,
 }: {
   text: string
+  responseScope?: string
   dark?: boolean
   onPrompt?: (prompt: string) => void
   streaming?: boolean
   citations?: Citation[]
 }) {
+  const sessionScope = useId()
   const contentRef = useRef<HTMLDivElement>(null)
   const [actionNotice, setActionNotice] = useState<{ response: string; text: string; error?: boolean } | null>(null)
   const [detailState, setDetailState] = useState<{ response: string; kind: 'report' | 'sources' } | null>(null)
@@ -1983,7 +1856,7 @@ export function MessageContent({
           case 'svg':
             return <SvgBlock key={i} source={segment.source} />
           case 'code':
-            return <CodeBlock key={i} code={segment.code} language={segment.language} />
+            return <CodeBlock key={i} code={segment.code} language={segment.language} storageKey={`${responseScope ?? sessionScope}:snippet:${i}`} />
           case 'map':
             return <WidgetRenderer key={i} kind="map" payload={segment.payload} dark={dark} />
           default:

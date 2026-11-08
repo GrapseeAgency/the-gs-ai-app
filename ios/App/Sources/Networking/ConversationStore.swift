@@ -48,7 +48,14 @@ final class ConversationStore: ObservableObject {
 
     /// Durable layer: SQLite + FTS5 (imports the legacy JSON document once).
     /// Its internal serial queue makes every statement safe from any thread.
-    private let sql = SQLiteChatStore()
+    private let sql: SQLiteChatStore
+
+    // Off-main loading is a snapshot, not authority over later user actions.
+    private var bootstrapFinished = false
+    private var bootstrapDiscardLoaded = false
+    private var bootstrapDeletedConversationIDs = Set<String>()
+    private var bootstrapMessageCutoffs: [String: String] = [:]
+    private var bootstrapPurgedBefore: String?
 
     /// Fixed-width ISO-8601 keeps lexicographic createdAt ordering chronological.
     private static let timestamp: ISO8601DateFormatter = {
@@ -63,7 +70,12 @@ final class ConversationStore: ObservableObject {
     /// one formatter keeps lexicographic `updatedAt < cutoff` chronological.
     static func isoString(_ date: Date) -> String { timestamp.string(from: date) }
 
-    private init() {
+    private convenience init() { self.init(sql: SQLiteChatStore()) }
+
+    /// The same production store over an explicit real SQLite dependency also
+    /// permits isolated integration tests without changing the shared app data.
+    init(sql: SQLiteChatStore) {
+        self.sql = sql
         // Deep-perf pass 80-b: the full-table bootstrap — both loads plus the
         // one-time legacy JSON import — used to run synchronously on whatever
         // thread first touched `shared` (the main thread for every launch),
@@ -74,7 +86,7 @@ final class ConversationStore: ObservableObject {
         Task.detached(priority: .userInitiated) { [weak self] in
             var loadedConversations = sql.loadConversations()
             var loadedMessages = sql.loadMessages()
-            if loadedConversations.isEmpty && loadedMessages.isEmpty {
+            if sql.usesDefaultDatabase && !sql.isAvailable && loadedConversations.isEmpty && loadedMessages.isEmpty {
                 // Storage hiccup or fresh install with a legacy document —
                 // keep the old in-memory JSON path alive so nothing ever
                 // looks "lost". File IO + decode stay off-main too.
@@ -89,23 +101,31 @@ final class ConversationStore: ObservableObject {
         }
     }
 
-    /// Applies the off-main bootstrap. Merge, not replace: a first-millisecond
-    /// mutation that raced the load (its SQLite write serialized AFTER the
-    /// load read) stays in memory exactly once.
-    private func applyBootstrap(conversations: [StoredConversation], messages: [StoredMessage]) {
-        var mergedConversations = conversations
-        for existing in self.conversations
-        where !mergedConversations.contains(where: { $0.id == existing.id }) {
-            mergedConversations.append(existing)
+    /// A delayed snapshot may add untouched rows, but cannot undo a newer
+    /// rename, pin/archive, deletion, retention purge, edit or Clear History.
+    func applyBootstrap(conversations: [StoredConversation], messages: [StoredMessage]) {
+        guard !bootstrapFinished else { return }
+        let currentConversationIDs = Set(self.conversations.map(\.id))
+        let currentMessageIDs = Set(self.messages.map(\.id))
+        let loadedConversations = bootstrapDiscardLoaded ? [] : conversations.filter { row in
+            !currentConversationIDs.contains(row.id)
+                && !bootstrapDeletedConversationIDs.contains(row.id)
+                && (bootstrapPurgedBefore.map { row.updatedAt >= $0 } ?? true)
         }
-        var mergedMessages = messages
-        for existing in self.messages
-        where !mergedMessages.contains(where: { $0.id == existing.id }) {
-            mergedMessages.append(existing)
+        let retainedConversationIDs = Set(loadedConversations.map(\.id)).union(currentConversationIDs)
+        let loadedMessages = bootstrapDiscardLoaded ? [] : messages.filter { row in
+            !currentMessageIDs.contains(row.id)
+                && !bootstrapDeletedConversationIDs.contains(row.conversationId)
+                && (bootstrapMessageCutoffs[row.conversationId].map { row.createdAt < $0 } ?? true)
+                && (bootstrapPurgedBefore == nil || retainedConversationIDs.contains(row.conversationId))
         }
-        self.conversations = mergedConversations
-        self.messages = mergedMessages
+        self.conversations = loadedConversations + self.conversations
+        self.messages = loadedMessages + self.messages
         rebuildLastMessageIndex()
+        bootstrapFinished = true
+        bootstrapDeletedConversationIDs.removeAll()
+        bootstrapMessageCutoffs.removeAll()
+        bootstrapPurgedBefore = nil
     }
 
     /// Legacy document read + decode for the bootstrap fallback — nonisolated
@@ -306,6 +326,7 @@ final class ConversationStore: ObservableObject {
     }
 
     func delete(id: String) {
+        if !bootstrapFinished { bootstrapDeletedConversationIDs.insert(id) }
         conversations.removeAll { $0.id == id }
         messages.removeAll { $0.conversationId == id }
         lastMessageByConversation[id] = nil
@@ -320,6 +341,10 @@ final class ConversationStore: ObservableObject {
         let doomed = conversations.filter { $0.updatedAt < cutoff }
         guard !doomed.isEmpty else { return 0 }
         let ids = Set(doomed.map(\.id))
+        if !bootstrapFinished {
+            bootstrapDeletedConversationIDs.formUnion(ids)
+            bootstrapPurgedBefore = max(bootstrapPurgedBefore ?? cutoff, cutoff)
+        }
         sql.deleteConversations(updatedBefore: cutoff)
         conversations.removeAll { ids.contains($0.id) }
         messages.removeAll { ids.contains($0.conversationId) }
@@ -331,11 +356,17 @@ final class ConversationStore: ObservableObject {
     /// leave the device. Library saves, settings and the identity stay — that
     /// is what makes it different from Delete Account.
     func clearHistory() {
+        if !bootstrapFinished { bootstrapDiscardLoaded = true }
         sql.deleteAllContent()
+        if sql.usesDefaultDatabase {
+            let legacy = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("gsai-store.json")
+            try? FileManager.default.removeItem(at: legacy)
+            AttachmentStore.shared.purgeAllStagedFiles()
+        }
         conversations.removeAll()
         messages.removeAll()
         lastMessageByConversation.removeAll()
-        AttachmentStore.shared.purgeAllStagedFiles()
     }
 
     /// Privacy → Clear local data: every conversation, message and library
@@ -415,6 +446,9 @@ final class ConversationStore: ObservableObject {
     /// recent occurrence) because in-memory rows do not carry persisted ids.
     func truncateMessages(fromUserContent content: String, in conversationID: String) {
         guard let stamp = sql.latestUserStamp(content: content, conversationId: conversationID) else { return }
+        if !bootstrapFinished {
+            bootstrapMessageCutoffs[conversationID] = min(bootstrapMessageCutoffs[conversationID] ?? stamp, stamp)
+        }
         sql.deleteMessages(fromInclusive: stamp, conversationId: conversationID)
         messages.removeAll { $0.conversationId == conversationID && $0.createdAt >= stamp }
         // The removed tail may include the preview row — recompute for this one

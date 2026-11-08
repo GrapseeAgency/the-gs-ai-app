@@ -42,7 +42,7 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
             // the touch target is 44pt and invisible.
             if let onBack {
                 Button(action: onBack) {
-                    NexlyGlyph(name: "arrow-left", size: 19, color: Aero.text)
+                    NexlyGlyph(name: "arrow-left", size: 19, color: NexlyInk.header)
                         .frame(width: 44, height: 44)
                         .gsGlass(.elevated, corner: 22)
                         .overlay(Circle().strokeBorder(rimColor, lineWidth: 1))
@@ -61,13 +61,16 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
                 .overlay(Circle().strokeBorder(brandInk.opacity(0.30), lineWidth: 1))
                 .accessibilityHidden(true)
 
-            // One word. The tagline was a second line of chrome that repeated
-            // what the sparkle and the name already said, and it pushed the
-            // title high in a row of 44pt discs.
-            Text("Nexly")
-                .font(.system(size: 16.5, weight: .semibold))
-                .foregroundStyle(NexlyInk.header)
-                .lineLimit(1)
+            // Preserve both brand lines from the supplied response references.
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Nexly")
+                    .font(.system(size: 16.5, weight: .semibold))
+                    .foregroundStyle(NexlyInk.header)
+                Text("Your AI companion")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(NexlyInk.headerMeta)
+            }
+            .lineLimit(1)
 
             Spacer(minLength: 8)
 
@@ -99,7 +102,7 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
         @ViewBuilder menu: () -> Menu
     ) -> some View {
         Button(action: action) {
-            NexlyGlyph(name: glyph, size: 19, color: Aero.text)
+            NexlyGlyph(name: glyph, size: 19, color: NexlyInk.header)
                 .frame(width: 44, height: 44)
                 .gsGlass(.elevated, corner: 22)
                 .overlay(Circle().strokeBorder(rimColor, lineWidth: 1))

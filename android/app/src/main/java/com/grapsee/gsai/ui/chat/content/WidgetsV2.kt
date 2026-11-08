@@ -54,6 +54,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -837,15 +838,46 @@ internal fun sanitizeWidgetPresentationAndroid(value: JsonElement, key: String =
     }
 }
 
+/** Repair only unquoted dialect literals; executable/human strings are data. */
+internal fun cleanWidgetDialectLiteralsAndroid(raw: String): String {
+    val result = StringBuilder(raw.length)
+    var quote: Char? = null
+    var escaped = false
+    var index = 0
+    while (index < raw.length) {
+        val c = raw[index]
+        if (quote != null) {
+            result.append(c)
+            if (escaped) escaped = false
+            else if (c.code == 92) escaped = true // Backslash escapes the following character.
+            else if (c == quote) quote = null
+            index++
+        } else if (c.code == 34 || c.code == 39) { // Double or single quote.
+            quote = c; result.append(c); index++
+        } else if (c.isLetter() || c == '_') {
+            var end = index + 1
+            while (end < raw.length && (raw[end].isLetterOrDigit() || raw[end] == '_')) end++
+            val word = raw.substring(index, end)
+            var next = end
+            while (next < raw.length && raw[next].isWhitespace()) next++
+            result.append(if (next < raw.length && raw[next] == ':') word else when (word) {
+                "True" -> "true"
+                "False" -> "false"
+                "None" -> "null"
+                else -> word
+            })
+            index = end
+        } else { result.append(c); index++ }
+    }
+    return result.toString()
+}
+
 internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
     val trimmed = rawJson.trim()
     if (trimmed.isEmpty()) return rawJson
 
-    // 1. Pre-clean Python/JS literals (`True`/`False`/`None`) outside strings.
-    val dialectCleaned = trimmed
-        .replace(Regex("(?<=[:\\[\\s,])True(?=[,\\]\\}\\s]|$)"), "true")
-        .replace(Regex("(?<=[:\\[\\s,])False(?=[,\\]\\}\\s]|$)"), "false")
-        .replace(Regex("(?<=[:\\[\\s,])None(?=[,\\]\\}\\s]|$)"), "null")
+    // 1. Preserve every quoted byte, including code/HTML/URLs and escapes.
+    val dialectCleaned = cleanWidgetDialectLiteralsAndroid(trimmed)
 
     val element = try {
         widgetJson.parseToJsonElement(dialectCleaned)
@@ -902,10 +934,12 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
             if ("series" !in m) {
                 val datasets = m["datasets"] as? JsonArray
                 if (datasets != null) {
-                    val converted = datasets.mapNotNull { ds ->
-                        val o = ds as? JsonObject ?: return@mapNotNull null
+                    val converted = datasets.map { ds ->
+                        val o = ds as? JsonObject ?: return@map ds
                         val name = (o["name"] ?: o["label"] ?: o["title"]) as? JsonPrimitive ?: JsonPrimitive("Series")
-                        val data = (o["data"] ?: o["values"] ?: o["points"]) as? JsonArray ?: return@mapNotNull null
+                        // Preserve invalid/missing data for strict decoding;
+                        // dropping a dataset changes what the answer claims.
+                        val data = o["data"] ?: o["values"] ?: o["points"] ?: JsonNull
                         JsonObject(mapOf("name" to name, "data" to data))
                     }
                     m["series"] = JsonArray(converted)
@@ -923,6 +957,24 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
                     }
                 }
             }
+            // The numeric point decoder cannot retain a string x/category.
+            // Preserve source labels before decoding, for both axis text and
+            // selected-value tooltips. Explicit labels always win.
+            if ("labels" !in m) {
+                val series = m["series"] as? JsonArray
+                val data = (series?.firstOrNull() as? JsonObject)?.get("data") as? JsonArray
+                val labels = data?.map { point ->
+                    val source = when (point) {
+                        is JsonArray -> point.firstOrNull()
+                        is JsonObject -> point["label"] ?: point["name"] ?: point["category"] ?: point["x"]
+                        else -> null
+                    }
+                    (source as? JsonPrimitive)?.takeIf { it != JsonNull && it.content.isNotBlank() }
+                }
+                if (labels != null && labels.any { it != null }) {
+                    m["labels"] = JsonArray(labels.mapIndexed { index, source -> source ?: JsonPrimitive("#${index + 1}") })
+                }
+            }
             // Expand single-series pie/donut with multiple points into one series per slice.
             val chartType = (m["type"] as? JsonPrimitive)?.contentOrNull ?: "bar"
             if (chartType == "pie" || chartType == "donut") {
@@ -932,19 +984,18 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
                     val firstSeries = seriesArr[0] as? JsonObject
                     val dataArr = firstSeries?.get("data") as? JsonArray
                     if (dataArr != null && dataArr.size > 1) {
-                        val expanded = dataArr.mapIndexedNotNull { idx, pt ->
+                        val expanded = dataArr.mapIndexed { idx, pt ->
                             val sliceName = (labelsArr?.getOrNull(idx) as? JsonPrimitive)?.contentOrNull
                                 ?: (pt as? JsonObject)?.let { (it["name"] ?: it["label"]) as? JsonPrimitive }?.contentOrNull
+                                ?: ((pt as? JsonArray)?.firstOrNull() as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
                                 ?: "Slice ${idx + 1}"
-                            val valueElem: JsonElement = when (pt) {
-                                is JsonPrimitive -> pt
-                                is JsonArray -> pt.lastOrNull() ?: JsonPrimitive(0)
-                                is JsonObject -> (pt["y"] ?: pt["value"] ?: pt["val"]) ?: JsonPrimitive(0)
-                            }
+                            // Keep the actual point for the shared strict decoder:
+                            // missing values are not zero, and [x,y,z] means y,
+                            // not whichever coordinate happens to be last.
                             JsonObject(
                                 mapOf(
                                     "name" to JsonPrimitive(sliceName),
-                                    "data" to JsonArray(listOf(JsonArray(listOf(JsonPrimitive(0), valueElem))))
+                                    "data" to JsonArray(listOf(pt))
                                 )
                             )
                         }

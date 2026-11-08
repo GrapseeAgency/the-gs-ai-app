@@ -5,6 +5,8 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 EXPECTED = {
+    'ordinaryMarkdownTasksEditDeletePreserveDetailsAndDoNotMoveCompletion',
+    'generatedReactTsxRunsActualTasksPersistsAndIsolatesResponses',
     'generatedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices',
     'generatedBookingSavesOnlyActualLocalSelectionWithoutReservation',
     'generatedChecklistEditsDeletesAddsAndKeepsCompletionWithTheActualTask',

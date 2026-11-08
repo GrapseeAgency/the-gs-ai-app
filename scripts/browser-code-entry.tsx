@@ -6,13 +6,13 @@ import { CodeBlock } from '../src/components/genui/blocks/CodeBlock'
 
 declare global {
   interface Window {
-    gsRenderCode: (code: string, language: string) => void
+    gsRenderCode: (code: string, language: string, storageKey?: string) => void
     gsRenderTerminal: (payload: Record<string, unknown>) => void
     gsRenderHTML: (source: string) => void
   }
 }
 const root = createRoot(document.getElementById('app')!)
-window.gsRenderCode = (code, language) => root.render(<CodeBlock code={code} language={language} />)
+window.gsRenderCode = (code, language, storageKey) => root.render(<CodeBlock code={code} language={language} storageKey={storageKey} />)
 
 window.gsRenderTerminal = payload => root.render(<TerminalWidget payload={payload} />)
 window.gsRenderHTML = source => root.render(<HtmlBlock source={source} fallbackHeight={490} />)
@@ -41,5 +41,5 @@ declare global { interface Window { gsRenderCollab: (payload: CollabPayload) => 
 window.gsRenderCollab = payload => root.render(<WidgetSurface dark={false}><CollabWidget payload={payload} /></WidgetSurface>)
 
 import { MessageContent } from '../src/components/genui/MessageContent'
-declare global { interface Window { gsRenderMessage: (text: string) => void } }
-window.gsRenderMessage = text => root.render(<MessageContent text={text} dark={false} />)
+declare global { interface Window { gsRenderMessage: (text: string, responseScope?: string) => void } }
+window.gsRenderMessage = (text, responseScope) => root.render(<MessageContent text={text} dark={false} responseScope={responseScope} />)

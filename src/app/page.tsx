@@ -148,6 +148,7 @@ const ENGINE_LABELS: Record<string, string> = {
 type ClarifyChoices = { question: string; options: { id: string; label: string }[] }
 
 type ChatMessage = {
+  id: string
   role: 'user' | 'assistant'
   content: string
   sources?: SourceCard[]
@@ -485,6 +486,7 @@ export default function Home() {
     try {
       const data = await fetch(`/api/v1/conversations/${id}/messages`).then((r) => r.json())
       const items = (data?.items ?? []) as {
+        id: string
         role: string
         content: string
         sources?: SourceCard[]
@@ -504,6 +506,7 @@ export default function Home() {
               }
             }
             return {
+              id: m.id,
               role: m.role as 'user' | 'assistant',
               content: m.content,
               ...(m.sources && m.sources.length > 0 ? { sources: m.sources } : {}),
@@ -627,7 +630,7 @@ export default function Home() {
       setReasoningOpen(true)
       setReasoningStart(null)
       setReasoningEnd(null)
-      setMessages((prev) => [...prev, { role: 'user', content: text }])
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', content: text }])
       setIsStreaming(true)
 
       const controller = new AbortController()
@@ -781,6 +784,7 @@ export default function Home() {
               setMessages((prev) => [
                 ...prev,
                 {
+                  id: typeof saved?.id === 'string' ? saved.id : crypto.randomUUID(),
                   role: 'assistant',
                   content: saved?.content ?? acc,
                   ...(doneSources.length > 0 ? { sources: doneSources } : {}),
@@ -958,6 +962,7 @@ export default function Home() {
             try {
               const data = await fetch(`/api/v1/conversations/${convId}/messages`).then((r) => r.json())
               const items = (data?.items ?? []) as {
+                id: string
                 role: string
                 content: string
                 sources?: SourceCard[]
@@ -977,6 +982,7 @@ export default function Home() {
                 setMessages((prev) => [
                   ...prev,
                   {
+                    id: landed.id,
                     role: 'assistant',
                     content: landed.content,
                     ...(landedSources.length > 0 ? { sources: landedSources } : {}),
@@ -989,7 +995,7 @@ export default function Home() {
             }
           }
           if (!adopted && acc) {
-            setMessages((prev) => [...prev, { role: 'assistant', content: acc }])
+            setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: acc }])
           }
           setStreamText('')
           setTrace([])
@@ -1003,7 +1009,7 @@ export default function Home() {
           setError(e instanceof Error ? e.message : 'Something went wrong')
         } else if (accRef.current) {
           // Stop-generation: keep whatever streamed before the interrupt.
-          setMessages((prev) => [...prev, { role: 'assistant', content: accRef.current }])
+          setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: accRef.current }])
           setStreamText('')
         }
       } finally {
@@ -1308,6 +1314,7 @@ export default function Home() {
                           }}
                         >
                           <MessageContent
+                            responseScope={`${conversationId ?? 'draft'}:${m.id}`}
                             text={m.content}
                             dark
                             onPrompt={(prompt) => sendRef.current(prompt)}

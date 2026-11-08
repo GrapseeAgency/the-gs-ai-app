@@ -13,6 +13,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
@@ -274,6 +279,7 @@ class NexlyChatScreenshotTest {
                     modifier = Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
+                        .testTag("response.reference.scroll")
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
@@ -285,13 +291,17 @@ class NexlyChatScreenshotTest {
                             createdAt = "2026-10-23T10:30:00Z"
                         )
                     )
-                    BlocksContent(
-                        content = wire,
-                        isStreaming = false,
-                        onCopyCode = {},
-                        glassAssistant = true,
-                        statusCard = null,
-                        planTimestamp = "2026-10-23T10:31:00Z"
+                    // Match the production ChatScreen wrapper, identity and
+                    // footer, not only its nested block renderer.
+                    AssistantMessage(
+                        message = ChatUiMessage(
+                            id = "flash-assistant", role = "assistant", content = wire,
+                            createdAt = "2026-10-23T10:31:00Z"
+                        ),
+                        isSpeaking = false,
+                        showIdentity = false,
+                        onCopy = {},
+                        onRegenerate = {}
                     )
                 }
                 Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
@@ -349,6 +359,29 @@ class NexlyChatScreenshotTest {
             compose.onNodeWithText("Table", useUnmergedTree = true).performClick()
             compose.onNodeWithText("Python", useUnmergedTree = true).assertIsDisplayed()
         }
+        val scroll = compose.onNodeWithTag("response.reference.scroll")
+        val viewportHeight = scroll.fetchSemanticsNode().boundsInRoot.height
+        val maximum = scroll.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].maxValue()
+        val frames = org.json.JSONArray()
+        var previous = -1f
+        do {
+            compose.waitForIdle()
+            val range = scroll.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+            val actual = range.value()
+            org.junit.Assert.assertTrue("Actual native scrolling must advance, not duplicate its first viewport", actual > previous)
+            val name = "genui-reference-android-$id-393x852-scroll-${frames.length()}.png"
+            compose.onRoot().captureRoboImage("build/screenshots/$name")
+            frames.put(org.json.JSONObject().put("file", name).put("offsetY", actual))
+            if (actual >= maximum) break
+            previous = actual
+            org.junit.Assert.assertTrue("A capture cap must fail, never silently omit the response tail", frames.length() < 20)
+            scroll.performSemanticsAction(SemanticsActions.ScrollBy) { action -> action(0f, viewportHeight * 0.75f) }
+        } while (true)
+        val last = frames.getJSONObject(frames.length() - 1).getDouble("offsetY")
+        org.junit.Assert.assertEquals("Full-scroll evidence must reach the real response bottom", maximum.toDouble(), last, 1.0)
+        java.io.File("build/screenshots/genui-reference-android-$id-393x852-scroll.json").writeText(
+            org.json.JSONObject().put("viewportHeight", viewportHeight).put("maximumOffsetY", maximum).put("frames", frames).toString(2))
+
     }
 
     @Test @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")

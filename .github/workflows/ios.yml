@@ -75,9 +75,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: ios-${{ github.ref }}
-  # Finish the running native audit; newer commits replace only the pending run.
-  # Per-file pushes must not repeatedly cancel Xcode before runtime evidence.
+  # Final acceptance requires an executed, passing native keyboard/CRUD/storage
+  # receipt before the full production-message, SQLite and visual audit. Keep
+  # prior diagnostic runs intact; coalesce pending changes in this generation.
+  group: ios-response-runtime-v8-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -166,7 +167,7 @@ jobs:
           test -d GSApp.xcodeproj || { echo "::error::GSApp.xcodeproj was not generated"; exit 1; }
           xcodebuild -list -project GSApp.xcodeproj
 
-      - name: Fetch the GsFfi xcframework from the latest ios-native run
+      - name: Fetch the GsFfi xcframework from a successful native producer job
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -182,21 +183,36 @@ jobs:
           # which uploads it as the GsFfi.xcframework artifact; this pull gate
           # takes the latest successful one -- the same producer/consumer
           # pattern android-device.yml uses for libgs_ffi.so.
-          RUN_ID=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/ios-native.yml/runs?status=success&per_page=1" \
-            | python3 -c 'import json,sys; d=json.load(sys.stdin); runs=d.get("workflow_runs",[]); print(runs[0]["id"] if runs else "")')
-          if [ -z "$RUN_ID" ]; then
-            echo "::error::no successful ios-native run to take GsFfi.xcframework from"
-            exit 1
-          fi
-          echo "ios-native run: $RUN_ID"
-          ART=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
-            | python3 -c 'import json,sys; d=json.load(sys.stdin); arts=[a for a in d.get("artifacts",[]) if a["name"]=="GsFfi.xcframework"]; print(arts[0]["id"] if arts else "")')
-          if [ -z "$ART" ]; then
-            echo "::error::no GsFfi.xcframework artifact in ios-native run $RUN_ID"
-            exit 1
-          fi
+          # A completed native workflow can fail its separate app tests AFTER
+          # successfully producing the framework. Conversely, its last fully
+          # green workflow may have no remaining artifact. Require the actual
+          # xcframework producer job to pass and its artifact to be unexpired;
+          # the app compilation/tests below still gate THIS revision strictly.
+          read -r RUN_ID ART < <(python3 - <<'PYFRAMEWORK'
+          import json, subprocess, sys
+          import os
+          repo = os.environ['GITHUB_REPOSITORY']
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{path}']))
+          runs = api('actions/workflows/ios-native.yml/runs?status=completed&per_page=30')['workflow_runs']
+          for run in runs:
+              if run.get('head_repository', {}).get('full_name') != repo:
+                  continue
+              artifacts = [a for a in api(f"actions/runs/{run['id']}/artifacts?per_page=100")['artifacts']
+                           if a['name'] == 'GsFfi.xcframework' and not a['expired']]
+              if not artifacts:
+                  continue
+              jobs = api(f"actions/runs/{run['id']}/jobs?per_page=100")['jobs']
+              if not any(j['name'] == 'xcframework' and j['conclusion'] == 'success' for j in jobs):
+                  continue
+              print(run['id'], artifacts[0]['id'])
+              break
+          else:
+              sys.exit('No unexpired framework from a successful ios-native xcframework producer job')
+          PYFRAMEWORK
+          )
+          test -n "$RUN_ID" && test -n "$ART"
+          echo "Verified native producer run: $RUN_ID"
           echo "artifact id: $ART"
           XF="$PROJECT_DIR/Frameworks/GsFfi.xcframework"
           rm -rf "$XF"
@@ -282,54 +298,44 @@ jobs:
             exit 65
           fi
 
-      - name: Focused generated-widget runtime test (before the full suite)
+      - name: Early actual inline React keyboard and storage acceptance
         run: |
           set -o pipefail
-          rm -rf ios/build/GSApp-genui.xcresult
           xcodebuild test \
             -parallel-testing-enabled NO \
             -project "$PROJECT_FILE" \
             -scheme "$SCHEME" \
             -destination "$IOS_DESTINATION" \
             -derivedDataPath "$DERIVED_DATA" \
-            -only-testing:AppTests/CalcHonestyTests \
-            -only-testing:AppTests/NexlyChatRenderTests/testSixSuppliedResponseSectionReferencesRenderThroughActualChat \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedBookingSavesOnlyActualLocalSelectionWithoutReservation \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedChecklistEditsDeletesAddsAndKeepsActualTaskCompletion \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testContextualEditOpensActualCodeAndExportOpensSystemDocumentPicker \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testContextualReportShowsActualDataAndSharePresentsSystemActivitySheet \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedCodeCopyEditRunAndInvalidDraftReset \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTerminalUsesRealFilesWorkerAndUnsupportedRefusal \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji \
-            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTableAllDisplaysEveryActualRow \
-            -resultBundlePath ios/build/GSApp-genui.xcresult \
+            -only-testing:AppTests/CalcHonestyTests/testNativeJSONDelimiterRecoveryPreservesActualSourceBytesAndQuotedPunctuation \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch \
+            -resultBundlePath ios/build/GSApp-react-keyboard.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee ios/build/xcodebuild-genui-test.log
+          cp ios/build/xcodebuild-genui-test.log ios/build/xcodebuild-react-keyboard-test.log
+          python3 - <<'PY'
+          from pathlib import Path
+          log = Path('ios/build/xcodebuild-react-keyboard-test.log').read_text(errors='replace')
+          receipt = [line for line in log.splitlines() if 'Test Case' in line
+                     and 'PlatformRuntimeUITests testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch]' in line
+                     and 'passed (' in line]
+          if len(receipt) != 1:
+              raise SystemExit('Actual inline React test must execute and pass exactly once; zero/skipped tests do not count')
+          print('::notice::Actual inline React keyboard/CRUD/storage receipt: ' + receipt[0].replace('%', '%25'))
+          source_receipt = [line for line in log.splitlines() if 'Test Case' in line
+                            and 'CalcHonestyTests testNativeJSONDelimiterRecoveryPreservesActualSourceBytesAndQuotedPunctuation]' in line
+                            and 'passed (' in line]
+          if len(source_receipt) != 1:
+              raise SystemExit('The actual native JSON source-byte test must execute and pass exactly once')
+          print('::notice::Actual native JSON source-byte receipt: ' + source_receipt[0].replace('%', '%25'))
+          PY
 
-      - name: Independently verify actual XCTest source archive bytes
-        if: always()
-        run: |
-          set -euo pipefail
-          python3 scripts/check_response_archive.py --self-test
-          DIR=ios/build/source-archive
-          mkdir -p "$DIR"
-          if ! xcrun xcresulttool export attachments \
-            --path ios/build/GSApp-genui.xcresult --output-path "$DIR/raw" > "$DIR/export.log" 2>&1; then
-            python3 -c 'from pathlib import Path; print("::error::Native source attachment export failed: " + Path("ios/build/source-archive/export.log").read_text().replace("%", "%25").replace("\n", "%0A"))'
-            exit 1
-          fi
-          python3 -u scripts/check_response_archive.py "$DIR/raw" 2>&1 | tee "$DIR/verification.log"
-
-      - name: Preserve native source archive byte evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-source-archive-${{ github.run_id }}
-          path: ios/build/source-archive
-          if-no-files-found: error
-
+      # The complete suite below includes every CalcHonesty, six-section
+      # render and PlatformRuntime test. Do not run the same seeded UI suite
+      # first: its persisted chats invalidate clean-install Home/history and
+      # displace menu recents. The early real React test still independently
+      # requires actual relaunch persistence, and all named full-suite gates
+      # remain mandatory. No booted-simulator-name assumption or test skips.
       - name: Test (XCTest unit tests on iOS simulator)
         run: |
           set -o pipefail
@@ -353,6 +359,37 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee ios/build/xcodebuild-test.log
 
+      - name: Independently verify actual XCTest source archive bytes
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 scripts/check_response_archive.py --self-test
+          DIR=ios/build/source-archive
+          mkdir -p "$DIR"
+          if ! xcrun xcresulttool export attachments \
+            --path ios/build/GSApp-tests.xcresult --output-path "$DIR/raw" > "$DIR/export.log" 2>&1; then
+            python3 -c 'from pathlib import Path; print("::error::Native source attachment export failed: " + Path("ios/build/source-archive/export.log").read_text().replace("%", "%25").replace("\n", "%0A"))'
+            exit 1
+          fi
+          python3 -u scripts/check_response_archive.py "$DIR/raw" 2>&1 | tee "$DIR/verification.log"
+
+      - name: Preserve native source archive byte evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-source-archive-${{ github.run_id }}
+          path: ios/build/source-archive
+          if-no-files-found: error
+
+      - name: Select actual complete-suite diagnostics, not stale early output
+        if: always()
+        run: |
+          if [ -s ios/build/xcodebuild-test.log ]; then
+            cp ios/build/xcodebuild-test.log ios/build/xcodebuild-genui-test.log
+          else
+            echo "No complete-suite log exists; preserve the original early-test evidence, not an inferred full-suite result."
+          fi
+
       - name: Require platform runtime tests to actually pass
         run: |
           python3 - <<'PYRUNTIME'
@@ -360,6 +397,19 @@ jobs:
           import re
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
+              ('PlatformRuntimeUITests', 'testConversationActionsTapOpensRealOptionsWithoutLeavingChat'),
+              ('CalcHonestyTests', 'testActualMessagePreviewIdentitySurvivesRehydrationWithoutInventingServerIDs'),
+              ('CalcHonestyTests', 'testActualSQLiteHistoryAndOlderPagesKeepDurablePreviewIdentity'),
+              ('CalcHonestyTests', 'testActualSQLiteLegacyImportKeepsActualRowsAndCannotReviveClearedHistoryOnReopen'),
+              ('CalcHonestyTests', 'testNativeJSONDelimiterRecoveryPreservesActualSourceBytesAndQuotedPunctuation'),
+              ('CalcHonestyTests', 'testActualSQLiteDelayedBootstrapKeepsNewerRenamePinArchiveAndSourceBytes'),
+              ('CalcHonestyTests', 'testActualSQLiteDelayedBootstrapCannotResurrectDeletedConversationOrMessages'),
+              ('CalcHonestyTests', 'testActualSQLiteDelayedBootstrapCannotUndoClearHistoryOrDropPostClearAnswer'),
+              ('CalcHonestyTests', 'testActualSQLiteDelayedBootstrapCannotRestoreEditedAwayMessageTail'),
+              ('CalcHonestyTests', 'testActualSQLiteDelayedBootstrapCannotRestoreRetentionPurgedHistory'),
+              ('PlatformRuntimeUITests', 'testOrdinaryMarkdownTaskControlsPreserveRealDetailsAndCompletion'),
+              ('PlatformRuntimeUITests', 'testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch'),
+              ('CalcHonestyTests', 'testGeneratedReactTsxUsesActualWebKitTasksPersistenceAndResponseIsolation'),
               ('PlatformRuntimeUITests', 'testGeneratedChecklistEditsDeletesAddsAndKeepsActualTaskCompletion'),
               ('NexlyChatRenderTests', 'testSixSuppliedResponseSectionReferencesRenderThroughActualChat'),
               ('PlatformRuntimeUITests', 'testGeneratedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices'),
@@ -398,6 +448,59 @@ jobs:
           print('All required iOS platform runtime tests executed and passed')
           PYRUNTIME
 
+      - name: Review actual Files before the real Cancel touch
+        if: failure()
+        run: python3 scripts/publish_native_ui_pixels.py ios/build/xcodebuild-genui-test.log FILES
+
+      - name: Review actual Files after an unacknowledged Cancel touch
+        if: failure()
+        run: python3 scripts/publish_native_ui_pixels.py ios/build/xcodebuild-genui-test.log EXPORT
+
+      - name: Review actual React native UI failure pixels
+        if: failure()
+        run: python3 scripts/publish_native_ui_pixels.py ios/build/xcodebuild-genui-test.log REACT
+
+      - name: Publish actual React keyboard layout measurements
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('ios/build/xcodebuild-genui-test.log')
+          if path.exists():
+              actual = [line for line in path.read_text(errors='replace').splitlines()
+                        if 'GS_REACT_KEYBOARD_LAYOUT:' in line or 'GS_REACT_FOCUS_CHECK:' in line]
+              for line in actual[-8:]:
+                  print('::notice::' + line[:3500].replace('%', '%25').replace('\r', '%0D'))
+          PY
+
+      - name: Review actual system Share failure pixels
+        if: failure()
+        run: python3 scripts/publish_native_ui_pixels.py ios/build/xcodebuild-genui-test.log SHARE
+
+      - name: Publish actual Files presentation and cancellation diagnostics
+        if: failure()
+        run: |
+          python3 - <<'PYFILES'
+          import re
+          from pathlib import Path
+          path = Path('ios/build/xcodebuild-genui-test.log')
+          if not path.exists(): raise SystemExit(0)
+          lines = path.read_text(errors='replace').splitlines()
+          chunks = {}
+          for line in lines:
+              match = re.search(r'GS_PRESENTATION_EXPORT_(\d+): (.*)', line)
+              if match: chunks[int(match.group(1))] = match.group(2)
+              if 'GS_FILES_CANCEL_FRAME:' in line:
+                  print('::notice::' + line[-3000:].replace('%', '%25'))
+          hierarchy = ''.join(chunks[key] for key in sorted(chunks))
+          # This dedicated step owns its annotation budget. Unit-pass notices
+          # in a different step must never hide the actual system UI evidence.
+          if len(hierarchy) > 28000:
+              hierarchy = ' | '.join(part for part in hierarchy.split(' | ') if any(word in part for word in ['Window,', 'NavigationBar,', 'Button,', "label: 'Cancel'", "label: 'Save'", "label: 'Browse'", 'DocumentPicker', 'frame:']))
+          for start in range(0, min(len(hierarchy), 28000), 3500):
+              print('::notice::GS_FILES_HIERARCHY_' + str(start) + ': ' + hierarchy[start:start+3500].replace('%', '%25'))
+          PYFILES
+
       - name: Publish XCTest failure diagnostics as annotations
         if: failure()
         run: |
@@ -428,7 +531,7 @@ jobs:
                   if archive_log.exists():
                       print('::notice::Native archive diagnostic: ' + archive_log.read_text(errors='replace')[-8000:].replace('%', '%25').replace('\n', '%0A'))
           PYTEST
-          for RESULT in ios/build/GSApp-genui.xcresult ios/build/GSApp-tests.xcresult; do
+          for RESULT in ios/build/GSApp-react-keyboard.xcresult ios/build/GSApp-genui.xcresult ios/build/GSApp-tests.xcresult; do
             [ -d "$RESULT" ] || continue
             # test-results summary emits JSON by default on current Xcode.
             xcrun xcresulttool get test-results summary --path "$RESULT" > "$RESULT-summary.json" || true
@@ -500,6 +603,7 @@ jobs:
           mkdir -p "$DIR"
           if [ -d "$SRC" ]; then cp "$SRC"/nexly-chat-ios-*.png "$DIR/" 2>/dev/null || true; fi
           if [ -d "$SRC" ]; then cp "$SRC"/genui-reference-ios-*.png "$DIR/" 2>/dev/null || true; fi
+          if [ -d "$SRC" ]; then cp "$SRC"/genui-reference-ios-*-scroll.json "$DIR/" 2>/dev/null || true; fi
           for section in 01-dashboard 02-structured-launch 03-react-code 04-citations 05-data-grid 06-interactive-charts; do
             test -s "$DIR/genui-reference-ios-$section-393x852.png" \
               || { echo "::error::Missing actual iOS reference frame: $section"; exit 1; }
@@ -688,7 +792,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nexly-chat-render-ios
-          path: ios/build/nexly-renders/*.png
+          path: |
+            ios/build/nexly-renders/*.png
+            ios/build/nexly-renders/*-scroll.json
           if-no-files-found: error
           retention-days: 30
 
@@ -962,6 +1068,7 @@ jobs:
           path: |
             ios/build/GSApp-tests.xcresult
             ios/build/GSApp-genui.xcresult
+            ios/build/GSApp-react-keyboard.xcresult
           if-no-files-found: ignore
 
   response-section-review:

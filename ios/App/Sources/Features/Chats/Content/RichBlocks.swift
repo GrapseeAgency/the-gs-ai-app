@@ -466,6 +466,10 @@ private struct StructuredProseSequenceView: View {
         promoteStandaloneBoldHeadingsIOS(prose)
     }
 
+    private var visibleDashboardTab: String {
+        dashboardTabs.contains(activeDashboardTab) ? activeDashboardTab : "Dashboard"
+    }
+
     private var dashboardTabs: [String] {
         var tabs = ["Dashboard"]
         let hasTable = normalizedProse.contains {
@@ -594,7 +598,7 @@ private struct StructuredProseSequenceView: View {
         if !tabs.isEmpty {
             HStack(spacing: 4) {
                 ForEach(tabs, id: \.self) { (tab: String) in
-                    let selected = activeDashboardTab == tab
+                    let selected = visibleDashboardTab == tab
                     Button {
                         GSHaptics.select()
                         activeDashboardTab = tab
@@ -618,7 +622,7 @@ private struct StructuredProseSequenceView: View {
         }
 
         ForEach(entries, id: \.index) { entry in
-            if shouldShowEntryForTab(entry.block, tab: activeDashboardTab) {
+            if shouldShowEntryForTab(entry.block, tab: visibleDashboardTab) {
                 if let (sources, title) = entry.coalescedSources {
                     CitationsBlockView(citations: sources, title: title)
                 } else if let calc = entry.coalescedCalculator {
@@ -649,7 +653,7 @@ private struct StructuredProseSequenceView: View {
             let hasNum = proseText.range(of: "\\b\\d{2,}\\b", options: .regularExpression) != nil
             let hasDomainSignal = hasNum && (lowProse.contains("mortgage") || lowProse.contains("amortiz") || lowProse.contains("compound interest") || (lowProse.contains("loan") && (lowProse.contains("apr") || lowProse.contains("monthly"))) || (lowProse.contains("budget") && lowProse.contains("50/30/20")) || (lowProse.contains("calorie") && lowProse.contains("protein")) || lowProse.contains("tdee") || ((hasCurrency || hasNum) && hasPercent && (lowProse.contains("discount") || lowProse.contains("tax") || lowProse.contains("tip") || lowProse.contains("margin") || lowProse.contains("roi") || lowProse.contains("interest") || lowProse.contains("salary"))))
             let spontaneousSpec = parseQuickCalculatorSpec(titleRaw: "Interactive Scenario Calculator", bodyText: proseText)
-            let shouldShowSpontaneousCalc = spontaneousSpec != nil && !hasExplicitCalc && (activeDashboardTab == "Dashboard" || activeDashboardTab == "Calculator") && ((hasCurrency && hasPercent) || hasDomainSignal)
+            let shouldShowSpontaneousCalc = spontaneousSpec != nil && !hasExplicitCalc && (visibleDashboardTab == "Dashboard" || visibleDashboardTab == "Calculator") && ((hasCurrency && hasPercent) || hasDomainSignal)
             if shouldShowSpontaneousCalc, let spec = spontaneousSpec {
                 NexlyQuickCalculatorCardView(spec: spec)
             }
@@ -659,7 +663,7 @@ private struct StructuredProseSequenceView: View {
                 if case .widget(let k, _, _, _) = $0, ["chart", "table", "stat", "progress", "gauge"].contains(k) { return true }
                 return false
             }
-            let spontaneousMetrics = (!hasVisualDataBlock && activeDashboardTab == "Dashboard")
+            let spontaneousMetrics = (!hasVisualDataBlock && visibleDashboardTab == "Dashboard")
                 ? extractSpontaneousMetricsFromBlocksIOS(normalizedProse)
                 : []
             let shouldShowQuantitativeExplorer = spontaneousMetrics.count >= 3
@@ -673,7 +677,7 @@ private struct StructuredProseSequenceView: View {
                 if case .html = $0 { return true }
                 return false
             }
-            if !hasExplicitCalc && !shouldShowSpontaneousCalc && !shouldShowQuantitativeExplorer && !hasAnyWidgetOrHtml && activeDashboardTab == "Dashboard" {
+            if !hasExplicitCalc && !shouldShowSpontaneousCalc && !shouldShowQuantitativeExplorer && !hasAnyWidgetOrHtml && visibleDashboardTab == "Dashboard" {
                 let spontaneousConcepts = extractSpontaneousConceptsFromBlocksIOS(normalizedProse)
                 if spontaneousConcepts.count >= 3 {
                     NexlyInteractiveConceptDeckCardIOS(concepts: spontaneousConcepts)
@@ -786,18 +790,14 @@ private struct NexlyContextualActionPillsRowView: View {
     let citations: [Int: String]
     let onShowCode: () -> Void
     private enum PresentedSheet: Identifiable {
-        case share, export(URL), details
-        var id: String {
-            switch self {
-            case .share: return "share"
-            case .details: return "details"
-            case .export(let url): return url.absoluteString
-            }
-        }
+        case details
+        var id: String { "details" }
     }
     @State private var presentedSheet: PresentedSheet? = nil
+    @State private var activityItems: [Any]? = nil
     @State private var sourcesOnly = false
     @State private var preparedExportURL: URL? = nil
+    @State private var documentExportRequest: URL? = nil
     @State private var notice: String? = nil
 
     private var citationText: String {
@@ -825,7 +825,7 @@ private struct NexlyContextualActionPillsRowView: View {
             let file = directory.appendingPathComponent(filename)
             try data.write(to: file, options: .atomic)
             preparedExportURL = file
-            presentedSheet = .export(file)
+            documentExportRequest = file
         } catch {
             try? FileManager.default.removeItem(at: directory)
             throw error
@@ -838,7 +838,7 @@ private struct NexlyContextualActionPillsRowView: View {
     private func perform(_ label: String) {
         notice = nil
         switch label {
-        case "Share": presentedSheet = .share
+        case "Share": activityItems = [sourceText]
         case "Copy Citations":
             if citationText.isEmpty { notice = "No citation URLs are available to copy." }
             else { UIPasteboard.general.string = citationText; notice = "Citations copied." }
@@ -938,15 +938,18 @@ private struct NexlyContextualActionPillsRowView: View {
             }
             if let notice { Text(notice).font(.caption).accessibilityIdentifier("response.action.notice") }
             }
+            .background {
+                ResponseActivityPresenterIOS(items: activityItems) { activityItems = nil }
+                    .frame(width: 0, height: 0)
+                ResponseDocumentPickerIOS(sourceURL: documentExportRequest) { destination in
+                    notice = destination == nil ? "Export cancelled." : "Export saved."
+                    documentExportRequest = nil
+                    cleanPreparedExport()
+                }
+                .frame(width: 0, height: 0)
+            }
             .sheet(item: $presentedSheet, onDismiss: { cleanPreparedExport() }) { sheet in
                 switch sheet {
-                case .share:
-                    ResponseActivityPresenterIOS(items: [sourceText]) { presentedSheet = nil }
-                case .export(let file):
-                    ResponseDocumentPickerIOS(sourceURL: file) { destination in
-                        notice = destination == nil ? "Export cancelled." : "Export saved."
-                        presentedSheet = nil
-                    }
                 case .details:
                 NavigationStack {
                     ScrollView {
@@ -1306,8 +1309,8 @@ private struct NexlyCalloutCardView: View {
         let isWarn = callout.tone == .warning
         let bg = isWarn ? Color(red: 1.0, green: 0.957, blue: 0.902) : Color(red: 0.949, green: 0.925, blue: 1.0)
         let border = isWarn ? Color(red: 0.965, green: 0.784, blue: 0.561) : Color(red: 0.851, green: 0.800, blue: 1.0)
-        let titleColor = isWarn ? Color(red: 0.420, green: 0.196, blue: 0.024) : Color(red: 0.129, green: 0.094, blue: 0.271)
-        let bodyColor = isWarn ? Color(red: 0.353, green: 0.200, blue: 0.063) : Color(red: 0.224, green: 0.196, blue: 0.361)
+        let titleColor = NexlyInk.title
+        let bodyColor = NexlyInk.prose
 
         let theme = SpanTheme(
             monoBackground: Aero.container,
@@ -2385,6 +2388,7 @@ private func stripLeadingIconFromSpans(_ spans: [InlineSpan]) -> [InlineSpan] {
 }
 
 private struct HeadingView: View {
+    @Environment(\.nexlyProseCompact) private var compact
     let level: Int
     let spans: [InlineSpan]
     var isFirst: Bool = false
@@ -2394,7 +2398,7 @@ private struct HeadingView: View {
         let theme = SpanTheme(
             monoBackground: Aero.container,
             linkColor: Aero.accentDeep,
-            textColor: Aero.text,
+            textColor: compact ? NexlyInk.title : Aero.text,
             baseSize: 15,
             citations: citations
         )
@@ -2424,7 +2428,7 @@ private struct HeadingView: View {
                 }
                 Text(attributed(from: cleanedSpans, theme: theme))
                     .font(font)
-                    .foregroundStyle(level == 6 ? Aero.textSecondary : Aero.text)
+                    .foregroundStyle(compact ? NexlyInk.title : (level == 6 ? Aero.textSecondary : Aero.text))
                     .textSelection(.enabled)
                     .accessibilityAddTraits(.isHeader)
             }
@@ -2432,6 +2436,7 @@ private struct HeadingView: View {
     }
 
     private var font: Font {
+        if compact { return .system(size: level <= 1 ? 18 : (level == 2 ? 16 : 14), weight: .bold) }
         switch level {
         case 1: return Aero.responsive(22, .bold, relativeTo: .title2)
         case 2: return Aero.responsive(19, .bold, relativeTo: .title3)
@@ -2471,6 +2476,20 @@ private struct BulletListView: View {
     @State private var checkedStates: [Int: Bool] = [:]
     @State private var addingTask: Bool = false
     @State private var newTaskText: String = ""
+    @State private var removedTasks: Set<Int> = []
+    @State private var editedTasks: [Int: [InlineSpan]] = [:]
+    @State private var editingTarget: Int? = nil
+
+    private func saveTask() {
+        let text = NexlyIcons.cleanPlainText(newTaskText).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        if let target = editingTarget {
+            if target >= 0 { editedTasks[target] = parseInline(text) }
+            else if addedTasks.indices.contains(-target - 1) { addedTasks[-target - 1].text = text }
+        } else { addedTasks.append((text, false)) }
+        editingTarget = nil; newTaskText = ""; addingTask = false
+    }
+
 
     private var extractedSources: [CitationEntry] {
         guard sectionMode == .sources else { return [] }
@@ -2485,12 +2504,12 @@ private struct BulletListView: View {
     }
 
     private var totalTasks: Int {
-        items.count + addedTasks.count
+        items.count - removedTasks.count + addedTasks.count
     }
 
     private var completedTasks: Int {
         let baseDone = items.enumerated().filter { idx, item in
-            checkedStates[idx] ?? (item.checked ?? false)
+            !removedTasks.contains(idx) && (checkedStates[idx] ?? (item.checked ?? false))
         }.count
         let addedDone = addedTasks.filter { $0.checked }.count
         return baseDone + addedDone
@@ -2505,6 +2524,10 @@ private struct BulletListView: View {
                 checklistProgressHeader
                 bulletItemsList
                 checklistAddTaskSection
+            }
+            .onChange(of: items) { _ in
+                addedTasks = []; checkedStates = [:]; removedTasks = []; editedTasks = [:]
+                addingTask = false; editingTarget = nil; newTaskText = ""
             }
         }
     }
@@ -2567,13 +2590,16 @@ private struct BulletListView: View {
 
     @ViewBuilder
     private var bulletItemsList: some View {
-        ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
-            if item.checked != nil || sectionMode == .todo {
+        ForEach(Array(items.enumerated()), id: \.offset) { idx, sourceItem in
+            let item = ListItem(number: sourceItem.number, spans: editedTasks[idx] ?? sourceItem.spans, children: sourceItem.children, checked: sourceItem.checked)
+            if removedTasks.contains(idx) { EmptyView() }
+            else if item.checked != nil || sectionMode == .todo {
                 let currentChecked = checkedStates[idx] ?? (item.checked ?? false)
                 InteractiveChecklistItemRowView(
                     checked: currentChecked,
                     onToggle: { checkedStates[idx] = !currentChecked },
-                    onDelete: nil,
+                    onDelete: { removedTasks.insert(idx); editingTarget = nil; addingTask = false },
+                    onEdit: { editingTarget = idx; newTaskText = plainTextOfSpans(item.spans); addingTask = true },
                     item: item,
                     citations: citations
                 )
@@ -2587,7 +2613,8 @@ private struct BulletListView: View {
             InteractiveChecklistItemRowView(
                 checked: taskPair.checked,
                 onToggle: { addedTasks[idx].checked.toggle() },
-                onDelete: { addedTasks.remove(at: idx) },
+                onDelete: { addedTasks.remove(at: idx); editingTarget = nil; addingTask = false },
+                onEdit: { editingTarget = -idx - 1; newTaskText = taskPair.text; addingTask = true },
                 item: ListItem(spans: [.text(taskPair.text)], checked: taskPair.checked),
                 citations: citations
             )
@@ -2600,19 +2627,15 @@ private struct BulletListView: View {
             if addingTask {
                 HStack(spacing: 6) {
                     TextField("Type a new task…", text: $newTaskText)
+                        .accessibilityIdentifier("prose.task.input")
+                        .onSubmit(saveTask)
                         .font(.system(size: 12.5))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.92)))
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.847, green: 0.808, blue: 0.976), lineWidth: 1))
-                    Button("Add") {
-                        let trimmed = newTaskText.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            addedTasks.append((trimmed, false))
-                            newTaskText = ""
-                            addingTask = false
-                        }
-                    }
+                    Button(editingTarget == nil ? "Add" : "Save task", action: saveTask)
+                    .disabled(NexlyIcons.cleanPlainText(newTaskText).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(Color.white)
                     .padding(.horizontal, 10)
@@ -2622,6 +2645,7 @@ private struct BulletListView: View {
 
                     Button {
                         newTaskText = ""
+                        editingTarget = nil
                         addingTask = false
                     } label: {
                         NexlyGlyph(name: "x", size: 13, color: Aero.textSecondary)
@@ -2632,6 +2656,7 @@ private struct BulletListView: View {
             } else {
                 Button {
                     GSHaptics.select()
+                    editingTarget = nil; newTaskText = ""
                     addingTask = true
                 } label: {
                     HStack(spacing: 5) {
@@ -2660,6 +2685,7 @@ private struct InteractiveChecklistItemRowView: View {
     let checked: Bool
     let onToggle: () -> Void
     let onDelete: (() -> Void)?
+    var onEdit: (() -> Void)? = nil
     let item: ListItem
     var citations: [Int: String] = [:]
 
@@ -2708,6 +2734,11 @@ private struct InteractiveChecklistItemRowView: View {
                 }
                 .buttonStyle(.plain)
 
+                if let onEdit {
+                    Button(action: onEdit) { NexlyGlyph(name: "pencil", size: 12, color: Aero.textTertiary) }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Edit task: " + NexlyIcons.cleanPlainText(plainTextOfSpans(item.spans)))
+                }
                 if let onDelete {
                     Button {
                         GSHaptics.select()
@@ -2716,6 +2747,7 @@ private struct InteractiveChecklistItemRowView: View {
                         NexlyGlyph(name: "x", size: 12, color: Aero.textTertiary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Delete task: " + NexlyIcons.cleanPlainText(plainTextOfSpans(item.spans)))
                 }
             }
             .padding(.vertical, 3)
@@ -2973,8 +3005,10 @@ private func NestedChildView(block: Block, citations: [Int: String]) -> some Vie
         ParagraphView(spans: spans, citations: citations)
     case .bulletList(let items, _):
         BulletListView(items: items, citations: citations)
+            .environment(\.nexlySectionListMode, .normal)
     case .orderedList(let start, let items, _):
         OrderedListView(start: start, items: items, citations: citations)
+            .environment(\.nexlySectionListMode, .normal)
     case .blockQuote(let inner, _):
         BlockQuoteView(blocks: inner, citations: citations)
     default:
@@ -3023,6 +3057,7 @@ private struct BlockQuoteView: View {
 struct CodeBlockCardView: View {
     @Environment(\.nexlyCodeWrap) private var wrapCode
     @Environment(\.responseCodeActions) private var responseActions
+    @Environment(\.reactPreviewScope) private var reactScope
     @State private var localSourceID = UUID()
     @FocusState private var sourceFocused: Bool
     let language: String?
@@ -3050,7 +3085,7 @@ struct CodeBlockCardView: View {
     }
 
     private var supportsExecution: Bool {
-        ["html", "htm", "svg", "js", "javascript", "node", "json"].contains(lang)
+        ["html", "htm", "svg", "js", "javascript", "node", "json", "jsx", "tsx", "react"].contains(lang)
     }
 
     private var allLines: [String] {
@@ -3377,12 +3412,11 @@ struct CodeBlockCardView: View {
             HtmlBlockView(kind: "html", source: workerDocument, open: false)
                 .id(runCount)
                 .padding(8)
-        } else if !open && ["jsx", "tsx", "react"].contains(lang) {
-            Text("React source only: this view has no React/TypeScript compiler. No component has been executed. Use a self-contained HTML/JavaScript sandbox for a live preview.")
-                .font(.system(size: 12))
-                .foregroundStyle(Color.white.opacity(0.85))
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(12)
+        } else if !open && ["jsx", "tsx", "react"].contains(lang), browserDocument != nil {
+            ReactPreviewIOS(source: currentCode, scope: "\(reactScope ?? localSourceID.uuidString):\(sourceStart ?? 0)")
+                .id(runCount)
+                .frame(height: 420)
+                .padding(8)
         } else if !open && !supportsExecution {
             Text("Source only: no \(NexlyIcons.cleanPlainText(lang)) runtime is available in this app. Copy this source into a compatible environment; no execution has occurred here.")
                 .font(.system(size: 12))
@@ -3446,6 +3480,7 @@ struct CodeBlockCardView: View {
     }
 
     private func executeCode() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         if editing && editorError != nil {
             workerDocument = nil; browserDocument = nil; runOutput = nil
             errorOutput = "Not executed: correct the JSON-encoded source draft first."
@@ -3472,7 +3507,7 @@ struct CodeBlockCardView: View {
             }
             return
         }
-        if ["html", "htm", "svg"].contains(lang) {
+        if ["html", "htm", "svg", "jsx", "tsx", "react"].contains(lang) {
             browserDocument = currentCode
             return
         }

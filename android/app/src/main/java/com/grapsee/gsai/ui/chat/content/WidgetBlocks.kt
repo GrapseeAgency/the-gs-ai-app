@@ -10,11 +10,13 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -137,54 +139,61 @@ internal object PointListSerializer : KSerializer<List<List<Float>>> {
 
     override fun deserialize(decoder: Decoder): List<List<Float>> {
         val input = decoder as? JsonDecoder ?: return delegate.deserialize(decoder)
-        val array = input.decodeJsonElement() as? JsonArray ?: return emptyList()
-        return array.mapIndexedNotNull { index, item -> point(item, index) }
+        val array = requireNotNull(input.decodeJsonElement() as? JsonArray) { "Chart observations must be an array" }
+        return array.mapIndexed { index, item ->
+            requireNotNull(point(item, index)) {
+                "Observation $index is missing or non-finite; preserve source instead of fabricating zero or compacting labels"
+            }
+        }
     }
 
     override fun serialize(encoder: Encoder, value: List<List<Float>>) {
         delegate.serialize(encoder, value)
     }
 
+    private fun number(item: JsonElement?): Float? =
+        (item as? JsonPrimitive)?.floatOrNull?.takeIf { it.isFinite() }
+
+    private fun coordinate(item: JsonElement?, index: Int): Float? =
+        number(item) ?: (item as? JsonPrimitive)?.takeIf { it.isString && it.content.isNotBlank() }?.let { index.toFloat() }
+
     private fun point(item: JsonElement, index: Int): List<Float>? = when (item) {
-        is JsonPrimitive -> item.floatOrNull?.let { listOf(index.toFloat(), it) }
+        is JsonPrimitive -> number(item)?.let { listOf(index.toFloat(), it) }
         is JsonArray -> {
-            val numbers = item.mapNotNull { (it as? JsonPrimitive)?.floatOrNull }
             when {
-                // Preserve up to 5 coordinates so 2D [x, y], 3D bubble [x, y, z],
-                // and 4D candlestick [o, h, l, c] all survive intact.
-                numbers.size >= 2 -> numbers.take(5)
-                numbers.size == 1 -> listOf(index.toFloat(), numbers[0])
-                else -> null
+                item.isEmpty() -> null
+                item.size == 1 -> number(item[0])?.let { listOf(index.toFloat(), it) }
+                else -> {
+                    // Only the first coordinate may be a category label. Never
+                    // filter null/invalid coordinates into a different shape:
+                    // [0,null] is missing y, NOT a measurement of zero.
+                    val x = coordinate(item[0], index)
+                    val rest = item.drop(1).map { number(it) }
+                    if (x == null || rest.any { it == null }) null
+                    else listOf(x) + rest.filterNotNull()
+                }
             }
         }
         is JsonObject -> {
-            val o = (item["open"] as? JsonPrimitive)?.floatOrNull ?: (item["o"] as? JsonPrimitive)?.floatOrNull
-            val h = (item["high"] as? JsonPrimitive)?.floatOrNull ?: (item["h"] as? JsonPrimitive)?.floatOrNull
-            val l = (item["low"] as? JsonPrimitive)?.floatOrNull ?: (item["l"] as? JsonPrimitive)?.floatOrNull
-            val c = (item["close"] as? JsonPrimitive)?.floatOrNull ?: (item["c"] as? JsonPrimitive)?.floatOrNull
-            if (o != null && h != null && l != null && c != null) {
-                listOf(o, h, l, c)
+            fun supplied(vararg keys: String): JsonElement? =
+                keys.firstOrNull { it in item }?.let { item[it] }
+            val candleKeys = listOf("open", "o", "high", "h", "low", "l", "close", "c")
+            if (candleKeys.any { it in item }) {
+                val values = listOf(number(supplied("open", "o")), number(supplied("high", "h")),
+                    number(supplied("low", "l")), number(supplied("close", "c")))
+                if (values.any { it == null }) null else values.filterNotNull()
             } else {
-                val y = (item["y"] as? JsonPrimitive)?.floatOrNull
-                    ?: (item["value"] as? JsonPrimitive)?.floatOrNull
-                    ?: (item["val"] as? JsonPrimitive)?.floatOrNull
-                    ?: (item["v"] as? JsonPrimitive)?.floatOrNull
-                    ?: (item["score"] as? JsonPrimitive)?.floatOrNull
-                    ?: (item["count"] as? JsonPrimitive)?.floatOrNull
-                    ?: (item["amount"] as? JsonPrimitive)?.floatOrNull
-                if (y == null) null
-                else {
-                    val x = (item["x"] as? JsonPrimitive)?.floatOrNull ?: index.toFloat()
-                    val z = (item["z"] as? JsonPrimitive)?.floatOrNull
-                        ?: (item["size"] as? JsonPrimitive)?.floatOrNull
-                        ?: (item["r"] as? JsonPrimitive)?.floatOrNull
-                        ?: (item["radius"] as? JsonPrimitive)?.floatOrNull
-                    if (z != null) listOf(x, y, z) else listOf(x, y)
-                }
+                val y = number(supplied("y", "value", "val", "v", "count", "amount", "score"))
+                val x = if ("x" in item) coordinate(item["x"], index) else index.toFloat()
+                val zKey = listOf("z", "size", "r", "radius").firstOrNull { it in item }
+                val z = zKey?.let { number(item[it]) }
+                if (x == null || y == null || (zKey != null && z == null)) null
+                else if (z != null) listOf(x, y, z) else listOf(x, y)
             }
         }
         else -> null
     }
+
 }
 
 @Serializable
@@ -1266,17 +1275,17 @@ internal fun WidgetCardShell(
     val c = GsTheme.colors
     val dark = WidgetPalette.onDarkCanvas()
     val accent = WidgetPalette.legible(chosenHue, dark)
-    val base = c.elevatedSurface
+    val base = c.elevatedSurface.copy(alpha = if (dark) 0.80f else 0.46f)
     val clear = Color.Transparent
     val shape = toneShape(chosenTone)
     val fill: Brush = when (chosenTone) {
         CardTone.Plain, CardTone.Inset -> Brush.verticalGradient(listOf(base, base))
         CardTone.Outline, CardTone.Editorial -> Brush.verticalGradient(listOf(clear, clear))
         CardTone.Tinted -> Brush.verticalGradient(
-            listOf(accent.copy(alpha = if (dark) 0.16f else 0.10f), base, base)
+            listOf(accent.copy(alpha = if (dark) 0.16f else 0.06f), base, base)
         )
         CardTone.Hero -> Brush.verticalGradient(
-            listOf(accent.copy(alpha = if (dark) 0.26f else 0.18f), base, base)
+            listOf(accent.copy(alpha = if (dark) 0.26f else 0.08f), base, base)
         )
     }
     val edge = when (chosenTone) {
@@ -1320,48 +1329,36 @@ internal fun WidgetCardShell(
                 (pair.first ?: defaultPair.first) to clean
             }
             val defaultTone = remember(tag) { widgetTagGlassIcon(tag).second }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                NexlyGlassGlyphTile(
-                    name = leadingIcon,
-                    toneName = defaultTone,
-                    size = 24.dp,
-                    glyphSize = 14.dp,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                if (cleanedTitle.isNotEmpty()) {
-                    Text(
-                        cleanedTitle,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = c.textPrimary,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
+            if (cleanedTitle.isNotEmpty() || action != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    NexlyGlassGlyphTile(
+                        name = leadingIcon,
+                        toneName = defaultTone,
+                        size = 24.dp,
+                        glyphSize = 14.dp,
+                        modifier = Modifier.padding(end = 8.dp)
                     )
-                } else {
-                    Box(Modifier.weight(1f))
-                }
-                if (action != null) {
-                    Box(Modifier.padding(end = 8.dp)) { action() }
-                }
-                Text(
-                    tag.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = accent,
-                    modifier = if (chosenTone == CardTone.Editorial) {
-                        // Editorial has no pill: the tag is a quiet caption on
-                        // the rule, not another chip on another card.
-                        Modifier.padding(start = 8.dp)
+                    if (cleanedTitle.isNotEmpty()) {
+                        Text(
+                            cleanedTitle,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = c.textPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
                     } else {
-                        Modifier
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(accent.copy(alpha = if (dark) 0.20f else 0.12f))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                        Box(Modifier.weight(1f))
                     }
-                )
+                    if (action != null) {
+                        Box(Modifier.padding(end = 8.dp)) { action() }
+                    }
+                }
             }
             // Inset is a card inside a card: the content sits in its own
             // recessed panel, so a form never reads as a chart with fields.
+            CompositionLocalProvider(LocalWidgetStyle provides WidgetStyle(chosenHue, chosenTone)) {
             if (chosenTone == CardTone.Inset) {
                 Box(
                     Modifier
@@ -1374,6 +1371,7 @@ internal fun WidgetCardShell(
                 ) { content() }
             } else {
                 content()
+            }
             }
         }
     }
@@ -1533,8 +1531,8 @@ private fun ChartWidgetView(w: ChartWidget) {
     WidgetCardShell(
         NexlyIcons.cleanPlainText(w.title).ifEmpty { "Chart" },
         "chart",
-        hue = WidgetPalette.at(CHART_HUE_SLOTS[activeType] ?: 0),
-        tone = if (activeType in EDITORIAL_CHARTS) CardTone.Editorial else CardTone.Tinted
+        hue = if (isSwitchable) Color(0xFF6C4CF6) else WidgetPalette.at(CHART_HUE_SLOTS[activeType] ?: 0),
+        tone = if (!isSwitchable && activeType in EDITORIAL_CHARTS) CardTone.Editorial else CardTone.Tinted
     ) {
         if (isSwitchable) {
             // 07. Interactive Charts: Type Switcher Pills + Range Selector (Screenshot 6)
@@ -1544,16 +1542,16 @@ private fun ChartWidgetView(w: ChartWidget) {
                 Triple("area", "chart-area", "Area"),
                 Triple(if (w.type == "donut") "donut" else "pie", "chart-pie", "Pie")
             )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // Keep every chart type visible on phone-width cards; the
+            // genuine source-range control must not squeeze Pie off-screen.
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalAlignment = Alignment.End
             ) {
                 Row(
                     modifier = Modifier
-                        .weight(1f)
+                        .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
                         .clip(RoundedCornerShape(10.dp))
                         .background(Color(0xFFEDE6FF))
@@ -1693,7 +1691,9 @@ private fun ChartWidgetView(w: ChartWidget) {
                 } else null
             }
             if (kpiStats != null) {
-                Text("Summary: ${slicedWidget.series.firstOrNull()?.name?.ifEmpty { "Series 1" } ?: "Series 1"}", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textSecondary)
+                if (slicedWidget.series.size > 1) {
+                    Text("Summary: ${slicedWidget.series.firstOrNull()?.name?.ifEmpty { "Series 1" } ?: "Series 1"}", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textSecondary)
+                }
                 val (totalStr, peakPair, pct) = kpiStats
                 val pos = pct != null && pct >= 0.0
                 val pctStr = pct?.let { String.format(java.util.Locale.US, "%s%.1f%%", if (pos) "+" else "", it) } ?: if (activeType in setOf("pie", "donut")) "N/A (slice values)" else "N/A (zero baseline)"
@@ -1846,7 +1846,18 @@ private fun ChartWidgetView(w: ChartWidget) {
     }
 }
 
-private data class LineGeom(val minX: Float, val minY: Float, val spanX: Float, val spanY: Float)
+/** Actual signed source bounds, shared by Line/Area/Bar and iOS parity.
+ * Double intermediates keep opposite finite Float extremes representable. */
+internal data class ChartValueDomainAndroid(val lower: Double, val upper: Double) {
+    fun heightFraction(value: Float): Float = ((upper - value.toDouble()) / (upper - lower)).toFloat()
+    fun axisValue(fractionFromTop: Float): Float = (upper - (upper - lower) * fractionFromTop.toDouble()).toFloat()
+}
+internal fun chartValueDomainAndroid(values: List<Float>): ChartValueDomainAndroid {
+    val lower = minOf(0.0, values.minOrNull()?.toDouble() ?: 0.0)
+    val upper = maxOf(0.0, values.maxOrNull()?.toDouble() ?: 0.0)
+    return ChartValueDomainAndroid(lower, if (upper == lower) lower + 1.0 else upper)
+}
+private data class LineGeom(val minX: Float, val spanX: Float, val domain: ChartValueDomainAndroid)
 
 /** Thin axis labels without assigning the first eight labels to all points. */
 internal fun chartAxisLabelIndicesAndroid(count: Int, limit: Int = 8): List<Int> = when {
@@ -1871,23 +1882,15 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
         val ys = flat.map { it.getOrElse(1) { 0f } }
         val minX = xs.minOrNull() ?: 0f
         val maxX = xs.maxOrNull() ?: 1f
-        val minY = minOf(0f, ys.minOrNull() ?: 0f)
-        // Snap the ceiling to a round step, otherwise the four gridlines are
-        // labelled 0 / 61 / 122 / 183 and the chart reads as a debug overlay.
-        val rawMaxY = ys.maxOrNull() ?: 1f
-        val step = niceStep(((rawMaxY - minY) / 3f).takeIf { it > 0f } ?: 1f)
-        val maxY = minY + step * 3f
         LineGeom(
             minX = minX,
-            minY = minY,
             spanX = (maxX - minX).takeIf { it > 0f } ?: 1f,
-            spanY = (maxY - minY).takeIf { it > 0f } ?: 1f
+            domain = chartValueDomainAndroid(ys)
         )
     }
     val minX = geom.minX
-    val minY = geom.minY
     val spanX = geom.spanX
-    val spanY = geom.spanY
+    val domain = geom.domain
     val measurer = rememberTextMeasurer()
     val axisStyle = TextStyle(fontSize = 10.5.sp, color = GsTheme.colors.textTertiary)
     val probe = rememberChartProbe()
@@ -1918,6 +1921,7 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
         }
     }
     val activeDatum = probe.datum
+    Box(Modifier.fillMaxWidth().heightIn(min = 56.dp), contentAlignment = Alignment.Center) {
     if (activeDatum != null) {
         val selectedSeries = w.series.firstOrNull { it.name == activeDatum.series } ?: w.series.firstOrNull()
         val pts = selectedSeries?.data.orEmpty()
@@ -1937,6 +1941,9 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
                     .border(1.dp, Color(0xFFDCD3FA), RoundedCornerShape(10.dp))
                     .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
+                if (w.series.size > 1 && !activeDatum.series.isNullOrBlank()) {
+                    Text(activeDatum.series.orEmpty(), fontSize = 10.sp, color = GsTheme.colors.textTertiary, maxLines = 1)
+                }
                 Text(
                     text = activeDatum.label,
                     fontSize = 10.5.sp,
@@ -1962,6 +1969,9 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
                 }
             }
         }
+    } else {
+        Text("Tap a point to read it", style = MaterialTheme.typography.labelSmall, color = GsTheme.colors.textTertiary)
+    }
     }
     Canvas(
         Modifier
@@ -1980,7 +1990,7 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
                     w.series.forEach { s ->
                         s.data.forEachIndexed { i, pt ->
                             val px = padL + cw * ((pt.getOrElse(0) { 0f } - minX) / spanX)
-                            val py = padT + ch * (1f - ((pt.getOrElse(1) { 0f } - minY) / spanY))
+                            val py = padT + ch * domain.heightFraction(pt.getOrElse(1) { 0f })
                             val dx = px - tapX
                             val dy = py - tapY
                             val d = dx * dx + dy * dy
@@ -2009,12 +2019,12 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
         val padL = 34.dp.toPx(); val padT = 8.dp.toPx()
         val cw = (size.width - padL).coerceAtLeast(1f)
         val ch = (size.height - padT).coerceAtLeast(1f)
-        val base = padT + ch
+        val base = padT + ch * domain.heightFraction(0f)
         val selected = probe.datum
         repeat(4) { g ->
             val y = padT + ch * g / 3f
             drawLine(gridColor, Offset(padL, y), Offset(size.width, y), strokeWidth = 1f)
-            val laid = measurer.measure(axisLabel(minY + spanY * (1f - g / 3f), w.unit), axisStyle)
+            val laid = measurer.measure(axisLabel(domain.axisValue(g / 3f), w.unit), axisStyle)
             drawText(
                 laid,
                 topLeft = Offset(
@@ -2028,7 +2038,7 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
             val pts = s.data.map {
                 Offset(
                     padL + cw * ((it.getOrElse(0) { 0f } - minX) / spanX),
-                    padT + ch * (1f - ((it.getOrElse(1) { 0f } - minY) / spanY))
+                    padT + ch * domain.heightFraction(it.getOrElse(1) { 0f })
                 )
             }
             if (pts.size < 2) return@forEachIndexed
@@ -2065,7 +2075,9 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
                         col.copy(alpha = 0.01f)
                     ),
                     startY = padT,
-                    endY = base
+                    // The fill closes at true zero, but its paint domain must
+                    // remain nonzero even when every observation is negative.
+                    endY = padT + ch
                 )
             )
             drawPath(path, col, style = Stroke(width = 3.dp.toPx()))
@@ -2092,7 +2104,6 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
             }
         }
     }
-    ChartInspectBar(probe, w.unit, "Tap a point to read it", colors.firstOrNull() ?: GsTheme.colors.accent)
     // Sample across the complete source domain, and place each label at its
     // actual plotted x coordinate. Taking the first eight and stretching them
     // across a 31-point plot attached the wrong labels to the later points.
@@ -2110,27 +2121,6 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
         }
     }
 
-}
-
-/**
- * The axis ceiling: a "nice" number, not the raw maximum.
- *
- * Gridlines at 0/33/66/100% of 187 read as a debug overlay; gridlines at
- * 0/50/100/150 read as a chart. The step is rounded to 1/2/5×10^n so the labels
- * are always short, and the top line is step×3 so all four lines are round.
- */
-private fun niceStep(raw: Float): Float {
-    if (raw <= 0f) return 1f
-    val exp = kotlin.math.floor(kotlin.math.log10(raw.toDouble())).toInt()
-    val base = Math.pow(10.0, exp.toDouble()).toFloat()
-    val n = raw / base
-    val mult = when {
-        n <= 1f -> 1f
-        n <= 2f -> 2f
-        n <= 5f -> 5f
-        else -> 10f
-    }
-    return mult * base
 }
 
 /** 1234 -> "1.2K", 0.5 -> "0.5", 100 -> "100" (+ the widget's unit). */
@@ -2166,10 +2156,9 @@ private fun BarChart(w: ChartWidget) {
         if (w.labels.size >= first.size) w.labels
         else first.map { it.getOrElse(0) { 0f }.toInt().toString() }
     }
-    val maxV = remember(w.series) {
-        w.series.flatMap { s -> s.data.map { it.getOrElse(1) { 0f } } }.maxOrNull()?.takeIf { it > 0f } ?: 1f
+    val domain = remember(w.series) {
+        chartValueDomainAndroid(w.series.flatMap { series -> series.data.map { it.getOrElse(1) { 0f } } })
     }
-    val axisMax = remember(maxV) { niceStep(maxV / 3f) * 3f }
     val measurer = rememberTextMeasurer()
     val axisStyle = TextStyle(fontSize = 10.5.sp, color = c.textTertiary)
     val valueStyle = TextStyle(fontSize = 11.sp, color = c.textSecondary, fontWeight = FontWeight.SemiBold)
@@ -2218,7 +2207,7 @@ private fun BarChart(w: ChartWidget) {
         repeat(4) { g ->
             val y = top + plotH * g / 3f
             drawLine(gridColor, Offset(gutter, y), Offset(size.width, y), strokeWidth = 1f)
-            val laid = measurer.measure(axisLabel(axisMax * (1f - g / 3f), w.unit), axisStyle)
+            val laid = measurer.measure(axisLabel(domain.axisValue(g / 3f), w.unit), axisStyle)
             drawText(
                 laid,
                 topLeft = Offset(
@@ -2228,13 +2217,17 @@ private fun BarChart(w: ChartWidget) {
             )
         }
 
+        val zeroY = top + plotH * domain.heightFraction(0f)
+        if (domain.lower < 0.0) drawLine(c.textTertiary.copy(alpha = 0.5f), Offset(gutter, zeroY), Offset(size.width, zeroY), strokeWidth = 1f)
         val groupW = plotW / groups
         val barW = (groupW * 0.62f) / seriesCount
         val radius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
         w.series.forEachIndexed { si, s ->
             s.data.forEachIndexed { gi, point ->
-                val v = point.getOrElse(1) { 0f }.coerceAtLeast(0f)
-                val h = plotH * (v / axisMax) * progress
+                val v = point.getOrElse(1) { 0f }
+                val valueY = top + plotH * domain.heightFraction(v)
+                val h = kotlin.math.abs(valueY - zeroY) * progress
+                val barTop = if (v >= 0f) zeroY - h else zeroY
                 if (h <= 0.5f) return@forEachIndexed
                 val x = gutter + gi * groupW + groupW * 0.19f + si * barW
                 val width = barW * 0.92f
@@ -2244,14 +2237,14 @@ private fun BarChart(w: ChartWidget) {
                 val dim = selected != null && !isSelected
                 drawRoundRect(
                     colors[si % colors.size].copy(alpha = if (dim) 0.32f else 1f),
-                    topLeft = Offset(x, top + plotH - h),
+                    topLeft = Offset(x, barTop),
                     size = Size(width, h),
                     cornerRadius = radius
                 )
                 if (isSelected) {
                     drawRoundRect(
                         color = c.textPrimary.copy(alpha = 0.55f),
-                        topLeft = Offset(x, top + plotH - h),
+                        topLeft = Offset(x, barTop),
                         size = Size(width, h),
                         cornerRadius = radius,
                         style = Stroke(width = 1.5.dp.toPx())
@@ -2263,7 +2256,8 @@ private fun BarChart(w: ChartWidget) {
                         laid,
                         topLeft = Offset(
                             x + (width - laid.size.width) / 2f,
-                            (top + plotH - h - laid.size.height - 2.dp.toPx()).coerceAtLeast(0f)
+                            (if (v >= 0f) barTop - laid.size.height - 2.dp.toPx() else barTop + h + 2.dp.toPx())
+                                .coerceIn(0f, (size.height - laid.size.height).coerceAtLeast(0f))
                         )
                     )
                 }
@@ -2459,25 +2453,28 @@ internal val NUMERIC_CELL = Regex("""^[^\p{L}]{0,3}[-+]?\d[\d.,]*\s*(?:%|[a-zA-Z
 private fun StatWidgetView(w: StatWidget) {
     val c = GsTheme.colors
     val dark = WidgetPalette.onDarkCanvas()
-    WidgetCardShell(NexlyIcons.cleanPlainText(w.title).ifEmpty { "Stats" }, "stat") {
-        // Metrics are information, not pretend drill-down buttons. A two-column
-        // layout keeps every source card discoverable on an ordinary phone.
-        Column(Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            w.cards.chunked(2).forEachIndexed { rowIndex, row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    WidgetCardShell(NexlyIcons.cleanPlainText(w.title), "stat") {
+        // The reference presents four short KPIs in one row. Preserve readable
+        // two-column cards for larger type or lengthy source values and units.
+        val compactMetrics = w.cards.size == 4 && androidx.compose.ui.platform.LocalDensity.current.fontScale <= 1.1f &&
+            w.cards.all { it.value.length + it.unit.length <= 7 && it.label.length <= 28 }
+        val columns = if (compactMetrics) 4 else 2
+        Column(Modifier.fillMaxWidth().padding(top = if (w.title.isBlank()) 0.dp else 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            w.cards.chunked(columns).forEachIndexed { rowIndex, row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(if (compactMetrics) 5.dp else 8.dp)) {
                     row.forEachIndexed { columnIndex, card ->
-                        val accent = WidgetPalette.legible(WidgetPalette.at(rowIndex * 2 + columnIndex), dark)
+                        val accent = WidgetPalette.legible(WidgetPalette.at(rowIndex * columns + columnIndex), dark)
                         Column(
                             Modifier.weight(1f)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Brush.verticalGradient(listOf(accent.copy(alpha = if (dark) 0.20f else 0.08f), c.surface)))
+                                .background(Brush.verticalGradient(listOf(accent.copy(alpha = if (dark) 0.20f else 0.04f), c.surface)))
                                 .border(1.dp, accent.copy(alpha = if (dark) 0.34f else 0.22f), RoundedCornerShape(12.dp))
-                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                                .padding(horizontal = if (compactMetrics) 6.dp else 10.dp, vertical = 10.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text(NexlyIcons.cleanPlainText(card.label), style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
+                            Text(NexlyIcons.cleanPlainText(card.label), style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactMetrics) 9.5.sp else 11.sp, lineHeight = if (compactMetrics) 12.sp else 14.sp), minLines = if (compactMetrics) 2 else 1, color = NexlyInk.label)
                             Row(verticalAlignment = Alignment.Bottom) {
-                                Text(NexlyIcons.cleanPlainText(card.value), style = MaterialTheme.typography.titleMedium, color = c.textPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false))
+                                Text(NexlyIcons.cleanPlainText(card.value), style = MaterialTheme.typography.titleMedium.copy(fontSize = if (compactMetrics) 13.sp else 16.sp), color = NexlyInk.row, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false))
                                 if (card.unit.isNotEmpty()) {
                                     Text(NexlyIcons.cleanPlainText(card.unit), style = MaterialTheme.typography.labelSmall, color = c.textSecondary, modifier = Modifier.padding(start = 3.dp, bottom = 2.dp))
                                 }
@@ -2496,7 +2493,7 @@ private fun StatWidgetView(w: StatWidget) {
                             }
                         }
                     }
-                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                    repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
@@ -2532,7 +2529,7 @@ private fun TableWidgetView(w: TableWidget) {
     var sortCol by remember { mutableIntStateOf(-1) }
     var asc by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }
-    var pageSize by remember(w.rows.size) { mutableIntStateOf(if (w.rows.size in 4..5) 3 else 5) }
+    var pageSize by remember(w.rows.size) { mutableIntStateOf(5) }
     var page by remember { mutableIntStateOf(0) }
     val clipboard = LocalClipboardManager.current
     val c = GsTheme.colors
@@ -2623,6 +2620,17 @@ private fun TableWidgetView(w: TableWidget) {
                 .background(Color.White.copy(alpha = 0.72f))
                 .border(1.dp, Color(0xFFE2DBFA), RoundedCornerShape(12.dp))
         ) {
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val compactTable = w.columns.size in 2..4 && maxWidth >= 280.dp &&
+                androidx.compose.ui.platform.LocalDensity.current.fontScale <= 1.1f &&
+                w.columns.all { it.length <= 14 } && w.rows.all { row ->
+                    row.withIndex().all { (ci, cell) -> cell.length <= if (ci == primaryNameCol) 24 else 10 }
+                }
+            val columnWeights = w.columns.indices.map { if (it == primaryNameCol) 2f else 1f }
+            val columnWidths = w.columns.mapIndexed { ci, col ->
+                if (compactTable) (maxWidth - 20.dp) * columnWeights[ci] / columnWeights.sum()
+                else if (col.trim() == "#" || col.equals("rank", true)) 52.dp else 132.dp
+            }
             Column(Modifier.horizontalScroll(rememberScrollState())) {
                 Row(
                     modifier = Modifier
@@ -2630,7 +2638,7 @@ private fun TableWidgetView(w: TableWidget) {
                         .padding(horizontal = 10.dp)
                 ) {
                     w.columns.forEachIndexed { ci, col ->
-                        val colWidth = if (col.trim() == "#" || col.equals("rank", true)) 52.dp else 132.dp
+                        val colWidth = columnWidths[ci]
                         Text(
                             if (w.sortable) "$col ${if (sortCol == ci) (if (asc) "▲" else "▼") else ""}" else col,
                             style = MaterialTheme.typography.labelSmall,
@@ -2651,7 +2659,7 @@ private fun TableWidgetView(w: TableWidget) {
                     Row(modifier = Modifier.padding(horizontal = 10.dp)) {
                         w.columns.indices.forEach { ci ->
                             val colName = w.columns[ci]
-                            val colWidth = if (colName.trim() == "#" || colName.equals("rank", true)) 52.dp else 132.dp
+                            val colWidth = columnWidths[ci]
                             val rawVal = (row.getOrNull(ci) ?: "").trim()
                             val isTrend = Regex("^[↑↓↗↘+-]?\\s*[+-]?\\d+(?:\\.\\d+)?%$").matches(rawVal) &&
                                 (rawVal.startsWith("+") || rawVal.startsWith("-") || rawVal.startsWith("↑") || rawVal.startsWith("↓") || colName.contains("trend", true) || colName.contains("growth", true) || colName.contains("change", true))
@@ -2677,9 +2685,9 @@ private fun TableWidgetView(w: TableWidget) {
                                     }
                                     Text(
                                         text = displayLabel,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold, fontSize = if (compactTable) 10.5.sp else 12.sp),
                                         color = GsTheme.colors.textPrimary,
-                                        maxLines = 1,
+                                        maxLines = if (compactTable) 2 else 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
@@ -2691,7 +2699,8 @@ private fun TableWidgetView(w: TableWidget) {
                                 Text(
                                     displayStr,
                                     style = MaterialTheme.typography.bodySmall.copy(
-                                        fontWeight = if (isTrend || ci == 0) FontWeight.Bold else FontWeight.Normal
+                                        fontWeight = if (isTrend || ci == 0) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = if (compactTable) 10.5.sp else 12.sp
                                     ),
                                     color = when {
                                         isTrend && isNeg -> Color(0xFFE04F5F)
@@ -2710,6 +2719,7 @@ private fun TableWidgetView(w: TableWidget) {
                     }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(GsTheme.colors.divider.copy(alpha = 0.35f)))
                 }
+            }
             }
             if (rows.isEmpty()) {
                 Text(

@@ -44,7 +44,7 @@ final class NexlyChatRenderTests: XCTestCase {
             }
             XCTAssertEqual(widgets.map { $0.0 }, expected, id)
             for (kind, json) in widgets { XCTAssertTrue(isValidWidget(kind: kind, json: json), "\(id) cannot silently fall back to raw JSON") }
-            let rendered = try await Self.renderFlash(question: question, wire: wire, size: CGSize(width: 393, height: 852))
+            let rendered = try await Self.renderFlash(question: question, wire: wire, size: CGSize(width: 393, height: 852), scrollStem: "genui-reference-ios-\(id)-393x852")
             let image = try XCTUnwrap(rendered)
             let data = try XCTUnwrap(image.pngData())
             XCTAssertGreaterThan(data.count, 20_000, id)
@@ -200,20 +200,23 @@ final class NexlyChatRenderTests: XCTestCase {
     }
 
     private static func renderFlash(
-        question: String, wire: String, size: CGSize
+        question: String, wire: String, size: CGSize, scrollStem: String? = nil
     ) async throws -> UIImage? {
         let view = NexlyFlashQuestionView(question: question, wire: wire)
             .frame(width: size.width, height: size.height)
             .ignoresSafeArea()
             .environment(\.layoutDirection, .leftToRight)
-        return try await capture(view: view, size: size)
+        return try await capture(view: view, size: size, scrollStem: scrollStem)
     }
 
-    private static func capture<V: View>(view: V, size: CGSize) async throws -> UIImage? {
+    private static func capture<V: View>(view: V, size: CGSize, scrollStem: String? = nil) async throws -> UIImage? {
         let host = UIHostingController(rootView: view)
         host.view.frame = CGRect(origin: .zero, size: size)
 
+        let oldKeyWindow = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }.first { $0.isKeyWindow }
         let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+        defer { window.isHidden = true; window.rootViewController = nil; oldKeyWindow?.makeKeyAndVisible() }
         window.rootViewController = host
         window.layoutIfNeeded()
         window.makeKeyAndVisible()
@@ -232,6 +235,40 @@ final class NexlyChatRenderTests: XCTestCase {
         let image = renderer.image { _ in
             drew = host.view.drawHierarchy(in: CGRect(origin: .zero, size: size),
                                            afterScreenUpdates: true)
+        }
+        if let scrollStem {
+            func scrollViews(_ view: UIView) -> [UIScrollView] {
+                (view as? UIScrollView).map { [$0] } ?? view.subviews.flatMap { scrollViews($0) }
+            }
+            let scroll = try XCTUnwrap(scrollViews(host.view).filter { $0.bounds.width > size.width * 0.8 }.max { $0.bounds.height < $1.bounds.height }, "Actual chat response scroll view is required")
+            // UIKit's real top is negative when safe-area content insets apply.
+            // Normalize evidence coordinates to that genuine top; do not ask a
+            // short response to reach offset zero when UIKit clamps it to -47.
+            let minimum = -scroll.adjustedContentInset.top
+            let maximum = max(minimum, scroll.contentSize.height + scroll.adjustedContentInset.bottom - scroll.bounds.height)
+            let viewportHeight = max(1, scroll.bounds.height - scroll.adjustedContentInset.top - scroll.adjustedContentInset.bottom)
+            let stride = max(1, viewportHeight * 0.75)
+            var offset = minimum
+            var frames: [[String: Any]] = []
+            repeat {
+                scroll.setContentOffset(CGPoint(x: 0, y: offset), animated: false)
+                try await Task.sleep(nanoseconds: 80_000_000)
+                host.view.layoutIfNeeded()
+                XCTAssertEqual(scroll.contentOffset.y, offset, accuracy: 1, "The actual native response must scroll to every captured position")
+                var composited = false
+                let viewport = renderer.image { _ in composited = host.view.drawHierarchy(in: CGRect(origin: .zero, size: size), afterScreenUpdates: true) }
+                XCTAssertTrue(composited)
+                let name = "\(scrollStem)-scroll-\(frames.count).png"
+                try XCTUnwrap(viewport.pngData()).write(to: outputDirectory().appendingPathComponent(name))
+                frames.append(["file": name, "offsetY": Double(scroll.contentOffset.y - minimum)])
+                if offset >= maximum { break }
+                offset = min(maximum, offset + stride)
+                XCTAssertLessThan(frames.count, 20, "A capture cap must fail, never silently omit the response tail")
+                if frames.count >= 20 { break }
+            } while true
+            XCTAssertEqual(scroll.contentOffset.y, maximum, accuracy: 1, "Full-scroll evidence must include the actual bottom")
+            let manifest: [String: Any] = ["viewportHeight": Double(viewportHeight), "maximumOffsetY": Double(maximum - minimum), "minimumContentOffsetY": Double(minimum), "frames": frames]
+            try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]).write(to: outputDirectory().appendingPathComponent(scrollStem + "-scroll.json"))
         }
         return drew ? image : nil
     }
@@ -289,7 +326,7 @@ private struct NexlyFullChatView: View {
                 VStack(spacing: 0) {
                     NexlyBrandHeader(
                         sparkleLabel: "New chat",
-                        menuGlyph: "menu-2",
+                        menuGlyph: "dots-vertical",
                         menuLabel: "Open menu",
                         onSparkle: {},
                         onMenu: {},
@@ -358,7 +395,7 @@ private struct NexlyFlashQuestionView: View {
                 VStack(spacing: 0) {
                     NexlyBrandHeader(
                         sparkleLabel: "New chat",
-                        menuGlyph: "menu-2",
+                        menuGlyph: "dots-vertical",
                         menuLabel: "Open menu",
                         onSparkle: {},
                         onMenu: {},
@@ -376,12 +413,17 @@ private struct NexlyFlashQuestionView: View {
                                 ),
                                 editEnabled: false
                             )
-                            NexlyAssistantBlocksView(
-                                blocks: parseBlocks(wire),
-                                isStreaming: false,
-                                showStatus: false,
-                                isPlanTurn: false,
-                                planTimestamp: "2026-10-23T10:31:00Z"
+                            // Render the SAME settled message composition as
+                            // ChatDetailView, including its real wrapper/footer.
+                            // Mounting only RichBlocks hid double glass/insets
+                            // and added an orb absent from production.
+                            MessageBubble(
+                                message: ChatViewModel.ChatMessage(
+                                    role: "assistant",
+                                    content: wire,
+                                    createdAt: "2026-10-23T10:31:00Z"
+                                ),
+                                editEnabled: false
                             )
                         }
                         .padding(.horizontal, 16)
@@ -423,7 +465,7 @@ private struct NexlyFullProseView: View {
                 VStack(spacing: 0) {
                     NexlyBrandHeader(
                         sparkleLabel: "New chat",
-                        menuGlyph: "menu-2",
+                        menuGlyph: "dots-vertical",
                         menuLabel: "Open menu",
                         onSparkle: {},
                         onMenu: {},

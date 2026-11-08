@@ -16,6 +16,10 @@ struct PlatformRuntimeProbe: View {
     @State private var showChecklist = false
     @State private var nextChecklist = false
     @State private var appChecklist = false
+    @State private var showDashboard = false
+    @State private var nextDashboard = false
+    @State private var ordinaryChecklist = false
+    @State private var nextOrdinaryChecklist = false
     @State private var showCalculator = false
     @State private var showTable = false
     @State private var showChart = false
@@ -41,6 +45,7 @@ struct PlatformRuntimeProbe: View {
             Button("Open generated timer") { showTimer = true }
             Button("Open generated booking") { showBooking = true }
             Button("Open generated checklist") { showChecklist = true }
+            Button("Open generated dashboard") { showDashboard = true }
             Button("Open generated calculator") { showCalculator = true }
             Button("Open generated table") { showTable = true }
             Button("Open generated chart") { showChart = true }
@@ -67,16 +72,32 @@ struct PlatformRuntimeProbe: View {
                 }
             }
         }
+        .sheet(isPresented: $showDashboard) {
+            VStack {
+                Button("Replace dashboard source") { nextDashboard = true }
+                ScrollView {
+                    BlocksView(blocks: parseBlocks(nextDashboard
+                        ? "# Replacement dashboard\n\n## Supplied heading\n\nReplacement stays visible\n\nSupplied replacement footer"
+                        : "# Source dashboard\n\n| Name | Value |\n| --- | --- |\n| A | 1 |\n\n- [ ] Source task\n\nSource footer")).padding()
+                }
+            }
+        }
         .sheet(isPresented: $showChecklist) {
             VStack {
                 Button("Use app task surface") { appChecklist = true }
                 Button("Use next checklist payload") { nextChecklist = true }
+                Button("Use ordinary Markdown tasks") { ordinaryChecklist = true }
+                if ordinaryChecklist { Button("Replace ordinary tasks") { nextOrdinaryChecklist = true } }
                 ScrollView {
+                    if ordinaryChecklist {
+                        BlocksView(blocks: parseBlocks(nextOrdinaryChecklist ? "## Next actions\n- [ ] Replacement source" : "## Next actions\n- [ ] Original task\n  Supplied source detail\n  - Supplied nested detail\n- [x] Keep completed")).padding()
+                    } else {
                     WidgetBlockView(kind: appChecklist ? "app" : "checklist", json: appChecklist
                         ? #"{"type":"tasks","title":"App tasks","items":[{"title":"App first","subtitle":"Supplied app detail","done":true},{"title":"App second"}]}"#
                         : nextChecklist
                         ? #"{"title":"New tasks","items":[{"label":"New supplied task"}]}"#
                         : #"{"title":"Actual tasks","items":[{"label":"Original source","detail":"Only supplied detail"},{"label":"Keep source"}]}"#, open: false).padding()
+                    }
                 }
             }
         }

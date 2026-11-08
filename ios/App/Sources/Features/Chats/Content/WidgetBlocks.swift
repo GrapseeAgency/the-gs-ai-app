@@ -215,6 +215,35 @@ func sanitizeWidgetPresentationIOS(_ value: Any, key: String = "") -> Any {
     return value
 }
 
+/// Repair delimiters, never comma/bracket text inside actual source strings.
+func stripTrailingJSONCommasIOS(_ raw: String) -> String {
+    let scalars = Array(raw.unicodeScalars)
+    var result = ""
+    var quoted = false
+    var escaped = false
+    var index = 0
+    while index < scalars.count {
+        let scalar = scalars[index]
+        if quoted {
+            result.unicodeScalars.append(scalar)
+            if escaped { escaped = false }
+            else if scalar.value == 92 { escaped = true }
+            else if scalar.value == 34 { quoted = false }
+        } else if scalar.value == 34 {
+            quoted = true
+            result.unicodeScalars.append(scalar)
+        } else if scalar.value == 44 {
+            var next = index + 1
+            while next < scalars.count && CharacterSet.whitespacesAndNewlines.contains(scalars[next]) { next += 1 }
+            if next >= scalars.count || (scalars[next].value != 125 && scalars[next].value != 93) {
+                result.unicodeScalars.append(scalar)
+            }
+        } else { result.unicodeScalars.append(scalar) }
+        index += 1
+    }
+    return result
+}
+
 func parseRelaxedJSONObject(kind: String, raw: String) -> [String: Any]? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty, trimmed.count <= 65_536 else { return nil }
@@ -222,8 +251,9 @@ func parseRelaxedJSONObject(kind: String, raw: String) -> [String: Any]? {
        let any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
         return normalizeJSONRoot(kind: kind, value: any)
     }
-    // Strip trailing commas before } or ] and retry
-    let cleaned = trimmed.replacingOccurrences(of: ",\\s*([}\\]])", with: "$1", options: .regularExpression)
+    // String-aware recovery cannot turn a literal ",}" inside executable
+    // code into "}" merely because another field has a trailing comma.
+    let cleaned = stripTrailingJSONCommasIOS(trimmed)
     if let data = cleaned.data(using: .utf8),
        let any = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
         return normalizeJSONRoot(kind: kind, value: any)
@@ -560,6 +590,20 @@ private enum WidgetPalette {
         return hues[((index % n) + n) % n]
     }
 
+    /// Match Android's stable family palette; Swift's hashValue changes on relaunch.
+    static func forKind(_ kind: String) -> Color {
+        let slots = ["chart": 0, "stat": 1, "gauge": 2, "compare": 3,
+                     "progress": 4, "timeline": 5, "table": 6, "quiz": 7,
+                     "form": 8, "carousel": 9, "cards": 10, "followups": 11,
+                     "media": 3, "actions": 2, "panel": 1, "voice": 8,
+                     "calc": 9, "app": 4, "tabs": 0, "accordion": 5,
+                     "steps": 4, "menu": 8, "chips": 11, "rating": 2,
+                     "poll": 7, "diff": 9, "tree": 10, "flashcards": 6, "checklist": 1]
+        let key = kind.lowercased()
+        let hash = key.utf16.reduce(UInt32(0)) { ($0 &* 31) &+ UInt32($1) }
+        return at(slots[key] ?? Int(Int32(bitPattern: hash)))
+    }
+
     static func parseHex(_ raw: String?) -> Color? {
         guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
               raw.hasPrefix("#") else { return nil }
@@ -773,32 +817,28 @@ struct WidgetBlockView: View {
             .nexlyGlassCard(corner: 16)
         } else if let obj = parseRelaxedJSONObject(kind: resolvedKind, raw: json),
                   let effectiveKind = validatedWidgetKindIOS(kind: resolvedKind, json: json) {
-            let accent = WidgetPalette.parseHex(obj["accent"] as? String) ?? WidgetPalette.at( abs(effectiveKind.hashValue) )
+            let accent = WidgetPalette.parseHex(obj["accent"] as? String) ?? WidgetPalette.forKind(effectiveKind)
             let rawTitle = rawStr(obj, "title", "heading", "name", "question")
             let (explicitIcon, strippedTitle) = NexlyIcons.extractLeadingIcon(rawTitle)
             let cleanTitle = NexlyIcons.cleanPlainText(strippedTitle)
             let tagIcon = widgetTagGlassIconIOS(effectiveKind)
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .center, spacing: 8) {
-                    NexlyGlassGlyphTile(
-                        name: explicitIcon ?? tagIcon.icon,
-                        tone: tagIcon.tone,
-                        size: 24,
-                        glyphSize: 14
-                    )
-                    if !cleanTitle.isEmpty {
-                        Text(cleanTitle)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Aero.text)
-                            .lineLimit(2)
+                if !cleanTitle.isEmpty {
+                    HStack(alignment: .center, spacing: 8) {
+                        NexlyGlassGlyphTile(
+                            name: explicitIcon ?? tagIcon.icon,
+                            tone: tagIcon.tone,
+                            size: 24,
+                            glyphSize: 14
+                        )
+                        if !cleanTitle.isEmpty {
+                            Text(cleanTitle)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Aero.text)
+                                .lineLimit(2)
+                        }
+                        Spacer(minLength: 4)
                     }
-                    Spacer(minLength: 4)
-                    Text(effectiveKind.uppercased())
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundStyle(accent)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(accent.opacity(0.14), in: Capsule())
                 }
                 WidgetBodyView(kind: effectiveKind, obj: obj, accent: accent)
                     .id(effectiveKind + ":" + json)
@@ -1051,6 +1091,15 @@ func chartSliceLabelIOS(name: String, labels: [String], seriesIndex: Int) -> Str
     return seriesIndex < labels.count ? labels[seriesIndex] : "Series \(seriesIndex + 1)"
 }
 
+/// Preserve the response's actual chart accent. Controls keep their brand
+/// tint, but data ink must not silently force every model chart to purple.
+func chartSeriesColorIOS(_ obj: [String: Any], index: Int) -> Color {
+    if index == 0 {
+        return WidgetPalette.parseHex(obj["accent"] as? String) ?? Color(red: 0.424, green: 0.298, blue: 0.965)
+    }
+    return WidgetPalette.at(index + 1)
+}
+
 private struct ChartBodyView: View {
     let obj: [String: Any]
     let accent: Color
@@ -1105,7 +1154,7 @@ private struct ChartBodyView: View {
             for (sIdx, s) in series.enumerated() {
                 if !isSliceSeries && sIdx != min(selectedSeriesIndex, max(0, series.count - 1)) { continue }
                 let sName = str(s, "name", "label")
-                let color = WidgetPalette.at(sIdx)
+                let color = chartSeriesColorIOS(obj, index: sIdx)
                 if let data = s["data"] as? [Any] {
                     for (pIdx, pt) in data.enumerated() {
                         let sliceLabel = chartSliceLabelIOS(name: sName, labels: labels, seriesIndex: sIdx)
@@ -1128,7 +1177,7 @@ private struct ChartBodyView: View {
             for (idx, d) in data.enumerated() {
                 let lbl = str(d, "label", "name", "x", "category")
                 guard let val = chartObservationValueIOS(d) else { continue }
-                out.append(BarPoint(index: idx, seriesName: "", label: lbl.isEmpty ? "#\(idx + 1)" : lbl, value: val, color: WidgetPalette.at(idx)))
+                out.append(BarPoint(index: idx, seriesName: "", label: lbl.isEmpty ? "#\(idx + 1)" : lbl, value: val, color: chartSeriesColorIOS(obj, index: currentType == "pie" || currentType == "donut" ? idx : 0)))
             }
         }
         return out
@@ -1212,7 +1261,9 @@ private struct ChartBodyView: View {
 
     @ViewBuilder
     private func chartHeaderBar(rangeLabel: String) -> some View {
-        HStack(spacing: 6) {
+        // Do not hide Pie behind the range selector on phone-width cards.
+        // Every chart type stays visible; range is a separate trailing control.
+        VStack(alignment: .trailing, spacing: 6) {
             ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 3) {
                 ForEach(Array(Self.chartTypeTabs.enumerated()), id: \.offset) { _, tab in
@@ -1286,7 +1337,7 @@ private struct ChartBodyView: View {
             let stepColor = stepPct == nil ? Aero.textSecondary : ((stepPct ?? 0) >= 0 ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
             HStack(spacing: 8) {
                 Circle()
-                    .fill(Color(red: 0.424, green: 0.298, blue: 0.965))
+                    .fill(selPt.color)
                     .frame(width: 8, height: 8)
                 Text(selPt.label)
                     .font(.system(size: 12, weight: .semibold))
@@ -1309,6 +1360,7 @@ private struct ChartBodyView: View {
     @ViewBuilder
     private func chartVisualizationSurface(pts: [BarPoint], activeIdx: Int, maxVal: Double, totalVal: Double, unit: String) -> some View {
         let domain = chartDomainIOS(pts.map { $0.value })
+        let plotColor = pts.first?.color ?? chartSeriesColorIOS(obj, index: 0)
         if (currentType == "pie" || currentType == "donut") &&
             (pts.contains { $0.value < 0 } || totalVal <= 0) {
             Text("Pie shares require nonnegative values and a positive total. Choose Line or Bar for this dataset.")
@@ -1373,8 +1425,8 @@ private struct ChartBodyView: View {
                             areaPath.fill(
                                 LinearGradient(
                                     colors: [
-                                        Color(red: 0.424, green: 0.298, blue: 0.965).opacity(currentType == "area" ? 0.34 : 0.18),
-                                        Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.01)
+                                        plotColor.opacity(currentType == "area" ? 0.34 : 0.18),
+                                        plotColor.opacity(0.01)
                                     ],
                                     startPoint: .top,
                                     endPoint: .bottom
@@ -1382,7 +1434,7 @@ private struct ChartBodyView: View {
                             )
 
                             linePath.stroke(
-                                Color(red: 0.424, green: 0.298, blue: 0.965),
+                                plotColor,
                                 style: StrokeStyle(lineWidth: 2.8, lineCap: .round, lineJoin: .round)
                             )
 
@@ -1393,7 +1445,7 @@ private struct ChartBodyView: View {
                                     p.addLine(to: CGPoint(x: selCoord.x, y: h))
                                 }
                                 .stroke(
-                                    Color(red: 0.424, green: 0.298, blue: 0.965).opacity(0.45),
+                                    plotColor.opacity(0.45),
                                     style: StrokeStyle(lineWidth: 1.2, dash: [4, 3])
                                 )
                             }
@@ -1401,11 +1453,11 @@ private struct ChartBodyView: View {
                             ForEach(Array(coords.enumerated()), id: \.offset) { idx, c in
                                 let isSel = idx == activeIdx
                                 Circle()
-                                    .fill(isSel ? Color.white : Color(red: 0.424, green: 0.298, blue: 0.965))
+                                    .fill(isSel ? Color.white : plotColor)
                                     .frame(width: isSel ? 11 : 7, height: isSel ? 11 : 7)
                                     .overlay(
                                         Circle()
-                                            .stroke(Color(red: 0.424, green: 0.298, blue: 0.965), lineWidth: isSel ? 3 : 0)
+                                            .stroke(plotColor, lineWidth: isSel ? 3 : 0)
                                     )
                                     .position(c)
                                     .onTapGesture {
@@ -1453,7 +1505,7 @@ private struct ChartBodyView: View {
                                         path.addLine(to: CGPoint(x: geo.size.width, y: zeroY))
                                     }.stroke(Color.gray.opacity(0.4), lineWidth: 1)
                                     RoundedRectangle(cornerRadius: 3)
-                                        .fill(Color(red: 0.424, green: 0.298, blue: 0.965).opacity(isSel ? 1 : 0.45))
+                                        .fill(plotColor.opacity(isSel ? 1 : 0.45))
                                         .frame(width: geo.size.width, height: abs(valueY - zeroY))
                                         .position(x: geo.size.width / 2, y: (valueY + zeroY) / 2)
                                 }
@@ -1686,19 +1738,24 @@ private struct ChartBodyView: View {
 private struct StatBodyView: View {
     let obj: [String: Any]
     let accent: Color
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let cards = ((obj["cards"] ?? obj["items"] ?? obj["metrics"] ?? obj["kpis"] ?? obj["stats"]) as? [[String: Any]]) ?? []
         // A metric is not a drill-down button unless there is a real drill-down.
         // Preserve all supplied cards and units, with no invented trend arrows.
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+        let compactMetrics = cards.count == 4 && dynamicTypeSize <= .large && cards.allSatisfy {
+            str($0, "value", "val", "number", "amount").count + str($0, "unit").count <= 7 &&
+                str($0, "label", "title", "name", "metric").count <= 28
+        }
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: compactMetrics ? 5 : 8), count: compactMetrics ? 4 : 2), spacing: 8) {
             ForEach(Array(cards.enumerated()), id: \.offset) { _, card in
-                metricCard(card)
+                metricCard(card, compact: compactMetrics)
             }
         }
     }
 
-    private func metricCard(_ card: [String: Any]) -> some View {
+    private func metricCard(_ card: [String: Any], compact: Bool) -> some View {
         let label = NexlyIcons.cleanPlainText(str(card, "label", "title", "name", "metric"))
         let value = NexlyIcons.cleanPlainText(str(card, "value", "val", "number", "amount"))
         let unit = NexlyIcons.cleanPlainText(str(card, "unit"))
@@ -1709,14 +1766,17 @@ private struct StatBodyView: View {
         let tone = direction == "up" ? Color(red: 0.071, green: 0.604, blue: 0.353) : direction == "down" ? Color(red: 0.878, green: 0.310, blue: 0.373) : Aero.textSecondary
         return VStack(alignment: .leading, spacing: 4) {
             Text(label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Aero.textSecondary)
+                .font(.system(size: compact ? 9.5 : 11, weight: .medium))
+                .foregroundStyle(NexlyInk.label)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: compact ? 24 : 0, alignment: .topLeading)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.122, green: 0.094, blue: 0.259))
-                    .fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: compact ? 13 : 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(NexlyInk.row)
+                    .lineLimit(compact ? 1 : nil)
+                    .minimumScaleFactor(compact ? 0.75 : 1)
+                    .layoutPriority(1)
                 if !unit.isEmpty {
                     Text(unit).font(.system(size: 10, weight: .medium)).foregroundStyle(Aero.textSecondary)
                 }
@@ -1731,9 +1791,10 @@ private struct StatBodyView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(10)
+        .padding(.horizontal, compact ? 4 : 10)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.white.opacity(0.46), in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 0.886, green: 0.859, blue: 0.980), lineWidth: 1))
     }
 }
@@ -1786,7 +1847,7 @@ func widgetTablePrecedesIOS(_ left: String, _ right: String, ascending: Bool) ->
 
 func widgetTablePageSizeIOS(selection: Int, rowCount: Int) -> Int {
     if selection == -1 { return max(1, rowCount) }
-    return selection > 0 ? selection : ((4...5).contains(rowCount) ? 3 : 5)
+    return selection > 0 ? selection : 5
 }
 
 private struct TableBodyView: View {

@@ -673,12 +673,20 @@ async function main() {
     assert.doesNotMatch(document.body.textContent, /Ava Chen|3 rows returned/)
     assert.ok(!buttons().some(button => /Run/.test(button.textContent)))
   })
-  for (const language of ['python', 'typescript', 'jsx']) {
+  for (const language of ['python', 'typescript']) {
     await mount(h(CodeBlock, { language, code: language === 'python' ? 'print(6*7)' : 'const value: number = 42' }))
     check(language + ' immediately discloses unsupported execution without a nonworking Run control', () => {
       assert.match(document.body.textContent, /Not executed|Source only/)
       assert.ok(!buttons().some(button => /Run/.test(button.textContent)))
       assert.doesNotMatch(document.body.textContent, /Arithmetic preview/)
+      assert.equal(document.querySelectorAll('iframe').length, 0)
+    })
+  }
+  for (const language of ['jsx', 'tsx', 'react']) {
+    await mount(h(CodeBlock, { language, code: 'export default function App(){return <p>Actual component</p>}' }))
+    check(language + ' exposes actual React execution but does not falsely announce a mount before Run', () => {
+      assert.ok(buttons().some(button => button.textContent.trim() === 'Run in Browser'))
+      assert.doesNotMatch(document.body.textContent, /Source only|React preview running/)
       assert.equal(document.querySelectorAll('iframe').length, 0)
     })
   }

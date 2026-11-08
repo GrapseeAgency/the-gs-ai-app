@@ -287,8 +287,8 @@ struct ChatDetailView: View {
     private var brandHeader: some View {
         NexlyBrandHeader(
             sparkleLabel: onNewChat != nil ? "New chat" : "Search in chat",
-            menuGlyph: "menu-2",
-            menuLabel: isWorkspaceRoot && onOpenDrawer != nil ? "Open menu" : "Conversation actions",
+            menuGlyph: isWorkspaceRoot && onOpenDrawer != nil ? "menu-2" : vm.conversationID != nil ? "dots-vertical" : "chevron-left",
+            menuLabel: isWorkspaceRoot && onOpenDrawer != nil ? "Open menu" : vm.conversationID != nil ? "Conversation actions" : "Back",
             onSparkle: {
                 if let newChat = onNewChat {
                     newChat()
@@ -299,12 +299,14 @@ struct ChatDetailView: View {
             onMenu: {
                 if isWorkspaceRoot, let openDrawer = onOpenDrawer {
                     openDrawer()
+                } else if vm.conversationID != nil {
+                    showOptions = true
                 } else {
                     dismiss()
                 }
             },
             // The reference leads with a back arrow inside a conversation.
-            onBack: isWorkspaceRoot ? nil : { dismiss() },
+            onBack: isWorkspaceRoot || vm.conversationID == nil ? nil : { dismiss() },
             sparkleMenu: {
                 if let newChat = onNewChat {
                     Button(action: newChat) {
@@ -1454,11 +1456,10 @@ struct MessageBubble: View, Equatable {
                 conversationID: conversationID,
                 showOrb: false
             )
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            // The reference answer sits in a lit glass card, not raw on the
-            // backdrop; a search hit is a rim, not a fill.
-            .gsGlass(.floatingControl, corner: 20)
+            .environment(\.reactPreviewScope, "\(conversationID ?? "chat"):\(message.reactPreviewIdentity)")
+            // RichBlocks owns each prose/plan glass surface and its inset.
+            // A second turn-wide surface/padding nests every real answer,
+            // narrows interactive controls, and diverges from render captures.
             .overlay {
                 if highlight {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)

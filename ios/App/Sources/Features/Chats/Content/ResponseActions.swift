@@ -111,74 +111,125 @@ struct ResponseExportDocument: FileDocument {
 /// source file; the picker copies it only after the user chooses a destination.
 /// System pickers must be PRESENTED controllers, not embedded as SwiftUI child
 /// views. In particular, their remote Files/activity UI needs a real presenter.
-private final class ResponseSystemControllerHostIOS: UIViewController {
-    let systemController: UIViewController
-    private var presented = false
-    private weak var systemDismissDelegate: UIAdaptivePresentationControllerDelegate?
-    init(_ controller: UIViewController, delegate: UIAdaptivePresentationControllerDelegate) {
-        systemController = controller
-        systemDismissDelegate = delegate
-        super.init(nibName: nil, bundle: nil)
-    }
-    required init?(coder: NSCoder) { return nil }
-    override func viewDidLoad() { super.viewDidLoad(); view.backgroundColor = .clear }
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        guard !presented, view.window != nil else { return }
-        presented = true
-        if let popover = systemController.popoverPresentationController {
-            popover.sourceView = view
-            popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1)
-            popover.permittedArrowDirections = []
-        }
-        present(systemController, animated: true)
-        systemController.presentationController?.delegate = systemDismissDelegate
-    }
-}
-
+/// A non-modal anchor in the answer presents Files from the actual window's
+/// visible controller. Files is the single presentation, never a second modal
+/// stacked inside a SwiftUI sheet with a different remote-UI coordinate space.
 struct ResponseDocumentPickerIOS: UIViewControllerRepresentable {
-    let sourceURL: URL
+    let sourceURL: URL?
     let onCompletion: (URL?) -> Void
-    func makeCoordinator() -> Coordinator { Coordinator(onCompletion: onCompletion) }
-    func makeUIViewController(context: Context) -> UIViewController {
-        let picker = UIDocumentPickerViewController(forExporting: [sourceURL], asCopy: true)
-        // Files owns the complete interactive surface. Do not stack an
-        // automatically sized remote provider sheet inside a SwiftUI sheet:
-        // its navigation controls must stay inside the presented viewport.
-        picker.modalPresentationStyle = .fullScreen
-        picker.delegate = context.coordinator
-        picker.presentationController?.delegate = context.coordinator
-        return ResponseSystemControllerHostIOS(picker, delegate: context.coordinator)
+
+    func makeUIViewController(context: Context) -> DocumentPresentationHost {
+        DocumentPresentationHost()
     }
-    func updateUIViewController(_ controller: UIViewController, context: Context) {}
-    final class Coordinator: NSObject, UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate {
-        let onCompletion: (URL?) -> Void
+    func updateUIViewController(_ host: DocumentPresentationHost, context: Context) {
+        host.update(sourceURL: sourceURL, onCompletion: onCompletion)
+    }
+
+    final class DocumentPresentationHost: UIViewController, UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate {
+        private var requestedURL: URL?
+        private var activePicker: UIDocumentPickerViewController?
+        private var completion: ((URL?) -> Void)?
         private var completed = false
-        init(onCompletion: @escaping (URL?) -> Void) { self.onCompletion = onCompletion }
-        private func finish(_ url: URL?) { guard !completed else { return }; completed = true; onCompletion(url) }
+
+        override func viewDidLoad() { super.viewDidLoad(); view.backgroundColor = .clear }
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            presentIfReady()
+        }
+        func update(sourceURL: URL?, onCompletion: @escaping (URL?) -> Void) {
+            requestedURL = sourceURL
+            completion = onCompletion
+            // SwiftUI may be updating the view hierarchy in this call. Wait
+            // until that transaction has installed the anchor in its window.
+            DispatchQueue.main.async { [weak self] in self?.presentIfReady() }
+        }
+        private func presentIfReady() {
+            guard let source = requestedURL, activePicker == nil,
+                  var presenter = viewIfLoaded?.window?.rootViewController else { return }
+            while let presented = presenter.presentedViewController {
+                presenter = presented
+            }
+            guard !presenter.isBeingDismissed, !presenter.isBeingPresented else { return }
+            let picker = UIDocumentPickerViewController(forExporting: [source], asCopy: true)
+            picker.modalPresentationStyle = .fullScreen
+            picker.delegate = self
+            activePicker = picker
+            completed = false
+            presenter.present(picker, animated: true)
+            picker.presentationController?.delegate = self
+        }
+        private func finish(_ destination: URL?) {
+            guard !completed, let picker = activePicker else { return }
+            completed = true
+            requestedURL = nil
+            activePicker = nil
+            // The delegate, not a timeout or an app-owned Cancel button, is the
+            // only source of the export receipt. Dismiss the same controller.
+            picker.dismiss(animated: true)
+            completion?(destination)
+        }
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { finish(urls.first) }
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { finish(nil) }
         func presentationControllerDidDismiss(_ controller: UIPresentationController) { finish(nil) }
     }
 }
 
+/// Present the real system activity controller from a stable, non-modal
+/// anchor. Never stack it inside another transient SwiftUI sheet, especially
+/// while a report-details sheet is still completing its UIKit dismissal.
 struct ResponseActivityPresenterIOS: UIViewControllerRepresentable {
-    let items: [Any]
+    let items: [Any]?
     let onDismiss: () -> Void
-    func makeCoordinator() -> Coordinator { Coordinator(onDismiss: onDismiss) }
-    func makeUIViewController(context: Context) -> UIViewController {
-        let activity = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        let coordinator = context.coordinator
-        activity.completionWithItemsHandler = { _, _, _, _ in coordinator.finish() }
-        activity.presentationController?.delegate = coordinator
-        return ResponseSystemControllerHostIOS(activity, delegate: coordinator)
+    func makeUIViewController(context: Context) -> ActivityPresentationHost { ActivityPresentationHost() }
+    func updateUIViewController(_ host: ActivityPresentationHost, context: Context) {
+        host.update(items: items, onDismiss: onDismiss)
     }
-    func updateUIViewController(_ controller: UIViewController, context: Context) {}
-    final class Coordinator: NSObject, UIAdaptivePresentationControllerDelegate {
-        let onDismiss: () -> Void
+    final class ActivityPresentationHost: UIViewController, UIAdaptivePresentationControllerDelegate {
+        private var requestedItems: [Any]?
+        private var activeActivity: UIActivityViewController?
+        private var completion: (() -> Void)?
         private var completed = false
-        init(onDismiss: @escaping () -> Void) { self.onDismiss = onDismiss }
-        func finish() { guard !completed else { return }; completed = true; onDismiss() }
+        override func viewDidLoad() { super.viewDidLoad(); view.backgroundColor = .clear }
+        override func viewDidAppear(_ animated: Bool) { super.viewDidAppear(animated); presentIfReady() }
+        func update(items: [Any]?, onDismiss: @escaping () -> Void) {
+            requestedItems = items; completion = onDismiss
+            DispatchQueue.main.async { [weak self] in self?.presentIfReady() }
+        }
+        private func afterTransition(_ controller: UIViewController) {
+            if let transition = controller.transitionCoordinator {
+                transition.animate(alongsideTransition: nil) { [weak self] _ in
+                    DispatchQueue.main.async { self?.presentIfReady() }
+                }
+            } else {
+                // Re-check actual UIKit presentation state, never synthesize a
+                // share/Copy completion receipt or mutate the system sheet.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.presentIfReady() }
+            }
+        }
+        private func presentIfReady() {
+            guard let items = requestedItems, !items.isEmpty, activeActivity == nil,
+                  var presenter = viewIfLoaded?.window?.rootViewController else { return }
+            while let presented = presenter.presentedViewController {
+                if presented.isBeingDismissed || presented.isBeingPresented { afterTransition(presented); return }
+                presenter = presented
+            }
+            if presenter.isBeingDismissed || presenter.isBeingPresented { afterTransition(presenter); return }
+            let activity = UIActivityViewController(activityItems: items, applicationActivities: nil)
+            activity.completionWithItemsHandler = { [weak self] _, _, _, _ in self?.finish() }
+            if let popover = activity.popoverPresentationController {
+                popover.sourceView = presenter.view
+                popover.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
+                popover.permittedArrowDirections = []
+            }
+            activeActivity = activity; completed = false
+            presenter.present(activity, animated: true)
+            activity.presentationController?.delegate = self
+        }
+        private func finish() {
+            guard activeActivity != nil, !completed else { return }
+            completed = true; requestedItems = nil; activeActivity = nil
+            completion?()
+        }
         func presentationControllerDidDismiss(_ controller: UIPresentationController) { finish() }
     }
 }

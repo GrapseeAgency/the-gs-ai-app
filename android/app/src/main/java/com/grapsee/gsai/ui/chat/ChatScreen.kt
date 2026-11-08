@@ -1330,7 +1330,7 @@ fun ChatScreen(
             .navigationBarsPadding()
     ) {
         NexlyChatHeader(
-            sparkleLabel = "New chat",
+            sparkleLabel = if (newChatAction != null) "New chat" else "Search in chat",
             onSparkle = {
                 if (newChatAction != null) newChatAction()
                 else {
@@ -1348,7 +1348,11 @@ fun ChatScreen(
                     searchActiveIndex = 0
                 }
             },
-            menuIcon = if (atWorkspaceRoot && menuAction != null) GsIcons.Menu else GsIcons.MoreVertical,
+            menuIcon = when {
+                atWorkspaceRoot && menuAction != null -> GsIcons.Menu
+                activeConversationId != null -> GsIcons.MoreVertical
+                else -> GsIcons.ArrowLeft
+            },
             // Labelled for what the tap DOES. Inside a conversation this control opens
             // the conversation-options sheet, not the drawer and not "back" — the old
             // constant "Back" announced a navigation that never happened, which is both
@@ -1943,21 +1947,11 @@ internal fun NexlyChatHeader(
                 )
             }
             Spacer(Modifier.width(10.dp))
-            // One word, not a wordmark plus a tagline. "Your AI companion" was
-            // a second line of chrome that said nothing the sparkle and the
-            // name had not already said, and it made the title sit high in the
-            // row. The name alone, centred on the discs.
-            Text(
-                text = "Nexly",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontSize = 16.5.sp,
-                    lineHeight = 20.sp,
-                    fontWeight = FontWeight.SemiBold
-                ),
-                color = NexlyInk.header,
-                maxLines = 1,
-                modifier = Modifier.weight(1f)
-            )
+            // Both brand lines are present in the supplied response references.
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Nexly", style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.5.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold), color = NexlyInk.header, maxLines = 1)
+                Text("Your AI companion", fontSize = 10.5.sp, lineHeight = 13.sp, color = NexlyInk.headerMeta, maxLines = 1)
+            }
             ChatTopIconButton(
                 icon = GsIcons.Sparkles,
                 label = sparkleLabel,
@@ -2021,7 +2015,7 @@ private fun ChatTopIconButton(
         Icon(
             icon,
             contentDescription = null,
-            tint = GsTheme.colors.textPrimary,
+            tint = NexlyInk.header,
             modifier = Modifier.size(19.dp)
         )
     }
@@ -2469,9 +2463,13 @@ private fun LiveStreamText(
     statusCard: (@Composable () -> Unit)? = null,
     statusAtEnd: Boolean = true,
     planTimestamp: String? = null,
-    planConversationId: String? = null
+    planConversationId: String? = null,
+    previewMessageId: String? = null
 ) {
-    CompositionLocalProvider(LocalVoiceLauncher provides onNavigateVoice) {
+    CompositionLocalProvider(
+        LocalVoiceLauncher provides onNavigateVoice,
+        com.grapsee.gsai.ui.chat.content.LocalReactPreviewScope provides previewMessageId
+    ) {
         BlocksContent(
             content = live?.value?.streamText ?: fallback,
             isStreaming = isStreaming,
@@ -3027,15 +3025,14 @@ internal fun AssistantMessage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 640.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(20.dp))
+                    // BlocksContent owns each prose/plan card and its inset.
+                    // Do not wrap the real answer in a second padded glass card.
                     .border(
                         width = if (highlight) 2.dp else 0.dp,
                         color = if (highlight) MaterialTheme.colorScheme.primary
                         else androidx.compose.ui.graphics.Color.Transparent,
                         shape = RoundedCornerShape(20.dp),
                     )
-                    .padding(horizontal = 14.dp, vertical = 12.dp)
                     // Long-press only. There used to be `onClick = {}` here,
                     // which made every non-interactive pixel of an answer a
                     // button that did nothing — the exact "taps are swallowed"
@@ -3070,6 +3067,7 @@ internal fun AssistantMessage(
                     priorContext = priorContext,
                     glassAssistant = true,
                     planConversationId = conversationId,
+                    previewMessageId = "$conversationId:${message.id}",
                     statusCard = if (showStatus) {
                         {
                             ReferenceThinkingCard(
