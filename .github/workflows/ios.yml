@@ -79,7 +79,7 @@ concurrency:
   # exact reference React application's filters and persisted records, beyond
   # the standalone preview contract. Keep previous real evidence intact while
   # this generation runs; only pending runs within this generation are replaced.
-  group: ios-response-runtime-v4-${{ github.ref }}
+  group: ios-response-runtime-v5-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
