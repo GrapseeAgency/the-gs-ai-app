@@ -219,7 +219,7 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
         }
         when (w.surface) {
             "vote" -> {
-                val items = w.items.ifEmpty { listOf("Yes", "No") }
+                val items = w.items
                 val votes = items.indices.map { num("v$it") }
                 val total = maxOf(1, votes.sum())
                 items.forEachIndexed { i, label ->
@@ -377,7 +377,7 @@ internal fun CollabWidgetView(w: CollabWidgetData) {
             }
         }
         Text(
-            "room ${w.room} · shared prototype: per-server memory, last-write-wins, resets on restart",
+            "room ${w.room} · shared prototype: public SQLite-backed room, last-write-wins; state can survive restarts and idle rooms may be evicted",
             style = MaterialTheme.typography.labelSmall,
             color = GsTheme.colors.textTertiary,
             modifier = Modifier.padding(top = 8.dp)
