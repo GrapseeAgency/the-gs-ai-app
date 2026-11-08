@@ -20,7 +20,7 @@ export function HtmlBlock({ source, fallbackHeight = 320 }: { source: string; fa
 
   const themed = useMemo(() => {
     const hueVars = Array.from({ length: 12 }, (_, i) => `--gs-hue-${i + 1}`)
-    const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+    const head = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
       :root {
         --gs-text:${theme.text}; --gs-text-2:${theme.text2}; --gs-text-3:${theme.text3};
         --gs-surface:${theme.card}; --gs-raised:${theme.raised}; --gs-border:${theme.border};
@@ -32,7 +32,20 @@ export function HtmlBlock({ source, fallbackHeight = 320 }: { source: string; fa
       html,body { margin:0; padding:12px; background:transparent; color:var(--gs-text);
         font-family:-apple-system,'SF Pro Text','Segoe UI',Roboto,sans-serif; font-size:14px; }
       * { box-sizing:border-box; max-width:100%; }
-    </style><script>${emojiDOMPolicy.script}</script></head><body>${source}</body></html>`
+    </style><script>${emojiDOMPolicy.script}</script>`
+    // A document's CSP meta must remain in HEAD. Nesting a complete document
+    // inside BODY makes browsers ignore that policy and silently enables IO.
+    const fullDocument = /^\s*(?:<!--[\s\S]*?-->\s*)*(?:<!doctype\s+html\b|<html\b|<head\b)/i.test(source)
+    let doc: string
+    if (fullDocument && /<head(?:\s[^>]*)?>/i.test(source)) {
+      doc = source.replace(/<head(?:\s[^>]*)?>/i, match => `${match}${head}`)
+    } else if (fullDocument && /<html(?:\s[^>]*)?>/i.test(source)) {
+      doc = source.replace(/<html(?:\s[^>]*)?>/i, match => `${match}<head>${head}</head>`)
+    } else if (fullDocument) {
+      doc = source.replace(/<!doctype[^>]*>/i, match => `${match}<head>${head}</head>`)
+    } else {
+      doc = `<!doctype html><html><head>${head}</head><body>${source}</body></html>`
+    }
     return { doc, hueVars }
   }, [source, accent, theme])
 

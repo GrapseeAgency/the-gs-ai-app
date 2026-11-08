@@ -7,13 +7,21 @@ export interface Concept { term: string; definition: string }
 export function extractConceptDeck(text: string): Concept[] {
   if (/^\s*(?:```|~~~)|^\s*[-*+]\s+\[[ xX]\]/m.test(text)) return []
   const concepts: Concept[] = []
+  let excludedSection = false
   for (const line of text.split('\n')) {
+    const heading = /^\s*#{1,6}\s+(.+?)\s*#*\s*$/.exec(line) ?? /^\s*\*\*([^*]+)\*\*\s*$/.exec(line)
+    if (heading) {
+      const title = cleanPlainText(heading[1])
+      excludedSection = /\b(?:sources?|references|bibliography|citations?|steps?|plan|instructions|procedure|next actions?|action items?|tasks?|checklist|todo|to-do|routine)\b/i.test(title)
+      continue
+    }
+    if (excludedSection) continue
     const item = /^\s*(?:[-*+]\s+|\d+[.)]\s+)(?:\*\*([^*\n]+?)\*\*\s*[:—–-]?|([^:—–\n]+?)\s*[:—–])\s*(.+)$/.exec(line)
     if (!item) continue
     const term = cleanPlainText(item[1] ?? item[2]).replace(/[:—–-]+$/, '').trim()
     const definition = cleanPlainText(item[3])
     if (term.length < 3 || term.length > 44 || definition.length < 14 || definition.length > 600 || /https?:|\[[0-9]+\]/.test(definition)) continue
-    if (concepts.some((c) => c.term.toLowerCase() === term.toLowerCase() || c.definition === definition)) continue
+    if (concepts.some((c) => c.term.toLowerCase() === term.toLowerCase() || c.definition.toLowerCase() === definition.toLowerCase())) continue
     concepts.push({ term, definition })
     if (concepts.length === 8) break
   }

@@ -99,6 +99,12 @@ targets:
       - path: App/Resources
       - path: ../shared-contracts/emoji-dom-policy.json
         buildPhase: resources
+      - path: ../shared-contracts/javascript-worker-sandbox.json
+        buildPhase: resources
+      - path: ../shared-contracts/terminal-runtime.json
+        buildPhase: resources
+      - path: ../shared-contracts/response-section-references.json
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.grapsee.gsai

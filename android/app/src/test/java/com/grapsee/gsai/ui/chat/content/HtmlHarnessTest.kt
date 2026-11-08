@@ -118,38 +118,12 @@ class HtmlHarnessTest {
     }
 
     @Test
-    fun `sandbox is editable and escapes the source`() {
-        val doc = buildDocument(
-            "sandbox",
-            """{"language":"javascript","code":"console.log('<hi> & bye')"}""",
-            text,
-            accent
-        )!!
-        assertTrue(doc.contains("<textarea"))
-        assertTrue(doc.contains("&lt;hi&gt; &amp; bye"))
-        assertTrue(doc.contains("IS_HTML=false"))
-        // No network and no file access from the execution context.
-        assertTrue(doc.contains("default-src 'none'"))
-    }
-
-    @Test
-    fun `sandbox marks html as a preview and other languages as non runnable`() {
-        val html = buildDocument(
-            "sandbox",
-            """{"language":"html","code":"<b>hi</b>"}""",
-            text,
-            accent
-        )!!
-        assertTrue(html.contains("IS_HTML=true"))
-        assertTrue(html.contains("Preview"))
-
-        val python = buildDocument(
-            "sandbox",
-            """{"language":"python","code":"print(1)"}""",
-            text,
-            accent
-        )!!
-        assertTrue(python.contains("Execution is JavaScript/HTML only"))
-        assertFalse(python.contains("IS_HTML=true"))
+    fun `structured sandbox is never built as a host-script evaluator`() {
+        // Editing/Copy/Run now use CodeBlockCard, covered by the mandatory
+        // PlatformRuntimeTest generatedCodeEditorAndWorkerPreserveUnicodeAndStopLoops.
+        // Returning an old synchronous WebView document here would bypass it.
+        for (language in listOf("javascript", "html", "python", "typescript")) {
+            assertNull(buildDocument("sandbox", """{"language":"$language","code":"source"}""", text, accent))
+        }
     }
 }

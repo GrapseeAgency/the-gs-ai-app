@@ -89,19 +89,19 @@ function check(name: string, condition: boolean, detail = '') {
   check('unknown chart type → bar', v.ok && v.widget.type === 'bar' && v.repaired, v.ok ? String(v.widget.type) : validationErrors(v).join(','))
 }
 
-// 8. Caps are enforced.
+// 8. Capacity is enforced without silently discarding source columns.
 {
   const cols = Array.from({ length: 20 }, (_, i) => `c${i}`)
   const rows = [cols.map(() => 'x')]
   const v = validateWidget('table', JSON.stringify({ columns: cols, rows }))
-  check('table columns capped', v.ok && (v.widget.columns as unknown[]).length === 8)
+  check('table overflow is refused instead of losing source columns', !v.ok && validationErrors(v).some(error => error.includes('not silently truncated')))
 }
 
-// 9. A chart with a single point is rejected (not enough to plot).
+// 9. A real singleton is preserved; never invent another point or discard the series.
 {
   const payload = { type: 'line', labels: ['a'], series: [{ name: 'v', data: [[0, 1]] }] }
   const v = validateWidget('chart', JSON.stringify(payload))
-  check('single-point line rejected', !v.ok)
+  check('single-point line preserves its actual observation', v.ok && (v.widget.series as Array<{ data: number[][] }>)[0].data.length === 1)
 }
 
 // 10. Tool calls convert to the same fence format the clients already parse.
@@ -337,7 +337,7 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
 {
   const broken = 'Here is the chart.\n\n```chart\n{"type":"bar","series":[]}\n```\n\nThat is all.'
   const r = compileWidgets({ reply: broken, userPrompt: 'bar chart of revenue' })
-  check('an empty chart fence is removed, prose survives', r.text.includes('Here is the chart') && !r.text.includes('"series"'))
+  check('an empty chart is refused with its original source and surrounding prose preserved', r.widgets === 0 && r.text.includes('Here is the chart') && r.text.includes('Original source is preserved') && r.text.includes('"series":[]'))
 }
 
 
@@ -577,15 +577,19 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   check('editor timeline clamps duration', editor.ok && (editor.widget as Record<string, unknown>).duration !== 9999)
 }
 
-// 37. v3.1 — collab: shared-state kind validates, slugs, clamps, repairs.
+// 37. Shared state validates real source; unsupported surfaces and over-capacity data must not be silently changed.
 {
   const vote = validateWidget('collab', '{"surface":"vote","room":"Launch Day!!","items":["a","b"],"junk":1}')
   const w = vote.ok ? vote.widget : null
   check('collab vote validates with slugified room', !!w && w.room === 'launch-day' && w.surface === 'vote')
-  const junk = validateWidget('collab', '{"surface":"whiteboard","items":"x"}')
-  check('collab junk surface repairs to counter', junk.ok && junk.widget.surface === 'counter' && junk.repaired === true)
-  const clamped = validateWidget('collab', '{"surface":"todo","room":"r","items":' + JSON.stringify(Array.from({ length: 20 }, (_, i) => `i${i}`)) + '}')
-  check('collab items clamp to 12', clamped.ok && (clamped.widget.items as unknown[]).length === 12)
+  const unsupportedSource = '{"surface":"whiteboard","items":"x"}'
+  const oversizedSource = '{"surface":"todo","room":"r","items":' + JSON.stringify(Array.from({ length: 20 }, (_, i) => `i${i}`)) + '}'
+  check('unsupported collab surface is refused rather than changed into a counter', !validateWidget('collab', unsupportedSource).ok)
+  check('oversized collab source is refused rather than silently discarding eight items', !validateWidget('collab', oversizedSource).ok)
+  for (const source of [unsupportedSource, oversizedSource]) {
+    const refused = compileWidgets({ reply: '```collab\n' + source + '\n```', userPrompt: 'Show the supplied shared control' })
+    check('refused collab retains its complete original source without a fake working control', refused.widgets === 0 && refused.errors.length > 0 && refused.text.includes(source))
+  }
   const counterFence = extractWidgetFences('```counter\n{"room":"taps"}\n```')
   check('counter fence -> collab kind', counterFence[0]?.kind === 'collab', JSON.stringify(counterFence[0]?.kind))
   const pointerFence = extractWidgetFences('```pointer\n{}\n```')
@@ -621,7 +625,7 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   check('candlestick object points {open,high,low,close} -> 4D array', ohlcObj.ok && (ohlcObj.widget.series as Array<{ data: number[][] }>)[0]?.data[0]?.length === 4)
 
   const singlePie = validateWidget('chart', '{"type":"doughnut","labels":["iOS","Android","Web"],"values":[45,40,15]}')
-  check('single-series doughnut expands into 3 slices for PieChart', singlePie.ok && singlePie.widget.type === 'donut' && (singlePie.widget.series as unknown[]).length === 3)
+  check('single-series doughnut preserves all 3 observations for PieChart without series expansion', singlePie.ok && singlePie.widget.type === 'donut' && (singlePie.widget.series as Array<{ data: number[][] }>).reduce((count, series) => count + series.data.length, 0) === 3)
 }
 
 // 40. MODEL FREEDOM — natural schema shapes across table, compare, quiz,

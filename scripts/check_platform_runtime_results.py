@@ -5,6 +5,13 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 EXPECTED = {
+    'generatedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices',
+    'generatedBookingSavesOnlyActualLocalSelectionWithoutReservation',
+    'generatedChecklistEditsDeletesAddsAndKeepsCompletionWithTheActualTask',
+    'contextualActionsEditActualCodeShowDataAndLaunchPlatformSharing',
+    'generatedPollUsesRealTotalsAndResetsForNewPayload',
+    'generatedTerminalUsesRealFilesWorkerAndUnsupportedRefusal',
+    'generatedCodeEditorAndWorkerPreserveUnicodeAndStopLoops',
     'generatedChartRangeAndPieSwitchUseOnlyActualWindowObservations',
     'generatedHtmlRunsRealButtonLogicAndSuppressesDynamicEmoji',
     'backgroundReplyAppearsInOsAndSettingsSuppressIt',

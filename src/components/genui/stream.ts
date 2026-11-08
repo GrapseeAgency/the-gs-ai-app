@@ -54,10 +54,16 @@ export function parseStream(text: string): Segment[] {
         return [{ kind: 'widget', widget: v.kind, payload: v.widget, complete: true }]
       }
     }
+    try {
+      JSON.parse(trimmedWhole)
+      // Valid non-widget JSON is source, not Markdown. Parsing it as prose
+      // changes strings containing emphasis, links, icon tokens or escapes.
+      return [{ kind: 'code', code: text, language: 'json' }]
+    } catch { /* Not a whole JSON document; continue ordinary prose parsing. */ }
   }
 
   const segments: Segment[] = []
-  const fence = /^[ \t]{0,8}(```|~~~)([a-zA-Z][\w:./+-]*)?[ \t]*[^\r\n]*\r?\n/gm
+  const fence = /^[ \t]{0,8}(`{3,}|~{3,})([a-zA-Z][\w:./+-]*)?[ \t]*[^\r\n]*\r?\n/gm
   let cursor = 0
 
   const pushText = (chunk: string) => {
@@ -89,7 +95,7 @@ export function parseStream(text: string): Segment[] {
     const marker = open[1]
     const lang = open[2] ?? ''
     const bodyStart = open.index + open[0].length
-    const closeRe = new RegExp(`\\r?\\n[ \\t]{0,8}${marker}[ \\t]*(?=\\r?\\n|$)`, 'g')
+    const closeRe = new RegExp(`\\r?\\n[ \\t]{0,8}${marker[0]}{${marker.length},}[ \\t]*(?=\\r?\\n|$)`, 'g')
     closeRe.lastIndex = bodyStart
     const closeMatch = closeRe.exec(text)
     const complete = closeMatch !== null
@@ -107,11 +113,11 @@ export function parseStream(text: string): Segment[] {
       continue
     }
     if (lower === 'svg') {
-      segments.push({ kind: 'svg', source: trimmedBody })
+      segments.push(complete ? { kind: 'svg', source: body } : { kind: 'widget', widget: 'svg', payload: {}, complete: false })
       continue
     }
     if (HTML_FENCES.has(lower) || ((lower === 'app' || lower === 'ui' || lower === 'site') && !isJsonBody && trimmedBody.startsWith('<'))) {
-      segments.push({ kind: 'html', source: trimmedBody })
+      segments.push(complete ? { kind: 'html', source: body } : { kind: 'widget', widget: 'html', payload: {}, complete: false })
       continue
     }
     if (MAP_FENCES.has(lower) && isJsonBody) {
@@ -167,14 +173,14 @@ export function parseStream(text: string): Segment[] {
         segments.push({ kind: 'widget', widget: v.kind, payload: v.widget, complete: true })
         continue
       }
-      const fallbackPayload = safeJson(injected)
-      if (fallbackPayload) {
-        segments.push({ kind: 'widget', widget: kind, payload: fallbackPayload, complete: true })
-        continue
-      }
+      // Parsing JSON is not validation. Never turn a rejected payload into a
+      // "complete" live widget by falling back to the same unchecked object.
+      segments.push({ kind: 'text', text: 'Interactive content could not be rendered. Original source is preserved below.' })
+      segments.push({ kind: 'code', code: body, language: 'json' })
+      continue
     }
 
-    segments.push({ kind: 'code', code: body.replace(/\n?$/, ''), language: lower || undefined })
+    segments.push({ kind: 'code', code: body, language: lower || undefined })
   }
   return segments
 }

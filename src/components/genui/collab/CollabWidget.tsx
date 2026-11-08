@@ -36,7 +36,7 @@ export type CollabPayload = {
 type Presence = { id: string; name: string; color: string }
 type Shared = { status: 'connecting' | 'live' | 'offline'; state: Record<string, unknown>; presence: Presence[] }
 
-function useCollabRoom(room: string, me: Presence): Shared {
+function useCollabRoom(room: string, me: Presence, initial: Record<string, unknown>): Shared {
   const [shared, setShared] = useState<Shared>({ status: 'connecting', state: {}, presence: [] })
   const meRef = useRef(me)
 
@@ -45,6 +45,7 @@ function useCollabRoom(room: string, me: Presence): Shared {
   })
 
   useEffect(() => {
+    setShared({ status: 'connecting', state: {}, presence: [] })
     const q = new URLSearchParams({ room, client: me.id, name: me.name, color: me.color })
     const es = new EventSource(`/api/v1/collab?${q}`)
     es.addEventListener('snapshot', (ev) => {
@@ -55,8 +56,7 @@ function useCollabRoom(room: string, me: Presence): Shared {
       const d = JSON.parse((ev as MessageEvent).data) as { state: Record<string, unknown>; presence: Presence[] }
       setShared({ status: 'live', state: d.state ?? {}, presence: d.presence ?? [] })
     })
-    es.onopen = () => setShared((s) => ({ ...s, status: 'live' }))
-    es.onerror = () => setShared((s) => (s.status === 'live' ? { ...s, status: 'offline' } : s))
+    es.onerror = () => setShared((s) => ({ ...s, status: 'offline' }))
 
     // presence heartbeat — the broker expires us after 30s without one
     const beat = setInterval(() => {
@@ -70,14 +70,14 @@ function useCollabRoom(room: string, me: Presence): Shared {
     void fetch('/api/v1/collab', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ room, heartbeat: { id: me.id, name: me.name, color: me.color } }),
+      body: JSON.stringify({ room, initial, heartbeat: { id: me.id, name: me.name, color: me.color } }),
     }).catch(() => {})
 
     return () => {
       clearInterval(beat)
       es.close()
     }
-  }, [room, me.id, me.name, me.color])
+  }, [room, me.id, me.name, me.color, initial])
 
   return shared
 }
@@ -110,11 +110,25 @@ function makeMe(rampSeed: number): Presence {
 }
 
 export function CollabWidget({ payload }: { payload: CollabPayload }) {
+  return <CollabControls key={JSON.stringify(payload)} payload={payload} />
+}
+
+function CollabControls({ payload }: { payload: CollabPayload }) {
   const { ramp } = useWidgetIdentity()
   const me = useMemo(() => makeMe((payload.room ?? '').length + 1), [payload.room])
   const room = payload.room ?? 'lobby'
-  const shared = useCollabRoom(room, me)
-  const publish = usePublish(room)
+  const initialWire = JSON.stringify(payload.surface === 'todo'
+    ? { todos: (payload.items ?? []).map(text => ({ text, done: false })) }
+    : payload.surface === 'counter' || !payload.surface ? { n: payload.start ?? 0 } : {})
+  const initial = useMemo<Record<string, unknown>>(() => JSON.parse(initialWire), [initialWire])
+  const shared = useCollabRoom(room, me, initial)
+  const requestPublish = usePublish(room)
+  const [publishError, setPublishError] = useState<string | null>(null)
+  const publish = useCallback(async (body: Record<string, unknown>) => {
+    const response = await requestPublish({ ...body, initial })
+    setPublishError(response ? null : 'Not confirmed: the shared server did not acknowledge this change; it may have been received. Your current input is retained.')
+    return response
+  }, [requestPublish, initial])
   const surface = payload.surface ?? 'counter'
 
   return (
@@ -127,7 +141,7 @@ export function CollabWidget({ payload }: { payload: CollabPayload }) {
               <span key={p.id} title={p.name} style={{ width: 10, height: 10, borderRadius: 999, background: p.color, display: 'inline-block' }} />
             ))}
             {shared.presence.length > 4 ? `+${shared.presence.length - 4}` : ''}
-            {shared.presence.length ? ` · ${shared.presence.length} live` : ' · you'}
+            {shared.status === 'live' && shared.presence.length ? ` · ${shared.presence.length} live` : ' · no confirmed live roster'}
           </span>
         }
       />
@@ -135,6 +149,7 @@ export function CollabWidget({ payload }: { payload: CollabPayload }) {
       {surface === 'vote' && <VoteSurface payload={payload} shared={shared} publish={publish} />}
       {surface === 'todo' && <TodoSurface payload={payload} shared={shared} publish={publish} />}
       {surface === 'pointer' && <PointerSurface payload={payload} shared={shared} me={me} publish={publish} />}
+      {publishError && <div role="alert">{publishError}</div>}
       <StatusRow room={room} status={shared.status} note={payload.note} />
     </div>
   )
@@ -148,10 +163,10 @@ function CounterSurface({ payload, shared, publish }: { payload: CollabPayload; 
   return (
     <div style={{ textAlign: 'center', padding: '18px 0 14px' }}>
       <div style={{ fontSize: 54, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: accent, lineHeight: 1 }}>{n}</div>
-      <div style={{ fontSize: TYPE.micro, color: theme.text3, margin: '6px 0 12px' }}>{payload.label ?? 'this number is the same for everyone, right now'}</div>
+      <div style={{ fontSize: TYPE.micro, color: theme.text3, margin: '6px 0 12px' }}>{shared.status === 'live' && typeof shared.state.n === 'number' ? payload.label ?? 'Confirmed shared state' : 'Configured start; awaiting a confirmed shared counter value.'}</div>
       <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
         {[-1, 1, 5].map((d) => (
-          <UiButton key={d} buttonStyle={d > 0 ? 'filled' : 'tonal'} onClick={() => void publish({ delta: { n: d } })}>
+          <UiButton key={d} disabled={shared.status !== 'live'} buttonStyle={d > 0 ? 'filled' : 'tonal'} onClick={() => void publish({ delta: { n: d } })}>
             {d > 0 ? `+${d}` : d}
           </UiButton>
         ))}
@@ -168,10 +183,13 @@ function VoteSurface({ payload, shared, publish }: { payload: CollabPayload; sha
   const total = Math.max(1, votes.reduce((a, b) => a + b, 0))
   const leader = votes.indexOf(Math.max(...votes))
   const colors = ramp(Math.max(1, items.length))
-  const cast = (i: number) => {
-    if (mine.has(i)) return
-    setMine((s) => new Set(s).add(i))
-    void publish({ delta: { [`v${i}`]: 1 } })
+  const [pending, setPending] = useState<Set<number>>(new Set())
+  const cast = async (i: number) => {
+    if (mine.has(i) || pending.has(i) || shared.status !== 'live') return
+    setPending(s => new Set(s).add(i))
+    const response = await publish({ delta: { [`v${i}`]: 1 } })
+    setPending(s => { const next = new Set(s); next.delete(i); return next })
+    if (response) setMine(s => new Set(s).add(i))
   }
   if (!items.length) return <div style={{ padding: 12, color: theme.text3, fontSize: TYPE.micro }}>vote needs items</div>
   return (
@@ -180,8 +198,9 @@ function VoteSurface({ payload, shared, publish }: { payload: CollabPayload; sha
         <button
           key={i}
           type="button"
-          onClick={() => cast(i)}
-          disabled={mine.has(i)}
+          onClick={() => { void cast(i) }}
+          aria-label={`Vote ${label}`}
+          disabled={mine.has(i) || pending.has(i) || shared.status !== 'live'}
           style={{
             position: 'relative',
             border: `1px solid ${mine.has(i) ? accent : theme.border}`,
@@ -214,7 +233,16 @@ function TodoSurface({ payload, shared, publish }: { payload: CollabPayload; sha
   type Row = { text: string; done?: boolean }
   const rows: Row[] = Array.isArray(shared.state.todos) ? (shared.state.todos as Row[]) : (payload.items ?? []).map((text) => ({ text }))
   const [draft, setDraft] = useState('')
-  const replace = (next: Row[]) => void publish({ set: { todos: next.slice(0, 12) } })
+  const replace = (next: Row[]) => publish({ set: { todos: next } })
+  const [adding, setAdding] = useState(false)
+  const add = async () => {
+    if (adding || shared.status !== 'live' || !draft.trim() || rows.length >= 12) return
+    setAdding(true)
+    const original = draft
+    const response = await replace([...rows, { text: draft.trim() }])
+    if (response) setDraft(current => current === original ? '' : current)
+    setAdding(false)
+  }
   return (
     <div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
@@ -224,14 +252,11 @@ function TodoSurface({ payload, shared, publish }: { payload: CollabPayload; sha
           ariaLabel="new shared item"
           placeholder="add a shared item…"
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && draft.trim()) {
-              replace([...rows, { text: draft.trim() }])
-              setDraft('')
-            }
+            if (e.key === 'Enter') { e.preventDefault(); void add() }
           }}
         />
-        <UiButton buttonStyle="filled" onClick={() => { if (draft.trim()) { replace([...rows, { text: draft.trim() }]); setDraft('') } }}>
-          Add
+        <UiButton buttonStyle="filled" disabled={adding || shared.status !== 'live' || !draft.trim() || rows.length >= 12} onClick={() => { void add() }}>
+          {adding ? 'Saving…' : 'Add'}
         </UiButton>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -241,11 +266,12 @@ function TodoSurface({ payload, shared, publish }: { payload: CollabPayload; sha
             <input
               type="checkbox"
               checked={!!row.done}
+              disabled={shared.status !== 'live'}
               onChange={() => replace(rows.map((r, ii) => (ii === i ? { ...r, done: !r.done } : r)))}
               style={{ accentColor: accent }}
             />
             <span style={{ flex: 1, fontSize: TYPE.body, color: theme.text, textDecoration: row.done ? 'line-through' : 'none', opacity: row.done ? 0.6 : 1 }}>{row.text}</span>
-            <button type="button" aria-label="remove" onClick={() => replace(rows.filter((_, ii) => ii !== i))} style={{ border: 'none', background: 'transparent', color: theme.text3, cursor: 'pointer' }}>
+            <button type="button" aria-label="remove" disabled={shared.status !== 'live'} onClick={() => replace(rows.filter((_, ii) => ii !== i))} style={{ border: 'none', background: 'transparent', color: theme.text3, cursor: 'pointer' }}>
               ×
             </button>
           </div>
@@ -334,7 +360,7 @@ function StatusRow({ room, status, note }: { room: string; status: Shared['statu
     <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 10, fontSize: TYPE.micro, color: theme.text3, flexWrap: 'wrap' }}>
       <span style={{ width: 7, height: 7, borderRadius: 999, background: dot, display: 'inline-block' }} />
       <span>
-        {status} · room <code style={{ color: theme.text2 }}>{room}</code> · shared prototype: per-server memory, last-write-wins, resets on restart
+        {status} · room <code style={{ color: theme.text2 }}>{room}</code> · shared prototype: public SQLite-backed room, last-write-wins; state can survive restarts and idle rooms may be evicted
       </span>
       {note ? <span>· {note}</span> : null}
     </div>

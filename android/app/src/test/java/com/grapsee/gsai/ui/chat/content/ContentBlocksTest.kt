@@ -113,9 +113,9 @@ class ContentBlocksTest {
         blocks: List<Block>,
         where: String
     ) {
-        // Block offsets live in the CRLF-normalized space (the parser
-        // normalizes up front) — the boundary must be computed there too.
-        val frozenBoundary = lastLineRunStart(content.replace("\r\n", "\n"))
+        // A blank line inside a fence/math/quote is not a freeze boundary.
+        // Anchor the run at its containing block in original source space.
+        val frozenBoundary = streamingTailStart(content, blocks)
         // Offsets strictly increasing — real byte offsets, usable as keys.
         var prev = -1
         for (b in blocks) {
@@ -514,7 +514,7 @@ class ContentBlocksTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `CRLF streams produce the same blocks as LF streams`() {
+    fun `CRLF streams preserve semantic content and original source offsets`() {
         val lf = longListDoc
         val crlf = lf.replace("\n", "\r\n")
 
@@ -531,8 +531,15 @@ class ContentBlocksTest {
             crlfFinal = b
         }
 
-        assertEquals("final CRLF stream must equal the LF stream block-for-block", lfFinal, crlfFinal)
-        assertEquals(parseBlocks(lf), crlfFinal)
+        assertEquals(parseBlocks(lf), lfFinal)
+        assertEquals(parseBlocks(crlf), crlfFinal)
+        assertEquals(lfFinal.map { it.javaClass }, crlfFinal.map { it.javaClass })
+        assertEquals(lfFinal.filterIsInstance<Block.Paragraph>().map { it.spans }, crlfFinal.filterIsInstance<Block.Paragraph>().map { it.spans })
+        assertEquals(lfFinal.filterIsInstance<Block.BulletList>().map { it.items }, crlfFinal.filterIsInstance<Block.BulletList>().map { it.items })
+        for ((left, right) in lfFinal.zip(crlfFinal)) {
+            val originalOffset = left.sourceStart + lf.take(left.sourceStart).count { it == '\n' }
+            assertEquals("Offsets must address the actual CRLF message", originalOffset, right.sourceStart)
+        }
     }
 
     // ------------------------------------------------------------------

@@ -9,9 +9,20 @@ import UserNotifications
 @MainActor
 struct PlatformRuntimeProbe: View {
     @State private var status = "idle"
+    @State private var showTimer = false
+    @State private var nextTimer = false
+    @State private var showBooking = false
+    @State private var nextBooking = false
+    @State private var showChecklist = false
+    @State private var nextChecklist = false
+    @State private var appChecklist = false
     @State private var showCalculator = false
     @State private var showTable = false
     @State private var showChart = false
+    @State private var showCode = false
+    @State private var showTerminal = false
+    @State private var copyStatus = "Copy not inspected"
+    @State private var reportCopyStatus = "Report copy not inspected"
     @State private var ordinaryTable = false
     @State private var title = ""
     @State private var armed = false
@@ -27,16 +38,72 @@ struct PlatformRuntimeProbe: View {
             Button("Arm messages-disabled notice") { Task { await arm(mode: "messages") } }
             Button("Inspect OS delivery") { Task { await inspect() } }
             Button("Restore runtime settings") { Task { await restore() } }
+            Button("Open generated timer") { showTimer = true }
+            Button("Open generated booking") { showBooking = true }
+            Button("Open generated checklist") { showChecklist = true }
             Button("Open generated calculator") { showCalculator = true }
             Button("Open generated table") { showTable = true }
             Button("Open generated chart") { showChart = true }
-            if showCalculator {
-                WidgetBlockView(kind: "calc", json: #"{"title":"\ud83d\ude80 Growth","fields":[{"key":"amount","label":"Amount \u00a9\ufe0f \ud83d\ude00","value":100}],"outputs":[{"label":"Double","expr":"amount*2"}]}"#, open: false)
+            Button("Open generated code") { showCode = true }
+            Button("Open generated terminal") { showTerminal = true }
+        }
+        .sheet(isPresented: $showTimer) {
+            VStack {
+                Button("Use next timer payload") { nextTimer = true }
+                ScrollView {
+                    WidgetBlockView(kind: "app", json: nextTimer
+                        ? #"{"type":"timer","title":"Actual seconds","durationSeconds":5}"#
+                        : #"{"type":"timer","title":"Configure duration","items":[{"title":"Not time","price":25}]}"#, open: false).padding()
+                }
+            }
+        }
+        .sheet(isPresented: $showBooking) {
+            VStack {
+                Button("Use next booking payload") { nextBooking = true }
+                ScrollView {
+                    WidgetBlockView(kind: "app", json: nextBooking
+                        ? #"{"type":"booking","title":"New slots","slots":["11:00"]}"#
+                        : #"{"type":"booking","title":"Actual slots","slots":["09:00","10:00"]}"#, open: false).padding()
+                }
+            }
+        }
+        .sheet(isPresented: $showChecklist) {
+            VStack {
+                Button("Use app task surface") { appChecklist = true }
+                Button("Use next checklist payload") { nextChecklist = true }
+                ScrollView {
+                    WidgetBlockView(kind: appChecklist ? "app" : "checklist", json: appChecklist
+                        ? #"{"type":"tasks","title":"App tasks","items":[{"title":"App first","subtitle":"Supplied app detail","done":true},{"title":"App second"}]}"#
+                        : nextChecklist
+                        ? #"{"title":"New tasks","items":[{"label":"New supplied task"}]}"#
+                        : #"{"title":"Actual tasks","items":[{"label":"Original source","detail":"Only supplied detail"},{"label":"Keep source"}]}"#, open: false).padding()
+                }
+            }
+        }
+        .sheet(isPresented: $showCalculator) {
+            ScrollView {
+                WidgetBlockView(kind: "calc", json: #"{"title":"\ud83d\ude80 Growth","fields":[{"key":"amount","label":"Amount \u00a9\ufe0f \ud83d\ude00","value":100}],"outputs":[{"label":"Double","expr":"amount*2"}]}"#, open: false).padding()
+            }
+        }
+        .sheet(isPresented: $showTerminal) {
+            ScrollView {
+                WidgetBlockView(kind: "terminal", json: #"{"welcome":"Provided \ud83d\ude00 $& $$ __GS_WORKER_CONTRACT_LITERAL__","commands":[{"name":"deploy","description":"Help only","output":"deployed"}]}"#, open: false).padding()
             }
         }
         .sheet(isPresented: $showTable) {
             VStack {
                 Button("Use ordinary Markdown") { ordinaryTable = true }
+                Button("Prepare report share check") {
+                    UIPasteboard.general.string = "GS_SHARE_NOT_PERFORMED"
+                    reportCopyStatus = "Share check prepared"
+                }
+                Button("Inspect shared report") {
+                    let copied = UIPasteboard.general.string ?? ""
+                    let expected = extractCopyableProseSummary(parseBlocks(Self.tableMarkdown), citationsOnly: false)
+                    let complete = (1...31).allSatisfy { copied.contains("Item \($0)\t\($0)") }
+                    reportCopyStatus = copied == expected && complete ? "Original complete report shared" : "Wrong or incomplete report shared"
+                }
+                Text(reportCopyStatus).accessibilityIdentifier("report.copy.inspection")
                 ScrollView {
                     if ordinaryTable {
                         BlocksView(blocks: parseBlocks(Self.tableMarkdown)).padding()
@@ -48,6 +115,15 @@ struct PlatformRuntimeProbe: View {
         }
         .sheet(isPresented: $showChart) {
             ScrollView { WidgetBlockView(kind: "chart", json: Self.chartJSON, open: false).padding() }
+        }
+        .sheet(isPresented: $showCode) {
+            VStack {
+                Button("Inspect copied source") {
+                    copyStatus = UIPasteboard.general.string == Self.codeSource ? "Original source copied" : "Wrong source copied"
+                }
+                Text(copyStatus)
+                ScrollView { BlocksView(blocks: parseBlocks("```javascript\n" + Self.codeSource + "\n```")).padding() }
+            }
         }
         .onAppear {
             let settings = SettingsStore.shared
@@ -74,6 +150,8 @@ struct PlatformRuntimeProbe: View {
             }
         }
     }
+
+    private static let codeSource = #"const data = {"😀":7,"🌅":9}; console.log(data["😀"]+data["🌅"], "😀".length);"#
 
     private static var chartJSON: String {
         let data: [String: Any] = ["type": "line", "labels": (1...31).map { "P\($0)" },

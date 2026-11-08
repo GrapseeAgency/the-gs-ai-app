@@ -1,5 +1,14 @@
 package com.grapsee.gsai.ui.chat.content
 
+import android.app.Activity
+import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -19,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -38,6 +48,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -46,6 +57,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -59,6 +71,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.Placeholder
@@ -384,18 +397,18 @@ private fun isCalculatorHeadingTitle(raw: String): Boolean {
     return "calculator" in lower || "estimator" in lower || "simulator" in lower || "pricing model" in lower
 }
 
-private fun extractQuickCalcParams(text: String): Triple<Double, Double, Int>? {
+internal fun extractQuickCalcParams(text: String): Triple<Double, Double, Int>? {
     val low = text.lowercase()
     // A generic percentage tool cannot infer a medical model, profit margin,
     // investment cash flows or a 50/30/20 allocation from nearby numbers.
     if (listOf("calorie", "protein", "macro", "tdee", "bmi", "margin", "roi", "budget", "salary", "income").any { it in low }) return null
-    val amounts = Regex("""[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmMbB])?""").findAll(text).toList()
-    val rates = Regex("""(\d+(?:\.\d+)?)\s*(?:%|percent\b)""", RegexOption.IGNORE_CASE).findAll(text).toList()
+    val amounts = Regex("""(?<![\dA-Za-z_(−-])[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*([kKmMbB])(?![A-Za-z]))?(?![\dA-Za-z.,])""").findAll(text).toList()
+    val rates = Regex("""(?<![\dA-Za-z_.,−-])(\d+(?:\.\d+)?)\s*(?:%|percent\b)""", RegexOption.IGNORE_CASE).findAll(text).toList()
     if (amounts.size != 1 || rates.size != 1) return null
     if (listOf("discount", "tax", "tip", "markup", "vat", "loan", "mortgage", "emi", "compound", "apy", "apr").none { it in low }) return null
     val needsTerm = listOf("loan", "mortgage", "emi", "amortiz", "compound", "invest", "apy", "apr").any { it in low }
     if (needsTerm && !Regex("""\b\d{1,2}\s*(?:-\s*)?(?:years?|yrs?\b)""", RegexOption.IGNORE_CASE).containsMatchIn(text)) return null
-    val currMatch = Regex("""[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmMbB])?""").find(text)
+    val currMatch = Regex("""(?<![\dA-Za-z_(−-])[$€£¥]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*([kKmMbB])(?![A-Za-z]))?(?![\dA-Za-z.,])""").find(text)
     val currAmount = currMatch?.let { m ->
         val base = m.groupValues[1].replace(",", "").toDoubleOrNull() ?: return@let null
         val mult = when (m.groupValues[2].lowercase()) {
@@ -406,14 +419,16 @@ private fun extractQuickCalcParams(text: String): Triple<Double, Double, Int>? {
         }
         base * mult
     }
-    val pctMatch = Regex("""(\d+(?:\.\d+)?)\s*(?:%|percent\b)""", RegexOption.IGNORE_CASE).find(text)
+    val pctMatch = Regex("""(?<![\dA-Za-z_.,−-])(\d+(?:\.\d+)?)\s*(?:%|percent\b)""", RegexOption.IGNORE_CASE).find(text)
     val pctVal = pctMatch?.groupValues?.get(1)?.toDoubleOrNull()
 
     val yrMatch = Regex("""(\d{1,2})\s*(?:-\s*)?(?:years?|yrs?\b)""", RegexOption.IGNORE_CASE).find(text)
-    val yearsVal = yrMatch?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(1, 40) ?: 5
+    val suppliedYears = yrMatch?.groupValues?.get(1)?.toIntOrNull()
+    if (needsTerm && (suppliedYears == null || suppliedYears !in 1..40)) return null
+    val yearsVal = suppliedYears ?: 5
 
-    val amt = currAmount ?: return null
-    val rate = pctVal ?: return null
+    val amt = currAmount?.takeIf { it.isFinite() && it >= 0.0 } ?: return null
+    val rate = pctVal?.takeIf { it.isFinite() && it >= 0.0 } ?: return null
     return Triple(amt, rate, yearsVal)
 }
 
@@ -445,8 +460,42 @@ private fun promoteStandaloneBoldHeadings(rawBlocks: List<Block>): List<Block> =
         } else b
     }
 
+internal fun sourceCardForHeading(heading: Block, following: Block?): Pair<Block.CitationsBlock, String>? {
+    if (heading !is Block.Heading || following == null) return null
+    val title = NexlyIcons.cleanPlainText(plainTextOfSpans(heading.spans)).trim()
+    if (classifySectionListMode(title) != SectionListMode.SOURCES) return null
+    if (following is Block.CitationsBlock) return following to title
+    val items = when (following) {
+        is Block.OrderedList -> following.items
+        is Block.BulletList -> following.items
+        else -> return null
+    }
+    val start = (following as? Block.OrderedList)?.start ?: 1
+    val sources = items.mapIndexedNotNull { index, item -> extractSourceItemFromItem(item.number ?: (start + index), item) }
+    // A mixed list must not lose its unlinked source text.
+    if (sources.isEmpty() || sources.size != items.size) return null
+    return Block.CitationsBlock(sources.map { CitationEntry(number = it.number, title = it.title, domain = it.domain, snippet = it.snippet, url = it.url) }, following.sourceStart) to title
+}
+
 @Composable
 private fun StructuredBlockSequenceView(
+    blocks: List<Block>,
+    isStreaming: Boolean,
+    onCopyCode: (String) -> Unit,
+    citationUrls: Map<Int, String>,
+    onSendPrompt: ((String) -> Unit)?,
+    statusCard: (@Composable () -> Unit)?,
+    statusAtEnd: Boolean,
+    onStatusPlaced: () -> Unit
+) {
+    val codeActions = remember(blocks) { ResponseCodeActions() }
+    CompositionLocalProvider(LocalResponseCodeActions provides codeActions) {
+        StructuredBlockSequenceContent(blocks, isStreaming, onCopyCode, citationUrls, onSendPrompt, statusCard, statusAtEnd, onStatusPlaced)
+    }
+}
+
+@Composable
+private fun StructuredBlockSequenceContent(
     blocks: List<Block>,
     isStreaming: Boolean,
     onCopyCode: (String) -> Unit,
@@ -527,6 +576,19 @@ private fun StructuredBlockSequenceView(
                 !(block is Block.Heading && isCalculatorHeadingTitle(plainTextOfSpans(block.spans)))
             "Code" -> block !is Block.CodeBlock
             else -> false
+        }
+
+        // Markdown source lists are still list blocks at this seam, not only
+        // dedicated citations blocks. Coalesce the actual parser output too.
+        val sourceCard = if (!skipForTab) sourceCardForHeading(block, nextBlock) else null
+        if (sourceCard != null) {
+            currentSectionMode = SectionListMode.SOURCES
+            key("sources:${block.sourceStart}") { CitationsBlockView(sourceCard.first, sourceCard.second) }
+            if (statusCard != null && (i == statusHostIndex || i + 1 == statusHostIndex)) {
+                onStatusPlaced(); Spacer(Modifier.height(2.dp)); statusCard()
+            }
+            i += 2
+            continue
         }
 
         // Coalesce Heading("Quick Calculator" | "Calculator") + Paragraph/BulletList into interactive NexlyQuickCalculatorCard (Screenshot 1)
@@ -702,7 +764,7 @@ private fun StructuredBlockSequenceView(
     }
 
     // Bottom Contextual Action Pills (Screenshots 1–6)
-    if (!isStreaming && normalizedBlocks.size >= 2) {
+    if (!isStreaming && normalizedBlocks.isNotEmpty()) {
         val endsWithActionWidget = normalizedBlocks.lastOrNull().let {
             it is Block.WidgetBlock && it.kind in setOf("actions", "followups", "chips", "menu")
         }
@@ -710,7 +772,9 @@ private fun StructuredBlockSequenceView(
             NexlyContextualActionPillsRow(
                 blocks = normalizedBlocks,
                 onCopyCode = onCopyCode,
-                onSendPrompt = onSendPrompt
+                onSendPrompt = onSendPrompt,
+                citationUrls = citationUrls,
+                onShowCode = { activeDashboardTab = "Dashboard" }
             )
         }
     }
@@ -720,13 +784,77 @@ private fun StructuredBlockSequenceView(
 private fun NexlyContextualActionPillsRow(
     blocks: List<Block>,
     onCopyCode: (String) -> Unit,
-    onSendPrompt: ((String) -> Unit)?
+    onSendPrompt: ((String) -> Unit)?,
+    citationUrls: Map<Int, String>,
+    onShowCode: () -> Unit
 ) {
-    val actions = remember(blocks) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val codeActions = LocalResponseCodeActions.current
+    var pendingSave by remember { mutableStateOf<ByteArray?>(null) }
+    var detailView by remember(blocks) { mutableStateOf<String?>(null) }
+    fun notify(message: String) { Toast.makeText(context, message, Toast.LENGTH_LONG).show() }
+    val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val bytes = pendingSave
+        pendingSave = null
+        val uri = result.data?.data
+        if (result.resultCode == Activity.RESULT_OK && uri != null && bytes != null) scope.launch {
+            val failure = withContext(Dispatchers.IO) {
+                runCatching {
+                    val output = context.contentResolver.openOutputStream(uri) ?: error("The selected destination cannot be opened.")
+                    output.use { it.write(bytes) }
+                }.exceptionOrNull()
+            }
+            notify(if (failure == null) "Export saved" else "Could not save export: ${failure.message}")
+        }
+    }
+    val sourceText = remember(blocks, citationUrls) {
+        extractCopyableBlockSummary(blocks, false) + if (citationUrls.isEmpty()) "" else
+            "\n\nSources\n" + citationUrls.toSortedMap().entries.joinToString("\n") { "[${it.key}] ${it.value}" }
+    }
+    val citationText = remember(blocks, citationUrls) {
+        listOf(extractCopyableBlockSummary(blocks, true), citationUrls.toSortedMap().entries.joinToString("\n") { "[${it.key}] ${it.value}" })
+            .filter { it.isNotBlank() }.joinToString("\n")
+    }
+    val sourceUrls = remember(blocks, citationUrls) {
+        (citationUrls.values + blocks.filterIsInstance<Block.CitationsBlock>().flatMap { block -> block.citations.map { it.url } })
+            .distinct().filter { raw ->
+                val uri = android.net.Uri.parse(raw)
+                uri.scheme?.lowercase() in setOf("https", "http") && !uri.host.isNullOrBlank()
+            }
+    }
+    fun saveFile(name: String, mime: String, bytes: ByteArray) {
+        pendingSave = bytes
+        runCatching {
+            saveLauncher.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE); type = mime; putExtra(Intent.EXTRA_TITLE, name)
+            })
+        }.onFailure { pendingSave = null; notify("No file picker is available: ${it.message}") }
+    }
+    if (detailView != null) AlertDialog(
+        onDismissRequest = { detailView = null },
+        title = { Text(if (detailView == "sources") "All sources" else "Response report — original source and data") },
+        text = {
+            SelectionContainer {
+                Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
+                    Text(CodeDisplay.escape(if (detailView == "sources") citationText.ifBlank { "No source URLs were supplied." } else sourceText))
+                    if (detailView == "sources") sourceUrls.forEach { url ->
+                        TextButton(onClick = { com.grapsee.gsai.ui.components.GsLinks.openInApp(context, url) }) {
+                            NexlyGlassGlyphTile(name = "external-link", size = 20.dp, glyphSize = 12.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(CodeDisplay.escape(url))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { detailView = null }) { Text("Close details") } }
+    )
+    val actions = remember(blocks, citationUrls) {
         val hasChart = blocks.any { it is Block.WidgetBlock && it.kind == "chart" }
         val hasTable = blocks.any { it is Block.TableBlock || (it is Block.WidgetBlock && it.kind == "table") }
         val hasCode = blocks.any { it is Block.CodeBlock }
-        val hasSources = blocks.any {
+        val hasSources = citationUrls.isNotEmpty() || blocks.any {
             it is Block.CitationsBlock ||
                 (it is Block.Heading && classifySectionListMode(plainTextOfSpans(it.spans)) == SectionListMode.SOURCES)
         }
@@ -785,16 +913,29 @@ private fun NexlyContextualActionPillsRow(
                     .background(Color.White.copy(alpha = 0.82f))
                     .border(1.dp, Color(0xFFE1DAFA), RoundedCornerShape(999.dp))
                     .clickable {
-                        if (label.contains("Copy", ignoreCase = true) || label.contains("Share", ignoreCase = true)) {
-                            onCopyCode(
-                                extractCopyableBlockSummary(
-                                    blocks = blocks,
-                                    citationsOnly = label.contains("Citation", ignoreCase = true)
-                                )
-                            )
-                        } else {
-                            onSendPrompt?.invoke(label)
-                        }
+                        runCatching {
+                            when (label) {
+                                "Share" -> context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"; putExtra(Intent.EXTRA_TEXT, sourceText)
+                                }, "Share response"))
+                                "Copy Citations" -> if (citationText.isBlank()) notify("No citation URLs are available to copy.") else onCopyCode(citationText)
+                                "Download Report" -> saveFile("gs-ai-response.md", "text/markdown", sourceText.toByteArray(Charsets.UTF_8))
+                                "Download Project" -> {
+                                    val sources = blocks.filterIsInstance<Block.CodeBlock>().filterNot { it.open }.map {
+                                        codeActions?.source(it.sourceStart) ?: (it.language to it.code)
+                                    }
+                                    saveFile("gs-ai-source-snippets.zip", "application/zip", responseSourceArchive(sources))
+                                    notify("Source snippets only, not a complete runnable project. See README.txt.")
+                                }
+                                "Edit Code" -> {
+                                    onShowCode()
+                                    codeActions?.editFirst() ?: notify("No editable code block is available.")
+                                }
+                                "View All Sources" -> detailView = "sources"
+                                "View Details", "View Full Report" -> detailView = "report"
+                                else -> if (onSendPrompt != null) onSendPrompt(label) else notify("Follow-up requests are unavailable in this view.")
+                            }
+                        }.onFailure { notify("The action failed: ${it.message}") }
                     }
                     .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
@@ -815,7 +956,7 @@ private fun NexlyContextualActionPillsRow(
     }
 }
 
-private fun extractCopyableBlockSummary(blocks: List<Block>, citationsOnly: Boolean): String {
+internal fun extractCopyableBlockSummary(blocks: List<Block>, citationsOnly: Boolean): String {
     val lines = mutableListOf<String>()
     for (block in blocks) {
         when (block) {
@@ -844,10 +985,19 @@ private fun extractCopyableBlockSummary(blocks: List<Block>, citationsOnly: Bool
                 }
             }
             is Block.CodeBlock -> if (!citationsOnly) lines += block.code
+            is Block.WidgetBlock -> if (!citationsOnly) lines += "${block.kind} data\n${block.json}"
+            is Block.HtmlBlock -> if (!citationsOnly) lines += block.code
+            is Block.TableBlock -> if (!citationsOnly) {
+                lines += block.headers.joinToString("\t") { plainTextOfSpans(it) }
+                lines += block.rows.map { row -> row.joinToString("\t") { plainTextOfSpans(it) } }
+            }
+            is Block.BlockQuote -> if (!citationsOnly) lines += extractCopyableBlockSummary(block.blocks, false)
+            is Block.MathBlock -> if (!citationsOnly) lines += block.latex
+            is Block.MermaidBlock -> if (!citationsOnly) lines += block.source
             else -> {}
         }
     }
-    return lines.joinToString("\n").trim().ifEmpty { "Copied from Nexly" }
+    return lines.joinToString("\n").trim()
 }
 
 /**
@@ -906,7 +1056,7 @@ private fun BlockView(
             // grid, a dated log, percentages. When it parses as one of those
             // it renders as the native widget directly — no tabs, no
             // placeholder, nothing for the user to configure.
-            val visual = remember(block.code) {
+            val visual = remember(block.code, block.open, isStreaming, block.language) {
                 if (block.open || isStreaming) null
                 else {
                     val lang = block.language?.lowercase()
@@ -914,13 +1064,23 @@ private fun BlockView(
                     else null
                 }
             }
-            if (visual != null) {
+            val codeActions = LocalResponseCodeActions.current
+            var editPromotedSource by remember(block.sourceStart, block.code) { mutableStateOf(false) }
+            DisposableEffect(codeActions, block.sourceStart, block.code, visual) {
+                if (visual != null) codeActions?.register(block.sourceStart, ResponseCodeActions.Entry(block.language, { block.code }, {
+                    codeActions?.editOnRegistration(block.sourceStart)
+                    editPromotedSource = true
+                }))
+                onDispose { if (visual != null) codeActions?.remove(block.sourceStart) }
+            }
+            if (visual != null && !editPromotedSource) {
                 WidgetView(visual, onSendPrompt)
             } else {
                 CodeBlockCard(
                     language = block.language,
                     code = block.code,
                     open = block.open || isStreaming,
+                    sourceStart = block.sourceStart,
                     onCopyCode = onCopyCode
                 )
             }
@@ -1048,7 +1208,7 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
             }
             is InlineSpan.CodeSpan -> builder.withStyle(
                 SpanStyle(fontFamily = FontFamily.Monospace, background = theme.codeBg, fontSize = theme.fontSize * 0.88f)
-            ) { builder.append(NexlyIcons.cleanPlainText(span.code)) }
+            ) { builder.append(CodeDisplay.escape(span.code)) }
             is InlineSpan.LinkSpan -> builder.withLink(
                 LinkAnnotation.Url(
                     span.url,
@@ -1434,6 +1594,20 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
     }
 }
 
+internal fun sourceScenarioNumberText(value: Double): String =
+    if (value.isFinite()) java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString() else ""
+
+internal fun sourceLoanMonthlyPayment(principal: Double, apr: Double, years: Int): Double? {
+    if (!principal.isFinite() || !apr.isFinite() || principal < 0 || apr < 0 || years <= 0) return null
+    val months = years.toDouble() * 12.0
+    val rate = apr / 1200.0
+    // log1p/expm1 retain real interest at small rates; a tolerance-based
+    // zero-rate substitution silently erased interest on large principals.
+    val payment = if (rate == 0.0) principal / months
+        else principal * (rate / -kotlin.math.expm1(-months * kotlin.math.ln1p(rate)))
+    return payment.takeIf { it.isFinite() }
+}
+
 @Composable
 private fun NexlyQuickCalculatorCard(
     title: String,
@@ -1469,28 +1643,20 @@ private fun NexlyQuickCalculatorCard(
     var amountText by remember(initialAmount, initialMode) {
         val seedAmt = if (initialMode == 5 && initialAmount > 300.0) 75.0 else initialAmount
         mutableStateOf(
-            if (seedAmt % 1.0 == 0.0) seedAmt.toLong().toString()
-            else String.format(java.util.Locale.US, "%.2f", seedAmt)
+sourceScenarioNumberText(seedAmt)
         )
     }
     var rateText by remember(initialDiscount, initialMode) {
         val seedRate = if (initialMode == 5 && initialDiscount > 5.0) 2.0 else initialDiscount
         mutableStateOf(
-            if (seedRate % 1.0 == 0.0) seedRate.toLong().toString()
-            else String.format(java.util.Locale.US, "%.1f", seedRate)
+sourceScenarioNumberText(seedRate)
         )
     }
-    val amount = amountText.replace(",", "").toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
-    val ratePct = rateText.replace("%", "").toDoubleOrNull()?.coerceIn(0.0, 100.0) ?: 0.0
+    val amount = amountText.replace(",", "").toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0.0 } ?: Double.NaN
+    val ratePct = rateText.replace("%", "").toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0.0 } ?: Double.NaN
 
     val monthlyLoanPayment = remember(amount, ratePct, years) {
-        val n = (years * 12).coerceAtLeast(1)
-        val r = (ratePct / 100.0) / 12.0
-        if (r <= 0.000001) amount / n
-        else {
-            val factor = Math.pow(1.0 + r, n.toDouble())
-            amount * (r * factor) / (factor - 1.0)
-        }
+        sourceLoanMonthlyPayment(amount, ratePct, years) ?: Double.NaN
     }
     val totalLoanPaid = monthlyLoanPayment * years * 12
     val totalLoanInterest = (totalLoanPaid - amount).coerceAtLeast(0.0)
@@ -1526,8 +1692,8 @@ private fun NexlyQuickCalculatorCard(
         5 -> "Daily Target"
         else -> "Result"
     }
-    val formattedResult = when (mode) {
-        3 -> String.format(java.util.Locale.US, "%s%.0f/mo", currency, total)
+    val formattedResult = if (!total.isFinite()) "Undefined" else when (mode) {
+        3 -> String.format(java.util.Locale.US, "%s%.2f/mo", currency, total)
         5 -> String.format(java.util.Locale.US, "%.0f kcal", total)
         else -> String.format(java.util.Locale.US, "%s%.2f", currency, total)
     }
@@ -1594,10 +1760,8 @@ private fun NexlyQuickCalculatorCard(
                     modifier = Modifier.clickable {
                         mode = initialMode
                         years = initialYears.coerceIn(1, 40)
-                        amountText = if (initialAmount % 1.0 == 0.0) initialAmount.toLong().toString()
-                        else String.format(java.util.Locale.US, "%.2f", initialAmount)
-                        rateText = if (initialDiscount % 1.0 == 0.0) initialDiscount.toLong().toString()
-                        else String.format(java.util.Locale.US, "%.1f", initialDiscount)
+                        amountText = sourceScenarioNumberText(initialAmount)
+                        rateText = sourceScenarioNumberText(initialDiscount)
                     }
                 )
             }
@@ -1689,7 +1853,7 @@ private fun NexlyQuickCalculatorCard(
             ) {
                 Text(if (mode == 3) "Loan Term" else "Compounding Horizon", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    (if (mode == 3) listOf(5, 10, 15, 20, 30) else listOf(1, 3, 5, 10, 20)).forEach { yr ->
+                    ((if (mode == 3) listOf(5, 10, 15, 20, 30) else listOf(1, 3, 5, 10, 20)) + initialYears).distinct().sorted().forEach { yr ->
                         val active = years == yr
                         Box(
                             modifier = Modifier
@@ -1710,7 +1874,8 @@ private fun NexlyQuickCalculatorCard(
             }
         }
         Slider(
-            value = ratePct.toFloat().coerceIn(0f, if (mode == 5) 4f else 100f),
+            value = (ratePct.takeIf { it.isFinite() } ?: 0.0).toFloat().coerceIn(0f, if (mode == 5) 4f else 100f),
+            enabled = ratePct.isFinite(),
             onValueChange = { v ->
                 rateText = if (mode == 5 || mode == 3) String.format(java.util.Locale.US, "%.1f", v)
                 else String.format(java.util.Locale.US, "%.0f", v)
@@ -1750,10 +1915,10 @@ private fun NexlyQuickCalculatorCard(
                 }
             }
             Text(
-                text = when (mode) {
+                text = if (!total.isFinite()) "Enter valid amount and rate." else when (mode) {
                     1 -> "+${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
                     2 -> "Gain +${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
-                    3 -> "Interest ${String.format(java.util.Locale.US, "%s%.0f · Total %s%.0f", currency, totalLoanInterest, currency, totalLoanPaid)}"
+                    3 -> "Interest ${String.format(java.util.Locale.US, "%s%.2f · Total %s%.2f", currency, totalLoanInterest, currency, totalLoanPaid)}"
                     4 -> "Needs ${String.format(java.util.Locale.US, "%s%.0f · Annual +%s%.0f", currency, amount * 0.5, currency, total * 12)}"
                     5 -> "Protein ${String.format(java.util.Locale.US, "%.0fg · Water %.1fL", amount * ratePct.coerceAtLeast(1.2), amount * 0.035)}"
                     else -> "Saved ${String.format(java.util.Locale.US, "%s%.2f", currency, deltaVal)}"
@@ -1981,35 +2146,26 @@ private fun NexlyQuantitativeExplorerCard(items: List<SpontaneousMetricItem>) {
     }
 }
 
-private fun inferSourceDomainAndroid(text: String): Pair<String, String>? {
-    val low = text.lowercase()
-    return when {
-        "iea" in low -> "www.iea.org" to "https://www.iea.org"
-        "irena" in low -> "www.irena.org" to "https://www.irena.org"
-        "nature" in low -> "www.nature.com" to "https://www.nature.com"
-        "react" in low -> "react.dev" to "https://react.dev"
-        "tailwind" in low -> "tailwindcss.com" to "https://tailwindcss.com"
-        "mdn" in low || "mozilla" in low -> "developer.mozilla.org" to "https://developer.mozilla.org"
-        "python" in low -> "docs.python.org" to "https://docs.python.org"
-        "clickhouse" in low -> "clickhouse.com" to "https://clickhouse.com"
-        "nexly" in low -> "nexly-analytics.com" to "https://nexly-analytics.com"
-        "arxiv" in low -> "arxiv.org" to "https://arxiv.org"
-        "ieee" in low -> "www.ieee.org" to "https://www.ieee.org"
-        else -> null
-    }
-}
-
-private data class SpontaneousConceptItem(
+internal data class SpontaneousConceptItem(
     val term: String,
     val definition: String,
     val icon: String,
     val tone: String
 )
 
-private fun extractSpontaneousConceptsFromBlocks(blocks: List<Block>): List<SpontaneousConceptItem> {
+internal fun extractSpontaneousConceptsFromBlocks(blocks: List<Block>): List<SpontaneousConceptItem> {
     val out = mutableListOf<SpontaneousConceptItem>()
     val sepRegex = Regex("""^([^:—–-]{3,42})\s*(?::|—|–|-)\s*(.{14,})$""")
+    var excludedSection = false
+    val nonLearningSection = Regex("""\b(?:references|bibliography|steps?|plan|instructions|procedure)\b""", RegexOption.IGNORE_CASE)
     blocks.forEachIndexed { idx, b ->
+        if (b is Block.Heading) {
+            val title = NexlyIcons.cleanPlainText(plainTextOfSpans(b.spans))
+            excludedSection = classifySectionListMode(title) in setOf(SectionListMode.SOURCES, SectionListMode.TODO) || nonLearningSection.containsMatchIn(title)
+        }
+        // Publisher records and actionable procedures are not vocabulary
+        // definitions. Their real source/task controls are already rendered.
+        if (excludedSection) return@forEachIndexed
         val rawItems = when (b) {
             is Block.BulletList -> if (b.items.all { it.checked == null }) b.items else emptyList()
             is Block.OrderedList -> b.items
@@ -2020,9 +2176,9 @@ private fun extractSpontaneousConceptsFromBlocks(blocks: List<Block>): List<Spon
             if (first is InlineSpan.BoldSpan) {
                 val term = NexlyIcons.cleanPlainText(plainTextOfSpans(first.children)).trimEnd(':', '-', '—', '–').trim()
                 val rest = NexlyIcons.cleanPlainText(plainTextOfSpans(li.spans.drop(1))).replace(Regex("""^[\s:—–-]+"""), "").trim()
-                if (term.length in 3..44 && rest.length >= 14 && "http" !in rest.lowercase()) {
+                if (term.length in 3..44 && rest.length in 14..600 && "http" !in rest.lowercase()) {
                     val (icon, tone) = NexlyIcons.semanticIconFor("$term $rest", "bulb")
-                    out += SpontaneousConceptItem(term, rest.take(180), icon, tone)
+                    out += SpontaneousConceptItem(term, rest, icon, tone)
                 }
             } else {
                 val plain = NexlyIcons.cleanPlainText(plainTextOfSpans(li.spans))
@@ -2030,9 +2186,9 @@ private fun extractSpontaneousConceptsFromBlocks(blocks: List<Block>): List<Spon
                 if (m != null) {
                     val term = m.groupValues[1].trim()
                     val rest = m.groupValues[2].trim()
-                    if (term.length in 3..44 && rest.length >= 14 && "http" !in rest.lowercase()) {
+                    if (term.length in 3..44 && rest.length in 14..600 && "http" !in rest.lowercase()) {
                         val (icon, tone) = NexlyIcons.semanticIconFor("$term $rest", "bulb")
-                        out += SpontaneousConceptItem(term, rest.take(180), icon, tone)
+                        out += SpontaneousConceptItem(term, rest, icon, tone)
                     }
                 }
             }
@@ -2042,14 +2198,14 @@ private fun extractSpontaneousConceptsFromBlocks(blocks: List<Block>): List<Spon
             val next = blocks[idx + 1]
             if (next is Block.Paragraph && classifyCalloutHeaderTitle(hText) == null && classifySectionListMode(hText) == SectionListMode.DEFAULT) {
                 val pText = NexlyIcons.cleanPlainText(plainTextOfSpans(next.spans)).trim()
-                if (hText.length in 3..44 && pText.length >= 20) {
+                if (hText.length in 3..44 && pText.length in 20..600) {
                     val (icon, tone) = NexlyIcons.semanticIconFor("$hText $pText", "bulb")
-                    out += SpontaneousConceptItem(hText, pText.take(180), icon, tone)
+                    out += SpontaneousConceptItem(hText, pText, icon, tone)
                 }
             }
         }
     }
-    return out.distinctBy { it.term.lowercase() }.take(8)
+    return out.distinctBy { it.term.lowercase() }.distinctBy { it.definition.lowercase() }.take(8)
 }
 
 @Composable
@@ -2341,7 +2497,7 @@ private data class ParsedSourceItem(
     val url: String
 )
 
-private fun extractSourceItemFromItem(number: Int, item: ListItem, allowInference: Boolean = false): ParsedSourceItem? {
+private fun extractSourceItemFromItem(number: Int, item: ListItem): ParsedSourceItem? {
     val combined = mutableListOf<InlineSpan>()
     combined.addAll(item.spans)
     item.children.forEach { child ->
@@ -2350,10 +2506,10 @@ private fun extractSourceItemFromItem(number: Int, item: ListItem, allowInferenc
             combined.addAll(child.spans)
         }
     }
-    return extractSourceItemFromSpans(number, combined, allowInference)
+    return extractSourceItemFromSpans(number, combined)
 }
 
-private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>, allowInference: Boolean = false): ParsedSourceItem? {
+private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>): ParsedSourceItem? {
     var linkUrl = ""
     var linkTitle = ""
     fun walk(list: List<InlineSpan>) {
@@ -2380,12 +2536,6 @@ private fun extractSourceItemFromSpans(number: Int, spans: List<InlineSpan>, all
         if (m != null) {
             val found = m.value
             linkUrl = if (found.startsWith("http")) found else "https://$found"
-        }
-    }
-    if (linkUrl.isEmpty() && allowInference) {
-        val inferred = inferSourceDomainAndroid(fullText)
-        if (inferred != null) {
-            linkUrl = inferred.second
         }
     }
     if (linkUrl.isEmpty()) return null
@@ -2425,7 +2575,7 @@ private fun BulletListBlock(block: Block.BulletList, selectable: Boolean, citati
 
     val sourceItems = remember(block.items, sectionMode) {
         if (sectionMode == SectionListMode.SOURCES) {
-            block.items.mapIndexedNotNull { idx, item -> extractSourceItemFromItem(idx + 1, item, allowInference = true) }
+            block.items.mapIndexedNotNull { idx, item -> extractSourceItemFromItem(idx + 1, item) }
         } else emptyList()
     }
     if (sourceItems.isNotEmpty() && sourceItems.size == block.items.size) {
@@ -2755,11 +2905,10 @@ private fun OrderedListBlock(block: Block.OrderedList, selectable: Boolean, cita
         val extracted = block.items.mapIndexedNotNull { idx, item ->
             extractSourceItemFromItem(
                 number = item.number ?: (block.start + idx),
-                item = item,
-                allowInference = sectionMode == SectionListMode.SOURCES
+                item = item
             )
         }
-        if (extracted.isNotEmpty() && (sectionMode == SectionListMode.SOURCES || extracted.size == block.items.size)) {
+        if (extracted.isNotEmpty() && extracted.size == block.items.size) {
             extracted
         } else emptyList()
     }
@@ -2778,6 +2927,21 @@ private fun OrderedListBlock(block: Block.OrderedList, selectable: Boolean, cita
                 sourceStart = block.sourceStart
             )
         )
+        return
+    }
+
+    if (sectionMode == SectionListMode.SOURCES) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            block.items.forEachIndexed { index, item ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+                    Text("${item.number ?: (block.start + index)}.", style = MaterialTheme.typography.labelMedium)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        ParagraphBlock(Block.Paragraph(item.spans, block.sourceStart), showCaret = false, selectable = selectable, citationUrls = citationUrls)
+                        item.children.forEach { NestedChildView(it, selectable, citationUrls) }
+                    }
+                }
+            }
+        }
         return
     }
 
@@ -3121,18 +3285,15 @@ private fun BlockQuoteView(block: Block.BlockQuote, selectable: Boolean, citatio
 // ---------------------------------------------------------------------------
 
 internal fun parseSortableNumberAndroid(raw: String): Double? {
-    val clean = raw.replace(Regex("[,$€£¥%↑↓↗↘+\\s]"), "").trim()
-    if (clean.isEmpty()) return null
-    val mult = when (clean.last().lowercaseChar()) {
-        'k' -> 1_000.0
-        'm' -> 1_000_000.0
-        'b' -> 1_000_000_000.0
-        't' -> 1_000_000_000_000.0
-        else -> 1.0
-    }
-    val numPart = if (mult > 1.0) clean.dropLast(1).trim() else clean
-    val base = numPart.toDoubleOrNull() ?: return null
-    return base * mult
+    val match = Regex("^(?:([↑↓↗↘])\\s*)?([+-]?)\\s*[\$€£¥₹৳#]?\\s*([+-]?)\\s*((?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?)\\s*([kKmMbBtT]?)\\s*[%xX]?\$").matchEntire(raw.trim().replace('−', '-')) ?: return null
+    val (arrow, outer, inner, digits, suffix) = match.destructured
+    if (outer.isNotEmpty() && inner.isNotEmpty()) return null
+    val sign = outer.ifEmpty { inner }
+    val down = arrow == "↓" || arrow == "↘"
+    if (arrow.isNotEmpty() && ((down && sign == "+") || (!down && sign == "-"))) return null
+    val multiplier = when (suffix.lowercase()) { "k" -> 1e3; "m" -> 1e6; "b" -> 1e9; "t" -> 1e12; else -> 1.0 }
+    val base = digits.replace(",", "").toDoubleOrNull() ?: return null
+    return (base * multiplier * if (sign == "-" || down) -1 else 1).takeIf { it.isFinite() }
 }
 
 @Composable
@@ -3142,6 +3303,36 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
     val headers = remember(block.headers, theme) { block.headers.map { spansToAnnotatedString(it, theme) } }
     val allRows = remember(block.rows, theme) { block.rows.map { row -> row.map { spansToAnnotatedString(it, theme) } } }
     val columns = maxOf(headers.size, block.aligns.size, 1)
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val bodyStyle = MaterialTheme.typography.bodySmall
+    val headerStyle = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+    // Equal-width rank/data columns left only ~40dp for a language after its
+    // glass badge, splitting JavaScript while clipping the actual trend. Size
+    // from all supplied rows (not just this page), then scroll if necessary.
+    val naturalWidths = remember(headers, allRows, density, bodyStyle, headerStyle) {
+        (0 until columns).map { column ->
+            val header = headers.getOrNull(column)?.text.orEmpty()
+            val nameColumn = column == 0 || (column == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
+            val headerWidth = with(density) { textMeasurer.measure(header, headerStyle, softWrap = false).size.width.toDp() } + 20.dp
+            val dataWidth = allRows.maxOfOrNull { row ->
+                val raw = row.getOrNull(column)?.text.orEmpty().trim()
+                val badgeSpace = if (nameColumn && markdownEntityBadgeForCell(raw) != null) 26.dp else 0.dp
+                val trend = raw.endsWith("%") && raw.firstOrNull() in listOf('+', '-', '↑', '↓', '↗', '↘')
+                val display = if (trend) {
+                    val stripped = raw.replace(Regex("^[↑↓↗↘\\s]+"), "")
+                    "${if (raw.contains('-') || raw.startsWith("↓") || raw.startsWith("↘")) "↓" else "↑"} $stripped"
+                } else NexlyIcons.cleanPlainText(raw)
+                val style = bodyStyle.copy(fontWeight = when {
+                    trend -> FontWeight.Bold
+                    badgeSpace > 0.dp -> FontWeight.SemiBold
+                    else -> FontWeight.Normal
+                })
+                with(density) { textMeasurer.measure(display, style, softWrap = false).size.width.toDp() } + 20.dp + badgeSpace
+            } ?: 0.dp
+            maxOf(28.dp, headerWidth, dataWidth).coerceAtMost(280.dp)
+        }
+    }
 
     var sortCol by remember(block) { mutableStateOf<Int?>(null) }
     var sortAsc by remember(block) { mutableStateOf(true) }
@@ -3172,224 +3363,229 @@ private fun TableBlockView(block: Block.TableBlock, selectable: Boolean, citatio
     val chart = remember(block) { chartFromTableBlock(block) }
     var showChart by remember(block) { mutableStateOf(false) }
 
-    if (chart != null) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(bottom = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FenceTab("Table", !showChart) { showChart = false }
-            FenceTab("Chart", showChart) { showChart = true }
-        }
-    }
-    if (showChart && chart != null) {
-        WidgetView(Widget.Chart(chart))
-        return
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color.White.copy(alpha = 0.72f))
-            .border(1.dp, outline.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-    ) {
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-            val minCell = 92.dp
-            val fits = minCell * columns <= maxWidth
-            val cellWidth = if (fits) maxWidth / columns else minCell
-
-            val tableHeader: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
-                headers.forEachIndexed { c, header ->
-                    val sorted = sortCol == c
-                    val cleanHeaderText = NexlyIcons.cleanPlainText(header.text).ifEmpty { "Column ${c + 1}" }
-                    val hLabel = if (sorted) {
-                        AnnotatedString("$cleanHeaderText ${if (sortAsc) "↑" else "↓"}")
-                    } else AnnotatedString(cleanHeaderText)
-                    Box(
-                        modifier = Modifier.clickable {
-                            if (sortCol == c) sortAsc = !sortAsc else {
-                                sortCol = c
-                                sortAsc = true
-                            }
-                            page = 0
-                        }
-                    ) {
-                        Row {
-                            TableCell(
-                                text = hLabel,
-                                width = cellWidth,
-                                align = block.aligns.getOrElse(c) { TableAlign.LEFT },
-                                emphasize = true
-                            )
-                        }
-                    }
-                }
+    // SelectionContainer requires one layout root; otherwise its measure
+    // policy stacks the mode bar and table at the same origin, hiding Chart.
+    Column(Modifier.fillMaxWidth()) {
+        if (chart != null) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FenceTab("Table", !showChart) { showChart = false }
+                FenceTab("Chart", showChart) { showChart = true }
             }
+        }
+        if (showChart && chart != null) {
+            WidgetView(Widget.Chart(chart))
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.72f))
+                    .border(1.dp, outline.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+            ) {
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val naturalTotal = naturalWidths.fold(0.dp) { total, width -> total + width }
+                    val fits = naturalTotal <= maxWidth
+                    val extra = if (fits) (maxWidth - naturalTotal) / columns else 0.dp
+                    val widths = naturalWidths.map { it + extra }
+                    val tableWidth = widths.fold(0.dp) { total, width -> total + width }
 
-            if (fits) {
-                Column {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFFEDE6FF)),
-                        content = tableHeader
-                    )
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(outline.copy(alpha = 0.35f))
-                    )
-                    SelectionContainer {
-                        Column {
-                            rows.forEachIndexed { r, row ->
-                                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                    (0 until columns).forEach { c ->
-                                        TableCell(
-                                            text = row.getOrElse(c) { AnnotatedString("") },
-                                            width = cellWidth,
-                                            align = block.aligns.getOrElse(c) { TableAlign.LEFT },
-                                            emphasize = false,
-                                            isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
-                                        )
+                    val tableHeader: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+                        headers.forEachIndexed { c, header ->
+                            val sorted = sortCol == c
+                            val cleanHeaderText = NexlyIcons.cleanPlainText(header.text).ifEmpty { "Column ${c + 1}" }
+                            val hLabel = if (sorted) {
+                                AnnotatedString("$cleanHeaderText ${if (sortAsc) "↑" else "↓"}")
+                            } else AnnotatedString(cleanHeaderText)
+                            Box(
+                                modifier = Modifier.clickable {
+                                    if (sortCol == c) sortAsc = !sortAsc else {
+                                        sortCol = c
+                                        sortAsc = true
                                     }
+                                    page = 0
                                 }
-                                if (r != rows.lastIndex) {
-                                    Box(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .height(1.dp)
-                                            .background(outline.copy(alpha = 0.2f))
+                            ) {
+                                Row {
+                                    TableCell(
+                                        text = hLabel,
+                                        width = widths[c],
+                                        align = block.aligns.getOrElse(c) { TableAlign.LEFT },
+                                        emphasize = true
                                     )
                                 }
                             }
                         }
                     }
-                }
-            } else {
-                Column(Modifier.horizontalScroll(rememberScrollState())) {
-                    Row(
-                        modifier = Modifier.background(Color(0xFFEDE6FF)),
-                        content = tableHeader
-                    )
-                    Box(
-                        Modifier
-                            .width(cellWidth * columns)
-                            .height(1.dp)
-                            .background(outline.copy(alpha = 0.35f))
-                    )
-                    SelectionContainer {
+
+                    if (fits) {
                         Column {
-                            rows.forEach { row ->
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    (0 until columns).forEach { c ->
-                                        TableCell(
-                                            text = row.getOrElse(c) { AnnotatedString("") },
-                                            width = cellWidth,
-                                            align = block.aligns.getOrElse(c) { TableAlign.LEFT },
-                                            emphasize = false,
-                                            isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFFEDE6FF)),
+                                content = tableHeader
+                            )
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(outline.copy(alpha = 0.35f))
+                            )
+                            SelectionContainer {
+                                Column {
+                                    rows.forEachIndexed { r, row ->
+                                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                            (0 until columns).forEach { c ->
+                                                TableCell(
+                                                    text = row.getOrElse(c) { AnnotatedString("") },
+                                                    width = widths[c],
+                                                    align = block.aligns.getOrElse(c) { TableAlign.LEFT },
+                                                    emphasize = false,
+                                                    isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
+                                                )
+                                            }
+                                        }
+                                        if (r != rows.lastIndex) {
+                                            Box(
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .height(1.dp)
+                                                    .background(outline.copy(alpha = 0.2f))
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Column(Modifier.horizontalScroll(rememberScrollState())) {
+                            Row(
+                                modifier = Modifier.background(Color(0xFFEDE6FF)),
+                                content = tableHeader
+                            )
+                            Box(
+                                Modifier
+                                    .width(tableWidth)
+                                    .height(1.dp)
+                                    .background(outline.copy(alpha = 0.35f))
+                            )
+                            SelectionContainer {
+                                Column {
+                                    rows.forEach { row ->
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            (0 until columns).forEach { c ->
+                                                TableCell(
+                                                    text = row.getOrElse(c) { AnnotatedString("") },
+                                                    width = widths[c],
+                                                    align = block.aligns.getOrElse(c) { TableAlign.LEFT },
+                                                    emphasize = false,
+                                                    isPrimaryNameCol = c == 0 || (c == 1 && headers.firstOrNull()?.text?.trim() in setOf("#", "Rank", "No", "ID"))
+                                                )
+                                            }
+                                        }
+                                        Box(
+                                            Modifier
+                                                .width(tableWidth)
+                                                .height(1.dp)
+                                                .background(outline.copy(alpha = 0.2f))
                                         )
                                     }
                                 }
-                                Box(
-                                    Modifier
-                                        .width(cellWidth * columns)
-                                        .height(1.dp)
-                                        .background(outline.copy(alpha = 0.2f))
-                                )
                             }
                         }
                     }
                 }
-            }
-        }
 
-        if (sortedRows.size >= 4) {
-            val startRow = safePage * effectivePageSize + 1
-            val endRow = minOf(sortedRows.size, (safePage + 1) * effectivePageSize)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFFF6F2FF))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "‹",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                if (sortedRows.size >= 4) {
+                    val startRow = safePage * effectivePageSize + 1
+                    val endRow = minOf(sortedRows.size, (safePage + 1) * effectivePageSize)
+                    Row(
                         modifier = Modifier
-                            .clip(CircleShape)
-                            .clickable(enabled = safePage > 0) { page = (safePage - 1).coerceAtLeast(0) }
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                    (0 until totalPages).forEach { p ->
-                        val active = p == safePage
-                        Box(
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clip(CircleShape)
-                                .background(if (active) Color(0xFF6C4CF6) else Color.Transparent)
-                                .clickable { page = p },
-                            contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .background(Color(0xFFF6F2FF))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = (p + 1).toString(),
-                                fontSize = 11.sp,
+                                text = "‹",
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable(enabled = safePage > 0) { page = (safePage - 1).coerceAtLeast(0) }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                            (0 until totalPages).forEach { p ->
+                                val active = p == safePage
+                                Box(
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .clip(CircleShape)
+                                        .background(if (active) Color(0xFF6C4CF6) else Color.Transparent)
+                                        .clickable { page = p },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = (p + 1).toString(),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "›",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable(enabled = safePage < totalPages - 1) { page = (safePage + 1).coerceAtMost(totalPages - 1) }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                            Text(
+                                text = "$startRow–$endRow of ${sortedRows.size}",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(Color.White.copy(alpha = 0.85f))
+                                .border(1.dp, outline.copy(alpha = 0.35f), RoundedCornerShape(7.dp))
+                                .clickable {
+                                    pageSize = when (pageSize) {
+                                        3 -> 5
+                                        5 -> 10
+                                        10 -> -1
+                                        else -> 3
+                                    }
+                                    page = 0
+                                }
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "Show: ${if (pageSize == -1) "All" else pageSize.toString()} ▾",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
-                    Text(
-                        text = "›",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .clickable(enabled = safePage < totalPages - 1) { page = (safePage + 1).coerceAtMost(totalPages - 1) }
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                    Text(
-                        text = "$startRow–$endRow of ${sortedRows.size}",
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(7.dp))
-                        .background(Color.White.copy(alpha = 0.85f))
-                        .border(1.dp, outline.copy(alpha = 0.35f), RoundedCornerShape(7.dp))
-                        .clickable {
-                            pageSize = when (pageSize) {
-                                3 -> 5
-                                5 -> 10
-                                10 -> -1
-                                else -> 3
-                            }
-                            page = 0
-                        }
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Text(
-                        text = "Show: ${if (pageSize == -1) "All" else pageSize.toString()} ▾",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
                 }
             }
         }
@@ -3777,23 +3973,22 @@ private fun CollapsibleBlockView(block: Block.CollapsibleBlock, citationUrls: Ma
 // Structured seams — citations & tool results (backend provides; never faked)
 // ---------------------------------------------------------------------------
 
-private fun isAcademicSourceDomain(domain: String, url: String): Boolean {
-    val hay = "$domain $url".lowercase()
-    return ".edu" in hay ||
-        "nature.com" in hay ||
-        "arxiv.org" in hay ||
-        "ieee.org" in hay ||
-        "acm.org" in hay ||
-        "springer." in hay ||
-        "sciencedirect." in hay ||
-        "oxford" in hay ||
-        "cambridge" in hay ||
-        "nih.gov" in hay ||
-        "pubmed" in hay
+internal fun citationSourceUrl(raw: String): java.net.URL? = runCatching {
+    val url = java.net.URL(raw)
+    url.toURI() // Reject malformed authority, whitespace and backslash ambiguities.
+    require(url.protocol.lowercase() in setOf("http", "https") && url.host.isNotBlank() && url.userInfo == null && url.port <= 65535)
+    if (!url.host.startsWith("[")) java.net.IDN.toASCII(url.host, java.net.IDN.USE_STD3_ASCII_RULES)
+    url
+}.getOrNull()
+
+internal fun isAcademicSourceDomain(domain: String, raw: String): Boolean {
+    val host = citationSourceUrl(raw)?.host?.lowercase() ?: return false
+    val publishers = listOf("nature.com", "arxiv.org", "ieee.org", "acm.org", "springer.com", "springernature.com", "sciencedirect.com", "oup.com", "cambridge.org", "nih.gov")
+    return host.endsWith(".edu") || host.endsWith(".ac.uk") || publishers.any { host == it || host.endsWith(".$it") }
 }
 
 @Composable
-private fun CitationsBlockView(block: Block.CitationsBlock) {
+private fun CitationsBlockView(block: Block.CitationsBlock, title: String = "Key Sources") {
     val context = androidx.compose.ui.platform.LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -3809,7 +4004,7 @@ private fun CitationsBlockView(block: Block.CitationsBlock) {
                     glyphSize = 14.dp
                 )
                 Text(
-                    text = "Key Sources",
+                    text = title,
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -3821,6 +4016,8 @@ private fun CitationsBlockView(block: Block.CitationsBlock) {
             )
         }
         block.citations.forEach { citation ->
+            val link = remember(citation.url) { citationSourceUrl(citation.url) }
+            val domain = link?.host?.lowercase()?.removePrefix("www.") ?: "Invalid source URL"
             val academic = remember(citation.domain, citation.url) {
                 isAcademicSourceDomain(citation.domain, citation.url)
             }
@@ -3831,8 +4028,8 @@ private fun CitationsBlockView(block: Block.CitationsBlock) {
                     .clip(RoundedCornerShape(14.dp))
                     .background(Color.White.copy(alpha = 0.78f))
                     .border(1.dp, Color(0xFFE3DCFA), RoundedCornerShape(14.dp))
-                    .clickable(enabled = citation.url.startsWith("http")) {
-                        com.grapsee.gsai.ui.components.GsLinks.openInApp(context, citation.url)
+                    .clickable(enabled = link != null) {
+                        link?.let { com.grapsee.gsai.ui.components.GsLinks.openInApp(context, it.toExternalForm()) }
                     }
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
@@ -3876,30 +4073,28 @@ private fun CitationsBlockView(block: Block.CitationsBlock) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "↗ ${citation.domain.ifBlank { citation.url }}",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = Color(0xFF5B3DF5),
-                            maxLines = 1
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                            NexlyGlyph(name = "external-link", size = 11.dp, color = Color(0xFF5B3DF5))
+                            Text(text = domain, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = Color(0xFF5B3DF5), maxLines = 1)
+                        }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
-                                .background(if (academic) Color(0xFFEFEAFF) else Color(0xFFE6F9F0))
+                                .background(Color(0xFFEFEAFF))
                                 .padding(horizontal = 8.dp, vertical = 2.dp)
                         ) {
                             NexlyGlyph(
-                                name = if (academic) "building-bank" else "shield-check",
+                                name = if (academic) "building-bank" else "external-link",
                                 size = 11.dp,
-                                color = if (academic) Color(0xFF5B3DF5) else Color(0xFF129A5A)
+                                color = Color(0xFF5B3DF5)
                             )
                             Text(
-                                text = if (academic) "Academic" else "Trusted Source",
+                                text = if (link == null) "Invalid link" else if (academic) "Academic domain" else "Source link",
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (academic) Color(0xFF5B3DF5) else Color(0xFF129A5A)
+                                color = Color(0xFF5B3DF5)
                             )
                         }
                     }

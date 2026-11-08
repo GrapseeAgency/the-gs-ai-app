@@ -7,12 +7,12 @@
  *   POST {room, delta|set|heartbeat}  apply + broadcast; returns the new
  *                                revision and state.
  *
- * State semantics live in collab-broker.ts (prototype: per-server memory,
+ * State semantics live in collab-broker.ts (prototype: public SQLite-backed rooms,
  * commutative deltas for counts, LWW list replace, ephemeral presence).
  */
 
 import { NextRequest } from 'next/server'
-import { applyCollab, joinCollab, type CollabPresence } from '@/lib/collab-broker'
+import { applyCollab, joinCollab, collabRoomSnapshot, type CollabPresence } from '@/lib/collab-broker'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,12 +58,19 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      let latestRev = session.rev
       write('snapshot', { rev: session.rev, state: session.state, presence: session.presence, room })
       unsubscribe = session.subscribe((rev, state, presence) => {
+        latestRev = rev
         if (!write('rev', { rev, state, presence })) close()
       })
       req.signal.addEventListener('abort', close)
       keepalive = setInterval(() => {
+        const current = collabRoomSnapshot(room)
+        if (current && current.rev !== latestRev) {
+          latestRev = current.rev
+          if (!write('rev', current)) { close(); return }
+        }
         if (!write('ping', { t: Date.now() })) close()
       }, KEEPALIVE_MS)
     },
@@ -93,7 +100,16 @@ export async function POST(req: NextRequest) {
   const o = (body ?? {}) as Record<string, unknown>
   const room = slugOf(typeof o.room === 'string' ? o.room : '')
   if (room === 'lobby' && !o.room) return Response.json({ error: 'room required' }, { status: 400 })
-  const patch: { delta?: Record<string, number>; set?: Record<string, unknown>; heartbeat?: CollabPresence } = {}
+  const patch: { initial?: Record<string, unknown>; delta?: Record<string, number>; set?: Record<string, unknown>; heartbeat?: CollabPresence } = {}
+  if (o.initial !== undefined) {
+    if (!o.initial || typeof o.initial !== 'object' || Array.isArray(o.initial)) return Response.json({ error: 'invalid initial state' }, { status: 400 })
+    const initial = o.initial as Record<string, unknown>
+    const validCounter = initial.n === undefined || (typeof initial.n === 'number' && Number.isFinite(initial.n))
+    const validTodos = initial.todos === undefined || (Array.isArray(initial.todos) && initial.todos.length <= 12 && initial.todos.every(row =>
+      row && typeof row === 'object' && typeof row.text === 'string' && row.text.trim().length > 0 && row.text.length <= 1000 && (row.done === undefined || typeof row.done === 'boolean')))
+    if (!validCounter || !validTodos || Object.keys(initial).some(key => key !== 'n' && key !== 'todos')) return Response.json({ error: 'invalid supplied initial counter or task state' }, { status: 400 })
+    patch.initial = initial
+  }
   if (o.delta && typeof o.delta === 'object') {
     const d: Record<string, number> = {}
     for (const [k, v] of Object.entries(o.delta as Record<string, unknown>)) if (typeof v === 'number' && Number.isFinite(v)) d[k.slice(0, 40)] = Math.max(-1000, Math.min(1000, v))
@@ -109,7 +125,7 @@ export async function POST(req: NextRequest) {
       at: Date.now(),
     }
   }
-  if (!patch.delta && !patch.set && !patch.heartbeat) return Response.json({ error: 'nothing to apply' }, { status: 400 })
+  if (!patch.initial && !patch.delta && !patch.set && !patch.heartbeat) return Response.json({ error: 'nothing to apply' }, { status: 400 })
   const result = applyCollab(room, patch)
   if (!result) return Response.json({ error: 'room at capacity or nothing changed' }, { status: 409 })
   return Response.json({ room, ...result })

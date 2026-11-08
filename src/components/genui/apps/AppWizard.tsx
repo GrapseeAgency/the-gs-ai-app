@@ -15,8 +15,9 @@ import { UiSlider } from '../controls/UiSlider'
 /** Wizard — multi-step flow with per-step fields and a progress rail. */
 export function AppWizard({ payload }: { payload: AppPayload }) {
   const { accent, theme } = useWidgetIdentity()
-  const steps = (payload.steps ?? []).slice(0, 12)
+  const steps = (payload.steps ?? [])
   const [step, setStep] = useState(0)
+  const [completed, setCompleted] = useState(false)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   if (!steps.length) return null
   const current = steps[Math.min(step, steps.length - 1)]
@@ -25,10 +26,10 @@ export function AppWizard({ payload }: { payload: AppPayload }) {
     const type = String(sf.type ?? 'text')
     const label = String(sf.label ?? `Field ${i + 1}`)
     const key = `${step}-${i}`
-    const value = answers[key] ?? ''
+    const value = answers[key] ?? (typeof sf.value === 'number' || typeof sf.value === 'string' ? String(sf.value) : '')
     const set = (v: string) => setAnswers((a) => ({ ...a, [key]: v }))
     if (type === 'textarea') return <UiTextArea key={key} placeholder={label} value={value} onChange={set} />
-    if (type === 'select') return <UiSelect key={key} ariaLabel={label} value={value || String((sf.options as string[])?.[0] ?? '')} options={(sf.options as string[]) ?? []} onChange={set} />
+    if (type === 'select') return <UiSelect key={key} ariaLabel={label} value={value} options={['', ...((sf.options as string[]) ?? [])]} onChange={set} />
     if (type === 'radio')
       return (
         <div key={key}>
@@ -37,11 +38,29 @@ export function AppWizard({ payload }: { payload: AppPayload }) {
           ))}
         </div>
       )
-    if (type === 'slider') return <UiSlider key={key} label={label} value={Number(value) || 50} onChange={(v) => set(String(v))} />
+    if (type === 'slider') {
+      const numeric = Number(value)
+      const bounded = typeof sf.min === 'number' && typeof sf.max === 'number' && Number.isFinite(sf.min) && Number.isFinite(sf.max) && sf.max > sf.min
+      if (bounded && value.trim() && Number.isFinite(numeric) && numeric >= (sf.min as number) && numeric <= (sf.max as number)) {
+        return <UiSlider key={key} label={label} value={numeric} min={sf.min as number} max={sf.max as number} step={typeof sf.step === 'number' && sf.step > 0 ? sf.step : undefined} onChange={v => set(String(v))} />
+      }
+      return <UiTextInput key={key} ariaLabel={label} placeholder={label} inputType="number" value={value} onChange={set} />
+    }
     return <UiTextInput key={key} placeholder={label} value={value} onChange={set} />
   }
+  if (completed) return (
+    <AppShell title={payload.title}>
+      <div role="status">Completed locally. No data has been submitted to a service.</div>
+      <dl>{steps.flatMap((entry, stepIndex) => ((entry.fields as Array<Record<string, unknown>>) ?? []).map((item, fieldIndex) => {
+        const key = `${stepIndex}-${fieldIndex}`
+        const value = answers[key] ?? (typeof item.value === 'number' || typeof item.value === 'string' ? String(item.value) : '')
+        return <div key={key}><dt>{String(item.label ?? `Field ${fieldIndex + 1}`)}</dt><dd>{value || 'Not answered'}</dd></div>
+      }))}</dl>
+      <UiButton onClick={() => setCompleted(false)}>Review answers</UiButton>
+    </AppShell>
+  )
   return (
-    <AppShell title={payload.title} right={`Step ${step + 1} of ${steps.length}`} submitLabel={last ? (payload.submitLabel ?? 'Finish') : undefined}>
+    <AppShell onSubmit={() => setCompleted(true)} title={payload.title} right={`Step ${step + 1} of ${steps.length}`} submitLabel={last ? (payload.submitLabel ?? 'Finish') : undefined}>
       <div style={{ display: 'flex', gap: 4, marginBottom: 14 }}>
         {steps.map((_, i) => (
           <span key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? accent : theme.dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.08)', transition: 'background .3s ease' }} />

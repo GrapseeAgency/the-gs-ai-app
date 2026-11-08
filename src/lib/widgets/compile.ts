@@ -103,7 +103,7 @@ export function compileWidgets(input: CompileInput): CompileResult {
   }
 
   const valid: Array<{ start: number; end: number; replacement: string; repaired: boolean }> = []
-  const invalid: Array<{ start: number; end: number }> = []
+  const invalid: Array<{ start: number; end: number; replacement: string }> = []
   const errors: string[] = []
   // Tracks the block above so two adjacent widgets never share a face. The
   // model's explicit accent/variant wins; this only breaks ties.
@@ -116,7 +116,7 @@ export function compileWidgets(input: CompileInput): CompileResult {
     // a ```cards fence holding stat KPIs or flashcards, a ```table fence
     // holding a left/right comparison), infer the true kind from the payload
     // and validate against it before dropping the block.
-    if (!result.ok) {
+    if (!result.ok && fence.kind !== 'checklist' && fence.kind !== 'collab') {
       const healedKind = inferWidgetKind(fence.json)
       if (healedKind && healedKind !== fence.kind) {
         const healed = validateWidget(healedKind, fence.json)
@@ -152,8 +152,9 @@ export function compileWidgets(input: CompileInput): CompileResult {
         repaired: result.repaired,
       })
     } else {
-      invalid.push({ start: fence.start, end: fence.end })
-      errors.push(`${fence.kind}: ${validationErrors(result).join(', ')}`)
+      const reason = `${fence.kind}: ${validationErrors(result).join(', ')}`
+      invalid.push({ start: fence.start, end: fence.end, replacement: widgetSourceFallback(fence.json, `Interactive content could not be rendered (${reason}). Original source is preserved below.`) })
+      errors.push(reason)
     }
   }
 
@@ -162,7 +163,7 @@ export function compileWidgets(input: CompileInput): CompileResult {
   const overflow = valid.slice(LIMITS.maxWidgetsPerAnswer)
 
   if (kept.length > 0) {
-    let text = rewrite(reply, [...kept, ...overflow.map((v) => ({ ...v, replacement: '' }))], invalid)
+    let text = rewrite(reply, [...kept, ...overflow.map((v) => ({ ...v, replacement: widgetSourceFallback(reply.slice(v.start, v.end), 'Additional interactive content exceeds this response’s widget limit. Original source is preserved below.') }))], invalid)
     return {
       text: text.trimEnd(),
       widgets: kept.length,
@@ -171,6 +172,9 @@ export function compileWidgets(input: CompileInput): CompileResult {
     }
   }
 
+  // An invalid data widget is not evidence for an invented replacement chart.
+  if (invalid.length > 0) return { text: strip(reply, invalid), widgets: 0, path: 'none', errors }
+
   // Path 3: no usable widget. Only build one when the user asked for it.
   const chartType = requestedChartType(userPrompt)
   if (!chartType) {
@@ -178,16 +182,18 @@ export function compileWidgets(input: CompileInput): CompileResult {
   }
 
   const points = pickPoints(reply, priorText)
-  if (points.length < 2) {
+  if (points.length < 2 || (points.some(point => point.percent) && !points.every(point => point.percent))) {
     return { text: strip(reply, invalid), widgets: 0, path: 'none', errors }
   }
 
   const widget = buildChart(points, chartType)
   const direction = directWidgetArt({ kind: 'chart', payload: widget, priorText })
   const styled = { ...widget, accent: direction.accent, variant: direction.variant, palette: direction.palette }
+  const validated = validateWidget('chart', JSON.stringify(styled))
+  if (!validated.ok) return { text: strip(reply, invalid), widgets: 0, path: 'none', errors: [...errors, ...validationErrors(validated)] }
   const body = strip(reply, invalid).trimEnd()
   return {
-    text: `${body}${body ? '\n\n' : ''}${fenceBlock('chart', JSON.stringify(styled))}`,
+    text: `${body}${body ? '\n\n' : ''}${fenceBlock('chart', validated.json)}`,
     widgets: 1,
     path: 'fallback',
     errors,
@@ -214,9 +220,9 @@ function fenceBlock(kind: WidgetKind, json: string): string {
 function rewrite(
   text: string,
   replacements: Array<{ start: number; end: number; replacement: string }>,
-  removals: Array<{ start: number; end: number }>
+  removals: Array<{ start: number; end: number; replacement?: string }>
 ): string {
-  const edits = [...replacements, ...removals.map((r) => ({ ...r, replacement: '' }))]
+  const edits = [...replacements, ...removals.map((r) => ({ ...r, replacement: r.replacement ?? '' }))]
     .sort((a, b) => b.start - a.start)
   let out = text
   for (const edit of edits) {
@@ -225,7 +231,15 @@ function rewrite(
   return out
 }
 
-function strip(text: string, removals: Array<{ start: number; end: number }>): string {
+function widgetSourceFallback(source: string, message: string): string {
+  const runs: string[] = source.match(/`+/g) ?? []
+  const longest = runs.reduce<number>((max, run) => Math.max(max, run.length), 0)
+  const fence = '`'.repeat(Math.max(3, longest + 1))
+  // A text fence cannot be re-promoted into the same invalid widget by clients.
+  return `> ${message}\n\n${fence}text\n${source}\n${fence}`
+}
+
+function strip(text: string, removals: Array<{ start: number; end: number; replacement?: string }>): string {
   return rewrite(text, [], removals)
 }
 
@@ -255,7 +269,9 @@ function parseNumber(text: string): { value: number; display: string; percent: b
   const low = Number(m[1].replace(/,/g, ''))
   const high = m[2] ? Number(m[2].replace(/,/g, '')) : null
   if (!Number.isFinite(low)) return null
-  const raw = high !== null && Number.isFinite(high) ? (low + high) / 2 : low
+  // A range is not an observed scalar; do not manufacture its midpoint.
+  if (high !== null) return null
+  const raw = low
   const unit = (m[3] ?? '').toLowerCase()
   const factor =
     unit === 'trillion' || unit === 'tn' || unit === 't'
@@ -334,24 +350,22 @@ function extractPoints(text: string): Point[] {
     : rows.map((r) => r.point)
 
   const seen = new Set<string>()
-  return points.filter((p) => {
+  const unique = points.filter((p) => {
     const key = p.label.toLowerCase()
     if (seen.has(key)) return false
     seen.add(key)
     return true
-  }).slice(0, 8)
+  })
+  return unique.length <= LIMITS.maxPointsPerSeries ? unique : []
 }
 
 function buildChart(points: Point[], type: (typeof CHART_TYPES)[number]) {
   const labels = points.map((p) => p.label)
-  const series =
-    type === 'pie' || type === 'donut'
-      ? points.map((p) => ({ name: p.label, data: [[0, p.value]] }))
-      : [{ name: 'Value', data: points.map((p, i) => [i, p.value]) }]
+  const series = [{ name: 'Value', data: points.map((p, i) => [i, p.value]) }]
   return {
     type,
     title: 'From the numbers in this answer',
-    unit: '',
+    unit: points.every(point => point.percent) ? '%' : '',
     labels,
     series,
   }

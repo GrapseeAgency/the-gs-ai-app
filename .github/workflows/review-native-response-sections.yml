@@ -1,0 +1,53 @@
+name: Review actual native response sections
+on:
+  workflow_call:
+    inputs:
+      platform:
+        type: string
+        required: true
+      artifact:
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact }}
+          path: native-frame-evidence
+      - name: Locate genuine captured fixtures
+        env:
+          GS_REVIEW_PLATFORM: ${{ inputs.platform }}
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check "pillow==11.0.0"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          platform = os.environ['GS_REVIEW_PLATFORM']
+          if platform not in ('ios', 'android'): raise SystemExit('Unknown native platform')
+          frames = list(Path('native-frame-evidence').rglob(f'genui-reference-{platform}-01-dashboard-393x852.png'))
+          if len(frames) != 1: raise SystemExit('Expected exactly one genuine native fixture capture directory')
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('GS_NATIVE_FRAME_DIR=' + str(frames[0].parent) + '\n')
+          PY
+      # A separate job owns the bounded image-annotation budget. Native test
+      # failures and actual system-control diagnostics must not be displaced.
+      - name: Review actual dashboard
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 01-dashboard
+      - name: Review actual structured launch
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 02-structured-launch
+      - name: Review actual React source
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 03-react-code
+      - name: Review actual citations
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 04-citations
+      - name: Review actual data grid
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 05-data-grid
+      - name: Review actual interactive charts
+        run: python3 scripts/publish_response_section_frames.py "$GS_NATIVE_FRAME_DIR" '${{ inputs.platform }}' 06-interactive-charts

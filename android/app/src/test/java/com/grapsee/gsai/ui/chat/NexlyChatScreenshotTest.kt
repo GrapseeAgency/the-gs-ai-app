@@ -14,6 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.widthIn
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -314,6 +318,51 @@ class NexlyChatScreenshotTest {
         }
         compose.onRoot().captureRoboImage(path)
     }
+
+    /** Coverage for the six supplied section references. PNGs require visual
+     * review; rendering them is not an automatic fidelity verdict. */
+    private fun shootSectionReference(id: String) {
+        val application: android.app.Application = org.robolectric.RuntimeEnvironment.getApplication()
+        val contract = application.assets.open("response-section-references.json").bufferedReader().use { org.json.JSONObject(it.readText()) }
+        val fixtures = contract.getJSONArray("fixtures")
+        org.junit.Assert.assertEquals(6, fixtures.length())
+        val fixture = (0 until fixtures.length()).map { fixtures.getJSONObject(it) }.single { it.getString("id") == id }
+        val wire = fixture.getString("wire")
+        val blocks = com.grapsee.gsai.ui.chat.content.parseBlocks(wire)
+        val widgets = blocks.filterIsInstance<com.grapsee.gsai.ui.chat.content.Block.WidgetBlock>()
+        val expected = fixture.getJSONArray("widgetKinds")
+        org.junit.Assert.assertEquals((0 until expected.length()).map { expected.getString(it) }, widgets.map { it.kind })
+        widgets.forEach { org.junit.Assert.assertNotNull("$id must use an actual native widget, not raw JSON fallback", com.grapsee.gsai.ui.chat.content.parseWidget(it.kind, it.json)) }
+        val path = "build/screenshots/genui-reference-android-$id-393x852.png"
+        shootFlash(fixture.getString("question"), wire, path)
+        org.junit.Assert.assertTrue("$id did not produce a real native frame", java.io.File(path).length() > 20_000)
+        if (id == "05-data-grid") {
+            val chartButton = compose.onNodeWithText("Chart", useUnmergedTree = true)
+            chartButton.assertIsDisplayed()
+            val switchBounds = chartButton.fetchSemanticsNode().boundsInRoot
+            val headerBounds = compose.onNodeWithText("#", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            org.junit.Assert.assertTrue("The actual table must not cover its Chart controls", switchBounds.bottom <= headerBounds.top)
+            chartButton.performClick()
+            compose.onNodeWithText("#", useUnmergedTree = true).assertDoesNotExist()
+            org.junit.Assert.assertTrue("Chart must expose the real measure, not rank numbers", compose.onAllNodesWithText("Popularity", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+            compose.onRoot().captureRoboImage("build/screenshots/genui-reference-android-$id-chart-393x852.png")
+            compose.onNodeWithText("Table", useUnmergedTree = true).performClick()
+            compose.onNodeWithText("Python", useUnmergedTree = true).assertIsDisplayed()
+        }
+    }
+
+    @Test @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun sectionReference01Dashboard() = shootSectionReference("01-dashboard")
+    @Test @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun sectionReference02StructuredLaunch() = shootSectionReference("02-structured-launch")
+    @Test @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun sectionReference03ReactCode() = shootSectionReference("03-react-code")
+    @Test @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun sectionReference04Citations() = shootSectionReference("04-citations")
+    @Test @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun sectionReference05DataGrid() = shootSectionReference("05-data-grid")
+    @Test @Config(sdk = [34], qualifiers = "w393dp-h852dp-xxhdpi")
+    fun sectionReference06InteractiveCharts() = shootSectionReference("06-interactive-charts")
 
     private fun shoot(path: String) {
         compose.setContent { TheGsAiTheme(darkTheme = false) { referenceResponse() } }

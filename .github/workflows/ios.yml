@@ -16,16 +16,22 @@ on:
   pull_request:
     paths:
       - "ios/**"
-      - "shared-contracts/emoji-dom-policy.json"
+      - "shared-contracts/**"
       - ".github/workflows/ios.yml"
+      - "scripts/check_response_archive.py"
+      - "scripts/publish_response_section_frames.py"
+      - ".github/workflows/review-native-response-sections.yml"
   workflow_dispatch:
   push:
     branches:
       - main
     paths:
       - "ios/**"
-      - "shared-contracts/emoji-dom-policy.json"
+      - "shared-contracts/**"
       - ".github/workflows/ios.yml"
+      - "scripts/check_response_archive.py"
+      - "scripts/publish_response_section_frames.py"
+      - ".github/workflows/review-native-response-sections.yml"
       - "scripts/ios_static_gates.py"
       - "scripts/swift_structure_gate.py"
       # The pixel gate below runs this script and blocks on its verdict, so a
@@ -70,7 +76,9 @@ permissions:
 
 concurrency:
   group: ios-${{ github.ref }}
-  cancel-in-progress: true
+  # Finish the running native audit; newer commits replace only the pending run.
+  # Per-file pushes must not repeatedly cancel Xcode before runtime evidence.
+  cancel-in-progress: false
 
 jobs:
   ios-build-test:
@@ -279,17 +287,48 @@ jobs:
           set -o pipefail
           rm -rf ios/build/GSApp-genui.xcresult
           xcodebuild test \
+            -parallel-testing-enabled NO \
             -project "$PROJECT_FILE" \
             -scheme "$SCHEME" \
             -destination "$IOS_DESTINATION" \
             -derivedDataPath "$DERIVED_DATA" \
             -only-testing:AppTests/CalcHonestyTests \
+            -only-testing:AppTests/NexlyChatRenderTests/testSixSuppliedResponseSectionReferencesRenderThroughActualChat \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedBookingSavesOnlyActualLocalSelectionWithoutReservation \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedChecklistEditsDeletesAddsAndKeepsActualTaskCompletion \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testContextualEditOpensActualCodeAndExportOpensSystemDocumentPicker \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testContextualReportShowsActualDataAndSharePresentsSystemActivitySheet \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedCodeCopyEditRunAndInvalidDraftReset \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTerminalUsesRealFilesWorkerAndUnsupportedRefusal \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTableAllDisplaysEveryActualRow \
             -resultBundlePath ios/build/GSApp-genui.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee ios/build/xcodebuild-genui-test.log
+
+      - name: Independently verify actual XCTest source archive bytes
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 scripts/check_response_archive.py --self-test
+          DIR=ios/build/source-archive
+          mkdir -p "$DIR"
+          if ! xcrun xcresulttool export attachments \
+            --path ios/build/GSApp-genui.xcresult --output-path "$DIR/raw" > "$DIR/export.log" 2>&1; then
+            python3 -c 'from pathlib import Path; print("::error::Native source attachment export failed: " + Path("ios/build/source-archive/export.log").read_text().replace("%", "%25").replace("\n", "%0A"))'
+            exit 1
+          fi
+          python3 -u scripts/check_response_archive.py "$DIR/raw" 2>&1 | tee "$DIR/verification.log"
+
+      - name: Preserve native source archive byte evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-source-archive-${{ github.run_id }}
+          path: ios/build/source-archive
+          if-no-files-found: error
 
       - name: Test (XCTest unit tests on iOS simulator)
         run: |
@@ -305,6 +344,7 @@ jobs:
           RESULT_BUNDLE="ios/build/GSApp-tests.xcresult"
           rm -rf "$RESULT_BUNDLE"
           xcodebuild test \
+            -parallel-testing-enabled NO \
             -project "$PROJECT_FILE" \
             -scheme "$SCHEME" \
             -destination "$IOS_DESTINATION" \
@@ -320,6 +360,25 @@ jobs:
           import re
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
+              ('PlatformRuntimeUITests', 'testGeneratedChecklistEditsDeletesAddsAndKeepsActualTaskCompletion'),
+              ('NexlyChatRenderTests', 'testSixSuppliedResponseSectionReferencesRenderThroughActualChat'),
+              ('PlatformRuntimeUITests', 'testGeneratedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices'),
+              ('PlatformRuntimeUITests', 'testGeneratedBookingSavesOnlyActualLocalSelectionWithoutReservation'),
+              ('CalcHonestyTests', 'testWholeJSONPreservesMachineStringsBeforeMarkdownAndStreaming'),
+              ('CalcHonestyTests', 'testChecklistRefusesMalformedAndOversizedSourceWithoutKindHealing'),
+              ('CalcHonestyTests', 'testInvalidWizardCannotBypassIOSWidgetValidation'),
+              ('PlatformRuntimeUITests', 'testContextualEditOpensActualCodeAndExportOpensSystemDocumentPicker'),
+              ('PlatformRuntimeUITests', 'testContextualReportShowsActualDataAndSharePresentsSystemActivitySheet'),
+              ('CalcHonestyTests', 'testContextualCodeActionsRetainActualDraftsAndStayResponseScoped'),
+              ('CalcHonestyTests', 'testSourceArchivePreservesRealBytesAndKnownCRCWithoutInventingAProject'),
+              ('CalcHonestyTests', 'testSharedResponseReportIncludesActualTableAndWidgetData'),
+              ('PlatformRuntimeUITests', 'testGeneratedCodeCopyEditRunAndInvalidDraftReset'),
+              ('PlatformRuntimeUITests', 'testGeneratedTerminalUsesRealFilesWorkerAndUnsupportedRefusal'),
+              ('CalcHonestyTests', 'testCodeDisplayAndEditorPreserveActualSource'),
+              ('CalcHonestyTests', 'testGeneratedJavaScriptWorkerPreservesUnicodeStopsLoopsAndRejectsNetwork'),
+              ('CalcHonestyTests', 'testWorkerCSPPreventsActualHTTPAndPolicyOnlyCounterfactualCanFetch'),
+              ('CalcHonestyTests', 'testNativeFencesPreserveEverySourceSeparatorAndBlankLine'),
+              ('CalcHonestyTests', 'testNativeStreamingMatchesFullParseAtEveryFencePrefix'),
               ('PlatformRuntimeUITests', 'testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie'),
               ('CalcHonestyTests', 'testGeneratedHtmlExecutesAndCleansDynamicEmojiInProductionWebView'),
               ('CalcHonestyTests', 'testSignedChartDomainPreservesZeroNegativeAndAllObservations'),
@@ -348,8 +407,26 @@ jobs:
               lines = log.read_text(errors='replace').splitlines()
               failures = [line for line in lines if 'Ignoring failure to get hierarchy' not in line and any(word in line.lower() for word in ['error:', 'testing failed:', '** test failed **', 'timed out', 'could not'])]
               failures += [line for line in lines if 'Test Case' in line and 'failed' in line]
-              for line in failures[-35:]:
+              for line in failures[-8:]:
                   print('::error::' + line[:1800].replace('%', '%25').replace('\r', '%0D'))
+              passes = [line for line in lines if 'Test Case' in line and 'passed' in line and ('PlatformRuntimeUITests' in line or 'CalcHonestyTests' in line)]
+              for start in range(0, len(passes), 4):
+                  print('::notice::Actual executed native passes: ' + ' | '.join(passes[start:start + 4]).replace('%', '%25'))
+              import re
+              for label in ['EXPORT', 'SHARE']:
+                  chunks = {}
+                  for line in lines:
+                      match = re.search(r'GS_PRESENTATION_' + label + r'_(\d+): (.*)', line)
+                      if match: chunks[int(match.group(1))] = match.group(2)
+                  hierarchy = ''.join(chunks[key] for key in sorted(chunks))
+                  native = [part.strip() for part in hierarchy.split(' | ') if any(word in part for word in ["Button,", "NavigationBar,", "label: 'Cancel'", "label: 'Copy'", "label: 'Save'", "label: 'On My iPhone", "label: 'Browse'"])]
+                  if native: print('::notice::Actual native ' + label + ' controls: ' + ' | '.join(native)[-3200:].replace('%', '%25'))
+              for line in lines:
+                  if any(name in line for name in ['testWorkerCSPPreventsActualHTTPAndPolicyOnlyCounterfactualCanFetch', 'testSourceArchivePreservesRealBytesAndKnownCRCWithoutInventingAProject']) and 'passed' in line:
+                      print('::notice::Actual native unit proof: ' + line.replace('%', '%25'))
+              for archive_log in [Path('ios/build/source-archive/export.log'), Path('ios/build/source-archive/verification.log')]:
+                  if archive_log.exists():
+                      print('::notice::Native archive diagnostic: ' + archive_log.read_text(errors='replace')[-8000:].replace('%', '%25').replace('\n', '%0A'))
           PYTEST
           for RESULT in ios/build/GSApp-genui.xcresult ios/build/GSApp-tests.xcresult; do
             [ -d "$RESULT" ] || continue
@@ -422,6 +499,11 @@ jobs:
           DIR=ios/build/nexly-renders
           mkdir -p "$DIR"
           if [ -d "$SRC" ]; then cp "$SRC"/nexly-chat-ios-*.png "$DIR/" 2>/dev/null || true; fi
+          if [ -d "$SRC" ]; then cp "$SRC"/genui-reference-ios-*.png "$DIR/" 2>/dev/null || true; fi
+          for section in 01-dashboard 02-structured-launch 03-react-code 04-citations 05-data-grid 06-interactive-charts; do
+            test -s "$DIR/genui-reference-ios-$section-393x852.png" \
+              || { echo "::error::Missing actual iOS reference frame: $section"; exit 1; }
+          done
           for w in 393x852 411x914 360x780; do
             test -s "$DIR/nexly-chat-ios-$w.png" \
               || { echo "::error::nexly-chat-ios-$w.png missing — the chat render harness did not produce it"; exit 1; }
@@ -881,3 +963,11 @@ jobs:
             ios/build/GSApp-tests.xcresult
             ios/build/GSApp-genui.xcresult
           if-no-files-found: ignore
+
+  response-section-review:
+    needs: ios-build-test
+    if: always()
+    uses: ./.github/workflows/review-native-response-sections.yml
+    with:
+      platform: ios
+      artifact: nexly-chat-render-ios

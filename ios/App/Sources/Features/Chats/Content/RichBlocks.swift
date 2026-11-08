@@ -1,5 +1,5 @@
 import SwiftUI
-import JavaScriptCore
+import UniformTypeIdentifiers
 
 /// STEP 5 renderer (iOS twin of RichBlocks.kt) — the consumer half of the
 /// message → blocks seam. iOS parses on FINALIZE only (the streaming bubble
@@ -231,7 +231,7 @@ private func classifyCalloutHeaderTitle(_ raw: String) -> (CalloutTone, String)?
     return nil
 }
 
-private enum QuickCalcMode: String, CaseIterable {
+enum QuickCalcMode: String, CaseIterable {
     case discount = "-%"
     case markup = "+%"
     case percentOf = "Budget %"
@@ -240,7 +240,7 @@ private enum QuickCalcMode: String, CaseIterable {
     case macros = "Macros"
 }
 
-private struct NexlyCalculatorSpec {
+struct NexlyCalculatorSpec {
     let title: String
     let amountLabel: String
     let rateLabel: String
@@ -252,15 +252,15 @@ private struct NexlyCalculatorSpec {
     let currency: String
 }
 
-private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> NexlyCalculatorSpec? {
+func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> NexlyCalculatorSpec? {
     let (_, strippedTitle) = NexlyIcons.extractLeadingIcon(titleRaw)
     let cleanTitle = NexlyIcons.cleanPlainText(strippedTitle)
         .trimmingCharacters(in: CharacterSet(charactersIn: ":-—– "))
     let combined = "\(cleanTitle) \(bodyText)".lowercased()
     if ["calorie", "protein", "macro", "tdee", "bmi", "margin", "roi", "budget", "salary", "income"].contains(where: { combined.contains($0) }) { return nil }
     guard ["discount", "tax", "tip", "markup", "vat", "loan", "mortgage", "emi", "compound", "apy", "apr"].contains(where: { combined.contains($0) }) else { return nil }
-    let amountPattern = try? NSRegularExpression(pattern: "[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)\\s*([kKmMbB])?")
-    let ratePattern = try? NSRegularExpression(pattern: "(\\d+(?:\\.\\d+)?)\\s*(?:%|percent\\b)", options: .caseInsensitive)
+    let amountPattern = try? NSRegularExpression(pattern: "(?<![\\dA-Za-z_(−-])[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)(?:\\s*([kKmMbB])(?![A-Za-z]))?(?![\\dA-Za-z.,])")
+    let ratePattern = try? NSRegularExpression(pattern: "(?<![\\dA-Za-z_.,−-])(\\d+(?:\\.\\d+)?)\\s*(?:%|percent\\b)", options: .caseInsensitive)
     let sourceRange = NSRange(bodyText.startIndex..., in: bodyText)
     guard amountPattern?.numberOfMatches(in: bodyText, range: sourceRange) == 1,
           ratePattern?.numberOfMatches(in: bodyText, range: sourceRange) == 1 else { return nil }
@@ -269,7 +269,7 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
 
 
     var currAmount: Double? = nil
-    if let crx = try? NSRegularExpression(pattern: "[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)\\s*([kKmMbB])?"),
+    if let crx = try? NSRegularExpression(pattern: "(?<![\\dA-Za-z_(−-])[$€£¥]\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)(?:\\s*([kKmMbB])(?![A-Za-z]))?(?![\\dA-Za-z.,])"),
        let cm = crx.firstMatch(in: bodyText, range: NSRange(bodyText.startIndex..., in: bodyText)),
        let numRange = Range(cm.range(at: 1), in: bodyText),
        let base = Double(bodyText[numRange].replacingOccurrences(of: ",", with: "")) {
@@ -286,7 +286,7 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
     }
 
     var pctVal: Double? = nil
-    if let prx = try? NSRegularExpression(pattern: "(\\d+(?:\\.\\d+)?)\\s*(?:%|percent\\b)", options: [.caseInsensitive]),
+    if let prx = try? NSRegularExpression(pattern: "(?<![\\dA-Za-z_.,−-])(\\d+(?:\\.\\d+)?)\\s*(?:%|percent\\b)", options: [.caseInsensitive]),
        let pm = prx.firstMatch(in: bodyText, range: NSRange(bodyText.startIndex..., in: bodyText)),
        let pr = Range(pm.range(at: 1), in: bodyText) {
         pctVal = Double(bodyText[pr])
@@ -297,10 +297,13 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
        let ym = yrx.firstMatch(in: bodyText, range: NSRange(bodyText.startIndex..., in: bodyText)),
        let yr = Range(ym.range(at: 1), in: bodyText),
        let y = Int(bodyText[yr]) {
-        yearsVal = min(max(1, y), 40)
+        // The compact horizon control supports 1...40 years. Never silently
+        // turn a supplied 0- or 99-year scenario into a different loan.
+        if needsTerm && !(1...40).contains(y) { return nil }
+        yearsVal = y
     }
 
-    guard let amt = currAmount, let rate = pctVal else { return nil }
+    guard let amt = currAmount, let rate = pctVal, amt.isFinite, rate.isFinite, amt >= 0, rate >= 0 else { return nil }
 
     let currency: String = {
         if bodyText.contains("€") { return "€" }
@@ -363,7 +366,7 @@ private func parseQuickCalculatorSpec(titleRaw: String, bodyText: String) -> Nex
             currency: currency.isEmpty ? "$" : currency
         )
     }
-    if combined.contains("tax") || combined.contains("tip") || combined.contains("markup") || combined.contains("margin") || combined.contains("growth") || combined.contains("increase") {
+    if combined.contains("tax") || combined.contains("vat") || combined.contains("tip") || combined.contains("markup") || combined.contains("margin") || combined.contains("growth") || combined.contains("increase") {
         return NexlyCalculatorSpec(
             title: cleanTitle.isEmpty ? "Quick Calculator" : cleanTitle,
             amountLabel: "Base",
@@ -457,6 +460,7 @@ private struct StructuredProseSequenceView: View {
     let showThinkingStages: Bool
 
     @State private var activeDashboardTab: String = "Dashboard"
+    @StateObject private var codeActions = ResponseCodeActionsIOS()
 
     private var normalizedProse: [Block] {
         promoteStandaloneBoldHeadingsIOS(prose)
@@ -498,6 +502,7 @@ private struct StructuredProseSequenceView: View {
         let sectionMode: SectionListMode
         let coalescedCallout: (CalloutParsed, [ListItem])?
         let coalescedCalculator: NexlyCalculatorSpec?
+        var coalescedSources: ([CitationEntry], String)? = nil
     }
 
     private var entries: [SequenceEntry] {
@@ -508,6 +513,13 @@ private struct StructuredProseSequenceView: View {
         while i < sourceBlocks.count {
             let block = sourceBlocks[i]
             let nextBlock: Block? = (i + 1 < sourceBlocks.count) ? sourceBlocks[i + 1] : nil
+
+            if let sourceCard = sourceCardForHeadingIOS(block, following: nextBlock) {
+                mode = .sources
+                out.append(SequenceEntry(index: i, consumedCount: 2, block: block, sectionMode: mode, coalescedCallout: nil, coalescedCalculator: nil, coalescedSources: (sourceCard.citations, sourceCard.title)))
+                i += 2
+                continue
+            }
 
             // Coalesce Heading("Quick Calculator" | "Calculator") + BulletList/Paragraph into interactive NexlyQuickCalculatorCardView (Screenshot 1)
             if case .heading(_, let hSpans, _) = block {
@@ -573,6 +585,11 @@ private struct StructuredProseSequenceView: View {
     }
 
     var body: some View {
+        sequenceBody.environment(\.responseCodeActions, codeActions)
+    }
+
+    @ViewBuilder
+    private var sequenceBody: some View {
         let tabs = dashboardTabs
         if !tabs.isEmpty {
             HStack(spacing: 4) {
@@ -602,7 +619,9 @@ private struct StructuredProseSequenceView: View {
 
         ForEach(entries, id: \.index) { entry in
             if shouldShowEntryForTab(entry.block, tab: activeDashboardTab) {
-                if let calc = entry.coalescedCalculator {
+                if let (sources, title) = entry.coalescedSources {
+                    CitationsBlockView(citations: sources, title: title)
+                } else if let calc = entry.coalescedCalculator {
                     NexlyQuickCalculatorCardView(spec: calc)
                 } else if let (callout, extraItems) = entry.coalescedCallout {
                     NexlyCalloutCardView(callout: callout, extraItems: extraItems, citations: citations)
@@ -617,7 +636,7 @@ private struct StructuredProseSequenceView: View {
             }
         }
 
-        if !isStreaming && normalizedProse.count >= 2 {
+        if !isStreaming && !normalizedProse.isEmpty {
             let hasExplicitCalc = entries.contains { e in
                 if e.coalescedCalculator != nil { return true }
                 if case .widget(let k, _, _, _) = e.block, ["calc", "calculator", "converter"].contains(k) { return true }
@@ -669,12 +688,8 @@ private struct StructuredProseSequenceView: View {
                 return false
             }()
             if !endsWithAction {
-                NexlyContextualActionPillsRowView(prose: normalizedProse, onAction: { prompt in
-                    if prompt.lowercased().contains("copy") || prompt.lowercased().contains("share") {
-                        UIPasteboard.general.string = extractCopyableProseSummary(normalizedProse, citationsOnly: prompt.lowercased().contains("citation"))
-                    } else {
-                        widgetAction?(prompt)
-                    }
+                NexlyContextualActionPillsRowView(prose: normalizedProse, citations: citations, onShowCode: {
+                    activeDashboardTab = "Dashboard"
                 })
             }
         }
@@ -711,7 +726,7 @@ private struct StructuredProseSequenceView: View {
     }
 }
 
-private func extractCopyableProseSummary(_ prose: [Block], citationsOnly: Bool) -> String {
+func extractCopyableProseSummary(_ prose: [Block], citationsOnly: Bool) -> String {
     var lines: [String] = []
     for block in prose {
         switch block {
@@ -740,17 +755,116 @@ private func extractCopyableProseSummary(_ prose: [Block], citationsOnly: Bool) 
             }
         case .codeBlock(_, let code, _, _):
             if !citationsOnly { lines.append(code) }
+        case .widget(let kind, let json, _, _):
+            if !citationsOnly { lines.append("\(kind) data\n\(json)") }
+        case .html(_, let source, _, _):
+            if !citationsOnly { lines.append(source) }
+        case .table(let headers, _, let rows, _):
+            if !citationsOnly {
+                lines.append(headers.map { plainTextOfSpans($0) }.joined(separator: "\t"))
+                lines += rows.map { row in row.map { plainTextOfSpans($0) }.joined(separator: "\t") }
+            }
+        case .blockQuote(let blocks, _):
+            if !citationsOnly { lines.append(extractCopyableProseSummary(blocks, citationsOnly: false)) }
+        case .mathBlock(let latex, _):
+            if !citationsOnly { lines.append(latex) }
+        case .mermaid(let source, _):
+            if !citationsOnly { lines.append(source) }
         default:
             break
         }
     }
     let joined = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-    return joined.isEmpty ? "Copied from Nexly" : joined
+    return joined
 }
 
 private struct NexlyContextualActionPillsRowView: View {
+    @Environment(\.gsOpenInApp) private var inAppBrowser
+    @Environment(\.gsWidgetAction) private var widgetAction
+    @Environment(\.responseCodeActions) private var codeActions
     let prose: [Block]
-    let onAction: (String) -> Void
+    let citations: [Int: String]
+    let onShowCode: () -> Void
+    private enum PresentedSheet: Identifiable {
+        case share, export(URL), details
+        var id: String {
+            switch self {
+            case .share: return "share"
+            case .details: return "details"
+            case .export(let url): return url.absoluteString
+            }
+        }
+    }
+    @State private var presentedSheet: PresentedSheet? = nil
+    @State private var sourcesOnly = false
+    @State private var preparedExportURL: URL? = nil
+    @State private var notice: String? = nil
+
+    private var citationText: String {
+        [extractCopyableProseSummary(prose, citationsOnly: true), citations.sorted { $0.key < $1.key }.map { "[\($0.key)] \($0.value)" }.joined(separator: "\n")]
+            .filter { !$0.isEmpty }.joined(separator: "\n")
+    }
+    private var sourceURLs: [String] {
+        let embedded = prose.flatMap { block -> [String] in
+            if case .citations(let entries, _) = block { return entries.map(\.url) }
+            return []
+        }
+        return Array(Set(Array(citations.values) + embedded)).sorted().filter { raw in
+            citationSourceURLIOS(raw) != nil
+        }
+    }
+    private var sourceText: String {
+        let body = extractCopyableProseSummary(prose, citationsOnly: false)
+        return body + (citations.isEmpty ? "" : "\n\nSources\n" + citations.sorted { $0.key < $1.key }.map { "[\($0.key)] \($0.value)" }.joined(separator: "\n"))
+    }
+    private func prepareExport(_ data: Data, filename: String) throws {
+        cleanPreparedExport()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("GSResponse-" + UUID().uuidString, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let file = directory.appendingPathComponent(filename)
+            try data.write(to: file, options: .atomic)
+            preparedExportURL = file
+            presentedSheet = .export(file)
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            throw error
+        }
+    }
+    private func cleanPreparedExport() {
+        if let file = preparedExportURL { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        preparedExportURL = nil
+    }
+    private func perform(_ label: String) {
+        notice = nil
+        switch label {
+        case "Share": presentedSheet = .share
+        case "Copy Citations":
+            if citationText.isEmpty { notice = "No citation URLs are available to copy." }
+            else { UIPasteboard.general.string = citationText; notice = "Citations copied." }
+        case "Download Report":
+            do { try prepareExport(Data(sourceText.utf8), filename: "gs-ai-response.md") }
+            catch { notice = "Could not prepare export: \(error.localizedDescription)" }
+        case "Download Project":
+            let sources: [(String?, String)] = prose.compactMap { block in
+                guard case .codeBlock(let language, let source, let open, let id) = block, !open else { return nil }
+                return codeActions?.source(AnyHashable(id)) ?? (language, source)
+            }
+            do {
+                try prepareExport(try responseSourceArchiveIOS(sources), filename: "gs-ai-source-snippets.zip")
+                notice = "Source snippets only, not a complete runnable project. See README.txt."
+            } catch { notice = error.localizedDescription }
+        case "Edit Code":
+            onShowCode()
+            if let codeActions { codeActions.editFirst() }
+            else { notice = "No editable code block is available." }
+        case "View All Sources": sourcesOnly = true; presentedSheet = .details
+        case "View Details", "View Full Report": sourcesOnly = false; presentedSheet = .details
+        default:
+            if let widgetAction { widgetAction(label) }
+            else { notice = "Follow-up requests are unavailable in this view." }
+        }
+    }
 
     private var actions: [(String, String)] {
         let hasChart = prose.contains { if case .widget(let k, _, _, _) = $0 { return k == "chart" }; return false }
@@ -760,7 +874,7 @@ private struct NexlyContextualActionPillsRowView: View {
             return false
         }
         let hasCode = prose.contains { if case .codeBlock = $0 { return true }; return false }
-        let hasSources = prose.contains {
+        let hasSources = !citations.isEmpty || prose.contains {
             if case .citations = $0 { return true }
             if case .heading(_, let spans, _) = $0 { return classifySectionListMode(plainTextOfSpans(spans)) == .sources }
             return false
@@ -794,12 +908,13 @@ private struct NexlyContextualActionPillsRowView: View {
     var body: some View {
         let list = actions
         if !list.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(Array(list.enumerated()), id: \.offset) { _, pair in
                         Button {
                             GSHaptics.select()
-                            onAction(pair.1)
+                            perform(pair.1)
                         } label: {
                             HStack(spacing: 6) {
                                 NexlyGlyph(
@@ -820,6 +935,44 @@ private struct NexlyContextualActionPillsRowView: View {
                     }
                 }
                 .padding(.top, 4)
+            }
+            if let notice { Text(notice).font(.caption).accessibilityIdentifier("response.action.notice") }
+            }
+            .sheet(item: $presentedSheet, onDismiss: { cleanPreparedExport() }) { sheet in
+                switch sheet {
+                case .share:
+                    ResponseActivityPresenterIOS(items: [sourceText]) { presentedSheet = nil }
+                case .export(let file):
+                    ResponseDocumentPickerIOS(sourceURL: file) { destination in
+                        notice = destination == nil ? "Export cancelled." : "Export saved."
+                        presentedSheet = nil
+                    }
+                case .details:
+                NavigationStack {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text(CodeDisplayIOS.escape(sourcesOnly ? (citationText.isEmpty ? "No source URLs were supplied." : citationText) : sourceText))
+                                .textSelection(.enabled)
+                            if sourcesOnly {
+                                ForEach(sourceURLs, id: \.self) { raw in
+                                    Button {
+                                        if let url = citationSourceURLIOS(raw) { gsOpenURL(url, inApp: inAppBrowser) }
+                                    } label: {
+                                        HStack(alignment: .top, spacing: 8) {
+                                            NexlyGlyph(name: "external-link", size: 14, color: .purple)
+                                            Text(CodeDisplayIOS.escape(raw)).multilineTextAlignment(.leading)
+                                        }
+                                    }
+                                    .accessibilityIdentifier("response.source.link")
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading).padding()
+                    }
+                    .navigationTitle(sourcesOnly ? "All sources" : "Response source and data")
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Close details") { presentedSheet = nil } } }
+                }
+                }
             }
         }
     }
@@ -855,8 +1008,8 @@ func BlockView(block: Block, isLast: Bool, citations: [Int: String]) -> some Vie
         OrderedListView(start: start, items: items, citations: citations)
     case .blockQuote(let inner, _):
         BlockQuoteView(blocks: inner, citations: citations)
-    case .codeBlock(let language, let code, let open, _):
-        CodeBlockCardView(language: language, code: code, open: open)
+    case .codeBlock(let language, let code, let open, let sourceStart):
+        CodeBlockCardView(language: language, code: code, open: open, sourceStart: sourceStart)
     case .table(let headers, let aligns, let rows, _):
         TableBlockView(headers: headers, aligns: aligns, rows: rows, citations: citations)
     case .plan(let plan, let open, _):
@@ -921,7 +1074,7 @@ private func append(
         case .strike(let children):
             result.append(attributed(from: children, theme: theme, style: style.union(.strikethrough)))
         case .code(let code):
-            let cleanCode = NexlyIcons.cleanPlainText(code)
+            let cleanCode = CodeDisplayIOS.escape(code)
             var run = AttributedString(cleanCode)
             run.font = .system(size: theme.baseSize * 0.88, weight: .regular, design: .monospaced)
             run.backgroundColor = theme.monoBackground
@@ -1175,12 +1328,14 @@ private struct NexlyCalloutCardView: View {
                 Text(callout.title)
                     .font(.system(size: compact ? 13.5 : 14.5, weight: .bold))
                     .foregroundStyle(titleColor)
+                    .fixedSize(horizontal: false, vertical: true)
                 if !callout.bodySpans.isEmpty {
                     Text(attributed(from: callout.bodySpans, theme: theme))
                         .font(.system(size: compact ? 13 : 14, weight: .regular))
                         .foregroundStyle(bodyColor)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if !extraItems.isEmpty {
                     BulletListView(items: extraItems, citations: citations)
@@ -1195,6 +1350,34 @@ private struct NexlyCalloutCardView: View {
     }
 }
 
+func sourceScenarioNumberTextIOS(_ value: Double) -> String {
+    guard value.isFinite else { return "" }
+    if value == 0 { return "0" }
+    let text = String(value).lowercased()
+    let parts = text.split(separator: "e")
+    guard parts.count == 2, let exponent = Int(parts[1]) else {
+        return text.hasSuffix(".0") ? String(text.dropLast(2)) : text
+    }
+    let negative = parts[0].hasPrefix("-")
+    let mantissa = negative ? String(parts[0].dropFirst()) : String(parts[0])
+    let decimal = mantissa.split(separator: ".", omittingEmptySubsequences: false)
+    let digits = decimal.joined()
+    let position = decimal[0].count + exponent
+    let plain: String
+    if position <= 0 { plain = "0." + String(repeating: "0", count: -position) + digits }
+    else if position >= digits.count { plain = digits + String(repeating: "0", count: position - digits.count) }
+    else { plain = String(digits.prefix(position)) + "." + String(digits.dropFirst(position)) }
+    return (negative ? "-" : "") + plain
+}
+
+func sourceLoanMonthlyPaymentIOS(principal: Double, apr: Double, years: Int) -> Double? {
+    guard principal.isFinite, apr.isFinite, principal >= 0, apr >= 0, years > 0 else { return nil }
+    let months = Double(years) * 12
+    let rate = apr / 1200
+    let payment = rate == 0 ? principal / months : principal * (rate / -expm1(-months * log1p(rate)))
+    return payment.isFinite ? payment : nil
+}
+
 private struct NexlyQuickCalculatorCardView: View {
     let spec: NexlyCalculatorSpec
 
@@ -1206,12 +1389,8 @@ private struct NexlyQuickCalculatorCardView: View {
 
     init(spec: NexlyCalculatorSpec) {
         self.spec = spec
-        let amtFmt = spec.initialAmount.truncatingRemainder(dividingBy: 1.0) == 0
-            ? String(format: "%.0f", spec.initialAmount)
-            : String(format: "%.2f", spec.initialAmount)
-        let rateFmt = spec.initialRate.truncatingRemainder(dividingBy: 1.0) == 0
-            ? String(format: "%.0f", spec.initialRate)
-            : String(format: "%.1f", spec.initialRate)
+        let amtFmt = sourceScenarioNumberTextIOS(spec.initialAmount)
+        let rateFmt = sourceScenarioNumberTextIOS(spec.initialRate)
         _amountText = State(initialValue: amtFmt)
         _rateText = State(initialValue: rateFmt)
         _years = State(initialValue: spec.initialYears)
@@ -1219,19 +1398,17 @@ private struct NexlyQuickCalculatorCardView: View {
     }
 
     private var amountVal: Double {
-        max(0, Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0)
+        guard let value = Double(amountText.replacingOccurrences(of: ",", with: "")), value.isFinite, value >= 0 else { return .nan }
+        return value
     }
 
     private var rateVal: Double {
-        min(max(0, Double(rateText.replacingOccurrences(of: ",", with: "")) ?? 0), 1000)
+        guard let value = Double(rateText.replacingOccurrences(of: ",", with: "")), value.isFinite, value >= 0 else { return .nan }
+        return value
     }
 
     private var monthlyLoanPayment: Double {
-        let n = Double(max(1, years * 12))
-        let r = (rateVal / 100.0) / 12.0
-        if r <= 0.000001 { return amountVal / n }
-        let factor = pow(1.0 + r, n)
-        return amountVal * (r * factor) / (factor - 1.0)
+        sourceLoanMonthlyPaymentIOS(principal: amountVal, apr: rateVal, years: years) ?? .nan
     }
 
     private var totalLoanPaid: Double {
@@ -1258,8 +1435,9 @@ private struct NexlyQuickCalculatorCardView: View {
     }
 
     private var formattedResultText: String {
+        guard total.isFinite else { return "Undefined" }
         switch mode {
-        case .loan: return String(format: "%@%.0f/mo", spec.currency.isEmpty ? "$" : spec.currency, total)
+        case .loan: return String(format: "%@%.2f/mo", spec.currency.isEmpty ? "$" : spec.currency, total)
         case .macros: return String(format: "%.0f kcal", total)
         default: return String(format: "%@%.2f", spec.currency, total)
         }
@@ -1308,7 +1486,7 @@ private struct NexlyQuickCalculatorCardView: View {
     }
 
     private var horizonOptions: [Int] {
-        mode == .loan ? [5, 10, 15, 20, 30] : [1, 3, 5, 10, 20]
+        Array(Set((mode == .loan ? [5, 10, 15, 20, 30] : [1, 3, 5, 10, 20]) + [spec.initialYears])).sorted()
     }
 
     private var sliderMax: Double {
@@ -1327,10 +1505,11 @@ private struct NexlyQuickCalculatorCardView: View {
     }
 
     private var summaryBadgeText: String {
+        guard total.isFinite else { return "Enter valid amount and rate." }
         let curr = spec.currency.isEmpty ? "$" : spec.currency
         switch mode {
         case .loan:
-            return String(format: "Interest %@%.0f · Total %@%.0f", curr, totalLoanInterest, curr, totalLoanPaid)
+            return String(format: "Interest %@%.2f · Total %@%.2f", curr, totalLoanInterest, curr, totalLoanPaid)
         case .macros:
             return String(format: "Protein %.0fg · Water %.1fL", amountVal * max(1.2, rateVal), amountVal * 0.035)
         case .discount:
@@ -1379,12 +1558,8 @@ private struct NexlyQuickCalculatorCardView: View {
 
                 Button("Reset") {
                     GSHaptics.select()
-                    amountText = spec.initialAmount.truncatingRemainder(dividingBy: 1.0) == 0
-                        ? String(format: "%.0f", spec.initialAmount)
-                        : String(format: "%.2f", spec.initialAmount)
-                    rateText = spec.initialRate.truncatingRemainder(dividingBy: 1.0) == 0
-                        ? String(format: "%.0f", spec.initialRate)
-                        : String(format: "%.1f", spec.initialRate)
+                    amountText = sourceScenarioNumberTextIOS(spec.initialAmount)
+                    rateText = sourceScenarioNumberTextIOS(spec.initialRate)
                     years = spec.initialYears
                     mode = spec.mode
                 }
@@ -1495,7 +1670,7 @@ private struct NexlyQuickCalculatorCardView: View {
         VStack(alignment: .leading, spacing: 4) {
             Slider(
                 value: Binding(
-                    get: { min(max(0.0, rateVal), maxR) },
+                    get: { rateVal.isFinite ? min(max(0.0, rateVal), maxR) : 0 },
                     set: { (newVal: Double) in
                         rateText = useDec ? String(format: "%.1f", newVal) : String(format: "%.0f", newVal)
                     }
@@ -1504,6 +1679,7 @@ private struct NexlyQuickCalculatorCardView: View {
                 step: stepR
             )
             .tint(Color(red: 0.424, green: 0.298, blue: 0.965))
+            .disabled(!rateVal.isFinite)
 
             HStack {
                 HStack(spacing: 4) {
@@ -1716,14 +1892,14 @@ private struct NexlyQuantitativeExplorerCardIOS: View {
     }
 }
 
-private struct SpontaneousConceptItemIOS {
+struct SpontaneousConceptItemIOS {
     let term: String
     let definition: String
     let icon: String
     let tone: NexlyGlassTone
 }
 
-private func extractSpontaneousConceptsFromBlocksIOS(_ blocks: [Block]) -> [SpontaneousConceptItemIOS] {
+func extractSpontaneousConceptsFromBlocksIOS(_ blocks: [Block]) -> [SpontaneousConceptItemIOS] {
     var out: [SpontaneousConceptItemIOS] = []
     var seen = Set<String>()
     let sepRx = try? NSRegularExpression(pattern: "^([^:—–-]{3,42})\\s*(?::|—|–|-)\\s*(.{14,})$")
@@ -1731,15 +1907,24 @@ private func extractSpontaneousConceptsFromBlocksIOS(_ blocks: [Block]) -> [Spon
     func appendConcept(termRaw: String, defRaw: String) {
         let term = NexlyIcons.cleanPlainText(termRaw).trimmingCharacters(in: CharacterSet(charactersIn: ":-—– "))
         let def = NexlyIcons.cleanPlainText(defRaw).trimmingCharacters(in: CharacterSet(charactersIn: ":-—– "))
-        guard term.count >= 3, term.count <= 44, def.count >= 14, !def.lowercased().contains("http") else { return }
+        guard term.count >= 3, term.count <= 44, (14...600).contains(def.count), !def.lowercased().contains("http") else { return }
         let key = term.lowercased()
-        guard !seen.contains(key) else { return }
+        guard !seen.contains(key), !out.contains(where: { $0.definition.lowercased() == def.lowercased() }) else { return }
         seen.insert(key)
         let sem = NexlyIcons.semanticIcon(for: "\(term) \(def)", fallback: "bulb")
-        out.append(SpontaneousConceptItemIOS(term: term, definition: String(def.prefix(180)), icon: sem.icon, tone: sem.tone))
+        out.append(SpontaneousConceptItemIOS(term: term, definition: def, icon: sem.icon, tone: sem.tone))
     }
 
+    var excludedSection = false
     for (idx, b) in blocks.enumerated() {
+        if case .heading(_, let spans, _) = b {
+            let title = NexlyIcons.cleanPlainText(plainTextOfSpans(spans))
+            let section = classifySectionListMode(title)
+            excludedSection = section == .sources || section == .todo || title.range(of: "\\b(?:references|bibliography|steps?|plan|instructions|procedure)\\b", options: [.regularExpression, .caseInsensitive]) != nil
+        }
+        // A useful learning interaction needs actual definitions, not a quiz
+        // fabricated from citation records or an action plan.
+        if excludedSection { continue }
         let rawItems: [ListItem]
         switch b {
         case .bulletList(let items, _):
@@ -2038,23 +2223,26 @@ private struct NexlyInteractiveConceptDeckCardIOS: View {
     }
 }
 
-private func inferSourceDomain(from text: String) -> (domain: String, url: String)? {
-    let low = text.lowercased()
-    if low.contains("iea") { return ("www.iea.org", "https://www.iea.org") }
-    if low.contains("irena") { return ("www.irena.org", "https://www.irena.org") }
-    if low.contains("nature") { return ("www.nature.com", "https://www.nature.com") }
-    if low.contains("react") { return ("react.dev", "https://react.dev") }
-    if low.contains("tailwind") { return ("tailwindcss.com", "https://tailwindcss.com") }
-    if low.contains("mdn") || low.contains("mozilla") { return ("developer.mozilla.org", "https://developer.mozilla.org") }
-    if low.contains("python") { return ("docs.python.org", "https://docs.python.org") }
-    if low.contains("clickhouse") { return ("clickhouse.com", "https://clickhouse.com") }
-    if low.contains("nexly") { return ("nexly-analytics.com", "https://nexly-analytics.com") }
-    if low.contains("arxiv") { return ("arxiv.org", "https://arxiv.org") }
-    if low.contains("ieee") { return ("www.ieee.org", "https://www.ieee.org") }
-    return nil
+func sourceCardForHeadingIOS(_ heading: Block, following: Block?) -> (citations: [CitationEntry], title: String)? {
+    guard case .heading(_, let spans, _) = heading, let following else { return nil }
+    let title = NexlyIcons.cleanPlainText(plainTextOfSpans(spans)).trimmingCharacters(in: .whitespacesAndNewlines)
+    guard classifySectionListMode(title) == .sources else { return nil }
+    if case .citations(let citations, _) = following { return (citations, title) }
+    let items: [ListItem]
+    let start: Int
+    switch following {
+    case .orderedList(let number, let list, _): items = list; start = number
+    case .bulletList(let list, _): items = list; start = 1
+    default: return nil
+    }
+    let entries = items.enumerated().compactMap { index, item in
+        extractSourceEntryFromItem(number: item.number ?? (start + index), item: item)
+    }
+    guard !entries.isEmpty, entries.count == items.count else { return nil }
+    return (entries, title)
 }
 
-private func extractSourceEntryFromItem(number: Int, item: ListItem, allowInference: Bool = false) -> CitationEntry? {
+private func extractSourceEntryFromItem(number: Int, item: ListItem) -> CitationEntry? {
     var combinedSpans = item.spans
     for child in item.children {
         if case .paragraph(let cSpans, _) = child {
@@ -2062,10 +2250,10 @@ private func extractSourceEntryFromItem(number: Int, item: ListItem, allowInfere
             combinedSpans.append(contentsOf: cSpans)
         }
     }
-    return extractSourceEntryFromSpans(number: number, spans: combinedSpans, allowInference: allowInference)
+    return extractSourceEntryFromSpans(number: number, spans: combinedSpans)
 }
 
-private func extractSourceEntryFromSpans(number: Int, spans: [InlineSpan], allowInference: Bool = false) -> CitationEntry? {
+private func extractSourceEntryFromSpans(number: Int, spans: [InlineSpan]) -> CitationEntry? {
     var linkUrl = ""
     var linkTitle = ""
     func walk(_ list: [InlineSpan]) {
@@ -2092,11 +2280,6 @@ private func extractSourceEntryFromSpans(number: Int, spans: [InlineSpan], allow
        let r = Range(m.range, in: fullText) {
         let found = String(fullText[r])
         linkUrl = found.hasPrefix("http") ? found : "https://\(found)"
-    }
-    if linkUrl.isEmpty && allowInference {
-        if let inferred = inferSourceDomain(from: fullText) {
-            linkUrl = inferred.url
-        }
     }
     guard !linkUrl.isEmpty else { return nil }
     let afterProto = linkUrl.components(separatedBy: "://").last ?? linkUrl
@@ -2165,6 +2348,7 @@ private struct ParagraphView: View {
                             .lineSpacing(compact ? 2 : 0)
                             .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
                             .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 } else {
                     Text(attributed(from: displaySpans, theme: theme))
@@ -2172,6 +2356,7 @@ private struct ParagraphView: View {
                         .lineSpacing(compact ? 2 : 0)
                         .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
                         .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -2290,7 +2475,7 @@ private struct BulletListView: View {
     private var extractedSources: [CitationEntry] {
         guard sectionMode == .sources else { return [] }
         let entries = items.enumerated().compactMap { idx, item in
-            extractSourceEntryFromItem(number: idx + 1, item: item, allowInference: true)
+            extractSourceEntryFromItem(number: idx + 1, item: item)
         }
         return entries.count == items.count ? entries : []
     }
@@ -2558,11 +2743,10 @@ private struct OrderedListView: View {
         let entries = items.enumerated().compactMap { idx, item in
             extractSourceEntryFromItem(
                 number: item.number ?? (start + idx),
-                item: item,
-                allowInference: sectionMode == .sources
+                item: item
             )
         }
-        if !entries.isEmpty && (sectionMode == .sources || entries.count == items.count) {
+        if !entries.isEmpty && entries.count == items.count {
             return entries
         }
         return []
@@ -2572,6 +2756,21 @@ private struct OrderedListView: View {
         let sources = extractedSources
         if !sources.isEmpty {
             CitationsBlockView(citations: sources)
+        } else if sectionMode == .sources {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("\(item.number ?? (start + index)).").font(.system(size: 12, weight: .medium))
+                        VStack(alignment: .leading, spacing: 4) {
+                            ParagraphView(spans: item.spans, citations: citations)
+                            ForEach(Array(item.children.enumerated()), id: \.offset) { _, child in
+                                NestedChildView(block: child, citations: citations)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 if !completedSet.isEmpty && items.count >= 2 {
@@ -2823,11 +3022,21 @@ private struct BlockQuoteView: View {
 
 struct CodeBlockCardView: View {
     @Environment(\.nexlyCodeWrap) private var wrapCode
+    @Environment(\.responseCodeActions) private var responseActions
+    @State private var localSourceID = UUID()
+    @FocusState private var sourceFocused: Bool
     let language: String?
     let code: String
     var open: Bool = false
+    var sourceStart: Int? = nil
+    private var sourceID: AnyHashable { sourceStart.map(AnyHashable.init) ?? AnyHashable(localSourceID) }
 
+    @State private var workerDocument: String? = nil
+    @State private var browserDocument: String? = nil
     @State private var editing = false
+    @State private var editorDraft = ""
+    @State private var editorEncoded = false
+    @State private var editorError: String? = nil
     @State private var expanded = false
     @State private var editedCode: String? = nil
     @State private var runOutput: String? = nil
@@ -2838,6 +3047,10 @@ struct CodeBlockCardView: View {
     private var lang: String { (language ?? "code").lowercased().trimmingCharacters(in: .whitespacesAndNewlines) }
     private var isBrowserLang: Bool {
         ["html", "htm", "svg", "jsx", "tsx", "react"].contains(lang)
+    }
+
+    private var supportsExecution: Bool {
+        ["html", "htm", "svg", "js", "javascript", "node", "json"].contains(lang)
     }
 
     private var allLines: [String] {
@@ -2860,6 +3073,13 @@ struct CodeBlockCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             codeHeaderBar
+            if CodeDisplayIOS.requiresEncoding(currentCode) {
+                Text("Unicode symbols are shown as escapes; Copy and Run keep original source.").font(.caption).foregroundStyle(Color.white.opacity(0.8)).padding(8)
+            }
+            if editing && editorEncoded {
+                Text("Unicode-safe editor: edit one JSON-encoded source string.").font(.caption).foregroundStyle(Color.white.opacity(0.8)).padding(8)
+            }
+            if let editorError { Text(editorError).font(.caption).foregroundStyle(Color.red).padding(8) }
             codeEditorSurface
             codeExecutionBar
             codeOutputDrawer
@@ -2869,6 +3089,33 @@ struct CodeBlockCardView: View {
         .background(RoundedRectangle(cornerRadius: 14).fill(Color(red: 0.133, green: 0.122, blue: 0.231)))
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.212, green: 0.192, blue: 0.361), lineWidth: 1))
+        .onAppear {
+            if !open {
+                let restored = responseActions?.source(sourceID)?.1 ?? code
+                if restored != code { editedCode = restored }
+                registerResponseCode(source: restored)
+            }
+        }
+        .onDisappear { responseActions?.remove(sourceID) }
+        .onChange(of: currentCode) { source in responseActions?.update(sourceID, source: source) }
+        .onChange(of: open) { value in if !value { registerResponseCode(source: currentCode) } }
+        .onChange(of: code) { _ in
+            resetCodeState()
+            if !open { registerResponseCode(source: code) }
+        }
+        .onChange(of: language) { _ in
+            resetCodeState()
+            if !open { registerResponseCode(source: code) }
+        }
+    }
+
+    private func registerResponseCode(source: String) {
+        responseActions?.register(sourceID, entry: ResponseCodeActionsIOS.Entry(language: language, source: source, edit: {
+            editorEncoded = CodeDisplayIOS.requiresEncoding(currentCode)
+            editorDraft = editorEncoded ? CodeDisplayIOS.encodeEditor(currentCode) : currentCode
+            editorError = nil; editing = true
+            DispatchQueue.main.async { sourceFocused = true }
+        }))
     }
 
     @ViewBuilder
@@ -2879,7 +3126,7 @@ struct CodeBlockCardView: View {
                 size: 14,
                 color: Color(red: 0.620, green: 0.525, blue: 1.0)
             )
-            Text((language ?? "code").capitalized)
+            Text(NexlyIcons.cleanPlainText((language ?? "code").capitalized))
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(Color(red: 0.902, green: 0.882, blue: 1.0))
             Spacer()
@@ -2896,7 +3143,12 @@ struct CodeBlockCardView: View {
             }
             if !open && !code.isEmpty {
                 Button(editing ? "Done" : "Edit") {
-                    if editedCode == nil { editedCode = code }
+                    if editing && editorError != nil { return }
+                    if !editing {
+                        editorEncoded = CodeDisplayIOS.requiresEncoding(currentCode)
+                        editorDraft = editorEncoded ? CodeDisplayIOS.encodeEditor(currentCode) : currentCode
+                        editorError = nil
+                    }
                     editing.toggle()
                 }
                 .font(.system(size: 11, weight: .semibold))
@@ -2906,18 +3158,21 @@ struct CodeBlockCardView: View {
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
                 .buttonStyle(.plain)
             }
+            if currentCode != code || editorError != nil {
+                Button("Reset") { resetCodeState() }.buttonStyle(.plain).font(.caption)
+            }
             CodeCopyButton(text: currentCode)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background(Color(red: 0.106, green: 0.094, blue: 0.188))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Code block\(language.map { ", " + $0 } ?? "")")
     }
 
     @ViewBuilder
     private var codeEditorSurface: some View {
-        if currentCode.isEmpty {
+        if currentCode.isEmpty && !editing {
             Text("…")
                 .font(.system(size: 12, weight: .regular, design: .monospaced))
                 .foregroundStyle(Color(red: 0.925, green: 0.910, blue: 1.0))
@@ -2926,9 +3181,24 @@ struct CodeBlockCardView: View {
                 .textSelection(.enabled)
         } else if editing {
             TextEditor(text: Binding(
-                get: { editedCode ?? code },
-                set: { editedCode = $0 }
+                get: { editorDraft },
+                set: { draft in
+                    if !editorEncoded && CodeDisplayIOS.requiresEncoding(draft) {
+                        editorEncoded = true
+                        editorDraft = CodeDisplayIOS.encodeEditor(draft)
+                        editedCode = draft
+                        editorError = nil
+                    } else {
+                        editorDraft = CodeDisplayIOS.escape(draft)
+                        do {
+                            if editorEncoded { editedCode = try CodeDisplayIOS.decodeEditor(draft) }
+                            else { editedCode = draft }
+                            editorError = nil
+                        } catch { editorError = "Enter one valid JSON source string. Invalid drafts cannot run." }
+                    }
+                }
             ))
+            .focused($sourceFocused)
             .font(.system(size: 12, weight: .regular, design: .monospaced))
             .foregroundStyle(Color(red: 0.925, green: 0.910, blue: 1.0))
             .frame(minHeight: 110, maxHeight: 260)
@@ -2936,11 +3206,14 @@ struct CodeBlockCardView: View {
             .padding(.bottom, 8)
         } else {
             if wrapCode {
-                codeSurfaceWithLineNumbers
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 10)
-                    .textSelection(.enabled)
+                ScrollView(.vertical) {
+                    codeSurfaceWithLineNumbers
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 10)
+                        .textSelection(.enabled)
+                }
+                .frame(maxHeight: 320)
             } else {
                 ScrollView([.horizontal, .vertical]) {
                     codeSurfaceWithLineNumbers
@@ -2964,7 +3237,7 @@ struct CodeBlockCardView: View {
                 } label: {
                     HStack(spacing: 5) {
                         NexlyGlyph(name: "player-play", size: 12, color: .white)
-                        Text(isBrowserLang ? "Run in Browser" : (lang == "json" ? "Validate JSON" : "Run Code"))
+                        Text(!supportsExecution ? "Source only" : isBrowserLang ? "Run in Browser" : (lang == "json" ? "Validate JSON" : "Run Code"))
                             .font(.system(size: 11.5, weight: .bold))
                     }
                     .foregroundStyle(Color.white)
@@ -2973,6 +3246,8 @@ struct CodeBlockCardView: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.424, green: 0.298, blue: 0.965)))
                 }
                 .buttonStyle(.plain)
+                .disabled(!supportsExecution)
+                .opacity(supportsExecution ? 1 : 0.65)
 
                 Spacer()
 
@@ -3039,7 +3314,7 @@ struct CodeBlockCardView: View {
                 }
 
                 if let out = runOutput, !out.isEmpty {
-                    Text(out)
+                    Text(CodeDisplayIOS.escape(out))
                         .font(.system(size: 11.5, weight: .regular, design: .monospaced))
                         .foregroundStyle(Color(red: 0.847, green: 0.953, blue: 0.863))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3047,7 +3322,7 @@ struct CodeBlockCardView: View {
 
                 if let err = errorOutput ?? (["error", "stderr", "traceback", "exception"].contains(lang) ? currentCode : nil),
                    !err.isEmpty {
-                    Text(err)
+                    Text(CodeDisplayIOS.escape(err))
                         .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                         .foregroundStyle(Color(red: 0.988, green: 0.647, blue: 0.647))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3093,13 +3368,26 @@ struct CodeBlockCardView: View {
 
     @ViewBuilder
     private var browserPreviewSection: some View {
-        if !open && ["html", "htm", "svg"].contains(lang) && runCount > 0 {
-            HtmlBlockView(kind: lang == "svg" ? "svg" : "html", source: currentCode, open: false)
+        if !open && ["html", "htm", "svg"].contains(lang), let browserDocument {
+            HtmlBlockView(kind: lang == "svg" ? "svg" : "html", source: browserDocument, open: false)
+                .id(runCount)
                 .padding(8)
                 .background(Color(red: 0.973, green: 0.961, blue: 1.0))
+        } else if !open && ["js", "javascript", "node"].contains(lang), let workerDocument {
+            HtmlBlockView(kind: "html", source: workerDocument, open: false)
+                .id(runCount)
+                .padding(8)
         } else if !open && ["jsx", "tsx", "react"].contains(lang) {
             Text("React source only: this view has no React/TypeScript compiler. No component has been executed. Use a self-contained HTML/JavaScript sandbox for a live preview.")
                 .font(.system(size: 12))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(12)
+        } else if !open && !supportsExecution {
+            Text("Source only: no \(NexlyIcons.cleanPlainText(lang)) runtime is available in this app. Copy this source into a compatible environment; no execution has occurred here.")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(12)
         }
     }
@@ -3128,40 +3416,56 @@ struct CodeBlockCardView: View {
 
     @ViewBuilder
     private var codeSurfaceWithLineNumbers: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(lineNumbersText)
-                .font(.system(size: 12, weight: .regular, design: .monospaced))
-                .foregroundStyle(Color(red: 0.431, green: 0.412, blue: 0.588))
-                .multilineTextAlignment(.trailing)
-                .frame(minWidth: 22, alignment: .trailing)
-
-            Group {
-                if open {
-                    Text(displayedCode)
+        // A line number belongs to one original source line, even when that
+        // line wraps. Separate number/code text columns drifted out of sync.
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(displayedCode.components(separatedBy: "\n").enumerated()), id: \.offset) { index, line in
+                HStack(alignment: .top, spacing: 8) {
+                    Text("\(index + 1)")
                         .font(.system(size: 12, weight: .regular, design: .monospaced))
-                        .foregroundStyle(Color(red: 0.933, green: 0.922, blue: 1.0))
-                } else {
-                    highlightedCode(displayedCode, language: language)
-                        .foregroundStyle(Color(red: 0.933, green: 0.922, blue: 1.0))
+                        .foregroundStyle(Color(red: 0.431, green: 0.412, blue: 0.588))
+                        .frame(width: 22, alignment: .trailing)
+                    Group {
+                        if open {
+                            Text(CodeDisplayIOS.escape(line.isEmpty ? " " : line))
+                                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                        } else {
+                            highlightedCode(CodeDisplayIOS.escape(line.isEmpty ? " " : line), language: language, darkSurface: true)
+                        }
+                    }
+                    .foregroundStyle(Color(red: 0.933, green: 0.922, blue: 1.0))
+                    .fixedSize(horizontal: !wrapCode, vertical: true)
                 }
             }
         }
     }
 
+    private func resetCodeState() {
+        editedCode = nil; editing = false; editorDraft = ""; editorError = nil
+        editorEncoded = false; expanded = false; runOutput = nil; errorOutput = nil; runCount = 0; workerDocument = nil; browserDocument = nil
+    }
+
     private func executeCode() {
+        if editing && editorError != nil {
+            workerDocument = nil; browserDocument = nil; runOutput = nil
+            errorOutput = "Not executed: correct the JSON-encoded source draft first."
+            return
+        }
         runCount += 1
         runOutput = nil
         errorOutput = nil
+        workerDocument = nil
+        browserDocument = nil
         let src = currentCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !src.isEmpty else {
-            runOutput = "(empty snippet)"
+            errorOutput = "Not executed: empty snippet."
             return
         }
         if lang == "json" {
-            guard let data = src.data(using: .utf8) else { return }
+            guard let data = currentCode.data(using: .utf8) else { return }
             do {
                 let obj = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
-                let pretty = try JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys])
+                let pretty = try JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys, .fragmentsAllowed])
                 runOutput = String(data: pretty, encoding: .utf8)
             } catch {
                 errorOutput = error.localizedDescription
@@ -3169,67 +3473,11 @@ struct CodeBlockCardView: View {
             return
         }
         if ["html", "htm", "svg"].contains(lang) {
-            let stripped = src
-                .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
-                .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            runOutput = stripped.isEmpty ? "HTML/SVG preview ready (\(src.count) bytes)" : stripped
+            browserDocument = currentCode
             return
         }
         if ["py", "python", "python3"].contains(lang) {
-            var vars: [String: Double] = [:]
-            var output: [String] = []
-            var lineNumber = 0
-            func numeric(_ expr: String) throws -> Double {
-                guard expr.range(of: "^[a-zA-Z0-9_+*()./\\s-]+$", options: .regularExpression) != nil,
-                      !expr.contains("**"), !expr.contains("//") else {
-                    throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Only numbers, variables, +, -, *, / and parentheses are supported"])
-                }
-                let names = try NSRegularExpression(pattern: "[a-zA-Z_][a-zA-Z0-9_]*")
-                for match in names.matches(in: expr, range: NSRange(expr.startIndex..., in: expr)) {
-                    let name = (expr as NSString).substring(with: match.range)
-                    guard vars[name] != nil else {
-                        throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unknown variable: \(name)"])
-                    }
-                }
-                guard expr.range(of: "[a-zA-Z_]\\w*\\s*\\(", options: .regularExpression) == nil,
-                      let value = CalcExprIOS.evalOptional(expr, vars: vars), value.isFinite else {
-                    throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid expression, function call or non-finite result"])
-                }
-                return value
-            }
-            do {
-                let lines = src.components(separatedBy: "\n")
-                guard src.count <= 32000, lines.count <= 200 else {
-                    throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Preview limit exceeded"])
-                }
-                let assignment = try NSRegularExpression(pattern: "^([a-zA-Z_]\\w*)\\s*=\\s*([^=]+)$")
-                for raw in lines {
-                    lineNumber += 1
-                    let line = raw.trimmingCharacters(in: .whitespaces)
-                    if line.isEmpty || line.hasPrefix("#") { continue }
-                    if let match = assignment.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) {
-                        let ns = line as NSString
-                        vars[ns.substring(with: match.range(at: 1))] = try numeric(ns.substring(with: match.range(at: 2)))
-                        continue
-                    }
-                    if line.hasPrefix("print("), line.hasSuffix(")") {
-                        let arg = String(line.dropFirst(6).dropLast()).trimmingCharacters(in: .whitespaces)
-                        if arg.isEmpty { output.append("") }
-                        else if arg.range(of: "^\"[^\"\\\\]*\"$|^'[^'\\\\]*'$", options: .regularExpression) != nil {
-                            output.append(String(arg.dropFirst().dropLast()))
-                        } else {
-                            let value = try numeric(arg)
-                            output.append(value.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", value) : String(value))
-                        }
-                        continue
-                    }
-                    throw NSError(domain: "Preview", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unsupported statement; imports, loops and libraries require a Python runtime"])
-                }
-                runOutput = "Arithmetic preview (not a Python runtime)\n" + (output.isEmpty ? "(no print output)" : output.joined(separator: "\n"))
-            } catch {
-                errorOutput = "Preview stopped at line \(lineNumber): \(error.localizedDescription)"
-            }
+            errorOutput = "Not executed: no Python runtime is available here. Copy this source into a Python environment."
             return
         }
         if ["sql", "sqlite", "postgres", "postgresql", "mysql"].contains(lang) {
@@ -3240,44 +3488,10 @@ struct CodeBlockCardView: View {
             errorOutput = "Not executed: no \(lang.uppercased()) runtime is available here."
             return
         }
-        guard let ctx = JSContext() else { return }
-        var logs: [String] = []
-        var jsErr: String? = nil
-        ctx.exceptionHandler = { _, exception in
-            if let ex = exception?.toString() {
-                jsErr = ex
-            }
-        }
-        let logBlock: @convention(block) (JSValue) -> Void = { val in
-            logs.append(val.toString() ?? "")
-        }
-        ctx.setObject(logBlock, forKeyedSubscript: "__gsLog" as NSString)
-        _ = ctx.evaluateScript("""
-            var console = {
-              log: function() { __gsLog(Array.prototype.slice.call(arguments).join(' ')); },
-              info: function() { __gsLog(Array.prototype.slice.call(arguments).join(' ')); },
-              warn: function() { __gsLog(Array.prototype.slice.call(arguments).join(' ')); },
-              error: function() { __gsLog(Array.prototype.slice.call(arguments).join(' ')); }
-            };
-            """)
-        let jsSource: String = {
-            guard ["ts", "typescript"].contains(lang) else { return src }
-            return src
-                .replacingOccurrences(of: "(?m)^\\s*(?:export\\s+)?(?:interface|type)\\s+[A-Za-z0-9_]+[^;{]*(?:\\{[\\s\\S]*?\\}|=[^;\\n]+;?)", with: "", options: .regularExpression)
-                .replacingOccurrences(of: ":\\s*(?:string|number|boolean|any|void|unknown|never|Record<[^>]+>|Array<[^>]+>|[A-Z][A-Za-z0-9_<>\\[\\]|\\s]*)(?=\\s*[=,);\\{])", with: "", options: .regularExpression)
-                .replacingOccurrences(of: "\\s+as\\s+[A-Za-z0-9_<>\\[\\]]+", with: "", options: .regularExpression)
-        }()
-        let result = ctx.evaluateScript(jsSource)
-        if let err = jsErr {
-            errorOutput = err
-        } else if let result, !result.isUndefined {
-            logs.append("→ \(result.toString() ?? "")")
-        }
-        if !logs.isEmpty {
-            runOutput = logs.joined(separator: "\n")
-        } else if errorOutput == nil {
-            runOutput = "Completed (no console output)"
-        }
+        workerDocument = JavaScriptWorkerSandboxIOS.document(source: currentCode)
+        // Execution lives in a disposable Worker in WKWebView, never the app UI thread.
+        // Its console, exception, completion and timeout are displayed by that runtime.
+
     }
 }
 
@@ -3306,57 +3520,51 @@ struct CodeCopyButton: View {
 
 // MARK: - Table (06. Tables & Data Grids — Screenshot 5)
 
-private func parseSortableNumberIOS(_ raw: String) -> Double? {
-    let cleaned = raw
-        .replacingOccurrences(of: ",", with: "")
-        .replacingOccurrences(of: "^[↑↓↗↘\\s+$€£¥#]+", with: "", options: .regularExpression)
-        .replacingOccurrences(of: "[%xX\\s]+$", with: "", options: .regularExpression)
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-    let mult: Double = {
-        if cleaned.hasSuffix("T") || cleaned.hasSuffix("t") { return 1_000_000_000_000.0 }
-        if cleaned.hasSuffix("B") || cleaned.hasSuffix("b") { return 1_000_000_000.0 }
-        if cleaned.hasSuffix("M") || cleaned.hasSuffix("m") { return 1_000_000.0 }
-        if cleaned.hasSuffix("K") || cleaned.hasSuffix("k") { return 1_000.0 }
-        return 1.0
-    }()
-    let numPart = cleaned.replacingOccurrences(of: "[TtBbMmKk]$", with: "", options: .regularExpression)
-    return Double(numPart).map { $0 * mult }
+func parseSortableNumberIOS(_ raw: String) -> Double? {
+    let text = raw.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "−", with: "-")
+    guard let regex = try? NSRegularExpression(pattern: "^(?:([↑↓↗↘])\\s*)?([+-]?)\\s*[$€£¥₹৳#]?\\s*([+-]?)\\s*((?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?)\\s*([kKmMbBtT]?)\\s*[%xX]?$"),
+          let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) else { return nil }
+    func group(_ index: Int) -> String {
+        guard let range = Range(match.range(at: index), in: text) else { return "" }
+        return String(text[range])
+    }
+    let arrow = group(1), outer = group(2), inner = group(3)
+    guard outer.isEmpty || inner.isEmpty else { return nil }
+    let sign = outer.isEmpty ? inner : outer
+    let down = arrow == "↓" || arrow == "↘"
+    guard arrow.isEmpty || !((down && sign == "+") || (!down && sign == "-")) else { return nil }
+    let multipliers: [String: Double] = ["k": 1e3, "m": 1e6, "b": 1e9, "t": 1e12]
+    let multiplier: Double = multipliers[group(5).lowercased()] ?? 1.0
+    guard let base = Double(group(4).replacingOccurrences(of: ",", with: "")) else { return nil }
+    let value = base * multiplier * (sign == "-" || down ? -1 : 1)
+    return value.isFinite ? value : nil
 }
 
-private func chartJsonFromTableIOS(headers: [[InlineSpan]], rows: [[[InlineSpan]]]) -> String? {
+func chartJsonFromTableIOS(headers: [[InlineSpan]], rows: [[[InlineSpan]]]) -> String? {
     guard rows.count >= 2, headers.count >= 2 else { return nil }
     let headerTexts = headers.map { NexlyIcons.cleanPlainText(plainTextOfSpans($0)).trimmingCharacters(in: .whitespacesAndNewlines) }
-    let firstHeader = headerTexts.first ?? ""
-    let labelCol = (["#", "Rank", "No", "ID"].contains(firstHeader) && headers.count >= 3) ? 1 : 0
-    var numCol: Int? = nil
-    for c in 0..<headers.count where c != labelCol {
-        let validCount = rows.filter { row in
-            guard c < row.count else { return false }
-            return parseSortableNumberIOS(plainTextOfSpans(row[c])) != nil
-        }.count
-        if validCount >= max(2, rows.count / 2) {
-            numCol = c
-            break
+    let ranked = ["#", "rank", "no", "id"].contains(headerTexts[0].lowercased()) && headers.count >= 3
+    let labelCol = ranked ? 1 : 0
+    // Identifiers are categories, never the measure. Incomplete columns do not
+    // become partial charts that quietly hide observations with missing data.
+    for column in 0..<headers.count where column != labelCol && !(ranked && column == 0) {
+        var dataItems: [[String: Any]] = []
+        var units = Set<String>()
+        for row in rows {
+            guard labelCol < row.count, column < row.count else { break }
+            let raw = plainTextOfSpans(row[column]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let label = NexlyIcons.cleanPlainText(plainTextOfSpans(row[labelCol])).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let value = parseSortableNumberIOS(raw), !label.isEmpty else { break }
+            let currency = raw.first(where: { "$€£¥₹৳".contains($0) }).map(String.init) ?? ""
+            units.insert(raw.hasSuffix("%") ? "%" : (!currency.isEmpty ? currency : (raw.lowercased().hasSuffix("x") ? "x" : "")))
+            dataItems.append(["label": label, "value": value])
         }
+        guard dataItems.count == rows.count, units.count == 1 else { continue }
+        let payload: [String: Any] = ["type": "bar", "title": headerTexts[column], "unit": units.first ?? "", "data": dataItems]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload), let json = String(data: data, encoding: .utf8) else { return nil }
+        return json
     }
-    guard let vc = numCol else { return nil }
-    var dataItems: [[String: Any]] = []
-    for row in rows.prefix(12) {
-        guard labelCol < row.count, vc < row.count,
-              let val = parseSortableNumberIOS(plainTextOfSpans(row[vc])) else { continue }
-        let label = NexlyIcons.cleanPlainText(plainTextOfSpans(row[labelCol])).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !label.isEmpty else { continue }
-        dataItems.append(["label": label, "value": val])
-    }
-    guard dataItems.count >= 2 else { return nil }
-    let payload: [String: Any] = [
-        "type": "bar",
-        "title": headerTexts[vc].isEmpty ? "Comparison" : headerTexts[vc],
-        "data": dataItems
-    ]
-    guard let data = try? JSONSerialization.data(withJSONObject: payload),
-          let str = String(data: data, encoding: .utf8) else { return nil }
-    return str
+    return nil
 }
 
 private struct TableBlockView: View {
@@ -3365,6 +3573,7 @@ private struct TableBlockView: View {
     let rows: [[[InlineSpan]]]
     var citations: [Int: String] = [:]
 
+    @State private var measuredWidth: CGFloat = 0
     @State private var pageSize: Int
     @State private var page: Int = 0
     @State private var sortCol: Int = -1
@@ -3383,7 +3592,7 @@ private struct TableBlockView: View {
     /// each side, content clamped to the Step-2 640pt column) — deterministic,
     /// no greedy GeometryReader inside the lazy transcript.
     private var availableWidth: CGFloat {
-        min(UIScreen.main.bounds.width - 32, Aero.Layout.contentMaxWidth)
+        measuredWidth > 0 ? measuredWidth : min(UIScreen.main.bounds.width - 32, Aero.Layout.contentMaxWidth)
     }
 
     private var sortedRows: [[[InlineSpan]]] {
@@ -3423,8 +3632,11 @@ private struct TableBlockView: View {
 
     var body: some View {
         let columns = max(headers.count, aligns.count, 1)
-        let minCell: CGFloat = 92
-        let cellWidth = max(minCell, availableWidth / CGFloat(columns))
+        let natural = naturalColumnWidths(columns: columns)
+        let naturalTotal = natural.reduce(0, +)
+        let extra = max(0, availableWidth - naturalTotal) / CGFloat(columns)
+        let widths = natural.map { $0 + extra }
+        let tableWidth = widths.reduce(0, +)
         let theme = SpanTheme(
             monoBackground: Aero.container,
             linkColor: Aero.accentDeep,
@@ -3443,11 +3655,11 @@ private struct TableBlockView: View {
                 WidgetBlockView(kind: "chart", json: chartJson, open: false)
             } else {
                 VStack(alignment: .leading, spacing: 0) {
-                    if CGFloat(columns) * cellWidth <= availableWidth {
-                        table(theme: theme, cellWidth: cellWidth, columns: columns, scrollable: false)
+                    if tableWidth <= availableWidth {
+                        table(theme: theme, widths: widths, columns: columns, scrollable: false)
                     } else {
                         ScrollView(.horizontal, showsIndicators: false) {
-                            table(theme: theme, cellWidth: cellWidth, columns: columns, scrollable: true)
+                            table(theme: theme, widths: widths, columns: columns, scrollable: true)
                         }
                     }
 
@@ -3459,6 +3671,32 @@ private struct TableBlockView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline.opacity(0.4), lineWidth: 1))
             }
+        }
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            if width > 0 && abs(width - measuredWidth) > 0.5 { measuredWidth = width }
+        }
+    }
+
+    private func naturalColumnWidths(columns: Int) -> [CGFloat] {
+        let headerFont = UIFont.systemFont(ofSize: 12.5, weight: .bold)
+        let firstHeader = headers.first.map { NexlyIcons.cleanPlainText(plainTextOfSpans($0)) } ?? ""
+        return (0..<columns).map { column in
+            let header = column < headers.count ? NexlyIcons.cleanPlainText(plainTextOfSpans(headers[column])) : ""
+            var width = (header as NSString).size(withAttributes: [.font: headerFont]).width + 20
+            let isName = column == 0 || (column == 1 && ["#", "Rank", "No", "ID"].contains(firstHeader))
+            for row in rows where column < row.count {
+                let raw = plainTextOfSpans(row[column]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let badge: CGFloat = isName && entityBadge(for: raw) != nil ? 26 : 0
+                let trend = raw.hasSuffix("%") && ["+", "-", "↑", "↓", "↗", "↘"].contains(String(raw.prefix(1)))
+                // Measure the actual displayed arrow plus value, not the raw
+                // arrow AND an extra phantom 16pt icon. Rank cells do not need
+                // the 44pt floor reserved for ordinary data columns either.
+                let display = trend ? "\((raw.contains("-") || raw.hasPrefix("↓") || raw.hasPrefix("↘")) ? "↓" : "↑") \(raw.replacingOccurrences(of: "^[↑↓↗↘\\s]+", with: "", options: .regularExpression))" : NexlyIcons.cleanPlainText(raw)
+                let font = UIFont.systemFont(ofSize: badge > 0 || trend ? 12.5 : 13, weight: trend ? .bold : (badge > 0 ? .semibold : .regular))
+                width = max(width, (display as NSString).size(withAttributes: [.font: font]).width + 20 + badge)
+            }
+            return min(280, max(28, ceil(width)))
         }
     }
 
@@ -3557,7 +3795,7 @@ private struct TableBlockView: View {
     }
 
     @ViewBuilder
-    private func table(theme: SpanTheme, cellWidth: CGFloat, columns: Int, scrollable: Bool) -> some View {
+    private func table(theme: SpanTheme, widths: [CGFloat], columns: Int, scrollable: Bool) -> some View {
         let firstHeaderRaw = headers.first.map { NexlyIcons.cleanPlainText(plainTextOfSpans($0)).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
@@ -3577,7 +3815,7 @@ private struct TableBlockView: View {
                         cell(
                             AttributedString(hRaw + sortSuffix),
                             rawString: hRaw,
-                            width: cellWidth,
+                            width: widths[c],
                             align: c < aligns.count ? aligns[c] : .left,
                             emphasize: true,
                             isPrimaryNameCol: false
@@ -3596,7 +3834,7 @@ private struct TableBlockView: View {
                         cell(
                             attributed(from: c < row.count ? row[c] : [], theme: theme),
                             rawString: c < row.count ? plainTextOfSpans(row[c]) : "",
-                            width: cellWidth,
+                            width: widths[c],
                             align: c < aligns.count ? aligns[c] : .left,
                             emphasize: false,
                             isPrimaryNameCol: isNameCol
@@ -3608,7 +3846,7 @@ private struct TableBlockView: View {
                 }
             }
         }
-        .frame(width: scrollable ? cellWidth * CGFloat(columns) : nil, alignment: .leading)
+        .frame(width: scrollable ? widths.reduce(0, +) : nil, alignment: .leading)
         .textSelection(.enabled)
     }
 
@@ -3641,8 +3879,8 @@ private struct TableBlockView: View {
             Text("\(isNeg ? "↓" : "↑") \(cleanNum)")
                 .font(.system(size: 12.5, weight: .bold))
                 .foregroundStyle(isNeg ? Color(red: 0.878, green: 0.310, blue: 0.373) : Color(red: 0.071, green: 0.604, blue: 0.353))
-                .frame(width: width, alignment: frameAlignment(for: align))
                 .padding(.horizontal, 10)
+                .frame(width: width, alignment: frameAlignment(for: align))
                 .padding(.vertical, 7)
         } else if !emphasize, isPrimaryNameCol, let badge = entityBadge(for: trimmed) {
             HStack(spacing: 6) {
@@ -3657,15 +3895,15 @@ private struct TableBlockView: View {
                     .foregroundStyle(Color(red: 0.133, green: 0.102, blue: 0.278))
                     .lineLimit(1)
             }
-            .frame(width: width, alignment: frameAlignment(for: align))
             .padding(.horizontal, 10)
+            .frame(width: width, alignment: frameAlignment(for: align))
             .padding(.vertical, 7)
         } else {
             Text(text)
                 .font((emphasize || (isPrimaryNameCol && Int(trimmed) == nil)) ? .system(size: 12.5, weight: .bold) : Aero.caption())
                 .foregroundStyle((emphasize || (isPrimaryNameCol && Int(trimmed) == nil)) ? Color(red: 0.133, green: 0.102, blue: 0.278) : Aero.textSecondary)
-                .frame(width: width, alignment: frameAlignment(for: align))
                 .padding(.horizontal, 10)
+                .frame(width: width, alignment: frameAlignment(for: align))
                 .padding(.vertical, 7)
                 .multilineTextAlignment(alignment(for: align))
         }
@@ -3864,23 +4102,21 @@ private struct CollapsibleBlockView: View {
 
 // MARK: - Structured seams — citations & tool results (backend provides; never faked)
 
-private func isAcademicCitationDomain(_ domain: String, _ url: String) -> Bool {
-    let hay = "\(domain) \(url)".lowercased()
-    return hay.contains(".edu") ||
-        hay.contains("nature.com") ||
-        hay.contains("arxiv.org") ||
-        hay.contains("ieee.org") ||
-        hay.contains("acm.org") ||
-        hay.contains("springer.") ||
-        hay.contains("sciencedirect.") ||
-        hay.contains("oxford") ||
-        hay.contains("cambridge") ||
-        hay.contains("nih.gov") ||
-        hay.contains("pubmed")
+func citationSourceURLIOS(_ raw: String) -> URL? {
+    guard let url = URL(string: raw), let host = url.host, !host.isEmpty,
+          ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.user == nil, url.password == nil else { return nil }
+    return url
+}
+
+func isAcademicCitationDomain(_ domain: String, _ raw: String) -> Bool {
+    guard let host = citationSourceURLIOS(raw)?.host?.lowercased() else { return false }
+    let publishers = ["nature.com", "arxiv.org", "ieee.org", "acm.org", "springer.com", "springernature.com", "sciencedirect.com", "oup.com", "cambridge.org", "nih.gov"]
+    return host.hasSuffix(".edu") || host.hasSuffix(".ac.uk") || publishers.contains { host == $0 || host.hasSuffix("." + $0) }
 }
 
 private struct CitationsBlockView: View {
     let citations: [CitationEntry]
+    var title: String = "Key Sources"
     @Environment(\.gsOpenInApp) private var inAppBrowser
 
     var body: some View {
@@ -3893,7 +4129,7 @@ private struct CitationsBlockView: View {
                         size: 24,
                         glyphSize: 14
                     )
-                    Text("Key Sources")
+                    Text(title)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Aero.text)
                 }
@@ -3904,9 +4140,11 @@ private struct CitationsBlockView: View {
             }
 
             ForEach(Array(citations.enumerated()), id: \.offset) { _, citation in
+                let link = citationSourceURLIOS(citation.url)
+                let domain = link?.host?.replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression) ?? "Invalid source URL"
                 let academic = isAcademicCitationDomain(citation.domain, citation.url)
                 Button {
-                    if let link = URL(string: citation.url), ["https", "http"].contains(link.scheme?.lowercased() ?? "") {
+                    if let link {
                         gsOpenURL(link, inApp: inAppBrowser)
                     }
                 } label: {
@@ -3940,7 +4178,7 @@ private struct CitationsBlockView: View {
                                         size: 11,
                                         color: Color(red: 0.357, green: 0.239, blue: 0.961)
                                     )
-                                    Text(citation.domain.isEmpty ? citation.url : citation.domain)
+                                    Text(domain)
                                         .font(.system(size: 11.5, weight: .semibold))
                                         .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
                                         .lineLimit(1)
@@ -3948,18 +4186,18 @@ private struct CitationsBlockView: View {
                                 Spacer()
                                 HStack(spacing: 4) {
                                     NexlyGlyph(
-                                        name: academic ? "building-bank" : "shield-check",
+                                        name: academic ? "building-bank" : "external-link",
                                         size: 11,
                                         color: academic
                                             ? Color(red: 0.357, green: 0.239, blue: 0.961)
-                                            : Color(red: 0.071, green: 0.604, blue: 0.353)
+                                            : Color(red: 0.357, green: 0.239, blue: 0.961)
                                     )
-                                    Text(academic ? "Academic" : "Trusted Source")
+                                    Text(link == nil ? "Invalid link" : academic ? "Academic domain" : "Source link")
                                         .font(.system(size: 10.5, weight: .bold))
                                         .foregroundStyle(
                                             academic
                                                 ? Color(red: 0.357, green: 0.239, blue: 0.961)
-                                                : Color(red: 0.071, green: 0.604, blue: 0.353)
+                                                : Color(red: 0.357, green: 0.239, blue: 0.961)
                                         )
                                 }
                                 .padding(.horizontal, 8)
@@ -3968,7 +4206,7 @@ private struct CitationsBlockView: View {
                                     Capsule().fill(
                                         academic
                                             ? Color(red: 0.937, green: 0.918, blue: 1.0)
-                                            : Color(red: 0.902, green: 0.976, blue: 0.941)
+                                            : Color(red: 0.937, green: 0.918, blue: 1.0)
                                     )
                                 )
                             }
@@ -3982,8 +4220,9 @@ private struct CitationsBlockView: View {
                     .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.890, green: 0.863, blue: 0.980), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
+                .disabled(link == nil)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Source \(citation.number). \(citation.title), \(citation.domain)")
+                .accessibilityLabel("Source \(citation.number). \(citation.title), \(domain)")
             }
         }
     }

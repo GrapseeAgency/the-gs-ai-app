@@ -1,6 +1,276 @@
 import XCTest
 
 final class PlatformRuntimeUITests: XCTestCase {
+    private func printPresentationDiagnostics(_ app: XCUIApplication, label: String) {
+        let hierarchy = app.debugDescription.replacingOccurrences(of: "\n", with: " | ")
+        for start in stride(from: 0, to: hierarchy.count, by: 1400) {
+            print("GS_PRESENTATION_\(label)_\(start): " + String(hierarchy.dropFirst(start).prefix(1400)))
+        }
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-actual-\(label.lowercased())-failure"; capture.lifetime = .keepAlways; add(capture)
+    }
+
+    func testGeneratedTimerUsesActualSecondsPausesResetsAndNeverUsesPrices() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated timer"].waitForExistence(timeout: 20))
+        app.buttons["Open generated timer"].tap()
+        let remaining = app.staticTexts["timer.remaining"]
+        let toggle = app.buttons["timer.toggle"]
+        let duration = app.textFields["timer.duration"]
+        XCTAssertTrue(remaining.waitForExistence(timeout: 10))
+        XCTAssertEqual(remaining.label, "00:00"); XCTAssertFalse(toggle.isEnabled)
+        duration.tap(); duration.typeText("2")
+        XCTAssertTrue(toggle.isEnabled); toggle.tap()
+        XCTAssertEqual(toggle.label, "Pause"); toggle.tap()
+        let paused = remaining.label
+        let changesWhilePaused = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", paused), object: remaining)
+        changesWhilePaused.isInverted = true
+        XCTAssertEqual(XCTWaiter.wait(for: [changesWhilePaused], timeout: 1.2), .completed)
+        app.buttons["timer.reset"].tap()
+        XCTAssertEqual(remaining.label, "00:02"); XCTAssertTrue(duration.isEnabled)
+        toggle.tap()
+        XCTAssertTrue(app.staticTexts["timer.completed"].waitForExistence(timeout: 5))
+        XCTAssertEqual(remaining.label, "00:00"); XCTAssertFalse(toggle.isEnabled)
+        app.buttons["Use next timer payload"].tap()
+        XCTAssertEqual(remaining.label, "00:05"); XCTAssertTrue(toggle.isEnabled)
+        XCTAssertFalse(app.staticTexts["timer.completed"].exists)
+        XCTAssertTrue(app.staticTexts["Local countdown only. No background alarm or notification is scheduled."].exists)
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-timer-actual-seconds-pause-reset-source-replacement"; capture.lifetime = .keepAlways; add(capture)
+    }
+
+    func testGeneratedBookingSavesOnlyActualLocalSelectionWithoutReservation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated booking"].waitForExistence(timeout: 20))
+        app.buttons["Open generated booking"].tap()
+        let save = app.buttons["Save slot locally"]
+        XCTAssertTrue(save.waitForExistence(timeout: 10)); XCTAssertFalse(save.isEnabled)
+        app.buttons["09:00"].tap()
+        XCTAssertTrue(save.isEnabled); save.tap()
+        let receipt = app.staticTexts["booking.local.receipt"]
+        XCTAssertTrue(receipt.waitForExistence(timeout: 5))
+        XCTAssertEqual(receipt.label, "Saved locally: 09:00. Preview only; no reservation has been made.")
+        app.buttons["10:00"].tap()
+        XCTAssertFalse(receipt.exists)
+        save.tap()
+        XCTAssertEqual(receipt.label, "Saved locally: 10:00. Preview only; no reservation has been made.")
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-booking-actual-local-selection"; capture.lifetime = .keepAlways; add(capture)
+        app.buttons["Use next booking payload"].tap()
+        XCTAssertTrue(app.buttons["11:00"].waitForExistence(timeout: 5))
+        XCTAssertFalse(receipt.exists); XCTAssertFalse(save.isEnabled)
+    }
+
+    func testGeneratedChecklistEditsDeletesAddsAndKeepsActualTaskCompletion() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated checklist"].waitForExistence(timeout: 20))
+        app.buttons["Open generated checklist"].tap()
+        XCTAssertTrue(app.staticTexts["0 of 2 completed"].waitForExistence(timeout: 10))
+        app.buttons["Keep source"].tap()
+        XCTAssertEqual(app.buttons["Keep source"].value as? String, "Completed")
+        func replaceTask(_ text: String) {
+            let input = app.textFields["checklist.task.input"]
+            XCTAssertTrue(input.waitForExistence(timeout: 5))
+            let current = input.value as? String ?? ""
+            input.tap()
+            input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count) + text)
+        }
+        app.buttons["Edit task: Original source"].tap()
+        replaceTask("Renamed source")
+        app.buttons["Save task"].tap()
+        XCTAssertTrue(app.buttons["Renamed source, Only supplied detail"].exists)
+        XCTAssertEqual(app.buttons["Keep source"].value as? String, "Completed")
+        app.buttons["Delete task: Renamed source"].tap()
+        XCTAssertTrue(app.staticTexts["1 of 1 completed"].exists)
+        app.buttons["Add Task"].tap()
+        XCTAssertFalse(app.buttons["Add"].isEnabled)
+        let input = app.textFields["checklist.task.input"]
+        input.tap(); input.typeText("Added task")
+        app.buttons["Add"].tap()
+        app.buttons["Added task"].tap()
+        XCTAssertTrue(app.staticTexts["2 of 2 completed"].exists)
+        app.buttons["Edit task: Added task"].tap()
+        replaceTask("Added edited")
+        app.buttons["Save task"].tap()
+        XCTAssertEqual(app.buttons["Added edited"].value as? String, "Completed")
+        app.buttons["Delete task: Keep source"].tap()
+        XCTAssertTrue(app.staticTexts["1 of 1 completed"].exists)
+        XCTAssertEqual(app.buttons["Added edited"].value as? String, "Completed")
+        app.buttons["Use next checklist payload"].tap()
+        let sourceReset = app.staticTexts["0 of 1 completed"].waitForExistence(timeout: 5)
+        if !sourceReset { printPresentationDiagnostics(app, label: "CHECKLIST_RESET") }
+        XCTAssertTrue(sourceReset, "The source replacement must reset actual task count and completion")
+        XCTAssertFalse(app.buttons["Added edited"].exists)
+        XCTAssertEqual(app.buttons["New supplied task"].value as? String, "Not completed")
+        app.buttons["Use app task surface"].tap()
+        XCTAssertTrue(app.staticTexts["1 of 2 completed"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["App first, Supplied app detail"].value as? String, "Completed")
+        app.buttons["Edit task: App first"].tap()
+        replaceTask("App first edited")
+        app.buttons["Save task"].tap()
+        XCTAssertEqual(app.buttons["App first edited, Supplied app detail"].value as? String, "Completed")
+        app.buttons["Delete task: App second"].tap()
+        XCTAssertTrue(app.staticTexts["1 of 1 completed"].exists)
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-checklist-actual-task-mutations"; capture.lifetime = .keepAlways; add(capture)
+    }
+
+    func testContextualEditOpensActualCodeAndExportOpensSystemDocumentPicker() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated code"].waitForExistence(timeout: 20))
+        app.buttons["Open generated code"].tap()
+        XCTAssertTrue(app.buttons["Edit Code"].waitForExistence(timeout: 10))
+        app.buttons["Edit Code"].tap()
+        let editor = app.textViews.firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 10), "Contextual Edit must open the existing editor, not request another model answer")
+        XCTAssertTrue((editor.value as? String ?? "").contains("console.log"))
+        XCTAssertFalse((editor.value as? String ?? "").contains("😀"))
+        app.buttons["Done"].tap()
+        app.buttons["Download Project"].tap()
+        // Modern Files remote UI may expose its action as Other rather than
+        // Button. Verify the real provider and actual cancellation callback,
+        // not one OS version's accessibility class spelling.
+        let pickerCancel = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Cancel")).firstMatch
+        let shown = pickerCancel.waitForExistence(timeout: 15)
+        if !shown { printPresentationDiagnostics(app, label: "EXPORT") }
+        XCTAssertTrue(shown, "Export must present the real system document picker; notice=\(app.staticTexts["response.action.notice"].firstMatch.label); hierarchy=\(app.debugDescription.suffix(5000))")
+        guard shown else { return }
+        let provider = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@ OR label CONTAINS %@ OR label == %@", "On My iPhone", "iCloud Drive", "Browse")).firstMatch
+        XCTAssertTrue(provider.waitForExistence(timeout: 10), "Export must expose the actual system Files provider, not an app-owned Cancel label")
+        // Files is remote UI. On current iOS, resolving isHittable inside a
+        // waiter can itself fail with "remote AX element ... interrupted by
+        // waiter". Dispatch an actual touch to the visible native Cancel
+        // frame instead; only its real delegate receipt can pass this test.
+        let cancelFrame = pickerCancel.frame
+        let applicationFrame = app.frame
+        guard !cancelFrame.isEmpty, !cancelFrame.isNull,
+              applicationFrame.contains(CGPoint(x: cancelFrame.midX, y: cancelFrame.midY)) else {
+            printPresentationDiagnostics(app, label: "EXPORT")
+            XCTFail("The actual native Files Cancel control must occupy the visible viewport")
+            return
+        }
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-contextual-real-source-export-picker"; capture.lifetime = .keepAlways; add(capture)
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: cancelFrame.midX - applicationFrame.minX, dy: cancelFrame.midY - applicationFrame.minY)).tap()
+        let cancelled = app.staticTexts["response.action.notice"].firstMatch
+        let acknowledged = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            cancelled.exists && cancelled.label == "Export cancelled."
+        }, object: app)
+        let didAcknowledge = XCTWaiter.wait(for: [acknowledged], timeout: 10) == .completed
+        if !didAcknowledge { printPresentationDiagnostics(app, label: "EXPORT") }
+        XCTAssertTrue(didAcknowledge, "The actual document-picker delegate must acknowledge cancellation; no simulated save is allowed")
+    }
+
+    func testContextualReportShowsActualDataAndSharePresentsSystemActivitySheet() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated table"].waitForExistence(timeout: 20))
+        app.buttons["Open generated table"].tap()
+        app.buttons["Use ordinary Markdown"].tap()
+        XCTAssertTrue(app.buttons["View Full Report"].waitForExistence(timeout: 10))
+        app.buttons["View Full Report"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Item 31")).firstMatch.waitForExistence(timeout: 10), "Report must include every supplied row, not just the visible page")
+        app.buttons["Close details"].tap()
+        app.buttons["Prepare report share check"].tap()
+        app.buttons["Share"].tap()
+        let copyAction = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Copy")).firstMatch
+        let shareShown = copyAction.waitForExistence(timeout: 15)
+        if !shareShown { printPresentationDiagnostics(app, label: "SHARE") }
+        XCTAssertTrue(shareShown, "Share must present the real activity sheet, not copy silently")
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "genui-contextual-real-system-share-sheet"; capture.lifetime = .keepAlways; add(capture)
+        guard shareShown else { return }
+        XCTAssertTrue(copyAction.isHittable)
+        copyAction.tap()
+        XCTAssertTrue(app.buttons["Inspect shared report"].waitForExistence(timeout: 10))
+        app.buttons["Inspect shared report"].tap()
+        XCTAssertEqual(app.staticTexts["report.copy.inspection"].label, "Original complete report shared", "Real system Copy must replace the sentinel with all 31 actual source records")
+    }
+
+    func testGeneratedTerminalUsesRealFilesWorkerAndUnsupportedRefusal() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated terminal"].waitForExistence(timeout: 20))
+        app.buttons["Open generated terminal"].tap()
+        let input = app.webViews.textFields["Terminal command"].firstMatch
+        XCTAssertTrue(input.waitForExistence(timeout: 15))
+        func command(_ value: String) {
+            input.tap()
+            input.typeText(value)
+            app.webViews.buttons["Run"].firstMatch.tap()
+            XCTAssertEqual(input.value as? String, "", "Real form submission must consume the command")
+        }
+        func output(_ value: String) -> XCUIElement {
+            app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", value)).firstMatch
+        }
+        command("mkdir project"); command("cd project"); command("touch actual.txt"); command("ls")
+        XCTAssertTrue(app.webViews.staticTexts["actual.txt"].waitForExistence(timeout: 10))
+        command("rm actual.txt"); command("ls")
+        XCTAssertTrue(app.webViews.staticTexts["(empty)"].waitForExistence(timeout: 10))
+        command("js [1,2,3].map(n=>n*2)")
+        XCTAssertTrue(output("[2,4,6]").waitForExistence(timeout: 15), "A genuine Worker must compute array output")
+        command("js while(true) {}")
+        XCTAssertTrue(output("exceeded 2 seconds").waitForExistence(timeout: 15), "Actual infinite execution must stop")
+        command("python print(7)")
+        XCTAssertTrue(output("python: not executed").waitForExistence(timeout: 10))
+        XCTAssertFalse(app.webViews.buttons["Run again"].exists, "Unsupported execution must remove stale Worker output")
+        command("deploy")
+        XCTAssertTrue(output("deploy: not executed").waitForExistence(timeout: 10), "Model-provided output must never become fake execution")
+        XCTAssertFalse(output("😀").exists)
+        app.webViews.buttons["Reset session"].tap()
+        command("ls")
+        XCTAssertTrue(app.webViews.staticTexts["README.md"].waitForExistence(timeout: 10))
+        XCTAssertFalse(output("deploy: not executed").exists, "Reset must clear the prior actual session")
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "genui-terminal-real-files-worker-and-refusal"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+    }
+
+    func testGeneratedCodeCopyEditRunAndInvalidDraftReset() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Open generated code"].waitForExistence(timeout: 20))
+        app.buttons["Open generated code"].tap()
+        XCTAssertTrue(app.buttons["Copy code"].waitForExistence(timeout: 10))
+        app.buttons["Copy code"].tap()
+        app.buttons["Inspect copied source"].tap()
+        XCTAssertTrue(app.staticTexts["Original source copied"].waitForExistence(timeout: 10), "Copy must not substitute display escapes")
+        app.buttons["Run Code"].tap()
+        let output = app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "16 2")).firstMatch
+        XCTAssertTrue(output.waitForExistence(timeout: 15), "Native Run must execute actual Unicode-key computation")
+        app.buttons["Edit"].tap()
+        let editor = app.textViews.firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        XCTAssertFalse((editor.value as? String ?? "").contains("😀"), "Editor must use reversible escapes")
+        editor.tap()
+        editor.typeText("\n\"unterminated")
+        app.buttons["Run Code"].tap()
+        XCTAssertTrue(app.staticTexts["Not executed: correct the JSON-encoded source draft first."].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.webViews.count, 0, "Invalid Run must not leave a stale successful execution visible")
+        app.buttons["Reset"].tap()
+        XCTAssertTrue(app.buttons["Edit"].waitForExistence(timeout: 10))
+        XCTAssertFalse(editor.exists)
+        app.buttons["Run Code"].tap()
+        XCTAssertTrue(output.waitForExistence(timeout: 15), "Reset must restore the original executable source")
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "genui-code-actual-copy-edit-run-reset"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+    }
+
     func testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]

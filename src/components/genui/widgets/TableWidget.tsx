@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { parseTableNumber as parseNumericCellWeb } from '@/lib/nexly/table-number'
 import type { TablePayload } from '../types'
 import { alpha, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
@@ -24,19 +25,6 @@ function iconBadgeForCell(value: string): { icon: string; tone: GlassTone } | nu
   if (lower.startsWith('swift')) return { icon: 'brand-apple', tone: 'lavender' }
   if (lower.startsWith('kotlin') || lower.startsWith('android')) return { icon: 'brand-android', tone: 'green' }
   return semanticIconFor(value, 'sparkles')
-}
-
-function parseNumericCellWeb(raw: unknown): number | null {
-  const str = String(raw ?? '').trim()
-  if (!str) return null
-  const m = str.match(/^[↑↓↗↘+-]?\s*[$€£¥₹৳]?\s*([+-]?\d+(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmMbBtT%])?$/)
-  if (!m) return null
-  const base = Number(m[1].replace(/,/g, ''))
-  if (!Number.isFinite(base)) return null
-  const suffix = (m[2] ?? '').toLowerCase()
-  const mult = suffix === 'k' ? 1e3 : suffix === 'm' ? 1e6 : suffix === 'b' ? 1e9 : suffix === 't' ? 1e12 : 1
-  const sign = (str.startsWith('-') || str.startsWith('↓') || str.startsWith('↘')) && base > 0 ? -1 : 1
-  return base * mult * sign
 }
 
 /** Sortable data grid with ranking badges, trend coloring, pagination, and Key Insights (Screenshot 5). */

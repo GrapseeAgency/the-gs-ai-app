@@ -24,6 +24,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.key
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,78 +54,70 @@ import com.grapsee.gsai.ui.theme.GsTheme
 import kotlinx.coroutines.delay
 import com.grapsee.gsai.ui.icons.GsIcons
 
-private data class CodeRunResult(
+internal data class CodeRunResult(
     val output: String,
     val error: String? = null
 )
 
-private fun formatNumValue(d: Double): String =
-    if (d % 1.0 == 0.0) d.toLong().toString()
-    else String.format(java.util.Locale.US, "%.4f", d).trimEnd('0').trimEnd('.')
+/** Strict JSON lexical checks in addition to the AST parser. Generic JSON
+ * primitives must not silently accept NaN, bare words or leading-zero numbers. */
+internal fun validateCodeJsonSourceAndroid(source: String): String {
+    require(source.length <= 256_000) { "JSON validation limit is 256000 characters" }
+    var quoted = false
+    var depth = 0
+    var i = 0
+    while (i < source.length) {
+        val c = source[i]
+        if (quoted) {
+            when (c) {
+                '"' -> quoted = false
+                '\\' -> {
+                    i++
+                    require(i < source.length) { "Incomplete JSON escape" }
+                    if (source[i] == 'u') {
+                        require(i + 4 < source.length && (1..4).all { source[i + it] in "0123456789abcdefABCDEF" }) { "Invalid Unicode escape" }
+                        i += 4
+                    } else require(source[i] in "\"\\/bfnrt") { "Invalid JSON escape" }
+                }
+                else -> require(c >= ' ') { "Unescaped control character in JSON string" }
+            }
+        } else when (c) {
+            '"' -> quoted = true
+            '{', '[' -> { depth++; require(depth <= 128) { "JSON nesting limit is 128" } }
+            '}', ']' -> { depth--; require(depth >= 0) { "Unexpected closing delimiter" } }
+        }
+        i++
+    }
+    require(!quoted && depth == 0) { "Incomplete JSON document" }
+    val value = kotlinx.serialization.json.Json.parseToJsonElement(source)
+    val number = Regex("""-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?""")
+    fun validate(node: kotlinx.serialization.json.JsonElement) {
+        when (node) {
+            is kotlinx.serialization.json.JsonObject -> node.values.forEach { validate(it) }
+            is kotlinx.serialization.json.JsonArray -> node.forEach { validate(it) }
+            is kotlinx.serialization.json.JsonPrimitive -> require(node.isString || node.content in setOf("true", "false", "null") || number.matches(node.content)) { "Invalid JSON primitive" }
+        }
+    }
+    validate(value)
+    return kotlinx.serialization.json.Json { prettyPrint = true }
+        .encodeToString(kotlinx.serialization.json.JsonElement.serializer(), value)
+}
 
-private fun executeCodePreview(language: String?, code: String): CodeRunResult {
+internal fun executeCodePreview(language: String?, code: String): CodeRunResult {
     val lang = (language ?: "code").lowercase().trim()
     val trimmed = code.trim()
-    if (trimmed.isEmpty()) return CodeRunResult("(empty snippet)")
+    if (trimmed.isEmpty()) return CodeRunResult("", if (lang == "json") "JSONSyntaxError: expected a JSON value" else "Not executed: empty snippet")
 
     if (lang == "json") {
         return try {
-            val tok = org.json.JSONTokener(trimmed).nextValue()
-            val formatted = when (tok) {
-                is org.json.JSONObject -> tok.toString(2)
-                is org.json.JSONArray -> tok.toString(2)
-                else -> tok.toString()
-            }
-            CodeRunResult(formatted)
+            CodeRunResult(validateCodeJsonSourceAndroid(code))
         } catch (t: Throwable) {
             CodeRunResult(output = "", error = "JSONSyntaxError: ${t.message ?: "Invalid JSON"}")
         }
     }
 
     if (lang in setOf("py", "python", "python3")) {
-        // This is an arithmetic preview, NOT a Python runtime. Never skip a
-        // statement or supply missing variables and then report script success.
-        val vars = mutableMapOf<String, Double>()
-        val output = mutableListOf<String>()
-        fun numeric(expr: String): Double {
-            require(expr.matches(Regex("""[a-zA-Z0-9_+*()./\s-]+""")) && "**" !in expr && "//" !in expr) {
-                "Only numbers, variables, +, -, *, / and parentheses are supported"
-            }
-            Regex("""[a-zA-Z_][a-zA-Z0-9_]*""").findAll(expr).forEach {
-                require(vars.containsKey(it.value)) { "Unknown variable: ${it.value}" }
-            }
-            require(!Regex("""[a-zA-Z_]\w*\s*\(""").containsMatchIn(expr)) { "Function calls are not supported" }
-            return (CalcExpr.eval(expr, vars) ?: error("Invalid expression")).also {
-                require(it.isFinite()) { "Result is not finite (check division by zero)" }
-            }
-        }
-        var lineNumber = 0
-        return try {
-            require(trimmed.length <= 32000 && trimmed.lines().size <= 200) { "Preview limit exceeded" }
-            for (raw in trimmed.lines()) {
-                lineNumber++
-                val line = raw.trim()
-                if (line.isEmpty() || line.startsWith("#")) continue
-                val assign = Regex("""^([a-zA-Z_]\w*)\s*=\s*([^=]+)$""").matchEntire(line)
-                if (assign != null) { vars[assign.groupValues[1]] = numeric(assign.groupValues[2]); continue }
-                val print = Regex("""^print\((.*)\)$""").matchEntire(line)
-                if (print != null) {
-                    val arg = print.groupValues[1].trim()
-                    output += when {
-                        arg.isEmpty() -> ""
-                        arg.matches(Regex(""""[^"\\]*"|'[^'\\]*'""")) -> arg.drop(1).dropLast(1)
-                        else -> formatNumValue(numeric(arg))
-                    }
-                    continue
-                }
-                error("Unsupported statement; imports, loops and libraries require a Python runtime")
-            }
-            CodeRunResult("Arithmetic preview (not a Python runtime)\n" + if (output.isEmpty()) "(no print output)" else output.joinToString("\n"))
-        } catch (t: IllegalArgumentException) {
-            CodeRunResult("", "Preview stopped at line $lineNumber: ${t.message}")
-        } catch (t: IllegalStateException) {
-            CodeRunResult("", "Preview stopped at line $lineNumber: ${t.message}")
-        }
+        return CodeRunResult("", "Not executed: no Python runtime is available here. Copy this source into a Python environment.")
     }
     if (lang in setOf("sql", "sqlite", "postgres", "postgresql", "mysql")) {
         return CodeRunResult("", "Not executed: no database is connected. Copy this SQL into your database client.")
@@ -133,20 +132,28 @@ private fun executeCodePreview(language: String?, code: String): CodeRunResult {
  * bar ([▷ Run in Browser] / [▷ Run Code]), and terminal-style output drawer
  * with ● Success / ● Error status and ↻ Rerun control.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun CodeBlockCard(
     language: String?,
     code: String,
     open: Boolean,
+    sourceStart: Int? = null,
     onCopyCode: (String) -> Unit
 ) {
+    val responseActions = LocalResponseCodeActions.current
+    val sourceId = remember(code, language, sourceStart) { sourceStart ?: Any() }
     var copied by remember { mutableStateOf(false) }
-    var sandboxMode by remember { mutableStateOf(false) }
-    var editing by remember(code) { mutableStateOf(false) }
-    var currentCode by remember(code) { mutableStateOf(code) }
-    var expanded by remember(code) { mutableStateOf(false) }
-    var runResult by remember(code) { mutableStateOf<CodeRunResult?>(null) }
-    var runCount by remember(code) { mutableStateOf(0) }
+    var sandboxMode by remember(code, language) { mutableStateOf(false) }
+    var sandboxSource by remember(code, language) { mutableStateOf("") }
+    var editing by remember(code, language) { mutableStateOf(false) }
+    var editorDraft by remember(code, language) { mutableStateOf("") }
+    var editorEncoded by remember(code, language) { mutableStateOf(false) }
+    var editorError by remember(code, language) { mutableStateOf<String?>(null) }
+    var currentCode by remember(code, language) { mutableStateOf(responseActions?.source(sourceId)?.second ?: code) }
+    var expanded by remember(code, language) { mutableStateOf(false) }
+    var runResult by remember(code, language) { mutableStateOf<CodeRunResult?>(null) }
+    var runCount by remember(code, language) { mutableStateOf(0) }
 
     LaunchedEffect(copied) {
         if (copied) {
@@ -154,21 +161,28 @@ fun CodeBlockCard(
             copied = false
         }
     }
-    if (sandboxMode && !open && currentCode.isNotBlank()) {
-        Column {
-            CodeSandboxView(code = currentCode, language = language ?: "javascript")
-            Text(
-                text = "Close full sandbox",
-                style = MaterialTheme.typography.labelSmall,
-                color = GsTheme.colors.codeComment,
-                modifier = Modifier
-                    .padding(top = 4.dp, start = 4.dp)
-                    .clickable { sandboxMode = false }
-            )
-        }
-        return
+    val latestSource = rememberUpdatedState(currentCode)
+    val bringIntoView = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    DisposableEffect(responseActions, sourceId, open) {
+        if (!open) responseActions?.register(sourceId, ResponseCodeActions.Entry(language, { latestSource.value }, {
+            val source = latestSource.value
+            editorEncoded = CodeDisplay.requiresEncoding(source)
+            editorDraft = if (editorEncoded) CodeDisplay.encodeEditor(source) else source
+            editorError = null
+            editing = true
+            scope.launch {
+                androidx.compose.runtime.withFrameNanos { }
+                bringIntoView.bringIntoView()
+            }
+        }))
+        onDispose { responseActions?.remove(sourceId) }
     }
-    val colors = GsTheme.colors
+    val themeColors = GsTheme.colors
+    val colors = remember(themeColors) {
+        val dark = com.grapsee.gsai.ui.theme.darkGsColors()
+        themeColors.copy(codeText = dark.codeText, codeKeyword = dark.codeKeyword, codeString = dark.codeString, codeComment = dark.codeComment, codeNumber = dark.codeNumber)
+    }
     val wrapCode = LocalNexlyCodeWrap.current
     val allLines = remember(currentCode) { currentCode.lines() }
     val isCollapsible = allLines.size > 14
@@ -180,26 +194,29 @@ fun CodeBlockCard(
         (1..visibleLineCount).joinToString("\n")
     }
 
-    val highlighted = remember(visibleCode, language, colors, open) {
+    val displayCode = remember(visibleCode) { CodeDisplay.escape(visibleCode) }
+    val highlighted = remember(displayCode, language, colors, open) {
         when {
             visibleCode.isBlank() -> AnnotatedString("…")
-            open -> AnnotatedString(visibleCode)
-            else -> highlightCode(visibleCode, language, colors)
+            open -> AnnotatedString(displayCode)
+            else -> highlightCode(displayCode, language, colors)
         }
     }
 
     val langLabel = (language ?: "code").trim().ifBlank { "code" }
     val lowerLang = langLabel.lowercase()
-    val isBrowserLang = lowerLang in setOf("html", "htm", "svg", "js", "javascript")
+    val isBrowserLang = lowerLang in setOf("html", "htm", "svg", "js", "javascript", "node")
+    val supportsExecution = isBrowserLang || lowerLang == "json"
 
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = Color(0xFF221F3B),
         modifier = Modifier
             .fillMaxWidth()
+            .bringIntoViewRequester(bringIntoView)
             .border(1.dp, Color(0xFF36315C), RoundedCornerShape(14.dp))
             .semantics {
-                contentDescription = if (language != null) "Code block, $language" else "Code block"
+                contentDescription = if (language != null) "Code block, ${NexlyIcons.cleanPlainText(language)}" else "Code block"
             }
     ) {
         Column {
@@ -218,7 +235,7 @@ fun CodeBlockCard(
                     modifier = Modifier.padding(end = 6.dp)
                 )
                 Text(
-                    text = langLabel.replaceFirstChar { it.uppercase() },
+                    text = NexlyIcons.cleanPlainText(langLabel.replaceFirstChar { it.uppercase() }),
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                     color = Color(0xFFE6E1FF),
                     modifier = Modifier.weight(1f)
@@ -244,10 +261,23 @@ fun CodeBlockCard(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .background(Color.White.copy(alpha = 0.08f))
-                            .clickable { editing = !editing }
+                            .clickable {
+                                if (!editing) {
+                                    editorEncoded = CodeDisplay.requiresEncoding(currentCode)
+                                    editorDraft = if (editorEncoded) CodeDisplay.encodeEditor(currentCode) else currentCode
+                                    editorError = null
+                                }
+                                if (editorError == null) editing = !editing
+                            }
                             .padding(horizontal = 7.dp, vertical = 3.dp)
                     )
                     Spacer(Modifier.width(4.dp))
+                }
+                if (currentCode != code || editorError != null) {
+                    Text("Reset", color = Color(0xFFC5BCFF), modifier = Modifier.clickable {
+                        currentCode = code; editing = false; editorDraft = ""; editorError = null
+                        editorEncoded = false; sandboxMode = false; runResult = null; runCount = 0
+                    }.padding(horizontal = 6.dp))
                 }
                 IconButton(onClick = { onCopyCode(currentCode); copied = true }, modifier = Modifier.size(26.dp)) {
                     Icon(
@@ -283,8 +313,20 @@ fun CodeBlockCard(
                     )
                     if (editing) {
                         BasicTextField(
-                            value = currentCode,
-                            onValueChange = { currentCode = it },
+                            value = editorDraft,
+                            onValueChange = { draft ->
+                                if (!editorEncoded && CodeDisplay.requiresEncoding(draft)) {
+                                    editorEncoded = true
+                                    editorDraft = CodeDisplay.encodeEditor(draft)
+                                    currentCode = draft
+                                    editorError = null
+                                } else {
+                                    editorDraft = CodeDisplay.escape(draft)
+                                    runCatching { if (editorEncoded) CodeDisplay.decodeEditor(draft) else draft }
+                                        .onSuccess { currentCode = it; editorError = null }
+                                        .onFailure { editorError = "Enter one valid JSON source string. Invalid drafts cannot run." }
+                                }
+                            },
                             textStyle = TextStyle(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 12.sp,
@@ -313,6 +355,13 @@ fun CodeBlockCard(
                 }
             }
 
+            if (CodeDisplay.requiresEncoding(currentCode)) {
+                Text("Unicode symbols are shown as escapes; Copy and Run keep original source.", color = Color(0xFFC5BCFF), fontSize = 11.sp)
+            }
+            if (editing && editorEncoded) {
+                Text("Unicode-safe editor: edit one JSON-encoded source string.", color = Color(0xFFC5BCFF), fontSize = 11.sp)
+            }
+            editorError?.let { Text(it, color = Color(0xFFFCA5A5), fontSize = 11.sp) }
             // Bottom Execution Action Bar (04 & 05: Screenshots 1 & 2)
             if (!open && currentCode.isNotBlank()) {
                 Row(
@@ -329,8 +378,14 @@ fun CodeBlockCard(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color(0xFF6C4CF6))
-                            .clickable {
-                                if (lowerLang in setOf("html", "htm", "svg", "js", "javascript")) {
+                            .clickable(enabled = supportsExecution) {
+                                if (editing && editorError != null) {
+                                    sandboxMode = false
+                                    runResult = CodeRunResult("", "Not executed: correct the JSON-encoded source draft first.")
+                                } else if (lowerLang in setOf("html", "htm", "svg", "js", "javascript", "node")) {
+                                    runCount += 1
+                                    runResult = null
+                                    sandboxSource = currentCode
                                     sandboxMode = true
                                 } else {
                                     runCount += 1
@@ -345,7 +400,7 @@ fun CodeBlockCard(
                             color = Color.White
                         )
                         Text(
-                            text = if (isBrowserLang) "Run in Browser" else "Run Code",
+                            text = if (!supportsExecution) "Source only" else if (isBrowserLang) "Run in Browser" else "Validate JSON",
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -382,8 +437,12 @@ fun CodeBlockCard(
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(Color.White.copy(alpha = 0.08f))
                                     .clickable {
-                                        runCount += 1
-                                        runResult = executeCodePreview(language, currentCode)
+                                        if (editing && editorError != null) {
+                                            runResult = CodeRunResult("", "Not executed: correct the JSON-encoded source draft first.")
+                                        } else {
+                                            runCount += 1
+                                            runResult = executeCodePreview(language, currentCode)
+                                        }
                                     }
                                     .padding(horizontal = 7.dp, vertical = 3.dp)
                             ) {
@@ -449,14 +508,14 @@ fun CodeBlockCard(
                     }
                     if (activeResult.output.isNotBlank()) {
                         Text(
-                            text = activeResult.output,
+                            text = CodeDisplay.escape(activeResult.output),
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                             color = Color(0xFFD8F3DC)
                         )
                     }
                     if (activeResult.error != null) {
                         Text(
-                            text = activeResult.error,
+                            text = CodeDisplay.escape(activeResult.error),
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                             color = Color(0xFFFCA5A5),
                             modifier = Modifier
@@ -468,6 +527,19 @@ fun CodeBlockCard(
                         )
                     }
                 }
+            }
+
+            if (!open && !supportsExecution) {
+                Text(
+                    text = "Source only: no ${NexlyIcons.cleanPlainText(lowerLang)} runtime is available in this app. Copy this source into a compatible environment; no execution has occurred here.",
+                    fontSize = 12.sp,
+                    color = Color(0xFFD8D2EB),
+                    modifier = Modifier.fillMaxWidth().padding(12.dp)
+                )
+            }
+
+            if (sandboxMode && !open) {
+                key(runCount) { CodeSandboxView(code = sandboxSource, language = language ?: "javascript") }
             }
 
             // Visual Data Plot Preview (Screenshot 1: Revenue Trend mini bar chart from Python/JS code)

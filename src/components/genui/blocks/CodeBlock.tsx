@@ -2,16 +2,17 @@
 
 /**
  * CodeBlock — full code experience: syntax highlighting, inline editing,
- * execution preview (JS/TS console runner, HTML/SVG sandboxed iframe, JSON
+ * execution (bounded JavaScript Worker, HTML/SVG sandboxed iframe, JSON
  * validator), and error diagnostics.
  */
 import { useMemo, useState, type ReactNode } from 'react'
 import { alpha, RADIUS, TYPE } from '../theme/tokens'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { CopyChip } from '../primitives/CopyChip'
+import { HtmlBlock } from './HtmlBlock'
 import { GlassIcon } from '@/components/nexly/GlassIcon'
-import { arithmeticPreview } from '@/lib/code/arithmetic-preview'
 import { javascriptSandboxDocument } from '@/lib/code/javascript-sandbox'
+import { escapeCodeDisplay, requiresEncodedEditor, encodeSourceEditor, decodeSourceEditor } from '@/lib/code/display-source'
 
 const KEYWORD_RE =
   /\b(const|let|var|function|return|if|else|for|while|switch|case|break|continue|new|class|extends|import|from|export|default|async|await|try|catch|finally|throw|typeof|instanceof|in|of|def|elif|lambda|yield|with|as|pass|raise|True|False|None|fun|val|when|object|interface|struct|enum|guard|protocol|impl|pub|fn|match|mut|use|SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|GROUP|BY|ORDER|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|LIMIT)\b/g
@@ -20,11 +21,10 @@ const RUNNABLE_JS = new Set(['js', 'javascript', 'ts', 'typescript', 'jsx', 'tsx
 const RUNNABLE_HTML = new Set(['html', 'htm', 'svg'])
 const RUNNABLE_PY = new Set(['py', 'python', 'python3'])
 const RUNNABLE_SQL = new Set(['sql', 'sqlite', 'postgres', 'postgresql', 'mysql'])
-const RUNNABLE_SH = new Set(['sh', 'bash', 'zsh', 'shell'])
 const ERROR_LANGS = new Set(['error', 'stderr', 'traceback', 'stacktrace', 'exception'])
 
 function previewNonJsExecution(lang: string, source: string): { output: string; error?: string } {
-  if (RUNNABLE_PY.has(lang)) return arithmeticPreview(source)
+  if (RUNNABLE_PY.has(lang)) return { output: '', error: 'Not executed: no Python runtime is available here. Copy this source into a Python environment.' }
   if (RUNNABLE_SQL.has(lang)) return { output: '', error: 'Not executed: no database is connected. Copy this SQL into your database client.' }
   return { output: '', error: `Not executed: no ${lang.toUpperCase()} runtime is available here.` }
 }
@@ -88,10 +88,17 @@ function highlightLine(line: string, dark: boolean): ReactNode[] {
 }
 
 export function CodeBlock({ code, language }: { code: string; language?: string }) {
+  return <CodeControls key={JSON.stringify([code, language])} code={code} language={language} />
+}
+
+function CodeControls({ code, language }: { code: string; language?: string }) {
   const { accent } = useWidgetIdentity()
   const lang = (language ?? 'code').toLowerCase().trim()
   const [source, setSource] = useState(code)
   const [editing, setEditing] = useState(false)
+  const [editorDraft, setEditorDraft] = useState('')
+  const [editorEncoded, setEditorEncoded] = useState(false)
+  const [editorError, setEditorError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [runCount, setRunCount] = useState(0)
   const [output, setOutput] = useState<string | null>(null)
@@ -100,13 +107,10 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
   )
   const [htmlPreview, setHtmlPreview] = useState<string | null>(null)
 
-  const canRun =
-    RUNNABLE_JS.has(lang) ||
-    RUNNABLE_HTML.has(lang) ||
-    RUNNABLE_PY.has(lang) ||
-    RUNNABLE_SQL.has(lang) ||
-    RUNNABLE_SH.has(lang) ||
-    lang === 'json'
+  const canRun = ['js', 'javascript', 'node'].includes(lang) || RUNNABLE_HTML.has(lang) || lang === 'json'
+  const unsupportedNotice = ['ts', 'typescript', 'jsx', 'tsx', 'react'].includes(lang)
+    ? 'Source only: no TypeScript/React compiler is available here. No component has been executed. Use self-contained HTML/JavaScript for a live preview.'
+    : previewNonJsExecution(lang, source).error
 
   const allLines = useMemo(() => source.split('\n'), [source])
   const isCollapsible = allLines.length > 14
@@ -129,19 +133,19 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
         >
           {idx + 1}
         </span>
-        <span style={{ flex: 1, minWidth: 0 }}>{highlightLine(line, true)}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>{highlightLine(escapeCodeDisplay(line), true)}</span>
       </div>
     ))
   }, [visibleLines])
 
   const runCode = () => {
+    if (editing && editorError) { setHtmlPreview(null); setOutput(null); setErrorText('Not executed: correct the JSON-encoded source draft first.'); return }
     setRunCount((c) => c + 1)
     setErrorText(null)
     setOutput(null)
     setHtmlPreview(null)
     if (RUNNABLE_HTML.has(lang)) {
       setHtmlPreview(source)
-      setOutput('Live HTML/SVG preview opened in sandbox')
       return
     }
     if (lang === 'json') {
@@ -181,6 +185,9 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
 
   return (
     <div
+      data-code-block="true"
+      data-code-source={source}
+      data-code-language={lang}
       style={{
         borderRadius: 14,
         border: '1px solid #353059',
@@ -222,14 +229,27 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
               {expanded ? 'Collapse' : `Expand (${allLines.length})`}
             </button>
           )}
-          <button type="button" onClick={() => setEditing((v) => !v)} style={chipStyle}>
+          <button type="button" data-code-edit={editing ? undefined : "true"} onClick={() => {
+              if (editing && editorError) return
+              if (!editing) {
+                const encoded = requiresEncodedEditor(source)
+                setEditorEncoded(encoded)
+                setEditorDraft(encoded ? encodeSourceEditor(source) : source)
+                setEditorError(null)
+              }
+              setEditing(value => !value)
+            }} style={chipStyle}>
             {editing ? 'Done' : 'Edit'}
           </button>
-          {source !== code ? (
+          {source !== code || editorError !== null ? (
             <button
               type="button"
               onClick={() => {
                 setSource(code)
+                const encoded = requiresEncodedEditor(code)
+                setEditorEncoded(encoded)
+                setEditorDraft(encoded ? encodeSourceEditor(code) : code)
+                setEditorError(null)
                 setOutput(null)
                 setErrorText(null)
                 setHtmlPreview(null)
@@ -244,10 +264,25 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
       </div>
 
       {/* Code Surface */}
+      {requiresEncodedEditor(source) && <div style={{ padding: '6px 12px', fontSize: 11, color: '#C5BCFF' }}>Unicode symbols are shown as escapes; Copy and Run use the original source.</div>}
+      {editing && editorEncoded && <div style={{ padding: '6px 12px', fontSize: 11, color: '#C5BCFF' }}>Unicode-safe editor: edit one JSON-encoded source string.</div>}
+      {editorError && <div role="alert" style={{ padding: '6px 12px', color: '#FCA5A5' }}>{editorError}</div>}
       {editing ? (
         <textarea
-          value={source}
-          onChange={(e) => setSource(e.target.value)}
+          autoFocus
+          aria-label={editorEncoded ? 'JSON-encoded source' : 'Source code'}
+          value={editorDraft}
+          onChange={(e) => {
+            const draft = e.target.value
+            if (!editorEncoded && requiresEncodedEditor(draft)) {
+              setEditorEncoded(true); setEditorDraft(encodeSourceEditor(draft)); setSource(draft); setEditorError(null); return
+            }
+            setEditorDraft(escapeCodeDisplay(draft))
+            try {
+              setSource(editorEncoded ? decodeSourceEditor(draft) : draft)
+              setEditorError(null)
+            } catch { setEditorError('Enter one valid JSON string. The invalid draft has not replaced executable source.') }
+          }}
           spellCheck={false}
           rows={Math.min(18, Math.max(4, allLines.length + 1))}
           style={{
@@ -353,21 +388,14 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
         </div>
       )}
 
+      {!canRun && !ERROR_LANGS.has(lang) && (
+        <div style={{ padding: '10px 12px', color: '#D8D2EB', fontSize: 12, lineHeight: 1.5 }}>
+          {unsupportedNotice}
+        </div>
+      )}
+
       {/* Sandboxed HTML Preview */}
-      {htmlPreview ? (
-        <iframe
-          title="Code preview"
-          sandbox="allow-scripts"
-          srcDoc={htmlPreview}
-          style={{
-            width: '100%',
-            height: 220,
-            border: 'none',
-            borderTop: '1px solid rgba(255,255,255,0.1)',
-            background: '#fff',
-          }}
-        />
-      ) : null}
+      {htmlPreview ? <HtmlBlock key={runCount} source={htmlPreview} fallbackHeight={220} /> : null}
 
       {/* Terminal-Style Execution Output Drawer (05. Code Execution) */}
       {(output !== null || errorText !== null) && (
@@ -424,11 +452,12 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
                 whiteSpace: 'pre-wrap',
               }}
             >
-              {output}
+              {escapeCodeDisplay(output)}
             </pre>
           ) : null}
           {errorText ? (
             <pre
+              role="alert"
               style={{
                 margin: output ? '6px 0 0' : 0,
                 padding: '8px 10px',
@@ -440,7 +469,7 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
                 whiteSpace: 'pre-wrap',
               }}
             >
-              {errorText}
+              {escapeCodeDisplay(errorText)}
             </pre>
           ) : null}
         </div>

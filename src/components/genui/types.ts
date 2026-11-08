@@ -177,6 +177,8 @@ export interface MediaPayload extends StyledPayload {
 
 export interface AppPayload extends StyledPayload {
   type: string
+  /** Actual configured countdown duration, in seconds. Omit for user configuration. */
+  durationSeconds?: number
   steps?: Array<Record<string, unknown>>
   columns?: Array<{ title: string; items: Array<Record<string, unknown>> }>
   items?: Array<Record<string, unknown>>

@@ -2056,7 +2056,10 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       full = draft
       if (push) for (const chunk of chunkDeltas(sanitizeReplyEmojis(full))) push('delta', chunk)
     } else if (push) {
-      full = await synthesize(modelMessages, (d) => push('delta', sanitizeReplyEmojis(d)))
+      // Deltas are transport, not presentation. A chunk can bisect a fence,
+      // JSON escape, surrogate pair or executable string. Clients sanitize
+      // the accumulated display, never independently rewrite machine chunks.
+      full = await synthesize(modelMessages, (d) => push('delta', d))
     } else {
       full = await synthesize(modelMessages)
     }

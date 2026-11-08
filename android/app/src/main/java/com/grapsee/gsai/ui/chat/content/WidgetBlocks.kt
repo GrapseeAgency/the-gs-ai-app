@@ -89,7 +89,7 @@ import kotlinx.serialization.builtins.serializer
 
 /** Hard caps. A widget is data, not a document; anything bigger is a bug. */
 private const val MAX_WIDGET_BYTES = 64 * 1024
-private const val MAX_CHART_SERIES = 8
+private const val MAX_CHART_SERIES = 16
 private const val MAX_POINTS_PER_SERIES = 200
 private const val MAX_TABLE_ROWS = 100
 private const val MAX_TABLE_COLUMNS = 8
@@ -498,7 +498,7 @@ data class CollabWidgetData(
     val title: String = "",
     val label: String = "",
     val items: List<String> = emptyList(),
-    val start: Int = 0
+    val start: Double = 0.0
 )
 
 /** A validated widget payload. */
@@ -587,7 +587,10 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
                 // correctly-shaped pie and rendered it as a code block. A
                 // gantt is ONE RANGE PER SERIES (Task 1 = [0,2]), the same
                 // deal (probe 2026-10-20).
-                val minPoints = if (w.type == "pie" || w.type == "donut" || w.type == "gantt") 1 else 2
+                val minPoints = 1 // Preserve real singleton series; never discard or pad their observations.
+                require(w.series.size <= MAX_CHART_SERIES && w.series.all { it.data.size <= MAX_POINTS_PER_SERIES }) {
+                    "Chart exceeds supported capacity; original source is preserved instead of truncating observations."
+                }
                 val series = w.series.take(MAX_CHART_SERIES).map {
                     it.copy(data = it.data.take(MAX_POINTS_PER_SERIES))
                 }.filter { it.data.size >= minPoints }
@@ -644,6 +647,9 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
                 if (cards.isEmpty()) null else Widget.Stat(w.copy(cards = cards))
             }
             "table" -> widgetJson.decodeFromString<TableWidget>(json).let { w ->
+                require(w.columns.size <= MAX_TABLE_COLUMNS && w.rows.size <= MAX_TABLE_ROWS && w.rows.all { it.size <= w.columns.size }) {
+                    "Table exceeds supported capacity or declares fewer columns than cells; source was not silently truncated."
+                }
                 val cols = w.columns.take(MAX_TABLE_COLUMNS)
                 val rows = w.rows.take(MAX_TABLE_ROWS).filter { it.isNotEmpty() }
                 if (cols.isEmpty() || rows.isEmpty()) null
@@ -748,6 +754,7 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
             }
             "app" -> widgetJson.decodeFromString<AppWidget>(json).let { w ->
                 val type = w.type.lowercase()
+                if (type == "tasks" && (w.items.isEmpty() || w.items.size > 30 || w.items.any { it.title.isBlank() })) return null
                 val steps = w.steps.take(10)
                 val columns = w.columns.take(6)
                 val items = w.items.take(40)
@@ -759,6 +766,7 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
                     "sheet" -> rows.size >= 2
                     "config", "configurator" -> groups.any { it.options.isNotEmpty() }
                     "booking", "schedule" -> items.isNotEmpty() || w.slots.isNotEmpty()
+                    "timer" -> w.durationSeconds?.let { it.isFinite() && it % 1.0 == 0.0 && it >= 1.0 && it <= 604800.0 } ?: true
                     else -> items.isNotEmpty() || columns.isNotEmpty()
                 }
                 if (type !in APP_TYPES || !hasBody) null
@@ -839,10 +847,11 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
             }
             "collab" -> widgetJson.decodeFromString<CollabWidgetData>(json).let { w ->
                 val surface = if (w.surface in COLLAB_TYPES) w.surface
-                else w.type?.takeIf { it in COLLAB_TYPES } ?: "counter"
+                else w.type?.takeIf { it in COLLAB_TYPES } ?: return null
                 val room = w.room.lowercase().replace(Regex("[^a-z0-9-]+"), "-")
                     .trim('-').take(48).ifEmpty { "lobby" }
-                Widget.Collab(w.copy(surface = surface, room = room, items = w.items.filter { it.isNotBlank() }.take(12)))
+                if (!w.start.isFinite() || w.items.size > 12 || w.items.any { it.isBlank() } || (surface == "vote" && w.items.size < 2)) return null
+                Widget.Collab(w.copy(surface = surface, room = room))
             }
             // v2 — layout, navigation, and interactive controls.
             "tabs" -> widgetJson.decodeFromString<TabsWidget>(json).let { w ->
@@ -871,7 +880,7 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
             }
             "poll" -> widgetJson.decodeFromString<PollWidget>(json).let { w ->
                 val options = w.options.filter { it.label.isNotBlank() }.take(12)
-                if (options.size < 2) null else Widget.Poll(w.copy(options = options))
+                if (options.size < 2 || options.any { it.votes < 0 }) null else Widget.Poll(w.copy(options = options))
             }
             "diff" -> widgetJson.decodeFromString<DiffWidget>(json).let { w ->
                 if (w.unified.isBlank() && w.before.isBlank() && w.after.isBlank()) null
@@ -886,8 +895,8 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
                 if (cards.isEmpty()) null else Widget.Flashcards(w.copy(cards = cards))
             }
             "checklist" -> widgetJson.decodeFromString<ChecklistWidget>(json).let { w ->
-                val items = w.items.filter { it.label.isNotBlank() }.take(30)
-                if (items.isEmpty()) null else Widget.Checklist(w.copy(items = items))
+                if (w.items.isEmpty() || w.items.size > 30 || w.items.any { it.label.isBlank() }) null
+                else Widget.Checklist(w)
             }
             else -> null
         }
@@ -947,6 +956,21 @@ fun inferWidgetKind(json: String): String? {
         null
     } ?: return null
     val keys = obj.keys
+    if (keys == setOf("items")) {
+        val items = obj["items"] as? JsonArray
+        val labels = setOf("label", "text", "title", "name", "task", "todo", "percent", "value", "front", "back", "question", "options", "url", "src", "time", "date", "body")
+        if (items != null && items.none { item ->
+            (item is JsonPrimitive && item.isString && item.content.isNotBlank()) ||
+                (item is JsonObject && item.keys.any { it in labels })
+        }) return null
+    }
+    val explicitApp = listOf("kind", "widget", "type").any { key ->
+        val value = (obj[key] as? JsonPrimitive)?.contentOrNull
+        value != null && widgetKindOf(value) == "app"
+    }
+    if (explicitApp) return if (parseWidget("app", normalized) != null) "app" else null
+    if ("columns" in keys && "rows" in keys) return if (parseWidget("table", normalized) != null) "table" else null
+    if ("series" in keys) return if (parseWidget("chart", normalized) != null) "chart" else null
     val candidates = buildList {
         // Explicit kind / sub-type discriminators
         for (k in listOf("kind", "widget", "type", "sim", "view", "surface", "editor")) {
@@ -991,7 +1015,7 @@ fun inferWidgetKind(json: String): String? {
             add("steps"); add("app")
         }
         if ("items" in keys || "tasks" in keys || "todos" in keys) {
-            add("checklist"); add("progress"); add("gauge"); add("carousel"); add("cards"); add("steps"); add("accordion"); add("menu"); add("chips"); add("app"); add("media"); add("collab")
+            add("checklist"); add("progress"); add("gauge"); add("carousel"); add("cards"); add("steps"); add("accordion"); add("menu"); add("chips"); add("app"); add("media")
         }
         if ("pages" in keys) add("media")
         if ("groups" in keys || "slots" in keys) add("app")
@@ -1389,7 +1413,8 @@ fun WidgetBlockView(block: Block.WidgetBlock, streaming: Boolean, onSendPrompt: 
     }
     val widget = remember(block.kind, block.json) {
         parseWidget(block.kind, block.json)
-            ?: inferWidgetKind(block.json)?.let { inferred -> parseWidget(inferred, block.json) }
+            ?: if (widgetKindOf(block.kind) == "checklist") null
+            else inferWidgetKind(block.json)?.let { inferred -> parseWidget(inferred, block.json) }
     }
     if (widget == null) {
         WidgetFallback(block)
@@ -1528,6 +1553,8 @@ private fun ChartWidgetView(w: ChartWidget) {
             ) {
                 Row(
                     modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState())
                         .clip(RoundedCornerShape(10.dp))
                         .background(Color(0xFFEDE6FF))
                         .padding(3.dp),
@@ -1563,6 +1590,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier
+                        .padding(start = 6.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.White.copy(alpha = 0.8f))
                         .border(1.dp, Color(0xFFDFD7FA), RoundedCornerShape(8.dp))
@@ -1576,6 +1604,8 @@ private fun ChartWidgetView(w: ChartWidget) {
                     )
                     Text(
                         text = "$rangeLabel ▾",
+                        maxLines = 1,
+                        softWrap = false,
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF433B6B)
@@ -1667,7 +1697,9 @@ private fun ChartWidgetView(w: ChartWidget) {
                 val (totalStr, peakPair, pct) = kpiStats
                 val pos = pct != null && pct >= 0.0
                 val pctStr = pct?.let { String.format(java.util.Locale.US, "%s%.1f%%", if (pos) "+" else "", it) } ?: if (activeType in setOf("pie", "donut")) "N/A (slice values)" else "N/A (zero baseline)"
-                val deltaText = if (pct == null) "No defined baseline" else "${if (pos) "↑" else "↓"} $pctStr"
+                val summaryPointCount = slicedWidget.series.firstOrNull()?.data?.size ?: 0
+                val comparisonPeriod = if (activeType in setOf("pie", "donut")) "Not a time trend" else
+                    slicedWidget.labels.firstOrNull()?.let { first -> slicedWidget.labels.getOrNull(summaryPointCount - 1)?.let { last -> "$first–$last" } } ?: "First–last point"
                 val pillBg = if (pct == null) Color(0xFFF0EDF5) else if (pos) Color(0xFFE6F9F0) else Color(0xFFFDECEC)
                 val pillFg = if (pct == null) Color(0xFF655E70) else if (pos) Color(0xFF129A5A) else Color(0xFFE04F5F)
                 Row(
@@ -1696,14 +1728,14 @@ private fun ChartWidgetView(w: ChartWidget) {
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
-                                .background(pillBg)
+                                .background(Color(0xFFEFEAFF))
                                 .padding(horizontal = 6.dp, vertical = 1.5.dp)
                         ) {
                             Text(
-                                text = deltaText,
+                                text = "$summaryPointCount points",
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = pillFg
+                                color = Color(0xFF5B3DF5)
                             )
                         }
                     }
@@ -1761,7 +1793,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                             fontWeight = FontWeight.Bold,
                             color = GsTheme.colors.textPrimary
                         )
-                        Text("Growth Rate", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.Medium, maxLines = 1)
+                        Text(if (activeType in setOf("pie", "donut")) "Category data" else "First–last", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.Medium)
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
@@ -1769,7 +1801,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                                 .padding(horizontal = 6.dp, vertical = 1.5.dp)
                         ) {
                             Text(
-                                text = deltaText,
+                                text = comparisonPeriod,
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = pillFg
@@ -1815,6 +1847,14 @@ private fun ChartWidgetView(w: ChartWidget) {
 }
 
 private data class LineGeom(val minX: Float, val minY: Float, val spanX: Float, val spanY: Float)
+
+/** Thin axis labels without assigning the first eight labels to all points. */
+internal fun chartAxisLabelIndicesAndroid(count: Int, limit: Int = 8): List<Int> = when {
+    count <= 0 || limit <= 0 -> emptyList()
+    count <= limit -> (0 until count).toList()
+    limit == 1 -> listOf(count - 1)
+    else -> (0 until limit).map { kotlin.math.round(it.toDouble() * (count - 1) / (limit - 1)).toInt() }.distinct()
+}
 
 @Composable
 private fun LineChart(w: ChartWidget, filled: Boolean) {
@@ -2053,22 +2093,23 @@ private fun LineChart(w: ChartWidget, filled: Boolean) {
         }
     }
     ChartInspectBar(probe, w.unit, "Tap a point to read it", colors.firstOrNull() ?: GsTheme.colors.accent)
-    // X labels in equal cells, so they line up with the points above them.
+    // Sample across the complete source domain, and place each label at its
+    // actual plotted x coordinate. Taking the first eight and stretching them
+    // across a 31-point plot attached the wrong labels to the later points.
     if (xLabels.isNotEmpty()) {
-        Row(Modifier.fillMaxWidth().padding(top = 4.dp, start = 34.dp)) {
-            xLabels.take(8).forEach { label ->
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = GsTheme.colors.textTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f)
-                )
+        Canvas(Modifier.fillMaxWidth().height(20.dp).padding(top = 4.dp)) {
+            val left = 34.dp.toPx()
+            val plotWidth = (size.width - left).coerceAtLeast(1f)
+            chartAxisLabelIndicesAndroid(xLabels.size).forEach { index ->
+                val x = w.series.firstOrNull()?.data?.getOrNull(index)?.getOrNull(0)
+                val fraction = if (x != null) (x - minX) / spanX else index.toFloat() / (xLabels.size - 1).coerceAtLeast(1)
+                val label = measurer.measure(xLabels[index], axisStyle)
+                val textLeft = (left + plotWidth * fraction - label.size.width / 2f).coerceIn(0f, (size.width - label.size.width).coerceAtLeast(0f))
+                drawText(label, topLeft = Offset(textLeft, 0f))
             }
         }
     }
+
 }
 
 /**
@@ -2094,13 +2135,21 @@ private fun niceStep(raw: Float): Float {
 
 /** 1234 -> "1.2K", 0.5 -> "0.5", 100 -> "100" (+ the widget's unit). */
 internal fun axisLabel(value: Float, unit: String): String {
+    if (!value.isFinite()) return "Undefined"
+    val magnitude = kotlin.math.abs(value)
     val n = when {
-        value >= 1_000_000f -> String.format(java.util.Locale.US, "%.1fM", value / 1_000_000f)
-        value >= 1_000f -> String.format(java.util.Locale.US, "%.1fK", value / 1_000f)
-        value == value.toInt().toFloat() -> value.toInt().toString()
-        else -> String.format(java.util.Locale.US, "%.1f", value)
+        magnitude >= 1_000_000_000f -> String.format(java.util.Locale.US, "%.1fB", magnitude / 1_000_000_000f)
+        magnitude >= 1_000_000f -> String.format(java.util.Locale.US, "%.1fM", magnitude / 1_000_000f)
+        magnitude >= 1_000f -> String.format(java.util.Locale.US, "%.1fK", magnitude / 1_000f)
+        magnitude == magnitude.toInt().toFloat() -> magnitude.toInt().toString()
+        else -> String.format(java.util.Locale.US, "%.1f", magnitude)
     }
-    return n + unit
+    val sign = if (value < 0f) "-" else ""
+    return when (unit) {
+        "$", "€", "£", "¥", "₹", "৳", "₩" -> sign + unit + n
+        "", "%", "°", "°C", "°F" -> sign + n + unit
+        else -> sign + n + " " + unit
+    }
 }
 
 @Composable
@@ -2410,72 +2459,44 @@ internal val NUMERIC_CELL = Regex("""^[^\p{L}]{0,3}[-+]?\d[\d.,]*\s*(?:%|[a-zA-Z
 private fun StatWidgetView(w: StatWidget) {
     val c = GsTheme.colors
     val dark = WidgetPalette.onDarkCanvas()
-    var selectedIdx by remember { mutableIntStateOf(0) }
-    val safeSelected = selectedIdx.coerceIn(0, (w.cards.size - 1).coerceAtLeast(0))
     WidgetCardShell(NexlyIcons.cleanPlainText(w.title).ifEmpty { "Stats" }, "stat") {
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()).padding(top = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            w.cards.forEachIndexed { i, card ->
-                val accent = WidgetPalette.legible(WidgetPalette.at(i), dark)
-                val isSelected = i == safeSelected
-                Column(
-                    Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(accent.copy(alpha = if (isSelected) (if (dark) 0.32f else 0.22f) else (if (dark) 0.20f else 0.12f)), c.surface)
-                            )
-                        )
-                        .border(if (isSelected) 1.5.dp else 1.dp, accent.copy(alpha = if (isSelected) 0.65f else (if (dark) 0.34f else 0.22f)), RoundedCornerShape(12.dp))
-                        .clickable { selectedIdx = i }
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
-                        .width(130.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(card.value, style = MaterialTheme.typography.titleLarge, color = accent, fontWeight = FontWeight.Bold)
-                        if (card.unit.isNotEmpty()) {
-                            Text(card.unit, style = MaterialTheme.typography.labelMedium, color = c.textSecondary, modifier = Modifier.padding(start = 3.dp, bottom = 2.dp))
-                        }
-                        if (card.delta.isNotEmpty()) {
-                            val up = card.direction == "up"
-                            Text(
-                                card.delta,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (card.direction == "flat") c.textTertiary else if (up) c.success else c.error,
-                                modifier = Modifier.padding(start = 6.dp, bottom = 2.dp)
-                            )
+        // Metrics are information, not pretend drill-down buttons. A two-column
+        // layout keeps every source card discoverable on an ordinary phone.
+        Column(Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            w.cards.chunked(2).forEachIndexed { rowIndex, row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEachIndexed { columnIndex, card ->
+                        val accent = WidgetPalette.legible(WidgetPalette.at(rowIndex * 2 + columnIndex), dark)
+                        Column(
+                            Modifier.weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Brush.verticalGradient(listOf(accent.copy(alpha = if (dark) 0.20f else 0.08f), c.surface)))
+                                .border(1.dp, accent.copy(alpha = if (dark) 0.34f else 0.22f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(NexlyIcons.cleanPlainText(card.label), style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(NexlyIcons.cleanPlainText(card.value), style = MaterialTheme.typography.titleMedium, color = c.textPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false))
+                                if (card.unit.isNotEmpty()) {
+                                    Text(NexlyIcons.cleanPlainText(card.unit), style = MaterialTheme.typography.labelSmall, color = c.textSecondary, modifier = Modifier.padding(start = 3.dp, bottom = 2.dp))
+                                }
+                            }
+                            if (card.delta.isNotEmpty()) {
+                                val delta = NexlyIcons.cleanPlainText(card.delta)
+                                val number = delta.trim().removeSuffix("%").replace('−', '-').toDoubleOrNull()?.takeIf { it.isFinite() }
+                                val direction = card.direction.ifEmpty { when { number == null -> ""; number > 0 -> "up"; number < 0 -> "down"; else -> "flat" } }
+                                val tone = when (direction) { "up" -> c.success; "down" -> c.error; else -> c.textSecondary }
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    if (direction == "up" || direction == "down") {
+                                        NexlyGlyph(name = if (direction == "up") "trending-up" else "trending-down", size = 12.dp, color = tone)
+                                    }
+                                    Text(delta, style = MaterialTheme.typography.labelSmall, color = tone)
+                                }
+                            }
                         }
                     }
-                    Text(card.label, style = MaterialTheme.typography.labelSmall, color = c.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
-        val activeCard = w.cards.getOrNull(safeSelected)
-        if (activeCard != null && w.cards.size > 1) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(c.raisedSurface)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "${activeCard.label}: ${activeCard.value}${if (activeCard.unit.isNotEmpty()) " ${activeCard.unit}" else ""}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = c.textPrimary,
-                    fontWeight = FontWeight.SemiBold
-                )
-                if (activeCard.delta.isNotEmpty()) {
-                    Text(
-                        activeCard.delta,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (activeCard.direction == "up") c.success else if (activeCard.direction == "down") c.error else c.textSecondary
-                    )
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
         }

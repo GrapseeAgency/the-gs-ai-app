@@ -327,6 +327,16 @@ export function inferWidgetKind(json: string): WidgetKind | null {
   const obj = norm.obj
   const has = (k: string) => k in obj
 
+  // A recognizable dataset that fails validation must not be reinterpreted
+  // as an unrelated empty app just to obtain a successful widget result.
+  const explicitApp = [obj.kind, obj.widget].some(value => value === 'app') ||
+    (typeof obj.type === 'string' && (APP_TYPES as readonly string[]).includes(obj.type))
+  if (explicitApp) return validateWidget('app', repaired).ok ? 'app' : null
+  if ((has('columns') || has('headers')) && (has('rows') || has('data'))) {
+    return validateWidget('table', repaired).ok ? 'table' : null
+  }
+  if (has('series') || has('datasets')) return validateWidget('chart', repaired).ok ? 'chart' : null
+
   const candidates: WidgetKind[] = []
   const push = (...ks: WidgetKind[]) => {
     for (const k of ks) {
@@ -868,7 +878,7 @@ export function validationErrors(result: ValidationResult): string[] {
  * Only the first used to pass, so the other three were dropped as invalid —
  * our own validator threw away correct answers.
  */
-function normalisePoints(raw: unknown[], labelHints: string[]): number[][] {
+function normalisePoints(raw: unknown[], labelHints: string[], errors: string[]): number[][] {
   const out: number[][] = []
   raw.forEach((item, index) => {
     const direct = asNumber(item)
@@ -878,6 +888,11 @@ function normalisePoints(raw: unknown[], labelHints: string[]): number[][] {
     }
     if (Array.isArray(item)) {
       const first = item[0]
+      const numbers = typeof first === 'string' && first.trim() && asNumber(first) === null ? item.slice(1) : item
+      if (numbers.some(value => asNumber(value) === null)) {
+        errors.push(`chart point ${index + 1} contains a missing or invalid coordinate`)
+        return
+      }
       if (typeof first === 'string' && first.trim() && asNumber(first) === null) {
         labelHints.push(first.trim())
         const restNums = item.slice(1).map(asNumber).filter((n): n is number => n !== null)
@@ -1126,7 +1141,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     // A gantt chart is encoded as ONE RANGE PER SERIES — Task 1 is [0,2],
     // Task 2 is [2,4] (probe 2026-10-20). Demanding two points per series
     // rejected every canonical gantt payload.
-    const minPoints = pieLike || type === 'gantt' ? 1 : 2
+    const minPoints = 1 // A real one-point series is data, not permission to pad or discard it.
 
     // Accept series, Chart.js datasets, or lines/bars.
     let rawSeries = asArray(p.series)
@@ -1201,13 +1216,15 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       p.labels ?? p.categories ?? (Array.isArray(p.xAxis) ? p.xAxis : xAxisObj ? xAxisObj.categories ?? xAxisObj.data ?? xAxisObj.labels : undefined)
     )
       .map((l) => asString(l))
-      .filter(Boolean)
 
+    if (rawSeries.length > LIMITS.maxChartSeries) errors.push(`chart exceeds ${LIMITS.maxChartSeries} series; data was not silently truncated`)
     let series = rawSeries
       .map((s) => {
         const row = isObj(s) ? s : {}
         const rawPoints = asArray(row.data).length > 0 ? asArray(row.data) : asArray(row.values).length > 0 ? asArray(row.values) : asArray(row.points)
-        const data = normalisePoints(rawPoints, labelHints)
+        if (rawPoints.length > LIMITS.maxPointsPerSeries) errors.push(`chart series exceeds ${LIMITS.maxPointsPerSeries} points; data was not silently truncated`)
+        const data = normalisePoints(rawPoints, labelHints, errors)
+        if (data.length !== rawPoints.length) errors.push('chart contains missing or invalid observations; points were not silently discarded')
         return { name: asString(row.name ?? row.label ?? row.title ?? row.id, 'Series'), data }
       })
       .filter((s) => s.data.length >= minPoints)
@@ -1215,21 +1232,17 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
 
     const labels = declared.length > 0 ? declared : labelHints
 
-    // If a pie/donut arrived as a SINGLE series with multiple slice points
-    // ({"type":"pie","labels":["A","B"],"series":[{"name":"Share","data":[[0,40],[1,60]]}]}),
-    // expand it to the canonical one-series-per-slice form so every renderer
-    // (Web & Android) draws all slices instead of only the first point.
-    if (pieLike && series.length === 1 && series[0].data.length > 1) {
-      series = series[0].data
-        .slice(0, LIMITS.maxChartSeries)
-        .map((pt, idx) => ({
-          name: labels[idx] ?? `${series[0].name} ${idx + 1}`,
-          data: [[0, pt[pt.length - 1] ?? 0]],
-        }))
-      repaired = true
-    }
+    // Every client now renders every pie observation directly. Expanding a
+    // single source series to maxChartSeries slices discarded the remainder.
 
     if (series.length === 0) errors.push('chart needs at least one series with enough points')
+    if (pieLike) {
+      const observations = series.flatMap(item => item.data)
+      const total = observations.reduce((sum, point) => sum + point[1], 0)
+      if (observations.some(point => point.length !== 2 || point[1] < 0) || !Number.isFinite(total) || total <= 0) {
+        errors.push('Pie/donut needs actual nonnegative observations with a finite positive total; source data is not discarded or made absolute')
+      }
+    }
 
     return {
       widget: { type, title: asString(p.title), unit: asString(p.unit), labels, series },
@@ -1304,7 +1317,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     // If rows are objects [{"Brand":"A","Price":"120"}] and columns were omitted,
     // derive columns from the keys of the first row object.
     if (columns.length === 0 && rawRows.length > 0 && isObj(rawRows[0])) {
-      const derived = Object.keys(rawRows[0]).slice(0, LIMITS.maxTableColumns)
+      const derived = [...new Set(rawRows.flatMap(row => isObj(row) ? Object.keys(row) : []))]
       columns = derived
       colKeys.push(...derived)
       repaired = true
@@ -1318,13 +1331,16 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
         if (isObj(r)) {
           repaired = true
           const keys = colKeys.length > 0 ? colKeys.slice(0, columns.length) : columns
-          return keys.map((k, idx) => asString(r[k] ?? r[columns[idx]] ?? Object.values(r)[idx]))
+          return keys.map((k, idx) => asString(r[k] ?? r[columns[idx]]))
         }
         return []
       })
       .filter((r) => r.length > 0)
       .slice(0, LIMITS.maxTableRows)
     const errors: string[] = []
+    if (rawRows.length > LIMITS.maxTableRows) errors.push(`table exceeds ${LIMITS.maxTableRows} rows; data was not silently truncated`)
+    if (Math.max(rawCols.length, columns.length) > LIMITS.maxTableColumns) errors.push(`table exceeds ${LIMITS.maxTableColumns} columns; data was not silently truncated`)
+    if (rawRows.some(row => Array.isArray(row) && row.length > columns.length)) errors.push('table row contains cells without declared columns')
     if (!columns.length) errors.push('table needs columns')
     if (!rows.length) errors.push('table needs rows')
     return {
@@ -1889,9 +1905,13 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       return { ...o, ...(title ? { title } : {}), ...(body ? { body } : {}) }
     })
 
+    const durationSeconds = typeof p.durationSeconds === 'number' && Number.isFinite(p.durationSeconds) ? p.durationSeconds : null
+    const invalidDuration = type === 'timer' && p.durationSeconds !== undefined &&
+      (durationSeconds === null || !Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 604800)
     const widget = {
       type,
       title: asString(p.title),
+      ...(type === 'timer' && durationSeconds !== null ? { durationSeconds } : {}),
       steps,
       columns,
       items: rawItems.map(normAppItem).slice(0, LIMITS.maxAppItems),
@@ -1910,7 +1930,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       widget.slots.length > 0
     return {
       widget,
-      errors: hasBody ? [] : ['app needs steps, columns, items, groups, rows or slots'],
+      errors: invalidDuration ? ['Timer durationSeconds must be actual whole seconds from 1 through 604800; durations are not clamped or derived from prices'] : type === 'timer' ? [] : type === 'tasks' && (rawItems.length > LIMITS.maxChecklistItems || !rawItems.length || widget.items.some(item => !asString(item.title).trim())) ? ['Task app needs complete labelled tasks within capacity; source tasks are not silently discarded'] : (type === 'wizard' || type === 'onboarding') && !widget.steps.length ? ['wizard/onboarding needs actual steps'] : hasBody ? [] : ['app needs steps, columns, items, groups, rows or slots'],
       repaired,
     }
   },
@@ -2136,7 +2156,8 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
   },
 
   checklist: (p) => {
-    const items = asArray(p.items ?? p.tasks ?? p.todos ?? p.steps ?? p.list)
+    const rawItems = asArray(p.items ?? p.tasks ?? p.todos ?? p.steps ?? p.list)
+    const items = rawItems
       .map((i) => {
         const o = isObj(i) ? i : {}
         return {
@@ -2145,11 +2166,13 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
           done: o.done === true || o.checked === true || o.completed === true || o.status === 'done',
         }
       })
-      .filter((i) => i.label)
-      .slice(0, LIMITS.maxChecklistItems)
+    const errors: string[] = []
+    if (!items.length) errors.push('checklist needs items')
+    if (items.some(item => !item.label.trim())) errors.push('Every checklist task needs an actual label; invalid tasks are not silently discarded')
+    if (items.length > LIMITS.maxChecklistItems) errors.push('Checklist exceeds capacity; tasks are not silently truncated')
     return {
       widget: { title: asString(p.title), items },
-      errors: items.length ? [] : ['checklist needs items'],
+      errors,
       repaired: false,
     }
   },
@@ -2342,11 +2365,8 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
 
   collab: (p) => {
     let repaired = false
-    let surface = asString(p.surface ?? p.type, 'counter')
-    if (!(COLLAB_TYPES as readonly string[]).includes(surface)) {
-      surface = 'counter'
-      repaired = true
-    }
+    const surface = asString(p.surface ?? p.type, 'counter')
+    const invalidSurface = !(COLLAB_TYPES as readonly string[]).includes(surface)
     // room: slug — this is the shared key everyone converges on, so it must
     // survive a low-tier model: lowercase, [a-z0-9-], <=48 chars, default lobby.
     const rawRoom = asString(p.room ?? p.channel ?? p.id, 'lobby')
@@ -2356,11 +2376,14 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
       room,
       title: asString(p.title),
       label: asString(p.label),
-      items: asArray(p.items ?? p.options).map((i) => asString(i)).filter(Boolean).slice(0, 12),
+      items: asArray(p.items ?? p.options).map((i) => asString(i)),
       start: asNumber(p.start ?? p.value) ?? 0,
       note: asString(p.note),
     }
-    return { widget, errors: [], repaired }
+    const rawItems = asArray(p.items ?? p.options)
+    const invalidItems = rawItems.length > 12 || rawItems.some(item => typeof item !== 'string' || !item.trim())
+    return { widget, errors: invalidSurface || invalidItems || (surface === 'vote' && rawItems.length < 2)
+      ? ['Shared widgets require a supported surface and complete supplied labels within 12 items; voting requires at least two actual options, never invented choices or counts'] : [], repaired }
   },
 
   terminal: (p) => {

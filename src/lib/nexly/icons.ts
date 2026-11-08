@@ -720,7 +720,9 @@ function fallbackIconForCodePoint(cp: number): string | null {
 
 /** Replace known emoji with :icon: tokens, map any remaining emoji block to a semantic :icon: token, and strip pictographs. */
 export function emojiToIconTokens(text: string): string {
-  let out = text
+  // Numeric direction is data, not decoration. Preserve its sign using
+  // non-emoji text arrows before emoji/variation-selector normalization.
+  let out = text.replace(/[↘↗]\uFE0F?(?=\s*[+-]?\s*[$€£¥₹৳]?\s*\d)/gu, arrow => arrow.startsWith('↘') ? '↓' : '↑')
   // Longest first so ZWJ sequences (runner, keycaps, etc.) win over their base glyph.
   const entries = Object.entries(EMOJI_TO_ICON).sort((a, b) => b[0].length - a[0].length)
   for (const [emoji, icon] of entries) {
@@ -753,38 +755,49 @@ export function emojiToIconTokens(text: string): string {
     )
 }
 
-/**
- * Sanitize a full markdown reply or delta chunk so no raw Unicode emoji ever reaches
- * a client:
- *  - Inside fenced code blocks: for widget JSON fences, converts emojis cleanly; for source code fences, replaces ❌/✅/⚠️ with ASCII and strips pictographs.
- *  - Outside fenced blocks: converts known emojis into :icon: tokens and strips unknown pictographs.
+/** Presentation-only sanitation for a complete or accumulated reply.
+ * Fenced payloads are MACHINE DATA: changing JSON keys, source strings or
+ * expressions here corrupts execution. Their decoded display labels are
+ * handled by sanitizeWidgetPresentation; code views escape visible Unicode
+ * without changing what Copy/Run receive. Never apply this to isolated SSE
+ * chunks: fence markers and Unicode sequences can cross chunk boundaries.
  */
+/** Inline code and navigation destinations are also machine data. */
+export function sanitizeProseEmojis(text: string): string {
+  const machine = /(?<!`)(`+)(?!`)([^\r\n]*?)\1(?!`)|(!?\[[^\]\r\n]*\]\()([^)\r\n]*)(\))|https?:\/\/[^\s<>]+/g
+  let out = '', cursor = 0
+  for (const match of text.matchAll(machine)) {
+    const start = match.index ?? 0
+    out += emojiToIconTokens(text.slice(cursor, start))
+    out += match[3] !== undefined ? emojiToIconTokens(match[3]) + match[4] + match[5] : match[0]
+    cursor = start + match[0].length
+  }
+  return out + emojiToIconTokens(text.slice(cursor))
+}
+
 export function sanitizeReplyEmojis(markdown: string): string {
   if (!markdown) return markdown
-  const parts = markdown.split(/(```[\s\S]*?```)/g)
-  return parts
-    .map((part) => {
-      if (part.startsWith('```')) {
-        const firstLine = part.slice(3, part.indexOf('\n') > 0 ? part.indexOf('\n') : undefined).trim().toLowerCase()
-        const isCodeLang = /^(python|py|js|javascript|ts|typescript|jsx|tsx|java|kotlin|kt|swift|c|cpp|c\+\+|rust|rs|go|golang|ruby|rb|php|sql|bash|sh|zsh|shell|html|css|xml|yaml|yml|toml|dockerfile|makefile|r|matlab|scala|dart|lua|perl|haskell|elixir|clojure|csharp|cs|fsharp|vb|powershell|ps1)$/.test(
-          firstLine
-        )
-        if (isCodeLang) {
-          return part
-            .replace(/❌/g, '[x]')
-            .replace(/✅|✔️|✔/g, '[ok]')
-            .replace(/⚠️|⚠/g, '[!]')
-            .replace(/\p{Extended_Pictographic}/gu, '')
-            .replace(
-              /[\u203C\u2049\u2122\u2139\u2194-\u21AA\u2300-\u23FF\u25AA-\u25FE\u2600-\u27BF\u2934\u2935\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u3030\u303D\u3297\u3299\uFE00-\uFE0F\u200D\u20E3\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}]/gu,
-              ''
-            )
-        }
-        return emojiToIconTokens(part)
+  const whole = markdown.trim()
+  if ((whole.startsWith('{') && whole.endsWith('}')) || (whole.startsWith('[') && whole.endsWith(']'))) {
+    try { JSON.parse(whole); return markdown } catch { /* prose, not JSON */ }
+  }
+  let marker = ''
+  let width = 0
+  return (markdown.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g) ?? []).map(line => {
+    const body = line.replace(/[\r\n]+$/, '')
+    const fence = /^[ \t]{0,8}(`{3,}|~{3,})(.*)$/.exec(body)
+    if (marker) {
+      if (fence && fence[1][0] === marker && fence[1].length >= width && !fence[2].trim()) {
+        marker = ''; width = 0
       }
-      return emojiToIconTokens(part)
-    })
-    .join('')
+      return line
+    }
+    if (fence) {
+      marker = fence[1][0]; width = fence[1].length
+      return line
+    }
+    return sanitizeProseEmojis(line)
+  }).join('')
 }
 
 /** Extract a leading :icon: token (or converted leading emoji, even inside leading **bold**) and return { icon, rest }. */

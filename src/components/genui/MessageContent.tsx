@@ -1,5 +1,9 @@
 'use client'
 
+import { parseTableNumber, chartFromTableCells, plainTableCell } from '@/lib/nexly/table-number'
+import { escapeCodeDisplay } from '@/lib/code/display-source'
+import { downloadResponseFile, responseSourceArchive, responseSourceFile } from '@/lib/code/response-export'
+
 /**
  * MessageContent — the full assistant answer: rich markdown prose and widgets
  * inline, streamed-aware. Unclosed fences render as skeletons; a tap on any
@@ -14,7 +18,7 @@
  * glass glyphs.
  */
 
-import { Fragment, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useMemo, useRef, useState, type ReactNode } from 'react'
 import { parseStream, type Segment } from './stream'
 import { WidgetRenderer } from './WidgetRenderer'
 import { SpontaneousConceptDeck } from './SpontaneousConceptDeck'
@@ -454,7 +458,7 @@ function renderInline(
             border: `1px solid ${theme.border}`,
           }}
         >
-          {code}
+          {escapeCodeDisplay(code)}
         </code>
       )
     } else if (mathParen !== undefined || mathBracket !== undefined || mathDisplay !== undefined || mathDollar !== undefined) {
@@ -472,7 +476,7 @@ function renderInline(
         </span>
       )
     } else if (imgUrl !== undefined) {
-      const label = imgAlt || imgUrl
+      const label = escapeCodeDisplay(imgAlt || imgUrl)
       if (isSafeUrl(imgUrl)) {
         out.push(
           <a
@@ -518,11 +522,11 @@ function renderInline(
             rel="noopener noreferrer"
             style={{ color: accent, textDecoration: 'underline' }}
           >
-            {bareUrl}
+            {escapeCodeDisplay(bareUrl)}
           </a>
         )
       } else {
-        out.push(<Fragment key={`${keyPrefix}-bu${k++}`}>{bareUrl}</Fragment>)
+        out.push(<Fragment key={`${keyPrefix}-bu${k++}`}>{escapeCodeDisplay(bareUrl)}</Fragment>)
       }
     } else if (boldStar !== undefined || boldUnder !== undefined) {
       const inner = boldStar ?? boldUnder ?? ''
@@ -871,24 +875,16 @@ function ProseTableGrid({
   const [page, setPage] = useState<number>(0)
   const [sortCol, setSortCol] = useState<number | null>(null)
   const [sortAsc, setSortAsc] = useState<boolean>(true)
+  const [showChart, setShowChart] = useState(false)
+  const chart = useMemo(() => chartFromTableCells(block.headers, block.rows), [block.headers, block.rows])
 
   const sortedRows = useMemo(() => {
     if (sortCol === null) return block.rows
-    const parseSortableNum = (cell: string): number | null => {
-      const cleaned = cell.replace(/[*_`~,$%€£¥₹↑↓↗↘+,\s]/g, '').trim()
-      const m = cleaned.match(/^(-?\d+(?:\.\d+)?)([kKmMbBtT])?$/)
-      if (!m) return null
-      const base = Number(m[1])
-      if (!Number.isFinite(base)) return null
-      const suf = (m[2] ?? '').toLowerCase()
-      const mult = suf === 'k' ? 1e3 : suf === 'm' ? 1e6 : suf === 'b' ? 1e9 : suf === 't' ? 1e12 : 1
-      return base * mult
-    }
     return [...block.rows].sort((a, b) => {
-      const ca = (a[sortCol] ?? '').replace(/[*_`~]/g, '').trim()
-      const cb = (b[sortCol] ?? '').replace(/[*_`~]/g, '').trim()
-      const na = parseSortableNum(ca)
-      const nb = parseSortableNum(cb)
+      const ca = plainTableCell(a[sortCol] ?? '')
+      const cb = plainTableCell(b[sortCol] ?? '')
+      const na = parseTableNumber(ca)
+      const nb = parseTableNumber(cb)
       const cmp = na !== null && nb !== null ? na - nb : ca.localeCompare(cb, undefined, { numeric: true, sensitivity: 'base' })
       return sortAsc ? cmp : -cmp
     })
@@ -897,11 +893,11 @@ function ProseTableGrid({
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize))
   const safePage = Math.min(page, totalPages - 1)
   const visibleRows = sortedRows.slice(safePage * pageSize, safePage * pageSize + pageSize)
-  const firstHeaderClean = (block.headers[0] ?? '').replace(/[*_`]/g, '').trim()
+  const firstHeaderClean = plainTableCell(block.headers[0] ?? '')
   const primaryNameCol = ['#', 'Rank', 'No', 'ID'].includes(firstHeaderClean) ? 1 : 0
 
   const renderCellContent = (raw: string, colIdx: number, keyPrefix: string) => {
-    const clean = raw.replace(/[*_`]/g, '').trim()
+    const clean = plainTableCell(raw)
     const m = clean.match(/^([↑↓↗↘+-])?\s*([+-]?\d+(?:\.\d+)?%)$/)
     if (m && (clean.startsWith('+') || clean.startsWith('-') || clean.startsWith('↑') || clean.startsWith('↓') || clean.startsWith('↗') || clean.startsWith('↘'))) {
       const isNeg = clean.startsWith('-') || clean.startsWith('↓') || clean.startsWith('↘')
@@ -939,7 +935,15 @@ function ProseTableGrid({
   }
 
   return (
-    <div
+    <>
+      {chart && <div role="group" aria-label="Data view" style={{display:'flex', gap:4, marginBottom:6}}>
+        {[false, true].map(isChart => <button key={String(isChart)} type="button" aria-pressed={showChart === isChart}
+          onClick={() => setShowChart(isChart)}
+          style={{border:0, borderRadius:999, padding:'4px 10px', fontSize:11, fontWeight:700, cursor:'pointer', background:showChart === isChart ? accent : 'rgba(124,92,252,0.10)', color:showChart === isChart ? '#fff' : theme.text}}>
+          {isChart ? 'Chart' : 'Table'}
+        </button>)}
+      </div>}
+      {showChart && chart ? <WidgetRenderer kind="chart" payload={chart} dark={theme.dark} /> : <div
       style={{
         overflowX: 'auto',
         borderRadius: 14,
@@ -1091,7 +1095,8 @@ function ProseTableGrid({
           </button>
         </div>
       )}
-    </div>
+    </div>}
+    </>
   )
 }
 
@@ -1667,21 +1672,17 @@ function Prose({
   )
 }
 
-function isAcademicCitationDomain(domain: string, url: string): boolean {
-  const hay = `${domain} ${url}`.toLowerCase()
-  return (
-    hay.includes('.edu') ||
-    hay.includes('nature.com') ||
-    hay.includes('arxiv.org') ||
-    hay.includes('ieee.org') ||
-    hay.includes('acm.org') ||
-    hay.includes('springer.') ||
-    hay.includes('sciencedirect.') ||
-    hay.includes('oxford') ||
-    hay.includes('cambridge') ||
-    hay.includes('nih.gov') ||
-    hay.includes('pubmed')
-  )
+function citationSourceURL(raw: string): URL | null {
+  try {
+    const url = new URL(raw)
+    return ['https:', 'http:'].includes(url.protocol) && url.hostname && !url.username && !url.password ? url : null
+  } catch { return null }
+}
+
+function isAcademicCitationDomain(_domain: string, raw: string): boolean {
+  const host = citationSourceURL(raw)?.hostname.toLowerCase() ?? ''
+  const publishers = ['nature.com', 'arxiv.org', 'ieee.org', 'acm.org', 'springer.com', 'springernature.com', 'sciencedirect.com', 'oup.com', 'cambridge.org', 'nih.gov']
+  return host.endsWith('.edu') || host.endsWith('.ac.uk') || publishers.some(domain => host === domain || host.endsWith('.' + domain))
 }
 
 function CitationsSourceCards({
@@ -1716,20 +1717,14 @@ function CitationsSourceCards({
         </div>
       )}
       {citations.map((src) => {
-        const domain =
-          src.domain ||
-          (() => {
-            try {
-              return new URL(src.url).hostname.replace(/^www\./, '')
-            } catch {
-              return src.url
-            }
-          })()
+        const link = citationSourceURL(src.url)
+        const domain = link?.hostname.replace(/^www\./, '') ?? 'Invalid source URL'
         const academic = isAcademicCitationDomain(domain, src.url)
         return (
           <a
             key={src.ordinal}
-            href={src.url}
+            href={link?.href}
+            aria-disabled={!link}
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -1805,12 +1800,12 @@ function CitationsSourceCards({
                     borderRadius: 999,
                     fontSize: 11,
                     fontWeight: 700,
-                    background: academic ? 'rgba(124, 92, 252, 0.14)' : 'rgba(18, 154, 90, 0.14)',
-                    color: academic ? '#5B3DF5' : '#129A5A',
+                    background: 'rgba(124, 92, 252, 0.10)',
+                    color: '#5B3DF5',
                   }}
                 >
-                  <GlassIcon name={academic ? 'building-bank' : 'shield-check'} tone={academic ? 'indigo' : 'green'} size={15} glyph={9} />
-                  <span>{academic ? 'Academic' : 'Trusted Source'}</span>
+                  <GlassIcon name={academic ? 'building-bank' : 'external-link'} tone="indigo" size={15} glyph={9} />
+                  <span>{!link ? 'Invalid link' : academic ? 'Academic domain' : 'Source link'}</span>
                 </span>
               </div>
             </div>
@@ -1899,6 +1894,64 @@ export function MessageContent({
   streaming?: boolean
   citations?: Citation[]
 }) {
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [actionNotice, setActionNotice] = useState<{ response: string; text: string; error?: boolean } | null>(null)
+  const [detailState, setDetailState] = useState<{ response: string; kind: 'report' | 'sources' } | null>(null)
+  const detailView = detailState?.response === text ? detailState.kind : null
+  const setDetailView = (kind: 'report' | 'sources' | null) => setDetailState(kind ? { response: text, kind } : null)
+  const citationText = (citations ?? []).map(c => `[${c.ordinal}] ${c.title} — ${c.url}`).join('\n')
+  const performAction = async (label: string) => {
+    setActionNotice(null)
+    try {
+      switch (label) {
+        case 'Share':
+          if (navigator.share) await navigator.share({ title: 'GS AI response', text })
+          else {
+            if (!navigator.clipboard?.writeText) throw new Error('Sharing and clipboard access are unavailable in this browser.')
+            await navigator.clipboard.writeText(text)
+            setActionNotice({ response: text, text: 'Sharing is unavailable in this browser. Response copied; paste it where you want to share.' })
+          }
+          return
+        case 'Copy Citations': {
+          // Prefer persisted source records; otherwise copy only source-bearing
+          // lines, never claim the entire answer is a bibliography.
+          const sources = citationText || text.split('\n').filter(line => /https?:\/\//.test(line)).join('\n')
+          if (!sources) throw new Error('No citation URLs are available to copy.')
+          if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable in this browser.')
+          await navigator.clipboard.writeText(sources)
+          setActionNotice({ response: text, text: 'Citations copied.' })
+          return
+        }
+        case 'Download Report':
+          downloadResponseFile('gs-ai-response.md', text + (citationText ? '\n\n## Sources\n' + citationText : ''), 'text/markdown;charset=utf-8')
+          setActionNotice({ response: text, text: 'Response report exported as Markdown, including its original data.' })
+          return
+        case 'Download Project': {
+          const blocks = Array.from(contentRef.current?.querySelectorAll<HTMLElement>('[data-code-block]') ?? [])
+          const files = blocks.map((block, index) => responseSourceFile(block.dataset.codeSource ?? '', block.dataset.codeLanguage, index))
+          downloadResponseFile('gs-ai-source-snippets.zip', responseSourceArchive(files), 'application/zip')
+          setActionNotice({ response: text, text: 'Source snippets exported, including valid edits. This is not a complete runnable project; see README.txt.' })
+          return
+        }
+        case 'Edit Code': {
+          const editor = contentRef.current?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Source code"], textarea[aria-label="JSON-encoded source"]')
+          const edit = contentRef.current?.querySelector<HTMLButtonElement>('[data-code-edit]')
+          if (editor) { editor.scrollIntoView?.({ block: 'center', behavior: 'smooth' }); editor.focus() }
+          else if (edit) { edit.scrollIntoView?.({ block: 'center', behavior: 'smooth' }); edit.click() }
+          else throw new Error('No editable code block is available.')
+          return
+        }
+        case 'View All Sources': setDetailView('sources'); return
+        case 'View Details': case 'View Full Report': setDetailView('report'); return
+        default:
+          if (!onPrompt) throw new Error('Follow-up requests are unavailable in this view.')
+          onPrompt(label)
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return // User cancelled the native share sheet.
+      setActionNotice({ response: text, text: error instanceof Error ? error.message : 'The action failed. Please try again.', error: true })
+    }
+  }
   const segments = useMemo(() => parseStream(sanitizeReplyEmojis(text)), [text])
   const theme = useMemo(() => themeFor(dark), [dark])
   const concepts = useMemo(() => !streaming && segments.every((s) => s.kind === 'text') ? extractConceptDeck(text) : [], [text, segments, streaming])
@@ -1908,7 +1961,7 @@ export function MessageContent({
     [segments, text, citations, streaming]
   )
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: TYPE.body, lineHeight: 1.65 }}>
+    <div ref={contentRef} style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: TYPE.body, lineHeight: 1.65 }}>
       {segments.map((segment, i) => {
         switch (segment.kind) {
           case 'text':
@@ -1939,13 +1992,23 @@ export function MessageContent({
       })}
       {concepts.length >= 3 && <SpontaneousConceptDeck key={text} concepts={concepts} dark={dark} />}
       {citations && citations.length > 0 && <CitationsSourceCards citations={citations} theme={theme} />}
+      {actionNotice?.response === text && <div role={actionNotice.error ? 'alert' : 'status'}>{actionNotice.text}</div>}
+      {detailView && (
+        <section role="region" aria-label={detailView === 'sources' ? 'All sources' : 'Response report'} style={{ padding: 16, border: `1px solid ${theme.border}`, borderRadius: 16 }}>
+          <button type="button" onClick={() => setDetailView(null)}>Close details</button>
+          <h3>{detailView === 'sources' ? 'All sources' : 'Response report — original source and data'}</h3>
+          {detailView === 'sources' && citations?.length
+            ? <CitationsSourceCards citations={citations} theme={theme} />
+            : <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{escapeCodeDisplay(detailView === 'sources' ? citationText || text.split('\n').filter(line => /https?:\/\//.test(line)).join('\n') || 'No source URLs were supplied.' : text)}</pre>}
+        </section>
+      )}
       {contextualPills.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
           {contextualPills.map((pill, idx) => (
             <button
               key={idx}
               type="button"
-              onClick={() => onPrompt?.(pill.label)}
+              onClick={() => { void performAction(pill.label) }}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',

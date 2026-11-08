@@ -38,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -67,7 +68,10 @@ data class AppItem(
     val badge: String = "",
     val prompt: String = "",
     val date: String = "",
-    val price: Double = 0.0
+    val price: Double = 0.0,
+    val done: Boolean = false,
+    val checked: Boolean = false,
+    val completed: Boolean = false
 )
 
 @Serializable
@@ -95,6 +99,7 @@ data class AppWidget(
     val submitLabel: String = "",
     val month: String = "",
     val slots: List<String> = emptyList(),
+    val durationSeconds: Double? = null,
     val height: Int = 0
 )
 
@@ -107,6 +112,14 @@ internal val APP_TYPES = setOf(
 @Composable
 internal fun AppWidgetView(w: AppWidget, onSendPrompt: ((String) -> Unit)? = null) {
     val type = w.type.lowercase()
+    if (type == "tasks") {
+        ChecklistWidgetView(ChecklistWidget(title = w.title, items = w.items.map { item ->
+            ChecklistItem(label = item.title,
+                detail = listOf(item.subtitle, item.meta, item.badge, item.date).filter { it.isNotBlank() }.distinct().joinToString(" · "),
+                done = item.done || item.checked || item.completed)
+        }))
+        return
+    }
     WidgetCardShell(w.title.ifEmpty { "App" }, type) {
         Column(Modifier.padding(top = 8.dp)) {
             when (type) {
@@ -114,10 +127,9 @@ internal fun AppWidgetView(w: AppWidget, onSendPrompt: ((String) -> Unit)? = nul
                 "kanban" -> KanbanLayout(w, onSendPrompt)
                 "calendar" -> CalendarLayout(w, onSendPrompt)
                 "sheet" -> SheetLayout(w)
-                "tasks" -> TasksLayout(w, onSendPrompt)
                 "dashboard", "analytics", "report", "scenario" -> DashboardLayout(w, onSendPrompt)
                 "config", "configurator" -> ConfiguratorLayout(w, onSendPrompt)
-                "booking", "schedule" -> BookingLayout(w, onSendPrompt)
+                "booking", "schedule" -> BookingLayout(w)
                 "search" -> SearchLayout(w, onSendPrompt)
                 "filter" -> FilterLayout(w, onSendPrompt)
                 "files", "connected" -> ListLayout(w, onSendPrompt)
@@ -468,48 +480,6 @@ private fun SheetLayout(w: AppWidget) {
 
 // --- tasks -------------------------------------------------------------------
 
-@Composable
-private fun TasksLayout(w: AppWidget, onSendPrompt: ((String) -> Unit)?) {
-    val c = GsTheme.colors
-    val items = w.items.take(20).filter { it.title.isNotBlank() }
-    val done = remember { mutableStateMapOf<String, Boolean>() }
-    if (items.isEmpty()) {
-        Text("No tasks", style = MaterialTheme.typography.bodySmall, color = c.textTertiary)
-        return
-    }
-    items.forEach { item ->
-        val checked = done[item.title] == true
-        Row(
-            Modifier.fillMaxWidth().clickable { done[item.title] = !checked }.padding(vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(checked = checked, onCheckedChange = null)
-            Column(Modifier.weight(1f)) {
-                Text(
-                    item.title,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (checked) c.textTertiary else c.textPrimary
-                )
-                if (item.subtitle.isNotBlank()) {
-                    Text(item.subtitle, style = MaterialTheme.typography.labelSmall, color = c.textTertiary, maxLines = 1)
-                }
-            }
-            if (item.badge.isNotBlank()) {
-                Text(item.badge, style = MaterialTheme.typography.labelSmall, color = c.accent)
-            }
-        }
-    }
-    val open = items.count { done[it.title] != true }
-    Text("$open of ${items.size} open", style = MaterialTheme.typography.labelSmall, color = c.textTertiary, modifier = Modifier.padding(top = 6.dp))
-    if (onSendPrompt != null) {
-        Text("Ask about progress", style = MaterialTheme.typography.labelMedium, color = c.accent,
-            modifier = Modifier.padding(top = 6.dp).clickable {
-                val state = items.joinToString(", ") { "${it.title}=${if (done[it.title] == true) "done" else "open"}" }
-                onSendPrompt("Task progress — $state")
-            })
-    }
-}
-
 // --- dashboard ---------------------------------------------------------------
 
 @Composable
@@ -615,55 +585,38 @@ private fun ConfiguratorLayout(w: AppWidget, onSendPrompt: ((String) -> Unit)?) 
 // --- booking -----------------------------------------------------------------
 
 @Composable
-private fun BookingLayout(w: AppWidget, onSendPrompt: ((String) -> Unit)?) {
+private fun BookingLayout(w: AppWidget) {
     val c = GsTheme.colors
-    val slots = w.slots.take(16).filter { it.isNotBlank() }
-    val days = w.items.take(14).filter { it.title.isNotBlank() }
-    var day by remember { mutableStateOf(days.firstOrNull()?.title.orEmpty()) }
-    var slot by remember { mutableStateOf("") }
+    val slots = w.slots.filter { it.isNotBlank() }
+    val days = w.items.filter { it.title.isNotBlank() }
+    var day by remember(w) { mutableStateOf("") }
+    var slot by remember(w) { mutableStateOf("") }
+    var saved by remember(w) { mutableStateOf(false) }
+    Text("Local selection only. No booking service is connected and no reservation will be made.", style = MaterialTheme.typography.labelSmall, color = c.textSecondary)
     if (days.isNotEmpty()) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            days.forEach { d ->
-                val selected = day == d.title
-                Column(
-                    Modifier.clip(RoundedCornerShape(10.dp))
-                        .background(if (selected) c.accent else c.surface)
-                        .clickable { day = d.title }
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(d.title, style = MaterialTheme.typography.labelMedium, color = if (selected) c.onAccent else c.textPrimary)
-                    if (d.subtitle.isNotBlank()) {
-                        Text(d.subtitle, style = MaterialTheme.typography.labelSmall, color = if (selected) c.onAccent else c.textTertiary)
-                    }
+            days.forEach { item ->
+                TextButton(onClick = { day = item.title; saved = false }) {
+                    Text(item.title, color = if (day == item.title) c.accent else c.textPrimary)
                 }
             }
         }
     }
     if (slots.isNotEmpty()) {
-        Row(Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            slots.forEach { s ->
-                val selected = slot == s
-                Box(
-                    Modifier.clip(RoundedCornerShape(8.dp))
-                        .background(if (selected) c.accent else c.surface)
-                        .clickable { slot = s }
-                        .padding(horizontal = 10.dp, vertical = 7.dp)
-                ) {
-                    Text(s, style = MaterialTheme.typography.labelSmall, color = if (selected) c.onAccent else c.textSecondary)
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            slots.forEach { value ->
+                TextButton(onClick = { slot = value; saved = false }) {
+                    Text(value, color = if (slot == value) c.accent else c.textPrimary)
                 }
             }
         }
     }
-    val ready = day.isNotBlank() && (slots.isEmpty() || slot.isNotBlank())
-    Text(
-        w.submitLabel.ifBlank { "Confirm booking" },
-        style = MaterialTheme.typography.labelMedium,
-        color = if (ready) c.accent else c.textTertiary,
-        modifier = Modifier.padding(top = 10.dp).clickable {
-            if (ready) onSendPrompt?.invoke("Book ${w.title.ifEmpty { "appointment" }}: $day${if (slot.isBlank()) "" else " at $slot"}")
-        }
-    )
+    val ready = (days.isEmpty() || day.isNotBlank()) && (slots.isEmpty() || slot.isNotBlank()) && (day.isNotBlank() || slot.isNotBlank())
+    TextButton(enabled = ready, onClick = { saved = true }) { Text(w.submitLabel.ifBlank { "Save slot locally" }) }
+    if (saved) {
+        val selection = listOf(day, slot).filter { it.isNotBlank() }.joinToString(" at ")
+        Text("Saved locally: $selection. Preview only; no reservation has been made.", style = MaterialTheme.typography.bodySmall, color = c.textPrimary)
+    }
 }
 
 // --- search ------------------------------------------------------------------
@@ -769,32 +722,33 @@ private fun ListLayout(w: AppWidget, onSendPrompt: ((String) -> Unit)?) {
 
 // --- timer -------------------------------------------------------------------
 
-/**
- * Countdown timer app — the Android twin of the web AppTimer: a minutes
- * stepper (payload items[0].price as the default, clamped 1..180), a progress
- * ring, and Start/Pause/Reset. Ticks inside LaunchedEffect so the countdown
- * survives recomposition and stops cleanly at zero.
- */
+/** Real, local countdown. Prices are never durations; elapsed time is monotonic. */
 @Composable
 private fun TimerLayout(w: AppWidget) {
     val c = GsTheme.colors
-    val defaultMinutes = ((w.items.firstOrNull()?.price ?: 25.0).toInt()).coerceIn(1, 180)
-    var minutes by remember(w) { mutableIntStateOf(defaultMinutes) }
-    var left by remember(w) { mutableIntStateOf(defaultMinutes * 60) }
+    val source = w.durationSeconds
+    if (source != null && (!source.isFinite() || source % 1.0 != 0.0 || source < 1 || source > 604800)) {
+        Text("Timer durationSeconds must be whole seconds from 1 through 604800. Source durations are not clamped or taken from prices.", color = c.textPrimary)
+        return
+    }
+    val initial = source?.toLong() ?: 0L
+    var durationText by remember(w) { mutableStateOf(if (initial > 0) initial.toString() else "") }
+    var leftMillis by remember(w) { mutableStateOf(initial * 1000L) }
+    var deadline by remember(w) { mutableStateOf<Long?>(null) }
     var running by remember(w) { mutableStateOf(false) }
-
-    LaunchedEffect(running, left) {
-        if (running && left > 0) {
-            delay(1_000L)
-            left -= 1
-            if (left <= 0) running = false
+    var started by remember(w) { mutableStateOf(false) }
+    val duration = durationText.toLongOrNull()?.takeIf { it in 1L..604800L }
+    LaunchedEffect(running, w) {
+        while (running) {
+            leftMillis = ((deadline ?: break) - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+            if (leftMillis == 0L) { running = false; deadline = null; break }
+            delay(200L)
         }
     }
-
-    val total = (minutes * 60).coerceAtLeast(1)
-    val frac = left.toFloat() / total
-    val mm = (left / 60).toString().padStart(2, '0')
-    val ss = (left % 60).toString().padStart(2, '0')
+    val seconds = (leftMillis + 999L) / 1000L
+    val frac = leftMillis.toFloat() / ((duration ?: 0L) * 1000L).coerceAtLeast(1L)
+    val mm = (seconds / 60L).toString().padStart(2, '0')
+    val ss = (seconds % 60L).toString().padStart(2, '0')
 
     // The draw lambda is DrawScope, not @Composable — resolve the theme colour
     // once, outside it, instead of calling seriesColor() per frame.
@@ -820,23 +774,35 @@ private fun TimerLayout(w: AppWidget) {
             )
         }
         Text(
-            if (left > 0) "$mm:$ss" else "done",
+            "$mm:$ss",
+            modifier = Modifier.testTag("timer.remaining"),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = c.textPrimary
         )
         }
-        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { if (!running) { minutes = (minutes - 5).coerceIn(1, 180); left = minutes * 60 } }) { Text("−5 min") }
-            TextButton(onClick = { running = !running }) { Text(if (running) "Pause" else "Start") }
-            TextButton(onClick = { running = false; left = minutes * 60 }) { Text("Reset") }
-            TextButton(onClick = { if (!running) { minutes = (minutes + 5).coerceIn(1, 180); left = minutes * 60 } }) { Text("+5 min") }
-        }
-        Text(
-            "${w.items.size} preset(s) · default $defaultMinutes min",
-            style = MaterialTheme.typography.labelSmall,
-            color = c.textTertiary,
-            modifier = Modifier.padding(top = 6.dp)
+        OutlinedTextField(
+            value = durationText,
+            onValueChange = { durationText = it; leftMillis = (it.toLongOrNull()?.takeIf { value -> value in 1L..604800L } ?: 0L) * 1000L },
+            label = { Text("Duration (seconds)") },
+            singleLine = true,
+            enabled = !running && !started,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
         )
+        if (duration == null) Text("Enter whole seconds from 1 through 604800 to configure this local countdown.", color = c.textSecondary)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(enabled = duration != null && leftMillis > 0L, onClick = {
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (running) {
+                    leftMillis = ((deadline ?: now) - now).coerceAtLeast(0L)
+                    running = false; deadline = null
+                } else {
+                    deadline = now + leftMillis; started = true; running = true
+                }
+            }) { Text(if (running) "Pause" else "Start") }
+            TextButton(onClick = { running = false; started = false; deadline = null; leftMillis = (duration ?: 0L) * 1000L }) { Text("Reset") }
+        }
+        Text("Local countdown only. No background alarm or notification is scheduled.", style = MaterialTheme.typography.labelSmall, color = c.textTertiary)
+        if (started && leftMillis == 0L) Text("Done — countdown completed.", color = accent)
     }
 }

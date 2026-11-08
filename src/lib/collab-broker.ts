@@ -120,7 +120,7 @@ function notify(slug: string, rev: number, state: CollabState, presence: CollabP
 /** Apply one payload to a room; returns the new revision or null if dropped. */
 export function applyCollab(
   slug: string,
-  patch: { delta?: Record<string, number>; set?: CollabState; heartbeat?: CollabPresence },
+  patch: { initial?: CollabState; delta?: Record<string, number>; set?: CollabState; heartbeat?: CollabPresence },
 ): { rev: number; state: CollabState; presence: CollabPresence[] } | null {
   const s = store()
   sweep()
@@ -145,6 +145,16 @@ export function applyCollab(
           s.prepare(
             'INSERT INTO collab_presence (room_slug, id, name, color, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (room_slug, id) DO UPDATE SET name = excluded.name, color = excluded.color, at = excluded.at',
           ).run(slug, h.id, String(h.name ?? 'guest').slice(0, 24), /^#[0-9a-f]{6}$/i.test(String(h.color)) ? String(h.color) : '#4C6FFF', now)
+          changed = true
+        }
+      }
+    }
+    // First writer initializes supplied source values atomically. Rejoining or
+    // another viewer must never reset already-confirmed shared state.
+    if (patch.initial && bytesOf(patch.initial) <= MAX_STATE_BYTES) {
+      for (const [key, value] of Object.entries(patch.initial)) {
+        if (!Object.prototype.hasOwnProperty.call(next, key)) {
+          next[key] = value
           changed = true
         }
       }
