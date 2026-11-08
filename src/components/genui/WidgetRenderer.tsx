@@ -44,7 +44,7 @@ export function WidgetRenderer({
   }
   return (
     <WidgetSurface accent={accent} variant={variant} palette={palette} dark={dark}>
-      <Renderer payload={payload} onPrompt={onPrompt} />
+      <Renderer key={`${kind}:${JSON.stringify(payload)}`} payload={payload} onPrompt={onPrompt} />
     </WidgetSurface>
   )
 }
