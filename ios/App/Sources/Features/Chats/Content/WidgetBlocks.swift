@@ -1555,7 +1555,6 @@ private struct ChartBodyView: View {
             let growthPct = slices ? nil : chartGrowthPercentIOS(first: pts[0].value, last: pts[pts.count - 1].value)
             let pos = (growthPct ?? -1) >= 0
             let growthText = growthPct.map { String(format: "%@%.1f%%", pos ? "+" : "", $0) } ?? (slices ? "N/A (slice values)" : "N/A (zero baseline)")
-            let deltaText = growthPct == nil ? "No defined baseline" : "\(pos ? "↑" : "↓") \(growthText)"
             let pillBg = growthPct == nil ? Color.gray.opacity(0.1) : (pos ? Color(red: 0.902, green: 0.976, blue: 0.941) : Color(red: 0.992, green: 0.925, blue: 0.925))
             let pillFg = growthPct == nil ? Aero.textSecondary : (pos ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
             let peakPt = pts[peakIdx]
@@ -1573,12 +1572,12 @@ private struct ChartBodyView: View {
                     Text("Total")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
-                    Text(deltaText)
+                    Text("\(pts.count) points")
                         .font(.system(size: 9.5, weight: .bold))
-                        .foregroundStyle(pillFg)
+                        .foregroundStyle(Aero.accentDeep)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Capsule().fill(pillBg))
+                        .background(Capsule().fill(Color(red: 0.937, green: 0.918, blue: 1.0)))
                 }
                 .padding(.horizontal, 9)
                 .padding(.vertical, 8)
@@ -1599,7 +1598,7 @@ private struct ChartBodyView: View {
                     Text("Peak (\(peakPt.label))")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 3) {
                         NexlyGlyph(
                             name: "star",
@@ -1630,11 +1629,11 @@ private struct ChartBodyView: View {
                     Text(growthText)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Aero.text)
-                    Text(slices ? "Slice values" : "First–last change")
+                    Text(slices ? "Category data" : "First–last")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
-                        .lineLimit(1)
-                    Text(deltaText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(slices ? "Not a time trend" : "\(pts[0].label)–\(pts[pts.count - 1].label)")
                         .font(.system(size: 9.5, weight: .bold))
                         .foregroundStyle(pillFg)
                         .padding(.horizontal, 6)
