@@ -16,7 +16,7 @@ on:
   pull_request:
     paths:
       - "ios/**"
-      - "shared-contracts/emoji-dom-policy.json"
+      - "shared-contracts/**"
       - ".github/workflows/ios.yml"
   workflow_dispatch:
   push:
@@ -24,7 +24,7 @@ on:
       - main
     paths:
       - "ios/**"
-      - "shared-contracts/emoji-dom-policy.json"
+      - "shared-contracts/**"
       - ".github/workflows/ios.yml"
       - "scripts/ios_static_gates.py"
       - "scripts/swift_structure_gate.py"
@@ -284,6 +284,7 @@ jobs:
             -destination "$IOS_DESTINATION" \
             -derivedDataPath "$DERIVED_DATA" \
             -only-testing:AppTests/CalcHonestyTests \
+            -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedCodeCopyEditRunAndInvalidDraftReset \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedCalculatorUsesActualTypedNumbersAndNoEmoji \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedTableAllDisplaysEveryActualRow \
@@ -320,6 +321,9 @@ jobs:
           import re
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
+              ('PlatformRuntimeUITests', 'testGeneratedCodeCopyEditRunAndInvalidDraftReset'),
+              ('CalcHonestyTests', 'testCodeDisplayAndEditorPreserveActualSource'),
+              ('CalcHonestyTests', 'testGeneratedJavaScriptWorkerPreservesUnicodeStopsLoopsAndRejectsNetwork'),
               ('PlatformRuntimeUITests', 'testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie'),
               ('CalcHonestyTests', 'testGeneratedHtmlExecutesAndCleansDynamicEmojiInProductionWebView'),
               ('CalcHonestyTests', 'testSignedChartDomainPreservesZeroNegativeAndAllObservations'),
