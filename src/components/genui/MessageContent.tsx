@@ -18,7 +18,7 @@ import { downloadResponseFile, responseSourceArchive, responseSourceFile } from 
  * glass glyphs.
  */
 
-import { Fragment, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useMemo, useRef, useState, useId, type ReactNode } from 'react'
 import { parseStream, type Segment } from './stream'
 import { WidgetRenderer } from './WidgetRenderer'
 import { SpontaneousConceptDeck } from './SpontaneousConceptDeck'
@@ -1887,13 +1887,16 @@ export function MessageContent({
   onPrompt,
   streaming = false,
   citations,
+  responseScope,
 }: {
   text: string
+  responseScope?: string
   dark?: boolean
   onPrompt?: (prompt: string) => void
   streaming?: boolean
   citations?: Citation[]
 }) {
+  const sessionScope = useId()
   const contentRef = useRef<HTMLDivElement>(null)
   const [actionNotice, setActionNotice] = useState<{ response: string; text: string; error?: boolean } | null>(null)
   const [detailState, setDetailState] = useState<{ response: string; kind: 'report' | 'sources' } | null>(null)
@@ -1983,7 +1986,7 @@ export function MessageContent({
           case 'svg':
             return <SvgBlock key={i} source={segment.source} />
           case 'code':
-            return <CodeBlock key={i} code={segment.code} language={segment.language} />
+            return <CodeBlock key={i} code={segment.code} language={segment.language} storageKey={`${responseScope ?? sessionScope}:snippet:${i}`} />
           case 'map':
             return <WidgetRenderer key={i} kind="map" payload={segment.payload} dark={dark} />
           default:
