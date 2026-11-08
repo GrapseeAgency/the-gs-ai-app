@@ -114,8 +114,10 @@ struct ResponseExportDocument: FileDocument {
 private final class ResponseSystemControllerHostIOS: UIViewController {
     let systemController: UIViewController
     private var presented = false
-    init(_ controller: UIViewController) {
+    private weak var systemDismissDelegate: UIAdaptivePresentationControllerDelegate?
+    init(_ controller: UIViewController, delegate: UIAdaptivePresentationControllerDelegate) {
         systemController = controller
+        systemDismissDelegate = delegate
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { return nil }
@@ -130,6 +132,7 @@ private final class ResponseSystemControllerHostIOS: UIViewController {
             popover.permittedArrowDirections = []
         }
         present(systemController, animated: true)
+        systemController.presentationController?.delegate = systemDismissDelegate
     }
 }
 
@@ -141,7 +144,7 @@ struct ResponseDocumentPickerIOS: UIViewControllerRepresentable {
         let picker = UIDocumentPickerViewController(forExporting: [sourceURL], asCopy: true)
         picker.delegate = context.coordinator
         picker.presentationController?.delegate = context.coordinator
-        return ResponseSystemControllerHostIOS(picker)
+        return ResponseSystemControllerHostIOS(picker, delegate: context.coordinator)
     }
     func updateUIViewController(_ controller: UIViewController, context: Context) {}
     final class Coordinator: NSObject, UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate {
@@ -164,7 +167,7 @@ struct ResponseActivityPresenterIOS: UIViewControllerRepresentable {
         let coordinator = context.coordinator
         activity.completionWithItemsHandler = { _, _, _, _ in coordinator.finish() }
         activity.presentationController?.delegate = coordinator
-        return ResponseSystemControllerHostIOS(activity)
+        return ResponseSystemControllerHostIOS(activity, delegate: coordinator)
     }
     func updateUIViewController(_ controller: UIViewController, context: Context) {}
     final class Coordinator: NSObject, UIAdaptivePresentationControllerDelegate {
