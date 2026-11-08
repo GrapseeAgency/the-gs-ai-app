@@ -2469,9 +2469,13 @@ private fun LiveStreamText(
     statusCard: (@Composable () -> Unit)? = null,
     statusAtEnd: Boolean = true,
     planTimestamp: String? = null,
-    planConversationId: String? = null
+    planConversationId: String? = null,
+    previewMessageId: String? = null
 ) {
-    CompositionLocalProvider(LocalVoiceLauncher provides onNavigateVoice) {
+    CompositionLocalProvider(
+        LocalVoiceLauncher provides onNavigateVoice,
+        com.grapsee.gsai.ui.chat.content.LocalReactPreviewScope provides previewMessageId
+    ) {
         BlocksContent(
             content = live?.value?.streamText ?: fallback,
             isStreaming = isStreaming,
@@ -3070,6 +3074,7 @@ internal fun AssistantMessage(
                     priorContext = priorContext,
                     glassAssistant = true,
                     planConversationId = conversationId,
+                    previewMessageId = "$conversationId:${message.id}",
                     statusCard = if (showStatus) {
                         {
                             ReferenceThinkingCard(
