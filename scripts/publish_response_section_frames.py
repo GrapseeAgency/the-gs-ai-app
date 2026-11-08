@@ -26,9 +26,14 @@ def publish(directory: Path, platform: str, section: str | None = None) -> None:
         name = f'genui-reference-{platform}-{section}-393x852.png'
         image_path = directory / name
         with Image.open(image_path) as original:
-            if original.width * 852 != original.height * 393:
-                raise ValueError(f'Unexpected actual frame dimensions for {name}: {original.size}')
-            image = original.convert('RGB').resize((393, 852), Image.Resampling.LANCZOS)
+            if original.width < 100 or original.height <= original.width:
+                raise ValueError(f'Unexpected actual phone frame dimensions for {name}: {original.size}')
+            original_size = f'{original.width}x{original.height}'
+            # Robolectric's captured app root can exclude system-bar insets.
+            # Preserve its actual aspect: never stretch a captured viewport to
+            # pretend it was the qualifier's complete physical display.
+            height = round(original.height * 393 / original.width)
+            image = original.convert('RGB').resize((393, height), Image.Resampling.LANCZOS)
         data = b''
         for quality in (80, 65, 50, 35, 20):
             output = io.BytesIO()
@@ -48,10 +53,15 @@ def publish(directory: Path, platform: str, section: str | None = None) -> None:
         if len(chunks) > 10:
             raise ValueError('Too many annotation chunks')
         for index, chunk in enumerate(chunks, 1):
-            print(f'::notice title=Native section {platform} {section} {index}/{len(chunks)}::GS_RENDER_V1 {name} {digest} {index}/{len(chunks)} {chunk}', flush=True)
+            print(f'::notice title=Native section {platform} {section} {index}/{len(chunks)}::GS_RENDER_V1 {name} {digest} {index}/{len(chunks)} {original_size} {chunk}', flush=True)
 
 
 if __name__ == '__main__':
     if len(sys.argv) not in (3, 4):
         raise SystemExit('Usage: publish_response_section_frames.py DIRECTORY ios|android [SECTION]')
-    publish(Path(sys.argv[1]), sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else None)
+    try:
+        publish(Path(sys.argv[1]), sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else None)
+    except Exception as error:
+        message = str(error).replace('%', '%25').replace('\n', '%0A').replace('\r', '%0D')
+        print(f'::error::Actual native preview failed: {message}', flush=True)
+        raise
