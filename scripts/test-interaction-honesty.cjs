@@ -44,6 +44,17 @@ let checks = 0
 function check(name, fn) { fn(); checks++; console.log('PASS', name) }
 
 async function main() {
+  check('learning suggestions exclude real source and action sections and resume at actual concepts', () => {
+    for (const heading of ['Sources','Key Sources','References','Step-by-step plan','Next actions','Checklist']) assert.equal(extractConceptDeck('## '+heading+'\n'+text).length, 0, heading)
+    assert.equal(extractConceptDeck('## Sources\n- IEA: a supplied publisher record.\n## Core concepts\n'+text).length, 3)
+    assert.equal(extractConceptDeck('**Sources**\n'+text).length, 0)
+  })
+  check('learning retains complete source definitions and never quizzes ambiguous duplicate definitions', () => {
+    const definition = 'A supplied definition with an important source qualification. '.repeat(6).trim()
+    const source = ['Alpha','Beta','Gamma'].map(term=>`- **${term}**: ${definition} ${term}.`).join('\n')
+    assert.equal(extractConceptDeck(source)[0].definition, definition+' Alpha.')
+    assert.equal(extractConceptDeck(['Alpha','Beta','Gamma'].map(term=>`- **${term}**: ${definition}`).join('\n')).length, 0)
+  })
   // Execute the exact iframe srcDoc, including the shared policy, not a mock
   // sanitizer. JSDOM exercises DOM events/MutationObserver, not pixel layout.
   const source = `<button id="run" title="Increase &#x1F600;">Increase &#x1F600;</button><output id="result">0</output><svg data-custom-glass="true"><path d="M0 0L8 8"/></svg><script>window.marker=String.fromCodePoint(0x1F600);window.count=0;document.getElementById('run').onclick=function(){window.count++;document.getElementById('result').textContent=window.count+window.marker;};</script>`
