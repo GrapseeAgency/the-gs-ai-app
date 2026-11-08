@@ -324,6 +324,10 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   const original = { code: source, title: 'Keep “curly” and ‘single’ quotes', url: 'https://example.org/a//b', values: [1, 2] }
   const valid = JSON.stringify(original)
   check('repairJson leaves valid source JSON byte-identical', repairJson(valid) === valid)
+  check('truncated executable source is refused rather than fabricated', repairJson('{"code":"const obj = {value:1}}') === null)
+  check('truncated HTML source is refused rather than fabricated', repairJson('{"html":"<button>Actual</button>}') === null)
+  check('truncated formula is refused rather than assigned invented syntax', repairJson('{"expr":"amount * (rate + 1)}') === null)
+  check('truncated destination is refused rather than invented', repairJson('{"url":"https://example.org/report}') === null)
   for (const [name, raw] of [
     ['trailing comma', valid.slice(0, -1) + ',}'],
     ['missing root brace', valid.slice(0, -1)],
