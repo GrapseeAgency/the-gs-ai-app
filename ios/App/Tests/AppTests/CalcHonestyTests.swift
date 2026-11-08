@@ -5,6 +5,18 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testCitationAuthorityComesFromTheActualSafeHostNotModelLabelsOrURLSubstrings() {
+        XCTAssertEqual(citationSourceURLIOS("https://www.nature.com/article")?.host, "www.nature.com")
+        XCTAssertTrue(isAcademicCitationDomain("untrusted.example", "https://www.nature.com/article"))
+        for raw in ["https://untrusted.example/nature.com?publisher=arxiv.org", "https://nature.com.untrusted.example/paper", "https://untrusted.example/?from=university.edu"] {
+            XCTAssertFalse(isAcademicCitationDomain("nature.com", raw))
+        }
+        for raw in ["javascript:alert(1)", "file:///private/file", "https://nature.com@untrusted.example/paper"] {
+            XCTAssertNil(citationSourceURLIOS(raw))
+            XCTAssertFalse(isAcademicCitationDomain("nature.com", raw))
+        }
+    }
+
     func testTimersAcceptOnlyActualWholeSecondsWithoutPriceDefaults() {
         for json in [#"{"type":"timer"}"#, #"{"type":"timer","durationSeconds":5}"#, #"{"type":"timer","items":[{"price":25}]}"#] {
             XCTAssertTrue(isValidWidget(kind: "app", json: json))
