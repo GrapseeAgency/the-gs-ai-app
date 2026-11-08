@@ -3021,15 +3021,14 @@ internal fun AssistantMessage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 640.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(20.dp))
+                    // BlocksContent owns each prose/plan card and its inset.
+                    // Do not wrap the real answer in a second padded glass card.
                     .border(
                         width = if (highlight) 2.dp else 0.dp,
                         color = if (highlight) MaterialTheme.colorScheme.primary
                         else androidx.compose.ui.graphics.Color.Transparent,
                         shape = RoundedCornerShape(20.dp),
                     )
-                    .padding(horizontal = 14.dp, vertical = 12.dp)
                     // Long-press only. There used to be `onClick = {}` here,
                     // which made every non-interactive pixel of an answer a
                     // button that did nothing — the exact "taps are swallowed"
