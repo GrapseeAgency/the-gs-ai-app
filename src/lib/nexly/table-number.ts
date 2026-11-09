@@ -1,3 +1,5 @@
+import { categoricalChartType } from './chart-selection'
+
 /** Whole-cell numeric grammar. Never erase embedded operators or the sign
  * carried by a downward trend arrow while sorting real source data. */
 export function parseTableNumber(raw: unknown): number | null {
@@ -41,7 +43,7 @@ export function chartFromTableCells(headers: string[], rows: string[][]): Record
     const units = new Set(source.map(raw => raw.endsWith('%') ? '%' : raw.match(/[$€£¥₹৳]/)?.[0] ?? (/x$/i.test(raw) ? 'x' : '')))
     if (units.size !== 1) continue
     const title = plain(headers[column])
-    return { type: 'bar', title, unit: [...units][0], labels, series: [{ name: title, data: values.map((value, index) => [index, value]) }] }
+    return { type: categoricalChartType(labels), title, unit: [...units][0], labels, series: [{ name: title, data: values.map((value, index) => [index, value]) }] }
   }
   return null
 }
