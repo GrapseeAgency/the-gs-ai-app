@@ -26,7 +26,7 @@ import {
   isChartType,
   type WidgetKind,
 } from './catalog'
-import { extractBareWidget, extractWidgetFences, inferWidgetKind, validateWidget, validationErrors } from './validate'
+import { extractBareWidget, extractWidgetFences, inferWidgetKind, repairJson, validateWidget, validationErrors } from './validate'
 import { directWidgetArt, type ArtDirection } from './art-direct'
 import { sanitizeReplyEmojis } from '../nexly/icons'
 import { plainTableCell } from '../nexly/table-number'
@@ -60,6 +60,25 @@ export function requestedChartType(prompt: string): (typeof CHART_TYPES)[number]
   return chartPreference(prompt).type
 }
 
+/** A rejected chart source is not permission to discard its axes and heal it into a checklist. */
+function carriesChartSource(json: string): boolean {
+  const repaired = repairJson(json)
+  if (!repaired) return false
+  try {
+    let value: unknown = JSON.parse(repaired)
+    for (let depth = 0; depth < 4 && value && typeof value === 'object' && !Array.isArray(value); depth++) {
+      const object = value as Record<string, unknown>
+      if (Array.isArray(object.series) || Array.isArray(object.datasets)) return true
+      if (typeof object.type === 'string' && isChartType(object.type) &&
+          ['data', 'values', 'points', 'tasks', 'nodes', 'links', 'edges', 'bids', 'asks'].some(key => key in object)) return true
+      const envelope = ['chart', 'widget', 'payload', 'content', 'result', 'spec', 'config'].find(key => object[key] && typeof object[key] === 'object')
+      if (!envelope || Object.keys(object).length > 3) return false
+      value = object[envelope]
+    }
+  } catch { /* Invalid JSON is still handled by the normal source-preserving fallback. */ }
+  return false
+}
+
 export function compileWidgets(input: CompileInput): CompileResult {
   const { reply, userPrompt, priorText = '' } = input
   const fences = extractWidgetFences(reply)
@@ -85,7 +104,7 @@ export function compileWidgets(input: CompileInput): CompileResult {
     // a ```cards fence holding stat KPIs or flashcards, a ```table fence
     // holding a left/right comparison), infer the true kind from the payload
     // and validate against it before dropping the block.
-    if (!result.ok && fence.kind !== 'checklist' && fence.kind !== 'collab') {
+    if (!result.ok && fence.kind !== 'checklist' && fence.kind !== 'collab' && !(fence.kind === 'chart' && carriesChartSource(fence.json))) {
       const healedKind = inferWidgetKind(fence.json)
       if (healedKind && healedKind !== fence.kind) {
         const healed = validateWidget(healedKind, fence.json)
