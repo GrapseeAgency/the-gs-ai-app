@@ -29,6 +29,19 @@ final class CalculatorSourceHonestyTests: XCTestCase {
         XCTAssertTrue(calcNumberIOS(["value": "$42"], "value").isNaN, "Do not silently reinterpret prose as a supplied numeric value")
     }
 
+    func testProductionCalculatorExpressionsSupportScientificNumbersAndRejectInvalidArityOrRecursiveSource() {
+        XCTAssertEqual(CalcExprIOS.eval("1e3 + 2.5E-2", vars: [:]), 1000.025)
+        XCTAssertEqual(CalcExprIOS.evalOptional("1e3 + 2.5E-2", vars: [:]), 1000.025)
+        XCTAssertEqual(CalcExprIOS.eval("pow(2,3)", vars: [:]), 8)
+        XCTAssertTrue(CalcExprIOS.eval("pow(2)", vars: [:]).isNaN, "Missing exponent must not silently become zero")
+        XCTAssertTrue(CalcExprIOS.eval("sqrt(4,16)", vars: [:]).isNaN, "Do not silently ignore supplied arguments")
+        XCTAssertTrue(CalcExprIOS.eval("min(2,1/0)", vars: [:]).isNaN, "Undefined arguments must not become a plausible minimum")
+        XCTAssertTrue(CalcExprIOS.eval("1e+", vars: [:]).isNaN)
+        XCTAssertTrue(CalcExprIOS.eval(String(repeating: "(", count: 1000) + "1" + String(repeating: ")", count: 1000), vars: [:]).isNaN,
+                      "Generated pathological nesting must not crash the UI thread")
+        XCTAssertTrue(CalcExprIOS.eval(String(repeating: "1+", count: 5000) + "1", vars: [:]).isNaN)
+    }
+
     func testActualCalculatorFormatterDoesNotInventDollarsAndKeepsExplicitSourceUnits() {
         XCTAssertEqual(formatCalcResultIOS(100, unit: "", format: "currency"), "100.00")
         XCTAssertEqual(formatCalcResultIOS(100, unit: "currency"), "100.00")
