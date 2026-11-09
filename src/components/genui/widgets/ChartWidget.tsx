@@ -152,7 +152,11 @@ function ChartControls({ payload }: { payload: ChartPayload }) {
     : []
 
   if (!isSwitchable) {
-    return dispatchChartView(payload.type, payload)
+    const observations = (payload.series ?? []).reduce((count, series) => count + (series.data?.length ?? 0), 0)
+    return <>
+      {dispatchChartView(payload.type, payload)}
+      {observations > 0 && <div style={{ fontSize: 11, color: theme.text2 }}>{observations} points</div>}
+    </>
   }
 
   const tabs: Array<{ id: ChartPayload['type']; icon: string; label: string }> = [
