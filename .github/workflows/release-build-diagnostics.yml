@@ -16,15 +16,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/actions/jobs/129158776428/logs" > original-android-release.log 2> original-fetch-error.txt || true
+          gh api --allow-escape-sequences "repos/$GITHUB_REPOSITORY/actions/jobs/129158776428/logs" > original-android-release.log 2> original-fetch-error.txt || true
           python3 - <<'PY'
-          import pathlib
+          import pathlib, re
           text = pathlib.Path('original-android-release.log').read_text(errors='replace')
           error = pathlib.Path('original-fetch-error.txt').read_text(errors='replace')
           if error:
               print('::notice title=Actual log-fetch diagnostic::'+error[:3000].replace('%','%25').replace('\n','%0A'))
           if not text:
               raise SystemExit('Original job log could not be retrieved; no substitute is emitted')
+          text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', text)
           tail = '\n'.join(text.splitlines()[-180:])[-32000:]
           for start in range(0,len(tail),3500):
               part = tail[start:start+3500].replace('%','%25').replace('\r','%0D').replace('\n','%0A')
