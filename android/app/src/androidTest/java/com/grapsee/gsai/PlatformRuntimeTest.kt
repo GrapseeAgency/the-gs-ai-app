@@ -676,8 +676,10 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("Last 6 pts ▾").performClick()
         compose.onNodeWithText("Last 4 pts ▾").assertExists()
         compose.onNodeWithText("Pie").assertDoesNotExist()
-        compose.onNodeWithText("Long").assertExists()
-        compose.onNodeWithText("Short").assertExists()
+        // Both the native legend and the real series selector can expose
+        // these names. Test source presence without assuming a single node.
+        compose.onAllNodesWithText("Long").onFirst().assertExists()
+        compose.onAllNodesWithText("Short").onFirst().assertExists()
         compose.onNodeWithText("Absent").assertDoesNotExist()
         // A new, genuine single-series dataset can offer shares. Controls must
         // reset with that source, not preserve the previous window or series.
