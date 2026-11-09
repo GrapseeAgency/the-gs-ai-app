@@ -223,7 +223,7 @@ internal object WidgetRecovery {
             else -> {
                 val fromReply = extract(reply)
                 val usePrior = Regex("""\b(?:this|that|these|those|above|previous|same|it)\b|^(?:please\s+)?(?:show|draw|make|create|render|plot)\s+(?:me\s+)?(?:a\s+)?(?:(?:bar|line|pie|area|donut)\s+)?(?:chart|graph|plot)[.!?]?$""", RegexOption.IGNORE_CASE).containsMatchIn(prompt.trim())
-                val chosen = if (fromReply.points.size >= 2) fromReply else if (usePrior && !Regex("""(?m)^\s*(?:[-*+]\s*)?[^\n:]{1,60}:\s*[~$€£¥₹৳+-]?\d|^\s*\|""").containsMatchIn(reply)) extract(prior) else Extracted(emptyList(), "Value")
+                val chosen = if (fromReply.points.size >= 2) fromReply else if (usePrior && !fromReply.sourcePresent) extract(prior) else Extracted(emptyList(), "Value")
                 if (chosen.points.size < 2) return null
                 when (ask) {
                     is VisualAsk.Chart -> {
@@ -267,11 +267,12 @@ internal object WidgetRecovery {
     // Extraction
     // -----------------------------------------------------------------------
 
-    private data class Extracted(val points: List<Point>, val seriesName: String)
+    private data class Extracted(val points: List<Point>, val seriesName: String, val sourcePresent: Boolean = false)
 
     private fun extract(text: String): Extracted {
-        val rows = collect(text)
-        if (rows.isEmpty()) return Extracted(emptyList(), "Value")
+        var sourcePresent = false
+        val rows = collect(text) { sourcePresent = true }
+        if (rows.isEmpty()) return Extracted(emptyList(), "Value", sourcePresent)
 
         // A repeated metric label ("Market Cap") under distinct section
         // headings ("Telecommunications", "Semiconductors") means the SECTIONS
@@ -293,12 +294,12 @@ internal object WidgetRecovery {
 
         val seen = HashSet<String>()
         val unique = points.filter { seen.add(it.label.lowercase()) }
-        if (unique.size != points.size || unique.size > MAX_POINTS) return Extracted(emptyList(), "Value")
+        if (unique.size != points.size || unique.size > MAX_POINTS) return Extracted(emptyList(), "Value", sourcePresent)
         val name = if (useSection) dominant!!.key.replaceFirstChar { it.uppercase() } else "Value"
-        return Extracted(unique, name)
+        return Extracted(unique, name, sourcePresent)
     }
 
-    private fun collect(text: String): List<Raw> {
+    private fun collect(text: String, markSource: () -> Unit): List<Raw> {
         if (text.isBlank()) return emptyList()
         val rows = ArrayList<Raw>()
         var section = ""
@@ -318,13 +319,15 @@ internal object WidgetRecovery {
                 section = heading
                 continue
             }
+            if (line.startsWith("|")) markSource()
             val row = parseLine(line, section)
-            if (row != null) rows += row
+            if (row != null) { markSource(); rows += row }
             else {
                 val candidate = if (line.startsWith("|")) line.trim('|').split('|').getOrNull(1)?.trim()
                     else separator.find(line)?.let { line.substring(it.range.last + 1).trim() }
-                if (candidate != null && (Regex("""^(?:n/a|unknown|missing|not recorded|not available|—|-)$""", RegexOption.IGNORE_CASE).matches(candidate) ||
-                    Regex("""^[~$€£¥₹৳+-]?\d""").containsMatchIn(candidate))) return emptyList()
+                val plainCandidate = candidate?.let(::cleanLabel)
+                if (plainCandidate != null && (Regex("""^(?:n/a|unknown|missing|not recorded|not available|—|-)$""", RegexOption.IGNORE_CASE).matches(plainCandidate) ||
+                    Regex("""^[~$€£¥₹৳+-]?\d""").containsMatchIn(plainCandidate))) { markSource(); return emptyList() }
             }
             if (rows.size > MAX_POINTS) return emptyList()
         }
@@ -348,7 +351,9 @@ internal object WidgetRecovery {
         // Markdown table row: first cell = label, first numeric cell = value.
         if (line.startsWith("|")) {
             val cells = line.trim('|').split('|').map { it.trim() }
-            if (cells.size < 2) return null
+            // Selecting a numeric column from a multi-dimension table needs
+            // the real table controls, not a hidden first-number heuristic.
+            if (cells.size != 2) return null
             if (cells.all { it.isEmpty() || it.all { c -> c == '-' || c == ':' || c == ' ' } }) return null
             val label = cleanLabel(cells[0])
             if (!label.any { it.isLetterOrDigit() } || label.length < 2) return null
