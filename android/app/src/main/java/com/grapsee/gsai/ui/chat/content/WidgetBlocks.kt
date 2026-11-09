@@ -1541,7 +1541,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                 Triple("bar", "chart-bar", "Bar"),
                 Triple("area", "chart-area", "Area"),
                 Triple(if (w.type == "donut") "donut" else "pie", "chart-pie", "Pie")
-            )
+            ).filter { (type, _, _) -> type !in setOf("pie", "donut") || pieAlternativeAllowed(w) }
             // Keep every chart type visible on phone-width cards; the
             // genuine source-range control must not squeeze Pie off-screen.
             Column(
