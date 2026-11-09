@@ -4,6 +4,19 @@ import XCTest
 final class CalculatorSourceHonestyTests: XCTestCase {
     func testActualFencedCalculatorAcceptsSourceAliasesAndScientificInitialValuesWithoutInventedDefaults() throws {
         let source = #"{"title":"Custom source calculation","parameters":[{"key":"distance","label":"Distance","initial":"1e3"},{"key":"rate","label":"Rate","default":0}],"formulas":[{"label":"Actual total","expression":"distance*rate"}]}"#
+        XCTAssertEqual(inferWidgetKind(source), "calc", "Parameter/formula aliases must reach a real calculator without a fence")
+        XCTAssertTrue(parseBlocks(source).contains { block in
+            if case .widget("calc", _, false, _) = block { return true }
+            return false
+        })
+        let conventional = #"{"fields":[{"key":"x","label":"Actual input","value":2}],"outputs":[{"label":"Actual double","expr":"x*2"}]}"#
+        XCTAssertEqual(inferWidgetKind(conventional), "calc", "A generic form must not swallow calculator outputs")
+        XCTAssertTrue(parseBlocks(conventional).contains { block in
+            if case .widget("calc", _, false, _) = block { return true }
+            return false
+        })
+        XCTAssertEqual(inferWidgetKind(#"{"fields":[{"key":"name","label":"Your name"}]}"#), "form",
+                       "Actual ordinary forms still remain forms")
         let blocks = parseBlocks("```calc\n" + source + "\n```")
         let payloads = blocks.compactMap { block -> String? in
             if case .widget(let kind, let json, false, _) = block, kind == "calc" { return json }
