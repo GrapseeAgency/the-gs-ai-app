@@ -1196,8 +1196,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     let type = canonicalChartType(rawType)
     if (type !== rawType) repaired = true
     if (!isChartType(type)) {
-      type = 'bar'
-      repaired = true
+      return { widget: p, errors: [`Unsupported chart type: ${rawType}. Original source must not be relabelled as a bar chart.`], repaired }
     }
     // v2 graph / composition charts have their own payload shapes and do not
     // fit the series model at all.
