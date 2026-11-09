@@ -675,6 +675,8 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("All (8 pts) ▾").performClick()
         compose.onNodeWithText("Last 6 pts ▾").performClick()
         compose.onNodeWithText("Last 4 pts ▾").assertExists()
+        compose.onNodeWithText("Lowest").assertExists()
+        compose.onNodeWithText("5").assertExists()
         compose.onNodeWithText("Pie").assertDoesNotExist()
         // Both the native legend and the real series selector can expose
         // these names. Test source presence without assuming a single node.
@@ -686,7 +688,7 @@ class PlatformRuntimeTest {
         compose.runOnIdle { displayed = Widget.Chart(widget.w.copy(series = listOf(widget.w.series.first()))) }
         compose.onNodeWithText("All (8 pts) ▾").assertExists()
         compose.onNodeWithText("Pie").performClick()
-        compose.onNodeWithText("Long: P7 — 22%").assertExists()
+        compose.onNodeWithText("P7 — 22%").assertExists()
         compose.onNodeWithText("N/A (slice values)").assertExists()
         compose.onNodeWithText("Line").performClick()
         compose.onNodeWithText("All (8 pts) ▾").assertExists()
