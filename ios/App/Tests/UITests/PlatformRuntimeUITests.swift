@@ -603,7 +603,9 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertEqual(ninth.value as? String, "9.0", "Source initial alias was lost")
         ninth.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
         ninth.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 3) + "20\n")
-        XCTAssertFalse(app.keyboards.firstMatch.exists, "Done must dismiss calculator editing")
+        let keyboardDismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
+        XCTAssertEqual(XCTWaiter.wait(for: [keyboardDismissed], timeout: 5), .completed,
+                       "Done must actually dismiss calculator editing")
 
         let tenth = app.textFields["calc-input-x10"]
         reveal(tenth)
