@@ -5,6 +5,24 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testOptionalProseChartsKeepEverySignedUnicodeObservationInSourceOrder() throws {
+        let labels = ["ঢাকা", "ফেনী", "শূন্য", "Delta", "Epsilon", "Zeta", "Eta", "Theta", "Iota", "Kappa"]
+        let values = [-12, 0, 2026, 9, 8, 7, 6, 5, 4, 3]
+        let source = zip(labels, values).map { "- \($0.0): \($0.1)" }.joined(separator: "\n")
+        let json = try XCTUnwrap(chartJsonFromProseIOS(parseBlocks(source)))
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        let data = try XCTUnwrap(payload["data"] as? [[String: Any]])
+        XCTAssertEqual(data.compactMap { $0["label"] as? String }, labels)
+        XCTAssertEqual(data.compactMap { $0["value"] as? Int }, values)
+        XCTAssertEqual(payload["type"] as? String, "hbar")
+        XCTAssertEqual(chartJsonFromProseIOS(parseBlocks(source)), json, "Disclosure identity must be deterministic")
+        let trend = try XCTUnwrap(chartJsonFromProseIOS(parseBlocks("- Jan: -2\n- Feb: 0\n- Mar: 2026")))
+        XCTAssertTrue(trend.contains("\"line\""))
+        for ambiguous in ["- A: 1\n- B: unknown\n- C: 3", "- A: $1\n- B: 2%\n- C: $3", "- A: 1\n- A: 2\n- C: 3", "- A: 1\n- B: 2 kg\n- C: 3", "- A: 1\n- B: 2"] {
+            XCTAssertNil(chartJsonFromProseIOS(parseBlocks(ambiguous)), ambiguous)
+        }
+    }
+
     func testNativeChartSelectionFollowsActualCoordinatesAndPreservesSpecializedSemantics() throws {
         let cases: [([String], String)] = [
             (["Jan", "Feb", "Mar"], "line"), (["2022", "2023", "2024"], "line"),
