@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -279,10 +281,11 @@ internal fun formatCalc(value: Double, format: String, unit: String): String {
     return "$body $unit"
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun CalcWidgetView(w: CalcWidget, onSendPrompt: ((String) -> Unit)? = null) {
     val c = GsTheme.colors
-    val fields = w.fields.take(10).filter { it.key.isNotBlank() }
+    val fields = w.fields.filter { it.key.isNotBlank() }
     val defaults = fields.associate { it.key to (if (it.value.isFinite()) it.value else it.choices.firstOrNull()?.value ?: Double.NaN) }
     val values = remember(w) { mutableStateMapOf<String, Double>().apply { putAll(defaults) } }
     val drafts = remember(w) { mutableStateMapOf<String, String>() }
@@ -290,11 +293,12 @@ internal fun CalcWidgetView(w: CalcWidget, onSendPrompt: ((String) -> Unit)? = n
     WidgetCardShell(w.title.ifEmpty { "Calculator" }, w.type) {
         Column(Modifier.padding(top = 6.dp)) {
             if (w.presets.isNotEmpty()) {
-                Row(
+                FlowRow(
                     Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    w.presets.take(4).forEach { preset ->
+                    w.presets.forEach { preset ->
                         Box(
                             Modifier.clip(RoundedCornerShape(20.dp))
                                 .background(c.surface)
@@ -318,18 +322,20 @@ internal fun CalcWidgetView(w: CalcWidget, onSendPrompt: ((String) -> Unit)? = n
                         color = c.textTertiary,
                         modifier = Modifier.padding(top = 6.dp)
                     )
-                    Row(
+                    FlowRow(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                             .background(c.surface).padding(3.dp),
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                        maxItemsInEachRow = 3
                     ) {
-                        f.choices.take(5).forEach { choice ->
+                        f.choices.forEach { choice ->
                             val selected = abs(current - choice.value) < 1e-9
                             Box(
-                                Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                                Modifier.clip(RoundedCornerShape(8.dp))
                                     .background(if (selected) c.accent else Color.Transparent)
                                     .clickable { values[f.key] = choice.value }
-                                    .padding(vertical = 7.dp),
+                                    .padding(horizontal = 10.dp, vertical = 7.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -405,7 +411,7 @@ internal fun CalcWidgetView(w: CalcWidget, onSendPrompt: ((String) -> Unit)? = n
                 !v.isFinite() || (f.min != null && v < f.min) || (f.max != null && v > f.max)
             }
             if (invalidInput) Text("Enter valid numbers within the supplied limits", color = c.textSecondary)
-            val outputs = w.outputs.take(8).map { out ->
+            val outputs = w.outputs.map { out ->
                 out to if (invalidInput) null else CalcExpr.eval(out.expr, values)
             }
             Column(
