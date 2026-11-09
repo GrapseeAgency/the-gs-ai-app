@@ -1684,7 +1684,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                     val peakVal = ys.getOrElse(maxIdx) { 0f }
                     val pct = if (activeType in setOf("pie", "donut")) null else chartGrowthPercentAndroid(ys.first().toDouble(), ys.last().toDouble())
                     Triple(
-                        axisLabel(total, slicedWidget.unit),
+                        axisLabel(if (activeType in setOf("pie", "donut")) total else ys.minOrNull()!!, slicedWidget.unit),
                         peakLabel to axisLabel(peakVal, slicedWidget.unit),
                         pct
                     )
@@ -1724,7 +1724,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                             glyphSize = 14.dp
                         )
                         Text(totalStr, fontSize = 14.sp, color = GsTheme.colors.textPrimary, fontWeight = FontWeight.Bold)
-                        Text("Total", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.Medium)
+                        Text(if (activeType in setOf("pie", "donut")) "Total" else "Lowest", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.Medium)
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
