@@ -1,6 +1,45 @@
-Here are all the generated files.
+# Native app downloads
 
-## Latest release: v0.86.25 — the Model Centre, and the glass redesign finished (versionCode 148)
+## Latest release: v0.86.27 — native GenUI fixes (build 150)
+
+[Open the release page](https://github.com/GrapseeAgency/the-gs-ai-app/releases/tag/v0.86.27). Native Kotlin/Jetpack Compose Android and Swift/SwiftUI iOS clients, not a website packaged as an app. Sandboxed executable HTML/JavaScript/React content uses an embedded web runtime where appropriate.
+
+| Platform | Actual download | Installation |
+| --- | --- | --- |
+| Android | [Signed Release APK](https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.86.27/GS-AI-App-v0.86.27.apk) | Install over the existing shipping app; no uninstall needed. Allow installation from your browser/file manager when prompted. |
+| iPhone / iPad | [Unsigned arm64 device IPA](https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.86.27/GS-AI-iOS-v0.86.27-unsigned.ipa) | **Re-sign with your own Apple account/provisioning using a compatible sideloading tool before installation.** This is a real device build, not a renamed simulator app. It is not TestFlight/App Store signed; tapping this IPA alone will not install it. |
+| Xcode iOS Simulator | [Release App.app ZIP](https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.86.27/GS-AI-iOS-v0.86.27-simulator.zip) | Extract App.app, boot a compatible simulator, run `xcrun simctl install booted /path/to/App.app`, then `xcrun simctl launch booted com.grapsee.gsai`. Not installable on a physical iPhone. |
+
+### Integrity and exact build identity
+
+Source: [`12b3f43e4330`](https://github.com/GrapseeAgency/the-gs-ai-app/commit/12b3f43e4330bec4d801817b7e83351d5e3560b1). [Successful packaging and publication](https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/42620724192). [Exact-source native interactions and six-section review — all ten jobs passed](https://github.com/GrapseeAgency/the-gs-ai-app/actions/runs/42620731065).
+
+| File | Bytes | SHA-256 (GitHub-computed release digest) |
+| --- | ---: | --- |
+| `GS-AI-App-v0.86.27.apk` | 73283158 | `23c549b2df5a72c4e4092d3ed1939a893974ff67f7ce155ee8c2e7c5fc443fdb` |
+| `GS-AI-iOS-v0.86.27-unsigned.ipa` | 12033454 | `de35639a45430f8785e113bb7482f1438b42bbd8bff3920999e954b8993d9276` |
+| `GS-AI-iOS-v0.86.27-simulator.zip` | 19964086 | `1b1119812a3be64543099d1e659a6c2276d19cc31bdb7b1a2fac617ca9967e89` |
+
+The release includes `SHA256SUMS.txt`, `build-provenance.json`, Android certificate/package/optimization checks, and iOS Mach-O platform/architecture checks. Android's broad unit invocation discovered 532 tests: 429 executed with zero failures/errors; 103 conditional capture tests were skipped there. The separate mandatory native interaction and complete six-section capture/review workflow passed on this exact source. Both iOS device and simulator Release binaries compiled and passed their platform checks; this does not claim a new physical-device runtime session or physical haptic/wake proof.
+
+The APK uses the existing shipping certificate, is not debuggable, packages the baseline profile and all four native engine ABIs, and carries the public service origin rather than emulator loopback. iOS ships an actual arm64 `iPhoneOS` app and a distinct `iPhoneSimulator` app. Model weights are not bundled; existing model/download behavior is unchanged.
+
+The Android live updater reads `update-manifest.json`, now pointing to this release asset with its verified digest and size. **The committed legacy `download/GS-AI-App.apk` and screenshots below are historical, not the current build.** Use the release links above.
+
+### Fixes to check
+
+- Real task add/edit/delete/toggle and response-isolated React controls/persistence.
+- Source-derived charts, ranges, table controls and calculators; missing input stays empty instead of becoming a fabricated zero/minimum, and currency is not invented.
+- Custom source-defined discount/formula calculators stay interactive instead of being rejected by a closed category list or relabelled finance.
+- Custom glass icon normalization, source-byte-safe code handling, truthful unsupported-runtime behavior, and iOS durable history/relaunch/clear/delete/retention repairs.
+
+Exact whole-phone/reference pixel identity and physical haptic/background-wake delivery are not certified. Please test the downloaded builds on your devices.
+
+---
+
+# Historical release documentation (not current downloads)
+
+## Historical release: v0.86.25 — the Model Centre, and the glass redesign finished (versionCode 148)
 
     file    GS-AI-App.apk
     size    72366000 bytes
