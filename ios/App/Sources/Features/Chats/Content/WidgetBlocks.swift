@@ -1638,6 +1638,7 @@ private struct ChartBodyView: View {
             let pillBg = growthPct == nil ? Color.gray.opacity(0.1) : (pos ? Color(red: 0.902, green: 0.976, blue: 0.941) : Color(red: 0.992, green: 0.925, blue: 0.925))
             let pillFg = growthPct == nil ? Aero.textSecondary : (pos ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
             let peakPt = pts[peakIdx]
+            let minimum = pts.map { $0.value }.min() ?? pts[0].value
             HStack(spacing: 7) {
                 VStack(alignment: .leading, spacing: 3) {
                     NexlyGlassGlyphTile(
@@ -1646,10 +1647,10 @@ private struct ChartBodyView: View {
                         size: 24,
                         glyphSize: 14
                     )
-                    Text(compactNumber(totalVal, unit: unit))
+                    Text(compactNumber(slices ? totalVal : minimum, unit: unit))
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Aero.text)
-                    Text("Total")
+                    Text(slices ? "Total" : "Lowest")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
                     Text("\(pts.count) points")
