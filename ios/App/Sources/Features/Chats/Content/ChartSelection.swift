@@ -39,3 +39,19 @@ func categoricalChartTypeIOS(_ labels: [String]) -> String {
     if chronologicalChartLabelsIOS(labels) { return "line" }
     return labels.count > 7 || labels.contains(where: { $0.count > 18 }) ? "hbar" : "bar"
 }
+
+func pieAlternativeAllowedIOS(_ obj: [String: Any]) -> Bool {
+    let type = (obj["type"] as? String ?? "").lowercased()
+    let slices = type == "pie" || type == "donut"
+    guard let series = obj["series"] as? [[String: Any]], slices || series.count == 1 else { return false }
+    var values: [Double] = []
+    for item in series {
+        guard let data = item["data"] as? [Any] else { return false }
+        for point in data {
+            guard let value = chartObservationValueIOS(point), value.isFinite, value >= 0 else { return false }
+            values.append(value)
+        }
+    }
+    let total = values.reduce(0, +)
+    return !values.isEmpty && total > 0 && (slices || (obj["unit"] as? String ?? "") != "%" || abs(total - 100) < 1e-6)
+}
