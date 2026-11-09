@@ -91,15 +91,19 @@ class WidgetBlocksTest {
     }
 
     @Test
-    fun `chart with too many points is capped, not dropped`() {
+    fun `chart capacity preserves the entire source or rejects without truncation`() {
         val many = (1..300).joinToString(",") { "[$it,$it]" }
-        val w = parseWidget("chart", """{"type":"line","series":[{"name":"a","data":[$many]}]}""") as Widget.Chart
-        assertEquals(200, w.w.series[0].data.size)
+        assertNull(parseWidget("chart", """{"type":"line","series":[{"name":"a","data":[$many]}]}"""))
+        val supported = (1..200).joinToString(",") { "[$it,$it]" }
+        val w = parseWidget("chart", """{"type":"line","series":[{"name":"a","data":[$supported]}]}""") as Widget.Chart
+        assertEquals(200, w.w.series.single().data.size)
+        assertEquals(listOf(200f, 200f), w.w.series.single().data.last())
     }
 
     @Test
-    fun `chart with too few points or unknown type degrades to null`() {
-        assertNull(parseWidget("chart", """{"type":"line","series":[{"name":"a","data":[[1,2]]}]}"""))
+    fun `chart preserves real singleton data but rejects unknown type or absent data`() {
+        val singleton = parseWidget("chart", """{"type":"line","series":[{"name":"a","data":[[1,2]]}]}""") as Widget.Chart
+        assertEquals(listOf(listOf(1f, 2f)), singleton.w.series.single().data)
         // scatter is a valid type now; use a genuinely unknown type for the null path.
         assertNull(parseWidget("chart", """{"type":"sparkline","series":[{"name":"a","data":[[1,2],[2,3]]}]}"""))
         assertNull(parseWidget("chart", """{"series":[]}"""))
