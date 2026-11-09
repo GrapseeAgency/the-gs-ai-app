@@ -5,6 +5,39 @@ import Network
 @testable import GSApp
 
 final class CalcHonestyTests: XCTestCase {
+    func testNativeChartSelectionFollowsActualCoordinatesAndPreservesSpecializedSemantics() throws {
+        let cases: [([String], String)] = [
+            (["Jan", "Feb", "Mar"], "line"), (["2022", "2023", "2024"], "line"),
+            (["Q1 2024", "Q2 2024", "Q1 2025"], "line"),
+            (["2024-01", "2024-02", "2024-03"], "line"),
+            (["Mar", "Jan", "Feb"], "bar"), (["2024-02-31", "2024-03-01"], "bar"),
+            (["Alpha", "Beta"], "bar"), (["A supplied category with a long name", "Another supplied category"], "hbar")
+        ]
+        for (labels, expected) in cases {
+            XCTAssertEqual(categoricalChartTypeIOS(labels), expected, labels.joined(separator: ","))
+            let headers: [[InlineSpan]] = [[.text("Period")], [.text("Actual measure")]]
+            let rows: [[[InlineSpan]]] = labels.enumerated().map { [[.text($0.element)], [.text(String($0.offset + 1))]] }
+            let json = try XCTUnwrap(chartJsonFromTableIOS(headers: headers, rows: rows))
+            let actual = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+            XCTAssertEqual(actual["type"] as? String, expected)
+        }
+        let source: [String: Any] = ["type": "scatter", "series": [["name": "Actual", "data": [[10, 2], [30, 4]]]]]
+        let points = try XCTUnwrap(specializedChartPointsIOS(source))
+        XCTAssertEqual(points.map { $0.x }, [10, 30])
+        XCTAssertEqual(points.map { $0.y }, [2, 4])
+        XCTAssertFalse(basicNativeChartTypesIOS.contains("scatter"), "Specialized source must not enter the four-button line renderer")
+        XCTAssertNil(specializedChartPointsIOS(["type": "bubble", "series": [["data": [[10, 2], [30, 4]]]]))
+        XCTAssertNotNil(specializedChartPointsIOS(["type": "bubble", "series": [["data": [[10, 2, 5], [30, 4, 8]]]]))
+        XCTAssertNotNil(specializedChartPointsIOS(["type": "candlestick", "series": [["data": [[10, 15, 5, 12]]]]]))
+        XCTAssertNil(specializedChartPointsIOS(["type": "candlestick", "series": [["data": [[10, 5, 15, 12]]]]]))
+        XCTAssertNil(specializedChartPointsIOS(["type": "gantt", "series": [["data": [[10, 2]]]]]))
+        XCTAssertEqual(canonicalChartType("sankeyish"), "sankeyish")
+        XCTAssertFalse(isValidWidget(kind: "chart", json: #"{"type":"sankeyish","series":[{"data":[[0,1],[1,2]]}]}"#))
+        XCTAssertFalse(pieAlternativeAllowedIOS(["type": "line", "unit": "%", "series": [["data": [[0, -2], [1, 3]]]]))
+        XCTAssertFalse(pieAlternativeAllowedIOS(["type": "line", "series": [["data": [[0, 2]]], ["data": [[0, 3]]]]))
+        XCTAssertTrue(pieAlternativeAllowedIOS(["type": "bar", "unit": "%", "series": [["data": [[0, 40], [1, 60]]]]))
+    }
+
     func testNativeJSONDelimiterRecoveryPreservesActualSourceBytesAndQuotedPunctuation() throws {
         let source = #"const text = ",} ,] True False None"; const escaped = "\\\" ,}"; const smart = "“literal”";"#
         let original: [String: Any] = ["code": source, "title": "Keep ,} and ,] and “curly” quotes", "values": [1, 2]]
