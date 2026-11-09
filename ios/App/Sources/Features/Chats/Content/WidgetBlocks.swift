@@ -284,15 +284,23 @@ private func recoverPlainTextWidgetIOS(kind: String, raw: String) -> [String: An
     }
     switch kind {
     case "chart", "progress", "gauge":
-        let numPairs = kvPairs.compactMap { k, v -> [String: Any]? in
-            let numStr = v.replacingOccurrences(of: "[^0-9.-]", with: "", options: .regularExpression)
-            guard let d = Double(numStr) else { return nil }
-            return ["label": k, "value": d]
+        // A malformed fence is not permission to turn "1*2" into 12,
+        // strip a loss sign or discard a missing observation.
+        guard !kvPairs.isEmpty, bullets.isEmpty else { return nil }
+        var observations: [(String, Double)] = []
+        for (label, source) in kvPairs {
+            let valueText = kind != "chart" && source.hasSuffix("%") ? String(source.dropLast()).trimmingCharacters(in: .whitespaces) : source
+            guard let value = chartValueIOS(valueText) else { return nil }
+            if kind != "chart" && !(0...100).contains(value) { return nil }
+            observations.append((label, value))
         }
-        guard !numPairs.isEmpty else { return nil }
-        return kind == "chart"
-            ? ["type": "bar", "series": [["name": "Value", "data": numPairs]]]
-            : ["items": numPairs]
+        if kind == "chart" {
+            let labels = observations.map { $0.0 }
+            let data = observations.enumerated().map { [Double($0.offset), $0.element.1] }
+            let series: [[String: Any]] = [["name": "Value", "data": data]]
+            return ["type": categoricalChartTypeIOS(labels), "labels": labels, "series": series]
+        }
+        return ["items": observations.map { ["label": $0.0, "value": $0.1] as [String: Any] }]
     case "stat":
         guard !kvPairs.isEmpty else { return nil }
         return ["cards": kvPairs.map { ["label": $0.0, "value": $0.1] }]
