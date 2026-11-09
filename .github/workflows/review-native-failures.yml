@@ -1,5 +1,7 @@
 name: Review stored native failure evidence
 on:
+  push:
+    paths: [".github/workflows/review-native-failures.yml"]
   workflow_dispatch:
     inputs:
       source_run:
@@ -84,15 +86,29 @@ jobs:
           PY
 
   inspect-stored-full-suite:
-    if: github.event_name == 'workflow_dispatch' && inputs.evidence == 'full-suite'
-    name: Actual full-suite failure from iOS ${{ inputs.source_run }}
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.evidence == 'full-suite')
+    name: Actual stored full-suite failure
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Select original failed run without rerunning native tests
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SOURCE_RUN" ]; then
+            SOURCE_RUN=$(gh run list --workflow ios.yml --branch "$SOURCE_BRANCH" --status failure --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          fi
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]] || { echo "No stored failed iOS run found"; exit 1; }
+          echo "run=$SOURCE_RUN" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
-          name: ios-build-logs-${{ inputs.source_run }}
-          run-id: ${{ inputs.source_run }}
+          name: ios-build-logs-${{ steps.source.outputs.run }}
+          run-id: ${{ steps.source.outputs.run }}
           github-token: ${{ github.token }}
           path: stored-full-suite
       - name: Publish actual full-suite failures, not focused-log noise
