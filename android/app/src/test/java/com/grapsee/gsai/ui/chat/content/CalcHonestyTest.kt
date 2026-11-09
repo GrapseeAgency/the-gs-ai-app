@@ -5,6 +5,20 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun actualCalculatorParserKeepsThirteenthInputSixthChoiceAndNinthOutput() {
+        val fields = (1..13).joinToString(",") { """{"key":"x$it","label":"Input $it","value":$it}""" }
+        val choices = (1..6).joinToString(",") { """{"label":"Option $it","value":$it}""" }
+        val outputs = (1..8).joinToString(",") { """{"label":"Result $it","expr":"x1"}""" }
+        val source = """{"fields":[$fields,{"key":"option","label":"Choice","value":1,"choices":[$choices]}],"outputs":[$outputs,{"label":"Final result","expr":"x12+x13+option"}]}"""
+        val calc = (parseWidget("calc", source) as Widget.Calc).w
+        assertEquals(14, calc.fields.size)
+        assertEquals("x13", calc.fields[12].key)
+        assertEquals(6, calc.fields.last().choices.size)
+        assertEquals(9, calc.outputs.size)
+        assertEquals(256.0, CalcExpr.eval(calc.outputs.last().expr,
+            calc.fields.associate { it.key to it.value } + mapOf("x12" to 120.0, "x13" to 130.0, "option" to 6.0))!!, 0.0)
+    }
+
     @Test fun actualChartDecoderNeverCompactsMissingObservationsOrFabricatesZero() {
         for (invalid in listOf("""null""", """[0,null]""", """[0,true]""", """[0,1e100]""", """[0,10,null]""", """[null,10]""", """[0,10,"unknown"]""", """{"x":1,"y":null}""", """{"x":null,"y":10}""", """{"x":1,"y":10,"z":null}""", """{"open":1,"high":2,"low":null,"close":1}""")) {
             val source = """{"type":"line","labels":["Before","Missing","After"],"series":[{"name":"Actual","data":[[0,10],$invalid,[2,30]]}]}"""
