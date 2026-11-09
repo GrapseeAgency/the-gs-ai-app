@@ -1,4 +1,6 @@
-import { CHART_TYPES, type ChartType } from '../widgets/catalog'
+import { CHART_TYPES } from '../widgets/catalog'
+
+export type ChartType = (typeof CHART_TYPES)[number]
 
 /** Preferences constrain presentation, never supply observations or pick a random skin. */
 export function chartPreference(prompt: string): { requested: boolean; suppressed: boolean; type: ChartType | null } {
