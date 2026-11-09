@@ -41,3 +41,12 @@ internal fun categoricalChartType(labels: List<String>): String = when {
     labels.size > 7 || labels.any { it.length > 18 } -> "hbar"
     else -> "bar"
 }
+
+internal fun pieAlternativeAllowed(w: ChartWidget): Boolean {
+    val slices = w.type in setOf("pie", "donut")
+    if (!slices && w.series.size != 1) return false
+    val values = w.series.flatMap { it.data.map { point -> point.getOrNull(1) ?: Float.NaN } }
+    if (values.isEmpty() || values.any { !it.isFinite() || it < 0 }) return false
+    val total = values.sumOf { it.toDouble() }
+    return total > 0 && (slices || w.unit != "%" || kotlin.math.abs(total - 100) < 1e-6)
+}
