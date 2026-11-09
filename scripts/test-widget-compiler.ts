@@ -653,6 +653,31 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   const ohlcObj = validateWidget('chart', '{"type":"candlestick","series":[{"name":"BTC","data":[{"open":100,"high":115,"low":95,"close":110},{"o":110,"h":125,"l":105,"c":120}]}]}')
   check('candlestick object points {open,high,low,close} -> 4D array', ohlcObj.ok && (ohlcObj.widget.series as Array<{ data: number[][] }>)[0]?.data[0]?.length === 4)
 
+  const invalidCoordinates = [
+    {type:'scatter', values:[10,20]},
+    {type:'scatter', data:{Alpha:10,Beta:20}},
+    {type:'scatter', series:[{data:[{y:2},{y:4}]}]},
+    {type:'scatter', series:[{data:[['Alpha',2],['Beta',4]]}]},
+    {type:'bubble', series:[{data:[[1,2],[3,4]]}]},
+    {type:'bubble', series:[{data:[[1,2,-5]]}]},
+    {type:'candlestick', series:[{data:[[10,5,15,12]]}]},
+    {type:'gantt', series:[{data:[[10,2]]}]},
+    {type:'gantt', tasks:[{name:'Actual',start:0,end:2},{name:'Unknown',start:3}]},
+    {type:'correlation', series:[{data:[[0,1.1]]}]},
+    {type:'bar', series:[{data:[[0,1,2,3,4,5]]}]},
+  ]
+  for (const source of invalidCoordinates) {
+    const result=compileWidgets({reply:'```chart\n'+JSON.stringify(source)+'\n```', userPrompt:'Use my real observations'})
+    check('specialized semantics cannot acquire invented axes, dimensions, ranges or omitted records: '+source.type,
+      result.widgets===0 && result.text.includes('Original source is preserved'))
+  }
+  for (const source of [
+    {type:'scatter',series:[{data:[{x:10,y:2},{x:30,y:4}]}]},
+    {type:'bubble',series:[{data:[{x:10,y:2,size:5}]}]},
+    {type:'candlestick',series:[{data:[[1700000000,10,15,5,12]]}]},
+    {type:'gantt',tasks:[{name:'Actual',start:3,duration:2}]},
+  ]) check('actual specialized coordinates survive without schema fabrication: '+source.type,validateWidget('chart',JSON.stringify(source)).ok)
+
   const singlePie = validateWidget('chart', '{"type":"doughnut","labels":["iOS","Android","Web"],"values":[45,40,15]}')
   check('single-series doughnut preserves all 3 observations for PieChart without series expansion', singlePie.ok && singlePie.widget.type === 'donut' && (singlePie.widget.series as Array<{ data: number[][] }>).reduce((count, series) => count + series.data.length, 0) === 3)
 }
