@@ -5,6 +5,23 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun specializedChartsRequireActualSourceDimensionsAndRanges() {
+        for (json in listOf(
+            """{"type":"bubble","series":[{"data":[[1,2],[3,4]]}]}""",
+            """{"type":"bubble","series":[{"data":[[1,2,-5]]}]}""",
+            """{"type":"scatter","series":[{"data":[[2],[4]]}]}""",
+            """{"type":"candlestick","series":[{"data":[[10,5,15,12]]}]}""",
+            """{"type":"gantt","series":[{"data":[[10,2]]}]}""",
+            """{"type":"correlation","series":[{"data":[[0,1.1]]}]}"""
+        )) assertNull("Invalid source must not become invented measurements: $json", parseWidget("chart", json))
+        for (json in listOf(
+            """{"type":"scatter","series":[{"data":[[10,2],[30,4]]}]}""",
+            """{"type":"bubble","series":[{"data":[[10,2,5]]}]}""",
+            """{"type":"candlestick","series":[{"data":[[10,15,5,12]]}]}""",
+            """{"type":"gantt","series":[{"data":[[2,10]]}]}"""
+        )) assertTrue("Real specialized coordinates must survive: $json", parseWidget("chart", json) is Widget.Chart)
+    }
+
     @Test fun nativeChartSelectionKeepsDataMeaningAndEverySignedObservation() {
         val cases = listOf(
             listOf("Jan", "Feb", "Mar") to "line", listOf("2022", "2023", "2024") to "line",
