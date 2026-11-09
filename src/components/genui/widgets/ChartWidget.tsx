@@ -3,6 +3,7 @@
 /** The chart kind dispatcher: type -> the 34 chart components + Screenshot 6 Interactive Chrome. */
 import { useMemo, useState } from 'react'
 import type { ChartPayload } from '../types'
+import { pieAlternativeAllowed } from '../../../lib/nexly/chart-selection'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { AreaChartView } from '../charts/AreaChart'
 import { BarChartView } from '../charts/BarChart'
@@ -158,7 +159,8 @@ function ChartControls({ payload }: { payload: ChartPayload }) {
     { id: 'line', icon: 'chart-line', label: 'Line Chart' },
     { id: 'bar', icon: 'chart-bar', label: 'Bar Chart' },
     { id: 'area', icon: 'chart-area', label: 'Area Chart' },
-    { id: payload.type === 'donut' ? 'donut' : 'pie', icon: 'chart-pie', label: 'Pie Chart' },
+    ...(pieAlternativeAllowed(payload.type, payload.unit ?? '', payload.series ?? [])
+      ? [{ id: payload.type === 'donut' ? 'donut' as const : 'pie' as const, icon: 'chart-pie', label: 'Pie Chart' }] : []),
   ]
 
   const computedInsights =
