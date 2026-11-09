@@ -155,7 +155,8 @@ export interface CalcPayload extends StyledPayload {
   fields: Array<{
     key: string
     label: string
-    value: number
+    /** Missing/null is an unknown editable input, not an implied zero. */
+    value?: number | null
     unit?: string
     min?: number | null
     max?: number | null
