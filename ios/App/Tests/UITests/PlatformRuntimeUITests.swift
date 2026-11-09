@@ -529,6 +529,7 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Last 3 pts ▾"].waitForExistence(timeout: 10))
         app.buttons["Last 3 pts ▾"].tap()
         XCTAssertTrue(app.buttons["Last 2 pts ▾"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Lowest"].exists, "Independent observations must not acquire an invented additive total")
         let evidence = XCTAttachment(screenshot: app.screenshot())
         evidence.name = "genui-chart-real-series-selection-and-range"
         evidence.lifetime = .keepAlways
