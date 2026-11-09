@@ -590,6 +590,27 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
     return try {
         when (resolvedKind) {
             "chart" -> {
+                val source = widgetJson.parseToJsonElement(json) as? JsonObject
+                val sourceType = (source?.get("type") as? JsonPrimitive)?.contentOrNull
+                if (sourceType in setOf("scatter", "bubble", "gantt", "candlestick")) {
+                    fun sourceNumber(value: JsonElement?): Float? =
+                        (value as? JsonPrimitive)?.floatOrNull?.takeIf { it.isFinite() }
+                    val suppliedSeries = source?.get("series") as? JsonArray
+                    require(suppliedSeries != null && suppliedSeries.all { series ->
+                        val points = (series as? JsonObject)?.get("data") as? JsonArray
+                        points != null && points.all { point ->
+                            when (point) {
+                                is JsonArray -> point.size >= 2 && sourceNumber(point.firstOrNull()) != null
+                                is JsonObject -> if (sourceType == "candlestick") {
+                                    listOf("open" to "o", "high" to "h", "low" to "l", "close" to "c").all { (key, alias) ->
+                                        sourceNumber(point[key] ?: point[alias]) != null
+                                    }
+                                } else sourceNumber(point["x"]) != null
+                                else -> false
+                            }
+                        }
+                    }) { "Paired charts need supplied coordinates; ordinal indices cannot replace a missing measurement." }
+                }
                 val w = widgetJson.decodeFromString<ChartWidget>(json)
                 // Pie/donut are documented as ONE SERIES PER SLICE with a
                 // single point — requiring two points silently rejected every
