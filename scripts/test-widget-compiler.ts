@@ -967,6 +967,9 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
       chartPreference('show a ' + type + ' chart').type === type)
   }
   check('generic chart follow-up can use the actual previous observations', chart('Here are the observations.', 'show me a bar chart', trend)?.type === 'bar')
+  for (const source of ['- Jan: 1\n- Feb: unknown\n- Mar: 3', '- Jan: missing\n- Feb: missing', '- Alpha: 1_2\n- Beta: 3', '| Month | Sales |\n|---|---|\n| Jan | 10 |\n| Feb | unknown |', '- Jan: 10']) {
+    check('current incomplete observations never get replaced by stale prior data: ' + source.slice(0, 24), chart(source, 'chart this', trend) === null)
+  }
   check('a new subject does not hijack old unrelated chart data', chart('The requested population data is unavailable.', 'show a chart of Bangladesh population', trend) === null)
   const thirteen = Array.from({length: 13}, (_, index) => '- Category ' + index + ': ' + index).join('\n')
   check('recovery never truncates observations to a decorative fixed sample', chart(thirteen, 'graph this')?.labels.length === 13)
