@@ -82,7 +82,7 @@ data class CalcPreset(val label: String = "", val values: Map<String, Double> = 
 
 @Serializable
 data class CalcWidget(
-    val type: String = "loan",
+    val type: String = "calculator",
     val title: String = "",
     val fields: List<CalcField> = emptyList(),
     val outputs: List<CalcOutput> = emptyList(),
