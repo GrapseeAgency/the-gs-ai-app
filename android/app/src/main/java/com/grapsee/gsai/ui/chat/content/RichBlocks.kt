@@ -727,13 +727,13 @@ private fun StructuredBlockSequenceContent(
             renderedSpontaneousCalc = true
             val (amt, disc, yrs) = params
             OptionalResponseTool("Explore supplied inputs", normalizedBlocks) {
-            NexlyQuickCalculatorCard(
-                title = "Interactive Simulator",
-                initialAmount = amt,
-                initialDiscount = disc,
-                initialYears = yrs,
-                contextHint = fullProse
-            )
+                NexlyQuickCalculatorCard(
+                    title = "Explore supplied inputs",
+                    initialAmount = amt,
+                    initialDiscount = disc,
+                    initialYears = yrs,
+                    contextHint = fullProse
+                )
             }
         }
     }
@@ -1959,14 +1959,14 @@ internal fun chartFromProseBlocks(blocks: List<Block>): ChartWidget? {
         }
         for (item in items) {
             val match = separator.matchEntire(flattenSpans(item.spans).trim()) ?: return null
-            rows += listOf(listOf(InlineSpan.Text(match.groupValues[1].trim())), listOf(InlineSpan.Text(match.groupValues[2])))
+            rows.add(listOf(listOf(InlineSpan.TextSpan(match.groupValues[1].trim())), listOf(InlineSpan.TextSpan(match.groupValues[2]))))
         }
     }
     if (rows.size !in 3..200) return null
     val labels = rows.map { flattenSpans(it[0]).lowercase() }
     if (labels.toSet().size != labels.size) return null
     return chartFromTableBlock(Block.TableBlock(
-        headers = listOf(listOf(InlineSpan.Text("Observation")), listOf(InlineSpan.Text("Supplied observations"))),
+        headers = listOf(listOf(InlineSpan.TextSpan("Observation")), listOf(InlineSpan.TextSpan("Supplied observations"))),
         aligns = emptyList(), rows = rows, sourceStart = 0
     ))
 }
