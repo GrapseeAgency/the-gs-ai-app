@@ -396,6 +396,14 @@ func inferWidgetKind(_ raw: String) -> String? {
             candidates.append(mapped)
         }
     }
+    // A bare calculator has fields too. Prefer its actual formulas before
+    // the generic form candidate, otherwise parsing silently discards outputs.
+    let calcInputs = (obj["fields"] ?? obj["sliders"] ?? obj["inputs"] ?? obj["variables"] ?? obj["parameters"] ?? obj["params"]) as? [[String: Any]] ?? []
+    let calcResults = (obj["outputs"] ?? obj["results"] ?? obj["formulas"]) as? [[String: Any]] ?? []
+    if !calcInputs.isEmpty && (calcResults.contains { !calcOutputExpressionIOS($0).isEmpty }
+        || !str(obj, "formula", "expression", "expr").isEmpty) {
+        candidates.append("calc")
+    }
     if parseNexlyPlan(raw) != nil { candidates.append("plan") }
     if keys.contains("series") || (keys.contains("nodes") && keys.contains("links")) || keys.contains("words") || keys.contains("axes") {
         candidates.append("chart")
