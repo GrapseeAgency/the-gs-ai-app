@@ -96,6 +96,12 @@ async function main() {
     check('precedence: ' + expr, () => assert.equal(evaluateExpr(expr, {}), expected))
   }
   check('non-finite output is not fabricated zero', () => assert.equal(formatOutput(Infinity), '—'))
+  for (const format of ['money', 'currency']) {
+    check(format + ' without a supplied unit never invents dollars', () => assert.equal(formatOutput(1234.5, format), (1234.5).toLocaleString(undefined, { maximumFractionDigits: 2 })))
+    check(format + ' preserves an explicit BDT code', () => assert.equal(formatOutput(12.5, format, 'BDT'), '12.5 BDT'))
+    check(format + ' preserves an explicit taka symbol', () => assert.equal(formatOutput(12.5, format, '৳'), '৳12.5'))
+    check(format + ' preserves an explicitly supplied dollar symbol', () => assert.equal(formatOutput(12.5, format, '$'), '$12.5'))
+  }
   check('no quiz facts invented', () => {
     assert.equal(concepts.length, 3)
     conceptQuestions(concepts).forEach((q, i) => assert.equal(q.options[q.answer], concepts[i].term))
