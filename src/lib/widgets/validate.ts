@@ -945,11 +945,13 @@ export function validationErrors(result: ValidationResult): string[] {
  * Only the first used to pass, so the other three were dropped as invalid —
  * our own validator threw away correct answers.
  */
-function normalisePoints(raw: unknown[], labelHints: string[], errors: string[]): number[][] {
+function normalisePoints(raw: unknown[], labelHints: string[], errors: string[], type: string): number[][] {
+  const paired = ['scatter', 'bubble', 'gantt', 'candlestick'].includes(type)
   const out: number[][] = []
   raw.forEach((item, index) => {
     const direct = asNumber(item)
     if (direct !== null && !Array.isArray(item) && !isObj(item)) {
+      if (paired) { errors.push(`${type} needs source coordinates, not invented observation indices`); return }
       out.push([index, direct])
       return
     }
@@ -963,14 +965,14 @@ function normalisePoints(raw: unknown[], labelHints: string[], errors: string[])
       if (typeof first === 'string' && first.trim() && asNumber(first) === null) {
         labelHints.push(first.trim())
         const restNums = item.slice(1).map(asNumber).filter((n): n is number => n !== null)
-        if (restNums.length >= 2) out.push(restNums.slice(0, 5))
-        else if (restNums.length === 1) out.push([index, restNums[0]])
+        if (restNums.length >= 2) out.push(restNums)
+        else if (restNums.length === 1 && !paired) out.push([index, restNums[0]])
         return
       }
       const nums = item.map(asNumber).filter((n): n is number => n !== null)
       // Preserve 2D [x,y], 3D bubble [x,y,z], and 4D/5D candlestick [o,h,l,c].
-      if (nums.length >= 2) out.push(nums.slice(0, 5))
-      else if (nums.length === 1) out.push([index, nums[0]])
+      if (nums.length >= 2) out.push(nums)
+      else if (nums.length === 1 && !paired) out.push([index, nums[0]])
       return
     }
     if (isObj(item)) {
@@ -981,13 +983,15 @@ function normalisePoints(raw: unknown[], labelHints: string[], errors: string[])
       const h = asNumber(item.high ?? item.h)
       const l = asNumber(item.low ?? item.l)
       const c = asNumber(item.close ?? item.c)
-      if (o !== null && h !== null && l !== null && c !== null) {
+      if (type === 'candlestick' && o !== null && h !== null && l !== null && c !== null) {
         out.push([o, h, l, c])
         return
       }
       const y = asNumber(item.y ?? item.value ?? item.val ?? item.count ?? item.amount)
       if (y === null) return
-      const x = asNumber(item.x) ?? index
+      const suppliedX = asNumber(item.x)
+      if (paired && suppliedX === null) { errors.push(`${type} needs an actual numeric x/start coordinate`); return }
+      const x = suppliedX ?? index
       const z = asNumber(item.z ?? item.size ?? item.r)
       out.push(z !== null ? [x, y, z] : [x, y])
     }
@@ -1232,7 +1236,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
         const end = asNumber(o.end ?? o.to) ?? (start !== null && asNumber(o.duration) !== null ? start + (asNumber(o.duration) ?? 1) : null)
         if (start !== null && end !== null) {
           taskSeries.push({ name, data: [[start, end]] })
-        }
+        } else errors.push('Gantt task has missing or invalid start/end coordinates; source tasks were not silently discarded')
       }
       if (taskSeries.length > 0) {
         rawSeries = taskSeries
@@ -1264,7 +1268,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
           rawSeries = [{ name: asString(p.name, 'Value'), data: flat }]
         }
         repaired = true
-      } else if (isObj(p.data)) {
+      } else if (isObj(p.data) && !['scatter', 'bubble', 'gantt', 'candlestick'].includes(type)) {
         // Object map: {"type":"bar","data":{"Q1":120,"Q2":180}}
         const entries = Object.entries(p.data)
           .map(([k, v]) => [k, asNumber(v)] as const)
@@ -1289,7 +1293,7 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
         const row = isObj(s) ? s : {}
         const rawPoints = asArray(row.data).length > 0 ? asArray(row.data) : asArray(row.values).length > 0 ? asArray(row.values) : asArray(row.points)
         if (rawPoints.length > LIMITS.maxPointsPerSeries) errors.push(`chart series exceeds ${LIMITS.maxPointsPerSeries} points; data was not silently truncated`)
-        const data = normalisePoints(rawPoints, labelHints, errors)
+        const data = normalisePoints(rawPoints, labelHints, errors, type)
         if (data.length !== rawPoints.length) errors.push('chart contains missing or invalid observations; points were not silently discarded')
         return { name: asString(row.name ?? row.label ?? row.title ?? row.id, 'Series'), data }
       })
@@ -1302,6 +1306,17 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
     // single source series to maxChartSeries slices discarded the remainder.
 
     if (series.length === 0) errors.push('chart needs at least one series with enough points')
+    for (const point of series.flatMap(item => item.data)) {
+      const dimensions = type === 'bubble' ? [3] : type === 'candlestick' ? [4, 5] : [2]
+      if (!dimensions.includes(point.length)) errors.push(`${type} needs ${dimensions.join(' or ')} actual coordinates per observation; dimensions were not invented or discarded`)
+      if (type === 'bubble' && point[2] < 0) errors.push('Bubble size must be a real nonnegative source measure')
+      if (type === 'gantt' && point[1] < point[0]) errors.push('Gantt end must not precede its actual start')
+      if (type === 'correlation' && Math.abs(point[1]) > 1) errors.push('Correlation must be within -1 and 1')
+      if (type === 'candlestick' && [4, 5].includes(point.length)) {
+        const [open, high, low, close] = point.slice(-4)
+        if (high < Math.max(open, close) || low > Math.min(open, close) || low > high) errors.push('Candlestick high/low must contain the actual open and close')
+      }
+    }
     if (pieLike) {
       const observations = series.flatMap(item => item.data)
       const total = observations.reduce((sum, point) => sum + point[1], 0)
