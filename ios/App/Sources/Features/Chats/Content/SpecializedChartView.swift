@@ -82,7 +82,7 @@ struct SpecializedChartViewIOS: View {
                     ForEach(points) { point in
                         Text("\(point.series) · \(point.label)").tag(Optional(point.id))
                     }
-                }.pickerStyle(.menu)
+                }.pickerStyle(.menu).accessibilityIdentifier("chart.observation.picker")
                 if let point = points.first(where: { $0.id == selected }) {
                     Text(observationText(point)).font(.caption.monospacedDigit()).textSelection(.enabled)
                 }
@@ -107,6 +107,7 @@ struct SpecializedChartViewIOS: View {
         }
         .chartLegend(position: .bottom)
         .accessibilityLabel("\(type) chart, \(points.count) supplied observations")
+        .accessibilityIdentifier("chart.native.\(type)")
     }
 
     @ChartContentBuilder
