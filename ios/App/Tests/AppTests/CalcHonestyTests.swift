@@ -18,7 +18,7 @@ final class CalcHonestyTests: XCTestCase {
         XCTAssertEqual(chartJsonFromProseIOS(parseBlocks(source)), json, "Disclosure identity must be deterministic")
         let trend = try XCTUnwrap(chartJsonFromProseIOS(parseBlocks("- Jan: -2\n- Feb: 0\n- Mar: 2026")))
         XCTAssertTrue(trend.contains("\"line\""))
-        for ambiguous in ["- A: 1\n- B: unknown\n- C: 3", "- A: $1\n- B: 2%\n- C: $3", "- A: 1\n- A: 2\n- C: 3", "- A: 1\n- B: 2 kg\n- C: 3", "- A: 1\n- B: 2"] {
+        for ambiguous in ["- [x] Done: 1\n- A: 2\n- B: 3\n- C: 4", "- A: 1\n- B: unknown\n- C: 3", "- A: $1\n- B: 2%\n- C: $3", "- A: 1\n- A: 2\n- C: 3", "- A: 1\n- B: 2 kg\n- C: 3", "- A: 1\n- B: 2"] {
             XCTAssertNil(chartJsonFromProseIOS(parseBlocks(ambiguous)), ambiguous)
         }
     }
