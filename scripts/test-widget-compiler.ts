@@ -4,6 +4,7 @@
  *     --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck
  *   node /tmp/wt/scripts/test-widget-compiler.js
  */
+import { chartPreference, categoricalChartType, pieAlternativeAllowed } from '../src/lib/nexly/chart-selection'
 import { compileWidgets } from '../src/lib/widgets/compile'
 import { validateWidget, extractWidgetFences, repairJson, validationErrors, inferWidgetKind } from '../src/lib/widgets/validate'
 import { toolCallToFence } from '../src/lib/widgets/tools'
@@ -82,11 +83,11 @@ function check(name: string, condition: boolean, detail = '') {
   check('pie one-point slices accepted', v.ok, validationErrors(v).join(','))
 }
 
-// 7. Unknown chart type is repaired to bar, not dropped.
+// 7. Unknown semantics must not impersonate a different visualization.
 {
   const payload = { type: 'sankeyish', labels: ['a', 'b'], series: [{ name: 'v', data: [[0, 1], [1, 2]] }] }
   const v = validateWidget('chart', JSON.stringify(payload))
-  check('unknown chart type → bar', v.ok && v.widget.type === 'bar' && v.repaired, v.ok ? String(v.widget.type) : validationErrors(v).join(','))
+  check('unknown chart type preserves source instead of inventing a bar', !v.ok && validationErrors(v).some(error => error.includes('Unsupported chart type')))
 }
 
 // 8. Capacity is enforced without silently discarding source columns.
@@ -930,6 +931,50 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   const fullActual = fullFence ? JSON.parse(fullFence.json) : {}
   check('actual compiler does not truncate later supplied input fields', fullActual.fields?.length === 13 && fullActual.fields?.[11]?.value === 12)
   check('actual compiler does not truncate sixth choice or seventh output', fullActual.fields?.[12]?.choices?.length === 6 && fullActual.outputs?.length === 7)
+}
+
+
+// Vary wording, source schemas and data meaning rather than one screenshot prompt.
+{
+  function chart(reply: string, userPrompt: string, priorText = ''): Record<string, any> | null {
+    const result = compileWidgets({ reply, userPrompt, priorText })
+    const fence = extractWidgetFences(result.text).find(item => item.kind === 'chart')
+    return fence ? JSON.parse(fence.json) : null
+  }
+  const trend = '- Q1: 10\n- Q2: 20\n- Q3: 30'
+  for (const prompt of ['show me a chart', 'graph these observations', 'plot it', 'visualize this', 'Explain what changed']) {
+    check('real trend chooses a line without requiring one magic prompt: ' + prompt, chart(trend, prompt)?.type === 'line')
+  }
+  check('chronological year labels are observations rather than discarded headings', chart('- 2022: 10\n- 2023: 20\n- 2024: 30', 'show the pattern')?.type === 'line')
+  check('table observations use the same actual time meaning', chart('| Month | Sales |\n|---|---|\n| Jan | $10 |\n| Feb | $20 |\n| Mar | $30 |', 'chart this')?.unit === '$')
+  check('generic categorical chart remains a comparison, not a fake trend', chart('- Alpha: 10\n- Beta: 20', 'show a graph')?.type === 'bar')
+  check('native-sized long category labels choose a readable orientation', chart('- A supplied category with a long name: 10\n- Another supplied category: 20', 'graph these')?.type === 'hbar')
+  check('unordered dates are not silently sorted into a trend', chart('- Q3: 30\n- Q1: 10\n- Q2: 20', 'graph these')?.type === 'bar')
+  for (const prompt of ['no charts please', 'plain text only', 'avoid graphs', 'do not add a chart', 'only a table']) {
+    check('presentation preference survives data availability: ' + prompt, chart(trend, prompt) === null)
+  }
+  check('a small ordinary numeric answer is not forced into a dashboard', chart('- Alpha: 10\n- Beta: 20', 'Explain this briefly') === null)
+  check('mixed dimensions never become one numerical series', chart('- Mass: 10 kg\n- Cost: $20', 'chart these') === null)
+  check('matching physical units remain attached to actual observations', chart('- Parcel A: 10 kg\n- Parcel B: 20 kg', 'chart these')?.unit === 'kg')
+  for (const source of ['- Jan: 1\n- Feb: unknown\n- Mar: 3', '- Alpha: 1*2\n- Beta: 3', '- Alpha: 1_2\n- Beta: 3', '- Alpha: 10-20\n- Beta: 3', '```text\n- Alpha: 10\n- Beta: 20\n```']) {
+    check('invalid, partial or fenced source cannot become invented chart data: ' + source.slice(0, 24), chart(source, 'chart this') === null)
+  }
+  for (const type of ['scatter', 'bubble', 'sankey', 'network', 'candlestick', 'boxplot', 'heatmap', 'histogram']) {
+    check('specialized request never borrows an unrelated scalar bar schema: ' + type, chart(trend, 'show a ' + type + ' chart') === null)
+  }
+  for (const type of CHART_TYPES) {
+    check('every catalogue type remains explicitly selectable, not a four-type rotation: ' + type,
+      chartPreference('show a ' + type + ' chart').type === type)
+  }
+  check('generic chart follow-up can use the actual previous observations', chart('Here are the observations.', 'show me a bar chart', trend)?.type === 'bar')
+  check('a new subject does not hijack old unrelated chart data', chart('The requested population data is unavailable.', 'show a chart of Bangladesh population', trend) === null)
+  const thirteen = Array.from({length: 13}, (_, index) => '- Category ' + index + ': ' + index).join('\n')
+  check('recovery never truncates observations to a decorative fixed sample', chart(thirteen, 'graph this')?.labels.length === 13)
+  check('signed data cannot acquire a misleading pie switch', !pieAlternativeAllowed('line', '%', [{data:[[0,-2],[1,3]]}]))
+  check('independent series cannot disappear into a pie switch', !pieAlternativeAllowed('line', '', [{data:[[0,2]]},{data:[[0,3]]}]))
+  check('unrelated growth rates do not become parts of a whole', !pieAlternativeAllowed('line', '%', [{data:[[0,2],[1,3]]}]))
+  check('genuine percentage composition can expose a pie alternative', pieAlternativeAllowed('bar', '%', [{data:[[0,40],[1,60]]}]))
+  check('invalid calendar dates are not time coordinates', categoricalChartType(['2024-02-31','2024-03-01']) === 'bar')
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`)
