@@ -441,6 +441,8 @@ jobs:
               ('CalcHonestyTests', 'testNativeFencesPreserveEverySourceSeparatorAndBlankLine'),
               ('CalcHonestyTests', 'testNativeStreamingMatchesFullParseAtEveryFencePrefix'),
               ('PlatformRuntimeUITests', 'testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie'),
+              ('PlatformRuntimeUITests', 'testGeneratedScatterUsesActualPairedAxesAndNativeObservationInspection'),
+              ('CalcHonestyTests', 'testNativeChartSelectionFollowsActualCoordinatesAndPreservesSpecializedSemantics'),
               ('CalcHonestyTests', 'testGeneratedHtmlExecutesAndCleansDynamicEmojiInProductionWebView'),
               ('CalcHonestyTests', 'testSignedChartDomainPreservesZeroNegativeAndAllObservations'),
               ('PlatformRuntimeUITests', 'testBackgroundNoticeIsDeliveredAndDisabledKindsAreNot'),
