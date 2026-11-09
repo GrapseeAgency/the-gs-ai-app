@@ -29,6 +29,7 @@ import {
 import { extractBareWidget, extractWidgetFences, inferWidgetKind, validateWidget, validationErrors } from './validate'
 import { directWidgetArt, type ArtDirection } from './art-direct'
 import { sanitizeReplyEmojis } from '../nexly/icons'
+import { plainTableCell } from '../nexly/table-number'
 import { chartPreference, categoricalChartType, chronologicalLabels, supportsCategoryRecovery } from '../nexly/chart-selection'
 
 export interface CompileInput {
@@ -148,7 +149,7 @@ export function compileWidgets(input: CompileInput): CompileResult {
   const preference = chartPreference(userPrompt)
   if (preference.suppressed) return { text: reply, widgets: 0, path: 'none', errors }
   const fromReply = extractPoints(reply)
-  const usePrior = preference.requested && /\b(?:this|that|these|those|above|previous|same|it)\b|^(?:please\s+)?(?:show|draw|make|create|render|plot)\s+(?:me\s+)?(?:a\s+)?(?:chart|graph|plot)[.!?]?$/i.test(userPrompt.trim())
+  const usePrior = preference.requested && /\b(?:this|that|these|those|above|previous|same|it)\b|^(?:please\s+)?(?:show|draw|make|create|render|plot)\s+(?:me\s+)?(?:a\s+)?(?:(?:bar|line|pie|area|donut)\s+)?(?:chart|graph|plot)[.!?]?$/i.test(userPrompt.trim())
   const points = fromReply.length >= 2 ? fromReply : usePrior ? extractPoints(priorText) : []
   if (points.length < 2 || new Set(points.map(point => point.unit)).size !== 1) {
     return { text: reply, widgets: 0, path: 'none', errors }
@@ -286,15 +287,26 @@ function extractPoints(text: string): Point[] {
       }
     }
 
-    const body = clean(line.replace(BULLET, ''))
+    if (line.startsWith('|')) {
+      const cells = line.replace(/^\||\|$/g, '').split('|').map(plainTableCell)
+      if (cells.length !== 2 || cells.some(cell => cell.includes('\\'))) continue
+      const num = parseNumber(cells[1])
+      if (num) rows.push({ section, label: cells[0], point: { label: cells[0], ...num } })
+      else if (/^(?:n\/a|unknown|missing|not recorded|not available|—|-)$/i.test(cells[1]) || /^[~$€£¥₹৳+-]?\d/.test(cells[1])) return []
+      continue
+    }
+    const body = line.replace(BULLET, '').trim()
     const sep = SEPARATOR.exec(body)
     if (!sep || sep.index === undefined) continue
-    const label = body.slice(0, sep.index).trim()
+    const label = plainTableCell(body.slice(0, sep.index))
     if (label.length < 2 || label.length > 60 || !/[\p{L}\p{N}]/u.test(label)) continue
     if (label.includes('http')) continue
-    const rest = body.slice(sep.index + sep[0].length).trim()
+    const rest = plainTableCell(body.slice(sep.index + sep[0].length))
     const num = parseNumber(rest)
-    if (!num) continue
+    if (!num) {
+      if (/^(?:n\/a|unknown|missing|not recorded|not available|—|-)$/i.test(rest) || /^[~$€£¥₹৳+-]?\d/.test(rest)) return []
+      continue
+    }
     rows.push({ section, label, point: { label, ...num } })
   }
 
