@@ -27,9 +27,8 @@ import kotlinx.serialization.encodeToString
  * HONESTY RULES (non-negotiable)
  * ------------------------------
  *  - never invent a number for a data visual: every value is parsed from text
- *    already shown. The one exception is the explicit SAMPLE chart drawn when
- *    the user asked for a chart and the conversation holds no data at all —
- *    its title says SAMPLE and its series is called "Sample";
+ *    already shown. Missing data never authorises a sample chart, range
+ *    midpoints or a different chart schema;
  *  - never hide that this was reconstructed — titles say "from the answer
  *    above";
  *  - bail out silently when there is not enough data, rather than drawing an
@@ -48,7 +47,7 @@ internal sealed interface VisualAsk {
 
 internal object WidgetRecovery {
 
-    private const val MAX_POINTS = 8
+    private const val MAX_POINTS = 200
     private const val MAX_GALLERY = 12
 
     /**
@@ -63,7 +62,8 @@ internal object WidgetRecovery {
         val label: String,
         val value: Float,
         val display: String,
-        val percent: Boolean = false
+        val percent: Boolean = false,
+        val unit: String = ""
     )
 
     private data class Raw(
@@ -71,7 +71,8 @@ internal object WidgetRecovery {
         val label: String,
         val value: Float,
         val display: String,
-        val percent: Boolean
+        val percent: Boolean,
+        val unit: String
     )
 
     // Order matters: the most specific phrase wins ("horizontal bar" before
@@ -93,11 +94,11 @@ internal object WidgetRecovery {
         "funnel" to "funnel",
         "waterfall" to "waterfall",
         "treemap" to "treemap",
-        "histogram" to "bar",
-        "chart" to "bar",
-        "graph" to "bar",
-        "plot" to "bar",
-        "visuali" to "bar"
+        "histogram" to "histogram",
+        "chart" to "auto",
+        "graph" to "auto",
+        "plot" to "auto",
+        "visuali" to "auto"
     )
 
     private val headingLine = Regex("""^#{1,6}\s+(.+)$""")
@@ -111,10 +112,7 @@ internal object WidgetRecovery {
      * Group 1 = low, 2 = optional high (a range), 3 = unit.
      */
     private val numberAtStart = Regex(
-        """^~?\s*(?:about\s+|approx\.?\s+|around\s+|over\s+|under\s+|more than\s+|less than\s+)?""" +
-            """(?:[A-Z]{3}\s*)?[$€£¥₹]?\s*(-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?)""" +
-            """(?:\s*[-–]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?))?""" +
-            """\s*(%|percent|trillion|billion|million|thousand|tn|bn|mn|k|m|b|t)?""",
+        """^\s*(?:([A-Z]{3}|[$€£¥₹৳])\s*)?(-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:e[+-]?\d+)?)\s*(trillion|billion|million|thousand|tn|bn|mn|[kmbt](?![a-z]))?\s*(%|percent|[a-z°][a-z0-9/°^]{0,15})?\s*$""",
         RegexOption.IGNORE_CASE
     )
 
@@ -178,8 +176,14 @@ internal object WidgetRecovery {
         ) {
             return null
         }
-        chartTypes.firstOrNull { p.contains(it.first) }?.let { return VisualAsk.Chart(it.second) }
-        if (p.contains("table") || p.contains("spreadsheet")) return VisualAsk.Table
+        if (Regex("""\b(?:no|without|avoid|skip)\s+(?:any\s+)?(?:charts?|graphs?|plots?)\b|\b(?:don['’]t|do not|never)\s+(?:add|use|include|draw|render|show|make)?\s*(?:a\s+)?(?:charts?|graphs?|plots?)\b|\b(?:plain text|text only|prose only|only prose|just text|only (?:a )?table)\b""").containsMatchIn(p)) return null
+        // Preserve all named catalogue types; scalar recovery below refuses
+        // types whose required axes/edges/samples are not actually present.
+        val specific = chartTypes.firstOrNull { it.second != "auto" && p.contains(it.first) }
+        if (specific != null) return VisualAsk.Chart(specific.second)
+        CHART_TYPES.firstOrNull { Regex("""\b${Regex.escape(it.lowercase())}\b""").containsMatchIn(p) }?.let { return VisualAsk.Chart(it) }
+        if (Regex("""\b(?:charts?|graphs?|plots?|visuali[sz]e|visuali[sz]ation)\b""").containsMatchIn(p)) return VisualAsk.Chart("auto")
+        if (Regex("""\b(?:table|spreadsheet)\b""").containsMatchIn(p)) return VisualAsk.Table
         if (p.contains("timeline") || p.contains("roadmap") || p.contains("milestone") ||
             p.contains("history of") || p.contains("chronolog")
         ) {
@@ -193,7 +197,7 @@ internal object WidgetRecovery {
         ) {
             return VisualAsk.Gallery
         }
-        if (p.contains("stat") || p.contains("kpi") || p.contains("metric") ||
+        if (Regex("""\b(?:stats?|kpis?|metrics?)\b""").containsMatchIn(p) ||
             p.contains("key numbers") || p.contains("at a glance")
         ) {
             return VisualAsk.Stat
@@ -218,17 +222,18 @@ internal object WidgetRecovery {
             VisualAsk.Timeline -> timelineBlock(reply, prior)
             else -> {
                 val fromReply = extract(reply)
-                val chosen = if (fromReply.points.size >= 2) fromReply else extract(prior)
-                if (chosen.points.size < 2) {
-                    // No data anywhere. Asking for a chart and getting "I can't
-                    // draw" is the exact failure this layer exists for, so show
-                    // a SAMPLE — unmistakably labelled, never passed off as the
-                    // user's data. Other kinds stay silent: a sample form or map
-                    // would be noise, not a demonstration.
-                    return if (ask is VisualAsk.Chart) sampleChart(ask.type) else null
-                }
+                val usePrior = Regex("""\b(?:this|that|these|those|above|previous|same|it)\b|^(?:please\s+)?(?:show|draw|make|create|render|plot)\s+(?:me\s+)?(?:a\s+)?(?:(?:bar|line|pie|area|donut)\s+)?(?:chart|graph|plot)[.!?]?$""", RegexOption.IGNORE_CASE).containsMatchIn(prompt.trim())
+                val chosen = if (fromReply.points.size >= 2) fromReply else if (usePrior) extract(prior) else Extracted(emptyList(), "Value")
+                if (chosen.points.size < 2) return null
                 when (ask) {
-                    is VisualAsk.Chart -> chartBlock(chosen.points, ask.type, chosen.seriesName)
+                    is VisualAsk.Chart -> {
+                        val type = if (ask.type == "auto") categoricalChartType(chosen.points.map { it.label }) else ask.type
+                        val values = chosen.points.map { it.value }
+                        if (type !in setOf("line", "area", "bar", "hbar", "pie", "donut", "radar", "funnel") ||
+                            chosen.points.map { it.unit }.toSet().size != 1 ||
+                            (type in setOf("pie", "donut", "radar", "funnel") && (values.any { it < 0 } || values.none { it > 0 }))) null
+                        else chartBlock(chosen.points, type, chosen.seriesName)
+                    }
                     VisualAsk.Table -> tableBlock(chosen.points)
                     VisualAsk.Stat -> statBlock(chosen.points, chosen.seriesName)
                     VisualAsk.Progress -> progressBlock(chosen.points, chosen.seriesName)
@@ -281,13 +286,14 @@ internal object WidgetRecovery {
         val points = if (useSection) {
             rows.filter {
                 it.label.equals(dominant!!.key, ignoreCase = true) && it.section.isNotBlank()
-            }.map { Point(it.section, it.value, it.display, it.percent) }
+            }.map { Point(it.section, it.value, it.display, it.percent, it.unit) }
         } else {
-            rows.map { Point(it.label, it.value, it.display, it.percent) }
+            rows.map { Point(it.label, it.value, it.display, it.percent, it.unit) }
         }
 
         val seen = HashSet<String>()
-        val unique = points.filter { seen.add(it.label.lowercase()) }.take(MAX_POINTS)
+        val unique = points.filter { seen.add(it.label.lowercase()) }
+        if (unique.size != points.size || unique.size > MAX_POINTS) return Extracted(emptyList(), "Value")
         val name = if (useSection) dominant!!.key.replaceFirstChar { it.uppercase() } else "Value"
         return Extracted(unique, name)
     }
@@ -296,16 +302,24 @@ internal object WidgetRecovery {
         if (text.isBlank()) return emptyList()
         val rows = ArrayList<Raw>()
         var section = ""
+        var fence: String? = null
         for (rawLine in text.lineSequence()) {
             val line = rawLine.trim()
-            if (line.isEmpty() || line.startsWith("```")) continue
+            val marker = Regex("""^(`{3,}|~{3,})""").find(line)?.value
+            if (marker != null) {
+                val open = fence
+                if (open == null) fence = marker
+                else if (marker.first() == open.first() && marker.length >= open.length) fence = null
+                continue
+            }
+            if (line.isEmpty() || fence != null) continue
             val heading = headingOf(line)
             if (heading != null) {
                 section = heading
                 continue
             }
             parseLine(line, section)?.let { rows += it }
-            if (rows.size >= 40) break
+            if (rows.size > MAX_POINTS) return emptyList()
         }
         return rows
     }
@@ -330,10 +344,10 @@ internal object WidgetRecovery {
             if (cells.size < 2) return null
             if (cells.all { it.isEmpty() || it.all { c -> c == '-' || c == ':' || c == ' ' } }) return null
             val label = cleanLabel(cells[0])
-            if (!hasLetter(label) || label.length < 2) return null
+            if (!label.any { it.isLetterOrDigit() } || label.length < 2) return null
             for (cell in cells.drop(1)) {
                 val v = parseNumber(cell) ?: continue
-                return Raw(section, label, v.first, v.second, v.third)
+                return Raw(section, label, v.first, v.second, v.third, v.unit)
             }
             return null
         }
@@ -341,31 +355,33 @@ internal object WidgetRecovery {
         val body = cleanLabel(line.replace(bulletPrefix, ""))
         val m = separator.find(body) ?: return null
         val label = body.substring(0, m.range.first).trim()
-        if (label.length !in 2..60 || !hasLetter(label)) return null
+        if (label.length !in 2..60 || !label.any { it.isLetterOrDigit() }) return null
         if (label.endsWith("?") || label.endsWith("!") || label.contains("http")) return null
         val rest = body.substring(m.range.last + 1).trim()
         val v = parseNumber(rest) ?: return null
-        return Raw(section, label, v.first, v.second, v.third)
+        return Raw(section, label, v.first, v.second, v.third, v.unit)
     }
 
-    /** Returns (normalised value, human display, isPercent) or null. */
-    private fun parseNumber(text: String): Triple<Float, String, Boolean>? {
-        val m = numberAtStart.find(text.trim()) ?: return null
-        val low = m.groupValues[1].replace(",", "").toFloatOrNull() ?: return null
-        val high = m.groupValues[2].replace(",", "").toFloatOrNull()
-        val raw = if (high != null) (low + high) / 2f else low
-        val unit = m.groupValues[3].lowercase()
+    private data class ParsedNumber(val first: Float, val second: String, val third: Boolean, val unit: String)
 
-        val factor = when (unit) {
+    private fun parseNumber(text: String): ParsedNumber? {
+        val m = numberAtStart.matchEntire(text.trim()) ?: return null
+        val scale = m.groupValues[3].lowercase()
+        val factor = when (scale) {
             "trillion", "tn", "t" -> 1e12f
             "billion", "bn", "b" -> 1e9f
             "million", "mn", "m" -> 1e6f
             "thousand", "k" -> 1e3f
             else -> 1f
         }
-        val value = raw * factor
+        val value = (m.groupValues[2].replace(",", "").toFloatOrNull() ?: return null) * factor
         if (!value.isFinite()) return null
-        return Triple(value, display(raw, unit), unit == "%" || unit == "percent")
+        val currencies = mapOf("USD" to "$", "EUR" to "€", "GBP" to "£", "JPY" to "¥", "INR" to "₹", "BDT" to "৳")
+        val prefix = m.groupValues[1].let { currencies[it] ?: it }
+        val suffix = m.groupValues[4].let { if (it.equals("percent", true)) "%" else currencies[it] ?: it }
+        if (prefix.isNotEmpty() && suffix.isNotEmpty() && prefix != suffix) return null
+        val unit = prefix.ifEmpty { suffix }
+        return ParsedNumber(value, text.trim(), unit == "%", unit)
     }
 
     private fun display(raw: Float, unit: String): String {
@@ -432,36 +448,6 @@ internal object WidgetRecovery {
     // Block construction
     // -----------------------------------------------------------------------
 
-    /**
-     * The no-data case. The user asked for a chart and the answer contains
-     * nothing to chart. The title says SAMPLE and the series is called
-     * "Sample" — this is a renderer demonstration, never a claim about the
-     * user's data.
-     */
-    private fun sampleChart(type: String): Block.WidgetBlock {
-        val labels = listOf("Item 1", "Item 2", "Item 3", "Item 4")
-        val values = listOf(42f, 68f, 55f, 81f)
-        val series = if (type == "pie" || type == "donut") {
-            labels.zip(values).map { (label, value) ->
-                ChartSeries(name = label, data = listOf(listOf(0f, value)))
-            }
-        } else {
-            listOf(
-                ChartSeries(
-                    name = "Sample",
-                    data = values.mapIndexed { i, v -> listOf(i.toFloat(), v) }
-                )
-            )
-        }
-        val widget = ChartWidget(
-            type = type,
-            title = "Sample chart — no data in this conversation",
-            labels = labels,
-            series = series
-        )
-        return widgetBlock("chart", widgetJson.encodeToString(widget))
-    }
-
     private fun chartBlock(points: List<Point>, type: String, seriesName: String): Block.WidgetBlock {
         val title = if (seriesName == "Value") {
             "From the numbers in this answer"
@@ -481,6 +467,7 @@ internal object WidgetRecovery {
         }
         val widget = ChartWidget(
             type = type,
+            unit = points.first().unit,
             title = title,
             labels = points.map { it.label },
             series = series
