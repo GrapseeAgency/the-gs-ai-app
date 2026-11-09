@@ -217,9 +217,12 @@ internal object WidgetRecovery {
         // "Item 1…4" sample drawn underneath it.
         if (hasWidgetFence(reply)) return null
         val ask = askOf(prompt) ?: return null
+        // A new topic must not inherit the last answer's photos or dates.
+        val refersToPrior = Regex("""\b(?:this|that|these|those|above|previous|same|it)\b|^(?:please\s+)?(?:show|make|create|render)\s+(?:me\s+)?(?:a\s+)?(?:gallery|timeline)[.!?]?$""", RegexOption.IGNORE_CASE).containsMatchIn(prompt.trim())
+        val contextualPrior = if (refersToPrior) prior else ""
         return when (ask) {
-            VisualAsk.Gallery -> galleryBlock(reply, prior)
-            VisualAsk.Timeline -> timelineBlock(reply, prior)
+            VisualAsk.Gallery -> galleryBlock(reply, contextualPrior)
+            VisualAsk.Timeline -> timelineBlock(reply, contextualPrior)
             else -> {
                 val fromReply = extract(reply)
                 val usePrior = Regex("""\b(?:this|that|these|those|above|previous|same|it)\b|^(?:please\s+)?(?:show|draw|make|create|render|plot)\s+(?:me\s+)?(?:a\s+)?(?:(?:bar|line|pie|area|donut)\s+)?(?:chart|graph|plot)[.!?]?$""", RegexOption.IGNORE_CASE).containsMatchIn(prompt.trim())
@@ -442,11 +445,9 @@ internal object WidgetRecovery {
     }
 
     private fun galleryBlock(reply: String, prior: String): Block.WidgetBlock? {
-        val urls = LinkedHashSet<String>()
-        for (text in listOf(reply, prior)) {
-            imageUrl.findAll(text).forEach { urls += it.value.trimEnd('.', ',', ')') }
-            if (urls.size >= MAX_GALLERY) break
-        }
+        val currentUrls = imageUrl.findAll(reply).map { it.value.trimEnd('.', ',', ')') }.toList()
+        val urls = if (currentUrls.isNotEmpty()) currentUrls.distinct()
+            else imageUrl.findAll(prior).map { it.value.trimEnd('.', ',', ')') }.distinct().toList()
         if (urls.isEmpty()) return null
         val widget = CarouselWidget(
             title = "Images from the answer above",

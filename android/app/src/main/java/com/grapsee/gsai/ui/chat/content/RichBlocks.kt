@@ -722,36 +722,31 @@ private fun StructuredBlockSequenceContent(
                 }
             }.joinToString(" ")
         }
-        val hasCalcSignal = remember(fullProse) {
-            val low = fullProse.lowercase()
-            val hasCurrency = fullProse.contains('$') || fullProse.contains('€') || fullProse.contains('£')
-            val hasPct = fullProse.contains('%') || "percent" in low
-            val hasNumber = Regex("\\b\\d{2,}\\b").containsMatchIn(fullProse)
-            val isFinOrMath = ((hasCurrency || hasNumber) && hasPct && ("discount" in low || "tax" in low || "tip" in low || "interest" in low || "margin" in low || "roi" in low || "price" in low || "cost" in low || "save" in low || "loan" in low || "mortgage" in low || "compound" in low || "invest" in low || "budget" in low || "salary" in low)) ||
-                (hasNumber && ("mortgage" in low || "amortiz" in low || "compound interest" in low || ("loan" in low && ("apr" in low || "monthly" in low)) || ("budget" in low && "50/30/20" in low) || ("calorie" in low && "protein" in low) || "tdee" in low || ("macro" in low && "protein" in low)))
-            isFinOrMath
-        }
         val params = remember(fullProse) { extractQuickCalcParams(fullProse) }
-        if (hasCalcSignal && params != null) {
+        if (params != null) {
             renderedSpontaneousCalc = true
             val (amt, disc, yrs) = params
-            NexlyQuickCalculatorCard(
-                title = "Interactive Simulator",
-                initialAmount = amt,
-                initialDiscount = disc,
-                initialYears = yrs,
-                contextHint = fullProse
-            )
+            OptionalResponseTool("Explore supplied inputs", normalizedBlocks) {
+                NexlyQuickCalculatorCard(
+                    title = "Explore supplied inputs",
+                    initialAmount = amt,
+                    initialDiscount = disc,
+                    initialYears = yrs,
+                    contextHint = fullProse
+                )
+            }
         }
     }
 
     // Spontaneous Interactive Quantitative Explorer when prose lists 3+ numeric items without a chart or table
     var renderedQuantitativeExplorer = false
     if (!isStreaming && normalizedBlocks.none { it is Block.TableBlock || (it is Block.WidgetBlock && it.kind in setOf("chart", "table", "stat", "progress", "gauge")) }) {
-        val extractedMetrics = remember(normalizedBlocks) { extractSpontaneousMetricsFromBlocks(normalizedBlocks) }
-        if (extractedMetrics.size >= 3) {
+        val chart = remember(normalizedBlocks) { chartFromProseBlocks(normalizedBlocks) }
+        if (chart != null) {
             renderedQuantitativeExplorer = true
-            NexlyQuantitativeExplorerCard(items = extractedMetrics)
+            OptionalResponseTool("Explore supplied observations", normalizedBlocks) {
+                WidgetView(Widget.Chart(chart))
+            }
         }
     }
 
@@ -761,7 +756,9 @@ private fun StructuredBlockSequenceContent(
     ) {
         val extractedConcepts = remember(normalizedBlocks) { extractSpontaneousConceptsFromBlocks(normalizedBlocks) }
         if (extractedConcepts.size >= 3) {
-            NexlyInteractiveConceptDeckCard(concepts = extractedConcepts)
+            OptionalResponseTool("Practice concepts from this answer", normalizedBlocks) {
+                NexlyInteractiveConceptDeckCard(concepts = extractedConcepts)
+            }
         }
     }
 
@@ -1938,219 +1935,40 @@ sourceScenarioNumberText(seedRate)
     }
 }
 
-private data class SpontaneousMetricItem(
-    val label: String,
-    val value: Double,
-    val unit: String,
-    val icon: String,
-    val tone: String
-)
-
-private fun extractSpontaneousMetricsFromBlocks(blocks: List<Block>): List<SpontaneousMetricItem> {
-    val items = mutableListOf<SpontaneousMetricItem>()
-    val itemRegex = Regex("""^([A-Za-z][A-Za-z0-9\s/+.#&-]{1,28})\s*(?:—|–|-|:)\s*([$€£¥])?\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmMbB%])?\s*$""")
-    blocks.forEach { b ->
-        val rawItems = when (b) {
-            is Block.BulletList -> if (b.items.all { it.checked == null }) b.items else emptyList()
-            is Block.OrderedList -> b.items
-            else -> emptyList()
-        }
-        rawItems.forEach { li ->
-            val plain = NexlyIcons.cleanPlainText(plainTextOfSpans(li.spans))
-            val m = itemRegex.find(plain)
-            if (m != null) {
-                val label = m.groupValues[1].trim()
-                val curr = m.groupValues[2]
-                val num = m.groupValues[3].replace(",", "").toDoubleOrNull()
-                val suf = m.groupValues[4]
-                if (num != null && num > 0.0 && num !in 1990.0..2035.0) {
-                    val mult = when (suf.lowercase()) {
-                        "k" -> 1_000.0
-                        "m" -> 1_000_000.0
-                        "b" -> 1_000_000_000.0
-                        else -> 1.0
-                    }
-                    val unit = if (curr.isNotEmpty()) curr else if (suf == "%") "%" else ""
-                    val (icon, tone) = NexlyIcons.semanticIconFor(label, "chart-bar")
-                    items += SpontaneousMetricItem(label, num * mult, unit, icon, tone)
-                }
-            }
-        }
+@Composable
+private fun OptionalResponseTool(label: String, source: Any, content: @Composable () -> Unit) {
+    var expanded by remember(source) { mutableStateOf(false) }
+    TextButton(onClick = { expanded = !expanded }) {
+        Text(if (expanded) "Hide · $label" else label)
     }
-    // Mixed units and percentages are not additive parts of a whole.
-    if (items.map { it.unit }.distinct().size != 1 || items.any { it.unit !in setOf("$", "€", "£", "¥") }) return emptyList()
-    return items.distinctBy { it.label.lowercase() }.take(8)
+    if (expanded) content()
 }
 
-@Composable
-private fun NexlyQuantitativeExplorerCard(items: List<SpontaneousMetricItem>) {
-    var scale by remember { mutableStateOf(1.0) }
-    var sortDesc by remember { mutableStateOf(true) }
-    var selectedIdx by remember { mutableStateOf(0) }
-    val sorted = remember(items, sortDesc) {
-        if (sortDesc) items.sortedByDescending { it.value } else items
-    }
-    val maxVal = remember(sorted, scale) {
-        (sorted.maxOfOrNull { it.value * scale } ?: 1.0).coerceAtLeast(0.0001)
-    }
-    val totalVal = remember(sorted, scale) {
-        sorted.sumOf { it.value * scale }.coerceAtLeast(0.0001)
-    }
-    val activeItem = sorted.getOrElse(selectedIdx.coerceIn(0, sorted.lastIndex)) { sorted.first() }
-    val unit = activeItem.unit
-
-    fun fmtVal(v: Double): String {
-        val prefix = if (unit in listOf("$", "€", "£", "¥")) unit else ""
-        val suffix = if (unit == "%") "%" else ""
-        return when {
-            v >= 1_000_000 -> String.format(java.util.Locale.US, "%s%.1fM%s", prefix, v / 1_000_000.0, suffix)
-            v >= 1_000 -> String.format(java.util.Locale.US, "%s%.1fK%s", prefix, v / 1_000.0, suffix)
-            v % 1.0 == 0.0 -> String.format(java.util.Locale.US, "%s%.0f%s", prefix, v, suffix)
-            else -> String.format(java.util.Locale.US, "%s%.1f%s", prefix, v, suffix)
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = 0.80f))
-            .border(1.dp, Color(0xFFE2DAFA), RoundedCornerShape(14.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                NexlyGlassGlyphTile(
-                    name = "chart-bar",
-                    toneName = "lavender",
-                    size = 25.dp,
-                    glyphSize = 14.dp
-                )
-                Text(
-                    text = "Interactive Data Explorer",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF211845)
-                )
+/** A complete source list, through the same unit-safe adapter as native tables. */
+internal fun chartFromProseBlocks(blocks: List<Block>): ChartWidget? {
+    val separator = Regex("""^(.{1,80}?)\s*(?::|\s[—–]\s)\s*(.+)$""")
+    val rows = mutableListOf<List<List<InlineSpan>>>()
+    for (block in blocks) {
+        val items = when (block) {
+            is Block.BulletList -> {
+                if (block.items.any { it.checked != null }) return null
+                block.items
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                listOf(0.5 to "0.5×", 1.0 to "1×", 1.5 to "1.5×", 2.0 to "2×").forEach { (mult, lbl) ->
-                    val isSel = scale == mult
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (isSel) Color(0xFF6C4CF6) else Color(0xFFF3EEFF))
-                            .clickable { scale = mult }
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = lbl,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSel) Color.White else Color(0xFF4F35E8)
-                        )
-                    }
-                }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFFEDE5FF))
-                        .clickable { sortDesc = !sortDesc }
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = if (sortDesc) "Rank ↓" else "Original",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF5B3DF5)
-                    )
-                }
-            }
+            is Block.OrderedList -> block.items
+            else -> continue
         }
-        sorted.forEachIndexed { idx, item ->
-            val scaledVal = item.value * scale
-            val sharePct = (scaledVal / totalVal) * 100.0
-            val isSel = idx == selectedIdx.coerceIn(0, sorted.lastIndex)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(if (isSel) Color(0xFFF3EEFF) else Color.Transparent)
-                    .clickable { selectedIdx = idx }
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        NexlyGlassGlyphTile(
-                            name = item.icon,
-                            toneName = item.tone,
-                            size = 19.dp,
-                            glyphSize = 11.dp
-                        )
-                        Text(
-                            text = item.label,
-                            fontSize = 12.sp,
-                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.SemiBold,
-                            color = Color(0xFF211845)
-                        )
-                    }
-                    Text(
-                        text = "${fmtVal(scaledVal)} (${String.format(java.util.Locale.US, "%.0f%%", sharePct)})",
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isSel) Color(0xFF5B3DF5) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color(0xFFEAE3FC))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth((scaledVal / maxVal).toFloat().coerceIn(0.05f, 1f))
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(if (isSel) Color(0xFF5B3DF5) else Color(0xFF8C72F8))
-                    )
-                }
-            }
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(9.dp))
-                .background(Color(0xFFF6F2FF))
-                .padding(horizontal = 9.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Selected: ${activeItem.label} (${fmtVal(activeItem.value * scale)})",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF211845)
-            )
-            Text(
-                text = "Total: ${fmtVal(totalVal)}",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF5B3DF5)
-            )
+        for (item in items) {
+            val match = separator.matchEntire(flattenSpans(item.spans).trim()) ?: return null
+            rows.add(listOf(listOf(InlineSpan.TextSpan(match.groupValues[1].trim())), listOf(InlineSpan.TextSpan(match.groupValues[2]))))
         }
     }
+    if (rows.size !in 3..200) return null
+    val labels = rows.map { flattenSpans(it[0]).lowercase() }
+    if (labels.toSet().size != labels.size) return null
+    return chartFromTableBlock(Block.TableBlock(
+        headers = listOf(listOf(InlineSpan.TextSpan("Observation")), listOf(InlineSpan.TextSpan("Supplied observations"))),
+        aligns = emptyList(), rows = rows, sourceStart = 0
+    ))
 }
 
 internal data class SpontaneousConceptItem(

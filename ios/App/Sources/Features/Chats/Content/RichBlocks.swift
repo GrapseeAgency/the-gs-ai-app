@@ -647,15 +647,12 @@ private struct StructuredProseSequenceView: View {
                 return false
             }
             let proseText = extractCopyableProseSummary(normalizedProse, citationsOnly: false)
-            let lowProse = proseText.lowercased()
-            let hasCurrency = proseText.range(of: "[$€£]\\s*\\d", options: .regularExpression) != nil
-            let hasPercent = proseText.range(of: "\\b\\d+(?:\\.\\d+)?\\s*%", options: .regularExpression) != nil || lowProse.contains("percent")
-            let hasNum = proseText.range(of: "\\b\\d{2,}\\b", options: .regularExpression) != nil
-            let hasDomainSignal = hasNum && (lowProse.contains("mortgage") || lowProse.contains("amortiz") || lowProse.contains("compound interest") || (lowProse.contains("loan") && (lowProse.contains("apr") || lowProse.contains("monthly"))) || (lowProse.contains("budget") && lowProse.contains("50/30/20")) || (lowProse.contains("calorie") && lowProse.contains("protein")) || lowProse.contains("tdee") || ((hasCurrency || hasNum) && hasPercent && (lowProse.contains("discount") || lowProse.contains("tax") || lowProse.contains("tip") || lowProse.contains("margin") || lowProse.contains("roi") || lowProse.contains("interest") || lowProse.contains("salary"))))
-            let spontaneousSpec = parseQuickCalculatorSpec(titleRaw: "Interactive Scenario Calculator", bodyText: proseText)
-            let shouldShowSpontaneousCalc = spontaneousSpec != nil && !hasExplicitCalc && (visibleDashboardTab == "Dashboard" || visibleDashboardTab == "Calculator") && ((hasCurrency && hasPercent) || hasDomainSignal)
+            let spontaneousSpec = parseQuickCalculatorSpec(titleRaw: "Explore supplied inputs", bodyText: proseText)
+            let shouldShowSpontaneousCalc = spontaneousSpec != nil && !hasExplicitCalc && visibleDashboardTab == "Dashboard"
             if shouldShowSpontaneousCalc, let spec = spontaneousSpec {
-                NexlyQuickCalculatorCardView(spec: spec)
+                DisclosureGroup("Explore supplied inputs") {
+                    NexlyQuickCalculatorCardView(spec: spec)
+                }.id(proseText)
             }
 
             let hasVisualDataBlock = normalizedProse.contains {
@@ -663,12 +660,13 @@ private struct StructuredProseSequenceView: View {
                 if case .widget(let k, _, _, _) = $0, ["chart", "table", "stat", "progress", "gauge"].contains(k) { return true }
                 return false
             }
-            let spontaneousMetrics = (!hasVisualDataBlock && visibleDashboardTab == "Dashboard")
-                ? extractSpontaneousMetricsFromBlocksIOS(normalizedProse)
-                : []
-            let shouldShowQuantitativeExplorer = spontaneousMetrics.count >= 3
-            if shouldShowQuantitativeExplorer {
-                NexlyQuantitativeExplorerCardIOS(items: spontaneousMetrics)
+            let exploratoryChart = !hasVisualDataBlock && visibleDashboardTab == "Dashboard"
+                ? chartJsonFromProseIOS(normalizedProse) : nil
+            let shouldShowQuantitativeExplorer = exploratoryChart != nil
+            if let json = exploratoryChart {
+                DisclosureGroup("Explore supplied observations") {
+                    WidgetBlockView(kind: "chart", json: json, open: false)
+                }.id(proseText)
             }
 
             let hasAnyWidgetOrHtml = normalizedProse.contains {
@@ -680,7 +678,9 @@ private struct StructuredProseSequenceView: View {
             if !hasExplicitCalc && !shouldShowSpontaneousCalc && !shouldShowQuantitativeExplorer && !hasAnyWidgetOrHtml && visibleDashboardTab == "Dashboard" {
                 let spontaneousConcepts = extractSpontaneousConceptsFromBlocksIOS(normalizedProse)
                 if spontaneousConcepts.count >= 3 {
-                    NexlyInteractiveConceptDeckCardIOS(concepts: spontaneousConcepts)
+                    DisclosureGroup("Practice concepts from this answer") {
+                        NexlyInteractiveConceptDeckCardIOS(concepts: spontaneousConcepts)
+                    }.id(proseText)
                 }
             }
 
@@ -1714,185 +1714,32 @@ private struct NexlyQuickCalculatorCardView: View {
     }
 }
 
-private struct SpontaneousMetricItemIOS {
-    let label: String
-    let value: Double
-    let unit: String
-    let icon: String
-    let tone: NexlyGlassTone
-}
-
-private func extractSpontaneousMetricsFromBlocksIOS(_ blocks: [Block]) -> [SpontaneousMetricItemIOS] {
-    var out: [SpontaneousMetricItemIOS] = []
-    var seen = Set<String>()
-    guard let rx = try? NSRegularExpression(pattern: "^([A-Za-z][A-Za-z0-9\\s/+.#&-]{1,28})\\s*(?:—|–|-|:)\\s*([$€£¥])?\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)\\s*([kKmMbB%])?\\s*$") else {
-        return []
-    }
-    for b in blocks {
+/// An optional projection of a complete labelled list, not a second answer
+/// engine. The real table adapter supplies units, signs and adaptive chart type.
+func chartJsonFromProseIOS(_ blocks: [Block]) -> String? {
+    guard let separator = try? NSRegularExpression(pattern: "^(.{1,80}?)\\s*(?::|\\s[—–]\\s)\\s*(.+)$") else { return nil }
+    var rows: [[[InlineSpan]]] = []
+    for block in blocks {
         let items: [ListItem]
-        switch b {
+        switch block {
         case .bulletList(let list, _):
-            items = list.allSatisfy({ $0.checked == nil }) ? list : []
-        case .orderedList(_, let list, _):
+            guard list.allSatisfy({ $0.checked == nil }) else { return nil }
             items = list
-        default:
-            items = []
+        case .orderedList(_, let list, _): items = list
+        default: continue
         }
-        for li in items {
-            let plain = NexlyIcons.cleanPlainText(plainTextOfSpans(li.spans))
-            let ns = plain as NSString
-            guard let m = rx.firstMatch(in: plain, range: NSRange(location: 0, length: ns.length)) else { continue }
-            let label = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
-            let curr = m.range(at: 2).location != NSNotFound ? ns.substring(with: m.range(at: 2)) : ""
-            let numStr = ns.substring(with: m.range(at: 3)).replacingOccurrences(of: ",", with: "")
-            let suf = m.range(at: 4).location != NSNotFound ? ns.substring(with: m.range(at: 4)) : ""
-            guard let num = Double(numStr), num > 0, !(num >= 1990 && num <= 2035) else { continue }
-            let key = label.lowercased()
-            if seen.contains(key) { continue }
-            seen.insert(key)
-            let mult: Double = {
-                switch suf.lowercased() {
-                case "k": return 1_000.0
-                case "m": return 1_000_000.0
-                case "b": return 1_000_000_000.0
-                default: return 1.0
-                }
-            }()
-            let unit = !curr.isEmpty ? curr : (suf == "%" ? "%" : "")
-            let sem = NexlyIcons.semanticIcon(for: label, fallback: "chart-bar")
-            out.append(SpontaneousMetricItemIOS(label: label, value: num * mult, unit: unit, icon: sem.icon, tone: sem.tone))
-            if out.count >= 8 { break }
+        for item in items {
+            let text = plainTextOfSpans(item.spans).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let match = separator.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+                  let labelRange = Range(match.range(at: 1), in: text),
+                  let valueRange = Range(match.range(at: 2), in: text) else { return nil }
+            rows.append([[.text(String(text[labelRange]).trimmingCharacters(in: .whitespaces))], [.text(String(text[valueRange]))]])
         }
     }
-    if Set(out.map { $0.unit }).count != 1 || out.contains(where: { !["$", "€", "£", "¥"].contains($0.unit) }) { return [] }
-    return out
-}
-
-private struct NexlyQuantitativeExplorerCardIOS: View {
-    let items: [SpontaneousMetricItemIOS]
-    @State private var scale: Double = 1.0
-    @State private var sortDesc: Bool = true
-    @State private var selectedIdx: Int = 0
-
-    private var sorted: [SpontaneousMetricItemIOS] {
-        sortDesc ? items.sorted(by: { $0.value > $1.value }) : items
-    }
-
-    private func fmtVal(_ v: Double, unit: String) -> String {
-        let prefix = ["$", "€", "£", "¥"].contains(unit) ? unit : ""
-        let suffix = unit == "%" ? "%" : ""
-        if v >= 1_000_000 { return String(format: "%@%.1fM%@", prefix, v / 1_000_000.0, suffix) }
-        if v >= 1_000 { return String(format: "%@%.1fK%@", prefix, v / 1_000.0, suffix) }
-        if v.truncatingRemainder(dividingBy: 1.0) == 0 { return String(format: "%@%.0f%@", prefix, v, suffix) }
-        return String(format: "%@%.1f%@", prefix, v, suffix)
-    }
-
-    var body: some View {
-        let rows = sorted
-        let maxVal = max(0.0001, (rows.map { $0.value * scale }.max() ?? 1.0))
-        let totalVal = max(0.0001, rows.reduce(0.0) { $0 + $1.value * scale })
-        let safeIdx = min(max(0, selectedIdx), max(0, rows.count - 1))
-        let activeItem = rows[safeIdx]
-        let unit = activeItem.unit
-
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                HStack(spacing: 7) {
-                    NexlyGlassGlyphTile(name: "chart-bar", tone: .lavender, size: 25, glyphSize: 14)
-                    Text("Interactive Data Explorer")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
-                }
-                Spacer()
-                HStack(spacing: 4) {
-                    ForEach([0.5, 1.0, 1.5, 2.0], id: \.self) { (mult: Double) in
-                        let isSel = abs(scale - mult) < 0.05
-                        Button {
-                            GSHaptics.select()
-                            scale = mult
-                        } label: {
-                            Text(mult == 1.0 ? "1×" : (mult == 2.0 ? "2×" : String(format: "%.1f×", mult)))
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(isSel ? Color.white : Color(red: 0.310, green: 0.208, blue: 0.910))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(isSel ? Color(red: 0.424, green: 0.298, blue: 0.965) : Color(red: 0.953, green: 0.933, blue: 1.0))
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    Button {
-                        GSHaptics.select()
-                        sortDesc.toggle()
-                    } label: {
-                        Text(sortDesc ? "Rank ↓" : "Original")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.929, green: 0.898, blue: 1.0)))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            ForEach(Array(rows.enumerated()), id: \.offset) { idx, item in
-                let scaled = item.value * scale
-                let sharePct = (scaled / totalVal) * 100.0
-                let isSel = idx == safeIdx
-                Button {
-                    GSHaptics.select()
-                    selectedIdx = idx
-                } label: {
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack {
-                            NexlyGlassGlyphTile(name: item.icon, tone: item.tone, size: 19, glyphSize: 11)
-                            Text(item.label)
-                                .font(.system(size: 12, weight: isSel ? .bold : .semibold))
-                                .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
-                                .lineLimit(1)
-                            Spacer()
-                            Text(String(format: "%@ (%.0f%%)", fmtVal(scaled, unit: unit), sharePct))
-                                .font(.system(size: 11.5, weight: .bold))
-                                .foregroundStyle(isSel ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
-                        }
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule().fill(Color(red: 0.918, green: 0.890, blue: 0.988))
-                                Capsule()
-                                    .fill(isSel ? Color(red: 0.357, green: 0.239, blue: 0.961) : Color(red: 0.549, green: 0.447, blue: 0.973))
-                                    .frame(width: max(8, geo.size.width * CGFloat(min(1.0, scaled / maxVal))))
-                            }
-                        }
-                        .frame(height: 6)
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 9).fill(isSel ? Color(red: 0.953, green: 0.933, blue: 1.0) : Color.clear))
-                }
-                .buttonStyle(.plain)
-            }
-
-            HStack {
-                Text("Selected: \(activeItem.label) (\(fmtVal(activeItem.value * scale, unit: unit)))")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.129, green: 0.094, blue: 0.271))
-                Spacer()
-                Text("Total: \(fmtVal(totalVal, unit: unit))")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color(red: 0.357, green: 0.239, blue: 0.961))
-            }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 9).fill(Color(red: 0.965, green: 0.949, blue: 1.0)))
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.80)))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.886, green: 0.855, blue: 0.980), lineWidth: 1))
-    }
+    guard rows.count >= 3, rows.count <= 200 else { return nil }
+    let labels = rows.map { plainTextOfSpans($0[0]).lowercased() }
+    guard Set(labels).count == labels.count else { return nil }
+    return chartJsonFromTableIOS(headers: [[.text("Observation")], [.text("Supplied observations")]], rows: rows)
 }
 
 struct SpontaneousConceptItemIOS {
@@ -3596,7 +3443,7 @@ func chartJsonFromTableIOS(headers: [[InlineSpan]], rows: [[[InlineSpan]]]) -> S
         }
         guard dataItems.count == rows.count, units.count == 1 else { continue }
         let payload: [String: Any] = ["type": categoricalChartTypeIOS(dataItems.compactMap { $0["label"] as? String }), "title": headerTexts[column], "unit": units.first ?? "", "data": dataItems]
-        guard let data = try? JSONSerialization.data(withJSONObject: payload), let json = String(data: data, encoding: .utf8) else { return nil }
+        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]), let json = String(data: data, encoding: .utf8) else { return nil }
         return json
     }
     return nil
