@@ -69,6 +69,13 @@ jobs:
           suite = ET.parse(report).getroot()
           expected = {'unreachableUnusualPromptsProduceOneRetryNoticeAndNoKeywordSelectedAnswer', 'successfulCanonicalAnswerRetainsActualServerContentAndIdentity'}
           cases = suite.findall('testcase')
+          for case in cases:
+              for tag in ['failure', 'error', 'skipped']:
+                  failure = case.find(tag)
+                  if failure is not None:
+                      detail = (failure.text or failure.get('message') or tag)[:6000]
+                      annotation = (case.get('name', '') + ': ' + detail).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                      print('::error::' + annotation)
           if {case.get('name') for case in cases} != expected or any(case.find(tag) is not None for case in cases for tag in ['failure', 'error', 'skipped']):
               raise SystemExit('Actual transport honesty regressions missing, failed or skipped')
           print('Both real Ktor -> API -> repository -> isolated Room regressions executed and passed')
