@@ -20,16 +20,20 @@ export const chartPayload = (t: string): string => {
     return `{"type":"contour","points":[[0,0,1],[1,0,2],[2,0,1],[0,1,2],[1,1,3],[2,1,2],[0,2,1],[1,2,2],[2,2,1]],"levels":4}`
   if (t === 'parallel') return `{"type":"parallel","axes":["a","b","c"],"series":[{"name":"s","values":[1,2,3]}]}`
   if (t === 'depth') return `{"type":"depth","bids":[[100,1],[99,2]],"asks":[[101,1],[102,2]]}`
-  // shape-aware payloads for the charts whose renderers read structured rows —
-  // the validator accepts loose shapes, the proof renders REAL geometry
+  // Shape-aware source: paired axes, size measures, samples and ranges are
+  // distinct contracts, not interchangeable copies of the same fixture.
   if (t === 'candlestick')
     return `{"type":"candlestick","labels":["mon","tue"],"series":[{"name":"px","data":[[10,12,9,11],[11,13,10,12.5]]}]}`
   if (t === 'boxplot')
-    return `{"type":"boxplot","labels":["a","b"],"series":[{"name":"s","data":[[1,2,3,4],[2,3,4,5]]}]}`
+    return `{"type":"boxplot","series":[{"name":"a","data":[1,2,3,4]},{"name":"b","data":[2,3,4,5]}]}`
   if (t === 'chord')
     return `{"type":"chord","labels":["a","b"],"series":[{"name":"a","data":[[0,2],[2,0]]},{"name":"b","data":[[2,0],[0,2]]}]}`
-  if (t === 'scatter' || t === 'bubble')
-    return `{"type":"${t}","series":[{"name":"s","data":[[1,2,3],[2,3,5],[3,2,4]]}]}`
+  if (t === 'scatter')
+    return `{"type":"scatter","series":[{"name":"s","data":[[1,2],[2,3],[3,2]]}]}`
+  if (t === 'bubble')
+    return `{"type":"bubble","series":[{"name":"s","data":[[1,2,3],[2,3,5],[3,2,4]]}]}`
+  if (t === 'gantt')
+    return `{"type":"gantt","series":[{"name":"First task","data":[[0,2]]},{"name":"Second task","data":[[2,4]]}]}`
   if (t === 'heatmap')
     return `{"type":"heatmap","labels":["x","y"],"series":[{"name":"r1","data":[[0,5],[1,9]]},{"name":"r2","data":[[0,2],[1,7]]}]}`
   if (t === 'correlation')
