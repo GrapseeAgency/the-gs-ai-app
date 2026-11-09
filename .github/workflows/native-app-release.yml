@@ -1,0 +1,237 @@
+name: Native app release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: native-app-release-0.86.26
+  cancel-in-progress: false
+
+env:
+  VERSION: '0.86.26'
+  BUILD_NUMBER: '149'
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Stage the shipping native engine for all four ABIs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/stage_release_so.sh 42246640175
+      - name: Unit tests and optimized signed APK
+        working-directory: android
+        run: gradle --no-build-cache --max-workers=2 :app:testDebugUnitTest :app:assembleRelease
+      - name: Verify the actual shipping APK
+        run: |
+          set -euo pipefail
+          mkdir -p release-out
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          "$TOOLS/apksigner" verify --verbose --print-certs "$APK" > release-out/android-verification.txt
+          "$TOOLS/aapt2" dump badging "$APK" >> release-out/android-verification.txt
+          python3 - <<'PY'
+          import os, pathlib, zipfile
+          report = pathlib.Path('release-out/android-verification.txt').read_text()
+          assert 'b1ffd75dd410c84bd9467e418c419cd377d57569ae7ac5e26b778e6418b1a483' in report.lower(), 'Wrong shipping certificate'
+          assert "package: name='com.grapsee.gsai'" in report
+          assert f"versionCode='{os.environ['BUILD_NUMBER']}'" in report
+          assert f"versionName='{os.environ['VERSION']}'" in report
+          assert 'application-debuggable' not in report, 'Debug build is not a release'
+          with zipfile.ZipFile('android/app/build/outputs/apk/release/app-release.apk') as z:
+              for abi in ('armeabi-v7a','arm64-v8a','x86','x86_64'):
+                  assert z.getinfo(f'lib/{abi}/libgs_ffi.so').file_size > 0, abi
+              assert z.getinfo('assets/dexopt/baseline.prof').file_size > 0
+              dex = b''.join(z.read(n) for n in z.namelist() if n.endswith('.dex'))
+              assert b'https://preview-chat-c945696f-6447-4dfa-b510-971d8b9eb5bf.space-z.ai' in dex
+              assert b'http://10.0.2.2:3000' not in dex, 'Emulator URL in release'
+          PY
+          cp "$APK" "release-out/GS-AI-App-v${VERSION}.apk"
+          printf '\nSource: %s\nBuild: %s/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> release-out/android-verification.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-android-release
+          path: release-out/*
+          if-no-files-found: error
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Fetch a verified native device and simulator framework
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess, zipfile
+          repo = os.environ['GITHUB_REPOSITORY']
+          def api(p):
+              return json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/{p}']))
+          runs = api('actions/workflows/ios-native.yml/runs?status=completed&per_page=30')['workflow_runs']
+          for run in runs:
+              if run.get('head_repository', {}).get('full_name') != repo:
+                  continue
+              artifacts = [a for a in api(f"actions/runs/{run['id']}/artifacts?per_page=100")['artifacts'] if a['name'] == 'GsFfi.xcframework' and not a['expired']]
+              if not artifacts:
+                  continue
+              jobs = api(f"actions/runs/{run['id']}/jobs?per_page=100")['jobs']
+              if any(j['name'] == 'xcframework' and j['conclusion'] == 'success' for j in jobs):
+                  artifact = artifacts[0]
+                  break
+          else:
+              raise SystemExit('No unexpired framework from a successful native producer')
+          subprocess.run(['gh','api',f"repos/{repo}/actions/artifacts/{artifact['id']}/zip"], stdout=open('/tmp/gs-framework.zip','wb'), check=True)
+          out = pathlib.Path('ios/Frameworks/GsFfi.xcframework')
+          out.mkdir(parents=True, exist_ok=True)
+          with zipfile.ZipFile('/tmp/gs-framework.zip') as z:
+              z.extractall(out)
+          import plistlib
+          info = plistlib.loads((out/'Info.plist').read_bytes())
+          libs = info['AvailableLibraries']
+          assert any(x['SupportedPlatform'] == 'ios' and not x.get('SupportedPlatformVariant') and 'arm64' in x['SupportedArchitectures'] for x in libs), 'Missing physical-device slice'
+          assert any(x.get('SupportedPlatformVariant') == 'simulator' for x in libs), 'Missing simulator slice'
+          pathlib.Path('ios-native-producer.json').write_text(json.dumps({'producerRun':run['id'],'artifactId':artifact['id'],'sourceCommit':run['head_sha']},indent=2))
+          PY
+      - name: Generate native SwiftUI project
+        run: |
+          brew install xcodegen
+          cd ios
+          xcodegen generate
+      - name: Compile Release for physical iPhone and iPad
+        run: |
+          set -o pipefail
+          xcodebuild build -project ios/GSApp.xcodeproj -scheme GSApp \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath ios/build/release-device \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            2>&1 | tee ios-device-release.log
+      - name: Compile Release for iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild build -project ios/GSApp.xcodeproj -scheme GSApp \
+            -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios/build/release-simulator \
+            CODE_SIGNING_ALLOWED=NO MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            2>&1 | tee ios-simulator-release.log
+      - name: Verify native platforms and package actual app bundles
+        run: |
+          set -euo pipefail
+          mkdir -p release-out ios-package/Payload
+          DEVICE=ios/build/release-device/Build/Products/Release-iphoneos/App.app
+          SIM=ios/build/release-simulator/Build/Products/Release-iphonesimulator/App.app
+          export DEVICE SIM
+          python3 - <<'PY'
+          import os, pathlib, plistlib, re, subprocess
+          reports = []
+          for key, platform in [('DEVICE','IOS'), ('SIM','IOSSIMULATOR')]:
+              bundle = pathlib.Path(os.environ[key])
+              p = plistlib.loads((bundle/'Info.plist').read_bytes())
+              assert p['CFBundleIdentifier'] == 'com.grapsee.gsai'
+              assert p['CFBundleShortVersionString'] == os.environ['VERSION']
+              assert p['CFBundleVersion'] == os.environ['BUILD_NUMBER']
+              binary = str(bundle/p['CFBundleExecutable'])
+              archs = subprocess.check_output(['lipo','-archs',binary],text=True).strip()
+              if key == 'DEVICE':
+                  assert archs == 'arm64', archs
+                  assert p['CFBundleSupportedPlatforms'] == ['iPhoneOS']
+              else:
+                  assert p['CFBundleSupportedPlatforms'] == ['iPhoneSimulator']
+              report = subprocess.check_output(['xcrun','vtool','-show-build',binary],text=True)
+              assert re.search(r'platform\s+'+platform+r'\s', report), report
+              reports.append(key+' architectures: '+archs+'\n'+report)
+          pathlib.Path('release-out/ios-verification.txt').write_text('\n'.join(reports)+'\nUNSIGNED: device IPA requires re-signing before installation.\nSource: '+os.environ['GITHUB_SHA']+'\n')
+          PY
+          ditto "$DEVICE" ios-package/Payload/App.app
+          (cd ios-package && zip -qry "$GITHUB_WORKSPACE/release-out/GS-AI-iOS-v${VERSION}-unsigned.ipa" Payload)
+          ditto -c -k --sequesterRsrc --keepParent "$SIM" "release-out/GS-AI-iOS-v${VERSION}-simulator.zip"
+          cp ios-native-producer.json release-out/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-ios-release
+          path: release-out/*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-ios-release-logs
+          path: ios-*-release.log
+          if-no-files-found: warn
+
+  publish:
+    needs: [android, ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*-release
+          path: release-out
+          merge-multiple: true
+      - name: Publish both native apps together with checksums and installation instructions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -s "release-out/GS-AI-App-v${VERSION}.apk"
+          test -s "release-out/GS-AI-iOS-v${VERSION}-unsigned.ipa"
+          test -s "release-out/GS-AI-iOS-v${VERSION}-simulator.zip"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          root = pathlib.Path('release-out')
+          artifacts = [{'file':p.name,'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(root.iterdir()) if p.suffix in ('.apk','.ipa','.zip')]
+          (root/'SHA256SUMS.txt').write_text(''.join(f"{a['sha256']}  {a['file']}\n" for a in artifacts))
+          (root/'build-provenance.json').write_text(json.dumps({'version':os.environ['VERSION'],'buildNumber':os.environ['BUILD_NUMBER'],'sourceCommit':os.environ['GITHUB_SHA'],'workflowRun':os.environ['GITHUB_RUN_ID'],'iosSigning':'unsigned; re-sign before device installation','artifacts':artifacts},indent=2)+'\n')
+          PY
+          cat > release-notes.md <<EOF
+          ## Native Android and iOS — v${VERSION} (build ${BUILD_NUMBER})
+
+          Built from commit \`${GITHUB_SHA}\`. Native Kotlin/Jetpack Compose Android client and native Swift/SwiftUI iOS client — not a website packaged as an app. Sandboxed HTML/JavaScript/React experiences use the clients' embedded web runtime where appropriate.
+
+          ### Downloads and installation
+          - **Android:** \`GS-AI-App-v${VERSION}.apk\` — optimized, non-debuggable release, signed with the existing shipping certificate. Build 149 updates build 148 without uninstalling. Allow installation from your browser/file manager when Android asks.
+          - **iPhone/iPad:** \`GS-AI-iOS-v${VERSION}-unsigned.ipa\` — actual arm64 **device** build, not a renamed simulator app. **It requires re-signing with your own Apple account/provisioning using a compatible sideloading tool before installation.** This is not a TestFlight or App Store-signed download; tapping the IPA alone will not install it.
+          - **Mac / iOS Simulator:** \`GS-AI-iOS-v${VERSION}-simulator.zip\` — extract App.app, boot a compatible Xcode iOS Simulator, run \`xcrun simctl install booted /path/to/App.app\`, then \`xcrun simctl launch booted com.grapsee.gsai\`.
+          - Verify downloads against \`SHA256SUMS.txt\`. Native platform checks, engine provenance and the exact source/build identity are attached.
+
+          ### Changes to check
+          - Glass custom-icon normalization in generated responses and native rendering.
+          - Real checklist add/edit/delete/toggle and response-isolated React controls and persistent state.
+          - Source-derived calculators, charts, ranges, tooltips, totals and table controls, without invented measurements.
+          - Safe executable/source-byte handling; unsupported runtimes do not pretend to execute.
+          - iOS history/relaunch/clear/delete/retention fixes, keyboard behavior, and narrow-card chart mode visibility on both clients.
+
+          ### Verification and limits
+          The base application revision passed full iOS XCTest and archive-byte verification, Android native runtime and six-section capture/review, browser interaction checks and the chat-screen benchmark before packaging. This release workflow additionally runs Android unit tests, builds the actual signed Release APK and native iOS device/simulator Release apps, and verifies their identities and architectures. This is not a claim of exact whole-phone pixel parity or physical haptic/background-wake delivery. The iOS device app is unsigned; no Apple distribution identity has been used.
+
+          Build log: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          EOF
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$VERSION" --jq '.object.sha')" = "$GITHUB_SHA"
+            gh release upload "v$VERSION" release-out/* --clobber
+            gh release edit "v$VERSION" --title "v$VERSION — native GenUI fixes (Android + iOS)" --notes-file release-notes.md --latest
+          else
+            gh release create "v$VERSION" release-out/* --target "$GITHUB_SHA" \
+              --title "v$VERSION — native GenUI fixes (Android + iOS)" --notes-file release-notes.md --latest
+          fi
