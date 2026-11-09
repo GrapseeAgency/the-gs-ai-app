@@ -2,6 +2,9 @@ name: Native app release
 
 on:
   workflow_dispatch:
+  push:
+    branches: [arena/fb0bb5c7-the-gs-ai-app]
+    paths: [.github/workflows/native-app-release.yml]
 
 permissions:
   contents: read
