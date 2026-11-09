@@ -1,0 +1,31 @@
+name: Native release build diagnostics
+on:
+  push:
+    branches: [arena/fb0bb5c7-the-gs-ai-app]
+    paths: [.github/workflows/release-build-diagnostics.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  original-android-build-log:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Recover the original failed Android release job log
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/jobs/129158776428/logs" > original-android-release.log
+          python3 - <<'PY'
+          import pathlib
+          text = pathlib.Path('original-android-release.log').read_text(errors='replace')
+          tail = '\n'.join(text.splitlines()[-180:])[-32000:]
+          for start in range(0,len(tail),3500):
+              part = tail[start:start+3500].replace('%','%25').replace('\r','%0D').replace('\n','%0A')
+              print(f'::notice title=Original Android release log {start//3500+1}::{part}')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-android-release-failure
+          path: original-android-release.log
