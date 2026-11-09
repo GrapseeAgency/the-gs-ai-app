@@ -258,7 +258,7 @@ fun chartFromTableBlock(block: Block.TableBlock): ChartWidget? {
         }.toSet()
         if (units.size != 1) continue
         return ChartWidget(
-            type = "bar", title = header[column], unit = units.first(), labels = labels,
+            type = categoricalChartType(labels), title = header[column], unit = units.first(), labels = labels,
             series = listOf(ChartSeries(name = header[column], data = values.mapIndexed { index, value -> listOf(index.toFloat(), value!!) }))
         )
     }
