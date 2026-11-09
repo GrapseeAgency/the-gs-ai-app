@@ -46,6 +46,12 @@ final class CalculatorSourceHonestyTests: XCTestCase {
         XCTAssertEqual(CalcExprIOS.eval("1e3 + 2.5E-2", vars: [:]), 1000.025)
         XCTAssertEqual(CalcExprIOS.evalOptional("1e3 + 2.5E-2", vars: [:]), 1000.025)
         XCTAssertEqual(CalcExprIOS.eval("pow(2,3)", vars: [:]), 8)
+        XCTAssertEqual(CalcExprIOS.evalOptional("clamp(amount,0,100)", vars: ["amount": 140]), 100,
+                       "The documented shared clamp function must run on iOS too")
+        XCTAssertEqual(CalcExprIOS.eval("clamp(amount,0,100)", vars: ["amount": -12]), 0)
+        XCTAssertEqual(CalcExprIOS.eval("clamp(amount,0,100)", vars: ["amount": 42]), 42)
+        XCTAssertTrue(CalcExprIOS.eval("clamp(2,0)", vars: [:]).isNaN)
+        XCTAssertTrue(CalcExprIOS.eval("clamp(2,5,1)", vars: [:]).isNaN)
         XCTAssertTrue(CalcExprIOS.eval("pow(2)", vars: [:]).isNaN, "Missing exponent must not silently become zero")
         XCTAssertTrue(CalcExprIOS.eval("sqrt(4,16)", vars: [:]).isNaN, "Do not silently ignore supplied arguments")
         XCTAssertTrue(CalcExprIOS.eval("min(2,1/0)", vars: [:]).isNaN, "Undefined arguments must not become a plausible minimum")
