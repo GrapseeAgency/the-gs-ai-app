@@ -330,6 +330,7 @@ class NexlyChatScreenshotTest {
     }
 
     @Test
+    @Config(sdk = [34], qualifiers = "w393dp-h852dp-port-mdpi")
     fun sectionReferenceOptionalToolsDoNotTurnOrdinaryProseIntoAnOpenDashboard() {
         val source = androidx.compose.runtime.mutableStateOf("- Alpha: -12\n- Beta: 0\n- Gamma: 2026")
         compose.setContent {
