@@ -223,15 +223,15 @@ internal object WidgetRecovery {
             else -> {
                 val fromReply = extract(reply)
                 val usePrior = Regex("""\b(?:this|that|these|those|above|previous|same|it)\b|^(?:please\s+)?(?:show|draw|make|create|render|plot)\s+(?:me\s+)?(?:a\s+)?(?:(?:bar|line|pie|area|donut)\s+)?(?:chart|graph|plot)[.!?]?$""", RegexOption.IGNORE_CASE).containsMatchIn(prompt.trim())
-                val chosen = if (fromReply.points.size >= 2) fromReply else if (usePrior) extract(prior) else Extracted(emptyList(), "Value")
+                val chosen = if (fromReply.points.size >= 2) fromReply else if (usePrior && !Regex("""(?m)^\s*(?:[-*+]\s*)?[^\n:]{1,60}:\s*[~$€£¥₹৳+-]?\d|^\s*\|""").containsMatchIn(reply)) extract(prior) else Extracted(emptyList(), "Value")
                 if (chosen.points.size < 2) return null
                 when (ask) {
                     is VisualAsk.Chart -> {
                         val type = if (ask.type == "auto") categoricalChartType(chosen.points.map { it.label }) else ask.type
                         val values = chosen.points.map { it.value }
-                        if (type !in setOf("line", "area", "bar", "hbar", "pie", "donut", "radar", "funnel") ||
+                        if (type !in setOf("line", "area", "bar", "hbar", "pie", "donut", "radar", "funnel", "treemap", "waterfall") ||
                             chosen.points.map { it.unit }.toSet().size != 1 ||
-                            (type in setOf("pie", "donut", "radar", "funnel") && (values.any { it < 0 } || values.none { it > 0 }))) null
+                            (type in setOf("pie", "donut", "radar", "funnel", "treemap") && (values.any { it < 0 } || values.none { it > 0 }))) null
                         else chartBlock(chosen.points, type, chosen.seriesName)
                     }
                     VisualAsk.Table -> tableBlock(chosen.points)
@@ -318,7 +318,14 @@ internal object WidgetRecovery {
                 section = heading
                 continue
             }
-            parseLine(line, section)?.let { rows += it }
+            val row = parseLine(line, section)
+            if (row != null) rows += row
+            else {
+                val candidate = if (line.startsWith("|")) line.trim('|').split('|').getOrNull(1)?.trim()
+                    else separator.find(line)?.let { line.substring(it.range.last + 1).trim() }
+                if (candidate != null && (Regex("""^(?:n/a|unknown|missing|not recorded|not available|—|-)$""", RegexOption.IGNORE_CASE).matches(candidate) ||
+                    Regex("""^[~$€£¥₹৳+-]?\d""").containsMatchIn(candidate))) return emptyList()
+            }
             if (rows.size > MAX_POINTS) return emptyList()
         }
         return rows
@@ -352,9 +359,9 @@ internal object WidgetRecovery {
             return null
         }
 
-        val body = cleanLabel(line.replace(bulletPrefix, ""))
+        val body = line.replace(bulletPrefix, "").trim()
         val m = separator.find(body) ?: return null
-        val label = body.substring(0, m.range.first).trim()
+        val label = cleanLabel(body.substring(0, m.range.first))
         if (label.length !in 2..60 || !label.any { it.isLetterOrDigit() }) return null
         if (label.endsWith("?") || label.endsWith("!") || label.contains("http")) return null
         val rest = body.substring(m.range.last + 1).trim()
@@ -365,7 +372,13 @@ internal object WidgetRecovery {
     private data class ParsedNumber(val first: Float, val second: String, val third: Boolean, val unit: String)
 
     private fun parseNumber(text: String): ParsedNumber? {
-        val m = numberAtStart.matchEntire(text.trim()) ?: return null
+        var source = text.trim()
+        for (delimiter in listOf("**", "__", "`", "*", "_")) {
+            if (source.length > delimiter.length * 2 && source.startsWith(delimiter) && source.endsWith(delimiter)) {
+                source = source.substring(delimiter.length, source.length - delimiter.length).trim()
+            }
+        }
+        val m = numberAtStart.matchEntire(source) ?: return null
         val scale = m.groupValues[3].lowercase()
         val factor = when (scale) {
             "trillion", "tn", "t" -> 1e12f
