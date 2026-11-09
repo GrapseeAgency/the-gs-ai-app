@@ -1828,6 +1828,8 @@ export function MessageContent({
   const segments = useMemo(() => parseStream(sanitizeReplyEmojis(text)), [text])
   const theme = useMemo(() => themeFor(dark), [dark])
   const concepts = useMemo(() => !streaming && segments.every((s) => s.kind === 'text') ? extractConceptDeck(text) : [], [text, segments, streaming])
+  const [practiceSource, setPracticeSource] = useState<string | null>(null)
+  const practiceId = useId()
   const accent = segments.find((s): s is Extract<Segment, { kind: 'widget' }> => s.kind === 'widget')?.payload.accent as string | undefined
   const contextualPills = useMemo(
     () => (streaming ? [] : deriveContextualActionPills(segments, text, citations)),
@@ -1863,7 +1865,15 @@ export function MessageContent({
             return null
         }
       })}
-      {concepts.length >= 3 && <SpontaneousConceptDeck key={text} concepts={concepts} dark={dark} />}
+      {concepts.length >= 3 && <section>
+        <button type="button" aria-expanded={practiceSource === text} aria-controls={practiceId}
+          onClick={() => setPracticeSource(current => current === text ? null : text)}>
+          Practice concepts from this answer
+        </button>
+        {practiceSource === text && <div id={practiceId}>
+          <SpontaneousConceptDeck key={text} concepts={concepts} dark={dark} />
+        </div>}
+      </section>}
       {citations && citations.length > 0 && <CitationsSourceCards citations={citations} theme={theme} />}
       {actionNotice?.response === text && <div role={actionNotice.error ? 'alert' : 'status'}>{actionNotice.text}</div>}
       {detailView && (
