@@ -2,9 +2,54 @@ package com.grapsee.gsai.ui.chat.content
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun specializedChartsRequireActualSourceDimensionsAndRanges() {
+        for (json in listOf(
+            """{"type":"bubble","series":[{"data":[[1,2],[3,4]]}]}""",
+            """{"type":"bubble","series":[{"data":[[1,2,-5]]}]}""",
+            """{"type":"scatter","series":[{"data":[[2],[4]]}]}""",
+            """{"type":"candlestick","series":[{"data":[[10,5,15,12]]}]}""",
+            """{"type":"gantt","series":[{"data":[[10,2]]}]}""",
+            """{"type":"correlation","series":[{"data":[[0,1.1]]}]}"""
+        )) assertNull("Invalid source must not become invented measurements: $json", parseWidget("chart", json))
+        for (json in listOf(
+            """{"type":"scatter","series":[{"data":[[10,2],[30,4]]}]}""",
+            """{"type":"bubble","series":[{"data":[[10,2,5]]}]}""",
+            """{"type":"candlestick","series":[{"data":[[10,15,5,12]]}]}""",
+            """{"type":"gantt","series":[{"data":[[2,10]]}]}"""
+        )) assertTrue("Real specialized coordinates must survive: $json", parseWidget("chart", json) is Widget.Chart)
+    }
+
+    @Test fun nativeChartSelectionKeepsDataMeaningAndEverySignedObservation() {
+        val cases = listOf(
+            listOf("Jan", "Feb", "Mar") to "line", listOf("2022", "2023", "2024") to "line",
+            listOf("Q1 2024", "Q2 2024", "Q1 2025") to "line",
+            listOf("2024-01", "2024-02", "2024-03") to "line",
+            listOf("Mar", "Jan", "Feb") to "bar", listOf("2024-02-31", "2024-03-01") to "bar",
+            listOf("Alpha", "Beta") to "bar", listOf("A supplied category with a long name", "Another supplied category") to "hbar"
+        )
+        for ((labels, type) in cases) {
+            assertEquals(labels.toString(), type, categoricalChartType(labels))
+            val headers = listOf("Period", "Actual measure").map { listOf(InlineSpan.TextSpan(it)) }
+            val rows = labels.mapIndexed { index, label -> listOf(listOf(InlineSpan.TextSpan(label)), listOf(InlineSpan.TextSpan("${index + 1}"))) }
+            assertEquals(type, chartFromTableBlock(Block.TableBlock(headers, List(2) { TableAlign.LEFT }, rows, 0))!!.type)
+        }
+        val chart = ChartWidget(type = "hbar", labels = (1..13).map { "Actual $it" },
+            series = listOf(ChartSeries(name = "Actual", data = (1..13).map { listOf(it.toFloat(), (it - 7).toFloat()) })))
+        val observations = horizontalChartObservations(chart)!!
+        assertEquals(13, observations.size)
+        assertEquals(-6f, observations.first().value, 0f)
+        assertEquals("Actual 13", observations.last().label)
+        assertEquals(26, horizontalChartObservations(chart.copy(series = chart.series + chart.series))!!.size)
+        assertNull(horizontalChartObservations(chart.copy(series = listOf(ChartSeries(data = listOf(listOf(0f)))))))
+        assertEquals(false, pieAlternativeAllowed(chart.copy(type = "line")))
+        assertEquals(false, pieAlternativeAllowed(ChartWidget(type = "line", unit = "%", series = listOf(ChartSeries(data = listOf(listOf(0f,2f),listOf(1f,3f)))))))
+        assertEquals(true, pieAlternativeAllowed(ChartWidget(type = "bar", unit = "%", series = listOf(ChartSeries(data = listOf(listOf(0f,40f),listOf(1f,60f)))))))
+    }
+
     @Test fun actualCalculatorParserKeepsThirteenthInputSixthChoiceAndNinthOutput() {
         val fields = (1..13).joinToString(",") { """{"key":"x$it","label":"Input $it","value":$it}""" }
         val choices = (1..6).joinToString(",") { """{"label":"Option $it","value":$it}""" }

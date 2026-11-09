@@ -3,6 +3,7 @@
 /** The chart kind dispatcher: type -> the 34 chart components + Screenshot 6 Interactive Chrome. */
 import { useMemo, useState } from 'react'
 import type { ChartPayload } from '../types'
+import { pieAlternativeAllowed } from '../../../lib/nexly/chart-selection'
 import { useWidgetIdentity } from '../theme/WidgetSurface'
 import { AreaChartView } from '../charts/AreaChart'
 import { BarChartView } from '../charts/BarChart'
@@ -151,21 +152,26 @@ function ChartControls({ payload }: { payload: ChartPayload }) {
     : []
 
   if (!isSwitchable) {
-    return dispatchChartView(payload.type, payload)
+    const observations = (payload.series ?? []).reduce((count, series) => count + (series.data?.length ?? 0), 0)
+    return <>
+      {dispatchChartView(payload.type, payload)}
+      {observations > 0 && <div style={{ fontSize: 11, color: theme.text2 }}>{observations} points</div>}
+    </>
   }
 
   const tabs: Array<{ id: ChartPayload['type']; icon: string; label: string }> = [
     { id: 'line', icon: 'chart-line', label: 'Line Chart' },
     { id: 'bar', icon: 'chart-bar', label: 'Bar Chart' },
     { id: 'area', icon: 'chart-area', label: 'Area Chart' },
-    { id: payload.type === 'donut' ? 'donut' : 'pie', icon: 'chart-pie', label: 'Pie Chart' },
+    ...(pieAlternativeAllowed(payload.type, payload.unit ?? '', payload.series ?? [])
+      ? [{ id: payload.type === 'donut' ? 'donut' as const : 'pie' as const, icon: 'chart-pie', label: 'Pie Chart' }] : []),
   ]
 
   const computedInsights =
     summary
       ? [
           `${summary.seriesName}: ${summary.peakLabel} recorded the highest value (${summary.peakVal}) across ${summary.pointCount} points (${RANGE_OPTIONS[rangeIdx]}).`,
-          `First-to-last change for ${summary.seriesName} is ${summary.growthPct}; sum of observations is ${summary.total} (low: ${summary.minLabel} at ${summary.minVal}).`,
+          `Lowest observation for ${summary.seriesName}: ${summary.minLabel} at ${summary.minVal}. First-to-last change is ${summary.growthPct}.`,
         ]
       : rangeIdx === 3 ? explicitInsights : []
 
@@ -264,8 +270,8 @@ function ChartControls({ payload }: { payload: ChartPayload }) {
               border: `1px solid ${theme.border}`,
             }}
           >
-            <div style={{ fontSize: 10.5, color: theme.text3, fontWeight: 600 }}>Sum</div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: theme.text, marginTop: 2 }}>{summary.total}</div>
+            <div style={{ fontSize: 10.5, color: theme.text3, fontWeight: 600 }}>{activeType === 'pie' || activeType === 'donut' ? 'Total' : 'Lowest'}</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: theme.text, marginTop: 2 }}>{activeType === 'pie' || activeType === 'donut' ? summary.total : summary.minVal}</div>
             <div style={{ fontSize: 10.5, fontWeight: 700, color: theme.text3, marginTop: 2 }}>
               {summary.pointCount} points
             </div>

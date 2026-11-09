@@ -400,7 +400,32 @@ async function main() {
     await page.waitForSelector('tbody tr')
     const actualRows = await page.$$eval('tbody tr', rows=>rows.length)
     check('ordinary browser Table tab restores the actual paginated source rows', () => assert.equal(actualRows, 5))
-    assert.equal(checks, 55, 'All required real-browser code, terminal and production widget-control cases must execute')
+    await page.evaluate(() => window.gsRenderMessage('```chart\n' + JSON.stringify({
+      type: 'hbar', title: 'Actual signed observations', labels: Array.from({length:13}, (_,index) => 'Source '+index),
+      series: [
+        {name:'Primary', data:Array.from({length:13}, (_,index)=>[index,index%2===0 ? -(index+1) : index+1])},
+        {name:'Secondary', data:Array.from({length:13}, (_,index)=>[index,(index+1)*10])}
+      ]
+    }) + '\n```'))
+    await page.waitForFunction(() => {
+      const marks = Array.from(document.querySelectorAll('.recharts-bar-rectangle'))
+      return marks.length === 26 && marks.every(node => { const box=node.getBBox(); return box.width>0 && box.height>0 })
+    })
+    const marks = await page.$$eval('.recharts-bar-rectangle', nodes => nodes.map(node => {
+      const box = node.getBBox(); return {width:box.width,height:box.height}
+    }))
+    check('real horizontal chart paints every observation in both series beyond ten rows', () => {
+      assert.equal(marks.length,26); assert.ok(marks.every(mark=>mark.width>0 && mark.height>0))
+    })
+    await page.waitForFunction(() => document.querySelectorAll('.recharts-label-list text').length === 26)
+    const values = await page.$$eval('.recharts-label-list text', nodes => nodes.map(node=>node.textContent))
+    check('real horizontal-chart labels retain every signed source value without clamping or discarding a series', () => {
+      assert.deepEqual(values, [
+        ...Array.from({length:13}, (_,index)=>String(index%2===0 ? -(index+1) : index+1)),
+        ...Array.from({length:13}, (_,index)=>String((index+1)*10))
+      ])
+    })
+    assert.equal(checks, 57, 'All required real-browser code, terminal and production widget-control cases must execute')
     console.log(`\n${checks} real-browser code, terminal and widget-control checks passed`)
   } finally { closeProbe(); await browser.close(); fs.rmSync(libs, { recursive: true, force: true }) }
 }

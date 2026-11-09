@@ -663,25 +663,35 @@ class PlatformRuntimeTest {
         val labels = (0..7).joinToString(",") { "\"P$it\"" }
         val source = """{"type":"line","labels":[$labels],"series":[{"name":"Long","data":[$long]},{"name":"Short","data":[$short]},{"name":"Absent","data":[[0,9]]}]}"""
         val widget = parseWidget("chart", source) as Widget.Chart
+        var displayed by androidx.compose.runtime.mutableStateOf<Widget>(widget)
         compose.activity.setContentForPlatformTest {
             TheGsAiTheme {
                 androidx.compose.foundation.layout.Column(
                     Modifier.then(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()))) {
-                    com.grapsee.gsai.ui.chat.content.WidgetView(widget)
+                    com.grapsee.gsai.ui.chat.content.WidgetView(displayed)
                 }
             }
         }
         compose.onNodeWithText("All (8 pts) ▾").performClick()
         compose.onNodeWithText("Last 6 pts ▾").performClick()
         compose.onNodeWithText("Last 4 pts ▾").assertExists()
+        compose.onNodeWithText("Lowest").assertExists()
+        compose.onNodeWithText("5").assertExists()
+        compose.onNodeWithText("Pie").assertDoesNotExist()
+        // Both the native legend and the real series selector can expose
+        // these names. Test source presence without assuming a single node.
+        compose.onAllNodesWithText("Long").onFirst().assertExists()
+        compose.onAllNodesWithText("Short").onFirst().assertExists()
+        compose.onNodeWithText("Absent").assertDoesNotExist()
+        // A new, genuine single-series dataset can offer shares. Controls must
+        // reset with that source, not preserve the previous window or series.
+        compose.runOnIdle { displayed = Widget.Chart(widget.w.copy(series = listOf(widget.w.series.first()))) }
+        compose.onNodeWithText("All (8 pts) ▾").assertExists()
         compose.onNodeWithText("Pie").performClick()
-        compose.onNodeWithText("Long: P7 — 6%").assertExists()
-        compose.onNodeWithText("Short: P4 — 80%").assertExists()
-        compose.onAllNodes(hasText("Short: P0", substring = true)).assertCountEquals(0)
-        compose.onAllNodes(hasText("Absent", substring = true)).assertCountEquals(0)
+        compose.onNodeWithText("P7 — 22%").assertExists()
         compose.onNodeWithText("N/A (slice values)").assertExists()
         compose.onNodeWithText("Line").performClick()
-        compose.onNodeWithText("Last 4 pts ▾").assertExists()
+        compose.onNodeWithText("All (8 pts) ▾").assertExists()
     }
 
     @Test fun generatedTerminalUsesRealFilesWorkerAndUnsupportedRefusal() {

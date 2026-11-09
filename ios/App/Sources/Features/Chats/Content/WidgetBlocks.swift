@@ -152,7 +152,7 @@ func canonicalChartType(_ raw: String) -> String {
     let lower = trimmed.lowercased()
     if let hit = CHART_TYPES.first(where: { $0.lowercased() == lower }) { return hit }
     if let syn = CHART_SYNONYMS[lower] { return syn }
-    return "bar"
+    return trimmed // Unknown semantics are not permission to invent a bar chart.
 }
 
 func widgetKindOf(_ language: String?) -> String? {
@@ -284,15 +284,23 @@ private func recoverPlainTextWidgetIOS(kind: String, raw: String) -> [String: An
     }
     switch kind {
     case "chart", "progress", "gauge":
-        let numPairs = kvPairs.compactMap { k, v -> [String: Any]? in
-            let numStr = v.replacingOccurrences(of: "[^0-9.-]", with: "", options: .regularExpression)
-            guard let d = Double(numStr) else { return nil }
-            return ["label": k, "value": d]
+        // A malformed fence is not permission to turn "1*2" into 12,
+        // strip a loss sign or discard a missing observation.
+        guard !kvPairs.isEmpty, bullets.isEmpty else { return nil }
+        var observations: [(String, Double)] = []
+        for (label, source) in kvPairs {
+            let valueText = kind != "chart" && source.hasSuffix("%") ? String(source.dropLast()).trimmingCharacters(in: .whitespaces) : source
+            guard let value = chartValueIOS(valueText) else { return nil }
+            if kind != "chart" && !(0...100).contains(value) { return nil }
+            observations.append((label, value))
         }
-        guard !numPairs.isEmpty else { return nil }
-        return kind == "chart"
-            ? ["type": "bar", "series": [["name": "Value", "data": numPairs]]]
-            : ["items": numPairs]
+        if kind == "chart" {
+            let labels = observations.map { $0.0 }
+            let data = observations.enumerated().map { [Double($0.offset), $0.element.1] }
+            let series: [[String: Any]] = [["name": "Value", "data": data]]
+            return ["type": categoricalChartTypeIOS(labels), "labels": labels, "series": series]
+        }
+        return ["items": observations.map { ["label": $0.0, "value": $0.1] as [String: Any] }]
     case "stat":
         guard !kvPairs.isEmpty else { return nil }
         return ["cards": kvPairs.map { ["label": $0.0, "value": $0.1] }]
@@ -464,6 +472,8 @@ func isValidWidget(kind: String, json: String) -> Bool {
     guard let obj = parseRelaxedJSONObject(kind: resolved, raw: json) else { return false }
     switch resolved {
     case "chart":
+        let suppliedType = str(obj, "type", "chartType")
+        guard suppliedType.isEmpty || CHART_TYPES.contains(canonicalChartType(suppliedType)) else { return false }
         return (obj["series"] as? [Any])?.isEmpty == false ||
                (obj["data"] as? [Any])?.isEmpty == false ||
                (obj["values"] as? [Any])?.isEmpty == false ||
@@ -978,7 +988,14 @@ private struct WidgetBodyView: View {
     var body: some View {
         switch kind {
         case "chart":
-            ChartBodyView(obj: obj, accent: accent)
+            let type = canonicalChartType(str(obj, "type", "chartType").ifEmptyIOS("line"))
+            if basicNativeChartTypesIOS.contains(type) {
+                ChartBodyView(obj: obj, accent: accent)
+            } else if specializedNativeChartTypesIOS.contains(type) {
+                SpecializedChartViewIOS(obj: obj)
+            } else {
+                unsupportedChartSourceIOS(obj, message: "This chart type is not yet supported by the native renderer. Its original data is preserved; it has not been replaced with a different chart.")
+            }
         case "stat":
             StatBodyView(obj: obj, accent: accent)
         case "table":
@@ -1274,7 +1291,7 @@ private struct ChartBodyView: View {
         VStack(alignment: .trailing, spacing: 6) {
             ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 3) {
-                ForEach(Array(Self.chartTypeTabs.enumerated()), id: \.offset) { _, tab in
+                ForEach(Array(Self.chartTypeTabs.filter { $0.id != "pie" || pieAlternativeAllowedIOS(obj) }.enumerated()), id: \.offset) { _, tab in
                     let tabId = tab.id
                     let isSel = currentType == tabId || (tabId == "pie" && currentType == "donut")
                     Button {
@@ -1629,6 +1646,7 @@ private struct ChartBodyView: View {
             let pillBg = growthPct == nil ? Color.gray.opacity(0.1) : (pos ? Color(red: 0.902, green: 0.976, blue: 0.941) : Color(red: 0.992, green: 0.925, blue: 0.925))
             let pillFg = growthPct == nil ? Aero.textSecondary : (pos ? Color(red: 0.071, green: 0.604, blue: 0.353) : Color(red: 0.878, green: 0.310, blue: 0.373))
             let peakPt = pts[peakIdx]
+            let minimum = pts.map { $0.value }.min() ?? pts[0].value
             HStack(spacing: 7) {
                 VStack(alignment: .leading, spacing: 3) {
                     NexlyGlassGlyphTile(
@@ -1637,10 +1655,10 @@ private struct ChartBodyView: View {
                         size: 24,
                         glyphSize: 14
                     )
-                    Text(compactNumber(totalVal, unit: unit))
+                    Text(compactNumber(slices ? totalVal : minimum, unit: unit))
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(Aero.text)
-                    Text("Total")
+                    Text(slices ? "Total" : "Lowest")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Aero.textSecondary)
                     Text("\(pts.count) points")

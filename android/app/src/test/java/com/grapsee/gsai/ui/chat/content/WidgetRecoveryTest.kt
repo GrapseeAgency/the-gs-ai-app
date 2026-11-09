@@ -28,7 +28,7 @@ class WidgetRecoveryTest {
         would be software, followed by semiconductors.
     """.trimIndent()
 
-    private val sectorAnswer = """
+    private val rangeSectorAnswer = """
         Here is the breakdown by sector:
 
         5. Telecommunications
@@ -57,8 +57,18 @@ class WidgetRecoveryTest {
         - Focus: Cloud and platforms
     """.trimIndent()
 
+    // Concrete observations for positive recovery tests; the original captured
+    // range-only answer remains a separate refusal regression below.
+    private val sectorAnswer = rangeSectorAnswer.replace("~$2-3 trillion", "$2 trillion")
+        .replace("~$1-2 trillion", "$1 trillion").replace("~$1 trillion", "$1 trillion")
+
     @Test
-    fun `screenshot case - refusal plus numbers in the prior turn still renders a chart`() {
+    fun `ranges in the reported answer never become invented sector midpoints`() {
+        assertNull(WidgetRecovery.recover(refusal, "Show me a bar chart", rangeSectorAnswer))
+    }
+
+    @Test
+    fun `refusal plus concrete observations in the prior turn still renders a chart`() {
         val block = WidgetRecovery.recover(refusal, "Show me a bar chart", sectorAnswer)
         assertNotNull("a chart must be recovered", block)
         assertEquals("chart", block!!.kind)
@@ -71,6 +81,36 @@ class WidgetRecoveryTest {
         assertTrue(chart.labels.any { it.contains("Telecommunications") })
         assertTrue(chart.labels.any { it.contains("Semiconductors") })
         assertTrue(chart.title.contains("from the answer above"))
+    }
+
+    @Test fun currentSourcesCannotBorrowPreviousObservations() {
+        val prior = "- Q1: 10\n- Q2: 20\n- Q3: 30"
+        for (source in listOf(
+            "- Jan: 1\n- Feb: unknown\n- Mar: 3",
+            "- Jan: **missing**\n- Feb: **missing**",
+            "- Jan: 10",
+            "- Alpha: 1_2\n- Beta: 3",
+            "| Month | Sales |\n|---|---|\n| Jan | 10 |\n| Feb | unknown |",
+            "| Month | Mass | Cost |\n|---|---|---|\n| Jan | 10 kg | $20 |\n| Feb | 12 kg | $30 |"
+        )) assertNull("Stale history replaced current source: $source", WidgetRecovery.recover(source, "chart this", prior))
+    }
+
+    @Test fun recoveryUsesDataMeaningNotOneRepeatedBarChart() {
+        val trend = "- Q1: 10\n- Q2: 20\n- Q3: 30"
+        val automatic = WidgetRecovery.recover(trend, "show me a chart", "")!!
+        assertEquals("line", widgetJson.decodeFromString<ChartWidget>(automatic.json).type)
+        val longLabels = "- A supplied category with a long name: 10\n- Another supplied category: 20"
+        val readable = WidgetRecovery.recover(longLabels, "graph this", "")!!
+        assertEquals("hbar", widgetJson.decodeFromString<ChartWidget>(readable.json).type)
+        assertNull(WidgetRecovery.recover(trend, "no charts please", ""))
+        assertNull(WidgetRecovery.recover(trend, "plain text only", ""))
+        assertNull(WidgetRecovery.recover(trend, "draw a scatter plot", ""))
+        assertNull(WidgetRecovery.recover("- Mass: 10 kg\n- Cost: $20", "chart this", ""))
+        assertNull(WidgetRecovery.recover("- Alpha: 1*2\n- Beta: 3", "chart this", ""))
+        assertNull(WidgetRecovery.recover("- Jan: 1\n- Feb: unknown\n- Mar: 3", "chart this", ""))
+        assertNull(WidgetRecovery.recover("```text\n- Alpha: 10\n- Beta: 20\n```", "chart this", ""))
+        val thirteen = (1..13).joinToString("\n") { "- Source $it: $it" }
+        assertEquals(13, widgetJson.decodeFromString<ChartWidget>(WidgetRecovery.recover(thirteen, "chart this", "")!!.json).labels.size)
     }
 
     @Test
@@ -133,13 +173,8 @@ class WidgetRecoveryTest {
     }
 
     @Test
-    fun `no data yields a labelled sample, never a claim about user data`() {
-        val block = WidgetRecovery.recover(refusal, "show me a chart", "")
-        assertNotNull("a no-data chart request should still demonstrate the renderer", block)
-        val chart = widgetJson.decodeFromString<ChartWidget>(block!!.json)
-        assertTrue("title must say SAMPLE: ${chart.title}", chart.title.contains("Sample", true))
-        assertEquals("Sample", chart.series.first().name)
-        assertTrue("parseWidget rejected the sample", parseWidget(block.kind, block.json) is Widget.Chart)
+    fun `no data never invents a sample chart`() {
+        assertNull(WidgetRecovery.recover(refusal, "show me a chart", ""))
     }
 
     @Test

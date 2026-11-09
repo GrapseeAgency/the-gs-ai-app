@@ -296,45 +296,55 @@ private fun chartShareLabel(datum: ChartDatum): String =
 
 // --- horizontal bar ----------------------------------------------------------
 
+internal data class HorizontalChartObservation(val series: String, val label: String, val value: Float)
+
+internal fun horizontalChartObservations(w: ChartWidget): List<HorizontalChartObservation>? {
+    val observations = ArrayList<HorizontalChartObservation>()
+    for ((seriesIndex, series) in w.series.withIndex()) {
+        for ((index, point) in series.data.withIndex()) {
+            val value = point.getOrNull(1)?.takeIf { it.isFinite() } ?: return null
+            observations += HorizontalChartObservation(series.name.ifBlank { "Series ${seriesIndex + 1}" },
+                w.labels.getOrNull(index) ?: "Point ${index + 1}", value)
+        }
+    }
+    return observations.takeIf { it.isNotEmpty() }
+}
+
 @Composable
 internal fun HBarChart(w: ChartWidget) {
     var animate by remember { mutableStateOf(false) }
     LaunchedEffect(w) { animate = true }
     val progress by animateFloatAsState(if (animate) 1f else 0f, tween(700), label = "hbar")
-    val s = w.series.first()
-    val labels = if (w.labels.size >= s.data.size) w.labels else s.data.indices.map { "S${it + 1}" }
-    val maxV = chartMax(w)
+    val observations = horizontalChartObservations(w)
+    if (observations == null) {
+        Text("Chart unavailable: the source has a missing or invalid observation.")
+        return
+    }
+    val low = minOf(0.0, observations.minOf { it.value.toDouble() })
+    val high = maxOf(0.0, observations.maxOf { it.value.toDouble() })
+    val span = (high - low).takeIf { it > 0 } ?: 1.0
+    val zero = (-low / span).toFloat()
     val c = GsTheme.colors
     Column(Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        s.data.take(10).forEachIndexed { i, point ->
-            val v = point.getOrElse(1) { 0f }.coerceAtLeast(0f)
-            val frac = (v / maxV).coerceIn(0f, 1f) * progress
-            val label = labels.getOrElse(i) { "" }
+        observations.forEachIndexed { index, observation ->
+            val value = observation.value
+            val end = zero + (value.toDouble() / span).toFloat() * progress
+            val left = minOf(zero, end)
+            val width = kotlin.math.abs(end - zero)
+            val color = seriesColor(index)
             Column {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = c.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    Text(
-                        if (progress >= 0.99f) formatChartValue(v) else "",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = c.textSecondary,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                    )
+                    Text(if (w.series.size > 1) "${observation.series} · ${observation.label}" else observation.label,
+                        style = MaterialTheme.typography.labelMedium, color = c.textPrimary,
+                        modifier = Modifier.weight(1f, fill = false))
+                    Text(formatChartValue(value) + if (w.unit.isBlank()) "" else " ${w.unit}",
+                        style = MaterialTheme.typography.labelMedium, color = c.textSecondary,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
                 }
-                Box(
-                    Modifier.fillMaxWidth().padding(top = 4.dp).height(12.dp)
-                        .clip(RoundedCornerShape(99.dp)).background(c.raisedSurface)
-                ) {
-                    Box(
-                        Modifier.fillMaxWidth(frac).height(12.dp)
-                            .clip(RoundedCornerShape(99.dp)).background(seriesColor(i))
-                    )
+                Canvas(Modifier.fillMaxWidth().padding(top = 4.dp).height(12.dp)) {
+                    drawRect(c.raisedSurface)
+                    drawRect(color, topLeft = Offset(left * size.width, 0f), size = Size(width * size.width, size.height))
+                    drawLine(c.textSecondary, Offset(zero * size.width, 0f), Offset(zero * size.width, size.height), strokeWidth = 1f)
                 }
             }
         }

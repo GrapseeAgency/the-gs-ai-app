@@ -484,6 +484,30 @@ final class PlatformRuntimeUITests: XCTestCase {
         add(evidence)
     }
 
+    func testGeneratedScatterUsesActualPairedAxesAndNativeObservationInspection() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        let open = app.buttons["Open generated scatter"]
+        XCTAssertTrue(open.waitForExistence(timeout: 20))
+        open.tap()
+        let native = app.descendants(matching: .any)["chart.native.scatter"].firstMatch
+        XCTAssertTrue(native.waitForExistence(timeout: 10), "Scatter must use a real native paired-axis renderer, not the categorical line fallback")
+        XCTAssertFalse(app.buttons["Line"].exists)
+        XCTAssertFalse(app.buttons["Pie"].exists)
+        let picker = app.buttons["chart.observation.picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        picker.tap()
+        let third = app.buttons["Observed · Third"]
+        XCTAssertTrue(third.waitForExistence(timeout: 10))
+        third.tap()
+        XCTAssertTrue(app.staticTexts["Observed: x 8.0, y 9.0"].waitForExistence(timeout: 10), "Inspection must preserve both actual numeric axes, not replace x with a category index")
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "genui-native-scatter-actual-paired-axes"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+    }
+
     func testGeneratedChartRetainsAllPointsSelectsSeriesAndRejectsSignedPie() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
@@ -492,8 +516,7 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertTrue(open.waitForExistence(timeout: 20))
         open.tap()
         XCTAssertTrue(app.buttons["All (31 pts) ▾"].waitForExistence(timeout: 10), "Chart truncated its actual 31 observations")
-        app.buttons["Pie"].tap()
-        XCTAssertTrue(app.staticTexts["Pie shares require nonnegative values and a positive total. Choose Line or Bar for this dataset."].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Pie"].exists, "A signed multi-series source must not offer a misleading part-to-whole conversion")
         app.buttons["Bar"].tap()
         XCTAssertTrue(app.buttons["All (31 pts) ▾"].exists)
         app.buttons["Series: Primary"].tap()
@@ -506,6 +529,7 @@ final class PlatformRuntimeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Last 3 pts ▾"].waitForExistence(timeout: 10))
         app.buttons["Last 3 pts ▾"].tap()
         XCTAssertTrue(app.buttons["Last 2 pts ▾"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Lowest"].exists, "Independent observations must not acquire an invented additive total")
         let evidence = XCTAttachment(screenshot: app.screenshot())
         evidence.name = "genui-chart-real-series-selection-and-range"
         evidence.lifetime = .keepAlways

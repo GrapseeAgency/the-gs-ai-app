@@ -590,6 +590,27 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
     return try {
         when (resolvedKind) {
             "chart" -> {
+                val source = widgetJson.parseToJsonElement(json) as? JsonObject
+                val sourceType = (source?.get("type") as? JsonPrimitive)?.contentOrNull
+                if (sourceType in setOf("scatter", "bubble", "gantt", "candlestick")) {
+                    fun sourceNumber(value: JsonElement?): Float? =
+                        (value as? JsonPrimitive)?.floatOrNull?.takeIf { it.isFinite() }
+                    val suppliedSeries = source?.get("series") as? JsonArray
+                    require(suppliedSeries != null && suppliedSeries.all { series ->
+                        val points = (series as? JsonObject)?.get("data") as? JsonArray
+                        points != null && points.all { point ->
+                            when (point) {
+                                is JsonArray -> point.size >= 2 && sourceNumber(point.firstOrNull()) != null
+                                is JsonObject -> if (sourceType == "candlestick") {
+                                    listOf("open" to "o", "high" to "h", "low" to "l", "close" to "c").all { (key, alias) ->
+                                        sourceNumber(point[key] ?: point[alias]) != null
+                                    }
+                                } else sourceNumber(point["x"]) != null
+                                else -> false
+                            }
+                        }
+                    }) { "Paired charts need supplied coordinates; ordinal indices cannot replace a missing measurement." }
+                }
                 val w = widgetJson.decodeFromString<ChartWidget>(json)
                 // Pie/donut are documented as ONE SERIES PER SLICE with a
                 // single point — requiring two points silently rejected every
@@ -600,6 +621,19 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
                 require(w.series.size <= MAX_CHART_SERIES && w.series.all { it.data.size <= MAX_POINTS_PER_SERIES }) {
                     "Chart exceeds supported capacity; original source is preserved instead of truncating observations."
                 }
+                require(w.series.all { source -> source.data.all { point ->
+                    point.all { it.isFinite() } && when (w.type) {
+                        "bubble" -> point.size == 3 && point[2] >= 0f
+                        "candlestick" -> if (point.size in 4..5) {
+                            val ohlc = point.takeLast(4)
+                            ohlc[1] >= maxOf(ohlc[0], ohlc[3]) && ohlc[2] <= minOf(ohlc[0], ohlc[3]) && ohlc[2] <= ohlc[1]
+                        } else false
+                        "gantt" -> point.size == 2 && point[1] >= point[0]
+                        "correlation" -> point.size == 2 && kotlin.math.abs(point[1]) <= 1f
+                        "scatter", "line", "bar", "hbar", "area", "grouped", "stacked", "stackedArea", "waterfall" -> point.size == 2
+                        else -> true
+                    }
+                } }) { "Chart source has invalid or missing axes, dimensions or ranges; original observations are preserved instead of substituted." }
                 val series = w.series.take(MAX_CHART_SERIES).map {
                     it.copy(data = it.data.take(MAX_POINTS_PER_SERIES))
                 }.filter { it.data.size >= minPoints }
@@ -1541,7 +1575,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                 Triple("bar", "chart-bar", "Bar"),
                 Triple("area", "chart-area", "Area"),
                 Triple(if (w.type == "donut") "donut" else "pie", "chart-pie", "Pie")
-            )
+            ).filter { (type, _, _) -> type !in setOf("pie", "donut") || pieAlternativeAllowed(w) }
             // Keep every chart type visible on phone-width cards; the
             // genuine source-range control must not squeeze Pie off-screen.
             Column(
@@ -1684,7 +1718,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                     val peakVal = ys.getOrElse(maxIdx) { 0f }
                     val pct = if (activeType in setOf("pie", "donut")) null else chartGrowthPercentAndroid(ys.first().toDouble(), ys.last().toDouble())
                     Triple(
-                        axisLabel(total, slicedWidget.unit),
+                        axisLabel(if (activeType in setOf("pie", "donut")) total else ys.minOrNull()!!, slicedWidget.unit),
                         peakLabel to axisLabel(peakVal, slicedWidget.unit),
                         pct
                     )
@@ -1724,7 +1758,7 @@ private fun ChartWidgetView(w: ChartWidget) {
                             glyphSize = 14.dp
                         )
                         Text(totalStr, fontSize = 14.sp, color = GsTheme.colors.textPrimary, fontWeight = FontWeight.Bold)
-                        Text("Total", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.Medium)
+                        Text(if (activeType in setOf("pie", "donut")) "Total" else "Lowest", fontSize = 10.sp, color = GsTheme.colors.textTertiary, fontWeight = FontWeight.Medium)
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))

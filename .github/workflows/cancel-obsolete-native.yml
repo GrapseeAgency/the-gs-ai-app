@@ -1,0 +1,52 @@
+name: Keep current native verification moving
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel-obsolete-revisions:
+    # Same-repository PRs only. Do not give fork code a write token.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Cancel superseded native runs, never current acceptance gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Each native revision has an independent concurrency group so a
+          # runner stranded before allocation cannot pin the next revision.
+          # Retire obsolete groups explicitly instead of spending every macOS
+          # and emulator slot on source already replaced by a newer fix.
+          # Never cancel producers, another PR, a completed evidence run, or
+          # any acceptance/review job for this exact current source revision.
+          gh api --method GET "repos/$GH_REPO/actions/runs" \
+            -f branch="$PR_BRANCH" -f event=pull_request -f per_page=100 \
+            --paginate --jq '.workflow_runs[] | select(.head_branch == env.PR_BRANCH and .head_sha != env.PR_HEAD_SHA and .status != "completed") | select(.name == "iOS (macOS) — Xcode build & test" or .name == "Platform runtime contracts") | [.id, .head_sha] | @tsv' > /tmp/obsolete-native-runs
+          while IFS=$'\t' read -r id source_sha; do
+            [[ "$id" =~ ^[0-9]+$ && "$source_sha" =~ ^[0-9a-f]{40}$ ]] || continue
+            # An older cleanup job can itself start late. Only a verified
+            # ancestor is obsolete: never cancel a newer or divergent head.
+            if ! relation=$(gh api "repos/$GH_REPO/compare/$source_sha...$PR_HEAD_SHA" --jq '.status'); then
+              echo "::warning::Could not verify ancestry for native run $id; leaving it intact."
+              continue
+            fi
+            [[ "$relation" == "ahead" ]] || continue
+            if gh api --method POST "repos/$GH_REPO/actions/runs/$id/cancel"; then
+              echo "Cancellation accepted for obsolete native run $id"
+            else
+              # A completion race or repository policy must not suppress the
+              # actual native compile, touch tests or mandatory receipts.
+              echo "::warning::Could not cancel superseded run $id; current native acceptance remains unchanged."
+            fi
+          done < /tmp/obsolete-native-runs
