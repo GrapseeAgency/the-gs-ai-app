@@ -72,12 +72,13 @@ struct SpecializedChartViewIOS: View {
 
     var body: some View {
         if let points = specializedChartPointsIOS(obj) {
+            let rowCount = Set(points.map { ["heatmap", "correlation"].contains(type) ? $0.series : $0.label }).count
             VStack(alignment: .leading, spacing: 10) {
                 if let unit = obj["unit"] as? String, !unit.isEmpty {
                     Text("Unit: \(unit)").font(.caption).foregroundStyle(.secondary)
                 }
                 nativeChart(points)
-                    .frame(height: ["hbar", "gantt", "heatmap", "correlation"].contains(type) ? max(220, CGFloat(Set(points.map { $0.label }).count) * 28) : 260)
+                    .frame(height: ["hbar", "gantt", "heatmap", "correlation"].contains(type) ? max(220, CGFloat(rowCount) * 28) : 260)
                     .chartOverlay { proxy in
                         GeometryReader { geometry in
                             Rectangle().fill(.clear).contentShape(Rectangle())
@@ -85,13 +86,22 @@ struct SpecializedChartViewIOS: View {
                                     let area = geometry[proxy.plotAreaFrame]
                                     if ["hbar", "gantt"].contains(type) {
                                         if let category: String = proxy.value(atY: gesture.location.y - area.origin.y) {
-                                            selected = points.first(where: { $0.label == category })?.id
+                                            let candidates = points.filter { $0.label == category }
+                                            selected = candidates.count == 1 ? candidates.first?.id : nil
                                         }
                                     } else if ["grouped", "stacked", "waterfall", "heatmap", "correlation"].contains(type) {
                                         if let category: String = proxy.value(atX: gesture.location.x - area.origin.x) {
                                             let row: String? = proxy.value(atY: gesture.location.y - area.origin.y)
-                                            selected = points.first(where: { $0.label == category && (!["heatmap", "correlation"].contains(type) || $0.series == row) })?.id
+                                            let candidates = points.filter { $0.label == category && (!["heatmap", "correlation"].contains(type) || $0.series == row) }
+                                            selected = candidates.count == 1 ? candidates.first?.id : nil
                                         }
+                                    } else if type == "scatter" || type == "bubble" {
+                                        let finger = CGPoint(x: gesture.location.x - area.origin.x, y: gesture.location.y - area.origin.y)
+                                        func distance(_ point: NativeChartPointIOS) -> CGFloat {
+                                            guard let x = proxy.position(forX: point.x), let y = proxy.position(forY: point.y) else { return .infinity }
+                                            return hypot(x - finger.x, y - finger.y)
+                                        }
+                                        selected = points.min(by: { distance($0) < distance($1) })?.id
                                     } else if let x: Double = proxy.value(atX: gesture.location.x - area.origin.x) {
                                         selected = points.min(by: { abs((type == "candlestick" ? Double($0.id) : $0.x) - x) < abs((type == "candlestick" ? Double($1.id) : $1.x) - x) })?.id
                                     }
