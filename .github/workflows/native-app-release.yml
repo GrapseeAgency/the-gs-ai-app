@@ -37,7 +37,50 @@ jobs:
         run: bash .github/scripts/stage_release_so.sh 42246640175
       - name: Unit tests and optimized signed APK
         working-directory: android
-        run: gradle --no-build-cache --max-workers=2 :app:testDebugUnitTest :app:assembleRelease
+        run: |
+          set -o pipefail
+          cat > /tmp/release-test-logging.gradle <<'GRADLE'
+          allprojects {
+            tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
+              testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            }
+          }
+          GRADLE
+          gradle --no-build-cache --max-workers=2 --console=plain --stacktrace -I /tmp/release-test-logging.gradle :app:testDebugUnitTest 2>&1 | tee ../android-release-tests.log
+          gradle --no-build-cache --max-workers=2 --console=plain --stacktrace :app:assembleRelease 2>&1 | tee ../android-release-package.log
+      - name: Publish actual unit-test failures and execution counts
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import pathlib, xml.etree.ElementTree as ET
+          reports = list(pathlib.Path('android/app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'))
+          totals = dict(tests=0, failures=0, errors=0, skipped=0)
+          failures = []
+          for file in reports:
+              root = ET.parse(file).getroot()
+              for key in totals:
+                  totals[key] += int(root.get(key, 0))
+              for case in root.findall('testcase'):
+                  failure = case.find('failure')
+                  if failure is None:
+                      failure = case.find('error')
+                  if failure is not None:
+                      failures.append(case.get('classname','')+'.'+case.get('name','')+'\n'+(failure.text or failure.get('message','')))
+          for text in failures[:10]:
+              text = text[:3200].replace('%','%25').replace('\r','%0D').replace('\n','%0A')
+              print('::notice title=Actual native Android unit failure::'+text)
+          print('::notice title=Actual native Android test counts::'+str(totals))
+          if not reports:
+              print('::warning::No JUnit results exist; compilation may have failed before tests ran.')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-android-release-logs
+          path: |
+            android-release-*.log
+            android/app/build/test-results/testDebugUnitTest/*.xml
+          if-no-files-found: warn
       - name: Verify the actual shipping APK
         run: |
           set -euo pipefail
