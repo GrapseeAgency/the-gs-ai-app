@@ -397,6 +397,10 @@ jobs:
           import re
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
+              ('ChatResponseHonestyTests', 'testUnusualPromptFailureNeverBecomesKeywordSelectedCannedAnswer'),
+              ('ChatResponseHonestyTests', 'testCanonicalDoneReplacesDraftAndKeepsRealServerIdentityBeforeFinalization'),
+              ('ChatResponseHonestyTests', 'testInterruptedReplyPreservesOnlyActualTextAndDoesNotPromiseAutomaticContinuation'),
+              ('ChatResponseHonestyTests', 'testEmptyCompletionIsAnErrorNotASuccessfulBlankAnswer'),
               ('PlatformRuntimeUITests', 'testConversationActionsTapOpensRealOptionsWithoutLeavingChat'),
               ('CalcHonestyTests', 'testActualMessagePreviewIdentitySurvivesRehydrationWithoutInventingServerIDs'),
               ('CalcHonestyTests', 'testActualSQLiteHistoryAndOlderPagesKeepDurablePreviewIdentity'),
