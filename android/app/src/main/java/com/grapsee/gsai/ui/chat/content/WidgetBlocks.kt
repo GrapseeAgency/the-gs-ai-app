@@ -751,7 +751,8 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
                 val fields = w.fields.take(10).filter { it.key.isNotBlank() }
                 val outputs = w.outputs.take(8).filter { it.expr.isNotBlank() }
                 val rawType = w.type.lowercase().ifBlank { "finance" }
-                val normType = if (rawType in CALC_TYPES) rawType else "finance"
+                if (rawType !in CALC_TYPES) return null // Preserve unsupported source; never relabel it as finance.
+                val normType = rawType
                 if (fields.isEmpty() || outputs.isEmpty()) null
                 else Widget.Calc(
                     w.copy(
