@@ -29,6 +29,7 @@ import {
 import { extractBareWidget, extractWidgetFences, inferWidgetKind, validateWidget, validationErrors } from './validate'
 import { directWidgetArt, type ArtDirection } from './art-direct'
 import { sanitizeReplyEmojis } from '../nexly/icons'
+import { chartPreference, categoricalChartType, chronologicalLabels, supportsCategoryRecovery } from '../nexly/chart-selection'
 
 export interface CompileInput {
   reply: string
@@ -50,45 +51,12 @@ interface Point {
   value: number
   display: string
   percent: boolean
+  unit: string
 }
 
-const CHART_PHRASES: Array<[string, (typeof CHART_TYPES)[number]]> = [
-  ['horizontal bar', 'hbar'],
-  ['stacked bar', 'stacked'],
-  ['stacked area', 'stackedArea'],
-  ['bar chart', 'bar'],
-  ['bar graph', 'bar'],
-  ['column chart', 'bar'],
-  ['line chart', 'line'],
-  ['line graph', 'line'],
-  ['area chart', 'area'],
-  ['pie chart', 'pie'],
-  ['doughnut', 'donut'],
-  ['donut', 'donut'],
-  ['radar', 'radar'],
-  ['funnel', 'funnel'],
-  ['waterfall', 'waterfall'],
-  ['treemap', 'treemap'],
-  ['histogram', 'bar'],
-  ['chart', 'bar'],
-  ['graph', 'bar'],
-  ['plot', 'bar'],
-  ['visuali', 'bar'],
-]
-
+/** Null means no explicit type, not an instruction to invent a bar chart. */
 export function requestedChartType(prompt: string): (typeof CHART_TYPES)[number] | null {
-  const p = prompt.toLowerCase()
-  if (
-    p.includes('flowchart') ||
-    p.includes('flow chart') ||
-    p.includes('diagram') ||
-    p.includes('mindmap') ||
-    p.includes('org chart')
-  ) {
-    return null
-  }
-  const hit = CHART_PHRASES.find(([phrase]) => p.includes(phrase))
-  return hit ? hit[1] : null
+  return chartPreference(prompt).type
 }
 
 export function compileWidgets(input: CompileInput): CompileResult {
@@ -175,17 +143,25 @@ export function compileWidgets(input: CompileInput): CompileResult {
   // An invalid data widget is not evidence for an invented replacement chart.
   if (invalid.length > 0) return { text: strip(reply, invalid), widgets: 0, path: 'none', errors }
 
-  // Path 3: no usable widget. Only build one when the user asked for it.
-  const chartType = requestedChartType(userPrompt)
-  if (!chartType) {
-    return { text: strip(reply, invalid), widgets: 0, path: 'none', errors }
+  // Recover only data the answer really contains. Respect presentation opt-outs;
+  // a generic request does not identify either a chart type or a data schema.
+  const preference = chartPreference(userPrompt)
+  if (preference.suppressed) return { text: reply, widgets: 0, path: 'none', errors }
+  const fromReply = extractPoints(reply)
+  const usePrior = preference.requested && /\b(?:this|that|these|those|above|previous|same|it)\b|^(?:please\s+)?(?:show|draw|make|create|render|plot)\s+(?:me\s+)?(?:a\s+)?(?:chart|graph|plot)[.!?]?$/i.test(userPrompt.trim())
+  const points = fromReply.length >= 2 ? fromReply : usePrior ? extractPoints(priorText) : []
+  if (points.length < 2 || new Set(points.map(point => point.unit)).size !== 1) {
+    return { text: reply, widgets: 0, path: 'none', errors }
   }
-
-  const points = pickPoints(reply, priorText)
-  if (points.length < 2 || (points.some(point => point.percent) && !points.every(point => point.percent))) {
-    return { text: strip(reply, invalid), widgets: 0, path: 'none', errors }
+  // A real multi-observation trend can be useful without a magic "chart" word.
+  // Constants, unrelated numbers and ordinary conversation never trigger this.
+  if (!preference.requested && !(points.length >= 3 && chronologicalLabels(points.map(point => point.label)))) {
+    return { text: reply, widgets: 0, path: 'none', errors }
   }
-
+  const chartType = preference.type ?? categoricalChartType(points.map(point => point.label))
+  if (!supportsCategoryRecovery(chartType, points.map(point => point.value))) {
+    return { text: reply, widgets: 0, path: 'none', errors }
+  }
   const widget = buildChart(points, chartType)
   const direction = directWidgetArt({ kind: 'chart', payload: widget, priorText })
   const styled = { ...widget, accent: direction.accent, variant: direction.variant, palette: direction.palette }
@@ -251,8 +227,8 @@ const BULLET = /^\s*(?:[-*+•·]|\d{1,2}[.)])\s+/
 const HEADING = /^#{1,6}\s+(.+)$/
 const NUMBERED = /^\d{1,2}[.)]\s+(.+)$/
 const SEPARATOR = /\s*[:=]\s*|\s+[—–]\s+/
-const NUMBER_AT_START =
-  /^~?\s*(?:about\s+|approx\.?\s+|around\s+|over\s+|under\s+)?(?:[A-Z]{3}\s*)?[$€£¥₹]?\s*(-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?)(?:\s*[-–]\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?))?\s*(%|percent|trillion|billion|million|thousand|tn|bn|mn|k|m|b|t)?/i
+// Whole values only: prose, ranges, mixed dimensions and code are not observations.
+const NUMBER_AT_START = /^\s*(?:([A-Z]{3}|[$€£¥₹৳])\s*)?(-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:e[+-]?\d+)?)\s*(trillion|billion|million|thousand|tn|bn|mn|[kmbt](?![a-z]))?\s*(%|percent|[a-z°][a-z0-9/°^]{0,15})?\s*$/i
 
 function clean(s: string): string {
   return s
@@ -263,48 +239,38 @@ function clean(s: string): string {
     .trim()
 }
 
-function parseNumber(text: string): { value: number; display: string; percent: boolean } | null {
+function parseNumber(text: string): { value: number; display: string; percent: boolean; unit: string } | null {
   const m = NUMBER_AT_START.exec(text.trim())
   if (!m) return null
-  const low = Number(m[1].replace(/,/g, ''))
-  const high = m[2] ? Number(m[2].replace(/,/g, '')) : null
-  if (!Number.isFinite(low)) return null
-  // A range is not an observed scalar; do not manufacture its midpoint.
-  if (high !== null) return null
-  const raw = low
-  const unit = (m[3] ?? '').toLowerCase()
-  const factor =
-    unit === 'trillion' || unit === 'tn' || unit === 't'
-      ? 1e12
-      : unit === 'billion' || unit === 'bn' || unit === 'b'
-        ? 1e9
-        : unit === 'million' || unit === 'mn' || unit === 'm'
-          ? 1e6
-          : unit === 'thousand' || unit === 'k'
-            ? 1e3
-            : 1
-  const display =
-    unit === '%' || unit === 'percent'
-      ? `${raw}%`
-      : unit
-        ? `${raw} ${unit}`
-        : String(raw)
-  return { value: raw * factor, display, percent: unit === '%' || unit === 'percent' }
-}
-
-function pickPoints(reply: string, prior: string): Point[] {
-  const fromReply = extractPoints(reply)
-  return fromReply.length >= 2 ? fromReply : extractPoints(prior)
+  const scale = (m[3] ?? '').toLowerCase()
+  const factor = ['trillion', 'tn', 't'].includes(scale) ? 1e12
+    : ['billion', 'bn', 'b'].includes(scale) ? 1e9 : ['million', 'mn', 'm'].includes(scale) ? 1e6
+    : ['thousand', 'k'].includes(scale) ? 1e3 : 1
+  const value = Number(m[2].replace(/,/g, '')) * factor
+  if (!Number.isFinite(value)) return null
+  const suffix = m[4] ?? ''
+  const currency: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', JPY: '¥', INR: '₹', BDT: '৳' }
+  const prefix = m[1] ?? ''
+  const unit = (currency[prefix] ?? prefix) || (suffix.toLowerCase() === 'percent' ? '%' : currency[suffix] ?? suffix)
+  if (prefix && suffix && (currency[suffix] ?? suffix) !== (currency[prefix] ?? prefix)) return null
+  return { value, display: text.trim(), percent: unit === '%', unit }
 }
 
 function extractPoints(text: string): Point[] {
   if (!text.trim()) return []
   const rows: Array<{ section: string; label: string; point: Point }> = []
   let section = ''
+  let fence: string | null = null
 
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim()
-    if (!line || line.startsWith('```')) continue
+    const marker = /^(`{3,}|~{3,})/.exec(line)?.[1]
+    if (marker) {
+      if (!fence) fence = marker
+      else if (marker[0] === fence[0] && marker.length >= fence.length) fence = null
+      continue
+    }
+    if (!line || fence) continue
 
     const h = HEADING.exec(line)
     if (h) {
@@ -324,7 +290,7 @@ function extractPoints(text: string): Point[] {
     const sep = SEPARATOR.exec(body)
     if (!sep || sep.index === undefined) continue
     const label = body.slice(0, sep.index).trim()
-    if (label.length < 2 || label.length > 60 || !/[a-zA-Z]/.test(label)) continue
+    if (label.length < 2 || label.length > 60 || !/[\p{L}\p{N}]/u.test(label)) continue
     if (label.includes('http')) continue
     const rest = body.slice(sep.index + sep[0].length).trim()
     const num = parseNumber(rest)
@@ -356,7 +322,7 @@ function extractPoints(text: string): Point[] {
     seen.add(key)
     return true
   })
-  return unique.length <= LIMITS.maxPointsPerSeries ? unique : []
+  return unique.length === points.length && unique.length <= LIMITS.maxPointsPerSeries ? unique : []
 }
 
 function buildChart(points: Point[], type: (typeof CHART_TYPES)[number]) {
@@ -365,7 +331,7 @@ function buildChart(points: Point[], type: (typeof CHART_TYPES)[number]) {
   return {
     type,
     title: 'From the numbers in this answer',
-    unit: points.every(point => point.percent) ? '%' : '',
+    unit: points[0]?.unit ?? '',
     labels,
     series,
   }
