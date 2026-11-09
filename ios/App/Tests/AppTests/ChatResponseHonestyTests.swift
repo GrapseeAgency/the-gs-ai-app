@@ -107,13 +107,13 @@ final class ChatResponseHonestyTests: XCTestCase {
         XCTAssertNotNil(fixture.vm.errorMessage)
         XCTAssertFalse(fixture.vm.errorMessage?.contains("private upstream detail") ?? true)
         let id = try XCTUnwrap(fixture.vm.conversationID)
-        XCTAssertEqual(fixture.store.recentMessages(for: id).filter { $0.role == "assistant" }.count, 0)
+        XCTAssertEqual(fixture.store.recentMessages(for: id, limit: 20).filter { $0.role == "assistant" }.count, 0)
     }
 
     @MainActor
     func testCanonicalDoneReplacesDraftAndKeepsRealServerIdentityBeforeFinalization() async throws {
         let canonical = "Actual answer: a source-defined interactive Bengali evacuation checklist."
-        let message = try JSONSerialization.data(withJSONObject: ["id": "actual-server-answer", "conversationId": "fixture", "role": "assistant", "content": canonical])
+        let message = try JSONSerialization.data(withJSONObject: ["id": "actual-server-answer", "conversationId": "fixture", "role": "assistant", "content": canonical, "sources": [["id": "real-source", "ordinal": 1, "title": "Source", "url": "https://example.org/actual", "domain": "example.org", "snippet": "Actual evidence"]]])
         var stream = try event("delta", "Unfinished draft that must not survive completion")
         stream.append(try event("done", String(decoding: message, as: UTF8.self)))
         let response = stream
@@ -125,10 +125,12 @@ final class ChatResponseHonestyTests: XCTestCase {
         let answer = try XCTUnwrap(fixture.vm.messages.last)
         XCTAssertEqual(answer.content, canonical)
         XCTAssertEqual(answer.serverId, "actual-server-answer")
+        XCTAssertEqual(answer.sources?.first?.id, "real-source")
+        XCTAssertEqual(answer.sources?.first?.url, "https://example.org/actual")
         XCTAssertEqual(answer.reactPreviewIdentity, "actual-server-answer")
         XCTAssertNil(fixture.vm.errorMessage)
         let id = try XCTUnwrap(fixture.vm.conversationID)
-        let stored = fixture.store.recentMessages(for: id).filter { $0.role == "assistant" }
+        let stored = fixture.store.recentMessages(for: id, limit: 20).filter { $0.role == "assistant" }
         XCTAssertEqual(stored.count, 1)
         XCTAssertEqual(stored.first?.id, "actual-server-answer")
         XCTAssertEqual(stored.first?.content, canonical)
