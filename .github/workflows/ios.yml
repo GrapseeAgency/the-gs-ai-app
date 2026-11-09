@@ -308,6 +308,8 @@ jobs:
             -destination "$IOS_DESTINATION" \
             -derivedDataPath "$DERIVED_DATA" \
             -only-testing:AppTests/CalcHonestyTests/testNativeJSONDelimiterRecoveryPreservesActualSourceBytesAndQuotedPunctuation \
+            -only-testing:AppTests/ChatResponseHonestyTests \
+            -only-testing:AppTests/CalculatorSourceHonestyTests \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch \
             -resultBundlePath ios/build/GSApp-react-keyboard.xcresult \
             CODE_SIGNING_ALLOWED=NO \
@@ -397,6 +399,9 @@ jobs:
           import re
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
+              ('CalculatorSourceHonestyTests', 'testActualFencedCalculatorAcceptsSourceAliasesAndScientificInitialValuesWithoutInventedDefaults'),
+              ('CalculatorSourceHonestyTests', 'testActualCalculatorFormatterDoesNotInventDollarsAndKeepsExplicitSourceUnits'),
+              ('PlatformRuntimeUITests', 'testGeneratedCalculatorKeepsNinthTenthInputsSixthChoiceAndSeventhOutputUsable'),
               ('ChatResponseHonestyTests', 'testUnusualPromptFailureNeverBecomesKeywordSelectedCannedAnswer'),
               ('ChatResponseHonestyTests', 'testCanonicalDoneReplacesDraftAndKeepsRealServerIdentityBeforeFinalization'),
               ('ChatResponseHonestyTests', 'testInterruptedReplyPreservesOnlyActualTextAndDoesNotPromiseAutomaticContinuation'),
