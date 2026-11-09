@@ -6,6 +6,9 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * The Nexly timetable contract on the Android side. The model emits one fenced
@@ -14,6 +17,8 @@ import org.junit.Test
  * settled reply owns a timetable (so the Thinking card and the footer timestamp
  * do not disappear/duplicate).
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], manifest = Config.NONE)
 class NexlyPlanTest {
 
     private val wire = """
