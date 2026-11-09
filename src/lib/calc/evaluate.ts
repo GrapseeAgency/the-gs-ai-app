@@ -153,9 +153,12 @@ export function evaluateExpr(expr: string, vars: Record<string, number>): number
 export function formatOutput(value: number, format: string | undefined, unit: string | undefined): string {
   if (!Number.isFinite(value)) return '—'
   const safe = value
-  if (format === 'money') {
-    const symbol = unit && /^[^\d\s]/.test(unit) ? unit : '$'
-    return `${symbol}${safe.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+  if (format === 'money' || format === 'currency') {
+    const amount = safe.toLocaleString(undefined, { maximumFractionDigits: 2 })
+    // A monetary format does not identify a currency. Keep unknown units
+    // unknown, preserve explicit codes, and prefix only actual currency signs.
+    if (!unit) return amount
+    return /^\p{Sc}$/u.test(unit) ? `${unit}${amount}` : `${amount} ${unit}`
   }
   if (format === 'percent' || format === 'pct') {
     // Percent format accepts a ratio at EVERY magnitude. Unit '%' alone
