@@ -3595,7 +3595,7 @@ func chartJsonFromTableIOS(headers: [[InlineSpan]], rows: [[[InlineSpan]]]) -> S
             dataItems.append(["label": label, "value": value])
         }
         guard dataItems.count == rows.count, units.count == 1 else { continue }
-        let payload: [String: Any] = ["type": "bar", "title": headerTexts[column], "unit": units.first ?? "", "data": dataItems]
+        let payload: [String: Any] = ["type": categoricalChartTypeIOS(dataItems.compactMap { $0["label"] as? String }), "title": headerTexts[column], "unit": units.first ?? "", "data": dataItems]
         guard let data = try? JSONSerialization.data(withJSONObject: payload), let json = String(data: data, encoding: .utf8) else { return nil }
         return json
     }
