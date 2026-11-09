@@ -1950,7 +1950,10 @@ internal fun chartFromProseBlocks(blocks: List<Block>): ChartWidget? {
     val rows = mutableListOf<List<List<InlineSpan>>>()
     for (block in blocks) {
         val items = when (block) {
-            is Block.BulletList -> block.items.filter { it.checked == null }
+            is Block.BulletList -> {
+                if (block.items.any { it.checked != null }) return null
+                block.items
+            }
             is Block.OrderedList -> block.items
             else -> continue
         }
