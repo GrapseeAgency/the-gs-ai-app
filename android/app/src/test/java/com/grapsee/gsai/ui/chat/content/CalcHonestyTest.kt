@@ -5,6 +5,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+// Non-ASCII source labels exercise Android ICU emoji classification; run the
+// real Android-backed implementation rather than the JVM's throwing stubs.
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
 class CalcHonestyTest {
     @Test fun optionalProseChartsKeepEverySignedUnicodeObservationInSourceOrder() {
         val labels = listOf("ঢাকা", "ফেনী", "শূন্য", "Delta", "Epsilon", "Zeta", "Eta", "Theta", "Iota", "Kappa")
