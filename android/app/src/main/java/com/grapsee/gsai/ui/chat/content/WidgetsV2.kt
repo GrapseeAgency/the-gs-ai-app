@@ -1236,9 +1236,12 @@ internal fun normalizeWidgetJson(kind: String, rawJson: String): String {
                         fm["label"] = JsonPrimitive(lbl?.content ?: keyStr)
                     }
                     if ("value" !in fm) {
-                        val defVal = (fo["default"] ?: fo["initial"] ?: fo["min"]) as? JsonPrimitive
-                        val num = defVal?.content?.toDoubleOrNull() ?: 0.0
-                        fm["value"] = JsonPrimitive(num)
+                        // A lower bound is not a supplied value; absent input must
+                        // stay NaN/empty so the real calculator asks for input.
+                        val defVal = (fo["default"] ?: fo["initial"]) as? JsonPrimitive
+                        defVal?.content?.toDoubleOrNull()?.takeIf { it.isFinite() }?.let {
+                            fm["value"] = JsonPrimitive(it)
+                        }
                     }
                     JsonObject(fm)
                 })

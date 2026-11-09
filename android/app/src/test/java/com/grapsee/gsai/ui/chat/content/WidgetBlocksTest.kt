@@ -91,15 +91,19 @@ class WidgetBlocksTest {
     }
 
     @Test
-    fun `chart with too many points is capped, not dropped`() {
+    fun `chart capacity preserves the entire source or rejects without truncation`() {
         val many = (1..300).joinToString(",") { "[$it,$it]" }
-        val w = parseWidget("chart", """{"type":"line","series":[{"name":"a","data":[$many]}]}""") as Widget.Chart
-        assertEquals(200, w.w.series[0].data.size)
+        assertNull(parseWidget("chart", """{"type":"line","series":[{"name":"a","data":[$many]}]}"""))
+        val supported = (1..200).joinToString(",") { "[$it,$it]" }
+        val w = parseWidget("chart", """{"type":"line","series":[{"name":"a","data":[$supported]}]}""") as Widget.Chart
+        assertEquals(200, w.w.series.single().data.size)
+        assertEquals(listOf(200f, 200f), w.w.series.single().data.last())
     }
 
     @Test
-    fun `chart with too few points or unknown type degrades to null`() {
-        assertNull(parseWidget("chart", """{"type":"line","series":[{"name":"a","data":[[1,2]]}]}"""))
+    fun `chart preserves real singleton data but rejects unknown type or absent data`() {
+        val singleton = parseWidget("chart", """{"type":"line","series":[{"name":"a","data":[[1,2]]}]}""") as Widget.Chart
+        assertEquals(listOf(listOf(1f, 2f)), singleton.w.series.single().data)
         // scatter is a valid type now; use a genuinely unknown type for the null path.
         assertNull(parseWidget("chart", """{"type":"sparkline","series":[{"name":"a","data":[[1,2],[2,3]]}]}"""))
         assertNull(parseWidget("chart", """{"series":[]}"""))
@@ -418,8 +422,15 @@ class WidgetBlocksTest {
             assertTrue("calc type '$type' should parse", w is Widget.Calc)
             assertEquals(type, (w as Widget.Calc).w.type)
         }
-        // Unknown type, no fields, or no outputs must degrade rather than render blank.
-        assertNull(parseWidget("calc", """{"type":"astrology","fields":[{"key":"x"}],"outputs":[{"expr":"x"}]}"""))
+        // Category labels are not execution engines: the real formula is what
+        // makes a discount/custom calculator useful, not a closed SDK enum.
+        val custom = parseWidget("calc", """{"type":"discount","fields":[{"key":"x","value":20}],"outputs":[{"expr":"x*0.9"}]}""") as Widget.Calc
+        assertEquals("discount", custom.w.type)
+        assertEquals(18.0, CalcExpr.eval(custom.w.outputs.single().expr, mapOf("x" to custom.w.fields.single().value))!!, 0.0)
+        val unspecified = parseWidget("calc", """{"fields":[{"key":"x"}],"outputs":[{"expr":"x"}]}""") as Widget.Calc
+        assertEquals("calculator", unspecified.w.type)
+        assertTrue(unspecified.w.fields.single().value.isNaN())
+        // No fields or no outputs must still degrade rather than render blank.
         assertNull(parseWidget("calc", """{"type":"loan","fields":[],"outputs":[{"expr":"x"}]}"""))
         assertNull(parseWidget("calc", """{"type":"loan","fields":[{"key":"x"}],"outputs":[]}"""))
     }
