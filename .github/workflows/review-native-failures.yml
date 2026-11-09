@@ -116,12 +116,16 @@ jobs:
           python3 - <<'PY'
           import re
           from pathlib import Path
-          paths = list(Path('stored-full-suite').rglob('xcodebuild-test.log'))
-          if len(paths) != 1: raise SystemExit('Expected the original full-suite XCTest log')
-          lines = paths[0].read_text(errors='replace').splitlines()
+          paths = sorted(Path('stored-full-suite').rglob('xcodebuild*test.log'))
+          if not paths:
+              print('::error::No original XCTest logs exist in the selected failed run')
+              raise SystemExit(1)
+          # A failure in required early acceptance prevents the full suite from
+          # starting; preserve that actual error instead of losing its evidence.
+          lines = [line for path in paths for line in path.read_text(errors='replace').splitlines()]
           actual = [line for line in lines if re.search(r'error:|failed \(|Testing failed:|XCTAssert|Failing tests:|TEST FAILED|crash(?:ed|ing|:)|fatal error|Abort trap', line, re.I)
                     and 'ProcessSuspension' not in line and not re.search(r"Test Case .* (?:passed|started)", line)]
-          for line in actual[-10:]:
+          for line in actual[:20]:
               print('::error title=Actual stored full-suite XCTest failure::' + line[:3500].replace('%', '%25').replace('\r', '%0D'))
           if not actual:
               print('::notice::No matching actual XCTest error lines; no substitute diagnosis is produced')
