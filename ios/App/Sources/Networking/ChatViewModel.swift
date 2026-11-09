@@ -1166,9 +1166,10 @@ final class ChatViewModel: ObservableObject {
         guard previous != value else { return }
         messages[index].feedback = value
         guard let serverID = messages[index].serverId, !serverID.isEmpty else { return }
+        let client = apiClient
         Task { @MainActor [weak self] in
             do {
-                try await self.apiClient.setFeedback(messageID: serverID, value: value)
+                try await client.setFeedback(messageID: serverID, value: value)
             } catch {
                 guard let self else { return }
                 if let i = self.messages.firstIndex(where: { $0.id == id }) {
@@ -1179,7 +1180,8 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    private func finalize(with message: Message?) {        defer {
+    private func finalize(with message: Message?) {
+        defer {
             isStreaming = false
             streamTask = nil
             searchPhase = .idle // done → the orb honestly goes idle
@@ -1283,9 +1285,10 @@ final class ChatViewModel: ObservableObject {
             return
         }
         isLoadingHistory = true
+        let client = apiClient
         Task { [weak self] in
             do {
-                let history = try await self.apiClient.messages(conversationID: conversationID)
+                let history = try await client.messages(conversationID: conversationID)
                 guard let self else { return }
                 self.messages = history.map {
                     ChatMessage(
@@ -1305,8 +1308,8 @@ final class ChatViewModel: ObservableObject {
             } catch {
                 guard let self else { return }
                 self.isLoadingHistory = false
-                // A cold cache + offline is survivable: start the thread empty;
-                // the first send will fabricate the conversation row locally.
+                // A cold cache stays empty after a failed history load. Do not
+                // fabricate previous answers or erase other stored histories.
                 if Self.isCancellation(error) { return }
                 self.messages = []
             }
