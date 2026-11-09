@@ -219,6 +219,7 @@ final class APIClient {
             throw APIError.http(status: http.statusCode, body: String(decoding: body, as: UTF8.self))
         }
 
+        var receivedText = false
         for try await line in bytes.lines {
             guard line.hasPrefix("data:") else { continue }
             let payload = line.dropFirst("data:".count).trimmingCharacters(in: .whitespaces)
@@ -227,7 +228,9 @@ final class APIClient {
 
             switch event.event {
             case "delta":
-                onDelta(event.data ?? "")
+                let text = event.data ?? ""
+                receivedText = receivedText || !text.isEmpty
+                onDelta(text)
             case "reasoning":
                 // REASONING TRACE: thinking turns stream the model's reasoning
                 // as raw {"delta":"..."} frames — reach the consumer raw, same
@@ -236,6 +239,9 @@ final class APIClient {
                 onEvent(event)
             case "done":
                 let final = event.data.flatMap { try? decoder.decode(Message.self, from: Data($0.utf8)) }
+                guard receivedText || final?.content.isEmpty == false else {
+                    throw APIError.badResponse("The response completed without an answer.")
+                }
                 onDone(final)
                 return
             case "error":
@@ -251,6 +257,7 @@ final class APIClient {
                 continue // unknown event types are ignored for forward-compat
             }
         }
+        throw APIError.badResponse("The response stream ended before completion.")
     }
 
     // MARK: - Plumbing
