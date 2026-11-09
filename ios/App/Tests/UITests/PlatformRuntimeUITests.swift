@@ -580,6 +580,51 @@ final class PlatformRuntimeUITests: XCTestCase {
         add(evidence)
     }
 
+    func testGeneratedCalculatorKeepsNinthTenthInputsSixthChoiceAndSeventhOutputUsable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]
+        app.launch()
+        let open = app.buttons["Open generated calculator"]
+        XCTAssertTrue(open.waitForExistence(timeout: 20))
+        open.tap()
+        let expand = app.buttons["Use calculator with all source controls"]
+        XCTAssertTrue(expand.waitForExistence(timeout: 10))
+        expand.tap()
+        let scroll = app.scrollViews.firstMatch
+        func reveal(_ element: XCUIElement) {
+            for _ in 0..<8 {
+                if element.isHittable { break }
+                scroll.swipeUp()
+            }
+            XCTAssertTrue(element.isHittable, "Actual supplied control is missing or inaccessible: \(element)")
+        }
+        let ninth = app.textFields["calc-input-x9"]
+        reveal(ninth)
+        XCTAssertEqual(ninth.value as? String, "9.0", "Source initial alias was lost")
+        ninth.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+        ninth.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 3) + "20\n")
+        let keyboardDismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
+        XCTAssertEqual(XCTWaiter.wait(for: [keyboardDismissed], timeout: 5), .completed,
+                       "Done must actually dismiss calculator editing")
+
+        let tenth = app.textFields["calc-input-x10"]
+        reveal(tenth)
+        XCTAssertEqual(tenth.value as? String, "10.0")
+        tenth.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+        tenth.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4) + "30\n")
+        let sixthChoice = app.buttons["Source option 6"]
+        reveal(sixthChoice)
+        sixthChoice.tap()
+        reveal(app.staticTexts["Last supplied result"])
+        XCTAssertTrue(app.staticTexts["92.00"].waitForExistence(timeout: 10), "All real inputs and the sixth choice must affect the seventh output")
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "$" )).count, 0,
+                       "An unspecified currency must not become dollars")
+        let evidence = XCTAttachment(screenshot: app.screenshot())
+        evidence.name = "genui-calculator-all-source-controls-no-invented-currency"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+    }
+
     func testBackgroundNoticeIsDeliveredAndDisabledKindsAreNot() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_platform_runtime"]

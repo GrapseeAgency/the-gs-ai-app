@@ -1,5 +1,7 @@
 name: Review stored native failure evidence
 on:
+  push:
+    paths: [".github/workflows/review-native-failures.yml"]
   workflow_dispatch:
     inputs:
       source_run:
@@ -84,15 +86,33 @@ jobs:
           PY
 
   inspect-stored-full-suite:
-    if: github.event_name == 'workflow_dispatch' && inputs.evidence == 'full-suite'
-    name: Actual full-suite failure from iOS ${{ inputs.source_run }}
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.evidence == 'full-suite')
+    name: Actual stored XCTest failure ${{ matrix.offset }}
+    strategy:
+      matrix:
+        offset: [0, 1]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Select original failed run without rerunning native tests
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+          SOURCE_OFFSET: ${{ matrix.offset }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SOURCE_RUN" ]; then
+            SOURCE_RUN=$(gh run list --workflow ios.yml --branch "$SOURCE_BRANCH" --status failure --limit 2 --json databaseId --jq ".[${SOURCE_OFFSET}].databaseId // empty")
+          fi
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]] || { echo "No stored failed iOS run found"; exit 1; }
+          echo "run=$SOURCE_RUN" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
-          name: ios-build-logs-${{ inputs.source_run }}
-          run-id: ${{ inputs.source_run }}
+          name: ios-build-logs-${{ steps.source.outputs.run }}
+          run-id: ${{ steps.source.outputs.run }}
           github-token: ${{ github.token }}
           path: stored-full-suite
       - name: Publish actual full-suite failures, not focused-log noise
@@ -100,14 +120,29 @@ jobs:
           python3 - <<'PY'
           import re
           from pathlib import Path
-          paths = list(Path('stored-full-suite').rglob('xcodebuild-test.log'))
-          if len(paths) != 1: raise SystemExit('Expected the original full-suite XCTest log')
-          lines = paths[0].read_text(errors='replace').splitlines()
+          paths = sorted(Path('stored-full-suite').rglob('xcodebuild*test.log'))
+          if not paths:
+              print('::error::No original XCTest logs exist in the selected failed run')
+              raise SystemExit(1)
+          # A failure in required early acceptance prevents the full suite from
+          # starting; preserve that actual error instead of losing its evidence.
+          lines = [line for path in paths for line in path.read_text(errors='replace').splitlines()]
           actual = [line for line in lines if re.search(r'error:|failed \(|Testing failed:|XCTAssert|Failing tests:|TEST FAILED|crash(?:ed|ing|:)|fatal error|Abort trap', line, re.I)
                     and 'ProcessSuspension' not in line and not re.search(r"Test Case .* (?:passed|started)", line)]
-          for line in actual[-10:]:
+          for line in actual[:20]:
               print('::error title=Actual stored full-suite XCTest failure::' + line[:3500].replace('%', '%25').replace('\r', '%0D'))
           if not actual:
               print('::notice::No matching actual XCTest error lines; no substitute diagnosis is produced')
               for line in lines[-8:]: print('::notice::Actual stored log tail: ' + line[:3500].replace('%', '%25'))
+          events = [line for line in lines if 'GS_REACT_FOCUS_CHECK:' in line or 'GS_REACT_KEYBOARD_LAYOUT:' in line]
+          for line in events[-12:]:
+              print('::notice::Actual stored keyboard event: ' + line[:3000].replace('%', '%25'))
+          chunks = {}
+          for line in lines:
+              match = re.search(r'GS_PRESENTATION_REACT_(\d+): (.*)', line)
+              if match: chunks[int(match.group(1))] = match.group(2)
+          hierarchy = ''.join(chunks[key] for key in sorted(chunks))
+          controls = [part for part in hierarchy.split(' | ') if any(label in part for label in ['WebView,', 'ScrollView,', 'Keyboard,', "label: 'Add task'", "label: 'New task'"])]
+          for part in controls[:12]:
+              print('::notice::Actual stored React geometry: ' + part[:3000].replace('%', '%25'))
           PY

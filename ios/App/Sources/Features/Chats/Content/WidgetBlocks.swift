@@ -396,6 +396,14 @@ func inferWidgetKind(_ raw: String) -> String? {
             candidates.append(mapped)
         }
     }
+    // A bare calculator has fields too. Prefer its actual formulas before
+    // the generic form candidate, otherwise parsing silently discards outputs.
+    let calcInputs = (obj["fields"] ?? obj["sliders"] ?? obj["inputs"] ?? obj["variables"] ?? obj["parameters"] ?? obj["params"]) as? [[String: Any]] ?? []
+    let calcResults = (obj["outputs"] ?? obj["results"] ?? obj["formulas"]) as? [[String: Any]] ?? []
+    if !calcInputs.isEmpty && (calcResults.contains { !calcOutputExpressionIOS($0).isEmpty }
+        || !str(obj, "formula", "expression", "expr").isEmpty) {
+        candidates.append("calc")
+    }
     if parseNexlyPlan(raw) != nil { candidates.append("plan") }
     if keys.contains("series") || (keys.contains("nodes") && keys.contains("links")) || keys.contains("words") || keys.contains("axes") {
         candidates.append("chart")
@@ -502,8 +510,8 @@ func isValidWidget(kind: String, json: String) -> Bool {
         let phrases = (obj["phrases"] ?? obj["items"]) as? [[String: Any]]
         return phrases?.isEmpty == false
     case "calc":
-        return ((obj["fields"] ?? obj["sliders"] ?? obj["inputs"] ?? obj["variables"] ?? obj["params"]) as? [Any])?.isEmpty == false ||
-               ((obj["outputs"] ?? obj["results"]) as? [Any])?.isEmpty == false ||
+        return ((obj["fields"] ?? obj["sliders"] ?? obj["inputs"] ?? obj["variables"] ?? obj["parameters"] ?? obj["params"]) as? [Any])?.isEmpty == false ||
+               ((obj["outputs"] ?? obj["results"] ?? obj["formulas"]) as? [Any])?.isEmpty == false ||
                (obj["formula"] ?? obj["expression"] ?? obj["expr"]) != nil
     case "tabs":
         let tabs = (obj["tabs"] ?? obj["items"] ?? obj["sections"]) as? [[String: Any]]
@@ -3341,7 +3349,7 @@ enum CalcExprIOS {
         }
         if let rx = try? NSRegularExpression(pattern: "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b") {
             let ns = trimmed as NSString
-            let knownFns: Set<String> = ["sqrt", "abs", "round", "floor", "ceil", "min", "max", "pow", "log", "log10", "ln", "exp", "sin", "cos", "tan", "pi", "e"]
+            let knownFns: Set<String> = ["sqrt", "abs", "round", "floor", "ceil", "min", "max", "pow", "clamp", "log", "log10", "ln", "exp", "sin", "cos", "tan", "pi", "e"]
             for m in rx.matches(in: trimmed, range: NSRange(location: 0, length: ns.length)) {
                 let ident = ns.substring(with: m.range(at: 1))
                 if !knownFns.contains(ident.lowercased()) && vars[ident] == nil && vars[ident.lowercased()] == nil {
@@ -3354,8 +3362,10 @@ enum CalcExprIOS {
     }
 
     static func eval(_ expr: String, vars: [String: Double]) -> Double {
+        guard expr.count <= 8192 else { return .nan }
         let chars = Array(expr)
         var pos = 0
+        var depth = 0
 
         func skipWs() {
             while pos < chars.count && chars[pos].isWhitespace { pos += 1 }
@@ -3410,6 +3420,9 @@ enum CalcExprIOS {
         }
 
         func parseUnary() -> Double {
+            guard depth < 128 else { return .nan }
+            depth += 1
+            defer { depth -= 1 }
             skipWs()
             if pos < chars.count && chars[pos] == "-" { pos += 1; return -parseUnary() }
             if pos < chars.count && chars[pos] == "+" { pos += 1; return parseUnary() }
@@ -3429,6 +3442,13 @@ enum CalcExprIOS {
             if chars[pos].isNumber || chars[pos] == "." {
                 let start = pos
                 while pos < chars.count && (chars[pos].isNumber || chars[pos] == ".") { pos += 1 }
+                if pos < chars.count && (chars[pos] == "e" || chars[pos] == "E") {
+                    pos += 1
+                    if pos < chars.count && (chars[pos] == "+" || chars[pos] == "-") { pos += 1 }
+                    let exponentStart = pos
+                    while pos < chars.count && chars[pos].isNumber { pos += 1 }
+                    guard pos > exponentStart else { return .nan }
+                }
                 return Double(String(chars[start..<pos])) ?? Double.nan
             }
             if chars[pos].isLetter || chars[pos] == "_" {
@@ -3450,9 +3470,15 @@ enum CalcExprIOS {
                         }
                     }
                     guard pos < chars.count && chars[pos] == ")" else { return Double.nan }; pos += 1
+                    guard args.allSatisfy({ $0.isFinite }) else { return .nan }
+                    let function = ident.lowercased()
+                    let unaryFunctions: Set<String> = ["sqrt", "abs", "round", "floor", "ceil", "ln", "log", "log10", "exp", "sin", "cos", "tan"]
+                    guard !unaryFunctions.contains(function) || args.count == 1 else { return .nan }
+                    guard function != "pow" || args.count == 2 else { return .nan }
+                    guard function != "clamp" || args.count == 3 else { return .nan }
                     let a = args.first ?? Double.nan
-                    let b = args.count > 1 ? args[1] : 0.0
-                    switch ident.lowercased() {
+                    let b = args.count > 1 ? args[1] : Double.nan
+                    switch function {
                     case "sqrt": return a >= 0 ? sqrt(a) : Double.nan
                     case "abs": return abs(a)
                     case "round": return round(a)
@@ -3461,6 +3487,9 @@ enum CalcExprIOS {
                     case "min": return args.min() ?? Double.nan
                     case "max": return args.max() ?? Double.nan
                     case "pow": return pow(a, b)
+                    case "clamp":
+                        guard args[1] <= args[2] else { return .nan }
+                        return min(max(a, args[1]), args[2])
                     case "ln": return a > 0 ? log(a) : Double.nan
                     case "log", "log10": return a > 0 ? log10(a) : Double.nan
                     case "exp": return exp(a)
@@ -3490,45 +3519,67 @@ func calcPercentDisplayIOS(_ value: Double, format: String) -> Double {
     ["percent", "pct"].contains(format.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)) ? value * 100 : value
 }
 
+/// Calculator numbers are actual numeric source values, not text with all
+/// non-digits stripped (which would turn 1e3 into 13). Missing stays unknown.
+func calcNumberIOS(_ object: [String: Any], _ keys: String..., fallback: Double = .nan) -> Double {
+    for key in keys {
+        guard let raw = object[key] else { continue }
+        if let number = raw as? NSNumber {
+            guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return fallback }
+            return number.doubleValue
+        }
+        if let text = raw as? String {
+            return Double(text.trimmingCharacters(in: .whitespacesAndNewlines)) ?? fallback
+        }
+        return fallback
+    }
+    return fallback
+}
+
+func calcInitialValueIOS(_ field: [String: Any]) -> Double {
+    let choices = (field["choices"] ?? field["options"]) as? [[String: Any]] ?? []
+    return calcNumberIOS(field, "value", "default", "initial",
+                         fallback: choices.first.map { calcNumberIOS($0, "value") } ?? .nan)
+}
+
+func calcOutputExpressionIOS(_ output: [String: Any]) -> String {
+    str(output, "expr", "formula", "expression", "calc", "value")
+}
+
+func formatCalcResultIOS(_ value: Double, unit: String, format: String = "") -> String {
+    guard value.isFinite else { return "Undefined for these inputs" }
+    let rawUnit = unit.trimmingCharacters(in: .whitespacesAndNewlines)
+    let uLow = rawUnit.lowercased()
+    let fLow = format.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    let symbols: Set<String> = ["$", "€", "£", "¥", "৳", "₹"]
+    let currencyFormat = ["money", "currency", "usd"].contains(fLow)
+        || ["currency", "money", "usd"].contains(uLow) || symbols.contains(rawUnit)
+    let isPercent = ["percent", "pct", "%"].contains(fLow) || ["percent", "pct", "%"].contains(uLow)
+    // Currency is a display format, not evidence that the amount is USD.
+    let prefix = symbols.contains(rawUnit) ? rawUnit
+        : (uLow == "usd" || (rawUnit.isEmpty && fLow == "usd") ? "$" : "")
+    let suffix = isPercent ? "%"
+        : (rawUnit.isEmpty || !prefix.isEmpty || ["money", "currency"].contains(uLow) ? "" : " " + rawUnit)
+    let display = calcPercentDisplayIOS(value, format: fLow)
+    guard display.isFinite else { return "Undefined for these inputs" }
+    let number = display.truncatingRemainder(dividingBy: 1) == 0 && !currencyFormat
+        ? String(format: "%.0f", display) : String(format: "%.2f", display)
+    return prefix + number + suffix
+}
+
 private struct CalcBodyView: View {
     let obj: [String: Any]
     let accent: Color
     @State private var vals: [String: Double] = [:]
     @State private var drafts: [String: String] = [:]
-
-    private func formatCalcResult(_ n: Double, unit: String, format: String = "") -> String {
-        guard n.isFinite else { return "Undefined for these inputs" }
-        let uLow = unit.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        let fLow = format.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        let isCurrency = ["money", "currency", "usd"].contains(fLow) || ["currency", "money", "usd", "$", "€", "£", "¥"].contains(uLow)
-        let isPercent = ["percent", "pct", "%"].contains(fLow) || ["percent", "pct", "%"].contains(uLow)
-        let prefix: String = {
-            if ["$", "€", "£", "¥"].contains(unit.trimmingCharacters(in: .whitespacesAndNewlines)) {
-                return unit.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            return isCurrency ? "$" : ""
-        }()
-        let suffix: String = {
-            if isPercent { return "%" }
-            if isCurrency || unit.isEmpty { return "" }
-            return " \(unit)"
-        }()
-        let displayNum = calcPercentDisplayIOS(n, format: fLow)
-        let formatted: String = {
-            if displayNum.truncatingRemainder(dividingBy: 1.0) == 0 && !isCurrency {
-                return String(format: "%.0f", displayNum)
-            }
-            return String(format: "%.2f", displayNum)
-        }()
-        return "\(prefix)\(formatted)\(suffix)"
-    }
+    @FocusState private var focusedField: String?
 
     private var calcFields: [[String: Any]] {
-        ((obj["fields"] ?? obj["sliders"] ?? obj["inputs"] ?? obj["variables"] ?? obj["params"]) as? [[String: Any]]) ?? []
+        ((obj["fields"] ?? obj["sliders"] ?? obj["inputs"] ?? obj["variables"] ?? obj["parameters"] ?? obj["params"]) as? [[String: Any]]) ?? []
     }
 
     private var calcOutputs: [[String: Any]] {
-        if let outs = (obj["outputs"] ?? obj["results"]) as? [[String: Any]], !outs.isEmpty {
+        if let outs = (obj["outputs"] ?? obj["results"] ?? obj["formulas"]) as? [[String: Any]], !outs.isEmpty {
             return outs
         }
         let topFormula = str(obj, "formula", "expression", "expr")
@@ -3541,11 +3592,10 @@ private struct CalcBodyView: View {
 
     private func computeActiveVars(fields: [[String: Any]]) -> [String: Double] {
         var map: [String: Double] = [:]
-        for (idx, f) in fields.prefix(10).enumerated() {
+        for (idx, f) in fields.enumerated() {
             let rawKey = str(f, "id", "key", "name")
             let key = rawKey.isEmpty ? "x\(idx + 1)" : rawKey
-            let choices = f["choices"] as? [[String: Any]] ?? []
-            let initial = dbl(f, "value", "default", fallback: choices.first.map { dbl($0, "value", fallback: .nan) } ?? .nan)
+            let initial = calcInitialValueIOS(f)
             let cur = vals[key] ?? initial
             map[key] = cur
             map[key.lowercased()] = cur
@@ -3573,10 +3623,10 @@ private struct CalcBodyView: View {
                     .buttonStyle(.plain)
                 }
             }
-            ForEach(Array(fields.prefix(8).enumerated()), id: \.offset) { idx, f in
+            ForEach(Array(fields.enumerated()), id: \.offset) { idx, f in
                 calcFieldRow(idx: idx, f: f, activeVars: activeVars)
             }
-            ForEach(Array(outputs.prefix(6).enumerated()), id: \.offset) { _, out in
+            ForEach(Array(outputs.enumerated()), id: \.offset) { _, out in
                 calcOutputRow(out: out, activeVars: activeVars)
             }
         }
@@ -3587,22 +3637,23 @@ private struct CalcBodyView: View {
         let label = NexlyIcons.cleanPlainText(str(f, "label", "title", "name", "key"))
         let rawKey = str(f, "id", "key", "name")
         let key = rawKey.isEmpty ? "x\(idx + 1)" : rawKey
-        let minV = dbl(f, "min", fallback: -.greatestFiniteMagnitude)
-        let maxV = dbl(f, "max", fallback: .greatestFiniteMagnitude)
-        let hasRange = f["min"] != nil && f["max"] != nil && minV.isFinite && maxV.isFinite && maxV > minV
-        let rawStep = max(dbl(f, "step", fallback: 0), 0)
-        let effStep = rawStep > 0 ? rawStep : (hasRange ? (maxV - minV) / 100 : 1)
-        let cur = activeVars[key] ?? minV
+        let minV = calcNumberIOS(f, "min")
+        let maxV = calcNumberIOS(f, "max")
+        let hasRange = minV.isFinite && maxV.isFinite && maxV > minV && (maxV - minV).isFinite
+        let rawStep = calcNumberIOS(f, "step")
+        let effStep = rawStep.isFinite && rawStep > 0 ? rawStep : (hasRange ? (maxV - minV) / 100 : 1)
+        let cur = activeVars[key] ?? .nan
         let rawUnit = str(f, "unit")
-        let unit = ["currency", "money", "usd"].contains(rawUnit.lowercased()) ? "$" : rawUnit
-        let choices = (f["choices"] as? [[String: Any]]) ?? []
+        let unit = ["currency", "money"].contains(rawUnit.lowercased()) ? ""
+            : (rawUnit.lowercased() == "usd" ? "$" : rawUnit)
+        let choices = ((f["choices"] ?? f["options"]) as? [[String: Any]]) ?? []
         VStack(alignment: .leading, spacing: 3) {
             if !choices.isEmpty {
                 Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Aero.text)
-                HStack(spacing: 4) {
-                    ForEach(Array(choices.prefix(5).enumerated()), id: \.offset) { _, ch in
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], alignment: .leading, spacing: 4) {
+                    ForEach(Array(choices.enumerated()), id: \.offset) { _, ch in
                         let cLbl = NexlyIcons.cleanPlainText(str(ch, "label", "title", "name"))
-                        let cVal = dbl(ch, "value", fallback: 0)
+                        let cVal = calcNumberIOS(ch, "value")
                         let selected = abs(cur - cVal) < 1e-6
                         Button {
                             GSHaptics.select()
@@ -3617,6 +3668,7 @@ private struct CalcBodyView: View {
                                 .background(selected ? accent : Color.white.opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
                         }
                         .buttonStyle(.plain)
+                        .disabled(!cVal.isFinite)
                     }
                 }
             } else {
@@ -3636,6 +3688,9 @@ private struct CalcBodyView: View {
                         )
                     )
                     .accessibilityIdentifier("calc-input-\(key)")
+                    .focused($focusedField, equals: key)
+                    .submitLabel(.done)
+                    .onSubmit { focusedField = nil }
                     .font(Aero.mono(11.5))
                     .foregroundStyle(accent)
                     .multilineTextAlignment(.trailing)
@@ -3668,23 +3723,23 @@ private struct CalcBodyView: View {
     @ViewBuilder
     private func calcOutputRow(out: [String: Any], activeVars: [String: Double]) -> some View {
         let label = NexlyIcons.cleanPlainText(str(out, "label", "title", "name"))
-        let expr = str(out, "expr", "formula", "value")
+        let expr = calcOutputExpressionIOS(out)
         let unit = str(out, "unit")
         let fmt = str(out, "format")
         let evaluated: String = {
             if expr.isEmpty { return "Missing formula" }
-            for (index, field) in calcFields.prefix(10).enumerated() {
+            for (index, field) in calcFields.enumerated() {
                 let rawKey = str(field, "id", "key", "name")
                 let key = rawKey.isEmpty ? "x\(index + 1)" : rawKey
                 let value = activeVars[key] ?? .nan
-                if !value.isFinite || value < dbl(field, "min", fallback: -.greatestFiniteMagnitude)
-                    || value > dbl(field, "max", fallback: .greatestFiniteMagnitude) {
+                if !value.isFinite || value < calcNumberIOS(field, "min", fallback: -.greatestFiniteMagnitude)
+                    || value > calcNumberIOS(field, "max", fallback: .greatestFiniteMagnitude) {
                     return "Enter valid inputs"
                 }
             }
-            if let literal = Double(expr) { return formatCalcResult(literal, unit: unit, format: fmt) }
+            if let literal = Double(expr) { return formatCalcResultIOS(literal, unit: unit, format: fmt) }
             let val = CalcExprIOS.eval(expr, vars: activeVars)
-            return formatCalcResult(val, unit: unit, format: fmt)
+            return formatCalcResultIOS(val, unit: unit, format: fmt)
         }()
         HStack {
             Text(label)

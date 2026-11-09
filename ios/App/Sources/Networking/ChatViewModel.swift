@@ -6,10 +6,9 @@ import os.log
  * Owns one conversation: history load (store first, then network), optimistic
  * send, SSE streaming with live accumulation, stop, retry/regenerate. Every
  * turn is persisted to `ConversationStore` so threads survive relaunches, and
- * a dead backend never dead-ends the thread — GS Lite, the on-device responder,
- * streams a local reply instead (never an error screen). All state
- * mutations happen on the main actor; the streaming connection itself runs on
- * URLSession's background plumbing and hops back via `Task { @MainActor in … }`.
+ * failed requests keep actual received text and expose retry rather than
+ * substituting unrelated canned answers. All observable state mutations happen
+ * on the main actor; streaming deltas enter lock-guarded accumulation buffers.
  */
 /**
  * Lock-guarded delta sink for one stream. SSE chunks arrive on URLSession's
@@ -492,9 +491,14 @@ final class ChatViewModel: ObservableObject {
     /// bottom-landing on open can never trigger a prepend (Android parity).
     private var olderArmed = false
 
+    private let apiClient: APIClient
+    private let store: ConversationStore
+
     // MARK: - Init
 
-    init(conversationID: String?) {
+    init(conversationID: String?, apiClient: APIClient = .shared, store: ConversationStore? = nil) {
+        self.apiClient = apiClient
+        self.store = store ?? .shared
         self.conversationID = conversationID
         self.chatMode = ChatViewModel.loadChatMode(conversationID)
         if let conversationID {
@@ -632,7 +636,7 @@ final class ChatViewModel: ObservableObject {
         let conversation = conversationID
         messages.removeSubrange(index...)
         if let conversation, !conversation.hasPrefix("demo-") {
-            ConversationStore.shared.truncateMessages(fromUserContent: original, in: conversation)
+            self.store.truncateMessages(fromUserContent: original, in: conversation)
         }
         lastSentText = text
         beginStreaming(text: text, appendUserMessage: true)
@@ -653,13 +657,13 @@ final class ChatViewModel: ObservableObject {
         let turns = Array(messages[...index]).filter { !$0.content.isEmpty }
         guard !turns.isEmpty else { return }
         let sourceTitle = conversationID.flatMap {
-            ConversationStore.shared.conversation(withID: $0)?.title
+            self.store.conversation(withID: $0)?.title
         } ?? "New chat"
-        let conversation = ConversationStore.shared.createLocalConversation(
+        let conversation = self.store.createLocalConversation(
             title: String("Branch: \(sourceTitle)".prefix(40)))
         let fallbackStamp = ConversationStore.now()
         for turn in turns {
-            ConversationStore.shared.append(StoredMessage(
+            self.store.append(StoredMessage(
                 id: UUID().uuidString,
                 conversationId: conversation.id,
                 role: turn.role,
@@ -689,15 +693,15 @@ final class ChatViewModel: ObservableObject {
         defer {
             if !scratchID.isEmpty {
                 Task {
-                    try? await APIClient.shared.deleteConversation(id: scratchID)
+                    try? await self.apiClient.deleteConversation(id: scratchID)
                 }
             }
         }
         var accumulated = ""
         do {
-            let scratch = try await APIClient.shared.createConversation(title: "Translation")
+            let scratch = try await self.apiClient.createConversation(title: "Translation")
             scratchID = scratch.id
-            try await APIClient.shared.stream(
+            try await self.apiClient.stream(
                 message: prompt,
                 conversationID: scratch.id,
                 onDelta: { delta in
@@ -748,16 +752,23 @@ final class ChatViewModel: ObservableObject {
         streamTask = Task {
             do {
                 let conversationID = try await self.ensureConversation(for: text)
-                if appendUserMessage {
-                    ConversationStore.shared.append(StoredMessage(
-                        id: UUID().uuidString,
+                // A failed first create leaves the optimistic user turn in
+                // memory. Persist it once creation actually succeeds, including
+                // when that happens on Retry (appendUserMessage == false).
+                if let index = self.messages.lastIndex(where: { $0.role == "user" }),
+                   self.messages[index].durableID == nil {
+                    let user = self.messages[index]
+                    self.store.append(StoredMessage(
+                        id: user.id.uuidString,
                         conversationId: conversationID,
                         role: "user",
-                        content: text,
-                        createdAt: ConversationStore.now(),
-                        attachments: attachments))
+                        content: user.content,
+                        createdAt: user.createdAt,
+                        attachments: user.attachments))
+                    self.messages[index].durableID = user.id.uuidString
                 }
-                try await APIClient.shared.stream(
+                var completedMessage: Message?
+                try await self.apiClient.stream(
                     message: text,
                     conversationID: conversationID,
                     attachmentIDs: attachments?.map { $0.id },
@@ -772,9 +783,9 @@ final class ChatViewModel: ObservableObject {
                         buffer.append(delta) // lock-guarded — no main hop per token
                     },
                     onDone: { message in
-                        Task { @MainActor in
-                            self.finalize(with: message)
-                        }
+                        // Consume the canonical result before finalizing the
+                        // stream, not in a separately scheduled actor task.
+                        completedMessage = message
                     },
                     onEvent: { [sink = self.streamSink] event in
                         // The server titles a chat on its first turn and says so
@@ -788,26 +799,21 @@ final class ChatViewModel: ObservableObject {
                         sink.append(event) // lock-guarded — drained in the flush loop
                     }
                 )
-                // Stream closed without an explicit `done` event — wrap up.
+                // Transport returned after an explicit, validated completion.
                 if self.isStreaming {
-                    self.finalizeLocal()
+                    self.finalize(with: completedMessage)
                 }
             } catch {
                 if Self.isCancellation(error) {
                     self.finalizeLocal()
-                } else if !self.streamBuffer.isEmpty {
-                    // Partial stream that broke mid-flight: keep what arrived on
-                    // screen and disk, close with the same tail Android appends.
-                    let tail = "\n\n. I'll pick the thread back up right here."
-                    self.streamBuffer.append(tail)
-                    self.flushStreamingText()
-                    self.finalizeLocal()
                 } else {
-                    // GS Lite — the on-device responder keeps the conversation
-                    // flowing with a streamed local reply. No errors, no
-                    // connectivity talk; the turn simply gets answered.
-                    await self.streamLocalReply(text)
+                    // A failed request is not a generated answer. Preserve only
+                    // actual received text and expose the existing retry UI.
+                    let hasPartialAnswer = !self.streamBuffer.isEmpty
                     self.finalizeLocal()
+                    self.errorMessage = hasPartialAnswer
+                        ? "The response was interrupted. Your partial answer is saved. Retry to request a new response."
+                        : "I couldn't get a response. Please try again."
                 }
             }
         }
@@ -824,15 +830,13 @@ final class ChatViewModel: ObservableObject {
         if let conversationID { return conversationID }
         // Attachments-only first messages (empty text) keep the default title.
         let title = SettingsStore.shared.autoTitle && !text.isEmpty ? String(text.prefix(40)) : "New chat"
-        do {
-            let conversation = try await APIClient.shared.createConversation(title: title)
-            conversationID = conversation.id
-            return conversation.id
-        } catch {
-            let local = ConversationStore.shared.createLocalConversation(title: title)
-            conversationID = local.id
-            return local.id
-        }
+        // Do not invent a remote ID after a create failure. The optimistic
+        // user turn stays visible and Retry must retry creation, not repeatedly
+        // POST to a local UUID the backend has never seen. Existing stored
+        // histories are not deleted or reassigned by this failure path.
+        let conversation = try await self.apiClient.createConversation(title: title)
+        conversationID = conversation.id
+        return conversation.id
     }
 
     // MARK: - Coalesced streaming publish (deep-perf pass 80-b)
@@ -1162,9 +1166,10 @@ final class ChatViewModel: ObservableObject {
         guard previous != value else { return }
         messages[index].feedback = value
         guard let serverID = messages[index].serverId, !serverID.isEmpty else { return }
+        let client = apiClient
         Task { @MainActor [weak self] in
             do {
-                try await APIClient.shared.setFeedback(messageID: serverID, value: value)
+                try await client.setFeedback(messageID: serverID, value: value)
             } catch {
                 guard let self else { return }
                 if let i = self.messages.firstIndex(where: { $0.id == id }) {
@@ -1175,7 +1180,8 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    private func finalize(with message: Message?) {        defer {
+    private func finalize(with message: Message?) {
+        defer {
             isStreaming = false
             streamTask = nil
             searchPhase = .idle // done → the orb honestly goes idle
@@ -1251,7 +1257,7 @@ final class ChatViewModel: ObservableObject {
         // UUID here made actual React edits disappear after history reload.
         let identity = messages[index].reactPreviewIdentity
         messages[index].durableID = identity
-        ConversationStore.shared.append(StoredMessage(
+        self.store.append(StoredMessage(
             id: identity,
             conversationId: conversationID,
             role: "assistant",
@@ -1259,136 +1265,8 @@ final class ChatViewModel: ObservableObject {
             createdAt: ConversationStore.now()))
     }
 
-    // MARK: - GS Lite (on-device responder)
-
-    /**
-     * Delivers the on-device reply in ONE delta. PHASE 5 note: an offline turn
-     * keeps its attachments on the LOCAL user message (they were uploaded
-     * earlier — a ready draft restores across relaunches); the responder
-     * answers from the text prompt exactly as before, unchanged.
-     */
-    private func streamLocalReply(_ prompt: String) async {
-        // COMMIT 1 (a) of the mobile wiring: try the native engine first, and
-        // keep the existing responder for everything else.
-        //
-        // The ordering matters. The app still attempts the network before
-        // reaching this function — this is the failure path, not a local-first
-        // router — so a healthy app is unchanged. Self.localReply is NOT
-        // removed: a device with no model, a build with no framework, or a
-        // generation that throws must still answer.
-        let reply = nativeReply(prompt) ?? Self.localReply(prompt)
-        // TASK 2 (no fake typewriter): this reply is COMPLETE work before the
-        // first character shows. Dribbling it word by word with a timer would
-        // imitate typing and lie about progress — the exact verdict the
-        // native-engine path already carries ("splitting a completed local
-        // answer with a timer would imitate typing and would be a lie"). The
-        // ~30 Hz flush loop publishes it on the next tick.
-        streamBuffer.append(reply)
-    }
-
-    /// A completion from the native engine, or nil when there is nothing to get.
-    ///
-    /// nil covers every "no engine here" case rather than throwing, because each
-    /// of them means the same thing to this function: use the existing
-    /// responder. `GsNative.chat` itself throws and that is caught here — a
-    /// thrown error out of the local path would abandon a turn that had a
-    /// perfectly good answer available.
-    ///
-    /// Not force-unwrapped and not `try!`: a missing framework, an uninitialised
-    /// context and a generation failure are all ordinary states on a phone.
-    private func nativeReply(_ prompt: String) -> String? {
-        guard GsNativeLoader.isAvailable else {
-            if let reason = GsNativeLoader.unavailableReason {
-                print("[ChatViewModel] local path: \(reason.detail)")
-            }
-            return nil
-        }
-        do {
-            let text = try GsNative.chat(prompt)
-            return text.isEmpty ? nil : text
-        } catch {
-            print("[ChatViewModel] native generation failed; using the built-in responder: \(error)")
-            return nil
-        }
-    }
-
-    /**
-     * The reply pool: prompt-aware, varied per prompt via a Java-compatible
-     * hash so both platforms pick the same variant and the choice is stable
-     * across launches (Swift's hashValue is per-process randomized). Never
-     * mentions servers, errors or connectivity — the app reads fully
-     * functional on a fresh install.
-     */
-    private static func localReply(_ prompt: String) -> String {
-        let p = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lower = p.lowercased()
-        var topic = String(p.prefix(72))
-        while let last = topic.last, ".?!".contains(last) { topic.removeLast() }
-
-        func pick(_ options: String...) -> String {
-            options[Int(javaHash(p).magnitude % UInt32(options.count))]
-        }
-
-        if lower.range(of: "^(hi|hey|hello|yo|sup|hola|good (morning|afternoon|evening))[!.? ]*$", options: .regularExpression) != nil {
-            return "Hey, good to see you. What are we making today?\n\nI can draft, plan, " +
-                "refactor, brainstorm or just think out loud with you. Drop an idea and " +
-                "I'll take it from there."
-        }
-        if lower.contains("what can you do") || lower.contains("who are you") || lower.contains("your name") {
-            return "I'm GS, your pocket think-tank.\n\n• Draft & rewrite: emails, posts, docs\n" +
-                "• Plan & break down: projects, trips, launches\n• Explain: code, concepts, " +
-                "contracts\n• Generate: images, prompts, study notes\n\nStart anywhere, " +
-                "even a half-formed thought works."
-        }
-        if lower.hasPrefix("code") || lower.contains("kotlin") || lower.contains("swift") ||
-            lower.contains("function") || lower.contains("bug") || lower.contains("error") {
-            return pick(
-                "Here's a clean way to tackle \"\(topic)\":\n\n1. Reproduce the smallest failing case\n" +
-                    "2. Write the happy path first, then guard the edges\n3. Add a test that fails " +
-                    "without the fix and passes with it\n\nPaste the snippet and I'll go line by line.",
-                "For \"\(topic)\" I'd keep it simple:\n\n• Extract the pure logic into a function\n" +
-                    "• Push side effects (IO, state) to the edges\n• Name things by what they mean, " +
-                    "not what they do\n\nShare the code and I'll tailor it."
-            )
-        }
-        if lower.contains("plan") || lower.contains("roadmap") || lower.contains("launch") ||
-            lower.contains("trip") || lower.contains("schedule") {
-            return "Love it, \"\(topic)\" breaks down like this:\n\n• Scope: pick the one outcome that " +
-                "defines success\n• Milestones: 3 checkpoints, each shippable on its own\n" +
-                "• Risks: name the top two and their plan B\n• Next step: the 30-minute " +
-                "action you can take today\n\nTell me the deadline and I'll back-plan every phase."
-        }
-        if lower.contains("write") || lower.contains("draft") || lower.contains("email") ||
-            lower.contains("post") || lower.contains("caption") {
-            return "Here's a first pass on \"\(topic)\":\n\nOpen with the reader's problem, land one " +
-                "concrete promise, and close with a single next step. Short sentences. No " +
-                "hedge words.\n\nWant it warmer, punchier, or more formal? I'll rewrite in place."
-        }
-        return pick(
-            "\"\(topic)\", good thread to pull. Here's my take:\n\n• Start from the outcome " +
-                "you want, work backwards\n• Cut the problem to the smallest version that " +
-                "still matters\n• Ship a rough v0 today; refine with real feedback\n\n" +
-                "Ask me to expand any point and I'll go deeper.",
-            "On \"\(topic)\":\n\nThe useful move is to separate what's fixed from what's " +
-                "flexible. Fix the goal, flex the path. Then pick the cheapest experiment " +
-                "that tests your assumption this week.\n\nWant a checklist version of this?",
-            "Thinking through \"\(topic)\":\n\n1. What does success look like in one sentence?\n" +
-                "2. What's the biggest unknown blocking it?\n3. What can you test about that " +
-                "unknown in under an hour?\n\nAnswer those three and the path usually " +
-                "reveals itself. I'm here to think it through with you."
-        )
-    }
-
-    /// Java String.hashCode over UTF-16 code units — deterministic across
-    /// launches and identical to Android's pick, so the same prompt lands on
-    /// the same variant everywhere.
-    private static func javaHash(_ s: String) -> Int32 {
-        var h: Int32 = 0
-        for unit in s.utf16 {
-            h = h &* 31 &+ Int32(bitPattern: UInt32(unit))
-        }
-        return h
-    }
+    // Real on-device generation remains opt-in in send(). Remote failures
+    // must never be replaced by a keyword-selected pool of canned answers.
 
     // MARK: - History
 
@@ -1396,7 +1274,7 @@ final class ChatViewModel: ObservableObject {
         // Store first — threads must survive relaunches even fully offline.
         // Deep-perf pass #2b: the open is a newest-window read, so a
         // 2,000-turn thread opens with the same O(page) cost as a 20-turn one.
-        let stored = ConversationStore.shared.recentMessages(for: conversationID, limit: historyPageSize)
+        let stored = self.store.recentMessages(for: conversationID, limit: historyPageSize)
         if !stored.isEmpty {
             applyWindow(stored)
             return
@@ -1407,9 +1285,10 @@ final class ChatViewModel: ObservableObject {
             return
         }
         isLoadingHistory = true
+        let client = apiClient
         Task { [weak self] in
             do {
-                let history = try await APIClient.shared.messages(conversationID: conversationID)
+                let history = try await client.messages(conversationID: conversationID)
                 guard let self else { return }
                 self.messages = history.map {
                     ChatMessage(
@@ -1429,8 +1308,8 @@ final class ChatViewModel: ObservableObject {
             } catch {
                 guard let self else { return }
                 self.isLoadingHistory = false
-                // A cold cache + offline is survivable: start the thread empty;
-                // the first send will fabricate the conversation row locally.
+                // A cold cache stays empty after a failed history load. Do not
+                // fabricate previous answers or erase other stored histories.
                 if Self.isCancellation(error) { return }
                 self.messages = []
             }
@@ -1462,7 +1341,7 @@ final class ChatViewModel: ObservableObject {
      */
     func loadOlder() {
         guard olderArmed, hasOlder, let conversationID, let oldest = oldestStamp else { return }
-        let page = ConversationStore.shared.olderMessages(for: conversationID, before: oldest, limit: historyPageSize)
+        let page = self.store.olderMessages(for: conversationID, before: oldest, limit: historyPageSize)
         guard !page.isEmpty else {
             hasOlder = false
             return

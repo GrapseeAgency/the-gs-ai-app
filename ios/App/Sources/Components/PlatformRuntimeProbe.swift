@@ -21,6 +21,7 @@ struct PlatformRuntimeProbe: View {
     @State private var ordinaryChecklist = false
     @State private var nextOrdinaryChecklist = false
     @State private var showCalculator = false
+    @State private var expandedCalculator = false
     @State private var showTable = false
     @State private var showChart = false
     @State private var showCode = false
@@ -33,6 +34,20 @@ struct PlatformRuntimeProbe: View {
     @State private var accepted: Bool?
     @State private var backgroundObserved = false
     @State private var saved: [Bool] = []
+
+    private var expandedCalculatorJSON: String {
+        var fields: [[String: Any]] = (1...10).map { index in
+            ["key": "x\(index)", "label": "Actual input \(index)", "initial": index]
+        }
+        fields.append(["key": "transport", "label": "Actual supplied choices", "initial": 1,
+                       "options": (1...6).map { ["label": "Source option \($0)", "value": $0] as [String: Any] }])
+        var outputs: [[String: Any]] = (1...6).map { index in
+            ["label": "Supplied output \(index)", "expression": "x\(index)"]
+        }
+        outputs.append(["label": "Last supplied result", "expression": "x1+x2+x3+x4+x5+x6+x7+x8+x9+x10+transport", "format": "currency"])
+        let data = try! JSONSerialization.data(withJSONObject: ["title": "All actual source controls", "parameters": fields, "formulas": outputs])
+        return String(decoding: data, as: UTF8.self)
+    }
 
     var body: some View {
         VStack(spacing: 24) {
@@ -102,8 +117,14 @@ struct PlatformRuntimeProbe: View {
             }
         }
         .sheet(isPresented: $showCalculator) {
-            ScrollView {
-                WidgetBlockView(kind: "calc", json: #"{"title":"\ud83d\ude80 Growth","fields":[{"key":"amount","label":"Amount \u00a9\ufe0f \ud83d\ude00","value":100}],"outputs":[{"label":"Double","expr":"amount*2"}]}"#, open: false).padding()
+            VStack {
+                Button("Use calculator with all source controls") { expandedCalculator = true }
+                ScrollView {
+                    WidgetBlockView(kind: "calc", json: expandedCalculator ? expandedCalculatorJSON
+                        : #"{"title":"\ud83d\ude80 Growth","fields":[{"key":"amount","label":"Amount \u00a9\ufe0f \ud83d\ude00","value":100}],"outputs":[{"label":"Double","expr":"amount*2"}]}"#, open: false)
+                        .id(expandedCalculator).padding()
+                }
+                .scrollDismissesKeyboard(.interactively)
             }
         }
         .sheet(isPresented: $showTerminal) {

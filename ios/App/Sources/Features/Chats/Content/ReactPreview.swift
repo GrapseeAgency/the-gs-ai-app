@@ -129,6 +129,24 @@ struct ReactPreviewIOS: UIViewRepresentable {
                 #endif
             }
         }
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            // Run can be tapped while the new 420pt canvas is below the chat
+            // viewport. Offscreen WebKit content is throttled and its controls
+            // are not reliably exposed to accessibility or native hit testing.
+            // Reveal the actual canvas in its containing conversation scroller;
+            // do not pan the DOM or scroll the separate source-code editor.
+            guard webView.window != nil else { return }
+            var ancestor = webView.superview
+            while let current = ancestor {
+                if let scroll = current as? UIScrollView {
+                    scroll.superview?.layoutIfNeeded()
+                    let canvas = webView.convert(webView.bounds, to: scroll)
+                    scroll.scrollRectToVisible(canvas.insetBy(dx: 0, dy: -8), animated: false)
+                    break
+                }
+                ancestor = current.superview
+            }
+        }
         var lastSource: String?
         var origin: URL?
         var initialNavigation = true

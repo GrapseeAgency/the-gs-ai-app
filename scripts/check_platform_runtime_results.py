@@ -20,6 +20,7 @@ EXPECTED = {
     'realCardDistinguishesTapFromLongPress',
     'hapticDispatchUsesPlatformConstantsAndHonorsToggle',
     'generatedCalculatorAcceptsExactNumbersAndNeverRendersEmoji',
+    'generatedCalculatorKeepsLaterInputsSixthChoiceNinthOutputAndSixthPresetUsable',
     'generatedTableAllDisplaysEveryActualRow',
 }
 

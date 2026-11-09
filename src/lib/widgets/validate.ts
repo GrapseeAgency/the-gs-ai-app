@@ -13,7 +13,6 @@ import { evaluateExpr } from '../calc/evaluate'
 import {
   APP_TYPES,
   COLLAB_TYPES,
-  CALC_TYPES,
   CANVAS_TYPES,
   CHART_TYPES,
   EDITOR_TYPES,
@@ -1856,12 +1855,11 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
 
   calc: (p) => {
     let repaired = false
-    let type = asString(p.type, 'finance')
-    if (!(CALC_TYPES as readonly string[]).includes(type)) {
-      type = 'finance'
-      repaired = true
-    }
-    const rawFields = asArray(p.fields).length > 0 ? asArray(p.fields) : asArray(p.inputs ?? p.variables ?? p.parameters)
+    // A category is metadata, not permission to calculate. Custom source
+    // formulas must not be relabelled finance merely for being unfamiliar.
+    const type = asString(p.type, 'calculator')
+    const rawFields = ['fields', 'inputs', 'variables', 'parameters', 'params', 'sliders']
+      .map((key) => asArray(p[key])).find((rows) => rows.length > 0) ?? []
     if (!Array.isArray(p.fields) && rawFields.length > 0) repaired = true
     const fields = rawFields
       .map((f, idx) => {
@@ -1874,19 +1872,28 @@ const CHECKS: Record<WidgetKind, (p: Record<string, unknown>) => Check> = {
         return {
           key,
           label: label || key,
-          value: asNumber(o.value ?? o.default) ?? 0,
+          // Null remains user-configurable on all clients. A missing input
+          // and an explicit zero are not interchangeable.
+          value: asNumber(o.value ?? o.default ?? o.initial),
           unit: asString(o.unit),
           min: asNumber(o.min),
           max: asNumber(o.max),
           step: asNumber(o.step),
           choices: asArray(o.choices ?? o.options).map((c) => {
             const ch = isObj(c) ? c : {}
-            return { label: asString(ch.label ?? ch.name), value: asNumber(ch.value) ?? 0 }
-          }),
+            return { label: asString(ch.label ?? ch.name), value: asNumber(ch.value) }
+          }).filter((choice) => choice.label && choice.value !== null),
         }
       })
       .filter((f) => f.key && f.label)
-    const rawOutputs = asArray(p.outputs).length > 0 ? asArray(p.outputs) : asArray(p.results ?? p.formulas)
+    let rawOutputs = ['outputs', 'results', 'formulas']
+      .map((key) => asArray(p[key])).find((rows) => rows.length > 0) ?? []
+    const topFormula = asString(p.formula ?? p.expression ?? p.expr)
+    if (!rawOutputs.length && topFormula) {
+      rawOutputs = [{ label: asString(p.outputLabel ?? p.resultLabel, 'Result'), expr: topFormula,
+        unit: asString(p.unit ?? p.currency), format: asString(p.format) }]
+      repaired = true
+    }
     if (!Array.isArray(p.outputs) && rawOutputs.length > 0) repaired = true
     const outputs = rawOutputs
       .map((o) => {

@@ -77,6 +77,11 @@ private fun io.ktor.client.HttpClientConfig<*>.configure(sessionIdProvider: () -
         // Only 5xx get a second chance — connect failures (no backend
         // reachable) fall through instantly so the offline reply takes over.
         retryOnServerErrors(1)
+        // Ktor enables exception retries by default. Setting the server-error
+        // predicate alone does not disable them: a connect failure otherwise
+        // sends the request twice and delays the actionable offline notice.
+        // Retrying a POST after a transport exception can also duplicate a turn.
+        retryOnExceptionIf { _, _ -> false }
         exponentialDelay()
     }
     install(HttpTimeout) {

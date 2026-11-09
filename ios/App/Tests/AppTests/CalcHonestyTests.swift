@@ -721,6 +721,38 @@ final class CalcHonestyTests: XCTestCase {
     }
 
     @MainActor
+    func testExecutedReactCanvasRevealsItsConversationWithoutScrollingTheSourceEditor() throws {
+        let old = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }.first { $0.isKeyWindow }
+        let window: UIWindow
+        if let scene = old?.windowScene { window = UIWindow(windowScene: scene) }
+        else { window = UIWindow(frame: UIScreen.main.bounds) }
+        defer { window.isHidden = true; window.rootViewController = nil; old?.makeKeyAndVisible() }
+        let controller = UIViewController()
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        let conversation = UIScrollView(frame: CGRect(x: 0, y: 60, width: 300, height: 500))
+        conversation.contentSize = CGSize(width: 300, height: 1600)
+        controller.view.addSubview(conversation)
+        let content = UIView(frame: CGRect(x: 0, y: 0, width: 300, height: 1600))
+        conversation.addSubview(content)
+        let editor = UIScrollView(frame: CGRect(x: 0, y: 0, width: 300, height: 320))
+        editor.contentSize = CGSize(width: 600, height: 900)
+        content.addSubview(editor)
+        let web = WKWebView(frame: CGRect(x: 0, y: 900, width: 300, height: 420))
+        content.addSubview(web)
+        controller.view.layoutIfNeeded()
+        XCTAssertFalse(conversation.bounds.intersects(web.convert(web.bounds, to: conversation)))
+        let coordinator = ReactPreviewIOS.Coordinator()
+        coordinator.webView(web, didFinish: nil)
+        XCTAssertGreaterThan(conversation.contentOffset.y, 0)
+        XCTAssertTrue(conversation.bounds.contains(web.convert(web.bounds, to: conversation)),
+                      "The actual executed canvas must be inside the native viewport")
+        XCTAssertEqual(editor.contentOffset, .zero, "Revealing execution must not pan the source-code editor")
+        XCTAssertEqual(web.scrollView.contentOffset, .zero, "Do not double-pan the DOM viewport")
+    }
+
+    @MainActor
     func testGeneratedReactTsxUsesActualWebKitTasksPersistenceAndResponseIsolation() async throws {
         let contractURL = try XCTUnwrap(Bundle.main.url(forResource: "react-preview-acceptance", withExtension: "json"))
         let contract = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: contractURL)) as? [String: Any])

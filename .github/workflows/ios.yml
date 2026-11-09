@@ -75,10 +75,10 @@ permissions:
   contents: read
 
 concurrency:
-  # Final acceptance requires an executed, passing native keyboard/CRUD/storage
-  # receipt before the full production-message, SQLite and visual audit. Keep
-  # prior diagnostic runs intact; coalesce pending changes in this generation.
-  group: ios-response-runtime-v8-${{ github.ref }}
+  # Preserve executed evidence, but do not let an obsolete revision stranded
+  # before runner allocation pin every newer fix behind it. Match the Android
+  # runtime gate's revision-isolated scheduling; all acceptance gates remain.
+  group: ios-response-runtime-v9-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -298,7 +298,7 @@ jobs:
             exit 65
           fi
 
-      - name: Early actual inline React keyboard and storage acceptance
+      - name: Early transport, calculator and inline React keyboard acceptance
         run: |
           set -o pipefail
           xcodebuild test \
@@ -308,6 +308,8 @@ jobs:
             -destination "$IOS_DESTINATION" \
             -derivedDataPath "$DERIVED_DATA" \
             -only-testing:AppTests/CalcHonestyTests/testNativeJSONDelimiterRecoveryPreservesActualSourceBytesAndQuotedPunctuation \
+            -only-testing:AppTests/ChatResponseHonestyTests \
+            -only-testing:AppTests/CalculatorSourceHonestyTests \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch \
             -resultBundlePath ios/build/GSApp-react-keyboard.xcresult \
             CODE_SIGNING_ALLOWED=NO \
@@ -397,6 +399,15 @@ jobs:
           import re
           log = Path('ios/build/xcodebuild-test.log').read_text(errors='replace')
           required = [
+              ('CalculatorSourceHonestyTests', 'testActualFencedCalculatorAcceptsSourceAliasesAndScientificInitialValuesWithoutInventedDefaults'),
+              ('CalculatorSourceHonestyTests', 'testActualCalculatorFormatterDoesNotInventDollarsAndKeepsExplicitSourceUnits'),
+              ('CalculatorSourceHonestyTests', 'testProductionCalculatorExpressionsSupportScientificNumbersAndRejectInvalidArityOrRecursiveSource'),
+              ('PlatformRuntimeUITests', 'testGeneratedCalculatorKeepsNinthTenthInputsSixthChoiceAndSeventhOutputUsable'),
+              ('ChatResponseHonestyTests', 'testUnusualPromptFailureNeverBecomesKeywordSelectedCannedAnswer'),
+              ('ChatResponseHonestyTests', 'testCanonicalDoneReplacesDraftAndKeepsRealServerIdentityBeforeFinalization'),
+              ('ChatResponseHonestyTests', 'testInterruptedReplyPreservesOnlyActualTextAndDoesNotPromiseAutomaticContinuation'),
+              ('ChatResponseHonestyTests', 'testEmptyCompletionIsAnErrorNotASuccessfulBlankAnswer'),
+              ('ChatResponseHonestyTests', 'testFailedFirstCreationRetriesCreationAndPersistsOriginalUserOnceWithoutFakeIDs'),
               ('PlatformRuntimeUITests', 'testConversationActionsTapOpensRealOptionsWithoutLeavingChat'),
               ('CalcHonestyTests', 'testActualMessagePreviewIdentitySurvivesRehydrationWithoutInventingServerIDs'),
               ('CalcHonestyTests', 'testActualSQLiteHistoryAndOlderPagesKeepDurablePreviewIdentity'),
