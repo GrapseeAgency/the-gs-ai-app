@@ -37,6 +37,16 @@ final class CalcHonestyTests: XCTestCase {
         let waterfall = try XCTUnwrap(specializedChartPointsIOS(["type": "waterfall", "series": [["data": [[0, 3], [1, -5]]]]]))
         XCTAssertEqual(waterfall.map { $0.start }, [0, 3])
         XCTAssertEqual(waterfall.last.map { $0.start + $0.y }, -2)
+        for source in ["Alpha: 1*2\nBeta: 3", "Alpha: 1_2\nBeta: 3", "Alpha: 10\nBeta: unknown\nGamma: 30", "Mass A: 10 kg\nMass B: 20 kg"] {
+            XCTAssertNil(parseRelaxedJSONObject(kind: "chart", raw: source), "Plain source must not lose operators, missing values or units")
+        }
+        let recovered = try XCTUnwrap(parseRelaxedJSONObject(kind: "chart", raw: "Jan: -2\nFeb: 4\nMar: 1"))
+        XCTAssertEqual(recovered["type"] as? String, "line")
+        let recoveredSeries = try XCTUnwrap(recovered["series"] as? [[String: Any]])
+        let recoveredData = try XCTUnwrap(recoveredSeries.first?["data"] as? [[Double]])
+        XCTAssertEqual(recoveredData.map { $0[1] }, [-2, 4, 1])
+        XCTAssertNil(parseRelaxedJSONObject(kind: "progress", raw: "Design: 120%\nBuild: 45%"))
+        XCTAssertNotNil(parseRelaxedJSONObject(kind: "progress", raw: "Design: 80%\nBuild: 45%"))
         XCTAssertEqual(canonicalChartType("sankeyish"), "sankeyish")
         XCTAssertFalse(isValidWidget(kind: "chart", json: #"{"type":"sankeyish","series":[{"data":[[0,1],[1,2]]}]}"#))
         XCTAssertFalse(pieAlternativeAllowedIOS(["type": "line", "unit": "%", "series": [["data": [[0, -2], [1, 3]]]]]))
