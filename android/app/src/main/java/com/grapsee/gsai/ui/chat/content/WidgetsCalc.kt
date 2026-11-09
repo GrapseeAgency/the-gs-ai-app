@@ -255,7 +255,8 @@ internal fun formatCalc(value: Double, format: String, unit: String): String {
     val isPercent = fmtLower in setOf("percent", "pct", "%") || unitLower in setOf("percent", "pct", "%")
     val currSymbol = when (unit.trim()) {
         "€", "£", "¥", "$" -> unit.trim()
-        else -> if (isCurrency) "$" else ""
+        "USD", "usd" -> "$"
+        else -> if (unit.isBlank() && fmtLower == "usd") "$" else ""
     }
     val body = when {
         isCurrency -> String.format(Locale.US, "%s%,.2f", currSymbol, value)
@@ -273,6 +274,7 @@ internal fun formatCalc(value: Double, format: String, unit: String): String {
         else -> if (abs(value - round(value)) < 1e-9) String.format(Locale.US, "%,.0f", value)
         else String.format(Locale.US, "%,.2f", value)
     }
+    if (isCurrency && currSymbol.isEmpty() && unit.isNotBlank() && unitLower !in setOf("money", "currency")) return "$body $unit"
     if (isCurrency || isPercent || unit.isBlank()) return body
     return "$body $unit"
 }
