@@ -407,7 +407,10 @@ async function main() {
         {name:'Secondary', data:Array.from({length:13}, (_,index)=>[index,(index+1)*10])}
       ]
     }) + '\n```'))
-    await page.waitForFunction(() => document.querySelectorAll('.recharts-bar-rectangle').length === 26)
+    await page.waitForFunction(() => {
+      const marks = Array.from(document.querySelectorAll('.recharts-bar-rectangle'))
+      return marks.length === 26 && marks.every(node => { const box=node.getBBox(); return box.width>0 && box.height>0 })
+    })
     const marks = await page.$$eval('.recharts-bar-rectangle', nodes => nodes.map(node => {
       const box = node.getBBox(); return {width:box.width,height:box.height}
     }))
