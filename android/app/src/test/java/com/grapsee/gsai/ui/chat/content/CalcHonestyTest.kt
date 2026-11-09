@@ -5,6 +5,33 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun nativeChartSelectionKeepsDataMeaningAndEverySignedObservation() {
+        val cases = listOf(
+            listOf("Jan", "Feb", "Mar") to "line", listOf("2022", "2023", "2024") to "line",
+            listOf("Q1 2024", "Q2 2024", "Q1 2025") to "line",
+            listOf("2024-01", "2024-02", "2024-03") to "line",
+            listOf("Mar", "Jan", "Feb") to "bar", listOf("2024-02-31", "2024-03-01") to "bar",
+            listOf("Alpha", "Beta") to "bar", listOf("A supplied category with a long name", "Another supplied category") to "hbar"
+        )
+        for ((labels, type) in cases) {
+            assertEquals(labels.toString(), type, categoricalChartType(labels))
+            val headers = listOf("Period", "Actual measure").map { listOf(InlineSpan.Text(it)) }
+            val rows = labels.mapIndexed { index, label -> listOf(listOf(InlineSpan.Text(label)), listOf(InlineSpan.Text("${index + 1}"))) }
+            assertEquals(type, chartFromTableBlock(Block.TableBlock(headers, List(2) { TableAlign.LEFT }, rows, 0))!!.type)
+        }
+        val chart = ChartWidget(type = "hbar", labels = (1..13).map { "Actual $it" },
+            series = listOf(ChartSeries(name = "Actual", data = (1..13).map { listOf(it.toFloat(), (it - 7).toFloat()) })))
+        val observations = horizontalChartObservations(chart)!!
+        assertEquals(13, observations.size)
+        assertEquals(-6f, observations.first().value, 0f)
+        assertEquals("Actual 13", observations.last().label)
+        assertEquals(26, horizontalChartObservations(chart.copy(series = chart.series + chart.series))!!.size)
+        assertNull(horizontalChartObservations(chart.copy(series = listOf(ChartSeries(data = listOf(listOf(0f)))))))
+        assertEquals(false, pieAlternativeAllowed(chart.copy(type = "line")))
+        assertEquals(false, pieAlternativeAllowed(ChartWidget(type = "line", unit = "%", series = listOf(ChartSeries(data = listOf(listOf(0f,2f),listOf(1f,3f)))))))
+        assertEquals(true, pieAlternativeAllowed(ChartWidget(type = "bar", unit = "%", series = listOf(ChartSeries(data = listOf(listOf(0f,40f),listOf(1f,60f)))))))
+    }
+
     @Test fun actualCalculatorParserKeepsThirteenthInputSixthChoiceAndNinthOutput() {
         val fields = (1..13).joinToString(",") { """{"key":"x$it","label":"Input $it","value":$it}""" }
         val choices = (1..6).joinToString(",") { """{"label":"Option $it","value":$it}""" }
