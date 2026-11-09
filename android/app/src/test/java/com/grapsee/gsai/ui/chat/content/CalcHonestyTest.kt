@@ -6,6 +6,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CalcHonestyTest {
+    @Test fun optionalProseChartsKeepEverySignedUnicodeObservationInSourceOrder() {
+        val labels = listOf("ঢাকা", "ফেনী", "শূন্য", "Delta", "Epsilon", "Zeta", "Eta", "Theta", "Iota", "Kappa")
+        val values = listOf(-12, 0, 2026, 9, 8, 7, 6, 5, 4, 3)
+        val source = labels.zip(values).joinToString("\n") { (label, value) -> "- $label: $value" }
+        val chart = requireNotNull(chartFromProseBlocks(parseBlocks(source)))
+        assertEquals(labels, chart.labels)
+        assertEquals(values.map { it.toFloat() }, chart.series.single().data.map { it[1] })
+        assertEquals("hbar", chart.type)
+        assertEquals(chart, chartFromProseBlocks(parseBlocks(source)))
+        assertEquals("line", chartFromProseBlocks(parseBlocks("- Jan: -2\n- Feb: 0\n- Mar: 2026"))?.type)
+        for (ambiguous in listOf("- A: 1\n- B: unknown\n- C: 3", "- A: $1\n- B: 2%\n- C: $3", "- A: 1\n- A: 2\n- C: 3", "- A: 1\n- B: 2 kg\n- C: 3", "- A: 1\n- B: 2")) {
+            assertNull(ambiguous, chartFromProseBlocks(parseBlocks(ambiguous)))
+        }
+    }
+
     @Test fun specializedChartsRequireActualSourceDimensionsAndRanges() {
         for (json in listOf(
             """{"type":"bubble","series":[{"data":[[1,2],[3,4]]}]}""",
