@@ -329,6 +329,32 @@ class NexlyChatScreenshotTest {
         compose.onRoot().captureRoboImage(path)
     }
 
+    @Test
+    fun sectionReferenceOptionalToolsDoNotTurnOrdinaryProseIntoAnOpenDashboard() {
+        val source = androidx.compose.runtime.mutableStateOf("- Alpha: -12\n- Beta: 0\n- Gamma: 2026")
+        compose.setContent {
+            TheGsAiTheme(darkTheme = false) {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    BlocksContent(content = source.value, isStreaming = false, onCopyCode = {}, glassAssistant = true)
+                }
+            }
+        }
+        compose.onNodeWithText("Supplied observations").assertDoesNotExist()
+        compose.onNodeWithText("Explore supplied observations").performClick()
+        compose.onNodeWithText("Supplied observations").assertExists()
+        compose.onNodeWithText("Hide · Explore supplied observations").performClick()
+        compose.onNodeWithText("Supplied observations").assertDoesNotExist()
+        compose.runOnIdle {
+            source.value = "- Atom: A basic unit of a chemical element.\n- Molecule: Two or more atoms bonded together.\n- Element: A substance made of one type of atom."
+        }
+        compose.onNodeWithText("Interactive Concept Deck").assertDoesNotExist()
+        compose.onNodeWithText("Practice concepts from this answer").performClick()
+        compose.onNodeWithText("Interactive Concept Deck").assertExists()
+        compose.runOnIdle { source.value = "An ordinary answer without a templated dashboard." }
+        compose.onNodeWithText("Interactive Concept Deck").assertDoesNotExist()
+        compose.onNodeWithText("Practice concepts from this answer").assertDoesNotExist()
+    }
+
     /** Coverage for the six supplied section references. PNGs require visual
      * review; rendering them is not an automatic fidelity verdict. */
     private fun shootSectionReference(id: String) {
