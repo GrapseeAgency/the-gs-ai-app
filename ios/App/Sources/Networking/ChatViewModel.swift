@@ -6,10 +6,9 @@ import os.log
  * Owns one conversation: history load (store first, then network), optimistic
  * send, SSE streaming with live accumulation, stop, retry/regenerate. Every
  * turn is persisted to `ConversationStore` so threads survive relaunches, and
- * a dead backend never dead-ends the thread — GS Lite, the on-device responder,
- * streams a local reply instead (never an error screen). All state
- * mutations happen on the main actor; the streaming connection itself runs on
- * URLSession's background plumbing and hops back via `Task { @MainActor in … }`.
+ * failed requests keep actual received text and expose retry rather than
+ * substituting unrelated canned answers. All observable state mutations happen
+ * on the main actor; streaming deltas enter lock-guarded accumulation buffers.
  */
 /**
  * Lock-guarded delta sink for one stream. SSE chunks arrive on URLSession's
@@ -753,14 +752,20 @@ final class ChatViewModel: ObservableObject {
         streamTask = Task {
             do {
                 let conversationID = try await self.ensureConversation(for: text)
-                if appendUserMessage {
+                // A failed first create leaves the optimistic user turn in
+                // memory. Persist it once creation actually succeeds, including
+                // when that happens on Retry (appendUserMessage == false).
+                if let index = self.messages.lastIndex(where: { $0.role == "user" }),
+                   self.messages[index].durableID == nil {
+                    let user = self.messages[index]
                     self.store.append(StoredMessage(
-                        id: UUID().uuidString,
+                        id: user.id.uuidString,
                         conversationId: conversationID,
                         role: "user",
-                        content: text,
-                        createdAt: ConversationStore.now(),
-                        attachments: attachments))
+                        content: user.content,
+                        createdAt: user.createdAt,
+                        attachments: user.attachments))
+                    self.messages[index].durableID = user.id.uuidString
                 }
                 var completedMessage: Message?
                 try await self.apiClient.stream(
@@ -794,7 +799,7 @@ final class ChatViewModel: ObservableObject {
                         sink.append(event) // lock-guarded — drained in the flush loop
                     }
                 )
-                // Stream closed without an explicit `done` event — wrap up.
+                // Transport returned after an explicit, validated completion.
                 if self.isStreaming {
                     self.finalize(with: completedMessage)
                 }
@@ -825,15 +830,13 @@ final class ChatViewModel: ObservableObject {
         if let conversationID { return conversationID }
         // Attachments-only first messages (empty text) keep the default title.
         let title = SettingsStore.shared.autoTitle && !text.isEmpty ? String(text.prefix(40)) : "New chat"
-        do {
-            let conversation = try await self.apiClient.createConversation(title: title)
-            conversationID = conversation.id
-            return conversation.id
-        } catch {
-            let local = self.store.createLocalConversation(title: title)
-            conversationID = local.id
-            return local.id
-        }
+        // Do not invent a remote ID after a create failure. The optimistic
+        // user turn stays visible and Retry must retry creation, not repeatedly
+        // POST to a local UUID the backend has never seen. Existing stored
+        // histories are not deleted or reassigned by this failure path.
+        let conversation = try await self.apiClient.createConversation(title: title)
+        conversationID = conversation.id
+        return conversation.id
     }
 
     // MARK: - Coalesced streaming publish (deep-perf pass 80-b)
