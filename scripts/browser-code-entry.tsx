@@ -1,5 +1,6 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+import { flushSync } from 'react-dom'
 import { TerminalWidget } from '../src/components/genui/terminal/TerminalWidget'
 import { HtmlBlock } from '../src/components/genui/blocks/HtmlBlock'
 import { CodeBlock } from '../src/components/genui/blocks/CodeBlock'
@@ -42,4 +43,6 @@ window.gsRenderCollab = payload => root.render(<WidgetSurface dark={false}><Coll
 
 import { MessageContent } from '../src/components/genui/MessageContent'
 declare global { interface Window { gsRenderMessage: (text: string, responseScope?: string) => void } }
-window.gsRenderMessage = (text, responseScope) => root.render(<MessageContent text={text} dark={false} responseScope={responseScope} />)
+// The test driver must return after this response commits, not hand a click
+// an old Run button that React is about to detach during scope replacement.
+window.gsRenderMessage = (text, responseScope) => flushSync(() => root.render(<MessageContent text={text} dark={false} responseScope={responseScope} />))
