@@ -445,15 +445,16 @@ async function main() {
   ] } }))
   check('multi-series chart metrics explicitly identify their actual scope', () => {
     assert.match(document.body.textContent, /Summary: Short/)
-    assert.match(document.body.textContent, /sum of observations is 30/)
+    assert.match(document.body.textContent, /Lowest observation for Short: 0 at 10/)
     assert.doesNotMatch(document.body.textContent, /cumulative volume/)
   })
-  check('a chart sum never claims the individual points growth as aggregate-period growth', () => {
-    const label = Array.from(document.querySelectorAll('div')).find(node => node.textContent === 'Sum')
+  check('independent observations show actual extrema instead of an invented aggregate-period total', () => {
+    const label = Array.from(document.querySelectorAll('div')).find(node => node.textContent === 'Lowest')
     assert.ok(label)
     const card = label.parentElement.textContent
-    assert.match(card, /30/)
+    assert.match(card, /10/)
     assert.match(card, /2 points/)
+    assert.doesNotMatch(card, /30/)
     assert.doesNotMatch(card, /%|↑|↓/)
     assert.match(document.body.textContent, /First–last change/)
   })
@@ -461,6 +462,12 @@ async function main() {
   check('range uses longest series and does not restore short out-of-window history', () => {
     assert.match(document.body.textContent, /Last 3 points/)
     assert.doesNotMatch(document.body.textContent, /sum of observations|zero baseline/)
+  })
+  await mount(h(ChartWidget, { payload: { type: 'line', unit: '%', labels: ['Alpha','Beta','Gamma'], series: [{name:'Independent rates', data:[[0,12],[1,18],[2,30]]}] } }))
+  check('independent percentage rates never acquire a fictitious total or whole-composition control', () => {
+    assert.match(document.body.textContent, /Lowest observation for Independent rates: Alpha at 12 %/)
+    assert.doesNotMatch(document.body.textContent, /60 %|sum of observations/)
+    assert.ok(!buttons().some(button=>button.textContent.includes('Pie Chart')))
   })
   await mount(h(SpontaneousConceptDeck, { concepts, dark: false }))
   await click(buttons().find((b) => b.textContent.includes('tap to flip')))
