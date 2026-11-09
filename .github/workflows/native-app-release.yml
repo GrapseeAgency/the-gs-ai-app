@@ -273,10 +273,11 @@ jobs:
 
           Build log: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
           EOF
+          # Never publish a stale queued build over a reserved release identity.
           if gh release view "v$VERSION" >/dev/null 2>&1; then
             test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$VERSION" --jq '.object.sha')" = "$GITHUB_SHA"
             gh release upload "v$VERSION" release-out/* --clobber
-            gh release edit "v$VERSION" --title "v$VERSION — native GenUI fixes (Android + iOS)" --notes-file release-notes.md --latest
+            gh release edit "v$VERSION" --title "v$VERSION — native GenUI fixes (Android + iOS)" --notes-file release-notes.md --draft=false --latest
           else
             gh release create "v$VERSION" release-out/* --target "$GITHUB_SHA" \
               --title "v$VERSION — native GenUI fixes (Android + iOS)" --notes-file release-notes.md --latest
