@@ -16,7 +16,7 @@ class CalcHonestyTest {
         assertEquals("hbar", chart.type)
         assertEquals(chart, chartFromProseBlocks(parseBlocks(source)))
         assertEquals("line", chartFromProseBlocks(parseBlocks("- Jan: -2\n- Feb: 0\n- Mar: 2026"))?.type)
-        for (ambiguous in listOf("- A: 1\n- B: unknown\n- C: 3", "- A: $1\n- B: 2%\n- C: $3", "- A: 1\n- A: 2\n- C: 3", "- A: 1\n- B: 2 kg\n- C: 3", "- A: 1\n- B: 2")) {
+        for (ambiguous in listOf("- [x] Done: 1\n- A: 2\n- B: 3\n- C: 4", "- A: 1\n- B: unknown\n- C: 3", "- A: $1\n- B: 2%\n- C: $3", "- A: 1\n- A: 2\n- C: 3", "- A: 1\n- B: 2 kg\n- C: 3", "- A: 1\n- B: 2")) {
             assertNull(ambiguous, chartFromProseBlocks(parseBlocks(ambiguous)))
         }
     }
