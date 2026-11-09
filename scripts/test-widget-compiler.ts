@@ -880,6 +880,58 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   )
 }
 
+// Real unusual calculator payloads must survive the SAME compiler that ships
+// responses to native clients, not merely a renderer-only demonstration.
+{
+  const source = {
+    type: 'discount',
+    title: 'Source-defined calculation',
+    params: [
+      { key: 'principal', label: 'Principal', initial: '1e3' },
+      { key: 'unknown', label: 'Configure this input' },
+      { key: 'zero', label: 'Explicit zero', default: 0 },
+      { key: 'minimum', label: 'No supplied starting value', min: 10 },
+      { key: 'choice', label: 'Actual choices', choices: [
+        { label: 'Missing value' }, { label: 'Boolean is not a number', value: false },
+        { label: 'Actual zero', value: 0 }, { label: 'Actual seven', value: 7 },
+      ] },
+    ],
+    outputs: [{ label: 'Actual formula', expression: 'principal*choice', format: 'currency', unit: 'BDT' }],
+  }
+  const compiled = compileWidgets({ reply: '```calc\n' + JSON.stringify(source) + '\n```',
+    userPrompt: 'Build my custom discount calculation. Do not invent unknown inputs or currency.' })
+  const fence = extractWidgetFences(compiled.text).find((item) => item.kind === 'calc')
+  check('actual response compiler keeps a custom calculator instead of unrelated prose', compiled.widgets === 1 && !!fence)
+  const actual = fence ? JSON.parse(fence.json) : {}
+  check('actual compiler preserves arbitrary calculator category instead of forcing finance', actual.type === 'discount')
+  check('actual compiler preserves scientific initial input rather than overwriting it with zero', actual.fields?.[0]?.value === 1000)
+  check('actual compiler keeps missing input unknown', actual.fields?.[1]?.value === null)
+  check('actual compiler keeps an explicitly supplied zero', actual.fields?.[2]?.value === 0)
+  check('actual compiler never uses a minimum bound as an initial value', actual.fields?.[3]?.value === null)
+  check('actual compiler drops invalid choice values instead of inventing zeros', actual.fields?.[4]?.choices?.length === 2)
+  check('actual compiler retains valid zero and nonzero choices', actual.fields?.[4]?.choices?.[0]?.value === 0 && actual.fields?.[4]?.choices?.[1]?.value === 7)
+  check('actual compiler retains supplied expression, format and currency code', actual.outputs?.[0]?.expr === 'principal*choice' && actual.outputs?.[0]?.format === 'currency' && actual.outputs?.[0]?.unit === 'BDT')
+
+  const aliases = validateWidget('calc', JSON.stringify({ fields: [], parameters: [{ key: 'x', label: 'X', initial: 12 }],
+    outputs: [], formulas: [{ label: 'Source result', expression: 'x*2' }] }))
+  const aliased = aliases.ok ? aliases.widget : {}
+  check('server uses nonempty supplied aliases when canonical arrays are empty', aliases.ok && (aliased.fields as Array<{value: number}>)?.[0]?.value === 12 && (aliased.outputs as Array<{expr: string}>)?.[0]?.expr === 'x*2')
+  check('server does not invent finance when calculator category is omitted', aliased.type === 'calculator')
+  const top = validateWidget('calc', JSON.stringify({ sliders: [{ key: 'x', label: 'X', default: 3 }],
+    expression: 'x*2', resultLabel: 'Actual top-level formula', currency: 'BDT' }))
+  check('server supports actual top-level calculator formulas without fabricating a different widget', top.ok && (top.widget.outputs as Array<{expr: string, unit: string}>)?.[0]?.expr === 'x*2' && (top.widget.outputs as Array<{unit: string}>)?.[0]?.unit === 'BDT')
+
+  const fullSource = { type: 'custom-science', fields: [
+    ...Array.from({ length: 12 }, (_, index) => ({ key: `x${index + 1}`, label: `Actual input ${index + 1}`, initial: index + 1 })),
+    { key: 'choice', label: 'Source options', options: Array.from({ length: 6 }, (_, index) => ({ label: `Option ${index + 1}`, value: index + 1 })) },
+  ], outputs: Array.from({ length: 7 }, (_, index) => ({ label: `Actual result ${index + 1}`, expr: `x${index + 1}*choice` })) }
+  const full = compileWidgets({ reply: '```calc\n' + JSON.stringify(fullSource) + '\n```', userPrompt: 'Use all my actual custom science inputs, options and outputs.' })
+  const fullFence = extractWidgetFences(full.text).find((item) => item.kind === 'calc')
+  const fullActual = fullFence ? JSON.parse(fullFence.json) : {}
+  check('actual compiler does not truncate later supplied input fields', fullActual.fields?.length === 13 && fullActual.fields?.[11]?.value === 12)
+  check('actual compiler does not truncate sixth choice or seventh output', fullActual.fields?.[12]?.choices?.length === 6 && fullActual.outputs?.length === 7)
+}
+
 console.log(`\n${passed} passed, ${failures.length} failed`)
 if (failures.length) {
   for (const f of failures) console.log(`  - ${f}`)
