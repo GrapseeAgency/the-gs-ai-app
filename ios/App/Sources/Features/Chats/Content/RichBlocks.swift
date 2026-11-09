@@ -1722,7 +1722,9 @@ func chartJsonFromProseIOS(_ blocks: [Block]) -> String? {
     for block in blocks {
         let items: [ListItem]
         switch block {
-        case .bulletList(let list, _): items = list.filter { $0.checked == nil }
+        case .bulletList(let list, _):
+            guard list.allSatisfy({ $0.checked == nil }) else { return nil }
+            items = list
         case .orderedList(_, let list, _): items = list
         default: continue
         }
