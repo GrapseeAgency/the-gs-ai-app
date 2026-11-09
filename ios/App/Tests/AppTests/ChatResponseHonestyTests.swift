@@ -48,26 +48,33 @@ private final class ActualChatFixture {
     let session: URLSession
     let store: ConversationStore
     let vm: ChatViewModel
-    private let host = UUID().uuidString.lowercased() + ".gs-fixture.invalid"
+    private let host: String
     private let previousLocalPreference: Bool
 
-    init(reply: @escaping ChatFixtureURLProtocol.Handler) throws {
+    init(createReply: ChatFixtureURLProtocol.Handler? = nil, reply: @escaping ChatFixtureURLProtocol.Handler) throws {
+        let fixtureHost = UUID().uuidString.lowercased() + ".gs-fixture.invalid"
+        host = fixtureHost
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ChatFixtureURLProtocol.self]
-        session = URLSession(configuration: configuration)
-        let client = APIClient(session: session)
-        client.baseURL = try XCTUnwrap(URL(string: "https://" + host))
+        let fixtureSession = URLSession(configuration: configuration)
+        session = fixtureSession
+        let client = APIClient(session: fixtureSession)
+        client.baseURL = try XCTUnwrap(URL(string: "https://" + fixtureHost))
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("gs-response-" + UUID().uuidString)
         // OS-managed fixture files: never unlink a live WAL database.
         let sql = SQLiteChatStore(databaseURL: directory.appendingPathComponent("history.sqlite"))
-        store = ConversationStore(sql: sql)
-        vm = ChatViewModel(conversationID: nil, apiClient: client, store: store)
+        XCTAssertTrue(sql.isAvailable)
+        let fixtureStore = ConversationStore(sql: sql)
+        store = fixtureStore
+        vm = ChatViewModel(conversationID: nil, apiClient: client, store: fixtureStore)
         previousLocalPreference = SettingsStore.shared.preferLocal
         SettingsStore.shared.preferLocal = false
         let id = "actual-fixture-" + UUID().uuidString
         let conversation = try JSONSerialization.data(withJSONObject: ["id": id, "title": "Actual request"])
         ChatFixtureURLProtocol.install(host: host) { request in
-            if request.url?.path == "/api/v1/conversations" { return (201, conversation) }
+            if request.url?.path == "/api/v1/conversations" {
+                return createReply?(request) ?? (201, conversation)
+            }
             return reply(request)
         }
     }
@@ -85,6 +92,20 @@ private final class ActualChatFixture {
         session.invalidateAndCancel()
         ChatFixtureURLProtocol.remove(host: host)
         SettingsStore.shared.preferLocal = previousLocalPreference
+    }
+}
+
+private final class ActualChatRequestLog {
+    private let lock = NSLock()
+    private var recorded: [String] = []
+    func record(_ request: URLRequest) -> Int {
+        lock.lock(); defer { lock.unlock() }
+        recorded.append(request.url?.path ?? "")
+        return recorded.count
+    }
+    var paths: [String] {
+        lock.lock(); defer { lock.unlock() }
+        return recorded
     }
 }
 
@@ -149,6 +170,43 @@ final class ChatResponseHonestyTests: XCTestCase {
         XCTAssertNil(fixture.vm.messages.last?.serverId)
         XCTAssertTrue(fixture.vm.errorMessage?.contains("interrupted") ?? false)
         XCTAssertFalse(fixture.vm.messages.last?.content.contains("pick the thread") ?? true)
+    }
+
+    @MainActor
+    func testFailedFirstCreationRetriesCreationAndPersistsOriginalUserOnceWithoutFakeIDs() async throws {
+        let log = ActualChatRequestLog()
+        let prompt = "Design a custom monsoon evacuation tool for a wheelchair user in Feni."
+        let message = try JSONSerialization.data(withJSONObject: ["id": "retry-answer", "conversationId": "created-after-retry", "role": "assistant", "content": "Actual successful retry answer"])
+        let response = try event("done", String(decoding: message, as: UTF8.self))
+        let fixture = try ActualChatFixture(createReply: { request in
+            if log.record(request) == 1 { return (503, Data()) }
+            return (201, Data("{\"id\":\"created-after-retry\",\"title\":\"Actual retry\"}".utf8))
+        }, reply: { request in
+            _ = log.record(request)
+            return (200, response)
+        })
+        defer { fixture.close() }
+        let existing = fixture.store.createLocalConversation(title: "Unrelated offline history")
+        fixture.store.append(StoredMessage(id: "keep-this-offline-row", conversationId: existing.id, role: "assistant", content: "Actual offline source", createdAt: ConversationStore.now()))
+        fixture.vm.draft = prompt
+        fixture.vm.send()
+        try await fixture.finish()
+        XCTAssertNil(fixture.vm.conversationID, "Failed creation must not become a fake backend ID")
+        XCTAssertEqual(fixture.vm.messages.map(\.content), [prompt])
+        XCTAssertNotNil(fixture.vm.errorMessage)
+        XCTAssertEqual(log.paths, ["/api/v1/conversations"])
+
+        fixture.vm.retry()
+        try await fixture.finish()
+        XCTAssertNil(fixture.vm.errorMessage)
+        XCTAssertEqual(fixture.vm.conversationID, "created-after-retry")
+        XCTAssertEqual(fixture.vm.messages.filter { $0.role == "user" }.map(\.content), [prompt])
+        XCTAssertEqual(fixture.vm.messages.last?.serverId, "retry-answer")
+        XCTAssertEqual(log.paths, ["/api/v1/conversations", "/api/v1/conversations", "/api/v1/conversations/created-after-retry/messages"])
+        let saved = fixture.store.recentMessages(for: "created-after-retry", limit: 20)
+        XCTAssertEqual(saved.filter { $0.role == "user" }.map(\.content), [prompt])
+        XCTAssertEqual(saved.filter { $0.role == "assistant" }.count, 1)
+        XCTAssertEqual(fixture.store.recentMessages(for: existing.id, limit: 20).first?.content, "Actual offline source")
     }
 
     @MainActor
