@@ -3354,8 +3354,10 @@ enum CalcExprIOS {
     }
 
     static func eval(_ expr: String, vars: [String: Double]) -> Double {
+        guard expr.count <= 8192 else { return .nan }
         let chars = Array(expr)
         var pos = 0
+        var depth = 0
 
         func skipWs() {
             while pos < chars.count && chars[pos].isWhitespace { pos += 1 }
@@ -3410,6 +3412,9 @@ enum CalcExprIOS {
         }
 
         func parseUnary() -> Double {
+            guard depth < 128 else { return .nan }
+            depth += 1
+            defer { depth -= 1 }
             skipWs()
             if pos < chars.count && chars[pos] == "-" { pos += 1; return -parseUnary() }
             if pos < chars.count && chars[pos] == "+" { pos += 1; return parseUnary() }
@@ -3429,6 +3434,13 @@ enum CalcExprIOS {
             if chars[pos].isNumber || chars[pos] == "." {
                 let start = pos
                 while pos < chars.count && (chars[pos].isNumber || chars[pos] == ".") { pos += 1 }
+                if pos < chars.count && (chars[pos] == "e" || chars[pos] == "E") {
+                    pos += 1
+                    if pos < chars.count && (chars[pos] == "+" || chars[pos] == "-") { pos += 1 }
+                    let exponentStart = pos
+                    while pos < chars.count && chars[pos].isNumber { pos += 1 }
+                    guard pos > exponentStart else { return .nan }
+                }
                 return Double(String(chars[start..<pos])) ?? Double.nan
             }
             if chars[pos].isLetter || chars[pos] == "_" {
@@ -3450,9 +3462,14 @@ enum CalcExprIOS {
                         }
                     }
                     guard pos < chars.count && chars[pos] == ")" else { return Double.nan }; pos += 1
+                    guard args.allSatisfy({ $0.isFinite }) else { return .nan }
+                    let function = ident.lowercased()
+                    let unaryFunctions: Set<String> = ["sqrt", "abs", "round", "floor", "ceil", "ln", "log", "log10", "exp", "sin", "cos", "tan"]
+                    guard !unaryFunctions.contains(function) || args.count == 1 else { return .nan }
+                    guard function != "pow" || args.count == 2 else { return .nan }
                     let a = args.first ?? Double.nan
-                    let b = args.count > 1 ? args[1] : 0.0
-                    switch ident.lowercased() {
+                    let b = args.count > 1 ? args[1] : Double.nan
+                    switch function {
                     case "sqrt": return a >= 0 ? sqrt(a) : Double.nan
                     case "abs": return abs(a)
                     case "round": return round(a)
