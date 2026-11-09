@@ -26,7 +26,7 @@ export function HBarChartView({ payload, height }: { payload: ChartPayload; heig
             <XAxis type="number" tick={{ fontSize: TYPE.micro, fill: theme.text3 }} axisLine={false} tickLine={false} />
             <YAxis type="category" dataKey="label" width={110} tick={{ fontSize: TYPE.micro, fill: theme.text2 }} axisLine={false} tickLine={false} />
             <Tooltip cursor={{ fill: alpha(theme.dark ? '#FFFFFF' : '#14171C', 0.06) }} contentStyle={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 12, fontSize: TYPE.label, color: theme.text }} />
-            {series.map((item, index) => <Bar key={index} dataKey={`series_${index}`} name={item.name} fill={index === 0 ? accent : ramp[index % ramp.length]} radius={[0, 6, 6, 0]} maxBarSize={18}>
+            {series.map((item, index) => <Bar key={index} dataKey={`series_${index}`} name={item.name} fill={index === 0 ? accent : ramp(series.length)[index]} radius={[0, 6, 6, 0]} maxBarSize={18}>
               <LabelList dataKey={`series_${index}`} position="right" style={{ fontSize: TYPE.micro, fill: theme.text2, fontWeight: 600 }} />
             </Bar>)}
           </RcBar>
