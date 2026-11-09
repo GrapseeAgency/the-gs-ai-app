@@ -613,6 +613,32 @@ class PlatformRuntimeTest {
         compose.onNodeWithText("1–31 of 31").assertExists()
     }
 
+    @Test fun generatedCalculatorKeepsLaterInputsSixthChoiceNinthOutputAndSixthPresetUsable() {
+        val fields = (1..13).joinToString(",") { """{"key":"x$it","label":"Input $it","value":$it}""" }
+        val choices = (1..6).joinToString(",") { """{"label":"Option $it","value":$it}""" }
+        val outputs = (1..8).joinToString(",") { """{"label":"Result $it","expr":"x1"}""" }
+        val presets = (1..6).joinToString(",") { """{"label":"Preset $it","values":{"x12":20,"x13":30,"option":6}}""" }
+        val source = """{"title":"All actual controls","fields":[$fields,{"key":"option","label":"Choice","value":1,"choices":[$choices]}],"outputs":[$outputs,{"label":"Final result","expr":"x12+x13+option"}],"presets":[$presets]}"""
+        val widget = parseWidget("calc", source) as Widget.Calc
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    CalcWidgetView(widget.w)
+                }
+            }
+        }
+        compose.onNode(hasSetTextAction() and hasText("Input 12")).performScrollTo().performTextReplacement("120")
+        compose.onNode(hasSetTextAction() and hasText("Input 13")).performScrollTo().performTextReplacement("130")
+        compose.onNodeWithText("Option 6").performScrollTo().performClick()
+        compose.onNodeWithText("Final result").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("256").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Preset 6").performScrollTo().performClick()
+        compose.onNodeWithText("56").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Reset").performScrollTo().performClick()
+        compose.onNodeWithText("26").performScrollTo().assertIsDisplayed()
+        compose.onAllNodes(hasText("$", substring = true)).assertCountEquals(0)
+    }
+
     @Test fun generatedCalculatorAcceptsExactNumbersAndNeverRendersEmoji() {
         val json = """{"type":"finance","title":"\ud83d\ude80 Growth","fields":[{"key":"amount","label":"Amount \u00a9\ufe0f \ud83d\ude00","value":100}],"outputs":[{"label":"Double","expr":"amount*2","primary":true}]}"""
         val widget = parseWidget("calc", json) as Widget.Calc
