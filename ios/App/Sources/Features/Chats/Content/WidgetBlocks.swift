@@ -3349,7 +3349,7 @@ enum CalcExprIOS {
         }
         if let rx = try? NSRegularExpression(pattern: "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b") {
             let ns = trimmed as NSString
-            let knownFns: Set<String> = ["sqrt", "abs", "round", "floor", "ceil", "min", "max", "pow", "log", "log10", "ln", "exp", "sin", "cos", "tan", "pi", "e"]
+            let knownFns: Set<String> = ["sqrt", "abs", "round", "floor", "ceil", "min", "max", "pow", "clamp", "log", "log10", "ln", "exp", "sin", "cos", "tan", "pi", "e"]
             for m in rx.matches(in: trimmed, range: NSRange(location: 0, length: ns.length)) {
                 let ident = ns.substring(with: m.range(at: 1))
                 if !knownFns.contains(ident.lowercased()) && vars[ident] == nil && vars[ident.lowercased()] == nil {
@@ -3475,6 +3475,7 @@ enum CalcExprIOS {
                     let unaryFunctions: Set<String> = ["sqrt", "abs", "round", "floor", "ceil", "ln", "log", "log10", "exp", "sin", "cos", "tan"]
                     guard !unaryFunctions.contains(function) || args.count == 1 else { return .nan }
                     guard function != "pow" || args.count == 2 else { return .nan }
+                    guard function != "clamp" || args.count == 3 else { return .nan }
                     let a = args.first ?? Double.nan
                     let b = args.count > 1 ? args[1] : Double.nan
                     switch function {
@@ -3486,6 +3487,9 @@ enum CalcExprIOS {
                     case "min": return args.min() ?? Double.nan
                     case "max": return args.max() ?? Double.nan
                     case "pow": return pow(a, b)
+                    case "clamp":
+                        guard args[1] <= args[2] else { return .nan }
+                        return min(max(a, args[1]), args[2])
                     case "ln": return a > 0 ? log(a) : Double.nan
                     case "log", "log10": return a > 0 ? log10(a) : Double.nan
                     case "exp": return exp(a)
