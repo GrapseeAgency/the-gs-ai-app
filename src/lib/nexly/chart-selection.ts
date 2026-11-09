@@ -54,7 +54,7 @@ export function categoricalChartType(labels: string[]): 'line' | 'bar' | 'hbar' 
 
 /** Category/value pairs cannot honestly supply graph edges, OHLC or a second numeric axis. */
 export function supportsCategoryRecovery(type: ChartType, values: number[]): boolean {
-  if (!['line', 'area', 'bar', 'hbar', 'pie', 'donut', 'radar', 'funnel'].includes(type)) return false
-  if (['pie', 'donut', 'funnel', 'radar'].includes(type)) return values.every(value => value >= 0) && values.some(value => value > 0)
+  if (!['line', 'area', 'bar', 'hbar', 'pie', 'donut', 'radar', 'funnel', 'treemap', 'waterfall'].includes(type)) return false
+  if (['pie', 'donut', 'funnel', 'radar', 'treemap'].includes(type)) return values.every(value => value >= 0) && values.some(value => value > 0)
   return true
 }
