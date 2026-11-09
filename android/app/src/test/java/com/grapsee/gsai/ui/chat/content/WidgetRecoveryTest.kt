@@ -83,6 +83,18 @@ class WidgetRecoveryTest {
         assertTrue(chart.title.contains("from the answer above"))
     }
 
+    @Test fun currentSourcesCannotBorrowPreviousObservations() {
+        val prior = "- Q1: 10\n- Q2: 20\n- Q3: 30"
+        for (source in listOf(
+            "- Jan: 1\n- Feb: unknown\n- Mar: 3",
+            "- Jan: **missing**\n- Feb: **missing**",
+            "- Jan: 10",
+            "- Alpha: 1_2\n- Beta: 3",
+            "| Month | Sales |\n|---|---|\n| Jan | 10 |\n| Feb | unknown |",
+            "| Month | Mass | Cost |\n|---|---|---|\n| Jan | 10 kg | $20 |\n| Feb | 12 kg | $30 |"
+        )) assertNull("Stale history replaced current source: $source", WidgetRecovery.recover(source, "chart this", prior))
+    }
+
     @Test fun recoveryUsesDataMeaningNotOneRepeatedBarChart() {
         val trend = "- Q1: 10\n- Q2: 20\n- Q3: 30"
         val automatic = WidgetRecovery.recover(trend, "show me a chart", "")!!
