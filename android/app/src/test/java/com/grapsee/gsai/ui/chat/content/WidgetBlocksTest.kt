@@ -422,8 +422,15 @@ class WidgetBlocksTest {
             assertTrue("calc type '$type' should parse", w is Widget.Calc)
             assertEquals(type, (w as Widget.Calc).w.type)
         }
-        // Unknown type, no fields, or no outputs must degrade rather than render blank.
-        assertNull(parseWidget("calc", """{"type":"astrology","fields":[{"key":"x"}],"outputs":[{"expr":"x"}]}"""))
+        // Category labels are not execution engines: the real formula is what
+        // makes a discount/custom calculator useful, not a closed SDK enum.
+        val custom = parseWidget("calc", """{"type":"discount","fields":[{"key":"x","value":20}],"outputs":[{"expr":"x*0.9"}]}""") as Widget.Calc
+        assertEquals("discount", custom.w.type)
+        assertEquals(18.0, CalcExpr.eval(custom.w.outputs.single().expr, mapOf("x" to custom.w.fields.single().value))!!, 0.0)
+        val unspecified = parseWidget("calc", """{"fields":[{"key":"x"}],"outputs":[{"expr":"x"}]}""") as Widget.Calc
+        assertEquals("calculator", unspecified.w.type)
+        assertTrue(unspecified.w.fields.single().value.isNaN())
+        // No fields or no outputs must still degrade rather than render blank.
         assertNull(parseWidget("calc", """{"type":"loan","fields":[],"outputs":[{"expr":"x"}]}"""))
         assertNull(parseWidget("calc", """{"type":"loan","fields":[{"key":"x"}],"outputs":[]}"""))
     }
