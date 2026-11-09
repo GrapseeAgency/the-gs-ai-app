@@ -978,7 +978,14 @@ private struct WidgetBodyView: View {
     var body: some View {
         switch kind {
         case "chart":
-            ChartBodyView(obj: obj, accent: accent)
+            let type = canonicalChartType(str(obj, "type", "chartType").ifEmptyIOS("line"))
+            if basicNativeChartTypesIOS.contains(type) {
+                ChartBodyView(obj: obj, accent: accent)
+            } else if specializedNativeChartTypesIOS.contains(type) {
+                SpecializedChartViewIOS(obj: obj)
+            } else {
+                unsupportedChartSourceIOS(obj, message: "This chart type is not yet supported by the native renderer. Its original data is preserved; it has not been replaced with a different chart.")
+            }
         case "stat":
             StatBodyView(obj: obj, accent: accent)
         case "table":
