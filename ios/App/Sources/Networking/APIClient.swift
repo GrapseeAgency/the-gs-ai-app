@@ -52,11 +52,13 @@ final class APIClient {
     /// Header applied to every request built through this client.
     static let sessionHeaderName = "x-session-id"
 
-    private let session: URLSession = .shared
+    private let session: URLSession
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    private init() {}
+    init(session: URLSession = .shared) {
+        self.session = session
+    }
 
     // MARK: - Conversations
 
