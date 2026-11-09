@@ -384,6 +384,21 @@ class WidgetRecoveryTest {
     }
 
     @Test
+    fun `new gallery and timeline topics never borrow unrelated old answer data`() {
+        val priorPhotos = "https://images.example.com/old.png"
+        assertNull(WidgetRecovery.recover("I have no supplied photos.", "show a gallery of Kyoto", priorPhotos))
+        val current = WidgetRecovery.recover("https://images.example.com/current.png", "show those images", priorPhotos)!!
+        val gallery = parseWidget(current.kind, current.json) as Widget.Carousel
+        assertEquals(listOf("https://images.example.com/current.png"), gallery.w.items.map { it.image })
+        val followup = WidgetRecovery.recover("Here are those images.", "show those images", priorPhotos)!!
+        assertTrue(followup.json.contains("old.png"))
+        val oldDates = "- 2020-01: Old project start\n- 2020-06: Old project finish"
+        assertNull(WidgetRecovery.recover("No dates supplied.", "timeline of the new project", oldDates))
+        assertNull(WidgetRecovery.recover("- 2026-01: New project start", "timeline of those dates", oldDates))
+        assertTrue(WidgetRecovery.recover("Here are those dates.", "timeline of those dates", oldDates)!!.json.contains("2020-01"))
+    }
+
+    @Test
     fun `gallery with no image urls renders nothing`() {
         assertNull(WidgetRecovery.recover("No pictures here, sorry.", "show me a gallery", ""))
     }
