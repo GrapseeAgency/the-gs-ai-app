@@ -82,8 +82,7 @@ struct SpecializedChartViewIOS: View {
                         GeometryReader { geometry in
                             Rectangle().fill(.clear).contentShape(Rectangle())
                                 .gesture(DragGesture(minimumDistance: 0).onChanged { gesture in
-                                    guard let frame = proxy.plotAreaFrame else { return }
-                                    let area = geometry[frame]
+                                    let area = geometry[proxy.plotAreaFrame]
                                     if ["hbar", "gantt"].contains(type) {
                                         if let category: String = proxy.value(atY: gesture.location.y - area.origin.y) {
                                             selected = points.first(where: { $0.label == category })?.id
