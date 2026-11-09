@@ -12,6 +12,9 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * The catalogue is only useful if every page it ships actually renders.
@@ -21,6 +24,8 @@ import org.junit.Test
  * the SAME parser the chat screen uses. A typo in one JSON object fails this
  * test instead of showing a code block on a phone with no connection.
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], manifest = Config.NONE)
 class WidgetShowcaseTest {
 
     private val pages = listOf(
