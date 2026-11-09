@@ -3543,6 +3543,7 @@ private struct CalcBodyView: View {
     let accent: Color
     @State private var vals: [String: Double] = [:]
     @State private var drafts: [String: String] = [:]
+    @FocusState private var focusedField: String?
 
     private var calcFields: [[String: Any]] {
         ((obj["fields"] ?? obj["sliders"] ?? obj["inputs"] ?? obj["variables"] ?? obj["parameters"] ?? obj["params"]) as? [[String: Any]]) ?? []
@@ -3607,12 +3608,12 @@ private struct CalcBodyView: View {
         let label = NexlyIcons.cleanPlainText(str(f, "label", "title", "name", "key"))
         let rawKey = str(f, "id", "key", "name")
         let key = rawKey.isEmpty ? "x\(idx + 1)" : rawKey
-        let minV = calcNumberIOS(f, "min", fallback: -.greatestFiniteMagnitude)
-        let maxV = calcNumberIOS(f, "max", fallback: .greatestFiniteMagnitude)
-        let hasRange = f["min"] != nil && f["max"] != nil && minV.isFinite && maxV.isFinite && maxV > minV
-        let rawStep = max(calcNumberIOS(f, "step", fallback: 0), 0)
-        let effStep = rawStep > 0 ? rawStep : (hasRange ? (maxV - minV) / 100 : 1)
-        let cur = activeVars[key] ?? minV
+        let minV = calcNumberIOS(f, "min")
+        let maxV = calcNumberIOS(f, "max")
+        let hasRange = minV.isFinite && maxV.isFinite && maxV > minV && (maxV - minV).isFinite
+        let rawStep = calcNumberIOS(f, "step")
+        let effStep = rawStep.isFinite && rawStep > 0 ? rawStep : (hasRange ? (maxV - minV) / 100 : 1)
+        let cur = activeVars[key] ?? .nan
         let rawUnit = str(f, "unit")
         let unit = ["currency", "money"].contains(rawUnit.lowercased()) ? ""
             : (rawUnit.lowercased() == "usd" ? "$" : rawUnit)
@@ -3638,6 +3639,7 @@ private struct CalcBodyView: View {
                                 .background(selected ? accent : Color.white.opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
                         }
                         .buttonStyle(.plain)
+                        .disabled(!cVal.isFinite)
                     }
                 }
             } else {
@@ -3657,6 +3659,9 @@ private struct CalcBodyView: View {
                         )
                     )
                     .accessibilityIdentifier("calc-input-\(key)")
+                    .focused($focusedField, equals: key)
+                    .submitLabel(.done)
+                    .onSubmit { focusedField = nil }
                     .font(Aero.mono(11.5))
                     .foregroundStyle(accent)
                     .multilineTextAlignment(.trailing)
