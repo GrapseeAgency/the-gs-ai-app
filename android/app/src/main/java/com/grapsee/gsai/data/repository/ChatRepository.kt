@@ -42,7 +42,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
-import kotlin.math.abs
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -744,13 +743,12 @@ class ChatRepository(
                     // v0.71.5: connect never happened — rotate the affinity id
                     // so the retry does not hammer the same dead routing slot.
                     onDeadSession?.invoke()
-                    val marker = "(Offline, cannot reach GS.) " + forensicSuffix(e) + "\n\n"
+                    // Connection failure is not a generated answer. Genuine
+                    // opt-in on-device generation already runs before this
+                    // request; never substitute a keyword-selected stock reply.
+                    val marker = "(Offline, cannot reach GS.) Tap regenerate or try again when connected. " + forensicSuffix(e)
                     accumulated.append(marker)
                     onDelta(marker)
-                    streamLocalReply(content) { chunk ->
-                        accumulated.append(chunk)
-                        onDelta(chunk)
-                    }
                     persistAssistant(activeId, assistantId, accumulated)
                     return activeId
                 }
@@ -861,12 +859,6 @@ class ChatRepository(
     }
 
     /**
-     * The on-device responder that keeps chats alive when the backend
-     * is not reachable. Prompt-aware, varied per prompt, and streamed with the
-     * same cadence as a networked answer. Never mentions servers, errors or
-     * connectivity, so the app reads fully functional on a fresh install.
-     */
-    /**
      * COMMIT 1(b): answer from the on-device engine, BEFORE the network.
      *
      * Returns the conversation id on success, or null if the engine could not
@@ -909,72 +901,13 @@ class ChatRepository(
         return activeId
     }
 
-    private suspend fun streamLocalReply(prompt: String, onDelta: (String) -> Unit) {
-        // THE ENGINE IS ONLY CONSULTED IF THE USER ASKED FOR IT.
-        //
-        // This used to be
-        //
-        //     val reply = nativeReply(prompt) ?: localReply(prompt)
-        //
-        // unconditionally, and that is a product bug rather than a stylistic
-        // one. streamLocalReply is the path taken when the PROVIDER FAILED, so
-        // with the switch off -- the default -- a user who explicitly declined
-        // on-device AI still had their prompt handed to the local model the
-        // moment the network was unavailable.
-        //
-        // That contradicts the documented safety property, which is why the
-        // switch exists at all:
-        //
-        //   commit 1(b): with "Prefer on-device AI" off -- which is the default
-        //   -- this is a single false and everything below is byte-for-byte the
-        //   routing that shipped.
-        //
-        // And it is invisible to every existing test: a6 and a1 both run with the
-        // engine available and never exercise this function, so a green suite
-        // said nothing about it. a7_the_switch_actually_routes_off_and_on is the
-        // test that does, and it fails without this change.
-        //
-        // The responder is NOT removed. A phone with no model, a build with no
-        // engine, or a generation that throws must still answer -- so the
-        // fallback stays, it just respects the switch.
-        val reply = if (SettingsStore.preferLocal) {
-            nativeReply(prompt) ?: localReply(prompt)
-        } else {
-            localReply(prompt)
-        }
-    // ONCE, NOT A FAKE TYPEWRITER.
-    //
-    // This used to replay the finished answer one word at a time:
-    //
-    //     reply.split(" ").forEachIndexed { index, word ->
-    //         onDelta(if (index == 0) word else " $word")
-    //         delay(26)
-    //     }
-    //
-    // The engine does not stream. GsNative.chat returns the whole completion as
-    // one String (Rust chat_impl -> gs_mobile_chat -> gs_llama_chat, which runs
-    // to completion), so by this point the answer already exists in full. The
-    // loop added no information and cost ~4.9s of dead air per 256-token reply
-    // -- ~190 words at 26ms each -- purely to imitate the network path's shape.
-    //
-    // It also lied about progress: during nativeReply() no delta has been
-    // emitted and the bubble is empty, then text starts arriving. A typewriter
-    // over completed work reads as "still thinking", which is the opposite of
-    // the truth.
-    //
-    // One emit. The screen's Generating phase already carries the waiting
-    // state, so nothing is lost by being honest about the shape.
-    onDelta(reply)
-    }
-
     /**
      * A completion from the native engine, or null when there is nothing to get.
      *
      * Null covers every "no engine here" case rather than throwing, because
-     * every one of them means the same thing to this function: use the existing
-     * responder. [GsNative.chat] itself throws on failure and that is caught
-     * here — a thrown exception out of the local path would take down a chat
-     * turn that had a perfectly good answer available.
+     * every one of them means the same thing: try the remote request instead.
+     * [GsNative.chat] itself throws on failure and that is caught here. Neither
+     * a native nor remote failure is evidence that a canned answer is valid.
      *
      * perf-smooth-5 (cause 0b, the hard freeze): THIS CALL USED TO RUN ON THE
      * CALLER'S DISPATCHER, WHICH IS MAIN.
@@ -1008,7 +941,7 @@ class ChatRepository(
         return try {
             onInferenceThread { GsNative.chat(instructed) }.takeIf { it.isNotBlank() }
         } catch (t: Throwable) {
-            Log.w("ChatRepository", "native generation failed; using the built-in responder", t)
+            Log.w("ChatRepository", "native generation failed; trying the remote request", t)
             null
         }
     }
@@ -1025,66 +958,6 @@ class ChatRepository(
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
             block()
         }
-
-    private fun localReply(prompt: String): String {
-        val p = prompt.trim()
-        val lower = p.lowercase()
-        val topic = p.take(72).trimEnd('.', '?', '!')
-
-        fun pick(vararg options: String) = options[abs(p.hashCode()) % options.size]
-
-        // The rendered-component catalogue is answered before the generic
-        // branches, otherwise "show me the chart catalogue" lands in prose.
-        // Model-agnostic: this runs whenever no provider answered.
-        WidgetShowcase.replyFor(p)?.let { return it }
-
-        return when {
-            lower.matches(Regex("^(hi|hey|hello|yo|sup|hola|good (morning|afternoon|evening))[!.? ]*$")) ->
-                "Hey, good to see you. What are we making today?\n\nI can draft, plan, " +
-                    "refactor, brainstorm or just think out loud with you. Drop an idea and " +
-                    "I'll take it from there."
-            "what can you do" in lower || "who are you" in lower || "your name" in lower ->
-                "I'm GS, your pocket think-tank.\n\n• Draft & rewrite: emails, posts, docs\n" +
-                    "• Plan & break down: projects, trips, launches\n• Explain: code, concepts, " +
-                    "contracts\n• Generate: images, prompts, study notes\n\nStart anywhere, " +
-                    "even a half-formed thought works."
-            lower.startsWith("code") || "kotlin" in lower || "swift" in lower ||
-                "function" in lower || "bug" in lower || "error" in lower ->
-                pick(
-                    "Here's a clean way to tackle \"$topic\":\n\n1. Reproduce the smallest failing case\n" +
-                        "2. Write the happy path first, then guard the edges\n3. Add a test that fails " +
-                        "without the fix and passes with it\n\nPaste the snippet and I'll go line by line.",
-                    "For \"$topic\" I'd keep it simple:\n\n• Extract the pure logic into a function\n" +
-                        "• Push side effects (IO, state) to the edges\n• Name things by what they mean, " +
-                        "not what they do\n\nShare the code and I'll tailor it."
-                )
-            "plan" in lower || "roadmap" in lower || "launch" in lower ||
-                "trip" in lower || "schedule" in lower ->
-                "Love it, \"$topic\" breaks down like this:\n\n• Scope: pick the one outcome that " +
-                    "defines success\n• Milestones: 3 checkpoints, each shippable on its own\n" +
-                    "• Risks: name the top two and their plan B\n• Next step: the 30-minute " +
-                    "action you can take today\n\nTell me the deadline and I'll back-plan every phase."
-            "write" in lower || "draft" in lower || "email" in lower ||
-                "post" in lower || "caption" in lower ->
-                "Here's a first pass on \"$topic\":\n\nOpen with the reader's problem, land one " +
-                    "concrete promise, and close with a single next step. Short sentences. No " +
-                    "hedge words.\n\nWant it warmer, punchier, or more formal? I'll rewrite in place."
-            else ->
-                pick(
-                    "\"$topic\", good thread to pull. Here's my take:\n\n• Start from the outcome " +
-                        "you want, work backwards\n• Cut the problem to the smallest version that " +
-                        "still matters\n• Ship a rough v0 today; refine with real feedback\n\n" +
-                        "Ask me to expand any point and I'll go deeper.",
-                    "On \"$topic\":\n\nThe useful move is to separate what's fixed from what's " +
-                        "flexible. Fix the goal, flex the path. Then pick the cheapest experiment " +
-                        "that tests your assumption this week.\n\nWant a checklist version of this?",
-                    "Thinking through \"$topic\":\n\n1. What does success look like in one sentence?\n" +
-                        "2. What's the biggest unknown blocking it?\n3. What can you test about that " +
-                        "unknown in under an hour?\n\nAnswer those three and the path usually " +
-                        "reveals itself. I'm here to think it through with you."
-                )
-        }
-    }
 
     /** Cooperative stop — the UI usually cancels its own Job; this is the repo-level escape hatch. */
     fun cancelActive() {
