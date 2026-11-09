@@ -401,6 +401,7 @@ jobs:
           required = [
               ('CalculatorSourceHonestyTests', 'testActualFencedCalculatorAcceptsSourceAliasesAndScientificInitialValuesWithoutInventedDefaults'),
               ('CalculatorSourceHonestyTests', 'testActualCalculatorFormatterDoesNotInventDollarsAndKeepsExplicitSourceUnits'),
+              ('CalculatorSourceHonestyTests', 'testProductionCalculatorExpressionsSupportScientificNumbersAndRejectInvalidArityOrRecursiveSource'),
               ('PlatformRuntimeUITests', 'testGeneratedCalculatorKeepsNinthTenthInputsSixthChoiceAndSeventhOutputUsable'),
               ('ChatResponseHonestyTests', 'testUnusualPromptFailureNeverBecomesKeywordSelectedCannedAnswer'),
               ('ChatResponseHonestyTests', 'testCanonicalDoneReplacesDraftAndKeepsRealServerIdentityBeforeFinalization'),
