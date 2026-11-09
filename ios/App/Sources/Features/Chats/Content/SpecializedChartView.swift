@@ -15,7 +15,7 @@ struct NativeChartPointIOS: Identifiable {
 }
 
 func specializedChartPointsIOS(_ obj: [String: Any]) -> [NativeChartPointIOS]? {
-    let type = canonicalChartTypeIOS((obj["type"] as? String) ?? "")
+    let type = canonicalChartType((obj["type"] as? String) ?? "")
     guard specializedNativeChartTypesIOS.contains(type) else { return nil }
     let labels = (obj["labels"] as? [String]) ?? []
     let source: [[String: Any]]
@@ -33,7 +33,7 @@ func specializedChartPointsIOS(_ obj: [String: Any]) -> [NativeChartPointIOS]? {
                 let numbers = pair.map { chartValueIOS($0) }
                 guard numbers.allSatisfy({ $0 != nil }) else { return nil }
                 values = numbers.compactMap { $0 }
-                label = index < labels.count ? labels[index] : "Point \(index + 1)"
+                label = type == "gantt" && data.count == 1 ? (seriesIndex < labels.count ? labels[seriesIndex] : name) : (index < labels.count ? labels[index] : "Point \(index + 1)")
             } else if let point = raw as? [String: Any], let value = chartObservationValueIOS(raw) {
                 // Category-only objects cannot invent paired numeric axes or OHLC.
                 guard !["scatter", "bubble", "candlestick", "gantt"].contains(type) else { return nil }
@@ -55,7 +55,7 @@ func specializedChartPointsIOS(_ obj: [String: Any]) -> [NativeChartPointIOS]? {
 struct SpecializedChartViewIOS: View {
     let obj: [String: Any]
     @State private var selected: Int?
-    private var type: String { canonicalChartTypeIOS((obj["type"] as? String) ?? "") }
+    private var type: String { canonicalChartType((obj["type"] as? String) ?? "") }
 
     var body: some View {
         if let points = specializedChartPointsIOS(obj) {
@@ -142,7 +142,7 @@ struct SpecializedChartViewIOS: View {
             RectangleMark(x: .value("Column", point.label), y: .value("Row", point.series)).foregroundStyle(by: .value("Value", point.y))
         default:
             // Exhaustive routing above makes this unreachable; never draw a line as a substitute.
-            RuleMark(y: .value("Unavailable", Double.nan)).opacity(0)
+            if false { RuleMark(y: .value("Unavailable", 0)) }
         }
     }
 }
