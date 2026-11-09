@@ -600,6 +600,19 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
                 require(w.series.size <= MAX_CHART_SERIES && w.series.all { it.data.size <= MAX_POINTS_PER_SERIES }) {
                     "Chart exceeds supported capacity; original source is preserved instead of truncating observations."
                 }
+                require(w.series.all { source -> source.data.all { point ->
+                    point.all { it.isFinite() } && when (w.type) {
+                        "bubble" -> point.size == 3 && point[2] >= 0f
+                        "candlestick" -> if (point.size in 4..5) {
+                            val ohlc = point.takeLast(4)
+                            ohlc[1] >= maxOf(ohlc[0], ohlc[3]) && ohlc[2] <= minOf(ohlc[0], ohlc[3]) && ohlc[2] <= ohlc[1]
+                        } else false
+                        "gantt" -> point.size == 2 && point[1] >= point[0]
+                        "correlation" -> point.size == 2 && kotlin.math.abs(point[1]) <= 1f
+                        "scatter", "line", "bar", "hbar", "area", "grouped", "stacked", "stackedArea", "waterfall" -> point.size == 2
+                        else -> true
+                    }
+                } }) { "Chart source has invalid or missing axes, dimensions or ranges; original observations are preserved instead of substituted." }
                 val series = w.series.take(MAX_CHART_SERIES).map {
                     it.copy(data = it.data.take(MAX_POINTS_PER_SERIES))
                 }.filter { it.data.size >= minPoints }
