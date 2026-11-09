@@ -24,6 +24,7 @@ struct PlatformRuntimeProbe: View {
     @State private var expandedCalculator = false
     @State private var showTable = false
     @State private var showChart = false
+    @State private var showScatter = false
     @State private var showCode = false
     @State private var showTerminal = false
     @State private var copyStatus = "Copy not inspected"
@@ -64,6 +65,7 @@ struct PlatformRuntimeProbe: View {
             Button("Open generated calculator") { showCalculator = true }
             Button("Open generated table") { showTable = true }
             Button("Open generated chart") { showChart = true }
+            Button("Open generated scatter") { showScatter = true }
             Button("Open generated code") { showCode = true }
             Button("Open generated terminal") { showTerminal = true }
         }
@@ -153,6 +155,11 @@ struct PlatformRuntimeProbe: View {
                         WidgetBlockView(kind: "table", json: Self.tableJSON, open: false).padding()
                     }
                 }
+            }
+        }
+        .sheet(isPresented: $showScatter) {
+            ScrollView {
+                WidgetBlockView(kind: "chart", json: #"{"type":"scatter","title":"Actual paired observations","labels":["First","Second","Third"],"series":[{"name":"Observed","data":[[1,5],[3,2],[8,9]]}]}"#, open: false).padding()
             }
         }
         .sheet(isPresented: $showChart) {
