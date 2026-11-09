@@ -152,7 +152,7 @@ func canonicalChartType(_ raw: String) -> String {
     let lower = trimmed.lowercased()
     if let hit = CHART_TYPES.first(where: { $0.lowercased() == lower }) { return hit }
     if let syn = CHART_SYNONYMS[lower] { return syn }
-    return "bar"
+    return trimmed // Unknown semantics are not permission to invent a bar chart.
 }
 
 func widgetKindOf(_ language: String?) -> String? {
@@ -464,6 +464,8 @@ func isValidWidget(kind: String, json: String) -> Bool {
     guard let obj = parseRelaxedJSONObject(kind: resolved, raw: json) else { return false }
     switch resolved {
     case "chart":
+        let suppliedType = str(obj, "type", "chartType")
+        guard suppliedType.isEmpty || CHART_TYPES.contains(canonicalChartType(suppliedType)) else { return false }
         return (obj["series"] as? [Any])?.isEmpty == false ||
                (obj["data"] as? [Any])?.isEmpty == false ||
                (obj["values"] as? [Any])?.isEmpty == false ||
