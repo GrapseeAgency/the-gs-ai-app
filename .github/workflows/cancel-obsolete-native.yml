@@ -32,9 +32,16 @@ jobs:
           # any acceptance/review job for this exact current source revision.
           gh api --method GET "repos/$GH_REPO/actions/runs" \
             -f branch="$PR_BRANCH" -f event=pull_request -f per_page=100 \
-            --paginate --jq '.workflow_runs[] | select(.head_branch == env.PR_BRANCH and .head_sha != env.PR_HEAD_SHA and .status != "completed") | select(.name == "iOS (macOS) — Xcode build & test" or .name == "Platform runtime contracts") | .id' > /tmp/obsolete-native-runs
-          while IFS= read -r id; do
-            [[ "$id" =~ ^[0-9]+$ ]] || continue
+            --paginate --jq '.workflow_runs[] | select(.head_branch == env.PR_BRANCH and .head_sha != env.PR_HEAD_SHA and .status != "completed") | select(.name == "iOS (macOS) — Xcode build & test" or .name == "Platform runtime contracts") | [.id, .head_sha] | @tsv' > /tmp/obsolete-native-runs
+          while IFS=$'\t' read -r id source_sha; do
+            [[ "$id" =~ ^[0-9]+$ && "$source_sha" =~ ^[0-9a-f]{40}$ ]] || continue
+            # An older cleanup job can itself start late. Only a verified
+            # ancestor is obsolete: never cancel a newer or divergent head.
+            if ! relation=$(gh api "repos/$GH_REPO/compare/$source_sha...$PR_HEAD_SHA" --jq '.status'); then
+              echo "::warning::Could not verify ancestry for native run $id; leaving it intact."
+              continue
+            fi
+            [[ "$relation" == "ahead" ]] || continue
             if gh api --method POST "repos/$GH_REPO/actions/runs/$id/cancel"; then
               echo "Cancellation accepted for obsolete native run $id"
             else
