@@ -15,8 +15,8 @@ class CalcHonestyTest {
         )
         for ((labels, type) in cases) {
             assertEquals(labels.toString(), type, categoricalChartType(labels))
-            val headers = listOf("Period", "Actual measure").map { listOf(InlineSpan.Text(it)) }
-            val rows = labels.mapIndexed { index, label -> listOf(listOf(InlineSpan.Text(label)), listOf(InlineSpan.Text("${index + 1}"))) }
+            val headers = listOf("Period", "Actual measure").map { listOf(InlineSpan.TextSpan(it)) }
+            val rows = labels.mapIndexed { index, label -> listOf(listOf(InlineSpan.TextSpan(label)), listOf(InlineSpan.TextSpan("${index + 1}"))) }
             assertEquals(type, chartFromTableBlock(Block.TableBlock(headers, List(2) { TableAlign.LEFT }, rows, 0))!!.type)
         }
         val chart = ChartWidget(type = "hbar", labels = (1..13).map { "Actual $it" },
