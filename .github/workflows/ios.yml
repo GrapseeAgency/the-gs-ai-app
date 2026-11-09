@@ -401,6 +401,7 @@ jobs:
               ('ChatResponseHonestyTests', 'testCanonicalDoneReplacesDraftAndKeepsRealServerIdentityBeforeFinalization'),
               ('ChatResponseHonestyTests', 'testInterruptedReplyPreservesOnlyActualTextAndDoesNotPromiseAutomaticContinuation'),
               ('ChatResponseHonestyTests', 'testEmptyCompletionIsAnErrorNotASuccessfulBlankAnswer'),
+              ('ChatResponseHonestyTests', 'testFailedFirstCreationRetriesCreationAndPersistsOriginalUserOnceWithoutFakeIDs'),
               ('PlatformRuntimeUITests', 'testConversationActionsTapOpensRealOptionsWithoutLeavingChat'),
               ('CalcHonestyTests', 'testActualMessagePreviewIdentitySurvivesRehydrationWithoutInventingServerIDs'),
               ('CalcHonestyTests', 'testActualSQLiteHistoryAndOlderPagesKeepDurablePreviewIdentity'),
