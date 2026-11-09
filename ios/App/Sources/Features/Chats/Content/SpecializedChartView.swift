@@ -12,6 +12,7 @@ struct NativeChartPointIOS: Identifiable {
     let x: Double
     let y: Double
     let extra: [Double]
+    let start: Double
 }
 
 func specializedChartPointsIOS(_ obj: [String: Any]) -> [NativeChartPointIOS]? {
@@ -26,6 +27,7 @@ func specializedChartPointsIOS(_ obj: [String: Any]) -> [NativeChartPointIOS]? {
     for (seriesIndex, item) in source.enumerated() {
         guard let data = item["data"] as? [Any] else { return nil }
         let name = item["name"] as? String ?? "Series \(seriesIndex + 1)"
+        var cumulative = 0.0
         for (index, raw) in data.enumerated() {
             var values: [Double]
             let label: String
@@ -33,7 +35,12 @@ func specializedChartPointsIOS(_ obj: [String: Any]) -> [NativeChartPointIOS]? {
                 let numbers = pair.map { chartValueIOS($0) }
                 guard numbers.allSatisfy({ $0 != nil }) else { return nil }
                 values = numbers.compactMap { $0 }
-                label = type == "gantt" && data.count == 1 ? (seriesIndex < labels.count ? labels[seriesIndex] : name) : (index < labels.count ? labels[index] : "Point \(index + 1)")
+                if type == "heatmap" || type == "correlation" {
+                    guard let x = values.first else { return nil }
+                    label = x >= 0 && x < Double(labels.count) && x.rounded() == x ? labels[Int(x)] : String(x)
+                } else {
+                    label = type == "gantt" && data.count == 1 ? (seriesIndex < labels.count ? labels[seriesIndex] : name) : (index < labels.count ? labels[index] : "Point \(index + 1)")
+                }
             } else if let point = raw as? [String: Any], let value = chartObservationValueIOS(raw) {
                 // Category-only objects cannot invent paired numeric axes or OHLC.
                 guard !["scatter", "bubble", "candlestick", "gantt"].contains(type) else { return nil }
@@ -45,8 +52,14 @@ func specializedChartPointsIOS(_ obj: [String: Any]) -> [NativeChartPointIOS]? {
             if type == "bubble" && values[2] < 0 { return nil }
             if type == "gantt" && values[1] < values[0] { return nil }
             if type == "candlestick" && (values[1] < max(values[0], values[3]) || values[2] > min(values[0], values[3]) || values[2] > values[1]) { return nil }
+            if type == "correlation" && abs(values[1]) > 1 { return nil }
+            let start = cumulative
+            if type == "waterfall" {
+                cumulative += values[1]
+                guard cumulative.isFinite else { return nil }
+            }
             result.append(NativeChartPointIOS(id: result.count, series: name, label: label,
-                                             x: values[0], y: values[1], extra: Array(values.dropFirst(2))))
+                                             x: values[0], y: values[1], extra: Array(values.dropFirst(2)), start: start))
         }
     }
     return result.isEmpty ? nil : result
@@ -70,9 +83,18 @@ struct SpecializedChartViewIOS: View {
                             Rectangle().fill(.clear).contentShape(Rectangle())
                                 .gesture(DragGesture(minimumDistance: 0).onChanged { gesture in
                                     guard let frame = proxy.plotAreaFrame else { return }
-                                    let location = gesture.location.x - geometry[frame].origin.x
-                                    if let x: Double = proxy.value(atX: location) {
-                                        selected = points.min(by: { abs($0.x - x) < abs($1.x - x) })?.id
+                                    let area = geometry[frame]
+                                    if ["hbar", "gantt"].contains(type) {
+                                        if let category: String = proxy.value(atY: gesture.location.y - area.origin.y) {
+                                            selected = points.first(where: { $0.label == category })?.id
+                                        }
+                                    } else if ["grouped", "stacked", "waterfall", "heatmap", "correlation"].contains(type) {
+                                        if let category: String = proxy.value(atX: gesture.location.x - area.origin.x) {
+                                            let row: String? = proxy.value(atY: gesture.location.y - area.origin.y)
+                                            selected = points.first(where: { $0.label == category && (!["heatmap", "correlation"].contains(type) || $0.series == row) })?.id
+                                        }
+                                    } else if let x: Double = proxy.value(atX: gesture.location.x - area.origin.x) {
+                                        selected = points.min(by: { abs((type == "candlestick" ? Double($0.id) : $0.x) - x) < abs((type == "candlestick" ? Double($1.id) : $1.x) - x) })?.id
                                     }
                                 })
                         }
@@ -129,8 +151,7 @@ struct SpecializedChartViewIOS: View {
         case "stackedArea":
             AreaMark(x: .value("X", point.x), y: .value("Value", point.y)).foregroundStyle(by: .value("Series", point.series))
         case "waterfall":
-            let before = points.filter { $0.series == point.series && $0.id < point.id }.reduce(0) { $0 + $1.y }
-            BarMark(x: .value("Category", point.label), yStart: .value("Start", before), yEnd: .value("End", before + point.y))
+            BarMark(x: .value("Category", point.label), yStart: .value("Start", point.start), yEnd: .value("End", point.start + point.y))
                 .foregroundStyle(point.y >= 0 ? Color.green : Color.red)
         case "candlestick":
             RuleMark(x: .value("Observation", point.id), yStart: .value("Low", point.extra[0]), yEnd: .value("High", point.y))
