@@ -148,8 +148,9 @@ export function compileWidgets(input: CompileInput): CompileResult {
   // a generic request does not identify either a chart type or a data schema.
   const preference = chartPreference(userPrompt)
   if (preference.suppressed) return { text: reply, widgets: 0, path: 'none', errors }
-  const fromReply = extractPoints(reply)
-  const usePrior = preference.requested && /\b(?:this|that|these|those|above|previous|same|it)\b|^(?:please\s+)?(?:show|draw|make|create|render|plot)\s+(?:me\s+)?(?:a\s+)?(?:(?:bar|line|pie|area|donut)\s+)?(?:chart|graph|plot)[.!?]?$/i.test(userPrompt.trim())
+  const currentSource = { present: false }
+  const fromReply = extractPoints(reply, currentSource)
+  const usePrior = !currentSource.present && preference.requested && /\b(?:this|that|these|those|above|previous|same|it)\b|^(?:please\s+)?(?:show|draw|make|create|render|plot)\s+(?:me\s+)?(?:a\s+)?(?:(?:bar|line|pie|area|donut)\s+)?(?:chart|graph|plot)[.!?]?$/i.test(userPrompt.trim())
   const points = fromReply.length >= 2 ? fromReply : usePrior ? extractPoints(priorText) : []
   if (points.length < 2 || new Set(points.map(point => point.unit)).size !== 1) {
     return { text: reply, widgets: 0, path: 'none', errors }
@@ -257,7 +258,7 @@ function parseNumber(text: string): { value: number; display: string; percent: b
   return { value, display: text.trim(), percent: unit === '%', unit }
 }
 
-function extractPoints(text: string): Point[] {
+function extractPoints(text: string, source?: { present: boolean }): Point[] {
   if (!text.trim()) return []
   const rows: Array<{ section: string; label: string; point: Point }> = []
   let section = ''
@@ -288,6 +289,7 @@ function extractPoints(text: string): Point[] {
     }
 
     if (line.startsWith('|')) {
+      if (source) source.present = true
       const cells = line.replace(/^\||\|$/g, '').split('|').map(plainTableCell)
       if (cells.length !== 2 || cells.some(cell => cell.includes('\\'))) continue
       const num = parseNumber(cells[1])
@@ -303,6 +305,7 @@ function extractPoints(text: string): Point[] {
     if (label.includes('http')) continue
     const rest = plainTableCell(body.slice(sep.index + sep[0].length))
     const num = parseNumber(rest)
+    if (source && (num || /^(?:n\/a|unknown|missing|not recorded|not available|—|-)$/i.test(rest) || /^[~$€£¥₹৳+-]?\d/.test(rest))) source.present = true
     if (!num) {
       if (/^(?:n\/a|unknown|missing|not recorded|not available|—|-)$/i.test(rest) || /^[~$€£¥₹৳+-]?\d/.test(rest)) return []
       continue
