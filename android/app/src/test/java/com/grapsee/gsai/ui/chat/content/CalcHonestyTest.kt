@@ -434,6 +434,24 @@ class CalcHonestyTest {
         assertEquals("-120.00%", formatCalc(-1.2, "percent", ""))
         assertEquals("0.99%", formatCalc(0.99, "number", "%"))
     }
+    @Test fun actualModelCalculatorNormalizationNeverInventsAnInputOrCurrency() {
+        for (extra in listOf("", ",\"min\":100")) {
+            val source = """{"type":"finance","fields":[{"key":"x","label":"X"$extra}],"outputs":[{"expr":"x*2"}]}"""
+            val calc = (parseWidget("calc", source) as Widget.Calc).w
+            org.junit.Assert.assertTrue(calc.fields.single().value.isNaN())
+            assertNull(CalcExpr.eval(calc.outputs.single().expr, mapOf("x" to calc.fields.single().value)))
+        }
+        for (supplied in listOf("\"value\":0", "\"default\":0", "\"initial\":0")) {
+            val source = """{"type":"finance","fields":[{"key":"x",$supplied}],"outputs":[{"expr":"x*2"}]}"""
+            val calc = (parseWidget("calc", source) as Widget.Calc).w
+            assertEquals(0.0, calc.fields.single().value, 0.0)
+        }
+        assertEquals("1,234.50", formatCalc(1234.5, "money", ""))
+        assertEquals("$1,234.50", formatCalc(1234.5, "money", "USD"))
+        assertEquals("€1,234.50", formatCalc(1234.5, "money", "€"))
+        assertEquals("1,234.50 EUR", formatCalc(1234.5, "money", "EUR"))
+    }
+
     @Test fun missingBoundsAndValuesAreNotInvented() {
         val field = CalcField(key = "p", label = "Principal")
         assertNull(field.min)
