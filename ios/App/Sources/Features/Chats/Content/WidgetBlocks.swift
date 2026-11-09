@@ -1274,7 +1274,7 @@ private struct ChartBodyView: View {
         VStack(alignment: .trailing, spacing: 6) {
             ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 3) {
-                ForEach(Array(Self.chartTypeTabs.enumerated()), id: \.offset) { _, tab in
+                ForEach(Array(Self.chartTypeTabs.filter { $0.id != "pie" || pieAlternativeAllowedIOS(obj) }.enumerated()), id: \.offset) { _, tab in
                     let tabId = tab.id
                     let isSel = currentType == tabId || (tabId == "pie" && currentType == "donut")
                     Button {
