@@ -56,7 +56,23 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            cd android && bash -o pipefail -c 'gradle :app:testDebugUnitTest --tests com.grapsee.gsai.ui.chat.content.CalcHonestyTest --tests com.grapsee.gsai.ui.chat.content.ContentBlocksTest --tests "com.grapsee.gsai.ui.chat.NexlyChatScreenshotTest.sectionReference*" -PgsShots=true :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.grapsee.gsai.PlatformRuntimeTest --no-daemon --stacktrace 2>&1 | tee ../platform-runtime.log'
+            cd android && bash -o pipefail -c 'gradle :app:testDebugUnitTest --tests com.grapsee.gsai.data.repository.SendResponseHonestyTest --tests com.grapsee.gsai.ui.chat.content.CalcHonestyTest --tests com.grapsee.gsai.ui.chat.content.ContentBlocksTest --tests "com.grapsee.gsai.ui.chat.NexlyChatScreenshotTest.sectionReference*" -PgsShots=true :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.grapsee.gsai.PlatformRuntimeTest --no-daemon --stacktrace 2>&1 | tee ../platform-runtime.log'
+      - name: Require actual repository transport honesty regressions
+        if: always()
+        run: |
+          python3 - <<'PYHONESTY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          report = Path('android/app/build/test-results/testDebugUnitTest/TEST-com.grapsee.gsai.data.repository.SendResponseHonestyTest.xml')
+          if not report.is_file():
+              raise SystemExit('Missing real Ktor/repository/Room regression report')
+          suite = ET.parse(report).getroot()
+          expected = {'unreachableUnusualPromptsProduceOneRetryNoticeAndNoKeywordSelectedAnswer', 'successfulCanonicalAnswerRetainsActualServerContentAndIdentity'}
+          cases = suite.findall('testcase')
+          if {case.get('name') for case in cases} != expected or any(case.find(tag) is not None for case in cases for tag in ['failure', 'error', 'skipped']):
+              raise SystemExit('Actual transport honesty regressions missing, failed or skipped')
+          print('Both real Ktor -> API -> repository -> isolated Room regressions executed and passed')
+          PYHONESTY
       - name: Require all six actual response-section frames
         if: always()
         run: |
