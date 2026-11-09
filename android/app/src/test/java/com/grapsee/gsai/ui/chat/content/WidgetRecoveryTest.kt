@@ -6,6 +6,9 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * Widget recovery must be provable, not hoped for. These tests replay the
@@ -13,6 +16,8 @@ import org.junit.Test
  * "Show me a bar chart" with "I'm unable to create or display visualizations",
  * while the numbers were sitting in the previous answer.
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], manifest = Config.NONE)
 class WidgetRecoveryTest {
 
     private val refusal = """
