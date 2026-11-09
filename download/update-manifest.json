@@ -1,14 +1,12 @@
 {
-  "versionCode": 148,
-  "versionName": "0.86.25",
-  "apkUrl": "https://raw.githubusercontent.com/GrapseeAgency/the-gs-ai-app/main/download/GS-AI-App.apk",
-  "sha256": "e4d1120c9e3de01da79994146890d1cf4526de3c39c1bba5f86d3ccfbb4625d8",
-  "size": 72366000,
-  "notes": "v0.86.25 (versionCode 148) — CI android-release run 42257461385 from main at e3bc50c2. THE GLASS RELEASE, CONTINUED: three GenUI passes put model freedom and 36-kind widget parity across Web, Android and iOS — Key Insights cards, checklist +Add Task, Quick Calculator with multi-line steps, the rich-prose PROSE_PROMPT contract, and Section 01-02 twin-parity across every platform. The 0.86.3–0.86.25 craft passes finished the reference redesign on real surfaces: the pre-chat lotus-orb hero, the Dreamy Pastel reference shells, Archived/Shared Conversations and Conversation Details, Data Export & Account Deletion, the identity editor, a real Language page, Travel Agent reachable, dead screens removed, overlays that are menus not pages, settings rows that finally open pages, the library page behind every save, and not one stock dialog left. NEW IN THIS BUILD: the Model Centre (three plain tiers — Fast / Everyday / Best for difficult questions — with everything technical collapsed into per-model Advanced details) and the Compare models spec sheet, both platforms, wired to the pre-chat Explore AI Models card and writing the same preference key the chat send path reads. Contextual action pills now send their prompt as a real turn on both platforms. Six shipped-red fixes this round: the backtick-laden PROSE_PROMPT template that 500'd every /api route, the VoiceScreen luminance import, the ChatBubblePalette scanner's backtick blind spot, the linter's symbol index, the widget contour nine-point minimum the normalizer bypassed, and the 11 v2 widget kinds the contract-lock fixture never met. Engine: fresh libgs_ffi.so for all four ABIs (android-native 42246640175), versionCode 148 installs over 125 without uninstalling. Verified: android-app 42257504683 (green), android-screens 42247691640 (green, screenshots in download/qa-0.86.25-rich-reply.png), android-release 42257461385 (green, this APK).",
+  "versionCode": 150,
+  "versionName": "0.86.27",
+  "apkUrl": "https://github.com/GrapseeAgency/the-gs-ai-app/releases/download/v0.86.27/GS-AI-App-v0.86.27.apk",
+  "sha256": "23c549b2df5a72c4e4092d3ed1939a893974ff67f7ce155ee8c2e7c5fc443fdb",
+  "size": 73283158,
+  "notes": "Native GenUI fixes: working task and React controls, source-derived chart/calculator behavior, custom glass icons, and history/relaunch fixes. Corrected custom discount calculators and absent-input handling. Build 150 uses the existing shipping signature and installs over earlier builds.",
   "knownLimitations": [
-    "iOS is compile-verified by ios-native device+simulator builds; there is no iOS screenshot harness.",
-    "The artwork is vector-only by design — no raster illustrations ship.",
-    "Charts read out one datum at a time; there is no multi-select or pinning.",
-    "No billing backend: the Subscription page states that honestly instead of showing a price."
+    "The iOS device IPA is unsigned and requires re-signing with your Apple account before installation; the simulator app cannot install on an iPhone.",
+    "Exact whole-phone reference pixel parity and physical haptic/background-wake delivery are not certified."
   ]
 }
