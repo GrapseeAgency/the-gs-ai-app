@@ -58,3 +58,13 @@ export function supportsCategoryRecovery(type: ChartType, values: number[]): boo
   if (['pie', 'donut', 'funnel', 'radar', 'treemap'].includes(type)) return values.every(value => value >= 0) && values.some(value => value > 0)
   return true
 }
+
+/** A view switch must not discard series or turn signed changes into positive shares. */
+export function pieAlternativeAllowed(type: string, unit: string, series: Array<{ data: number[][] }>): boolean {
+  const slices = type === 'pie' || type === 'donut'
+  if (!slices && series.length !== 1) return false
+  const values = series.flatMap(item => item.data.map(point => point[1]))
+  if (!values.length || values.some(value => !Number.isFinite(value) || value < 0)) return false
+  const total = values.reduce((sum, value) => sum + value, 0)
+  return total > 0 && (slices || unit !== '%' || Math.abs(total - 100) < 1e-6)
+}
