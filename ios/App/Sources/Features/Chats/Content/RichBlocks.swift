@@ -1126,9 +1126,10 @@ private func appendText(
             appendCitations(run, into: &result, theme: theme, style: style)
         case .icon(let name):
             var glyph = AttributedString(NexlyIcons.glyph(name))
-            glyph.font = .custom(NexlyIcons.family, size: theme.baseSize * 1.12)
-            glyph.foregroundColor = Color(red: 0.357, green: 0.239, blue: 0.961)
-            glyph.baselineOffset = -theme.baseSize * 0.08
+            glyph.font = .custom(NexlyIcons.family, size: theme.baseSize * 0.98)
+            glyph.foregroundColor = theme.textColor
+            glyph.baselineOffset = -theme.baseSize * 0.035
+            if !style.isEmpty { glyph.inlinePresentationIntent = style }
             result.append(glyph)
         }
     }
@@ -2181,32 +2182,15 @@ private struct ParagraphView: View {
                     baseSize: compact ? 13 : 15,
                     citations: citations
                 )
-                let leadingIcon = NexlyIcons.extractLeadingIcon(plainTextOfSpans(spans)).0
-                let displaySpans = leadingIcon != nil ? stripLeadingIconFromSpans(spans) : spans
-                if let leadingIcon {
-                    HStack(alignment: .top, spacing: 8) {
-                        NexlyGlassGlyphTile(
-                            name: leadingIcon,
-                            tone: NexlyIcons.tone(for: leadingIcon),
-                            size: 21,
-                            glyphSize: 12
-                        )
-                        .padding(.top, 1)
-                        Text(attributed(from: displaySpans, theme: theme))
-                            .font(compact ? .system(size: 13, weight: .regular) : Aero.body())
-                            .lineSpacing(compact ? 2 : 0)
-                            .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                } else {
-                    Text(attributed(from: displaySpans, theme: theme))
-                        .font(compact ? .system(size: 13, weight: .regular) : Aero.body())
-                        .lineSpacing(compact ? 2 : 0)
-                        .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
-                        .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                }
+                // Ordinary prose keeps a leading custom emoji/icon inline with
+                // its sentence. Glass tiles remain reserved for actual structured
+                // card/step icons, not every glyph at the start of a paragraph.
+                Text(attributed(from: spans, theme: theme))
+                    .font(compact ? .system(size: 13, weight: .regular) : Aero.body())
+                    .lineSpacing(compact ? 2 : 0)
+                    .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
