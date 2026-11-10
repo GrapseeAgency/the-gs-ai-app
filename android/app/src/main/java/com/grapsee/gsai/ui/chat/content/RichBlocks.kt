@@ -1179,11 +1179,11 @@ private fun rememberNexlyInlineContent(styled: AnnotatedString): Map<String, Inl
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        NexlyGlassGlyphTile(
+                        // Inline glyphs share the text baseline, never a separate tile.
+                        NexlyGlyph(
                             name = iconName,
-                            toneName = NexlyIcons.toneFor(iconName),
                             size = 17.dp,
-                            glyphSize = 11.dp
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }

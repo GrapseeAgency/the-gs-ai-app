@@ -1125,10 +1125,9 @@ private func appendText(
         case .text(let run):
             appendCitations(run, into: &result, theme: theme, style: style)
         case .icon(let name):
-            var glyph = AttributedString(" \(NexlyIcons.glyph(name)) ")
+            var glyph = AttributedString(NexlyIcons.glyph(name))
             glyph.font = .custom(NexlyIcons.family, size: theme.baseSize * 1.12)
             glyph.foregroundColor = Color(red: 0.357, green: 0.239, blue: 0.961)
-            glyph.backgroundColor = Color(red: 0.933, green: 0.910, blue: 1.0)
             glyph.baselineOffset = -theme.baseSize * 0.08
             result.append(glyph)
         }

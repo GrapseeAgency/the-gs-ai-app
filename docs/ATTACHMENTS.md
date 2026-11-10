@@ -8,16 +8,34 @@ spec. Like `docs/ORBS.md`, this doc is the anti-drift contract.
 
 - **Reception is real.** Picking, staging, validating, uploading and storing
   user content are genuine, verifiable operations against the real backend.
-- **Analysis does not exist.** There is NO vision, NO OCR, NO document
-  intelligence, NO transcription of attached audio. The model context receives
-  only an honest note: *files were attached; contents are not readable yet.*
-  No UI may claim, hint or simulate otherwise.
-- **No invented states.** If the client cannot distinguish a state, the UI does
-  not show it. There is no server-side processing step today, so no
-  "processing" state exists anywhere.
-- **No invented media kinds.** `image | pdf | document` are shipped.
-  `audio | video | screenshot` are reserved in the model but MUST NOT be
-  offered by any picker until a real consumer exists.
+- **Content understanding is capability-specific.** Existing image vision/OCR
+  and PDF/TXT/Markdown/CSV extraction feed real content into their existing
+  pipelines. Audio/video uploads support native previews and playback only;
+  their contents are not transcribed or interpreted by the chat model. The
+  provider receives a metadata-only notice, never invented media contents.
+- **No invented states.** Preparation and upload indicators follow real I/O.
+  There is no fabricated percentage, processing phase, waveform or tool step.
+- **Receive/preview kinds:** `image | pdf | document | audio | video`.
+  MP3, WAV, M4A/MP4 audio, MP4, MOV and WebM are signature-validated by the
+  server, with the unchanged **10 MB/file, six files/message** limits.
+- **Real previews:** image pixels, PDF first page, bounded text excerpt, and
+  video frame where the native codec can decode it. Missing previews have
+  explicit fallback/retry; history restores files from the app endpoint into
+  private attachment storage, covered by the existing privacy wipe.
+- **Opening:** iOS uses native Quick Look; Android audio/video use in-app
+  native players with actual measured timing and lifecycle cleanup. Android
+  documents/images can open through read-granted, attachment-scoped viewer
+  URIs. Missing codec/viewer support is reported, not simulated.
+- **Chat activity:** regular SSE responses must be read while open (Android
+  `HttpStatement.execute`, iOS `URLSession.bytes`). Live status is visible
+  even on flash turns without a reasoning trace. Model reasoning and real
+  search events remain event-driven, including while answer validation
+  withholds draft text. Received bursts reveal progressively; stop/error
+  saves every received character, and an old task cannot finalize a newer turn.
+
+Earlier phase sections below describe the original foundation; the current
+receive/preview and activity contract above supersedes their image-only UI
+and reserved-media statements.
 
 ## 1. Attachment data model (logical — identical on both platforms)
 

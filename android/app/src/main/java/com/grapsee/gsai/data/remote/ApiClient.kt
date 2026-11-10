@@ -7,6 +7,8 @@ import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
+import io.ktor.client.request.preparePost
+import io.ktor.client.request.accept
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -274,39 +276,12 @@ class ApiClient(
         /** Non-visible plan-progress context for the next turn. */
         turnContext: String? = null
     ) {
-        // THE POST IS INSIDE THE GUARD TOO, AND IT IS WHERE THE CUT ACTUALLY
-        // SURFACES.
-        //
-        // Run 36784781671, after every transport operation was already wrapped:
-        //
-        //     Classify: mid-stream cut ->
-        //       — EOFException: Chunked stream has ended ended unexpectedly:
-        //         no chunk size —
-        //     Classify: server saw 1 request(s)
-        //
-        // Unwrapped again. So it was not the channel, not the isClosedForRead
-        // probe and not the read -- all three were inside the guard by then. CIO
-        // decodes the chunked body while `post` is still returning, and the
-        // headers and the first chunk arrive in one segment, so a peer that dies
-        // mid-body is discovered there. That also explains why the delta never
-        // reached onDelta: nothing had handed the bytes to this loop yet.
-        //
-        // Enumerating call sites is what failed twice. This wraps the whole
-        // request, so where CIO happens to notice no longer matters.
-        //
-        // THE RULE IS THE MIRROR OF classifySendFailure's. That function lists
-        // the failures which PROVE the peer was never reached: no DNS, no
-        // connect, no timeout. Those are rethrown unchanged, so a real offline
-        // event still reads as one. Everything else that fails after the
-        // request was written implies a connection existed and then the response
-        // did -- which is a cut, and is the honest label for it.
-        // A try EXPRESSION, so the response is the value rather than a `val`
-        // assigned inside the try. Both catch arms end in `throw`, so they are
-        // Nothing and the expression's type is HttpResponse -- which needs no
-        // appeal to the definite-assignment rule to compile. The `val line`
-        // read further down already uses this form for the same reason.
-        val response = try {
-            client.post("$root/conversations/$conversationId/messages") {
+        // Ktor post() saves the entire body before returning. An SSE response
+        // MUST be consumed inside HttpStatement.execute, while it is arriving.
+        // This also scopes response cleanup to success, failure and cancellation.
+        try {
+            client.preparePost("$root/conversations/$conversationId/messages") {
+                accept(ContentType.Text.EventStream)
                 contentType(ContentType.Application.Json)
                 setBody(
                     SendMessageRequest(
@@ -318,6 +293,137 @@ class ApiClient(
                         turnContext = turnContext
                     )
                 )
+            }.execute { response ->
+                // FORENSIC AUDIT [5]: a non-2xx here is BACKEND_ERROR, not "offline".
+                // Surface the server's sanitized error message instead of reading an
+                // error JSON body as if it were an SSE stream.
+                if (!response.status.isSuccess()) {
+                    val body = runCatching { response.bodyAsText() }.getOrDefault("")
+                    val serverMessage = runCatching {
+                        GsApiJson.decodeFromString<ErrorResponseDto>(body).error
+                    }.getOrNull()?.takeIf { it.isNotBlank() }
+                    throw GsBackendException(status = response.status.value, serverMessage = serverMessage)
+                }
+                // ==========================================================
+                // A 2xx WHOSE BODY DIED IS A CUT. THE SCOPE IS EVERY TRANSPORT
+                // OPERATION, NOT JUST THE ONE I GUESSED AT FIRST.
+                // ==========================================================
+                //
+                // Run 36783468375 named the exception, which is what made this fixable:
+                //
+                //   Classify: mid-stream cut ->
+                //     — EOFException: Chunked stream has ended unexpectedly: no chunk size —
+                //   Classify: server saw 1 request(s)
+                //
+                // An EOFException is a plain java.io.IOException, so `catch (e: Exception)`
+                // would have caught it -- if the read were where it was thrown. It was
+                // not: the try I wrapped around `channel.readUTF8Line()` did not fire, and
+                // the exception arrived at classifySendFailure unwrapped.
+                //
+                // I DO NOT KNOW WHICH CALL THREW, and the honest thing is to say so
+                // rather than pick a fourth theory. What makes the fix correct is that it
+                // no longer depends on knowing: EVERY operation that touches the transport
+                // is inside the guard -- bodyAsChannel(), the isClosedForRead probe, and
+                // the line read. Enumerating them one at a time is how two previous
+                // attempts each looked correct and caught nothing.
+                //
+                // And this wider scope is the RIGHT definition anyway: a 2xx has arrived,
+                // so the request succeeded; any failure from here on is the answer
+                // stopping, whatever call noticed.
+                val channel = try {
+                    response.bodyAsChannel()
+                } catch (ce: CancellationException) {
+                    if (!coroutineContext.isActive) throw ce
+                    throw GsStreamCutException(status = response.status.value, cause = ce)
+                } catch (e: Exception) {
+                    throw GsStreamCutException(status = response.status.value, cause = e)
+                }
+        
+                try {
+                    while (!channel.isClosedForRead) {
+                        val line = channel.readUTF8Line() ?: break
+                        val trimmed = line.trim()
+                        if (!trimmed.startsWith("data:")) continue
+                        val payload = trimmed.removePrefix("data:").trim()
+                        if (payload.isEmpty()) continue
+                        val event = runCatching { GsApiJson.decodeFromString<SseEvent>(payload) }.getOrNull() ?: continue
+                        when (event.event) {
+                            "delta" -> onDelta(event.data.orEmpty())
+                            "status" -> onStatus(event.data.orEmpty())
+                            // FLASH-MODE BUG 1: first event of every turn carries the
+                            // resolved effective mode. Ignored by pre-v0.70 parsers (no
+                            // else branch here — unknown events are skipped silently).
+                            "mode" -> if (!event.data.isNullOrBlank()) onMode(event.data)
+                            // PHASE 8.1: search-chain payloads are double-encoded JSON strings —
+                            // forward untouched; an empty payload is ignored, never forwarded.
+                            "search" -> if (!event.data.isNullOrBlank()) onSearchEvent(event.data)
+                            "source" -> if (!event.data.isNullOrBlank()) onSourceEvent(event.data)
+                            "clarify" -> if (!event.data.isNullOrBlank()) onClarifyEvent(event.data)
+                            // PHASE 8.2: research-level events (§research) — same double-encoded
+                            // payload shape, same empty-payload tolerance.
+                            "research" -> if (!event.data.isNullOrBlank()) onResearchEvent(event.data)
+                            // PHASE 5: deep-research branch progress (§ledger) — unknown to
+                            // pre-ledger parsers, which skip it silently (same contract).
+                            "ledger" -> if (!event.data.isNullOrBlank()) onLedgerEvent(event.data)
+                            // The headline the server just decided. Unknown to older
+                            // parsers, which skip it silently (same contract as ledger).
+                            "conversation" -> if (!event.data.isNullOrBlank()) onConversationEvent(event.data)
+                            // REASONING TRACE — unknown to pre-reasoning parsers, which
+                            // skip it silently (when-without-else contract).
+                            "reasoning" -> if (!event.data.isNullOrBlank()) onReasoningEvent(event.data)
+                            "done" -> {
+                                val message = event.data?.let { data ->
+                                    runCatching { GsApiJson.decodeFromString<MessageDto>(data) }.getOrNull()
+                                }
+                                onDone(message)
+                                return@execute
+                            }
+                            // A SERVER-SENT ERROR IS NOT A TRANSPORT FAILURE, and it used to
+                            // throw IllegalStateException, which the widened cut guard above
+                            // would now have caught and called a mid-stream cut -- telling the
+                            // user their connection dropped when the backend had answered with
+                            // a refusal. So it throws the exception that means that, and it is
+                            // in the guard's passthrough list.
+                            //
+                            // It also stops being an invented status. IllegalStateException
+                            // matched none of classifySendFailure's shapes, so an SSE error
+                            // rendered as "GS backend error (HTTP 0)" -- the same fabricated
+                            // code as the cut, for the opposite reason. `status = 200` is
+                            // literal: the response WAS a 200, and what arrived inside it was
+                            // an error event carrying the server's own message.
+                            "error" -> throw GsBackendException(
+                                status = 200,
+                                serverMessage = event.data ?: "Stream error from backend",
+                            )
+                        }
+                    }
+                    // EOF is not completion. Only an explicit done closes a successful turn.
+                    throw GsStreamCutException(status = response.status.value, cause = java.io.EOFException("Response ended before done"))
+                } catch (ce: CancellationException) {
+                    // A cancelled TURN cancels this coroutine's Job, so the context is not
+                    // active and the rethrow is right. A peer that dropped the connection
+                    // leaves the Job running -- the user is still waiting -- so this is a
+                    // cut. There is no path where the user's own cancellation is
+                    // swallowed: `throw ce` still runs for it.
+                    //
+                    // Needed at BOTH scopes, because a Ktor channel closed by the peer
+                    // surfaces as a CancellationException whose Job is still active, and
+                    // treating that as a cancellation would send the turn down the
+                    // "user navigated away" path instead of the honest one.
+                    if (!coroutineContext.isActive) throw ce
+                    throw GsStreamCutException(status = response.status.value, cause = ce)
+                } catch (e: Exception) {
+                    // Two exceptions already carry their own meaning and must keep it.
+                    //
+                    //   GsStreamCutException  already classified; re-wrapping would hide
+                    //                      the original cause one level deeper for no gain.
+                    //   GsBackendException    the server sent an SSE `error` EVENT. That is
+                    //                      a backend refusal, not a transport failure, and
+                    //                      calling it a cut would tell the user their
+                    //                      connection dropped when the server answered.
+                    if (e is GsStreamCutException || e is GsBackendException) throw e
+                    throw GsStreamCutException(status = response.status.value, cause = e)
+                }
             }
         } catch (ce: CancellationException) {
             // A cancelled turn cancels this coroutine's Job; a peer that went away
@@ -325,6 +431,7 @@ class ApiClient(
             if (!coroutineContext.isActive) throw ce
             throw GsStreamCutException(status = null, cause = ce)
         } catch (e: Exception) {
+            if (e is GsStreamCutException || e is GsBackendException) throw e
             // REACHABILITY, NOT GUESSING. These three are the shapes that prove the
             // peer was never contacted, and classifySendFailure already treats them
             // as genuine offline. Rethrowing them unchanged keeps that decision in
@@ -343,133 +450,6 @@ class ApiClient(
             // so the classifier sees the real class.
             if (e.hasTlsFailureInChain()) throw e
             throw GsStreamCutException(status = null, cause = e)
-        }
-        // FORENSIC AUDIT [5]: a non-2xx here is BACKEND_ERROR, not "offline".
-        // Surface the server's sanitized error message instead of reading an
-        // error JSON body as if it were an SSE stream.
-        if (!response.status.isSuccess()) {
-            val body = runCatching { response.bodyAsText() }.getOrDefault("")
-            val serverMessage = runCatching {
-                GsApiJson.decodeFromString<ErrorResponseDto>(body).error
-            }.getOrNull()?.takeIf { it.isNotBlank() }
-            throw GsBackendException(status = response.status.value, serverMessage = serverMessage)
-        }
-        // ==========================================================
-        // A 2xx WHOSE BODY DIED IS A CUT. THE SCOPE IS EVERY TRANSPORT
-        // OPERATION, NOT JUST THE ONE I GUESSED AT FIRST.
-        // ==========================================================
-        //
-        // Run 36783468375 named the exception, which is what made this fixable:
-        //
-        //   Classify: mid-stream cut ->
-        //     — EOFException: Chunked stream has ended unexpectedly: no chunk size —
-        //   Classify: server saw 1 request(s)
-        //
-        // An EOFException is a plain java.io.IOException, so `catch (e: Exception)`
-        // would have caught it -- if the read were where it was thrown. It was
-        // not: the try I wrapped around `channel.readUTF8Line()` did not fire, and
-        // the exception arrived at classifySendFailure unwrapped.
-        //
-        // I DO NOT KNOW WHICH CALL THREW, and the honest thing is to say so
-        // rather than pick a fourth theory. What makes the fix correct is that it
-        // no longer depends on knowing: EVERY operation that touches the transport
-        // is inside the guard -- bodyAsChannel(), the isClosedForRead probe, and
-        // the line read. Enumerating them one at a time is how two previous
-        // attempts each looked correct and caught nothing.
-        //
-        // And this wider scope is the RIGHT definition anyway: a 2xx has arrived,
-        // so the request succeeded; any failure from here on is the answer
-        // stopping, whatever call noticed.
-        val channel = try {
-            response.bodyAsChannel()
-        } catch (ce: CancellationException) {
-            if (!coroutineContext.isActive) throw ce
-            throw GsStreamCutException(status = response.status.value, cause = ce)
-        } catch (e: Exception) {
-            throw GsStreamCutException(status = response.status.value, cause = e)
-        }
-
-        try {
-            while (!channel.isClosedForRead) {
-                val line = channel.readUTF8Line() ?: break
-                val trimmed = line.trim()
-                if (!trimmed.startsWith("data:")) continue
-                val payload = trimmed.removePrefix("data:").trim()
-                if (payload.isEmpty()) continue
-                val event = runCatching { GsApiJson.decodeFromString<SseEvent>(payload) }.getOrNull() ?: continue
-                when (event.event) {
-                    "delta" -> onDelta(event.data.orEmpty())
-                    "status" -> onStatus(event.data.orEmpty())
-                    // FLASH-MODE BUG 1: first event of every turn carries the
-                    // resolved effective mode. Ignored by pre-v0.70 parsers (no
-                    // else branch here — unknown events are skipped silently).
-                    "mode" -> if (!event.data.isNullOrBlank()) onMode(event.data)
-                    // PHASE 8.1: search-chain payloads are double-encoded JSON strings —
-                    // forward untouched; an empty payload is ignored, never forwarded.
-                    "search" -> if (!event.data.isNullOrBlank()) onSearchEvent(event.data)
-                    "source" -> if (!event.data.isNullOrBlank()) onSourceEvent(event.data)
-                    "clarify" -> if (!event.data.isNullOrBlank()) onClarifyEvent(event.data)
-                    // PHASE 8.2: research-level events (§research) — same double-encoded
-                    // payload shape, same empty-payload tolerance.
-                    "research" -> if (!event.data.isNullOrBlank()) onResearchEvent(event.data)
-                    // PHASE 5: deep-research branch progress (§ledger) — unknown to
-                    // pre-ledger parsers, which skip it silently (same contract).
-                    "ledger" -> if (!event.data.isNullOrBlank()) onLedgerEvent(event.data)
-                    // The headline the server just decided. Unknown to older
-                    // parsers, which skip it silently (same contract as ledger).
-                    "conversation" -> if (!event.data.isNullOrBlank()) onConversationEvent(event.data)
-                    // REASONING TRACE — unknown to pre-reasoning parsers, which
-                    // skip it silently (when-without-else contract).
-                    "reasoning" -> if (!event.data.isNullOrBlank()) onReasoningEvent(event.data)
-                    "done" -> {
-                        val message = event.data?.let { data ->
-                            runCatching { GsApiJson.decodeFromString<MessageDto>(data) }.getOrNull()
-                        }
-                        onDone(message)
-                    }
-                    // A SERVER-SENT ERROR IS NOT A TRANSPORT FAILURE, and it used to
-                    // throw IllegalStateException, which the widened cut guard above
-                    // would now have caught and called a mid-stream cut -- telling the
-                    // user their connection dropped when the backend had answered with
-                    // a refusal. So it throws the exception that means that, and it is
-                    // in the guard's passthrough list.
-                    //
-                    // It also stops being an invented status. IllegalStateException
-                    // matched none of classifySendFailure's shapes, so an SSE error
-                    // rendered as "GS backend error (HTTP 0)" -- the same fabricated
-                    // code as the cut, for the opposite reason. `status = 200` is
-                    // literal: the response WAS a 200, and what arrived inside it was
-                    // an error event carrying the server's own message.
-                    "error" -> throw GsBackendException(
-                        status = 200,
-                        serverMessage = event.data ?: "Stream error from backend",
-                    )
-                }
-            }
-        } catch (ce: CancellationException) {
-            // A cancelled TURN cancels this coroutine's Job, so the context is not
-            // active and the rethrow is right. A peer that dropped the connection
-            // leaves the Job running -- the user is still waiting -- so this is a
-            // cut. There is no path where the user's own cancellation is
-            // swallowed: `throw ce` still runs for it.
-            //
-            // Needed at BOTH scopes, because a Ktor channel closed by the peer
-            // surfaces as a CancellationException whose Job is still active, and
-            // treating that as a cancellation would send the turn down the
-            // "user navigated away" path instead of the honest one.
-            if (!coroutineContext.isActive) throw ce
-            throw GsStreamCutException(status = response.status.value, cause = ce)
-        } catch (e: Exception) {
-            // Two exceptions already carry their own meaning and must keep it.
-            //
-            //   GsStreamCutException  already classified; re-wrapping would hide
-            //                      the original cause one level deeper for no gain.
-            //   GsBackendException    the server sent an SSE `error` EVENT. That is
-            //                      a backend refusal, not a transport failure, and
-            //                      calling it a cut would tell the user their
-            //                      connection dropped when the server answered.
-            if (e is GsStreamCutException || e is GsBackendException) throw e
-            throw GsStreamCutException(status = response.status.value, cause = e)
         }
     }
 

@@ -1849,7 +1849,7 @@ fun ChatScreen(
                 if (remainingSlots == 0) {
                     showSnack("Up to ${AttachmentRules.MAX_PER_MESSAGE} attachments per message")
                 } else {
-                    documentPicker.launch(arrayOf("image/*", "application/pdf", "text/*"))
+                    documentPicker.launch(arrayOf("image/*", "application/pdf", "text/*", "audio/*", "video/*"))
                 }
             },
             onVoice = {
@@ -2534,14 +2534,14 @@ internal fun ReferenceThinkingCard(
     } else if (isPlan) {
         "Composing your plan..."
     } else {
-        "Composing the answer..."
+        "Generating answer..."
     }
     val finalIcon = if (hasSearch) "world-search" else "pencil"
     val finalTone = if (hasSearch) "blue" else "peach"
     val finalActive = if (hasSearch) {
         phase == NexlyThinkingPhase.SEARCH
     } else {
-        phase == NexlyThinkingPhase.ANSWER
+        phase != NexlyThinkingPhase.DONE
     }
     Column(
         modifier = Modifier
@@ -2967,7 +2967,7 @@ internal fun AssistantMessage(
     // Show the stage card only when a real thinking/reasoning event arrived;
     // a flash turn with web sources keeps a single Search/Answer row.
     val showThinkingStages = sawThinking || liveMode == "thinking" || liveReasoningActive
-    val showStatus = showThinkingStages || turnSources.isNotEmpty()
+    val showStatus = message.isStreaming || showThinkingStages || turnSources.isNotEmpty()
     Box(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             if (showIdentity) {

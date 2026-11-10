@@ -57,7 +57,7 @@ struct AttachmentSheetView: View {
 
     /// Files stays documents-only (spec: images come through Gallery).
     private static let fileTypes: [UTType] = [
-        .pdf, .plainText, .commaSeparatedText, .utf8PlainText, .text,
+        .pdf, .plainText, .commaSeparatedText, .utf8PlainText, .text, .image, .audio, .movie,
     ]
 
     /// FLASH MODE (Phase 3) — the one-line truth under the mode picker.

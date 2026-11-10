@@ -248,7 +248,7 @@ final class APIClient {
                 let failure = APIError.server(event.data ?? "The assistant hit an unexpected error.")
                 onError(failure)
                 throw failure
-            case "status", "search", "source", "clarify", "research", "conversation":
+            case "status", "mode", "search", "source", "clarify", "research", "ledger", "conversation":
                 // PHASE 8.1/8.2: trace + research events reach the consumer
                 // raw — payload decoding + honest-state mapping live in
                 // ChatViewModel.

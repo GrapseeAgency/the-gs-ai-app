@@ -17,13 +17,13 @@ import UniformTypeIdentifiers
 
 // MARK: - Vocabulary
 
-/// Shipped media kinds (spec §0): image | pdf | document. audio/video/
-/// screenshot are reserved in the model and MUST NOT be offered until a real
-/// consumer exists — deliberately no cases for them.
+/// Shipped receive/preview kinds. Media playback is not model analysis.
 enum AttachmentKind: String, Codable, CaseIterable, Equatable {
     case image
     case pdf
     case document
+    case audio
+    case video
 }
 
 /// Where the bytes came from (spec §1 `source`).
@@ -109,12 +109,12 @@ extension AttachmentFailure: Codable {
 
 struct AttachmentRules {
 
-    /// Receive allowlist — identical to the backend set. Audio/video are
-    /// deliberately absent: receiving them would fake a capability.
+    /// Receive allowlist — identical to the backend; media can be played.
     static let allowedMIMETypes: Set<String> = [
         "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic",
         "image/heif", "application/pdf", "text/plain", "text/markdown",
-        "text/csv",
+        "text/csv", "audio/mpeg", "audio/wav", "audio/mp4",
+        "video/mp4", "video/quicktime", "video/webm",
     ]
 
     /// Hard byte cap per attachment — the server re-checks; this is the
@@ -124,8 +124,20 @@ struct AttachmentRules {
     /// Hard cap per message.
     static let maxPerMessage = 6
 
+    static func canonicalMIME(_ mime: String) -> String {
+        let base = mime.split(separator: ";").first.map(String.init)?.lowercased() ?? mime.lowercased()
+        switch base {
+        case "audio/x-m4a": return "audio/mp4"
+        case "audio/x-wav", "audio/wave": return "audio/wav"
+        case "text/x-markdown": return "text/markdown"
+        default: return base
+        }
+    }
+
     /// MIME → kind, mirroring `kindForMime` on the server.
     static func kindForMime(_ mime: String) -> AttachmentKind? {
+        if mime.hasPrefix("audio/") { return .audio }
+        if mime.hasPrefix("video/") { return .video }
         if mime.hasPrefix("image/") { return .image }
         if mime == "application/pdf" { return .pdf }
         if mime.hasPrefix("text/") { return .document }
@@ -146,6 +158,12 @@ struct AttachmentRules {
         case "txt", "text": return "text/plain"
         case "md", "markdown": return "text/markdown"
         case "csv": return "text/csv"
+        case "mp3": return "audio/mpeg"
+        case "wav": return "audio/wav"
+        case "m4a": return "audio/mp4"
+        case "mp4", "m4v": return "video/mp4"
+        case "mov": return "video/quicktime"
+        case "webm": return "video/webm"
         default: return nil
         }
     }
@@ -194,6 +212,12 @@ struct AttachmentRules {
         case "text/plain": return "txt"
         case "text/markdown": return "md"
         case "text/csv": return "csv"
+        case "audio/mpeg": return "mp3"
+        case "audio/wav": return "wav"
+        case "audio/mp4": return "m4a"
+        case "video/mp4": return "mp4"
+        case "video/quicktime": return "mov"
+        case "video/webm": return "webm"
         default: return "bin"
         }
     }
@@ -465,6 +489,41 @@ final class AttachmentStore: ObservableObject {
         return URL(fileURLWithPath: path)
     }
 
+    /// Restore real previews for history too, not just this session's drafts.
+    /// Fetch only the app's file endpoint; never follow an attachment-supplied host.
+    func previewURL(for attachment: Attachment) async throws -> URL {
+        if let staged = stagedLocalURL(forRemoteID: attachment.id),
+           FileManager.default.fileExists(atPath: staged.path) { return staged }
+        guard !attachment.id.isEmpty,
+              attachment.id.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_" }) else {
+            throw APIError.badResponse("Invalid attachment identifier")
+        }
+        let directory = Self.stagingDirectory(for: "preview-\(attachment.id)")
+        let target = directory.appendingPathComponent(AttachmentRules.sanitizeDisplayName(attachment.displayName))
+        if FileManager.default.fileExists(atPath: target.path) {
+            stagedByRemoteID[attachment.id] = target.path
+            return target
+        }
+        let request = try APIClient.shared.buildRequest(path: "/api/v1/files/\(attachment.id)")
+        let (temporary, response) = try await URLSession.shared.download(for: request)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw APIError.badResponse("Attachment preview is unavailable. Tap to retry.")
+        }
+        let bytes = (try FileManager.default.attributesOfItem(atPath: temporary.path)[.size] as? NSNumber)?.intValue ?? 0
+        guard bytes > 0, bytes <= AttachmentRules.maxBytes else {
+            throw APIError.badResponse("Attachment preview exceeds the file limit")
+        }
+        try Task.checkCancellation()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Another row may have fetched this same attachment while suspended.
+        if !FileManager.default.fileExists(atPath: target.path) {
+            try FileManager.default.moveItem(at: temporary, to: target)
+        }
+        stagedByRemoteID[attachment.id] = target.path
+        return target
+    }
+
     // MARK: Storage locations (spec §4)
 
     /// Application Support/Attachments/<uuid>/<displayName>
@@ -574,6 +633,8 @@ final class AttachmentStore: ObservableObject {
         case .image: return "photo-\(stamp).\(ext)"
         case .pdf: return "document-\(stamp).pdf"
         case .document: return "note-\(stamp).\(ext)"
+        case .audio: return "audio-\(stamp).\(ext)"
+        case .video: return "video-\(stamp).\(ext)"
         }
     }
 
@@ -581,7 +642,7 @@ final class AttachmentStore: ObservableObject {
     nonisolated private static func resolvedMIME(forFileAt url: URL) -> String? {
         let values = try? url.resourceValues(forKeys: [.contentTypeKey])
         let mime = values?.contentType?.preferredMIMEType?.lowercased()
-        return mime
+        return mime.map(AttachmentRules.canonicalMIME)
     }
 
     // MARK: Staging (selected → preparing → uploading)

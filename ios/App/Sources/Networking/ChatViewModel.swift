@@ -122,6 +122,7 @@ struct SearchTraceStep: Identifiable, Equatable {
         /// sent them.
         case completedSummary(queries: Int, sources: Int, retrieved: Int, citations: [Int]?)
         case composing
+        case toolActivity(title: String, detail: String)
     }
 
     let id = UUID()
@@ -647,6 +648,10 @@ final class ChatViewModel: ObservableObject {
     func stop() {
         streamTask?.cancel()
         streamTask = nil
+        // Close synchronously: callers can send a new turn immediately, and
+        // every already-received byte survives even if its reveal was pending.
+        // The cancelled task's response-ID guard prevents late finalization.
+        if isStreaming { finalizeLocal() }
     }
 
     /// Benchmark branch-new-chat: everything up to and including the tapped
@@ -749,9 +754,11 @@ final class ChatViewModel: ObservableObject {
 
         // Strong self capture is intentional and bounded: the task only lives
         // as long as this stream; `stop()` cancels it, which ends the cycle.
+        guard let responseID = messages.last?.id else { return }
         streamTask = Task {
             do {
                 let conversationID = try await self.ensureConversation(for: text)
+                guard self.isStreaming, self.messages.last?.id == responseID else { return }
                 // A failed first create leaves the optimistic user turn in
                 // memory. Persist it once creation actually succeeds, including
                 // when that happens on Retry (appendUserMessage == false).
@@ -799,11 +806,27 @@ final class ChatViewModel: ObservableObject {
                         sink.append(event) // lock-guarded — drained in the flush loop
                     }
                 )
-                // Transport returned after an explicit, validated completion.
-                if self.isStreaming {
-                    self.finalize(with: completedMessage)
+                guard self.isStreaming, self.messages.last?.id == responseID else { return }
+                if self.streamBuffer.isEmpty, let content = completedMessage?.content, !content.isEmpty {
+                    self.streamBuffer.append(content)
                 }
+                // Reveal received text at display cadence even when an upstream
+                // proxy batches several deltas. Never invent tokens or work steps.
+                self.stopFlushLoop()
+                self.drainSearchEvents()
+                while self.isStreaming, self.messages.last?.id == responseID,
+                      let index = self.messages.indices.last,
+                      self.messages[index].isStreaming,
+                      self.messages[index].content != self.streamBuffer.snapshot() {
+                    try Task.checkCancellation()
+                    self.flushStreamingText()
+                    try await Task.sleep(nanoseconds: 33_000_000)
+                }
+                if self.isStreaming, self.messages.last?.id == responseID { self.finalize(with: completedMessage) }
             } catch {
+                // A stopped task may resume after a new send. Its completion or
+                // cancellation must never close the newer bubble or its painter.
+                guard self.isStreaming, self.messages.last?.id == responseID else { return }
                 if Self.isCancellation(error) {
                     self.finalizeLocal()
                 } else {
@@ -865,7 +888,7 @@ final class ChatViewModel: ObservableObject {
         flushTask = nil
     }
 
-    private func flushStreamingText() {
+    private func flushStreamingText(drainAll: Bool = false) {
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
         let text = streamBuffer.snapshot()
         guard messages[index].content != text else { return }
@@ -881,7 +904,15 @@ final class ChatViewModel: ObservableObject {
                 os_log("GS-PERF tapToFirstVisibleCharMs=%d chars=%d", log: .default, type: .info, ms, text.count)
             }
         }
-        messages[index].content = text
+        let visible = messages[index].content
+        let remaining = max(0, text.count - visible.count)
+        // Normal provider tokens paint immediately; bursts catch up adaptively.
+        // String prefixes are grapheme-safe (including custom-icon tokens' text).
+        if !drainAll, text.hasPrefix(visible), remaining > 32 {
+            messages[index].content = String(text.prefix(visible.count + max(32, remaining / 12)))
+        } else {
+            messages[index].content = text
+        }
     }
 
     // MARK: - Search event ingest (PHASE 8.1 + 8.2 v2)
@@ -926,6 +957,8 @@ final class ChatViewModel: ObservableObject {
             // pipeline — decode tolerantly, append only what really came.
             guard let payload = try? JSONDecoder().decode(ResearchEventPayload.self, from: Data(data.utf8)) else { return }
             applyResearchEvent(payload)
+        case "ledger":
+            applyLedgerEvent(data)
         case "reasoning":
             // REASONING TRACE — {"delta":"..."} from thinking-enabled stream
             // turns. Tolerant: a malformed frame is dropped, never breaks the
@@ -1096,6 +1129,45 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    /// Public research work facts, never inferred skills or hidden thought steps.
+    private func applyLedgerEvent(_ data: String) {
+        guard let payload = try? JSONSerialization.jsonObject(with: Data(data.utf8)) as? [String: Any],
+              let type = payload["type"] as? String else { return }
+        let query = String((payload["query"] as? String ?? "").prefix(240))
+        let title: String
+        let detail: String
+        switch type {
+        case "ledger_started":
+            title = "Research started"
+            detail = (payload["branches"] as? Int).map { "\($0) branches planned" } ?? ""
+            promotePhase(.searching)
+        case "branch_started":
+            guard !query.isEmpty else { return }
+            title = "Researching"; detail = query
+            promotePhase(.searching)
+        case "branch_completed":
+            title = "Research branch completed"; detail = query
+        case "branch_failed":
+            title = "Research branch failed"; detail = query
+        case "subagents_launched":
+            guard let count = payload["count"] as? Int, count > 0 else { return }
+            title = "Research workers launched"; detail = "\(count) workers"
+        case "gaps_open":
+            title = "Research gaps found"
+            detail = (payload["gaps"] as? [String]).map { "\($0.count) gaps" } ?? ""
+        case "contradictions":
+            guard let count = payload["count"] as? Int, count > 0 else { return }
+            title = "Conflicting evidence found"; detail = "\(count) conflicts"
+        case "ledger_final":
+            title = "Research evidence assembled"
+            detail = (payload["claims"] as? Int).map { "\($0) claims" } ?? ""
+        case "stopped_by_user":
+            title = "Research stopped"; detail = "Stopped by user"
+        default: return
+        }
+        appendUniqueStep(.toolActivity(title: title, detail: detail))
+    }
+
     /// Appends a trace step unless an identical step already arrived this
     /// turn — the v2 idempotency pairs (`source` `read`/`completed`, the
     /// legacy `search:completed` + v2 `research:completed`) and re-sent
@@ -1229,7 +1301,7 @@ final class ChatViewModel: ObservableObject {
         }
         stopFlushLoop()
         drainSearchEvents() // stop/cancel keeps the trace that really happened
-        flushStreamingText() // land the last ≤33ms of deltas before closing
+        flushStreamingText(drainAll: true) // stop/error retains ALL received text
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
         if messages[index].content.isEmpty {
             messages.remove(at: index)

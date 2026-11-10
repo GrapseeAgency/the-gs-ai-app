@@ -9,6 +9,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -202,6 +204,25 @@ class ChatStreamController(private val chat: ChatRepository) {
             hasAttachments = attachments.isNotEmpty()
         )
         job = scope.launch {
+            var visibleChars = 0
+            fun paintReceivedText() {
+                if (visibleChars >= buffer.length) return
+                val remaining = buffer.length - visibleChars
+                var end = minOf(buffer.length, visibleChars + maxOf(32, remaining / 12))
+                // Never split a UTF-16 surrogate pair at the reveal boundary.
+                if (end < buffer.length && Character.isHighSurrogate(buffer[end - 1])) end++
+                visibleChars = end
+                publishIfMine(token) { current ->
+                    current.copy(streamText = buffer.substring(0, end),
+                        reasoningEndMs = current.reasoningEndMs
+                            ?: if (current.reasoning != null) SystemClock.uptimeMillis() else null)
+                }
+            }
+            // Independent of network callbacks: a small final delta must not
+            // remain invisible until another chunk or done happens to arrive.
+            val painter = launch {
+                while (isActive) { paintReceivedText(); delay(STREAM_PAINT_MS) }
+            }
             try {
                 val returnedId = chat.send(
                     conversationId = conversationId,
@@ -284,15 +305,7 @@ class ChatStreamController(private val chat: ChatRepository) {
                                     "tapToFirstVisibleCharMs=${now - sendCalledAt} chars=${buffer.length}"
                                 )
                             }
-                            publishIfMine(token) { current ->
-                                current.copy(
-                                    streamText = buffer.toString(),
-                                    // The first answer token freezes the measured
-                                    // thinking span (only when reasoning ran).
-                                    reasoningEndMs = current.reasoningEndMs
-                                        ?: (if (current.reasoning != null) SystemClock.uptimeMillis() else null)
-                                )
-                            }
+                            paintReceivedText()
                         }
                     },
                     // The done message's persisted sources[] are the AUTHORITATIVE
@@ -302,13 +315,14 @@ class ChatStreamController(private val chat: ChatRepository) {
                     onDone = { done ->
                         val doneContent = done?.content
                         if (!doneContent.isNullOrBlank()) {
+                            val visible = buffer.substring(0, minOf(visibleChars, buffer.length))
                             buffer.setLength(0)
                             buffer.append(doneContent)
+                            if (!doneContent.startsWith(visible)) visibleChars = 0
                         }
                         publishIfMine(token) { current ->
                             val cards = done?.sources?.map { it.toSourceCard() }
                             current.copy(
-                                streamText = if (!doneContent.isNullOrBlank()) doneContent else current.streamText,
                                 sources = if (cards.isNullOrEmpty()) current.sources else cards,
                                 clarify = current.clarify
                                     ?: done?.clarifyOptions?.let { parseClarifyPayload(it) }
@@ -316,6 +330,7 @@ class ChatStreamController(private val chat: ChatRepository) {
                         }
                     }
                 )
+                while (visibleChars < buffer.length) { paintReceivedText(); delay(STREAM_PAINT_MS) }
                 publishIfMine(token) { it.copy(streamText = buffer.toString(), phase = Phase.Finalizing) }
                 publishIfMine(token) { it.copy(conversationId = returnedId, phase = Phase.Done) }
             } catch (ce: CancellationException) {
@@ -335,6 +350,7 @@ class ChatStreamController(private val chat: ChatRepository) {
                     )
                 }
             } finally {
+                painter.cancel()
                 if (job === coroutineContext[Job]) job = null
             }
         }

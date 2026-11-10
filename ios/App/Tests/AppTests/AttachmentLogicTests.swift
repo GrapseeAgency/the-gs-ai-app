@@ -15,13 +15,13 @@ final class AttachmentLogicTests: XCTestCase {
         let expected: Set<String> = [
             "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic",
             "image/heif", "application/pdf", "text/plain", "text/markdown",
-            "text/csv",
+            "text/csv", "audio/mpeg", "audio/wav", "audio/mp4",
+            "video/mp4", "video/quicktime", "video/webm",
         ]
         XCTAssertEqual(AttachmentRules.allowedMIMETypes, expected)
-        // Deliberately absent: no audio/video — receiving them would fake a
-        // capability (spec §0).
-        XCTAssertFalse(AttachmentRules.allowedMIMETypes.contains("audio/mpeg"))
-        XCTAssertFalse(AttachmentRules.allowedMIMETypes.contains("video/mp4"))
+        XCTAssertTrue(AttachmentRules.allowedMIMETypes.contains("audio/mpeg"))
+        XCTAssertTrue(AttachmentRules.allowedMIMETypes.contains("video/mp4"))
+        XCTAssertFalse(AttachmentRules.allowedMIMETypes.contains("audio/unknown"))
     }
 
     func testLimitsMatchBackend() {
@@ -37,8 +37,8 @@ final class AttachmentLogicTests: XCTestCase {
         XCTAssertEqual(AttachmentRules.kindForMime("text/plain"), .document)
         XCTAssertEqual(AttachmentRules.kindForMime("text/markdown"), .document)
         XCTAssertEqual(AttachmentRules.kindForMime("text/csv"), .document)
-        XCTAssertNil(AttachmentRules.kindForMime("video/mp4"))
-        XCTAssertNil(AttachmentRules.kindForMime("audio/mpeg"))
+        XCTAssertEqual(AttachmentRules.kindForMime("video/mp4"), .video)
+        XCTAssertEqual(AttachmentRules.kindForMime("audio/mpeg"), .audio)
         XCTAssertNil(AttachmentRules.kindForMime("application/zip"))
         XCTAssertNil(AttachmentRules.kindForMime("application/octet-stream"))
     }
@@ -49,6 +49,12 @@ final class AttachmentLogicTests: XCTestCase {
         XCTAssertEqual(AttachmentRules.mimeForFileName("notes.md"), "text/markdown")
         XCTAssertEqual(AttachmentRules.mimeForFileName("table.csv"), "text/csv")
         XCTAssertEqual(AttachmentRules.mimeForFileName("readme.txt"), "text/plain")
+        XCTAssertEqual(AttachmentRules.mimeForFileName("voice.m4a"), "audio/mp4")
+        XCTAssertEqual(AttachmentRules.mimeForFileName("clip.MOV"), "video/quicktime")
+        XCTAssertEqual(AttachmentRules.preferredExtension(forMime: "video/mp4"), "mp4")
+        XCTAssertEqual(AttachmentRules.canonicalMIME("audio/x-m4a"), "audio/mp4")
+        XCTAssertEqual(AttachmentRules.canonicalMIME("audio/x-wav"), "audio/wav")
+        XCTAssertNil(AttachmentTransitions.validate(byteSize: 100, mimeType: "audio/mpeg"))
         XCTAssertNil(AttachmentRules.mimeForFileName("archive.zip"))
         XCTAssertNil(AttachmentRules.mimeForFileName("noextension"))
     }
@@ -84,7 +90,7 @@ final class AttachmentLogicTests: XCTestCase {
             AttachmentTransitions.validate(byteSize: AttachmentRules.maxBytes + 1, mimeType: "image/png"),
             .tooLarge)
         XCTAssertEqual(
-            AttachmentTransitions.validate(byteSize: 100, mimeType: "video/mp4"),
+            AttachmentTransitions.validate(byteSize: 100, mimeType: "video/unknown"),
             .unsupported)
         XCTAssertEqual(
             AttachmentTransitions.validate(byteSize: 0, mimeType: "text/plain"),

@@ -24,11 +24,8 @@ export const MAX_ATTACHMENTS_PER_MESSAGE = 6
  */
 export const MAX_OCR_TEXT_CHARS = 20_000
 
-/**
- * Receive allowlist. Audio/video are deliberately ABSENT — the platform has no
- * processor for them yet, so receiving them would only fake a capability
- * (Phase 5 §5/§14). Extend this list only when a real consumer exists.
- */
+/** Receive formats with native file/media preview consumers. Audio/video
+ * playback does NOT imply transcription or model understanding. */
 export const ALLOWED_MIME_TYPES: ReadonlySet<string> = new Set([
   'image/jpeg',
   'image/png',
@@ -40,11 +37,15 @@ export const ALLOWED_MIME_TYPES: ReadonlySet<string> = new Set([
   'text/plain',
   'text/markdown',
   'text/csv',
+  'audio/mpeg', 'audio/wav', 'audio/mp4',
+  'video/mp4', 'video/quicktime', 'video/webm',
 ])
 
-export type AttachmentKind = 'image' | 'pdf' | 'document'
+export type AttachmentKind = 'image' | 'pdf' | 'document' | 'audio' | 'video'
 
 export function kindForMime(mime: string): AttachmentKind | null {
+  if (mime.startsWith('audio/')) return 'audio'
+  if (mime.startsWith('video/')) return 'video'
   if (mime.startsWith('image/')) return 'image'
   if (mime === 'application/pdf') return 'pdf'
   if (mime.startsWith('text/')) return 'document'
@@ -95,6 +96,18 @@ export function sniffMatchesMime(head: Uint8Array, mime: string): boolean {
     case 'image/heif':
       // ISO BMFF: brand string sits at offset 8 ("heic"/"heix"/"mif1"/"msf1").
       return ascii(4, 'ftyp') && (ascii(8, 'heic') || ascii(8, 'heix') || ascii(8, 'mif1') || ascii(8, 'msf1'))
+    case 'audio/mpeg':
+      return ascii(0, 'ID3') || (head[0] === 0xff && (head[1] & 0xe0) === 0xe0)
+    case 'audio/wav':
+      return ascii(0, 'RIFF') && ascii(8, 'WAVE')
+    case 'audio/mp4':
+      return ascii(4, 'ftyp') && ['M4A ', 'M4B ', 'isom', 'mp42'].some(b => ascii(8, b))
+    case 'video/mp4':
+      return ascii(4, 'ftyp') && ['isom', 'iso2', 'mp41', 'mp42', 'avc1', 'M4V '].some(b => ascii(8, b))
+    case 'video/quicktime':
+      return ascii(4, 'ftyp') && ascii(8, 'qt  ')
+    case 'video/webm':
+      return head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3
     case 'application/pdf':
       return ascii(0, '%PDF')
     case 'text/plain':

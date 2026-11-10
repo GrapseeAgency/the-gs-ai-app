@@ -1,5 +1,15 @@
 package com.grapsee.gsai.ui.attachment
 
+import android.content.Intent
+import android.widget.Toast
+import androidx.core.content.FileProvider
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -88,17 +98,53 @@ private fun AttachmentChip(
     onRemove: () -> Unit,
     onRetry: () -> Unit
 ) {
+    val context = LocalContext.current
+    var localFile by remember(draft.id, draft.localPath) {
+        mutableStateOf(draft.localPath?.let(::File)?.takeIf { it.isFile })
+    }
+    var previewFailed by remember(draft.id) { mutableStateOf(false) }
+    var attempt by remember(draft.id) { mutableStateOf(0) }
+    var showingMedia by remember(draft.id) { mutableStateOf(false) }
+    if (showingMedia && localFile != null) {
+        MediaPreview(localFile!!, draft.kind == AttachmentKind.Video) { showingMedia = false }
+    }
+    LaunchedEffect(draft.id, draft.remoteId, draft.localPath, attempt) {
+        if (localFile == null && draft.remoteId != null) {
+            previewFailed = false
+            try { localFile = attachmentPreviewFile(context, draft) }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { previewFailed = true }
+        }
+    }
+    fun openPreview() {
+        val file = localFile
+        if (file == null) { attempt++; return }
+        if (draft.kind == AttachmentKind.Audio || draft.kind == AttachmentKind.Video) {
+            showingMedia = true
+            return
+        }
+        try {
+            val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+            context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, draft.mimeType)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+        } catch (_: Exception) {
+            Toast.makeText(context, "No viewer is available for this file type", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val visual = draft.kind == AttachmentKind.Image || draft.kind == AttachmentKind.Video
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .18f)),
         modifier = Modifier.padding(end = 8.dp)
     ) {
         Row(
-            modifier = Modifier.padding(start = 6.dp, top = 6.dp, bottom = 6.dp, end = 2.dp),
+            modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ChipThumbnail(draft)
+            Box(Modifier.clickable(onClickLabel = "Preview ${draft.displayName}", onClick = ::openPreview)) {
+                ChipThumbnail(draft, localFile, if (visual) 104 else 72)
+            }
             Column(modifier = Modifier.padding(start = 8.dp)) {
                 Text(
                     text = draft.displayName.ifEmpty { "attachment" },
@@ -111,7 +157,7 @@ private fun AttachmentChip(
                 Text(
                     text = when (draft.phase) {
                         AttachmentPhase.Failed -> failureLabel(draft.failure, draft.serverCode)
-                        AttachmentPhase.Ready -> AttachmentRules.humanSize(draft.byteSize)
+                        AttachmentPhase.Ready -> if (previewFailed) "Preview unavailable" else AttachmentRules.humanSize(draft.byteSize)
                         // Size is unknown until the staged copy exists — no invented bytes.
                         else -> "…"
                     },
@@ -123,6 +169,14 @@ private fun AttachmentChip(
                     },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (localFile != null || previewFailed) {
+                ChipButton(
+                    icon = if (draft.kind == AttachmentKind.Audio || draft.kind == AttachmentKind.Video) GsIcons.CirclePlay else GsIcons.ExternalLink,
+                    label = if (previewFailed) "Retry preview ${draft.displayName}" else "Open ${draft.displayName}",
+                    tint = MaterialTheme.colorScheme.primary,
+                    onClick = ::openPreview
                 )
             }
             if (editable) {
@@ -152,11 +206,11 @@ private fun AttachmentChip(
  * overlay while preparing/uploading (never a fabricated percent).
  */
 @Composable
-private fun ChipThumbnail(draft: AttachmentDraft) {
+private fun ChipThumbnail(draft: AttachmentDraft, localFile: File?, edge: Int) {
     val boxShape = RoundedCornerShape(10.dp)
     Box(
         modifier = Modifier
-            .size(48.dp)
+            .size(edge.dp)
             .clip(boxShape)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         contentAlignment = Alignment.Center
@@ -169,15 +223,12 @@ private fun ChipThumbnail(draft: AttachmentDraft) {
                 modifier = Modifier.size(20.dp)
             )
         } else {
-            val stagedFile = draft.localPath?.let(::File)
-            val bitmap = rememberStagedThumbnail(
-                if (draft.kind == AttachmentKind.Image) stagedFile else null
-            )
+            val bitmap = rememberStagedThumbnail(if (draft.kind != AttachmentKind.Audio) localFile else null)
             if (bitmap != null) {
                 Image(
                     bitmap = bitmap,
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                    contentScale = if (draft.kind == AttachmentKind.Pdf || draft.kind == AttachmentKind.Document) ContentScale.Fit else ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
@@ -236,6 +287,8 @@ private fun kindIcon(kind: AttachmentKind): ImageVector = when (kind) {
     AttachmentKind.Image -> GsIcons.Image
     AttachmentKind.Pdf -> GsIcons.FileText
     AttachmentKind.Document -> GsIcons.File
+    AttachmentKind.Audio -> GsIcons.FileMusic
+    AttachmentKind.Video -> GsIcons.FileVideo
 }
 
 /** Honest, human failure copy — taxonomy mapped 1:1, codes shown verbatim. */

@@ -9,8 +9,7 @@ import kotlinx.serialization.Serializable
  * no Android imports, fully JVM unit-testable. Android I/O lives in
  * [AttachmentStore]; the wire shape lives in data/remote/AttachmentDto.
  *
- * Honest-capability rule (§0): kinds are exactly image | pdf | document.
- * audio/video/screenshot stay reserved and are never offered anywhere.
+ * Audio/video have real native preview/playback consumers, not AI analysis.
  * There is NO processing phase — the server has none, the UI must not fake one.
  */
 
@@ -18,7 +17,9 @@ import kotlinx.serialization.Serializable
 enum class AttachmentKind(val wire: String) {
     Image("image"),
     Pdf("pdf"),
-    Document("document");
+    Document("document"),
+    Audio("audio"),
+    Video("video");
 
     companion object {
         fun fromWire(value: String?): AttachmentKind? =
@@ -120,7 +121,7 @@ data class AttachmentDraft(
  */
 object AttachmentRules {
 
-    /** Receive allowlist — identical to the backend. Audio/video absent on purpose. */
+    /** Receive allowlist — identical to the backend; media is previewable, not analyzed. */
     val ALLOWED_MIME_TYPES: Set<String> = setOf(
         "image/jpeg",
         "image/png",
@@ -131,7 +132,9 @@ object AttachmentRules {
         "application/pdf",
         "text/plain",
         "text/markdown",
-        "text/csv"
+        "text/csv",
+        "audio/mpeg", "audio/wav", "audio/mp4",
+        "video/mp4", "video/quicktime", "video/webm"
     )
 
     /** Hard byte cap per attachment (checked before upload; server re-checks). */
@@ -159,6 +162,8 @@ object AttachmentRules {
         "text/x-csv",
         "application/csv" -> "text/csv"
         "text/x-markdown" -> "text/markdown"
+        "audio/x-m4a" -> "audio/mp4"
+        "audio/x-wav", "audio/wave" -> "audio/wav"
         else -> mimeType.lowercase()
     }
 
@@ -166,6 +171,8 @@ object AttachmentRules {
     fun kindForMime(mimeType: String): AttachmentKind? {
         val mime = mimeType.lowercase()
         return when {
+            mime.startsWith("audio/") -> AttachmentKind.Audio
+            mime.startsWith("video/") -> AttachmentKind.Video
             mime.startsWith("image/") -> AttachmentKind.Image
             mime == "application/pdf" -> AttachmentKind.Pdf
             mime.startsWith("text/") -> AttachmentKind.Document

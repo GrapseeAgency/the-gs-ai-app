@@ -908,10 +908,10 @@ struct NexlyThinkingCard: View {
             return "\(searchSources) source\(searchSources == 1 ? "" : "s") found"
         }
         if phase == .done { return isPlan ? "Plan ready" : "Answer ready" }
-        return isPlan ? "Composing your plan..." : "Composing the answer..."
+        return isPlan ? "Composing your plan..." : "Generating answer..."
     }
     private var finalActive: Bool {
-        hasSearch ? phase == .search : phase == .answer
+        hasSearch ? phase == .search : phase != .done
     }
 
     var body: some View {

@@ -1331,7 +1331,13 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
               : 'Describe this image.'
             : ''
 
+    const media = prep.claimedAttachments.filter(a => a.kind === 'audio' || a.kind === 'video')
+      .map(({ kind, displayName }) => ({ kind, displayName }))
+    const mediaNotice = media.length > 0
+      ? `ATTACHED MEDIA (metadata only): ${JSON.stringify(media)}. These files can be previewed and played in the app, but their audio/video contents have NOT been transcribed, watched or analyzed. Do not infer their contents from filenames; request a transcript or relevant still images when needed.`
+      : null
     const evidenceBlocks = [
+      mediaNotice,
       crystallization.block,
       docContext.block,
       historyBlock?.block ?? null,
@@ -1799,12 +1805,16 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     modelMessages: ChatMessageInput[] | VisionChatMessage[],
     onDelta?: (d: string) => void
   ): Promise<string> => {
-    if (!prep.runId) return synthesizeRaw(modelMessages, onDelta)
+    // Validated answers still use the provider stream, so genuine reasoning
+    // and mode activity can arrive while their draft is checked. Only answer
+    // deltas are withheld; no invented progress or unvalidated text is emitted.
+    const answerDelta = onDelta ?? (push ? (_delta: string) => {} : undefined)
+    if (!prep.runId) return synthesizeRaw(modelMessages, answerDelta)
     return tracked(
       prep.runId,
       { request: 'LLMCallRequested', completed: 'LLMCallCompleted', failed: 'LLMCallFailed' },
       { step: ++llmStep, kind: useVision ? 'vision' : 'text' },
-      () => synthesizeRaw(modelMessages, onDelta)
+      () => synthesizeRaw(modelMessages, answerDelta)
     )
   }
   const executeSearchLogged = async (emit: SearchEventEmitter | null): Promise<TurnSearch> => {

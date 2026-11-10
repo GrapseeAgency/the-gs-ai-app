@@ -1,6 +1,9 @@
 import SwiftUI
 import UIKit
 import ImageIO
+import PDFKit
+import AVFoundation
+import QuickLook
 
 // MARK: - PHASE 5 composer + transcript attachment UI (docs/ATTACHMENTS.md §6-§8)
 //
@@ -19,7 +22,12 @@ final class ThumbLoader: ObservableObject {
 
     @Published private(set) var image: UIImage?
 
-    private static let cache = NSCache<NSString, UIImage>()
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.totalCostLimit = 24 * 1024 * 1024
+        cache.countLimit = 96
+        return cache
+    }()
     private let url: URL
 
     init(url: URL) {
@@ -36,7 +44,9 @@ final class ThumbLoader: ObservableObject {
         let decoded = await Self.decode(from: url)
         guard !Task.isCancelled else { return }
         guard let decoded else { return }
-        Self.cache.setObject(decoded, forKey: url.path as NSString)
+        let pixelBytes = decoded.cgImage.map { $0.bytesPerRow * $0.height }
+            ?? Int(decoded.size.width * decoded.size.height * decoded.scale * decoded.scale * 4)
+        Self.cache.setObject(decoded, forKey: url.path as NSString, cost: pixelBytes)
         image = decoded
     }
 
@@ -44,6 +54,33 @@ final class ThumbLoader: ObservableObject {
     /// full-size allocation, never on the main thread.
     private nonisolated static func decode(from url: URL) async -> UIImage? {
         await Task.detached(priority: .utility) { () -> UIImage? in
+            let ext = url.pathExtension.lowercased()
+            if ext == "pdf" {
+                return PDFDocument(url: url)?.page(at: 0)?.thumbnail(of: CGSize(width: 256, height: 320), for: .mediaBox)
+            }
+            if ["mp4", "m4v", "mov", "webm"].contains(ext) {
+                let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+                generator.appliesPreferredTrackTransform = true
+                generator.maximumSize = CGSize(width: 320, height: 320)
+                guard let frame = try? generator.copyCGImage(at: .zero, actualTime: nil) else { return nil }
+                return UIImage(cgImage: frame)
+            }
+            if ["txt", "text", "md", "markdown", "csv"].contains(ext) {
+                guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+                defer { try? handle.close() }
+                guard let data = try? handle.read(upToCount: 2048), !data.isEmpty else { return nil }
+                // A bounded UTF-8 read may end inside a Bengali/multibyte code
+                // point; keep the valid excerpt instead of discarding its preview.
+                let text = String(decoding: data, as: UTF8.self)
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = 1 // thumbnail pixels, not a 3x full-resolution page
+                return UIGraphicsImageRenderer(size: CGSize(width: 256, height: 320), format: format).image { context in
+                    UIColor.white.setFill()
+                    context.fill(CGRect(x: 0, y: 0, width: 256, height: 320))
+                    (text as NSString).draw(in: CGRect(x: 18, y: 18, width: 220, height: 284),
+                        withAttributes: [.font: UIFont.systemFont(ofSize: 13), .foregroundColor: UIColor.darkGray])
+                }
+            }
             guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
             let options: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -71,6 +108,8 @@ struct AttachmentKindIcon: View {
         case .image: return "photo"
         case .pdf: return "doc.richtext"
         case .document: return "doc.plaintext"
+        case .audio: return "waveform"
+        case .video: return "play.rectangle"
         }
     }
 
@@ -91,8 +130,8 @@ struct AttachmentThumb: View {
 
     var body: some View {
         Group {
-            if kind == .image, let localURL {
-                StagedThumb(url: localURL)
+            if kind != .audio, let localURL {
+                StagedThumb(url: localURL, kind: kind)
             } else {
                 AttachmentKindIcon(kind: kind)
             }
@@ -109,22 +148,26 @@ struct AttachmentThumb: View {
 /// shared).
 private struct StagedThumb: View {
     let url: URL
+    let kind: AttachmentKind
 
     @StateObject private var loader: ThumbLoader
 
-    init(url: URL) {
+    init(url: URL, kind: AttachmentKind) {
         self.url = url
+        self.kind = kind
         _loader = StateObject(wrappedValue: ThumbLoader(url: url))
     }
 
     var body: some View {
         Group {
             if let image = loader.image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
+                if kind == .pdf || kind == .document {
+                    Image(uiImage: image).resizable().scaledToFit()
+                } else {
+                    Image(uiImage: image).resizable().scaledToFill()
+                }
             } else {
-                AttachmentKindIcon(kind: .image, pointSize: 18)
+                AttachmentKindIcon(kind: kind, pointSize: 18)
             }
         }
         .task(id: url.path) { await loader.loadIfNeeded() }
@@ -164,10 +207,18 @@ struct AttachmentChip: View {
     let draft: AttachmentDraft
     let onRetry: () -> Void
     let onRemove: () -> Void
+    @State private var previewURL: URL?
 
     var body: some View {
         HStack(spacing: Aero.Spacing.s) {
-            AttachmentThumb(kind: draft.kind, localURL: draft.localURL)
+            Button { previewURL = draft.localURL } label: {
+                AttachmentThumb(kind: draft.kind, localURL: draft.localURL,
+                    size: draft.kind == .image || draft.kind == .video ? 104 : 76)
+            }
+            .buttonStyle(.plain)
+            .disabled(draft.localURL == nil)
+            .accessibilityLabel("Preview \(draft.displayName)")
+            .quickLookPreview($previewURL)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(draft.displayName)
@@ -280,26 +331,59 @@ struct MessageAttachmentChips: View {
     }
 
     private func chip(_ attachment: Attachment) -> some View {
-        let kind = AttachmentKind(rawValue: attachment.kind) ?? .document
-        let stagedURL = AttachmentStore.shared.stagedLocalURL(forRemoteID: attachment.id)
-        return HStack(spacing: Aero.Spacing.s) {
-            AttachmentThumb(kind: kind, localURL: stagedURL, size: 48)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(attachment.displayName)
-                    .font(Aero.label())
-                    .foregroundStyle(Aero.text)
-                    .lineLimit(1)
-                    .frame(maxWidth: 120, alignment: .leading)
-                Text(AttachmentRules.humanBytes(attachment.byteSize))
-                    .font(Aero.metadata())
-                    .foregroundStyle(Aero.textMuted)
+        MessageAttachmentPreview(attachment: attachment)
+    }
+}
+
+/// Real content first, metadata second. Works after relaunch, not only after upload.
+private struct MessageAttachmentPreview: View {
+    let attachment: Attachment
+    @State private var localURL: URL?
+    @State private var previewURL: URL?
+    @State private var failed = false
+    @State private var attempt = 0
+    private var kind: AttachmentKind { AttachmentKind(rawValue: attachment.kind) ?? .document }
+    private var visual: Bool { kind == .image || kind == .video }
+
+    var body: some View {
+        Button {
+            if let localURL { previewURL = localURL } else { attempt += 1 }
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                if visual {
+                    AttachmentThumb(kind: kind, localURL: localURL, size: 208)
+                        .overlay {
+                            if kind == .video { Image(systemName: "play.circle.fill").font(.system(size: 32)).foregroundStyle(.white) }
+                        }
+                }
+                HStack(spacing: 10) {
+                    if !visual { AttachmentThumb(kind: kind, localURL: localURL, size: 64) }
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(attachment.displayName).font(Aero.label()).foregroundStyle(Aero.text).lineLimit(2)
+                        Text(AttachmentRules.humanBytes(attachment.byteSize)).font(Aero.metadata()).foregroundStyle(Aero.textMuted)
+                        if failed {
+                            Text("Preview unavailable · Tap to retry").font(Aero.metadata()).foregroundStyle(Aero.danger)
+                        } else if localURL == nil {
+                            ProgressView().scaleEffect(0.7)
+                        } else if kind == .audio || kind == .video {
+                            Text("Tap to play · Media preview").font(Aero.metadata()).foregroundStyle(Aero.textMuted)
+                        }
+                    }
+                }
             }
+            .frame(maxWidth: visual ? 208 : 248, alignment: .leading)
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 20).fill(Aero.elevatedSurface.opacity(0.72)))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(Aero.outline, lineWidth: 1))
         }
-        .padding(6)
-        .background(RoundedRectangle(cornerRadius: Aero.Radius.md).fill(Aero.elevatedSurface))
-        .overlay(RoundedRectangle(cornerRadius: Aero.Radius.md).stroke(Aero.outline, lineWidth: 1))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(attachment.displayName), \(AttachmentRules.humanBytes(attachment.byteSize))")
+        .buttonStyle(.plain)
+        .quickLookPreview($previewURL)
+        .accessibilityLabel("Preview \(attachment.displayName), \(AttachmentRules.humanBytes(attachment.byteSize))")
+        .task(id: "\(attachment.id):\(attempt)") {
+            failed = false
+            do { localURL = try await AttachmentStore.shared.previewURL(for: attachment) }
+            catch { if !Task.isCancelled { failed = true } }
+        }
     }
 }
 

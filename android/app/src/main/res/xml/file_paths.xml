@@ -5,4 +5,5 @@
 <paths>
     <cache-path name="liveupdate" path="liveupdate/" />
     <cache-path name="camera" path="camera/" />
+    <files-path name="attachment_previews" path="attachments/" />
 </paths>

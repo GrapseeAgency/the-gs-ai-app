@@ -47,6 +47,69 @@ class PlatformRuntimeTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
 
+    @Test fun actualAttachmentPreviewsDecodeImagePDFAndSourceTextWithoutInventingMissingFiles() {
+        val directory = java.io.File(compose.activity.cacheDir, "decoder-" + java.util.UUID.randomUUID()).apply { mkdirs() }
+        try {
+            val photo = java.io.File(directory, "photo.png")
+            val bitmap = android.graphics.Bitmap.createBitmap(1200, 800, android.graphics.Bitmap.Config.ARGB_8888)
+            bitmap.eraseColor(android.graphics.Color.BLUE)
+            photo.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+            bitmap.recycle()
+            val pdf = java.io.File(directory, "source.pdf")
+            val document = android.graphics.pdf.PdfDocument()
+            val page = document.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(612, 792, 1).create())
+            page.canvas.drawText("Actual PDF source", 40f, 40f, android.graphics.Paint().apply { textSize = 24f })
+            document.finishPage(page)
+            pdf.outputStream().use { document.writeTo(it) }
+            document.close()
+            val text = java.io.File(directory, "notes.md").apply { writeText("Actual source text, not generated summary.") }
+            kotlinx.coroutines.runBlocking {
+                for (file in listOf(photo, pdf, text)) {
+                    val decoded = com.grapsee.gsai.ui.attachment.ThumbLoader.decode(file)
+                    assertNotNull("Real decoder failed for ${file.name}", decoded)
+                    assertTrue(decoded!!.width > 0 && decoded.height > 0)
+                    assertTrue(kotlin.math.max(decoded.width, decoded.height) <= 512)
+                }
+                assertNull(com.grapsee.gsai.ui.attachment.ThumbLoader.decode(java.io.File(directory, "missing.png")))
+            }
+        } finally { directory.deleteRecursively() }
+    }
+
+    @Test fun actualVoiceAttachmentPlaysNativeBytesWithMeasuredTimeAndClosesCleanly() {
+        val context = compose.activity
+        val directory = java.io.File(context.filesDir, "attachments/runtime-voice").apply { mkdirs() }
+        val file = java.io.File(directory, "real-voice.wav")
+        // A real five-second mono PCM fixture, not a simulated player timer.
+        val sampleRate = 8000
+        val pcmSize = sampleRate * 5 * 2
+        val bytes = java.nio.ByteBuffer.allocate(44 + pcmSize).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        bytes.put("RIFF".toByteArray()).putInt(36 + pcmSize).put("WAVEfmt ".toByteArray())
+            .putInt(16).putShort(1.toShort()).putShort(1.toShort()).putInt(sampleRate)
+            .putInt(sampleRate * 2).putShort(2.toShort()).putShort(16.toShort())
+            .put("data".toByteArray()).putInt(pcmSize)
+        file.writeBytes(bytes.array())
+        val draft = com.grapsee.gsai.data.attachment.AttachmentDraft(
+            id = "runtime-voice", kind = com.grapsee.gsai.data.attachment.AttachmentKind.Audio,
+            source = com.grapsee.gsai.data.attachment.AttachmentSource.Files,
+            displayName = file.name, mimeType = "audio/wav", localPath = file.absolutePath,
+            byteSize = file.length(), phase = com.grapsee.gsai.data.attachment.AttachmentPhase.Ready)
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme { com.grapsee.gsai.ui.attachment.AttachmentChipRow(listOf(draft), editable = false) }
+        }
+        try {
+            compose.onNodeWithContentDescription("Open real-voice.wav").performClick()
+            compose.waitUntil(8000) { compose.onAllNodesWithText("0:00 / 0:05").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Play audio").performClick()
+            compose.onNodeWithText("Pause audio").assertIsDisplayed()
+            compose.waitUntil(5000) { compose.onAllNodesWithText("0:01 / 0:05").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Pause audio").performClick()
+            compose.onNodeWithText("Play audio").assertIsDisplayed()
+            compose.onNodeWithText("Close preview").performClick()
+            compose.onNodeWithText("Play audio").assertDoesNotExist()
+            compose.onNodeWithContentDescription("Open real-voice.wav").assertExists()
+        } finally { file.delete(); directory.delete() }
+    }
+
     @Test fun generatedChecklistEditsDeletesAddsAndKeepsCompletionWithTheActualTask() {
         var kind by androidx.compose.runtime.mutableStateOf("checklist")
         var payload by androidx.compose.runtime.mutableStateOf("""{"title":"Actual tasks","items":[{"label":"Original source","detail":"Only supplied detail"},{"label":"Keep source"}]}""")
