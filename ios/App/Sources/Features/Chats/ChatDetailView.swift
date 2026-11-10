@@ -751,7 +751,7 @@ struct ChatDetailView: View {
         switch option {
         case "Code": return "Code attachments arrive with the repo build"
         case "Prompt template": return "Prompt templates arrive with the library build"
-        default: return "Not available yet"
+        default: return option
         }
     }
 
