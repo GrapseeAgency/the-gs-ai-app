@@ -1237,7 +1237,10 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
                             linkInteractionListener = { _ -> theme.openLink(url) }
                         )
                     ) {
-                        withStyle(citationChipStyle(theme)) { builder.append(span.number.toString()) }
+                        val host = runCatching { java.net.URI(url).host }.getOrNull()
+                            ?.removePrefix("www.")?.takeIf { it.isNotBlank() }
+                        val label = host ?: "Source"
+                        withStyle(citationChipStyle(theme)) { builder.append(" $label · ${span.number} ") }
                     }
                 }
             }
@@ -1249,13 +1252,12 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
     }
 }
 
-/** Small superscript-style chip look for a RESOLVED citation marker. */
+/** Readable inline source label; only resolved markers become links. */
 private fun citationChipStyle(theme: SpanTheme): SpanStyle = SpanStyle(
     color = theme.linkColor,
     background = theme.linkColor.copy(alpha = 0.10f),
     fontSize = theme.fontSize * 0.78f,
-    baselineShift = BaselineShift(0.18f),
-    fontWeight = FontWeight.SemiBold
+    fontWeight = FontWeight.Medium
 )
 
 private fun spansToAnnotatedString(spans: List<InlineSpan>, theme: SpanTheme, showCaret: Boolean = false): AnnotatedString =
