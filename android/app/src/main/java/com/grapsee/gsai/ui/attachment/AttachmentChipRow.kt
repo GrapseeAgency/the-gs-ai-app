@@ -10,6 +10,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -71,11 +73,11 @@ fun AttachmentChipRow(
     onRetry: (String) -> Unit = {}
 ) {
     if (drafts.isEmpty()) return
-    // §6: row height caps at ≈2 chip heights; horizontal scroll absorbs the rest.
+    // Bounded media cards; horizontal scroll keeps multiple previews out of the text field.
     LazyRow(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(max = 120.dp),
+            .heightIn(max = if (editable) 312.dp else 336.dp),
         horizontalArrangement = horizontalArrangement,
         verticalAlignment = Alignment.CenterVertically,
         contentPadding = PaddingValues(horizontal = 2.dp)
@@ -106,7 +108,8 @@ private fun AttachmentChip(
     var attempt by remember(draft.id) { mutableStateOf(0) }
     var showingMedia by remember(draft.id) { mutableStateOf(false) }
     if (showingMedia && localFile != null) {
-        MediaPreview(localFile!!, draft.kind == AttachmentKind.Video) { showingMedia = false }
+        if (draft.kind == AttachmentKind.Image) ImagePreview(localFile!!, draft.displayName) { showingMedia = false }
+        else MediaPreview(localFile!!, draft.kind == AttachmentKind.Video) { showingMedia = false }
     }
     LaunchedEffect(draft.id, draft.remoteId, draft.localPath, attempt) {
         if (localFile == null && draft.remoteId != null) {
@@ -119,7 +122,7 @@ private fun AttachmentChip(
     fun openPreview() {
         val file = localFile
         if (file == null) { attempt++; return }
-        if (draft.kind == AttachmentKind.Audio || draft.kind == AttachmentKind.Video) {
+        if (draft.kind == AttachmentKind.Audio || draft.kind == AttachmentKind.Video || draft.kind == AttachmentKind.Image) {
             showingMedia = true
             return
         }
@@ -131,69 +134,56 @@ private fun AttachmentChip(
             Toast.makeText(context, "No viewer is available for this file type", Toast.LENGTH_SHORT).show()
         }
     }
-    val visual = draft.kind == AttachmentKind.Image || draft.kind == AttachmentKind.Video
+    val visual = draft.kind != AttachmentKind.Audio
+    val edge = if (editable) 160 else 224
     Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .18f)),
-        modifier = Modifier.padding(end = 8.dp)
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = .72f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f)),
+        modifier = Modifier.padding(end = 10.dp).width(if (visual) (edge + 16).dp else 256.dp).animateContentSize()
     ) {
-        Row(
-            modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(Modifier.clickable(onClickLabel = "Preview ${draft.displayName}", onClick = ::openPreview)) {
-                ChipThumbnail(draft, localFile, if (visual) 104 else 72)
-            }
-            Column(modifier = Modifier.padding(start = 8.dp)) {
-                Text(
-                    text = draft.displayName.ifEmpty { "attachment" },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 120.dp)
-                )
-                Text(
-                    text = when (draft.phase) {
-                        AttachmentPhase.Failed -> failureLabel(draft.failure, draft.serverCode)
-                        AttachmentPhase.Ready -> if (previewFailed) "Preview unavailable" else AttachmentRules.humanSize(draft.byteSize)
-                        // Size is unknown until the staged copy exists — no invented bytes.
-                        else -> "…"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (draft.phase == AttachmentPhase.Failed) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (localFile != null || previewFailed) {
-                ChipButton(
-                    icon = if (draft.kind == AttachmentKind.Audio || draft.kind == AttachmentKind.Video) GsIcons.CirclePlay else GsIcons.ExternalLink,
-                    label = if (previewFailed) "Retry preview ${draft.displayName}" else "Open ${draft.displayName}",
-                    tint = MaterialTheme.colorScheme.primary,
-                    onClick = ::openPreview
-                )
-            }
-            if (editable) {
-                if (draft.phase == AttachmentPhase.Failed) {
-                    ChipButton(
-                        icon = GsIcons.RefreshCw,
-                        label = "Retry ${draft.displayName}",
-                        tint = MaterialTheme.colorScheme.primary,
-                        onClick = onRetry
-                    )
+        Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (visual) {
+                Box(Modifier.fillMaxWidth()) {
+                    Box(Modifier.clickable(onClickLabel = "Preview ${draft.displayName}", onClick = ::openPreview)) {
+                        ChipThumbnail(draft, localFile, edge)
+                    }
+                    if (draft.kind == AttachmentKind.Video) {
+                        Icon(GsIcons.CirclePlay, contentDescription = "Video", tint = Color.White,
+                            modifier = Modifier.align(Alignment.Center).size(36.dp))
+                    }
+                    if (editable) {
+                        Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surface.copy(alpha = .85f),
+                            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)) {
+                            ChipButton(GsIcons.X, "Remove ${draft.displayName}", MaterialTheme.colorScheme.onSurface, onRemove)
+                        }
+                    }
                 }
-                ChipButton(
-                    icon = GsIcons.X,
-                    label = "Remove ${draft.displayName}",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    onClick = onRemove
-                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!visual) ChipThumbnail(draft, localFile, 56)
+                Column(Modifier.weight(1f)) {
+                    Text(draft.displayName.ifEmpty { "Attachment" }, style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(when (draft.phase) {
+                        AttachmentPhase.Failed -> failureLabel(draft.failure, draft.serverCode)
+                        AttachmentPhase.Selected, AttachmentPhase.Preparing -> "Preparing…"
+                        AttachmentPhase.Uploading -> "Uploading…"
+                        AttachmentPhase.Ready -> if (previewFailed) "Preview unavailable · Retry" else AttachmentRules.humanSize(draft.byteSize)
+                    }, style = MaterialTheme.typography.labelSmall, maxLines = 2,
+                        color = if (draft.phase == AttachmentPhase.Failed || previewFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (localFile != null || previewFailed) {
+                    ChipButton(if (draft.kind == AttachmentKind.Audio || draft.kind == AttachmentKind.Video) GsIcons.CirclePlay else GsIcons.ExternalLink,
+                        if (previewFailed) "Retry preview ${draft.displayName}" else "Open ${draft.displayName}",
+                        MaterialTheme.colorScheme.primary, ::openPreview)
+                }
+            }
+            if (editable && (!visual || draft.phase == AttachmentPhase.Failed)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    if (draft.phase == AttachmentPhase.Failed) ChipButton(GsIcons.RefreshCw, "Retry ${draft.displayName}", MaterialTheme.colorScheme.primary, onRetry)
+                    if (!visual) ChipButton(GsIcons.X, "Remove ${draft.displayName}", MaterialTheme.colorScheme.onSurfaceVariant, onRemove)
+                }
             }
         }
     }

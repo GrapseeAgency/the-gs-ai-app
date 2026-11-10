@@ -1,5 +1,6 @@
 package com.grapsee.gsai.ui.attachment
 
+import androidx.compose.ui.graphics.asImageBitmap
 import android.media.MediaPlayer
 import android.widget.MediaController
 import android.widget.VideoView
@@ -43,7 +44,10 @@ private fun NativeVideoPreview(file: File) {
     DisposableEffect(view, lifecycle) {
         view.setMediaController(MediaController(context).apply { setAnchorView(view) })
         view.setOnErrorListener { _, _, _ -> failed = true; true }
-        view.setOnPreparedListener { view.start() }
+        view.setOnPreparedListener {
+            // Preparation may finish after Home/background. Never start hidden playback.
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) view.start()
+        }
         view.setVideoPath(file.absolutePath)
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) view.pause() }
         lifecycle.addObserver(observer)
@@ -105,4 +109,42 @@ private fun NativeAudioPreview(file: File) {
 private fun mediaTime(milliseconds: Int): String {
     val seconds = milliseconds.coerceAtLeast(0) / 1000
     return "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
+}
+
+/** A bounded, off-main-thread photo viewer; never launches an external app. */
+@Composable
+internal fun ImagePreview(file: File, title: String, onDismiss: () -> Unit) {
+    var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var loaded by remember(file) { mutableStateOf(false) }
+    LaunchedEffect(file) {
+        bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeFile(file.absolutePath, bounds)
+                var sample = 1
+                while (bounds.outWidth / sample > 1536 || bounds.outHeight / sample > 1536) sample *= 2
+                android.graphics.BitmapFactory.decodeFile(file.absolutePath,
+                    android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+            }.getOrNull()
+        }
+        loaded = true
+    }
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(24.dp), tonalElevation = 4.dp) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                val image = bitmap
+                when {
+                    image != null -> androidx.compose.foundation.Image(
+                        bitmap = image.asImageBitmap(), contentDescription = title,
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 440.dp))
+                    !loaded -> LinearProgressIndicator(Modifier.fillMaxWidth())
+                    else -> Text("This device could not decode the image.", color = MaterialTheme.colorScheme.error)
+                }
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Close preview") }
+            }
+        }
+    }
 }

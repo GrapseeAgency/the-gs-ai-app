@@ -1168,12 +1168,12 @@ private func appendCitations(
         if let ordinal = Int(ns.substring(with: match.range(at: 1))),
            let urlString = theme.citations[ordinal],
            let url = URL(string: urlString) {
-            // Superscript chip: the bare number, shrunk, raised, tinted —
-            // a real Text link (system open path, same as every inline link).
-            var chip = AttributedString("\(ordinal)")
+            // Domain and ordinal identify the real source without a detached icon tile.
+            let host = url.host?.replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression)
+            let label = host.flatMap { $0.isEmpty ? nil : $0 } ?? "Source"
+            var chip = AttributedString(" \(label) · \(ordinal) ")
             chip.link = url
-            chip.font = .system(size: theme.baseSize * 0.72, weight: .semibold)
-            chip.baselineOffset = theme.baseSize * 0.3
+            chip.font = .system(size: theme.baseSize * 0.78, weight: .medium)
             chip.foregroundColor = theme.linkColor
             chip.backgroundColor = theme.monoBackground
             result.append(chip)

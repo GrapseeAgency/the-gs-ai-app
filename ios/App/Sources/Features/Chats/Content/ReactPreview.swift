@@ -33,6 +33,18 @@ enum ReactPreviewRuntimeIOS {
     }
 }
 
+/// Reveal an attached, measured canvas before waiting for JavaScript to finish.
+/// Offscreen WebKit work can be throttled; didFinish alone is too late to reveal it.
+private final class ReactCanvasWebView: WKWebView {
+    var firstLayout: (() -> Void)?
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard window != nil, bounds.width > 0, bounds.height > 0, let firstLayout else { return }
+        self.firstLayout = nil
+        DispatchQueue.main.async(execute: firstLayout)
+    }
+}
+
 /// Dedicated web origin per response/snippet. Genuine WebKit localStorage is
 /// persistent, with no cookie/DOM/native-bridge access to the application.
 struct ReactPreviewIOS: UIViewRepresentable {
@@ -42,7 +54,10 @@ struct ReactPreviewIOS: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
-        let view = WKWebView(frame: .zero, configuration: configuration)
+        let view = ReactCanvasWebView(frame: .zero, configuration: configuration)
+        view.firstLayout = { [weak coordinator = context.coordinator, weak view] in
+            if let view { coordinator?.revealCanvas(view) }
+        }
         view.navigationDelegate = context.coordinator
         context.coordinator.webView = view
         view.scrollView.keyboardDismissMode = .interactive
@@ -130,6 +145,9 @@ struct ReactPreviewIOS: UIViewRepresentable {
             }
         }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            revealCanvas(webView)
+        }
+        func revealCanvas(_ webView: WKWebView) {
             // Run can be tapped while the new 420pt canvas is below the chat
             // viewport. Offscreen WebKit content is throttled and its controls
             // are not reliably exposed to accessibility or native hit testing.
@@ -151,10 +169,14 @@ struct ReactPreviewIOS: UIViewRepresentable {
         var origin: URL?
         var initialNavigation = true
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            let initial = initialNavigation && action.navigationType == .other && action.targetFrame?.isMainFrame == true
-            initialNavigation = false
-            let expected = action.request.url == origin || action.request.url?.scheme == "about"
-            decisionHandler(initial && expected ? .allow : .cancel)
+            let expected = action.request.url == origin || action.request.url?.absoluteString == "about:blank"
+            let initial = initialNavigation && action.navigationType == .other
+                && action.targetFrame?.isMainFrame != false && expected
+            // Only consume the initial navigation allowance when that exact
+            // document is accepted. An unrelated canceled action must not leave
+            // the real first document permanently blank. Later links stay blocked.
+            if initial { initialNavigation = false }
+            decisionHandler(initial ? .allow : .cancel)
         }
     }
 }

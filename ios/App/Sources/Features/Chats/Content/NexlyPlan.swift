@@ -914,8 +914,47 @@ struct NexlyThinkingCard: View {
         hasSearch ? phase == .search : phase != .done
     }
 
+    private var liveTitle: String {
+        switch phase {
+        case .reasoning: return "Reasoning"
+        case .search: return "Sources received"
+        case .answer: return "Writing answer"
+        default: return "Waiting for response"
+        }
+    }
+
+    private var liveDetail: String {
+        switch phase {
+        case .reasoning: return reasoningHint.flatMap { $0.isEmpty ? nil : $0 } ?? "Reasoning received"
+        case .search: return "\(searchSources) source\(searchSources == 1 ? "" : "s") available"
+        case .answer: return "Showing the response as it arrives"
+        default: return "Request in progress · waiting for content"
+        }
+    }
+
+    private var effortLabel: String? {
+        switch effort?.lowercased() {
+        case "low": return "Low effort"
+        case "medium": return "Medium effort"
+        case "high": return "High effort"
+        case "xhigh": return "Extra-high effort"
+        default: return nil
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if phase != .done {
+                HStack(spacing: 10) {
+                    ProgressView().controlSize(.small).tint(NexlyInk.label)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text([liveTitle, effortLabel].compactMap { $0 }.joined(separator: " · "))
+                            .font(.system(size: 12.5, weight: .medium)).foregroundStyle(NexlyInk.label)
+                        Text(liveDetail).font(.system(size: 12)).foregroundStyle(NexlyInk.meta).lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                }.padding(10)
+            } else {
             if showStages {
                 row(icon: "sparkles", tone: .peach,
                     title: "Thinking", subtitle: thinkingSubtitle,
@@ -928,6 +967,7 @@ struct NexlyThinkingCard: View {
                 tone: hasSearch ? .blue : .peach,
                 title: finalTitle, subtitle: finalSubtitle,
                 active: finalActive)
+            }
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 2)

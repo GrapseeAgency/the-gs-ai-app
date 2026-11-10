@@ -110,6 +110,65 @@ class PlatformRuntimeTest {
         } finally { file.delete(); directory.delete() }
     }
 
+    @Test fun photoCardOpensRealImageInAppAndClosesWithoutAnExternalViewer() {
+        val file = java.io.File(compose.activity.cacheDir, "native-photo.png")
+        val image = android.graphics.Bitmap.createBitmap(2400, 1600, android.graphics.Bitmap.Config.ARGB_8888)
+        image.eraseColor(android.graphics.Color.BLUE)
+        file.outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        image.recycle()
+        val draft = com.grapsee.gsai.data.attachment.AttachmentDraft(
+            id = "native-photo", kind = com.grapsee.gsai.data.attachment.AttachmentKind.Image,
+            source = com.grapsee.gsai.data.attachment.AttachmentSource.Files,
+            displayName = file.name, mimeType = "image/png", localPath = file.absolutePath,
+            byteSize = file.length(), phase = com.grapsee.gsai.data.attachment.AttachmentPhase.Ready)
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme { com.grapsee.gsai.ui.attachment.AttachmentChipRow(listOf(draft), editable = false) }
+        }
+        try {
+            compose.onNodeWithContentDescription("Open native-photo.png").performClick()
+            compose.waitUntil(8000) {
+                compose.onAllNodesWithContentDescription("native-photo.png").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithContentDescription("native-photo.png").assertIsDisplayed()
+            compose.onNodeWithText("Close preview").performClick()
+            compose.onNodeWithText("Close preview").assertDoesNotExist()
+            compose.onNodeWithContentDescription("Open native-photo.png").assertIsDisplayed()
+        } finally { file.delete() }
+    }
+
+    @Test fun sourceCountExpandsRealCardsAndPreservesTheActualSourceURL() {
+        var opened: String? = null
+        val source = com.grapsee.gsai.data.chat.SourceCard(1, "Actual source title", "https://example.org/article", "example.org")
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme { com.grapsee.gsai.ui.chat.SourceCardsRow(listOf(source)) { opened = it } }
+        }
+        compose.onNodeWithText("1 source").assertIsDisplayed()
+        compose.onNodeWithText("Actual source title").assertDoesNotExist()
+        compose.onNodeWithText("1 source").performClick()
+        compose.onNodeWithText("Actual source title").performClick()
+        assertEquals(source.url, opened)
+        compose.onNodeWithText("1 source").performClick()
+        compose.onNodeWithText("Actual source title").assertDoesNotExist()
+    }
+
+    @Test fun liveActivityShowsActualPhaseAndEffortWithoutInventingOtherSteps() {
+        var phase by androidx.compose.runtime.mutableStateOf(com.grapsee.gsai.ui.chat.NexlyThinkingPhase.THINKING)
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                com.grapsee.gsai.ui.chat.ReferenceThinkingCard(phase = phase, effort = "high", reasoningHint = "Public reasoning from the stream")
+            }
+        }
+        compose.onNodeWithText("Waiting for response · High effort").assertIsDisplayed()
+        compose.onNodeWithText("Reasoning").assertDoesNotExist()
+        compose.onNodeWithText("Answer").assertDoesNotExist()
+        compose.runOnIdle { phase = com.grapsee.gsai.ui.chat.NexlyThinkingPhase.REASONING }
+        compose.onNodeWithText("Reasoning · High effort").assertIsDisplayed()
+        compose.onNodeWithText("Public reasoning from the stream").assertIsDisplayed()
+        compose.runOnIdle { phase = com.grapsee.gsai.ui.chat.NexlyThinkingPhase.ANSWER }
+        compose.onNodeWithText("Writing answer · High effort").assertIsDisplayed()
+        compose.onNodeWithText("Public reasoning from the stream").assertDoesNotExist()
+    }
+
     @Test fun generatedChecklistEditsDeletesAddsAndKeepsCompletionWithTheActualTask() {
         var kind by androidx.compose.runtime.mutableStateOf("checklist")
         var payload by androidx.compose.runtime.mutableStateOf("""{"title":"Actual tasks","items":[{"label":"Original source","detail":"Only supplied detail"},{"label":"Keep source"}]}""")

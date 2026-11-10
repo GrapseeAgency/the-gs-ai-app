@@ -172,13 +172,13 @@ struct AttachmentSheetView: View {
         PhotosPicker(
             selection: $pickerItems,
             maxSelectionCount: max(1, remainingSlots),
-            matching: .images
+            matching: .any(of: [.images, .videos])
         ) {
-            row(symbol: "photo", title: "Photos")
+            row(symbol: "photo", title: "Photos & videos")
         }
         .buttonStyle(.plain)
         .disabled(atCapacity || loadingGallery)
-        .accessibilityLabel(atCapacity ? "Photos, six attachments per message" : "Add from Photos")
+        .accessibilityLabel(atCapacity ? "Photos and videos, six attachments per message" : "Add photos or videos")
     }
 
     private var cameraRow: some View {
@@ -272,17 +272,29 @@ struct AttachmentSheetView: View {
     // MARK: Gallery loading
 
     /// Loads each picked item's bytes off the sheet, then hands them to the
-    /// store. MIME resolves from the item's content types; a load failure is
-    /// skipped quietly — the user simply picked nothing yet, no fake error.
+    /// store. Preserve the actual supported MIME; never relabel a video as JPEG.
+    /// Only cancellation is silent; an unreadable selection reports a real failure.
     private func loadGalleryItems(_ items: [PhotosPickerItem]) {
         loadingGallery = true
         Task {
             for item in items {
-                let mime = item.supportedContentTypes.first?.preferredMIMEType?.lowercased()
-                    ?? "image/jpeg"
-                let resolved = AttachmentRules.allowedMIMETypes.contains(mime) ? mime : "image/jpeg"
-                if let data = try? await item.loadTransferable(type: Data.self), !data.isEmpty {
-                    onImageData(data, resolved, .gallery)
+                let types = item.supportedContentTypes.compactMap { $0.preferredMIMEType?.lowercased() }
+                let mime = types.first(where: { AttachmentRules.allowedMIMETypes.contains($0) })
+                    ?? types.first ?? "application/octet-stream"
+                guard AttachmentRules.allowedMIMETypes.contains(mime) else {
+                    onUnavailable("This photo or video format is not supported.")
+                    continue
+                }
+                do {
+                    guard let data = try await item.loadTransferable(type: Data.self), !data.isEmpty else {
+                        onUnavailable("The selected photo or video could not be loaded.")
+                        continue
+                    }
+                    onImageData(data, mime, .gallery)
+                } catch is CancellationError {
+                    break
+                } catch {
+                    onUnavailable("The selected photo or video could not be loaded.")
                 }
             }
             loadingGallery = false
