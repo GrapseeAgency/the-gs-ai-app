@@ -559,6 +559,9 @@ class ChatRepository(
             }
             if (!hasReadyAttachments) {
                 val localId = runCatching {
+                    // This is the real native inference hand-off; the UI can
+                    // distinguish it from the earlier transport/model wait.
+                    onStatus("generating")
                     streamLocalFirst(content, conversationId, onDelta)
                 }.getOrNull()
                 if (localId != null) {
