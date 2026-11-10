@@ -86,7 +86,7 @@ char* gs_mobile_chat(gs_mobile_ctx_t* ctx, const char* prompt, int32_t max_token
 /* Same chat template and return contract as gs_mobile_chat, but streams real
  * decoded token text to `on_token` as it is generated. A nonzero callback
  * result stops at a token boundary and returns only the text already delivered.
- * Pass NULL to_token to obtain the ordinary full-completion behaviour. */
+ * Pass NULL for on_token to obtain the ordinary full-completion behaviour. */
 char* gs_mobile_chat_stream(gs_mobile_ctx_t* ctx, const char* prompt,
                             int32_t max_tokens, float temperature,
                             gs_token_callback_t on_token, void* user_data);
