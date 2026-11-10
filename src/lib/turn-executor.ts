@@ -1331,7 +1331,12 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
               : 'Describe this image.'
             : ''
 
+    const media = prep.claimedAttachments.filter(a => a.kind === 'audio' || a.kind === 'video')
+    const mediaNotice = media.length > 0
+      ? `ATTACHED MEDIA (metadata only): ${JSON.stringify(media)}. These files can be previewed and played in the app, but their audio/video contents have NOT been transcribed, watched or analyzed. Do not infer their contents from filenames; request a transcript or relevant still images when needed.`
+      : null
     const evidenceBlocks = [
+      mediaNotice,
       crystallization.block,
       docContext.block,
       historyBlock?.block ?? null,
