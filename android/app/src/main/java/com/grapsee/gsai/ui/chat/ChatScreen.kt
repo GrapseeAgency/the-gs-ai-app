@@ -2525,7 +2525,7 @@ internal fun ReferenceThinkingCard(
             NexlyThinkingPhase.REASONING -> reasoningHint?.takeIf { it.isNotBlank() } ?: "Reasoning received"
             NexlyThinkingPhase.SEARCH -> "$searchSources source${if (searchSources == 1) "" else "s"} available"
             NexlyThinkingPhase.ANSWER -> "Showing the response as it arrives"
-            else -> "Connected · awaiting response content"
+            else -> "Request in progress · waiting for content"
         }
         val effortLabel = when (effort?.lowercase()) {
             "low" -> "Low effort"
