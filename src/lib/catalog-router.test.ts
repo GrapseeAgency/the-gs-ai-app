@@ -145,4 +145,12 @@ describe('catalog fast router', () => {
     }
   })
 
+  test('explicit thinking never uses the mode-blind generic fast path', () => {
+    const request = {route:'TEXT_SIMPLE',hasImages:false,hasDocuments:false,requiresReasoning:true,
+      cache:cache({groq:[model('groq','free')]}),env:{GROQ_API_KEY:'test'} as unknown as NodeJS.ProcessEnv}
+    expect(selectCatalogFastRoutes(request)).toEqual([])
+    expect(hasEligibleDirectFreeCatalogRoute(request)).toBe(false)
+    expect(selectCatalogFastRoutes({...request,requiresReasoning:false})).toHaveLength(1)
+  })
+
 })
