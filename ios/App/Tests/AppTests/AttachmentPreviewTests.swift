@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import SwiftUI
 @testable import GSApp
 
 /// Actual file decoders, not icon placeholders or simulated preview payloads.
@@ -31,6 +32,11 @@ final class AttachmentPreviewTests: XCTestCase {
             XCTAssertGreaterThan(preview.size.width, 0)
             XCTAssertGreaterThan(preview.size.height, 0)
             XCTAssertLessThanOrEqual(max(preview.size.width, preview.size.height), 512)
+            let mime = try XCTUnwrap(AttachmentRules.mimeForFileName(file.lastPathComponent))
+            let draft = AttachmentDraft(id: file.lastPathComponent, kind: try XCTUnwrap(AttachmentRules.kindForMime(mime)),
+                source: .files, displayName: file.lastPathComponent, mimeType: mime, phase: .ready,
+                localPath: file.path, byteSize: try Data(contentsOf: file).count)
+            try await captureCard(draft)
         }
     }
 
@@ -40,4 +46,29 @@ final class AttachmentPreviewTests: XCTestCase {
         await loader.loadIfNeeded()
         XCTAssertNil(loader.image)
     }
+    /// Capture the actual composer card after the real decoder runs, not a mockup.
+    private func captureCard(_ draft: AttachmentDraft) async throws {
+        let size = CGSize(width: 320, height: 340)
+        let host = UIHostingController(rootView: AttachmentChipRow(drafts: [draft], onRetry: { _ in }, onRemove: { _ in }))
+        host.view.frame = CGRect(origin: .zero, size: size)
+        let previous = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }.first { $0.isKeyWindow }
+        let window = UIWindow(frame: host.view.frame)
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        try await Task.sleep(nanoseconds: 350_000_000)
+        host.view.layoutIfNeeded()
+        var drew = false
+        let image = UIGraphicsImageRenderer(size: size).image { _ in
+            drew = host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+        }
+        XCTAssertTrue(drew, "Actual attachment card did not composite")
+        XCTAssertGreaterThan(try XCTUnwrap(image.pngData()).count, 2000)
+        let capture = XCTAttachment(image: image)
+        capture.name = "native-attachment-card-\(draft.displayName)"
+        capture.lifetime = .keepAlways
+        add(capture)
+    }
+
 }
