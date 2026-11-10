@@ -1227,7 +1227,12 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
                     // long-press path (GsLinks), never a plain tap.
                     linkInteractionListener = { _ -> theme.openLink(span.url) }
                 )
-            ) { builder.append(NexlyIcons.cleanPlainText(span.text).ifEmpty { "Link" }) }
+            ) {
+                // Preserve inline custom glyphs in link labels. cleanPlainText
+                // is for metadata, not rich runs, and would erase their icons.
+                if (span.text.isBlank()) builder.append("Link")
+                else appendNexlyText(builder, span.text, theme)
+            }
             is InlineSpan.CitationSpan -> {
                 // PHASE 8.1: [N] resolves against the turn's real sources → a
                 // small superscript-style tappable chip that opens the source
