@@ -256,7 +256,7 @@ jobs:
                   # producer. Give its run time to appear before considering a
                   # compatible prior artifact. When the Swift bridge needs the
                   # new stream API, never fall back to another branch's binary.
-                  if event == 'pull_request' and elapsed < fallback_after:
+                  if event in ('pull_request', 'push') and elapsed < fallback_after:
                       pending = True
                   else:
                       candidates = list(branch_runs)
