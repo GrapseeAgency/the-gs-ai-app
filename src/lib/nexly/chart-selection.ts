@@ -1,3 +1,4 @@
+import { presentationPreference } from '../widgets/readable'
 import { CHART_TYPES } from '../widgets/catalog'
 
 export type ChartType = (typeof CHART_TYPES)[number]
@@ -5,7 +6,7 @@ export type ChartType = (typeof CHART_TYPES)[number]
 /** Preferences constrain presentation, never supply observations or pick a random skin. */
 export function chartPreference(prompt: string): { requested: boolean; suppressed: boolean; type: ChartType | null } {
   const text = prompt.toLowerCase()
-  const suppressed = /\b(?:no|without|avoid|skip)\s+(?:any\s+)?(?:charts?|graphs?|plots?|visuali[sz]ations?)\b|\b(?:don['’]t|do not|never)\s+(?:add|use|include|draw|render|show|make)?\s*(?:a\s+)?(?:charts?|graphs?|plots?)\b|\b(?:plain text|text only|prose only|only prose|just text|only (?:a )?table)\b/.test(text)
+  const suppressed = presentationPreference(prompt) !== 'automatic'
   const requested = !suppressed && /\b(?:charts?|graphs?|plots?|visuali[sz]e|visuali[sz]ation|sankey|histogram|scatterplot|boxplot|heatmap|treemap|wordcloud)\b/.test(text)
   if (!requested) return { requested, suppressed, type: null }
   const aliases: Array<[RegExp, ChartType]> = [
