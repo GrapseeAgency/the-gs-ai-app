@@ -52,6 +52,8 @@ final class AttachmentLogicTests: XCTestCase {
         XCTAssertEqual(AttachmentRules.mimeForFileName("voice.m4a"), "audio/mp4")
         XCTAssertEqual(AttachmentRules.mimeForFileName("clip.MOV"), "video/quicktime")
         XCTAssertEqual(AttachmentRules.preferredExtension(forMime: "video/mp4"), "mp4")
+        XCTAssertEqual(AttachmentRules.canonicalMIME("audio/x-m4a"), "audio/mp4")
+        XCTAssertEqual(AttachmentRules.canonicalMIME("audio/x-wav"), "audio/wav")
         XCTAssertNil(AttachmentTransitions.validate(byteSize: 100, mimeType: "audio/mpeg"))
         XCTAssertNil(AttachmentRules.mimeForFileName("archive.zip"))
         XCTAssertNil(AttachmentRules.mimeForFileName("noextension"))
