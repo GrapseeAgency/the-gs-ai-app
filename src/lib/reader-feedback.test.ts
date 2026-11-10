@@ -12,6 +12,9 @@ test('unrated immediately previous answers do not reuse an older rating', () => 
   expect(query).toContain("role: 'assistant'")
   expect(query).toContain("orderBy: { createdAt: 'desc' }")
   expect(executor).toContain('readerFeedbackContext(lastVerdict)')
+  expect(executor).not.toContain('If a widget needs dates, use these dates.')
+  expect(executor).not.toContain('Follow any rendering, icon')
+  expect(executor).toContain('Current local clock: ${clock.localIso}')
 })
 
 test('ratings do not invent what was wrong or dictate the next answer format', () => {
