@@ -551,11 +551,34 @@ jobs:
 
       - name: Preserve native source archive byte evidence
         if: always()
+        id: source-archive-upload-primary
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ios-source-archive-${{ github.run_id }}
           path: ios/build/source-archive
           if-no-files-found: error
+
+      - name: Retry native source archive evidence upload after transient failure
+        if: always() && steps.source-archive-upload-primary.outcome == 'failure'
+        id: source-archive-upload-retry
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-source-archive-${{ github.run_id }}
+          path: ios/build/source-archive
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Require native source archive byte evidence to persist
+        if: always()
+        env:
+          PRIMARY_OUTCOME: ${{ steps.source-archive-upload-primary.outcome }}
+          RETRY_OUTCOME: ${{ steps.source-archive-upload-retry.outcome }}
+        run: |
+          if [[ "$PRIMARY_OUTCOME" != "success" && "$RETRY_OUTCOME" != "success" ]]; then
+            echo "::error::Native source archive evidence upload failed on both attempts (primary=$PRIMARY_OUTCOME, retry=$RETRY_OUTCOME)"
+            exit 1
+          fi
 
       - name: Select actual complete-suite diagnostics, not stale early output
         if: always()
