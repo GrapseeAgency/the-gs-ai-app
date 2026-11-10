@@ -310,6 +310,7 @@ jobs:
             -only-testing:AppTests/CalcHonestyTests/testNativeJSONDelimiterRecoveryPreservesActualSourceBytesAndQuotedPunctuation \
             -only-testing:AppTests/ChatResponseHonestyTests \
             -only-testing:AppTests/AttachmentLogicTests \
+            -only-testing:AppTests/AttachmentPreviewTests \
             -only-testing:AppTests/CalculatorSourceHonestyTests \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch \
             -resultBundlePath ios/build/GSApp-react-keyboard.xcresult \
@@ -414,6 +415,8 @@ jobs:
               ('ChatResponseHonestyTests', 'testStoppedRevealCannotFinalizeTheImmediatelyFollowingTurn'),
               ('AttachmentLogicTests', 'testAllowlistMatchesBackend'),
               ('AttachmentLogicTests', 'testKindForMime'),
+              ('AttachmentPreviewTests', 'testPhotoPDFAndTextProduceBoundedPreviewsFromActualBytes'),
+              ('AttachmentPreviewTests', 'testUnreadableFileCannotBecomeInventedImagePreview'),
               ('PlatformRuntimeUITests', 'testConversationActionsTapOpensRealOptionsWithoutLeavingChat'),
               ('CalcHonestyTests', 'testActualMessagePreviewIdentitySurvivesRehydrationWithoutInventingServerIDs'),
               ('CalcHonestyTests', 'testActualSQLiteHistoryAndOlderPagesKeepDurablePreviewIdentity'),
