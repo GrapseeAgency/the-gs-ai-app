@@ -540,13 +540,26 @@ private fun msLabel(value: Long): String = "$value ms"
 @Composable
 fun SourceCardsRow(sources: List<SourceCard>, onOpenUrl: (String) -> Unit) {
     if (sources.isEmpty()) return
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-    ) {
-        sources.forEach { card -> SourceCardView(card, onOpenUrl) }
+    var expanded by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier.clickable(onClickLabel = if (expanded) "Hide sources" else "Show sources") { expanded = !expanded }) {
+            Row(Modifier.padding(horizontal = 12.dp).height(44.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                com.grapsee.gsai.ui.chat.content.NexlyGlyph("world-search", 16.dp, MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${sources.size} source${if (sources.size == 1) "" else "s"}", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(if (expanded) GsIcons.ChevronUp else GsIcons.ChevronDown, contentDescription = if (expanded) "Expanded" else "Collapsed",
+                    modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (expanded) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                sources.sortedBy { it.ordinal }.forEach { card -> SourceCardView(card, onOpenUrl) }
+            }
+        }
     }
 }
 
