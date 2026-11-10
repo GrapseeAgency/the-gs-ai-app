@@ -194,7 +194,7 @@ struct AttachmentChipRow: View {
             }
             .padding(.vertical, 2)
         }
-        .frame(maxHeight: 156)
+        .frame(maxHeight: 268)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Attachments")
     }
@@ -209,31 +209,56 @@ struct AttachmentChip: View {
     let onRemove: () -> Void
     @State private var previewURL: URL?
 
+    private var visual: Bool { draft.kind == .image || draft.kind == .video }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        HStack(spacing: Aero.Spacing.s) {
-            Button { previewURL = draft.localURL } label: {
-                AttachmentThumb(kind: draft.kind, localURL: draft.localURL,
-                    size: draft.kind == .image || draft.kind == .video ? 104 : 76)
+        VStack(alignment: .leading, spacing: 8) {
+            if visual {
+                Button { previewURL = draft.localURL } label: {
+                    AttachmentThumb(kind: draft.kind, localURL: draft.localURL, size: 160)
+                        .overlay {
+                            if draft.kind == .video {
+                                Image(systemName: "play.circle.fill").font(.system(size: 32)).foregroundStyle(.white)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .disabled(draft.localURL == nil)
+                .accessibilityLabel("Preview \(draft.displayName)")
+                .overlay(alignment: .topTrailing) {
+                    Button(action: onRemove) {
+                        Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
+                            .frame(width: 44, height: 44)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Remove attachment \(draft.displayName)")
+                    .padding(4)
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(draft.localURL == nil)
-            .accessibilityLabel("Preview \(draft.displayName)")
-            .quickLookPreview($previewURL)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(draft.displayName)
-                    .font(Aero.label())
-                    .foregroundStyle(Aero.text)
-                    .lineLimit(1)
-                    .frame(maxWidth: 120, alignment: .leading)
-                phaseLine
+            HStack(spacing: 10) {
+                if !visual {
+                    Button { previewURL = draft.localURL } label: {
+                        AttachmentThumb(kind: draft.kind, localURL: draft.localURL, size: 64)
+                    }.buttonStyle(.plain).disabled(draft.localURL == nil)
+                        .accessibilityLabel("Preview \(draft.displayName)")
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(draft.displayName).font(Aero.label()).foregroundStyle(Aero.text)
+                        .lineLimit(2).multilineTextAlignment(.leading)
+                    phaseLine
+                }
+                if !visual { Spacer(minLength: 0) }
             }
-
-            actions
+            if !visual || draft.phase == .failed { actions.frame(maxWidth: .infinity, alignment: .trailing) }
         }
-        .padding(6)
-        .background(RoundedRectangle(cornerRadius: Aero.Radius.md).fill(Aero.elevatedSurface))
-        .overlay(RoundedRectangle(cornerRadius: Aero.Radius.md).stroke(Aero.outline, lineWidth: 1))
+        .frame(width: visual ? 160 : 224, alignment: .leading)
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 20).fill(Aero.elevatedSurface.opacity(0.72)))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Aero.outline, lineWidth: 1))
+        .quickLookPreview($previewURL)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: draft.phase)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilitySummary)
     }
