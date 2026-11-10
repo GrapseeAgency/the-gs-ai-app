@@ -1051,8 +1051,9 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    /// `status` payloads: `searching` | `working` | `composing` | `search_failed`.
-    /// The trace's `composing` line also comes from here — it is a real
+    /// `status` payloads include search activity plus real synthesis states
+    /// (`generating` / `checking`). The trace's `composing` line also comes from
+    /// here — it is a real
     /// synthesis signal, not a guess. Phases only move forward; a late
     /// status event never regresses the orb backwards.
     private func applyStatus(_ payload: String) {
