@@ -1499,13 +1499,28 @@ jobs:
           # `generic/platform=iOS` is the DEVICE platform; `generic/platform=iOS
           # Simulator` is the other one, and mixing them up produces a green
           # build of the wrong thing -- which is what this step exists to avoid.
-          xcodebuild build -project GSApp.xcodeproj -scheme GSApp \
+          if xcodebuild build -project GSApp.xcodeproj -scheme GSApp \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
-            2>&1 | tee build-device.log
+            2>&1 | tee build-device.log; then
+            :
+          else
+            BUILD_RC=$?
+            # The failed device-only link was otherwise invisible in Actions:
+            # the log was written to build-device.log, but the upload step only
+            # included simulator logs. Emit the concise compiler/linker errors
+            # now, and preserve the full device log below for the next diagnosis.
+            { grep -E 'error:|Undefined symbols|duplicate symbol|ld:' build-device.log || true; } \
+              | sed -n '1,35p' \
+              | while IFS= read -r line; do
+                  echo "::error::Device build: $line"
+                done
+            echo "::error::Device xcodebuild failed (exit $BUILD_RC); full log: ios/build-device.log"
+            exit "$BUILD_RC"
+          fi
 
           echo "=== the device product ==="
           # `sed -n '1,3p'`, never `head`: see the note in the simulator step
@@ -2737,6 +2752,7 @@ jobs:
         with:
           name: ios-simulator-logs
           path: |
+            ios/build-device.log
             ios/build-simulator.log
             ios/test-simulator.log
           if-no-files-found: warn
