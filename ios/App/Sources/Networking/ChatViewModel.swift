@@ -19,8 +19,14 @@ import os.log
  */
 final class StreamAccumulator: @unchecked Sendable {
 
+    struct Snapshot {
+        let text: String
+        let resetVersion: UInt64
+    }
+
     private let lock = NSLock()
     private var text = ""
+    private var resetVersion: UInt64 = 0
 
     func append(_ delta: String) {
         lock.lock()
@@ -31,13 +37,29 @@ final class StreamAccumulator: @unchecked Sendable {
     func reset() {
         lock.lock()
         text = ""
+        resetVersion &+= 1
         lock.unlock()
     }
 
     func snapshot() -> String {
+        snapshotWithVersion().text
+    }
+
+    func snapshotWithVersion() -> Snapshot {
         lock.lock()
         defer { lock.unlock() }
-        return text
+        return Snapshot(text: text, resetVersion: resetVersion)
+    }
+
+    /// Serialize a UI publish against server draft resets. A stale display
+    /// snapshot cannot race past a reset and restore text the server rejected.
+    @MainActor
+    func applyIfCurrent(_ version: UInt64, _ body: () -> Void) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard resetVersion == version else { return false }
+        body()
+        return true
     }
 
     var isEmpty: Bool { snapshot().isEmpty }
@@ -863,11 +885,16 @@ final class ChatViewModel: ObservableObject {
                         // stream, not in a separately scheduled actor task.
                         completedMessage = message
                     },
-                    onReset: { [buffer = self.streamBuffer] in
-                        // The server discarded a provisional draft after a
-                        // real guard failure. Clearing the shared accumulator
-                        // makes the next display-cadence flush replace it.
+                    onReset: { [weak self, buffer = self.streamBuffer] in
+                        // Invalidate any display snapshot already in flight,
+                        // then flush on the main actor. If retry bytes have
+                        // arrived by then, that one valid replacement is shown.
                         buffer.reset()
+                        Task { @MainActor [weak self] in
+                            guard let self, self.isStreaming,
+                                  self.messages.last?.id == responseID else { return }
+                            self.flushStreamingText()
+                        }
                     },
                     onEvent: { [sink = self.streamSink] event in
                         // The server titles a chat on its first turn and says so
@@ -965,29 +992,35 @@ final class ChatViewModel: ObservableObject {
 
     private func flushStreamingText(drainAll: Bool = false) {
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
-        let text = streamBuffer.snapshot()
-        guard messages[index].content != text else { return }
-        if !firstCharLogged, !text.isEmpty {
-            firstCharLogged = true
-            // The first answer paint freezes the measured thinking span.
-            if reasoningStart != nil, reasoningEnd == nil { reasoningEnd = Date() }
-            if let tappedAt = sendTappedAt {
-                let ms = Int(Date().timeIntervalSince(tappedAt) * 1000)
-                // OSLog has no `.app` member (raw: iOS run 38470835743, "type
-                // 'OSLog' has no member 'app'"). The GS-PERF prefix keeps the
-                // line greppable from the process' default log handle.
-                os_log("GS-PERF tapToFirstVisibleCharMs=%d chars=%d", log: .default, type: .info, ms, text.count)
+        let snapshot = streamBuffer.snapshotWithVersion()
+        let text = snapshot.text
+        var didPublish = false
+        var shouldLogFirstCharacter = false
+        let current = streamBuffer.applyIfCurrent(snapshot.resetVersion) {
+            guard messages[index].content != text else { return }
+            if !firstCharLogged, !text.isEmpty {
+                firstCharLogged = true
+                shouldLogFirstCharacter = true
+                // The first answer paint freezes the measured thinking span.
+                if reasoningStart != nil, reasoningEnd == nil { reasoningEnd = Date() }
             }
+            let visible = messages[index].content
+            let remaining = max(0, text.count - visible.count)
+            // Normal provider tokens paint immediately; bursts catch up adaptively.
+            // String prefixes are grapheme-safe (including custom-icon tokens' text).
+            if !drainAll, text.hasPrefix(visible), remaining > 32 {
+                messages[index].content = String(text.prefix(visible.count + max(32, remaining / 12)))
+            } else {
+                messages[index].content = text
+            }
+            didPublish = true
         }
-        let visible = messages[index].content
-        let remaining = max(0, text.count - visible.count)
-        // Normal provider tokens paint immediately; bursts catch up adaptively.
-        // String prefixes are grapheme-safe (including custom-icon tokens' text).
-        if !drainAll, text.hasPrefix(visible), remaining > 32 {
-            messages[index].content = String(text.prefix(visible.count + max(32, remaining / 12)))
-        } else {
-            messages[index].content = text
-        }
+        guard current, didPublish, shouldLogFirstCharacter, let tappedAt = sendTappedAt else { return }
+        let ms = Int(Date().timeIntervalSince(tappedAt) * 1000)
+        // OSLog has no `.app` member (raw: iOS run 38470835743, "type
+        // 'OSLog' has no member 'app'"). The GS-PERF prefix keeps the
+        // line greppable from the process' default log handle.
+        os_log("GS-PERF tapToFirstVisibleCharMs=%d chars=%d", log: .default, type: .info, ms, text.count)
     }
 
     // MARK: - Search event ingest (PHASE 8.1 + 8.2 v2)
