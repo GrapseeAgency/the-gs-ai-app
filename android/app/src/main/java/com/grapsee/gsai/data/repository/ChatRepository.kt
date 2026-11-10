@@ -25,6 +25,7 @@ import com.grapsee.gsai.data.remote.MessageSourceDto
 import com.grapsee.gsai.data.remote.UpdateConversationRequest
 import com.grapsee.gsai.native.GsNative
 import com.grapsee.gsai.native.GsNativeLoader
+import com.grapsee.gsai.native.NativeTokenCallback
 import android.util.Log
 import kotlinx.serialization.encodeToString
 import kotlinx.coroutines.CancellationException
@@ -878,7 +879,7 @@ class ChatRepository(
         onDelta: (String) -> Unit,
     ): String? {
         if (!GsNativeLoader.isAvailable()) return null
-        val text = nativeReply(content) ?: return null
+        val text = nativeReply(content, onDelta) ?: return null
 
         val activeId = resolveConversation(activeConversationId, content)
         val assistantId = UUID.randomUUID().toString()
@@ -892,11 +893,8 @@ class ChatRepository(
                 attachments = "[]"
             )
         )
-        // One delta, not a word-by-word stream. The engine returned a whole
-        // completion; re-splitting it with a timer would imitate typing and
-        // would be a lie about where the text came from. The provider path
-        // streams because the server streams.
-        onDelta(text)
+        // `onDelta` already received the engine's real token callbacks above;
+        // do not append the completed result a second time.
         persistAssistant(activeId, assistantId, StringBuilder(text))
         return activeId
     }
@@ -930,19 +928,50 @@ class ChatRepository(
      *      is due. When the UI is idle it still gets the core — this costs
      *      almost nothing in tokens/sec and buys every frame.
      */
-    private suspend fun nativeReply(prompt: String): String? {
+    private suspend fun nativeReply(prompt: String, onDelta: (String) -> Unit): String? {
         if (!GsNativeLoader.isAvailable()) return null
-        // The small on-device model has never been shown the widget wire format,
-        // so it answers in prose even when a visual would be better. The
-        // instruction is prepended at the call site (not baked into the engine)
-        // so it applies to whichever model is installed and never leaks into
-        // the transcript.
+        // Keep the compact local instruction at the call site, not in the
+        // durable chat transcript or native model template.
         val instructed = WidgetShowcase.nativeInstruction + "\n\nUser: " + prompt
+        val turnJob = currentCoroutineContext()[Job]
+        val streamed = StringBuilder()
         return try {
-            onInferenceThread { GsNative.chat(instructed) }.takeIf { it.isNotBlank() }
-        } catch (t: Throwable) {
-            Log.w("ChatRepository", "native generation failed; trying the remote request", t)
-            null
+            val completed = onInferenceThread {
+                GsNative.chatStream(instructed, NativeTokenCallback { delta ->
+                    if (turnJob?.isActive != true) return@NativeTokenCallback false
+                    streamed.append(delta)
+                    onDelta(delta)
+                    true
+                })
+            }
+            val visible = streamed.toString()
+            if (completed.startsWith(visible) && completed.length > visible.length) {
+                val tail = completed.substring(visible.length)
+                streamed.append(tail)
+                onDelta(tail)
+            } else if (completed != visible) {
+                // Prefer the exact text the reader saw over silently replacing
+                // it with a different terminal string.
+                Log.w("ChatRepository", "native token stream differed from its terminal result")
+                return visible.takeIf { it.isNotBlank() }
+            }
+            completed.takeIf { it.isNotBlank() }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Throwable) {
+            val partial = streamed.toString()
+            if (partial.isNotBlank()) {
+                // Once visible tokens have been delivered, do not silently start
+                // a second remote answer on top of them. Preserve the real text
+                // and make the interrupted local generation explicit.
+                val notice = "\n\n(On-device generation was interrupted.)"
+                onDelta(notice)
+                Log.w("ChatRepository", "native generation interrupted after visible output", failure)
+                partial + notice
+            } else {
+                Log.w("ChatRepository", "native generation failed; trying the remote request", failure)
+                null
+            }
         }
     }
 
