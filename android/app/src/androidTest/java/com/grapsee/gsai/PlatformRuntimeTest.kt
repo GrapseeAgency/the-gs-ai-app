@@ -97,16 +97,18 @@ class PlatformRuntimeTest {
             TheGsAiTheme { com.grapsee.gsai.ui.attachment.AttachmentChipRow(listOf(draft), editable = false) }
         }
         try {
-            compose.onNodeWithContentDescription("Open real-voice.wav").performClick()
+            // Sent audio is played inline from the staged native bytes, without opening a separate preview dialog.
             compose.waitUntil(8000) { compose.onAllNodesWithText("0:00 / 0:05").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithText("Play audio").performClick()
-            compose.onNodeWithText("Pause audio").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Play audio").performClick()
+            compose.onNodeWithContentDescription("Pause audio").assertIsDisplayed()
             compose.waitUntil(5000) { compose.onAllNodesWithText("0:01 / 0:05").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithText("Pause audio").performClick()
-            compose.onNodeWithText("Play audio").assertIsDisplayed()
-            compose.onNodeWithText("Close preview").performClick()
-            compose.onNodeWithText("Play audio").assertDoesNotExist()
-            compose.onNodeWithContentDescription("Open real-voice.wav").assertExists()
+            compose.onNodeWithContentDescription("Pause audio").performClick()
+            compose.onNodeWithContentDescription("Play audio").assertIsDisplayed()
+            compose.activity.setContentForPlatformTest {
+                TheGsAiTheme { Text("Playback removed") }
+            }
+            compose.onNodeWithText("Playback removed").assertExists()
+            compose.onNodeWithContentDescription("Play audio").assertDoesNotExist()
         } finally { file.delete(); directory.delete() }
     }
 
@@ -727,7 +729,7 @@ class PlatformRuntimeTest {
             }
         }
         compose.onAllNodes(hasText("😀", substring = true)).assertCountEquals(0)
-        compose.onNodeWithText("Link", substring = true).assertExists()
+        compose.onNodeWithText("Link", substring = true).assertDoesNotExist()
         compose.onNodeWithText("Show: 5 ▾").performClick()
         compose.onNodeWithText("Show: 10 ▾").performClick()
         compose.onNodeWithText("Show: All ▾").assertExists()
