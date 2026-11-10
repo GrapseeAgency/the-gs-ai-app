@@ -17,13 +17,13 @@ import UniformTypeIdentifiers
 
 // MARK: - Vocabulary
 
-/// Shipped media kinds (spec §0): image | pdf | document. audio/video/
-/// screenshot are reserved in the model and MUST NOT be offered until a real
-/// consumer exists — deliberately no cases for them.
+/// Shipped receive/preview kinds. Media playback is not model analysis.
 enum AttachmentKind: String, Codable, CaseIterable, Equatable {
     case image
     case pdf
     case document
+    case audio
+    case video
 }
 
 /// Where the bytes came from (spec §1 `source`).
@@ -109,12 +109,12 @@ extension AttachmentFailure: Codable {
 
 struct AttachmentRules {
 
-    /// Receive allowlist — identical to the backend set. Audio/video are
-    /// deliberately absent: receiving them would fake a capability.
+    /// Receive allowlist — identical to the backend; media can be played.
     static let allowedMIMETypes: Set<String> = [
         "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic",
         "image/heif", "application/pdf", "text/plain", "text/markdown",
-        "text/csv",
+        "text/csv", "audio/mpeg", "audio/wav", "audio/mp4",
+        "video/mp4", "video/quicktime", "video/webm",
     ]
 
     /// Hard byte cap per attachment — the server re-checks; this is the
@@ -126,6 +126,8 @@ struct AttachmentRules {
 
     /// MIME → kind, mirroring `kindForMime` on the server.
     static func kindForMime(_ mime: String) -> AttachmentKind? {
+        if mime.hasPrefix("audio/") { return .audio }
+        if mime.hasPrefix("video/") { return .video }
         if mime.hasPrefix("image/") { return .image }
         if mime == "application/pdf" { return .pdf }
         if mime.hasPrefix("text/") { return .document }
@@ -146,6 +148,12 @@ struct AttachmentRules {
         case "txt", "text": return "text/plain"
         case "md", "markdown": return "text/markdown"
         case "csv": return "text/csv"
+        case "mp3": return "audio/mpeg"
+        case "wav": return "audio/wav"
+        case "m4a": return "audio/mp4"
+        case "mp4", "m4v": return "video/mp4"
+        case "mov": return "video/quicktime"
+        case "webm": return "video/webm"
         default: return nil
         }
     }
@@ -194,6 +202,12 @@ struct AttachmentRules {
         case "text/plain": return "txt"
         case "text/markdown": return "md"
         case "text/csv": return "csv"
+        case "audio/mpeg": return "mp3"
+        case "audio/wav": return "wav"
+        case "audio/mp4": return "m4a"
+        case "video/mp4": return "mp4"
+        case "video/quicktime": return "mov"
+        case "video/webm": return "webm"
         default: return "bin"
         }
     }
@@ -574,6 +588,8 @@ final class AttachmentStore: ObservableObject {
         case .image: return "photo-\(stamp).\(ext)"
         case .pdf: return "document-\(stamp).pdf"
         case .document: return "note-\(stamp).\(ext)"
+        case .audio: return "audio-\(stamp).\(ext)"
+        case .video: return "video-\(stamp).\(ext)"
         }
     }
 
