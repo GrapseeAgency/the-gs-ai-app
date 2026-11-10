@@ -1799,12 +1799,16 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     modelMessages: ChatMessageInput[] | VisionChatMessage[],
     onDelta?: (d: string) => void
   ): Promise<string> => {
-    if (!prep.runId) return synthesizeRaw(modelMessages, onDelta)
+    // Validated answers still use the provider stream, so genuine reasoning
+    // and mode activity can arrive while their draft is checked. Only answer
+    // deltas are withheld; no invented progress or unvalidated text is emitted.
+    const answerDelta = onDelta ?? (push ? (_delta: string) => {} : undefined)
+    if (!prep.runId) return synthesizeRaw(modelMessages, answerDelta)
     return tracked(
       prep.runId,
       { request: 'LLMCallRequested', completed: 'LLMCallCompleted', failed: 'LLMCallFailed' },
       { step: ++llmStep, kind: useVision ? 'vision' : 'text' },
-      () => synthesizeRaw(modelMessages, onDelta)
+      () => synthesizeRaw(modelMessages, answerDelta)
     )
   }
   const executeSearchLogged = async (emit: SearchEventEmitter | null): Promise<TurnSearch> => {
