@@ -43,7 +43,10 @@ private fun NativeVideoPreview(file: File) {
     DisposableEffect(view, lifecycle) {
         view.setMediaController(MediaController(context).apply { setAnchorView(view) })
         view.setOnErrorListener { _, _, _ -> failed = true; true }
-        view.setOnPreparedListener { view.start() }
+        view.setOnPreparedListener {
+            // Preparation may finish after Home/background. Never start hidden playback.
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) view.start()
+        }
         view.setVideoPath(file.absolutePath)
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) view.pause() }
         lifecycle.addObserver(observer)
