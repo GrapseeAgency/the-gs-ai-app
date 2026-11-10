@@ -17,7 +17,7 @@ export function NexlyUserTurn({
     <div className="nx-turn nx-turn-user">
       <div className="nx-user-main">
         <div className="nx-user-bubble">
-          <NexlyRichText text={text} iconTile={18} iconSize={10} />
+          <NexlyRichText text={text} iconTile={18} iconSize={10} inline />
         </div>
         <span className="nx-user-avatar" aria-hidden="true">
           <GlassIcon bare name="user" size={17} />
