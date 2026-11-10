@@ -648,6 +648,10 @@ final class ChatViewModel: ObservableObject {
     func stop() {
         streamTask?.cancel()
         streamTask = nil
+        // Close synchronously: callers can send a new turn immediately, and
+        // every already-received byte survives even if its reveal was pending.
+        // The cancelled task's response-ID guard prevents late finalization.
+        if isStreaming { finalizeLocal() }
     }
 
     /// Benchmark branch-new-chat: everything up to and including the tapped
