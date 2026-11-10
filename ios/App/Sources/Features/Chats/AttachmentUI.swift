@@ -44,8 +44,9 @@ final class ThumbLoader: ObservableObject {
         let decoded = await Self.decode(from: url)
         guard !Task.isCancelled else { return }
         guard let decoded else { return }
-        Self.cache.setObject(decoded, forKey: url.path as NSString,
-                             cost: Int(decoded.size.width * decoded.size.height * 4))
+        let pixelBytes = decoded.cgImage.map { $0.bytesPerRow * $0.height }
+            ?? Int(decoded.size.width * decoded.size.height * decoded.scale * decoded.scale * 4)
+        Self.cache.setObject(decoded, forKey: url.path as NSString, cost: pixelBytes)
         image = decoded
     }
 
@@ -71,7 +72,9 @@ final class ThumbLoader: ObservableObject {
                 // A bounded UTF-8 read may end inside a Bengali/multibyte code
                 // point; keep the valid excerpt instead of discarding its preview.
                 let text = String(decoding: data, as: UTF8.self)
-                return UIGraphicsImageRenderer(size: CGSize(width: 256, height: 320)).image { context in
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = 1 // thumbnail pixels, not a 3x full-resolution page
+                return UIGraphicsImageRenderer(size: CGSize(width: 256, height: 320), format: format).image { context in
                     UIColor.white.setFill()
                     context.fill(CGRect(x: 0, y: 0, width: 256, height: 320))
                     (text as NSString).draw(in: CGRect(x: 18, y: 18, width: 220, height: 284),
