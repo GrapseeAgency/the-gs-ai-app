@@ -173,11 +173,14 @@ private fun AttachmentChip(
                     }, style = MaterialTheme.typography.labelSmall, maxLines = 2,
                         color = if (draft.phase == AttachmentPhase.Failed || previewFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (localFile != null || previewFailed) {
+                if ((localFile != null || previewFailed) && (editable || draft.kind != AttachmentKind.Audio)) {
                     ChipButton(if (draft.kind == AttachmentKind.Audio || draft.kind == AttachmentKind.Video) GsIcons.CirclePlay else GsIcons.ExternalLink,
                         if (previewFailed) "Retry preview ${draft.displayName}" else "Open ${draft.displayName}",
                         MaterialTheme.colorScheme.primary, ::openPreview)
                 }
+            }
+            if (!editable && draft.kind == AttachmentKind.Audio && localFile != null) {
+                InlineAudioPreview(localFile!!)
             }
             if (editable && (!visual || draft.phase == AttachmentPhase.Failed)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
