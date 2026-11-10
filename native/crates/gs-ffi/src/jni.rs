@@ -23,7 +23,7 @@
 
 use std::sync::Mutex;
 
-use jni::objects::{JByteArray, JClass, JString};
+use jni::objects::{JByteArray, JClass, JObject, JString, JValue};
 use jni::sys::{
     jboolean, jfloatArray, jint, jobject, jlong, jstring, JNI_FALSE, JNI_TRUE,
 };
@@ -334,6 +334,77 @@ pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_chatWithBudget(
     max_tokens: jint,
 ) -> jobject {
     chat_impl(env, prompt, max_tokens as i32)
+}
+
+/// Stream actual on-device tokens through the caller's NativeTokenCallback.
+/// The JNI callback is synchronous on this inference thread; the Kotlin owner
+/// coalesces its visible text updates onto the normal chat paint cadence.
+#[no_mangle]
+pub extern "system" fn Java_com_grapsee_gsai_native_GsNative_chatStream(
+    mut env: JNIEnv,
+    _class: JClass,
+    prompt: JString,
+    callback: JObject,
+) -> jobject {
+    guard!(env, "chatStream", std::ptr::null_mut(), {
+        let p: String = match env.get_string(&prompt) {
+            Ok(s) => s.into(),
+            Err(e) => {
+                throw(&mut env, "chatStream", e);
+                return std::ptr::null_mut();
+            }
+        };
+        let mut callback_error: Option<String> = None;
+        let result = call(|ctx| {
+            ctx.chat_stream(&p, DEFAULT_MAX_TOKENS, 0.2, |delta| {
+                if callback_error.is_some() { return false; }
+                let java_delta = match env.new_string(delta) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        callback_error = Some(error.to_string());
+                        return false;
+                    }
+                };
+                let invoked = env.call_method(
+                    &callback,
+                    "onToken",
+                    "(Ljava/lang/String;)Z",
+                    &[JValue::Object(java_delta.as_ref())],
+                );
+                let _ = env.delete_local_ref(java_delta);
+                match invoked {
+                    Ok(value) => match value.z() {
+                        Ok(keep_going) => keep_going,
+                        Err(error) => {
+                            callback_error = Some(error.to_string());
+                            false
+                        }
+                    },
+                    Err(error) => {
+                        callback_error = Some(error.to_string());
+                        false
+                    }
+                }
+            })
+        });
+        if let Some(error) = callback_error {
+            throw(&mut env, "chatStream", format!("token callback failed: {error}"));
+            return std::ptr::null_mut();
+        }
+        match result {
+            Ok(text) => match env.new_string(text) {
+                Ok(value) => value.into_raw(),
+                Err(error) => {
+                    throw(&mut env, "chatStream", error);
+                    std::ptr::null_mut()
+                }
+            },
+            Err(error) => {
+                throw(&mut env, "chatStream", error);
+                std::ptr::null_mut()
+            }
+        }
+    })
 }
 
 fn chat_impl(mut env: JNIEnv, prompt: JString, max_tokens: i32) -> jobject {
