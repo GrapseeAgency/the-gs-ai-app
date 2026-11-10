@@ -37,6 +37,8 @@ export type CatalogRouteRequest = {
   route: string
   hasImages: boolean
   hasDocuments: boolean
+  /** Generic catalog execution has no verified reasoning-mode adapter. */
+  requiresReasoning?: boolean
   estimatedInputChars?: number
   maxCandidates?: number
   maxCatalogAgeMs?: number
@@ -143,8 +145,9 @@ export function catalogContextFits(
 /** Select free catalog candidates for a simple, text-only turn. */
 export function selectCatalogFastRoutes(request: CatalogRouteRequest): CatalogFastRoute[] {
   const env = request.env ?? process.env
+  if (request.requiresReasoning) return false
   if (request.autoFastPath === false || !autoFastPathEnabled(env)) return []
-  if (request.route !== 'TEXT_SIMPLE' || request.hasImages || request.hasDocuments) return []
+  if (request.route !== 'TEXT_SIMPLE' || request.hasImages || request.hasDocuments || request.requiresReasoning) return []
 
   const maxCandidates = Math.min(
     DEFAULT_MAX_CANDIDATES,
