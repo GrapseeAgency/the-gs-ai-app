@@ -434,10 +434,10 @@ components:
         id: { type: string, format: uuid }
         kind:
           type: string
-          enum: [image, pdf, document]
+          enum: [image, pdf, document, audio, video]
           description: >-
-            Extensible: audio | video | screenshot are reserved for when a real
-            processor exists. Do not emit them today.
+            Audio/video support is upload, preview and playback only; this does
+            not imply transcription or model interpretation of their contents.
         displayName: { type: string, maxLength: 200 }
         mimeType:
           type: string
