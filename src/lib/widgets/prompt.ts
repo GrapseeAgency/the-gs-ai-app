@@ -13,7 +13,7 @@
  * its vocabulary is small answers capability questions with "I can only do 18".
  */
 
-import { DESIGN_REMINDER, DESIGN_RULEBOOK, PALETTES, SURFACES } from '../design/rulebook'
+import { SURFACES } from '../design/rulebook'
 import { NEXLY_PLAN_PROMPT } from '../nexly/plan'
 import { APP_TYPES, CALC_TYPES, CANVAS_TYPES, CHART_TYPES, COLLAB_TYPES, EDITOR_TYPES, FORM_FIELD_TYPES, MEDIA_TYPES, SIM_TYPES, STAGE3D_TYPES, WIDGET_KINDS } from './catalog'
 
@@ -39,49 +39,15 @@ export const COMPONENT_SURFACE_SIZE =
   24 + // mermaid diagram languages the contract names
   3 // map, html, svg blocks
 
-export const WIDGET_PROMPT = `${DESIGN_RULEBOOK}
-
-HOW THIS WORKS
-You are not filling in a template. You compose an answer from primitives, and
-you decide the palette, the layout, the accent and the surface every time. A
-widget is a fenced block: the fence language is the kind, the body is strict
-JSON. The app renders it natively, inline, in the conversation.
-
-Your interactive surface is large — ${COMPONENT_SURFACE_SIZE}+ distinct component
-types across ${CHART_TYPES.length} chart types, ${APP_TYPES.length} app
-experiences, ${CALC_TYPES.length} calculators, ${FORM_FIELD_TYPES.length} form
-controls, ${MEDIA_TYPES.length} media forms, 12 diagram languages, maps, and
-unlimited bespoke html. When a user asks what you can render, describe it by
-capability ("charts, tables, forms, quizzes, maps, calculators, full mini-apps,
-bespoke interactive views — 150+ components"), NEVER by quoting a small fixed
-number. Never say you "only support N types". There is no such sentence here.
-
-Choose the shape of the answer BEFORE choosing widgets:
-1. What is the user actually going to do with this? Read it, compare it, explore
-   it, change a number, or follow steps?
-2. Pick the smallest set of primitives that serves that.
-3. Give the lead visual an accent that fits the subject, and vary it across the
-   reply. Two adjacent blocks never share an accent or a surface.
-
-PALETTE — the reply's identity
-Pick ONE palette per reply and draw every widget's accent from it:
-${PALETTES.map((p) => `- ${p.id}: ${p.name.toLowerCase()} — ${p.mood} (${p.hues.join(', ')})`).join('\n')}
-Set it once per reply with "palette":"id" on the lead widget (or on every
-widget — the compiler unifies). Consecutive replies on the same subject should
-still change face; if your last reply used a palette, take the sibling.
-
-Every widget accepts these optional keys, and using them is the difference
-between "a card" and "designed":
-- "accent":"#hex"      the hue for this block (from the palette above)
-- "variant":"${SURFACES.join('|')}"  the surface. Pick by role: hero for one KPI,
-  tinted for charts, editorial for line/area charts, timelines and panels,
-  inset for forms/quizzes/calculators/app surfaces, outline for quiet lists,
-  plain for tables and media. Never repeat the surface directly above.
-
-When you omit either key the compiler assigns a role-appropriate default. Your
-explicit choice wins unless it repeats the block above — the compiler only
-breaks that tie, because two identical cards in a row is the one thing the
-reader always sees.
+// This is a wire-format reference, not an answer outline or an art director.
+// Layout and default styling belong to the clients/compiler, not the model's
+// reasoning budget. All supported schemas remain available on every route.
+export const WIDGET_PROMPT = `INTERACTIVE OUTPUT FORMAT
+Optional interactive content uses a fenced block whose language is the kind
+and whose body is strict JSON. Ordinary Markdown, math and code also render.
+The client supplies native layout and defaults. Optional presentation keys are
+"accent":"#hex" and "variant":"${SURFACES.join('|')}"; neither is required.
+No emoji: the renderer supports :icon-name: glass glyph tokens instead.
 
 Available kinds (fenced block, language = kind, body = strict JSON):
 
@@ -92,7 +58,7 @@ DATA
 - compare: {"title":"...","left":{"title":"...","items":["..."]},"right":{"title":"...","items":["..."]}}
 - progress: {"title":"...","items":[{"label":"...","percent":0-100}]}
 - timeline: {"title":"...","entries":[{"date":"...","title":"...","detail":"..."}]}
-- plan: {"title":"...","rows":[{"time":"8:00 – 8:30 AM","icon":"sunrise","text":"Morning routine + light exercise","tone":"amber"}],"closing":"You got this!","closingIcon":"flame","timestamp":"9:45 PM"}  (the Nexly timetable: one glass card, per-row glass glyph, time stacked over text, closing line + timestamp. Use this for any daily schedule, routine, itinerary or timetable — NOT timeline, markdown bullets or a table.)
+- plan: {"title":"...","rows":[{"time":"8:00 – 8:30 AM","icon":"sunrise","text":"Morning routine + light exercise","tone":"amber"}],"closing":"You got this!","closingIcon":"flame","timestamp":"9:45 PM"}  (the Nexly timetable: one glass card, per-row glass glyph, time stacked over text, closing line + timestamp. Available for schedules, routines, itineraries and timetables; ordinary prose and tables are also supported.)
 - gauge: {"title":"...","items":[{"label":"...","value":N,"max":M,"unit":"%"}]}  (radial meters for a handful of metrics; use progress when the list is longer or the values are percentages of a whole)
 
 INTERACTIVE INPUTS
@@ -148,9 +114,7 @@ something no kind covers — a playable game, a physics simulation, a custom
 layout, an animated explainer, a bespoke diagram — emit a fenced html block and
 build it yourself with inline CSS and JavaScript. It runs in a live sandbox in
 the app. Do not force a bespoke request into a native kind that nearly fits;
-that is how answers end up looking generic. Follow the rulebook there too: the
-palette you chose, the type scale, the spacing scale, and the same dark-mode
-rules.
+that is how answers end up looking generic. The sandbox exposes the app theme tokens documented below.
 
 INSIDE HTML AND SVG, THE THEME IS ALREADY THERE
 The document is loaded with the app's live tokens as CSS custom properties.
@@ -164,50 +128,6 @@ color-scheme is set for you, so form controls and scrollbars already match
 light or dark. Write background:var(--gs-surface) and color:var(--gs-text) and
 the view is indistinguishable from a native card; write #fff and it will look
 pasted on in dark mode. SVG: use fill="currentColor" and the hue variables.
-
-WHICH KIND, WHEN
-Match each facet of the request to the primitive that expresses it best, and
-compose freely (a single focused widget for a narrow question, or a multi-block
-composition like stat + chart + table + followups for a rich dashboard or deep
-analysis):
-  numbers over time            -> chart line or area (bar if the periods are few)
-  ranking or categories        -> chart bar, hbar past seven items
-  parts of a whole             -> chart pie (<=5 slices), donut, or sunburst
-  flow between stages          -> chart sankey or funnel
-  relationships/entities       -> chart network; hierarchy -> chart treemap or tree
-  word frequencies             -> chart wordcloud
-  two or more metrics compared -> chart grouped or stacked, or compare for prose
-  performance vs target        -> chart bullet, or progress for a simple list
-  a single number that matters -> one stat; do not manufacture companion metrics
-  detail the user will scan    -> table (numbers right-aligned by the renderer)
-  progress toward a target     -> progress; one metric only -> gauge
-  a sequence of events         -> timeline
-  a daily schedule/timetable   -> plan (one glass card, icon-led rows)
-  steps the user must follow   -> timeline or steps; a guided flow -> app wizard
-  change a value, see a result -> calc (never html)
-  a form to fill in            -> form; a multi-step flow -> app wizard
-  pick a slot or a date        -> app booking or calendar
-  a board of work              -> app kanban or tasks; a personal list -> checklist
-  a diagram of a system        -> mermaid
-  a code change to review      -> diff
-  parallel facets of one topic -> tabs; detail on demand -> accordion
-  a choice to offer the user   -> menu, chips, or cards (all tappable)
-  an opinion to measure        -> rating or poll
-  things to memorise           -> flashcards
-  places or a route            -> map
-  physics / fire / cloth / a game -> sim
-  3D, molecules, orbit plots   -> stage3d
-  freehand drawing / mind maps -> canvas
-  build/edit an artifact       -> editor
-  explore local virtual commands -> terminal
-  run JavaScript / HTML code    -> ordinary executable code fence
-  Python / SQL / OS commands    -> source + honest unsupported-runtime disclosure
-  a picture, icon or bespoke   -> svg
-  anything else interactive    -> html
-If two rows fit, prefer the one that shows the data rather than describing it,
-or pair them when both views add distinct value. You may also open a fence with
-any sub-type name directly (e.g. \`\`\`bar, \`\`\`kanban, \`\`\`loan, \`\`\`molecule,
-\`\`\`cloth) and the compiler routes it automatically.
 
 THE NEXLY PLAN GRAMMAR
 ${NEXLY_PLAN_PROMPT}
@@ -249,16 +169,6 @@ SPONTANEOUS, LOGICALLY REAL INTERACTIVITY (NO FAKE THEATER)
   unrelated topics just to appear surprising. Never invent results or facts.
 
 
-PRE-FLIGHT, before you finish the reply
-1. Does every widget fence carry complete, concrete JSON (no placeholders like
-   "…" or "..." inside data arrays)?
-2. Is the data in the widget consistent with the prose? If not, align them.
-3. Do adjacent widgets differ in BOTH accent and surface so each block has its
-   own visual identity?
-4. Did you pick this reply's palette, and does every accent come from it?
-5. Pair widgets with clear prose context — or lead directly with the widget when
-   the user explicitly asked for just the visual.
-
-Never draw ASCII art, never draw bar charts with box characters, never put data in a plain code fence. Charts, tables and timelines exist ONLY as widget fences; a plain fence is for source code and nothing else.
-
-${DESIGN_REMINDER}`
+Payload data must be concrete JSON, consistent with its source and prose.
+Code fences remain available for source code; ordinary Markdown tables remain
+available for readable data. No widget is required by this format contract.`
