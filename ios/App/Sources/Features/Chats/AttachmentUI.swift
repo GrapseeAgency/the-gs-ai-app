@@ -126,7 +126,7 @@ struct AttachmentThumb: View {
     var body: some View {
         Group {
             if kind != .audio, let localURL {
-                StagedThumb(url: localURL)
+                StagedThumb(url: localURL, kind: kind)
             } else {
                 AttachmentKindIcon(kind: kind)
             }
@@ -143,11 +143,13 @@ struct AttachmentThumb: View {
 /// shared).
 private struct StagedThumb: View {
     let url: URL
+    let kind: AttachmentKind
 
     @StateObject private var loader: ThumbLoader
 
-    init(url: URL) {
+    init(url: URL, kind: AttachmentKind) {
         self.url = url
+        self.kind = kind
         _loader = StateObject(wrappedValue: ThumbLoader(url: url))
     }
 
@@ -158,7 +160,7 @@ private struct StagedThumb: View {
                     .resizable()
                     .scaledToFill()
             } else {
-                AttachmentKindIcon(kind: .image, pointSize: 18)
+                AttachmentKindIcon(kind: kind, pointSize: 18)
             }
         }
         .task(id: url.path) { await loader.loadIfNeeded() }
