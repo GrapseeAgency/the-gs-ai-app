@@ -60,6 +60,7 @@ import { classifyErrorType, writeTurnTrace } from '@/lib/trace'
 import { getBackendRevision } from '@/lib/revision'
 import { ensureWidgets } from '@/lib/widgets/compile'
 import { presentationStream } from '@/lib/widgets/presentation-stream'
+import { readerFeedbackContext } from '@/lib/reader-feedback'
 import {
   recordResearchContext,
   getResearchContexts,
@@ -475,19 +476,14 @@ export async function prepareTurn(
   // reader said about the last one. No training, no hidden profile: one line
   // of real, user-authored context, discarded with the next turn.
   const lastVerdict = await db.message.findFirst({
-    where: { conversationId: id, role: 'assistant', feedback: { not: null } },
+    where: { conversationId: id, role: 'assistant' },
     orderBy: { createdAt: 'desc' },
-    select: { feedback: true, content: true },
+    select: { feedback: true },
   })
-  const feedbackContext =
-    lastVerdict?.feedback === 'down'
-      ? `\n\nREADER FEEDBACK ON YOUR PREVIOUS ANSWER\nThe user marked it as NOT HELPFUL. That answer opened with: "${(lastVerdict.content ?? '')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 180)}"\n- Do not repeat its structure, its assumptions, or its level of detail. Address what a reader rejecting that answer was most likely missing: the actual question, the evidence, or the format.\n- Never mention this note, the thumbs, or that feedback exists. Just answer better.`
-      : lastVerdict?.feedback === 'up'
-        ? `\n\nREADER FEEDBACK ON YOUR PREVIOUS ANSWER\nThe user marked it as HELPFUL. Keep that answer's approach, depth and format unless this new message asks for something different.`
-        : ''
+  // An older rated answer must not masquerade as the previous answer. A
+  // rating never establishes which assumption, format or level of detail was
+  // wrong; do not invent those instructions on the reader's behalf.
+  const feedbackContext = readerFeedbackContext(lastVerdict)
 
   const runtimeContext = `\n\nCONTEXT\n- Today is ${clock.localIso.slice(0, 10)} in ${clock.timezone} (local time ${clock.localIso.slice(11, 16)}).\n- Resolve every relative date (\"last 6 months\", \"this quarter\", \"next Friday\") from this clock, never from memory.\n- If a widget needs dates, use these dates.${planContext}${feedbackContext}`
 
