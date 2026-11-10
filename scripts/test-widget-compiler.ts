@@ -8,6 +8,9 @@ import { chartPreference, categoricalChartType, pieAlternativeAllowed } from '..
 import { compileWidgets } from '../src/lib/widgets/compile'
 import { validateWidget, extractWidgetFences, repairJson, validationErrors, inferWidgetKind } from '../src/lib/widgets/validate'
 import { toolCallToFence } from '../src/lib/widgets/tools'
+import { widgetReadableText } from '../src/lib/widgets/readable'
+import { presentationStream } from '../src/lib/widgets/presentation-stream'
+import { PROSE_PROMPT } from '../src/lib/prose-prompt'
 import { WIDGET_PROMPT } from '../src/lib/widgets/prompt'
 import { directWidgetArt } from '../src/lib/widgets/art-direct'
 import { SURFACES } from '../src/lib/design/rulebook'
@@ -1003,6 +1006,49 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   check('unrelated growth rates do not become parts of a whole', !pieAlternativeAllowed('line', '%', [{data:[[0,2],[1,3]]}]))
   check('genuine percentage composition can expose a pie alternative', pieAlternativeAllowed('bar', '%', [{data:[[0,40],[1,60]]}]))
   check('invalid calendar dates are not time coordinates', categoricalChartType(['2024-02-31','2024-03-01']) === 'bar')
+}
+
+// Presentation is an application contract, including valid model output and SSE.
+{
+  const payload = { type: 'bar', title: 'Actual observations', labels: ['ঢাকা', 'ফেনী', 'Zero'], series: [{ name: 'Measured', data: [[0, -12], [1, 2026], [2, 0]] }] }
+  const fence = '```chart\n' + JSON.stringify(payload) + '\n```'
+  for (const prompt of ['no charts please', 'plain text only', 'avoid graphs', 'do not add a chart', 'only a table']) {
+    const result = compileWidgets({ reply: 'Actual answer before.\n\n' + fence + '\n\nActual answer after.', userPrompt: prompt })
+    check('valid model chart respects reader preference: ' + prompt, result.widgets === 0 && extractWidgetFences(result.text).length === 0)
+    check('format choice preserves signed, zero, year-like and Unicode data: ' + prompt,
+      ['ঢাকা', 'ফেনী', '-12', '2026', '0', 'Measured', 'Actual answer before.', 'Actual answer after.'].every(value => result.text.includes(value)))
+  }
+  for (const source of [JSON.stringify(payload), '```json\n' + JSON.stringify(payload) + '\n```', fence.replaceAll('```', '~~~')]) {
+    const result = compileWidgets({ reply: source, userPrompt: 'text only' })
+    check('bare, JSON-fenced and tilde-fenced model data cannot bypass text-only', result.widgets === 0 && extractWidgetFences(result.text).length === 0 && result.text.includes('2026'))
+  }
+  const table = '```table\n' + JSON.stringify({columns:['City','Value'], rows:[['Dhaka',12],['Feni',0]]}) + '\n```'
+  const noCharts = compileWidgets({ reply: fence + '\n\n' + table, userPrompt: 'no charts, retain the table' })
+  check('no-chart preference keeps a useful model table', noCharts.widgets === 1 && extractWidgetFences(noCharts.text).every(f => f.kind === 'table'))
+  check('text-only also suppresses table widgets without deleting rows', compileWidgets({ reply: table, userPrompt: 'text only' }).text.includes('Feni'))
+  check('automatic mode retains useful spontaneous model charts', compileWidgets({ reply: fence, userPrompt: 'What changed in these observations?' }).widgets === 1)
+  const data = widgetReadableText(JSON.stringify({ title:'No fake calculations', rows:[['', 'a,b', false, 0, null]], progress:120, code:'```chart\n{}\n```' }))
+  check('readable projection preserves empty cells, booleans and out-of-widget-range source values', data.includes('""') && data.includes('"a,b"') && data.includes('false') && data.includes('120'))
+  check('source text cannot smuggle a widget through readable projection', extractWidgetFences(data).length === 0)
+  for (const prompt of ['no charts', 'plain text only', 'only a table']) {
+    const events: Array<[string,string]> = []
+    const stream = presentationStream(prompt, (event, data) => { events.push([event, data]) })
+    stream.push?.('reasoning', 'Actual provider progress')
+    stream.push?.('source', 'Actual source progress')
+    stream.push?.('delta', fence)
+    check('format safety defers only unvalidated deltas: ' + prompt, events.length === 2 && events[0][0] === 'reasoning' && events[1][0] === 'source')
+    stream.release(['Complete ', 'answer with all supplied facts.'])
+    stream.release(['duplicate'])
+    stream.push?.('done', 'persisted message')
+    check('format-safe streaming releases the complete projection exactly once: ' + prompt, events.filter(e => e[0] === 'delta').map(e => e[1]).join('') === 'Complete answer with all supplied facts.' && events[events.length - 1]?.[0] === 'done')
+  }
+  const events: string[] = []
+  const automatic = presentationStream('Explain this', (event, data) => { events.push(data) })
+  automatic.push?.('delta', 'Live ordinary answer')
+  automatic.release(['Do not duplicate'])
+  check('normal answers retain live streaming', events.join('') === 'Live ordinary answer')
+  const forbiddenRecipes = /A reply is a LAYOUT|WHICH KIND, WHEN|PRE-FLIGHT|never carry a bold label followed by a colon/i
+  check('generation reference no longer imposes a layout or mechanical prose recipe', !forbiddenRecipes.test(WIDGET_PROMPT + PROSE_PROMPT))
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`)
