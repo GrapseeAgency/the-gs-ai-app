@@ -225,8 +225,9 @@ class ApiClient(
      * PHASE 8.1 (docs/search-event-protocol.md v1, additive): the search chain
      * events are forwarded raw and the client stays silent on unknown event
      * names — the exact tolerance the protocol promises old clients:
-     *  - [onStatus] — payload is the plain status string
-     *    (searching | working | composing | search_failed),
+     *  - [onStatus] — payload is the plain status string (searching | working |
+     *    composing | search_failed | generating | checking),
+     *  - [onReset] — the server rejected a provisional draft and is replacing it,
      *  - [onSearchEvent] / [onSourceEvent] / [onClarifyEvent] — the payload is
      *    a JSON-encoded object STRING (double-encoded, like `done`); parsing is
      *    the stream layer's job, this walker never interprets it.
