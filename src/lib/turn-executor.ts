@@ -1965,7 +1965,11 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
               userTurnText,
               buildAggregateCorrection(aggv)
             )
-            const retry = await synthesize(corrected)
+            // This aggregate guard runs after the first provider draft. Surface
+            // the real failed check and replace that draft before streaming the
+            // fresh provider attempt; never hide a second silent synthesis.
+            if (push) { push('status', 'checking'); push('reset', '') }
+            const retry = await synthesize(corrected, streamAnswerDelta)
             aggv = verifyCsvAggregates(retry, table)
             if (aggv.length === 0) {
               full = retry
