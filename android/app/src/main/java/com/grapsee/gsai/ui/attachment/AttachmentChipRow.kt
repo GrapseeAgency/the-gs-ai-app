@@ -104,6 +104,10 @@ private fun AttachmentChip(
     }
     var previewFailed by remember(draft.id) { mutableStateOf(false) }
     var attempt by remember(draft.id) { mutableStateOf(0) }
+    var showingMedia by remember(draft.id) { mutableStateOf(false) }
+    if (showingMedia && localFile != null) {
+        MediaPreview(localFile!!, draft.kind == AttachmentKind.Video) { showingMedia = false }
+    }
     LaunchedEffect(draft.id, draft.remoteId, draft.localPath, attempt) {
         if (localFile == null && draft.remoteId != null) {
             previewFailed = false
@@ -115,6 +119,10 @@ private fun AttachmentChip(
     fun openPreview() {
         val file = localFile
         if (file == null) { attempt++; return }
+        if (draft.kind == AttachmentKind.Audio || draft.kind == AttachmentKind.Video) {
+            showingMedia = true
+            return
+        }
         try {
             val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
             context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, draft.mimeType)
