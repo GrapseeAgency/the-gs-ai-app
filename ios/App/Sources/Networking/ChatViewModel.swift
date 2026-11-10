@@ -799,10 +799,18 @@ final class ChatViewModel: ObservableObject {
                         sink.append(event) // lock-guarded — drained in the flush loop
                     }
                 )
-                // Transport returned after an explicit, validated completion.
-                if self.isStreaming {
-                    self.finalize(with: completedMessage)
+                // Reveal received text at display cadence even when an upstream
+                // proxy batches several deltas. Never invent tokens or work steps.
+                self.stopFlushLoop()
+                while self.isStreaming,
+                      let index = self.messages.indices.last,
+                      self.messages[index].isStreaming,
+                      self.messages[index].content != self.streamBuffer.snapshot() {
+                    try Task.checkCancellation()
+                    self.flushStreamingText()
+                    try await Task.sleep(nanoseconds: 33_000_000)
                 }
+                if self.isStreaming { self.finalize(with: completedMessage) }
             } catch {
                 if Self.isCancellation(error) {
                     self.finalizeLocal()
@@ -865,7 +873,7 @@ final class ChatViewModel: ObservableObject {
         flushTask = nil
     }
 
-    private func flushStreamingText() {
+    private func flushStreamingText(drainAll: Bool = false) {
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
         let text = streamBuffer.snapshot()
         guard messages[index].content != text else { return }
@@ -881,7 +889,15 @@ final class ChatViewModel: ObservableObject {
                 os_log("GS-PERF tapToFirstVisibleCharMs=%d chars=%d", log: .default, type: .info, ms, text.count)
             }
         }
-        messages[index].content = text
+        let visible = messages[index].content
+        let remaining = max(0, text.count - visible.count)
+        // Normal provider tokens paint immediately; bursts catch up adaptively.
+        // String prefixes are grapheme-safe (including custom-icon tokens' text).
+        if !drainAll, text.hasPrefix(visible), remaining > 32 {
+            messages[index].content = String(text.prefix(visible.count + max(32, remaining / 12)))
+        } else {
+            messages[index].content = text
+        }
     }
 
     // MARK: - Search event ingest (PHASE 8.1 + 8.2 v2)
@@ -1229,7 +1245,7 @@ final class ChatViewModel: ObservableObject {
         }
         stopFlushLoop()
         drainSearchEvents() // stop/cancel keeps the trace that really happened
-        flushStreamingText() // land the last ≤33ms of deltas before closing
+        flushStreamingText(drainAll: true) // stop/error retains ALL received text
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
         if messages[index].content.isEmpty {
             messages.remove(at: index)
