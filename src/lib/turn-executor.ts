@@ -1332,6 +1332,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
             : ''
 
     const media = prep.claimedAttachments.filter(a => a.kind === 'audio' || a.kind === 'video')
+      .map(({ kind, displayName }) => ({ kind, displayName }))
     const mediaNotice = media.length > 0
       ? `ATTACHED MEDIA (metadata only): ${JSON.stringify(media)}. These files can be previewed and played in the app, but their audio/video contents have NOT been transcribed, watched or analyzed. Do not infer their contents from filenames; request a transcript or relevant still images when needed.`
       : null
