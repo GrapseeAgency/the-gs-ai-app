@@ -67,8 +67,10 @@ final class ThumbLoader: ObservableObject {
             if ["txt", "text", "md", "markdown", "csv"].contains(ext) {
                 guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
                 defer { try? handle.close() }
-                guard let data = try? handle.read(upToCount: 2048),
-                      let text = String(data: data, encoding: .utf8), !text.isEmpty else { return nil }
+                guard let data = try? handle.read(upToCount: 2048), !data.isEmpty else { return nil }
+                // A bounded UTF-8 read may end inside a Bengali/multibyte code
+                // point; keep the valid excerpt instead of discarding its preview.
+                let text = String(decoding: data, as: UTF8.self)
                 return UIGraphicsImageRenderer(size: CGSize(width: 256, height: 320)).image { context in
                     UIColor.white.setFill()
                     context.fill(CGRect(x: 0, y: 0, width: 256, height: 320))
@@ -156,9 +158,11 @@ private struct StagedThumb: View {
     var body: some View {
         Group {
             if let image = loader.image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
+                if kind == .pdf || kind == .document {
+                    Image(uiImage: image).resizable().scaledToFit()
+                } else {
+                    Image(uiImage: image).resizable().scaledToFill()
+                }
             } else {
                 AttachmentKindIcon(kind: kind, pointSize: 18)
             }
