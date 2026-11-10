@@ -466,7 +466,7 @@ export async function prepareTurn(
   const clientContext =
     sanitizeTurnContext(args.turnContext) || serverPlanContext
   const planContext = clientContext
-    ? `\n\nCLIENT CONTEXT & PLAN STATE\n${clientContext}\n- Follow any rendering, icon (:icon-name: glass tokens, zero Unicode emojis), and interactive widget instructions above while adapting to any recorded checklist progress.\n- Do not repeat this context block verbatim.`
+    ? `\n\nCLIENT CONTEXT & PLAN STATE\n${clientContext}`
     : ''
   // THE READER'S VERDICT ON THE PREVIOUS ANSWER.
   //
@@ -485,7 +485,9 @@ export async function prepareTurn(
   // wrong; do not invent those instructions on the reader's behalf.
   const feedbackContext = readerFeedbackContext(lastVerdict)
 
-  const runtimeContext = `\n\nCONTEXT\n- Today is ${clock.localIso.slice(0, 10)} in ${clock.timezone} (local time ${clock.localIso.slice(11, 16)}).\n- Resolve every relative date (\"last 6 months\", \"this quarter\", \"next Friday\") from this clock, never from memory.\n- If a widget needs dates, use these dates.${planContext}${feedbackContext}`
+  // Clock and progress are facts, not directives to replace historical source
+  // dates or force every new question back into the last plan's presentation.
+  const runtimeContext = `\n\nCONTEXT\nCurrent local clock: ${clock.localIso} (${clock.timezone}).${planContext}${feedbackContext}`
 
   const baseSystemPrompt = conversation.assistant?.instructions
     ? `${conversation.assistant.instructions}\n\n(Platform persona base: ${SYSTEM_PROMPT})\n\n${PROSE_PROMPT}\n${WIDGET_PROMPT}${runtimeContext}`
