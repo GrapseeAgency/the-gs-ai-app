@@ -30,6 +30,7 @@ import { orCompleteChat, orStreamChat } from '@/lib/openrouter'
 import { planRoute } from '@/lib/router'
 import {
   selectCatalogFastRoutes,
+  catalogContextFits,
   type CatalogFastRoute,
 } from '@/lib/catalog-router'
 import {
@@ -58,6 +59,8 @@ import { mapWithConcurrency } from '@/lib/concurrency'
 import { classifyErrorType, writeTurnTrace } from '@/lib/trace'
 import { getBackendRevision } from '@/lib/revision'
 import { ensureWidgets } from '@/lib/widgets/compile'
+import { presentationStream } from '@/lib/widgets/presentation-stream'
+import { readerFeedbackContext } from '@/lib/reader-feedback'
 import {
   recordResearchContext,
   getResearchContexts,
@@ -463,7 +466,7 @@ export async function prepareTurn(
   const clientContext =
     sanitizeTurnContext(args.turnContext) || serverPlanContext
   const planContext = clientContext
-    ? `\n\nCLIENT CONTEXT & PLAN STATE\n${clientContext}\n- Follow any rendering, icon (:icon-name: glass tokens, zero Unicode emojis), and interactive widget instructions above while adapting to any recorded checklist progress.\n- Do not repeat this context block verbatim.`
+    ? `\n\nCLIENT CONTEXT & PLAN STATE\n${clientContext}`
     : ''
   // THE READER'S VERDICT ON THE PREVIOUS ANSWER.
   //
@@ -473,21 +476,18 @@ export async function prepareTurn(
   // reader said about the last one. No training, no hidden profile: one line
   // of real, user-authored context, discarded with the next turn.
   const lastVerdict = await db.message.findFirst({
-    where: { conversationId: id, role: 'assistant', feedback: { not: null } },
+    where: { conversationId: id, role: 'assistant' },
     orderBy: { createdAt: 'desc' },
-    select: { feedback: true, content: true },
+    select: { feedback: true },
   })
-  const feedbackContext =
-    lastVerdict?.feedback === 'down'
-      ? `\n\nREADER FEEDBACK ON YOUR PREVIOUS ANSWER\nThe user marked it as NOT HELPFUL. That answer opened with: "${(lastVerdict.content ?? '')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 180)}"\n- Do not repeat its structure, its assumptions, or its level of detail. Address what a reader rejecting that answer was most likely missing: the actual question, the evidence, or the format.\n- Never mention this note, the thumbs, or that feedback exists. Just answer better.`
-      : lastVerdict?.feedback === 'up'
-        ? `\n\nREADER FEEDBACK ON YOUR PREVIOUS ANSWER\nThe user marked it as HELPFUL. Keep that answer's approach, depth and format unless this new message asks for something different.`
-        : ''
+  // An older rated answer must not masquerade as the previous answer. A
+  // rating never establishes which assumption, format or level of detail was
+  // wrong; do not invent those instructions on the reader's behalf.
+  const feedbackContext = readerFeedbackContext(lastVerdict)
 
-  const runtimeContext = `\n\nCONTEXT\n- Today is ${clock.localIso.slice(0, 10)} in ${clock.timezone} (local time ${clock.localIso.slice(11, 16)}).\n- Resolve every relative date (\"last 6 months\", \"this quarter\", \"next Friday\") from this clock, never from memory.\n- If a widget needs dates, use these dates.${planContext}${feedbackContext}`
+  // Clock and progress are facts, not directives to replace historical source
+  // dates or force every new question back into the last plan's presentation.
+  const runtimeContext = `\n\nCONTEXT\nCurrent local clock: ${clock.localIso} (${clock.timezone}).${planContext}${feedbackContext}`
 
   const baseSystemPrompt = conversation.assistant?.instructions
     ? `${conversation.assistant.instructions}\n\n(Platform persona base: ${SYSTEM_PROMPT})\n\n${PROSE_PROMPT}\n${WIDGET_PROMPT}${runtimeContext}`
@@ -631,11 +631,19 @@ export async function prepareTurn(
     (freeTextRoute || tierFreeEligible) &&
     // Vision has no verified free adapter yet; queue instead of paying.
     routerPlan.route !== 'VISION'
+  const requestedMode = parseThinkingMode(args.mode)
+  const thinking = resolveThinkingConfig(
+    requestedMode,
+    routerPlan.internalModelId,
+    routerPlan.route,
+    cap.capability
+  )
   const catalogFastRoutes = selectCatalogFastRoutes({
     route: routerPlan.route,
+    requiresReasoning: requestedMode === 'thinking' || thinking.config?.mode === 'thinking',
     hasImages: useVision,
     hasDocuments: currentTurnDocs.length > 0 || historyDocTurns.length > 0,
-    estimatedInputChars: content.length + recentDesc.reduce((sum, message) => sum + message.content.length, 0),
+    estimatedInputChars: Buffer.byteLength(baseSystemPrompt + content + recentDesc.map(message => message.content).join('\n'), 'utf8'),
   })
   const baseRoute = resolveModelRoute(routerPlan.internalModelId)
   const freeChain = forceFreeEligible
@@ -677,13 +685,6 @@ export async function prepareTurn(
   // The mode only sets the model's thinking config — capability routing above
   // is untouched. Register and thinking are orthogonal — a register-class
   // turn with mode=thinking still thinks (the config applies identically).
-  const requestedMode = parseThinkingMode(args.mode)
-  const thinking = resolveThinkingConfig(
-    requestedMode,
-    routerPlan.internalModelId,
-    routerPlan.route,
-    cap.capability
-  )
   if (thinking.remapNote) {
     console.log(`GS-MODE-REMAP conv=${id} ${thinking.remapNote}`)
   }
@@ -968,6 +969,8 @@ const MAX_GUARD_ATTEMPTS = 3
 export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnResult> {
   const id = prep.conversationId
   const content = prep.content
+  const presentation = presentationStream(content, push)
+  push = presentation.push
   const userMessage = prep.userMessage
   const cap = prep.cap
   const routerPlan = prep.routerPlan
@@ -1576,7 +1579,15 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     // duplicating output.
     let catalogOutputStarted = false
     let lastCatalogError: unknown = null
-    const directCatalogRoutes = catalogFastRoutes.filter((route) => route.provider !== 'openrouter')
+    const fittingCatalogRoutes = catalogFastRoutes.filter(route => catalogContextFits(route, msgs))
+    const directCatalogRoutes = fittingCatalogRoutes.filter((route) => route.provider !== 'openrouter')
+    const fittingOpenRouterModels = openRouterModels?.filter(model =>
+      !catalogFastRoutes.some(route => route.provider === 'openrouter' && route.modelId === model) ||
+      fittingCatalogRoutes.some(route => route.provider === 'openrouter' && route.modelId === model)
+    )
+    if (openRouterModels && fittingOpenRouterModels?.length === 0 && directCatalogRoutes.length === 0) {
+      throw new FreeCapacityUnavailableError('No free candidate can hold the complete request and answer context.')
+    }
     for (const route of directCatalogRoutes) {
       const apiKey = configuredProviderKey(route.provider)
       if (!apiKey) continue
@@ -1610,7 +1621,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         )
       }
     }
-    if (freeOnlyEnabled() && !openRouterModels && directCatalogRoutes.length > 0) {
+    if (freeOnlyEnabled() && !fittingOpenRouterModels?.length && catalogFastRoutes.length > 0) {
       throw new FreeCapacityUnavailableError(
         lastCatalogError instanceof Error
           ? 'Free catalog providers are temporarily unavailable.'
@@ -1619,11 +1630,11 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     }
 
     try {
-      if (openRouterModels) {
+      if (fittingOpenRouterModels?.length) {
         callStartedAt = Date.now()
         const text = wrappedOnDelta
-          ? await orStreamChat(msgs, openRouterModels, wrappedOnDelta, orReasoning, reasoningForward?.onDelta)
-          : await orCompleteChat(msgs, openRouterModels, orReasoning).then((r) => r.text)
+          ? await orStreamChat(msgs, fittingOpenRouterModels, wrappedOnDelta, orReasoning, reasoningForward?.onDelta)
+          : await orCompleteChat(msgs, fittingOpenRouterModels, orReasoning).then((r) => r.text)
         reasoningForward?.flush()
         if (!text.trim()) throw emptyRejection('OpenRouter chain')
         return text
@@ -2082,6 +2093,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       )
     }
     const finalText = compiled.text
+    presentation.release(chunkDeltas(finalText))
     const saved = await createAssistantMessage({
       conversationId: id,
       role: 'assistant',

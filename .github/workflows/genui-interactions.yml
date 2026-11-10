@@ -1,10 +1,10 @@
 name: GenUI interaction contracts
 on:
   pull_request:
-    paths: ['shared-contracts/**', 'src/**', 'scripts/test-interaction-honesty.cjs', 'scripts/test-code-browser.cjs', 'scripts/test-react-preview-browser.cjs', 'scripts/build-react-runtime.cjs', 'scripts/react-runtime/**', 'scripts/browser-code-entry.tsx', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
+    paths: ['shared-contracts/**', 'src/**', 'scripts/test-interaction-honesty.cjs', 'scripts/test-widget-compiler.ts', 'scripts/test-code-browser.cjs', 'scripts/test-react-preview-browser.cjs', 'scripts/build-react-runtime.cjs', 'scripts/react-runtime/**', 'scripts/browser-code-entry.tsx', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
   push:
     branches: [main]
-    paths: ['shared-contracts/**', 'src/**', 'scripts/test-interaction-honesty.cjs', 'scripts/test-code-browser.cjs', 'scripts/test-react-preview-browser.cjs', 'scripts/build-react-runtime.cjs', 'scripts/react-runtime/**', 'scripts/browser-code-entry.tsx', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
+    paths: ['shared-contracts/**', 'src/**', 'scripts/test-interaction-honesty.cjs', 'scripts/test-widget-compiler.ts', 'scripts/test-code-browser.cjs', 'scripts/test-react-preview-browser.cjs', 'scripts/build-react-runtime.cjs', 'scripts/react-runtime/**', 'scripts/browser-code-entry.tsx', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
 permissions:
   contents: read
 jobs:
@@ -18,10 +18,19 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate the real Prisma client and typecheck the complete application
+        env:
+          DATABASE_URL: file:/tmp/gs-ai-typecheck.db
+        run: |
+          set -o pipefail
+          npx prisma generate 2>&1 | tee /tmp/gs-prisma-generate.log
+          npx tsc --noEmit --pretty false 2>&1 | tee /tmp/gs-typecheck.log
       - name: Compile and exercise actual interaction controls
         run: |
           set -o pipefail
           npm run test:interactions 2>&1 | tee /tmp/gs-interaction-runtime.log
+      - name: Full-context fast-route and complex-task routing regressions
+        run: npx --yes bun@1.3.14 test src/lib/catalog-router.test.ts src/lib/reader-feedback.test.ts src/lib/model-capabilities.test.ts
       - name: Install pinned real-browser verification tools
         run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund @sparticuz/chromium@143.0.4 puppeteer-core@24.37.5 esbuild@0.27.3
       - name: Real browser controls, clipboard, terminal files, worker timeout and causal CSP denial
@@ -34,7 +43,7 @@ jobs:
         run: |
           python3 - <<'PYCODE'
           from pathlib import Path
-          for name in ['/tmp/gs-interaction-runtime.log', '/tmp/gs-code-browser-runtime.log', '/tmp/gs-react-preview-runtime.log']:
+          for name in ['/tmp/gs-prisma-generate.log', '/tmp/gs-typecheck.log', '/tmp/gs-interaction-runtime.log', '/tmp/gs-code-browser-runtime.log', '/tmp/gs-react-preview-runtime.log']:
               p = Path(name)
               if p.exists():
                   text = p.read_text()[-12000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
@@ -45,6 +54,8 @@ jobs:
         with:
           name: real-browser-code-runtime
           path: |
+            /tmp/gs-prisma-generate.log
+            /tmp/gs-typecheck.log
             /tmp/gs-interaction-runtime.log
             /tmp/gs-code-browser-runtime.log
             /tmp/gs-code-browser-runtime.png

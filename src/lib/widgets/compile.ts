@@ -28,6 +28,7 @@ import {
 } from './catalog'
 import { extractBareWidget, extractWidgetFences, inferWidgetKind, repairJson, validateWidget, validationErrors } from './validate'
 import { directWidgetArt, type ArtDirection } from './art-direct'
+import { presentationPreference, suppressWidget, widgetReadableText } from './readable'
 import { sanitizeReplyEmojis } from '../nexly/icons'
 import { plainTableCell } from '../nexly/table-number'
 import { chartPreference, categoricalChartType, chronologicalLabels, supportsCategoryRecovery } from '../nexly/chart-selection'
@@ -81,6 +82,8 @@ function carriesChartSource(json: string): boolean {
 
 export function compileWidgets(input: CompileInput): CompileResult {
   const { reply, userPrompt, priorText = '' } = input
+  const presentation = presentationPreference(userPrompt)
+  const noninteractive: Array<{ start: number; end: number; replacement: string }> = []
   const fences = extractWidgetFences(reply)
   // No fenced widget? The payload may still be there, unfenced or inside a
   // ```json block — the model does this constantly. Promote it to a canonical
@@ -98,6 +101,10 @@ export function compileWidgets(input: CompileInput): CompileResult {
   const directions: ArtDirection[] = []
 
   for (const fence of fences) {
+    if (suppressWidget(fence.kind, presentation)) {
+      noninteractive.push({ start: fence.start, end: fence.end, replacement: widgetReadableText(fence.json) })
+      continue
+    }
     let result = validateWidget(fence.kind, fence.json)
     // Cross-kind self-healing: when the fence language and the payload's real
     // structure disagree (e.g. a ```gantt fence holding dated timeline entries,
@@ -112,6 +119,10 @@ export function compileWidgets(input: CompileInput): CompileResult {
       }
     }
     if (result.ok) {
+      if (suppressWidget(result.kind, presentation)) {
+        noninteractive.push({ start: fence.start, end: fence.end, replacement: widgetReadableText(fence.json) })
+        continue
+      }
       const payload = JSON.parse(result.json) as Record<string, unknown>
       const direction = directWidgetArt({
         kind: result.kind,
@@ -151,7 +162,7 @@ export function compileWidgets(input: CompileInput): CompileResult {
   const overflow = valid.slice(LIMITS.maxWidgetsPerAnswer)
 
   if (kept.length > 0) {
-    let text = rewrite(reply, [...kept, ...overflow.map((v) => ({ ...v, replacement: widgetSourceFallback(reply.slice(v.start, v.end), 'Additional interactive content exceeds this response’s widget limit. Original source is preserved below.') }))], invalid)
+    let text = rewrite(reply, [...noninteractive, ...kept, ...overflow.map((v) => ({ ...v, replacement: widgetSourceFallback(reply.slice(v.start, v.end), 'Additional interactive content exceeds this response’s widget limit. Original source is preserved below.') }))], invalid)
     return {
       text: text.trimEnd(),
       widgets: kept.length,
@@ -159,6 +170,10 @@ export function compileWidgets(input: CompileInput): CompileResult {
       errors,
     }
   }
+
+  // Suppressed model widgets must not enter the automatic recovery path and
+  // become charts again. Prose outside each original fence stays byte-for-byte.
+  if (noninteractive.length > 0) return { text: rewrite(reply, noninteractive, invalid).trimEnd(), widgets: 0, path: 'none', errors }
 
   // An invalid data widget is not evidence for an invented replacement chart.
   if (invalid.length > 0) return { text: strip(reply, invalid), widgets: 0, path: 'none', errors }

@@ -119,6 +119,19 @@ async function main() {
     const html = renderToString(h(TitleRow, { title: ':rocket: Launch' }))
     assert.match(html, /nx-glyph/); assert.doesNotMatch(html, /:rocket:/)
   })
+  for (const prompt of ['no charts please', 'plain text only', 'only a table']) {
+    check('actual message view honors presentation without dropping observations: ' + prompt, () => {
+      const generated = 'These are the supplied observations.\n\n```chart\n' + JSON.stringify({
+        type:'line', title:'Actual observations', labels:['Dhaka','Feni','Zero'],
+        series:[{name:'Measured',data:[[0,-12],[1,2026],[2,0]]}]
+      }) + '\n```\n\nNo invented totals.'
+      const compiled = ensureWidgets(generated, {userPrompt:prompt})
+      const html = renderToString(h(MessageContent, {text:compiled.text,dark:false}))
+      assert.equal(compiled.widgets,0)
+      assert.doesNotMatch(html, /<svg|<canvas|<iframe|>series:|>labels:/)
+      for (const value of ['Dhaka','Feni','Zero','-12','2026','Measured','No invented totals.']) assert.ok(html.includes(value),value)
+    })
+  }
   check('automatic tools wait for finalized text', () => {
     assert.doesNotMatch(renderToString(h(MessageContent, { text, streaming: true })), /Practice concepts from this answer/)
     assert.match(renderToString(h(MessageContent, { text })), /Practice concepts from this answer/)

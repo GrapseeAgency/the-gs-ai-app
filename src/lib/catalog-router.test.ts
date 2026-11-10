@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   hasEligibleDirectFreeCatalogRoute,
+  catalogContextFits,
   selectCatalogFastRoutes,
 } from './catalog-router'
 import type { NormalizedModelMetadata } from './provider-catalog'
@@ -106,4 +107,50 @@ describe('catalog fast router', () => {
       env: {} as NodeJS.ProcessEnv,
     })).toEqual([])
   })
+  test('requires both text input and output, known context and room to answer', () => {
+    const routes = selectCatalogFastRoutes({
+      route:'TEXT_SIMPLE', hasImages:false, hasDocuments:false, estimatedInputChars:12000,
+      env:{GROQ_API_KEY:'test'} as unknown as NodeJS.ProcessEnv,
+      cache:cache({groq:[
+        model('groq','enough'),
+        model('groq','tiny',{contextWindowTokens:4096}),
+        model('groq','unknown',{contextWindowTokens:null}),
+        model('groq','image-in',{inputModalities:['image']}),
+        model('groq','no-output',{outputModalities:[]}),
+      ]}),
+    })
+    expect(routes.map(route=>route.modelId)).toEqual(['enough'])
+  })
+
+  test('assembled system, history, evidence and Unicode are counted without trimming messages', () => {
+    const messages = [
+      {content:'System contract '.repeat(500)},
+      {content:'Earlier user request '.repeat(100)},
+      {content:'Retrieved evidence '.repeat(200)},
+      {content:'ফেনী থেকে বিস্তারিত ব্যাখ্যা চাই।'.repeat(50)},
+    ]
+    const original = JSON.stringify(messages)
+    const bytes = messages.reduce((sum,message)=>sum+Buffer.byteLength(message.content,'utf8')+16,0)
+    expect(catalogContextFits({contextWindowTokens:bytes+4096}, messages)).toBe(true)
+    expect(catalogContextFits({contextWindowTokens:bytes+4095}, messages)).toBe(false)
+    expect(catalogContextFits({contextWindowTokens:null}, messages)).toBe(false)
+    expect(catalogContextFits({contextWindowTokens:NaN}, messages)).toBe(false)
+    expect(JSON.stringify(messages)).toBe(original)
+  })
+
+  test('complex work never falls onto the unverified simple-model catalog fast path', () => {
+    for (const route of ['TEXT_COMPLEX','CODING','DEEP_RESEARCH','DOCUMENT','VISION']) {
+      expect(selectCatalogFastRoutes({route,hasImages:false,hasDocuments:false,
+        cache:cache({groq:[model('groq','free')]}),env:{GROQ_API_KEY:'test'} as unknown as NodeJS.ProcessEnv})).toEqual([])
+    }
+  })
+
+  test('explicit thinking never uses the mode-blind generic fast path', () => {
+    const request = {route:'TEXT_SIMPLE',hasImages:false,hasDocuments:false,requiresReasoning:true,
+      cache:cache({groq:[model('groq','free')]}),env:{GROQ_API_KEY:'test'} as unknown as NodeJS.ProcessEnv}
+    expect(selectCatalogFastRoutes(request)).toEqual([])
+    expect(hasEligibleDirectFreeCatalogRoute(request)).toBe(false)
+    expect(selectCatalogFastRoutes({...request,requiresReasoning:false})).toHaveLength(1)
+  })
+
 })

@@ -23,7 +23,7 @@ import type { NormalizedModelMetadata } from './provider-catalog'
 const AUTO_FAST_PATH_ENV = 'GS_CATALOG_AUTO_FAST_PATH'
 const DEFAULT_MAX_CANDIDATES = 6
 const DEFAULT_MAX_CATALOG_AGE_MS = 24 * 60 * 60 * 1_000
-const APPROX_CHARS_PER_TOKEN = 3
+const OUTPUT_CONTEXT_RESERVE = 4096
 
 export type CatalogFastRoute = {
   provider: GenericTextProviderId
@@ -37,6 +37,8 @@ export type CatalogRouteRequest = {
   route: string
   hasImages: boolean
   hasDocuments: boolean
+  /** Generic catalog execution has no verified reasoning-mode adapter. */
+  requiresReasoning?: boolean
   estimatedInputChars?: number
   maxCandidates?: number
   maxCatalogAgeMs?: number
@@ -57,11 +59,11 @@ function isGenericProvider(value: string): value is GenericTextProviderId {
 }
 
 function isTextModel(model: NormalizedModelMetadata): boolean {
-  return model.inputModalities.includes('text') || model.outputModalities.includes('text')
+  return model.inputModalities.includes('text') && model.outputModalities.includes('text')
 }
 
 function estimatedTokens(chars: number): number {
-  return Math.max(1, Math.ceil(Math.max(0, chars) / APPROX_CHARS_PER_TOKEN))
+  return Math.max(1, Math.ceil(Math.max(0, chars))) + OUTPUT_CONTEXT_RESERVE
 }
 
 function cacheIsFresh(
@@ -103,7 +105,7 @@ function eligibleModels(request: CatalogRouteRequest): EligibleModel[] {
     // The generic execution path is text-chat only. Do not auto-route audio,
     // image, or video output models into a normal text response.
     if (model.outputModalities.some((modality) => modality !== 'text')) continue
-    if (model.contextWindowTokens !== null && model.contextWindowTokens < minimumContext) continue
+    if (model.contextWindowTokens === null || model.contextWindowTokens < minimumContext) continue
     eligible.push({ provider, model })
   }
   return eligible.sort((a, b) => {
@@ -125,11 +127,26 @@ function toFastRoute(entry: { provider: GenericTextProviderId; model: Normalized
   }
 }
 
+/** Recheck the assembled request, including system contract and fresh evidence.
+ * UTF-8 bytes are a conservative tokenizer-independent bound, not a request
+ * to shorten the answer. An oversized candidate is skipped, never truncated.
+ * The reserve leaves room to answer; it does not cap generated output.
+ */
+export function catalogContextFits(
+  route: Pick<CatalogFastRoute, 'contextWindowTokens'>,
+  messages: ReadonlyArray<{ content: string }>,
+): boolean {
+  const context = route.contextWindowTokens
+  if (context === null || !Number.isFinite(context)) return false
+  const input = messages.reduce((total, message) => total + Buffer.byteLength(message.content, 'utf8') + 16, 0)
+  return input + OUTPUT_CONTEXT_RESERVE <= context
+}
+
 /** Select free catalog candidates for a simple, text-only turn. */
 export function selectCatalogFastRoutes(request: CatalogRouteRequest): CatalogFastRoute[] {
   const env = request.env ?? process.env
   if (request.autoFastPath === false || !autoFastPathEnabled(env)) return []
-  if (request.route !== 'TEXT_SIMPLE' || request.hasImages || request.hasDocuments) return []
+  if (request.route !== 'TEXT_SIMPLE' || request.hasImages || request.hasDocuments || request.requiresReasoning) return []
 
   const maxCandidates = Math.min(
     DEFAULT_MAX_CANDIDATES,
@@ -153,6 +170,7 @@ export function selectCatalogFastRoutes(request: CatalogRouteRequest): CatalogFa
 export function hasEligibleDirectFreeCatalogRoute(
   request: Partial<CatalogRouteRequest> = {},
 ): boolean {
+  if (request.requiresReasoning) return false
   const env = request.env ?? process.env
   if (request.autoFastPath === false || !autoFastPathEnabled(env)) return false
   const cache = request.cache === undefined ? getProviderCatalogCache() : request.cache
