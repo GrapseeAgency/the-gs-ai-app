@@ -30,6 +30,7 @@ import { orCompleteChat, orStreamChat } from '@/lib/openrouter'
 import { planRoute } from '@/lib/router'
 import {
   selectCatalogFastRoutes,
+  catalogContextFits,
   type CatalogFastRoute,
 } from '@/lib/catalog-router'
 import {
@@ -635,7 +636,7 @@ export async function prepareTurn(
     route: routerPlan.route,
     hasImages: useVision,
     hasDocuments: currentTurnDocs.length > 0 || historyDocTurns.length > 0,
-    estimatedInputChars: content.length + recentDesc.reduce((sum, message) => sum + message.content.length, 0),
+    estimatedInputChars: Buffer.byteLength(baseSystemPrompt + content + recentDesc.map(message => message.content).join('\n'), 'utf8'),
   })
   const baseRoute = resolveModelRoute(routerPlan.internalModelId)
   const freeChain = forceFreeEligible
@@ -1576,7 +1577,15 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     // duplicating output.
     let catalogOutputStarted = false
     let lastCatalogError: unknown = null
-    const directCatalogRoutes = catalogFastRoutes.filter((route) => route.provider !== 'openrouter')
+    const fittingCatalogRoutes = catalogFastRoutes.filter(route => catalogContextFits(route, msgs))
+    const directCatalogRoutes = fittingCatalogRoutes.filter((route) => route.provider !== 'openrouter')
+    const fittingOpenRouterModels = openRouterModels?.filter(model =>
+      !catalogFastRoutes.some(route => route.provider === 'openrouter' && route.modelId === model) ||
+      fittingCatalogRoutes.some(route => route.provider === 'openrouter' && route.modelId === model)
+    )
+    if (openRouterModels && fittingOpenRouterModels?.length === 0 && directCatalogRoutes.length === 0) {
+      throw new FreeCapacityUnavailableError('No free candidate can hold the complete request and answer context.')
+    }
     for (const route of directCatalogRoutes) {
       const apiKey = configuredProviderKey(route.provider)
       if (!apiKey) continue
@@ -1610,7 +1619,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         )
       }
     }
-    if (freeOnlyEnabled() && !openRouterModels && directCatalogRoutes.length > 0) {
+    if (freeOnlyEnabled() && !fittingOpenRouterModels?.length && catalogFastRoutes.length > 0) {
       throw new FreeCapacityUnavailableError(
         lastCatalogError instanceof Error
           ? 'Free catalog providers are temporarily unavailable.'
@@ -1619,11 +1628,11 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     }
 
     try {
-      if (openRouterModels) {
+      if (fittingOpenRouterModels?.length) {
         callStartedAt = Date.now()
         const text = wrappedOnDelta
-          ? await orStreamChat(msgs, openRouterModels, wrappedOnDelta, orReasoning, reasoningForward?.onDelta)
-          : await orCompleteChat(msgs, openRouterModels, orReasoning).then((r) => r.text)
+          ? await orStreamChat(msgs, fittingOpenRouterModels, wrappedOnDelta, orReasoning, reasoningForward?.onDelta)
+          : await orCompleteChat(msgs, fittingOpenRouterModels, orReasoning).then((r) => r.text)
         reasoningForward?.flush()
         if (!text.trim()) throw emptyRejection('OpenRouter chain')
         return text
