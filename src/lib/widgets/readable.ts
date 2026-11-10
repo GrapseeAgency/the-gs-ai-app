@@ -45,9 +45,13 @@ export type PresentationPreference = 'plain' | 'table' | 'no-charts' | 'automati
 
 /** Only explicit presentation constraints, never a topic-to-widget decision. */
 export function presentationPreference(prompt: string): PresentationPreference {
-  if (/\b(?:plain text|text only|prose only|only prose|just text)\b/i.test(prompt)) return 'plain'
-  if (/\bonly (?:a )?table\b/i.test(prompt)) return 'table'
-  if (/\b(?:no|without|avoid|skip)\s+(?:any\s+)?(?:charts?|graphs?|plots?|visuali[sz]ations?)\b|\b(?:don['’]t|do not|never)\s+(?:add|use|include|draw|render|show|make)?\s*(?:a\s+)?(?:charts?|graphs?|plots?)\b/i.test(prompt)) return 'no-charts'
+  // Quoted examples and executable source are content, not presentation
+  // instructions (e.g. explain the phrase "no charts"). Apostrophes in
+  // don't/doesn't are deliberately not treated as quotation marks.
+  const text = prompt.replace(/```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`\n]*`|"(?:\\.|[^"\\])*"|“[^”]*”|(?<!\w)'(?:\\.|[^'\\])*'(?!\w)/g, ' ')
+  if (/\b(?:plain text only|text only|prose only|only prose|just text)\b|^\s*plain text[.!?]?\s*$|\b(?:in|as)\s+(?:only\s+|just\s+)?plain text\b|\buse\s+(?:only\s+|just\s+)?plain text\b/i.test(text)) return 'plain'
+  if (/\b(?:only (?:a )?table|table only)\b/i.test(text)) return 'table'
+  if (/\b(?:no|without|avoid|skip)\s+(?:any\s+)?(?:charts?|graphs?|plots?|visuali[sz]ations?)\b|\b(?:don['’]t|do not|never)\s+(?:add|use|include|draw|render|show|make|want)?\s*(?:(?:a|any|the)\s+)?(?:charts?|graphs?|plots?|visuali[sz]ations?)\b/i.test(text)) return 'no-charts'
   return 'automatic'
 }
 
