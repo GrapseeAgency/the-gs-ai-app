@@ -116,6 +116,13 @@ object GsNative {
     external fun chat(prompt: String): String
 
     /**
+     * Generate a completion while forwarding each real native token to the
+     * callback. The callback runs on the inference thread; return false to
+     * cooperatively stop at a token boundary. Like [chat], call off the UI thread.
+     */
+    external fun chatStream(prompt: String, callback: NativeTokenCallback): String
+
+    /**
      * Generate a completion with an explicit token budget.
      *
      * A separate method rather than an overload: JNI mangles by arity, so one
