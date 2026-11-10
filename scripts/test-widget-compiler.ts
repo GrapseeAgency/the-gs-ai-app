@@ -1018,7 +1018,7 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
     check('format choice preserves signed, zero, year-like and Unicode data: ' + prompt,
       ['ঢাকা', 'ফেনী', '-12', '2026', '0', 'Measured', 'Actual answer before.', 'Actual answer after.'].every(value => result.text.includes(value)))
   }
-  for (const source of [JSON.stringify(payload), '```json\n' + JSON.stringify(payload) + '\n```', fence.replaceAll('```', '~~~')]) {
+  for (const source of [JSON.stringify(payload), '```json\n' + JSON.stringify(payload) + '\n```', fence.replace(/```/g, '~~~')]) {
     const result = compileWidgets({ reply: source, userPrompt: 'text only' })
     check('bare, JSON-fenced and tilde-fenced model data cannot bypass text-only', result.widgets === 0 && extractWidgetFences(result.text).length === 0 && result.text.includes('2026'))
   }
