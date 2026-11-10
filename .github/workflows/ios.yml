@@ -411,6 +411,7 @@ jobs:
               ('ChatResponseHonestyTests', 'testFailedFirstCreationRetriesCreationAndPersistsOriginalUserOnceWithoutFakeIDs'),
               ('ChatResponseHonestyTests', 'testBatchedAnswerRevealsProgressivelyAndModeReachesTheActualViewModel'),
               ('ChatResponseHonestyTests', 'testStopDuringBurstRevealPreservesEveryReceivedCharacter'),
+              ('ChatResponseHonestyTests', 'testStoppedRevealCannotFinalizeTheImmediatelyFollowingTurn'),
               ('AttachmentLogicTests', 'testAllowlistMatchesBackend'),
               ('AttachmentLogicTests', 'testKindForMime'),
               ('PlatformRuntimeUITests', 'testConversationActionsTapOpensRealOptionsWithoutLeavingChat'),
