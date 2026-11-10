@@ -17,6 +17,13 @@ package com.grapsee.gsai.native
  *  3. **Nothing here blocks the UI thread.** A generation on a phone takes
  *     seconds, not milliseconds. Call from `Dispatchers.IO`.
  */
+@androidx.annotation.Keep
+fun interface NativeTokenCallback {
+    /** Return false to stop generation at the next real token boundary. */
+    @androidx.annotation.Keep
+    fun onToken(delta: String): Boolean
+}
+
 object GsNative {
 
     /**
