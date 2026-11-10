@@ -20,17 +20,22 @@ class AttachmentRulesTest {
             "image/jpeg", "image/png", "image/webp", "image/gif",
             "image/heic", "image/heif",
             "application/pdf",
-            "text/plain", "text/markdown", "text/csv"
+            "text/plain", "text/markdown", "text/csv",
+            "audio/mpeg", "audio/wav", "audio/mp4",
+            "video/mp4", "video/quicktime", "video/webm"
         )
         assertEquals(backend, AttachmentRules.ALLOWED_MIME_TYPES)
     }
 
     @Test
-    fun `audio and video are deliberately absent`() {
-        assertNull(AttachmentRules.kindForMime("audio/mpeg"))
-        assertNull(AttachmentRules.kindForMime("video/mp4"))
-        assertFalse(AttachmentRules.isAllowed("audio/mpeg"))
-        assertFalse(AttachmentRules.isAllowed("video/mp4"))
+    fun `playable media is received without claiming analysis`() {
+        assertEquals(AttachmentKind.Audio, AttachmentRules.kindForMime("audio/mpeg"))
+        assertEquals(AttachmentKind.Video, AttachmentRules.kindForMime("video/mp4"))
+        assertTrue(AttachmentRules.isAllowed("audio/mpeg"))
+        assertTrue(AttachmentRules.isAllowed("video/mp4"))
+        assertFalse(AttachmentRules.isAllowed("audio/unknown"))
+        assertEquals("audio/mp4", AttachmentRules.canonicalMime("audio/x-m4a"))
+        assertEquals("audio/wav", AttachmentRules.canonicalMime("audio/x-wav"))
     }
 
     @Test
