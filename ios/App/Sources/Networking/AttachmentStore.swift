@@ -124,6 +124,16 @@ struct AttachmentRules {
     /// Hard cap per message.
     static let maxPerMessage = 6
 
+    static func canonicalMIME(_ mime: String) -> String {
+        let base = mime.split(separator: ";").first.map(String.init)?.lowercased() ?? mime.lowercased()
+        switch base {
+        case "audio/x-m4a": return "audio/mp4"
+        case "audio/x-wav", "audio/wave": return "audio/wav"
+        case "text/x-markdown": return "text/markdown"
+        default: return base
+        }
+    }
+
     /// MIME → kind, mirroring `kindForMime` on the server.
     static func kindForMime(_ mime: String) -> AttachmentKind? {
         if mime.hasPrefix("audio/") { return .audio }
@@ -632,7 +642,7 @@ final class AttachmentStore: ObservableObject {
     nonisolated private static func resolvedMIME(forFileAt url: URL) -> String? {
         let values = try? url.resourceValues(forKeys: [.contentTypeKey])
         let mime = values?.contentType?.preferredMIMEType?.lowercased()
-        return mime
+        return mime.map(AttachmentRules.canonicalMIME)
     }
 
     // MARK: Staging (selected → preparing → uploading)
