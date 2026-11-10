@@ -24,7 +24,8 @@ export function widgetReadableText(raw: string): string {
     const prefix = '  '.repeat(Math.min(depth, 12))
     const label = key ? `${literal(key)}: ` : ''
     if (Array.isArray(value) && value.every(v => v === null || typeof v !== 'object')) {
-      lines.push(`${prefix}- ${label}${value.map(literal).join(', ') || '(empty list)'}`)
+      const cells = value.map(v => literal(typeof v === 'string' ? JSON.stringify(v) : v))
+      lines.push(`${prefix}- ${label}${value.length ? cells.join(', ') : '(empty list)'}`)
     } else if (value !== null && typeof value === 'object') {
       if (key) lines.push(`${prefix}- ${literal(key)}:`)
       const entries = Array.isArray(value)
