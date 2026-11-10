@@ -205,19 +205,61 @@ jobs:
           announced_wait = False
 
           def api(path):
-              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{path}']))
+              last_error = None
+              for attempt in range(3):
+                  try:
+                      result = subprocess.run(
+                          ['gh', 'api', f'repos/{repo}/{path}'],
+                          check=False, capture_output=True, text=True, timeout=60)
+                      if result.returncode != 0:
+                          detail = (result.stderr or result.stdout).strip()
+                          raise RuntimeError(f'gh api exited {result.returncode}: {detail}')
+                      return json.loads(result.stdout)
+                  except Exception as exc:
+                      last_error = f'{type(exc).__name__}: {exc}'
+                      if attempt < 2:
+                          time.sleep(2)
+              message = f'{path}: {last_error}'.replace('\n', ' ').replace('\r', ' ')
+              print(f'::error title=Native artifact lookup failed::{message}', file=sys.stdout)
+              raise SystemExit(1)
 
           def artifact_from(run):
+              if run.get('status') in ('queued', 'pending'):
+                  return None, 'pending'
+              jobs = api(f"actions/runs/{run['id']}/jobs?per_page=100").get('jobs', [])
+              producer = next((j for j in jobs if j.get('name') == 'xcframework'), None)
+              if producer is None or producer.get('status') != 'completed':
+                  return None, 'pending' if run.get('status') != 'completed' else 'failed'
+              if producer.get('conclusion') != 'success':
+                  return None, 'failed'
               artifacts = api(f"actions/runs/{run['id']}/artifacts?per_page=100").get('artifacts', [])
               artifact = next((a for a in artifacts
                                if a.get('name') == 'GsFfi.xcframework' and not a.get('expired')), None)
-              jobs = api(f"actions/runs/{run['id']}/jobs?per_page=100").get('jobs', [])
-              producer = next((j for j in jobs if j.get('name') == 'xcframework'), None)
-              if producer and producer.get('conclusion') == 'success' and artifact:
+              if artifact:
                   return artifact, 'success'
-              if run.get('status') != 'completed' or (producer and producer.get('status') != 'completed'):
-                  return None, 'pending'
-              return None, 'failed'
+              return None, 'pending' if run.get('status') != 'completed' else 'failed'
+
+          def native_sources_unchanged(run):
+              source_sha = run.get('head_sha')
+              target_sha = os.environ['NATIVE_SOURCE_SHA']
+              if not source_sha or not target_sha:
+                  return False
+              if source_sha == target_sha:
+                  return True
+              comparison = api(f'compare/{source_sha}...{target_sha}')
+              if comparison.get('status') not in ('ahead', 'identical'):
+                  return False
+              files = comparison.get('files', [])
+              # The compare API truncates very large file lists. Never call a
+              # truncated diff "compatible" by accident.
+              if len(files) >= 300:
+                  return False
+              for changed in files:
+                  path = changed.get('filename', '')
+                  if (path.startswith(('native/', '.cargo/', '.github/scripts/'))
+                          or path == '.github/workflows/ios-native.yml'):
+                      return False
+              return True
 
           def emit(run, artifact):
               print(run['id'], artifact['id'])
@@ -226,7 +268,7 @@ jobs:
           while True:
               runs = api('actions/workflows/ios-native.yml/runs?per_page=100').get('workflow_runs', [])
               same_repo = [r for r in runs
-                           if r.get('head_repository', {}).get('full_name') == repo]
+                           if (r.get('head_repository') or {}).get('full_name') == repo]
               exact = [r for r in same_repo if r.get('head_sha') in target_shas]
               pending = False
 
@@ -240,6 +282,21 @@ jobs:
                           pending = True
                       else:
                           failures.append(run)
+                  if pending:
+                      # A prior PR artifact is safe to reuse only when every
+                      # native build input is byte-for-byte unchanged since its
+                      # source commit. This avoids rebuilding the XCFramework
+                      # for an iOS-workflow-only follow-up while never masking a
+                      # changed C/Rust ABI or implementation.
+                      prior = sorted(
+                          (r for r in same_repo if r.get('head_branch') == target_branch
+                           and r.get('head_sha') not in target_shas
+                           and r.get('status') == 'completed'),
+                          key=lambda r: r.get('created_at', ''), reverse=True)
+                      for run in prior:
+                          artifact, state = artifact_from(run)
+                          if state == 'success' and native_sources_unchanged(run):
+                              emit(run, artifact)
                   if not pending:
                       details = ', '.join(f"run {r['id']}: {r.get('conclusion') or 'no producer artifact'}"
                                           for r in failures)
@@ -268,6 +325,8 @@ jobs:
                       for run in candidates:
                           artifact, state = artifact_from(run)
                           if state == 'success':
+                              if requires_stream_api and not native_sources_unchanged(run):
+                                  continue
                               emit(run, artifact)
 
                       if requires_stream_api and event in ('pull_request', 'push'):
