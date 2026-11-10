@@ -112,6 +112,8 @@ class ChatStreamController(private val chat: ChatRepository) {
         val hasAttachments: Boolean = false,
         /** PHASE 8.1: last known wire status of the search chain (null = no search this turn). */
         val searchPhase: String? = null,
+        /** Real provider activity: generating a draft or checking it before a retry. */
+        val generationStatus: String? = null,
         /** PHASE 8.1: real received search-chain steps, in arrival order. */
         val traceItems: List<SearchTraceItem> = emptyList(),
         /** PHASE 8.1: live source cards; final value = the persisted done sources. */
@@ -247,6 +249,15 @@ class ChatStreamController(private val chat: ChatRepository) {
                     // --- PHASE 8.1 search-chain events (protocol v1) -----------
                     onStatus = { status ->
                         publishIfMine(token) { search.applyStatus(it, status) }
+                    },
+                    onReset = {
+                        // A retry replaces, rather than appends to, the real
+                        // provider draft that failed the server's check.
+                        synchronized(buffer) {
+                            buffer.setLength(0)
+                            visibleChars = 0
+                        }
+                        publishIfMine(token) { it.copy(streamText = "") }
                     },
                     // FLASH-MODE BUG 1: the first event of every turn — the
                     // backend's resolved effective mode. Parsed tolerantly; a
@@ -451,6 +462,7 @@ private class SearchStreamAccumulator {
         when (status) {
             "searching" -> state.copy(searchPhase = "searching")
             "working" -> state.copy(searchPhase = "working")
+            "generating", "checking" -> state.copy(generationStatus = status)
             "composing" -> state.copy(
                 searchPhase = "composing",
                 traceItems = if (state.traceItems.any { it.kind == SearchTraceItem.Kind.Composing }) {
