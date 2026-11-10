@@ -267,6 +267,8 @@ class ApiClient(
         /** REASONING TRACE: raw {"delta":"..."} frames from thinking-enabled
          *  stream turns. Forwarded untouched; empty payload ignored. */
         onReasoningEvent: (String) -> Unit = {},
+        /** A provisional provider draft failed a real server check; replace its text before retry deltas. */
+        onReset: () -> Unit = {},
         /** CLOCK (GenUI): the device IANA zone (e.g. "Asia/Dhaka") used by the
          *  backend to anchor relative dates in widgets. Defaults to THIS
          *  DEVICE's zone, so every turn — including the translation scratch
@@ -371,6 +373,7 @@ class ApiClient(
                             // REASONING TRACE — unknown to pre-reasoning parsers, which
                             // skip it silently (when-without-else contract).
                             "reasoning" -> if (!event.data.isNullOrBlank()) onReasoningEvent(event.data)
+                            "reset" -> onReset()
                             "done" -> {
                                 val message = event.data?.let { data ->
                                     runCatching { GsApiJson.decodeFromString<MessageDto>(data) }.getOrNull()
