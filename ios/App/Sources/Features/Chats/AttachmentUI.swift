@@ -194,6 +194,7 @@ struct AttachmentChipRow: View {
             }
             .padding(.vertical, 2)
         }
+        .fixedSize(horizontal: false, vertical: true)
         .frame(maxHeight: 312)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Attachments")
