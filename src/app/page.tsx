@@ -220,7 +220,7 @@ function MessageAttachmentPreviews({ attachments }: { attachments: AttachmentPre
               </div>
             )}
             {isDocument && canEmbedDocument && (
-              <iframe src={url} title={`Preview ${attachment.displayName}`} loading="lazy" sandbox=""
+              <iframe src={url} title={`Preview ${attachment.displayName}`} loading="lazy" sandbox={isPdf ? undefined : ''}
                 className="block h-56 w-full border-0 bg-white" />
             )}
             {isDocument && !canEmbedDocument && (
