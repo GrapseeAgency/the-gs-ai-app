@@ -749,9 +749,11 @@ final class ChatViewModel: ObservableObject {
 
         // Strong self capture is intentional and bounded: the task only lives
         // as long as this stream; `stop()` cancels it, which ends the cycle.
+        guard let responseID = messages.last?.id else { return }
         streamTask = Task {
             do {
                 let conversationID = try await self.ensureConversation(for: text)
+                guard self.isStreaming, self.messages.last?.id == responseID else { return }
                 // A failed first create leaves the optimistic user turn in
                 // memory. Persist it once creation actually succeeds, including
                 // when that happens on Retry (appendUserMessage == false).
@@ -799,10 +801,14 @@ final class ChatViewModel: ObservableObject {
                         sink.append(event) // lock-guarded — drained in the flush loop
                     }
                 )
+                guard self.isStreaming, self.messages.last?.id == responseID else { return }
+                if self.streamBuffer.isEmpty, let content = completedMessage?.content, !content.isEmpty {
+                    self.streamBuffer.append(content)
+                }
                 // Reveal received text at display cadence even when an upstream
                 // proxy batches several deltas. Never invent tokens or work steps.
                 self.stopFlushLoop()
-                while self.isStreaming,
+                while self.isStreaming, self.messages.last?.id == responseID,
                       let index = self.messages.indices.last,
                       self.messages[index].isStreaming,
                       self.messages[index].content != self.streamBuffer.snapshot() {
@@ -810,8 +816,11 @@ final class ChatViewModel: ObservableObject {
                     self.flushStreamingText()
                     try await Task.sleep(nanoseconds: 33_000_000)
                 }
-                if self.isStreaming { self.finalize(with: completedMessage) }
+                if self.isStreaming, self.messages.last?.id == responseID { self.finalize(with: completedMessage) }
             } catch {
+                // A stopped task may resume after a new send. Its completion or
+                // cancellation must never close the newer bubble or its painter.
+                guard self.isStreaming, self.messages.last?.id == responseID else { return }
                 if Self.isCancellation(error) {
                     self.finalizeLocal()
                 } else {
