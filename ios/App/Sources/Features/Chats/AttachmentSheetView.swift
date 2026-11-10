@@ -281,6 +281,10 @@ struct AttachmentSheetView: View {
                 let types = item.supportedContentTypes.compactMap { $0.preferredMIMEType?.lowercased() }
                 let mime = types.first(where: { AttachmentRules.allowedMIMETypes.contains($0) })
                     ?? types.first ?? "application/octet-stream"
+                guard AttachmentRules.allowedMIMETypes.contains(mime) else {
+                    onUnavailable("This photo or video format is not supported.")
+                    continue
+                }
                 do {
                     guard let data = try await item.loadTransferable(type: Data.self), !data.isEmpty else {
                         onUnavailable("The selected photo or video could not be loaded.")
