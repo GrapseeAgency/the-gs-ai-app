@@ -17,6 +17,7 @@ import com.grapsee.gsai.di.ServiceLocator
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.core.readBytes
+import io.ktor.utils.io.readRemaining
 import kotlinx.coroutines.CancellationException
 import android.util.LruCache
 import androidx.compose.runtime.Composable
