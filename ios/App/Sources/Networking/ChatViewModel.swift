@@ -122,6 +122,7 @@ struct SearchTraceStep: Identifiable, Equatable {
         /// sent them.
         case completedSummary(queries: Int, sources: Int, retrieved: Int, citations: [Int]?)
         case composing
+        case toolActivity(title: String, detail: String)
     }
 
     let id = UUID()
@@ -808,6 +809,7 @@ final class ChatViewModel: ObservableObject {
                 // Reveal received text at display cadence even when an upstream
                 // proxy batches several deltas. Never invent tokens or work steps.
                 self.stopFlushLoop()
+                self.drainSearchEvents()
                 while self.isStreaming, self.messages.last?.id == responseID,
                       let index = self.messages.indices.last,
                       self.messages[index].isStreaming,
@@ -951,6 +953,8 @@ final class ChatViewModel: ObservableObject {
             // pipeline — decode tolerantly, append only what really came.
             guard let payload = try? JSONDecoder().decode(ResearchEventPayload.self, from: Data(data.utf8)) else { return }
             applyResearchEvent(payload)
+        case "ledger":
+            applyLedgerEvent(data)
         case "reasoning":
             // REASONING TRACE — {"delta":"..."} from thinking-enabled stream
             // turns. Tolerant: a malformed frame is dropped, never breaks the
@@ -1119,6 +1123,45 @@ final class ChatViewModel: ObservableObject {
         default:
             break // unknown research sub-types stay invisible, never invented
         }
+    }
+
+    /// Public research work facts, never inferred skills or hidden thought steps.
+    private func applyLedgerEvent(_ data: String) {
+        guard let payload = try? JSONSerialization.jsonObject(with: Data(data.utf8)) as? [String: Any],
+              let type = payload["type"] as? String else { return }
+        let query = String((payload["query"] as? String ?? "").prefix(240))
+        let title: String
+        let detail: String
+        switch type {
+        case "ledger_started":
+            title = "Research started"
+            detail = (payload["branches"] as? Int).map { "\($0) branches planned" } ?? ""
+            promotePhase(.searching)
+        case "branch_started":
+            guard !query.isEmpty else { return }
+            title = "Researching"; detail = query
+            promotePhase(.searching)
+        case "branch_completed":
+            title = "Research branch completed"; detail = query
+        case "branch_failed":
+            title = "Research branch failed"; detail = query
+        case "subagents_launched":
+            guard let count = payload["count"] as? Int, count > 0 else { return }
+            title = "Research workers launched"; detail = "\(count) workers"
+        case "gaps_open":
+            title = "Research gaps found"
+            detail = (payload["gaps"] as? [String]).map { "\($0.count) gaps" } ?? ""
+        case "contradictions":
+            guard let count = payload["count"] as? Int, count > 0 else { return }
+            title = "Conflicting evidence found"; detail = "\(count) conflicts"
+        case "ledger_final":
+            title = "Research evidence assembled"
+            detail = (payload["claims"] as? Int).map { "\($0) claims" } ?? ""
+        case "stopped_by_user":
+            title = "Research stopped"; detail = "Stopped by user"
+        default: return
+        }
+        appendUniqueStep(.toolActivity(title: title, detail: detail))
     }
 
     /// Appends a trace step unless an identical step already arrived this
