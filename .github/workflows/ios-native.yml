@@ -9,8 +9,20 @@ name: ios-native
 
 on:
   workflow_dispatch:
+  pull_request:
+    # Build the native framework from the PR source itself. The iOS app job
+    # imports its C declarations from this artifact, so a main-branch archive
+    # can be stale even when the Swift source in the PR has changed.
+    paths:
+      - 'native/**'
+      - 'ios/**'
+      - 'shared-contracts/**'
+      - '.github/workflows/ios-native.yml'
+      - '.github/workflows/ios.yml'
+      - '.github/scripts/**'
+      - '.cargo/config.toml'
   push:
-    branches: [native-runtime]
+    branches: [main, native-runtime]
     paths:
       - 'native/**'
       # ios/** WAS MISSING, and the omission is the same class of bug as a check
@@ -25,6 +37,7 @@ on:
       # accident, and only as often as someone remembers to dispatch it.
       - 'ios/**'
       - '.github/workflows/ios-native.yml'
+      - '.github/workflows/ios.yml'
       # The workflow RUNS scripts under .github/scripts/, so a change to one of
       # them has to reach this workflow or the script is unmaintainable in
       # practice: edit it, nothing reruns, and the edit is silently inert.
