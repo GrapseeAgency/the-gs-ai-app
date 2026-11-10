@@ -152,6 +152,7 @@ private struct SearchTraceRow: View {
         case .searchFailed: return "exclamationmark.triangle"
         case .completedSummary: return "checkmark.seal"
         case .composing: return "pencil"
+        case .toolActivity: return "gearshape.2"
         }
     }
 
@@ -209,11 +210,15 @@ private struct SearchTraceRow: View {
             return "Search complete \u{2014} \(sources) \(sources == 1 ? "source" : "sources"), \(retrieved) \(retrieved == 1 ? "page" : "pages") read"
         case .composing:
             return "Composing the answer"
+        case .toolActivity(let title, _):
+            return title
         }
     }
 
     private var detail: String {
         switch step.kind {
+        case .toolActivity(_, let detail):
+            return detail
         case .query(_, _, let engines):
             return engines.isEmpty ? "" : engines.map { EngineDisplayName.label(for: $0) }.joined(separator: " · ")
         case .results(let round, _, _, _):
