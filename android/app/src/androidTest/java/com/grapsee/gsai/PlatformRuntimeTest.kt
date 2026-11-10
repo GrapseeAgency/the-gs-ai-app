@@ -47,6 +47,34 @@ class PlatformRuntimeTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
 
+    @Test fun actualAttachmentPreviewsDecodeImagePDFAndSourceTextWithoutInventingMissingFiles() {
+        val directory = java.io.File(compose.activity.cacheDir, "decoder-" + java.util.UUID.randomUUID()).apply { mkdirs() }
+        try {
+            val photo = java.io.File(directory, "photo.png")
+            val bitmap = android.graphics.Bitmap.createBitmap(1200, 800, android.graphics.Bitmap.Config.ARGB_8888)
+            bitmap.eraseColor(android.graphics.Color.BLUE)
+            photo.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+            bitmap.recycle()
+            val pdf = java.io.File(directory, "source.pdf")
+            val document = android.graphics.pdf.PdfDocument()
+            val page = document.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(612, 792, 1).create())
+            page.canvas.drawText("Actual PDF source", 40f, 40f, android.graphics.Paint().apply { textSize = 24f })
+            document.finishPage(page)
+            pdf.outputStream().use { document.writeTo(it) }
+            document.close()
+            val text = java.io.File(directory, "notes.md").apply { writeText("Actual source text, not generated summary.") }
+            kotlinx.coroutines.runBlocking {
+                for (file in listOf(photo, pdf, text)) {
+                    val decoded = com.grapsee.gsai.ui.attachment.ThumbLoader.decode(file)
+                    assertNotNull("Real decoder failed for ${file.name}", decoded)
+                    assertTrue(decoded!!.width > 0 && decoded.height > 0)
+                    assertTrue(kotlin.math.max(decoded.width, decoded.height) <= 512)
+                }
+                assertNull(com.grapsee.gsai.ui.attachment.ThumbLoader.decode(java.io.File(directory, "missing.png")))
+            }
+        } finally { directory.deleteRecursively() }
+    }
+
     @Test fun actualVoiceAttachmentPlaysNativeBytesWithMeasuredTimeAndClosesCleanly() {
         val context = compose.activity
         val directory = java.io.File(context.filesDir, "attachments/runtime-voice").apply { mkdirs() }
