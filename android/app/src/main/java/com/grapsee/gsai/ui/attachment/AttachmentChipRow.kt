@@ -228,7 +228,7 @@ private fun ChipThumbnail(draft: AttachmentDraft, localFile: File?, edge: Int) {
                 Image(
                     bitmap = bitmap,
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                    contentScale = if (draft.kind == AttachmentKind.Pdf || draft.kind == AttachmentKind.Document) ContentScale.Fit else ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
