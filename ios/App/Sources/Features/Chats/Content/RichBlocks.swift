@@ -1084,16 +1084,18 @@ private func append(
             if !style.isEmpty { run.inlinePresentationIntent = style }
             result.append(run)
         case .link(let text, let url):
-            let cleanText = NexlyIcons.cleanPlainText(text)
-            let label = cleanText.isEmpty ? "Link" : cleanText
+            // Keep custom icons in the same inline text run as the link label;
+            // cleaning first would silently erase every inline glyph.
+            let label = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Link" : text
             if let url = URL(string: url) {
-                var run = AttributedString(label)
+                var run = AttributedString()
+                appendText(label, into: &run, theme: theme, style: style)
                 run.link = url
                 run.underlineStyle = .single
                 run.foregroundColor = theme.linkColor
                 result.append(run)
             } else {
-                result.append(AttributedString(label))
+                appendText(label, into: &result, theme: theme, style: style)
             }
         case .math(let latex):
             if let rendered = renderMathAttributedString(latex, baseSize: theme.baseSize, color: theme.textColor) {
