@@ -19,13 +19,33 @@ struct SourceCardsView: View {
 
     let sources: [MessageSource]
 
+    @State private var expanded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Sources")
-                .font(Aero.label())
-                .foregroundStyle(Aero.textMuted)
-            ForEach(ordered, id: \.id) { source in
-                SourceCardRow(source: source)
+        if !sources.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    withAnimation(reduceMotion ? nil : Aero.gentle) { expanded.toggle() }
+                } label: {
+                    HStack(spacing: 7) {
+                        NexlyGlyph(name: "world-search", size: 16, color: Aero.textMuted)
+                        Text("\(sources.count) source\(sources.count == 1 ? "" : "s")")
+                            .font(Aero.label()).foregroundStyle(Aero.textMuted)
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10, weight: .semibold)).foregroundStyle(Aero.textMuted)
+                    }
+                    .padding(.horizontal, 12).frame(minHeight: 44)
+                    .background(Capsule().fill(Aero.raisedSurface))
+                    .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(KineticPressStyle())
+                .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+                .accessibilityHint("Show or hide the sources for this answer")
+                if expanded {
+                    ForEach(ordered, id: \.id) { source in SourceCardRow(source: source) }
+                }
             }
         }
     }
