@@ -209,7 +209,7 @@ struct AttachmentChip: View {
     let onRemove: () -> Void
     @State private var previewURL: URL?
 
-    private var visual: Bool { draft.kind == .image || draft.kind == .video }
+    private var visual: Bool { draft.kind != .audio }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -368,7 +368,7 @@ private struct MessageAttachmentPreview: View {
     @State private var failed = false
     @State private var attempt = 0
     private var kind: AttachmentKind { AttachmentKind(rawValue: attachment.kind) ?? .document }
-    private var visual: Bool { kind == .image || kind == .video }
+    private var visual: Bool { kind != .audio }
 
     var body: some View {
         Button {
