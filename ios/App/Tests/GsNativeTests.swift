@@ -284,7 +284,7 @@ final class GsNativeTests: XCTestCase {
 
     /// iOS's a6: with the switch on, `send()` must answer from the ENGINE.
     @MainActor
-    func testTheChatScreenAnswersFromTheEngine() throws {
+    func testTheChatScreenAnswersFromTheEngine() async throws {
         try loadEngineOrSkip()
 
         let store = SettingsStore.shared
@@ -296,6 +296,16 @@ final class GsNativeTests: XCTestCase {
         let vm = ChatViewModel(conversationID: nil)
         vm.draft = screenPrompt
         vm.send()
+
+        // `send()` starts native inference on a detached worker and returns
+        // immediately. Inspecting the transcript here races the real stream and
+        // used to assert against an empty, still-streaming assistant row. Yield
+        // the MainActor while the actual model reply arrives and finalizes.
+        let deadline = Date().addingTimeInterval(180)
+        while vm.isStreaming && Date() < deadline {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertFalse(vm.isStreaming, "the actual local model stream did not finish within 180 seconds")
 
         let text = transcript(vm)
         print("iOS a6 transcript -> \(text.prefix(160))")
