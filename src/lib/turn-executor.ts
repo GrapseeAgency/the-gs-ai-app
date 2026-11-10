@@ -629,8 +629,16 @@ export async function prepareTurn(
     (freeTextRoute || tierFreeEligible) &&
     // Vision has no verified free adapter yet; queue instead of paying.
     routerPlan.route !== 'VISION'
+  const requestedMode = parseThinkingMode(args.mode)
+  const thinking = resolveThinkingConfig(
+    requestedMode,
+    routerPlan.internalModelId,
+    routerPlan.route,
+    cap.capability
+  )
   const catalogFastRoutes = selectCatalogFastRoutes({
     route: routerPlan.route,
+    requiresReasoning: requestedMode === 'thinking' || thinking.config?.mode === 'thinking',
     hasImages: useVision,
     hasDocuments: currentTurnDocs.length > 0 || historyDocTurns.length > 0,
     estimatedInputChars: Buffer.byteLength(baseSystemPrompt + content + recentDesc.map(message => message.content).join('\n'), 'utf8'),
@@ -675,13 +683,6 @@ export async function prepareTurn(
   // The mode only sets the model's thinking config — capability routing above
   // is untouched. Register and thinking are orthogonal — a register-class
   // turn with mode=thinking still thinks (the config applies identically).
-  const requestedMode = parseThinkingMode(args.mode)
-  const thinking = resolveThinkingConfig(
-    requestedMode,
-    routerPlan.internalModelId,
-    routerPlan.route,
-    cap.capability
-  )
   if (thinking.remapNote) {
     console.log(`GS-MODE-REMAP conv=${id} ${thinking.remapNote}`)
   }
