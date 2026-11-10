@@ -145,7 +145,6 @@ export function catalogContextFits(
 /** Select free catalog candidates for a simple, text-only turn. */
 export function selectCatalogFastRoutes(request: CatalogRouteRequest): CatalogFastRoute[] {
   const env = request.env ?? process.env
-  if (request.requiresReasoning) return false
   if (request.autoFastPath === false || !autoFastPathEnabled(env)) return []
   if (request.route !== 'TEXT_SIMPLE' || request.hasImages || request.hasDocuments || request.requiresReasoning) return []
 
@@ -171,6 +170,7 @@ export function selectCatalogFastRoutes(request: CatalogRouteRequest): CatalogFa
 export function hasEligibleDirectFreeCatalogRoute(
   request: Partial<CatalogRouteRequest> = {},
 ): boolean {
+  if (request.requiresReasoning) return false
   const env = request.env ?? process.env
   if (request.autoFastPath === false || !autoFastPathEnabled(env)) return false
   const cache = request.cache === undefined ? getProviderCatalogCache() : request.cache
