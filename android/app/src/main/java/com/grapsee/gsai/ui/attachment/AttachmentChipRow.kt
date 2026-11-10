@@ -134,7 +134,7 @@ private fun AttachmentChip(
             Toast.makeText(context, "No viewer is available for this file type", Toast.LENGTH_SHORT).show()
         }
     }
-    val visual = draft.kind == AttachmentKind.Image || draft.kind == AttachmentKind.Video
+    val visual = draft.kind != AttachmentKind.Audio
     val edge = if (editable) 160 else 224
     Surface(
         shape = RoundedCornerShape(20.dp),
