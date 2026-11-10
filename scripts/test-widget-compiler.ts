@@ -1053,7 +1053,7 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
   const events: string[] = []
   const automatic = presentationStream('Explain this', (event, data) => { events.push(data) })
   automatic.push?.('delta', 'Live ordinary answer')
-  automatic.release(['Do not duplicate'])
+  automatic.release('Do not duplicate')
   check('normal answers retain live streaming', events.join('') === 'Live ordinary answer')
   const forbiddenRecipes = /A reply is a LAYOUT|WHICH KIND, WHEN|PRE-FLIGHT|never carry a bold label followed by a colon/i
   check('generation reference no longer imposes a layout or mechanical prose recipe', !forbiddenRecipes.test(WIDGET_PROMPT + PROSE_PROMPT))
