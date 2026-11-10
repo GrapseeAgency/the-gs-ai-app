@@ -47,6 +47,41 @@ class PlatformRuntimeTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
 
+    @Test fun actualVoiceAttachmentPlaysNativeBytesWithMeasuredTimeAndClosesCleanly() {
+        val context = compose.activity
+        val directory = java.io.File(context.filesDir, "attachments/runtime-voice").apply { mkdirs() }
+        val file = java.io.File(directory, "real-voice.wav")
+        // A real five-second mono PCM fixture, not a simulated player timer.
+        val sampleRate = 8000
+        val pcmSize = sampleRate * 5 * 2
+        val bytes = java.nio.ByteBuffer.allocate(44 + pcmSize).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        bytes.put("RIFF".toByteArray()).putInt(36 + pcmSize).put("WAVEfmt ".toByteArray())
+            .putInt(16).putShort(1.toShort()).putShort(1.toShort()).putInt(sampleRate)
+            .putInt(sampleRate * 2).putShort(2.toShort()).putShort(16.toShort())
+            .put("data".toByteArray()).putInt(pcmSize)
+        file.writeBytes(bytes.array())
+        val draft = com.grapsee.gsai.data.attachment.AttachmentDraft(
+            id = "runtime-voice", kind = com.grapsee.gsai.data.attachment.AttachmentKind.Audio,
+            source = com.grapsee.gsai.data.attachment.AttachmentSource.Files,
+            displayName = file.name, mimeType = "audio/wav", localPath = file.absolutePath,
+            byteSize = file.length(), phase = com.grapsee.gsai.data.attachment.AttachmentPhase.Ready)
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme { com.grapsee.gsai.ui.attachment.AttachmentChipRow(listOf(draft), editable = false) }
+        }
+        try {
+            compose.onNodeWithContentDescription("Open real-voice.wav").performClick()
+            compose.waitUntil(8000) { compose.onAllNodesWithText("0:00 / 0:05").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Play audio").performClick()
+            compose.onNodeWithText("Pause audio").assertIsDisplayed()
+            compose.waitUntil(5000) { compose.onAllNodesWithText("0:01 / 0:05").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Pause audio").performClick()
+            compose.onNodeWithText("Play audio").assertIsDisplayed()
+            compose.onNodeWithText("Close preview").performClick()
+            compose.onNodeWithText("Play audio").assertDoesNotExist()
+            compose.onNodeWithContentDescription("Open real-voice.wav").assertExists()
+        } finally { file.delete(); directory.delete() }
+    }
+
     @Test fun generatedChecklistEditsDeletesAddsAndKeepsCompletionWithTheActualTask() {
         var kind by androidx.compose.runtime.mutableStateOf("checklist")
         var payload by androidx.compose.runtime.mutableStateOf("""{"title":"Actual tasks","items":[{"label":"Original source","detail":"Only supplied detail"},{"label":"Keep source"}]}""")
