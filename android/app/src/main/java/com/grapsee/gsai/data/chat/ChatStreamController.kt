@@ -350,8 +350,9 @@ class ChatStreamController(private val chat: ChatRepository) {
                     )
                 }
             } finally {
+                painter.cancel()
                 if (job === coroutineContext[Job]) job = null
-            } finally { painter.cancel() }
+            }
         }
     }
 
