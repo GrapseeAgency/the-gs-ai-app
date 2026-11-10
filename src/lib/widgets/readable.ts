@@ -11,9 +11,53 @@ function literal(value: unknown): string {
   return text.replace(/[\\`*_{}\[\]<>#~|]/g, '\\$&')
 }
 
+/** Common data widgets read as an answer, not an internal schema dump.
+ * Unknown shapes retain the general lossless field projection below.
+ */
+function readableData(source: unknown): string | null {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return null
+  const object = source as Record<string, unknown>
+  const title = typeof object.title === 'string' ? literal(object.title) : ''
+  const allowed = (keys: string[]) => Object.keys(object).every(key => appearanceKeys.has(key) || keys.includes(key))
+  if (Array.isArray(object.columns) && object.columns.every(c => typeof c === 'string') && object.columns.length &&
+      Array.isArray(object.rows) && object.rows.every(row => Array.isArray(row) && row.length === (object.columns as unknown[]).length && row.every(v => v === null || typeof v !== 'object')) &&
+      allowed(['title','columns','rows','sortable','searchable','pageSize'])) {
+    const columns = object.columns as string[]
+    return [title, ...object.rows.map(row => '- ' + (row as unknown[]).map((value, i) =>
+      `${literal(columns[i])}: ${typeof value === 'string' && !value ? '""' : literal(value)}`
+    ).join('; '))].filter(Boolean).join('\n')
+  }
+  if (!['bar','hbar','line','area','pie','donut','grouped','stacked','stackedArea'].includes(String(object.type)) ||
+      !Array.isArray(object.series) || !object.series.length ||
+      !allowed(['title','type','unit','labels','series'])) return null
+  if (object.labels !== undefined && (!Array.isArray(object.labels) || !object.labels.every(v => typeof v === 'string'))) return null
+  if (object.unit !== undefined && typeof object.unit !== 'string') return null
+  const labels = (object.labels ?? []) as string[]
+  const lines = [title, object.unit ? `Unit: ${literal(object.unit)}` : ''].filter(Boolean)
+  const used = new Set<number>()
+  for (const series of object.series) {
+    if (!series || typeof series !== 'object' || Array.isArray(series) ||
+        Object.keys(series).some(key => !['name','data'].includes(key)) ||
+        (series.name !== undefined && typeof series.name !== 'string') || !Array.isArray(series.data)) return null
+    if (series.name) lines.push(`${literal(series.name)}:`)
+    for (const point of series.data) {
+      if (!Array.isArray(point) || point.length !== 2 || !point.every(v => typeof v === 'number' && Number.isFinite(v))) return null
+      const [x, y] = point
+      const labelled = Number.isInteger(x) && x >= 0 && x < labels.length
+      if (labelled) used.add(x)
+      lines.push(`- ${labelled ? literal(labels[x]) : `x = ${x}`}: ${y}`)
+    }
+  }
+  // Do not silently discard labels that have no supplied observation.
+  if (labels.length && used.size !== labels.length) return null
+  return lines.join('\n')
+}
+
 export function widgetReadableText(raw: string): string {
   let source: unknown
   try { source = JSON.parse(raw) } catch { return literal(raw) }
+  const data = readableData(source)
+  if (data !== null) return data
   const lines: string[] = []
   type Entry = { key: string; value: unknown; depth: number }
   const stack: Entry[] = [{ key: '', value: source, depth: 0 }]
