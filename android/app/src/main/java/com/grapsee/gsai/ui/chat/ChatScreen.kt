@@ -1849,7 +1849,7 @@ fun ChatScreen(
                 if (remainingSlots == 0) {
                     showSnack("Up to ${AttachmentRules.MAX_PER_MESSAGE} attachments per message")
                 } else {
-                    documentPicker.launch(arrayOf("image/*", "application/pdf", "text/*"))
+                    documentPicker.launch(arrayOf("image/*", "application/pdf", "text/*", "audio/*", "video/*"))
                 }
             },
             onVoice = {
