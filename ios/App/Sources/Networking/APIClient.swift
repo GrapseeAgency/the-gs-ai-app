@@ -189,6 +189,8 @@ final class APIClient {
         onDelta: @escaping (String) -> Void,
         onDone: @escaping (Message?) -> Void,
         onError: @escaping (Error) -> Void = { _ in },
+        /** The server replaced a provisional provider draft before retrying. */
+        onReset: @escaping () -> Void = {},
         onEvent: @escaping (SseEvent) -> Void = { _ in }
     ) async throws {
         var request = try buildRequest(
@@ -231,6 +233,8 @@ final class APIClient {
                 let text = event.data ?? ""
                 receivedText = receivedText || !text.isEmpty
                 onDelta(text)
+            case "reset":
+                onReset()
             case "reasoning":
                 // REASONING TRACE: thinking turns stream the model's reasoning
                 // as raw {"delta":"..."} frames — reach the consumer raw, same
