@@ -5,6 +5,9 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 EXPECTED = {
+    'photoCardOpensRealImageInAppAndClosesWithoutAnExternalViewer',
+    'sourceCountExpandsRealCardsAndPreservesTheActualSourceURL',
+    'liveActivityShowsActualPhaseAndEffortWithoutInventingOtherSteps',
     'actualAttachmentPreviewsDecodeImagePDFAndSourceTextWithoutInventingMissingFiles',
     'actualVoiceAttachmentPlaysNativeBytesWithMeasuredTimeAndClosesCleanly',
     'ordinaryMarkdownTasksEditDeletePreserveDetailsAndDoNotMoveCompletion',
