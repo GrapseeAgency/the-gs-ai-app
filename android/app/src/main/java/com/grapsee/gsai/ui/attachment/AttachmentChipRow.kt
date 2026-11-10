@@ -11,9 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -75,11 +73,11 @@ fun AttachmentChipRow(
     onRetry: (String) -> Unit = {}
 ) {
     if (drafts.isEmpty()) return
-    // §6: row height caps at ≈2 chip heights; horizontal scroll absorbs the rest.
+    // Bounded media cards; horizontal scroll keeps multiple previews out of the text field.
     LazyRow(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(max = if (editable) 260.dp else 336.dp),
+            .heightIn(max = if (editable) 312.dp else 336.dp),
         horizontalArrangement = horizontalArrangement,
         verticalAlignment = Alignment.CenterVertically,
         contentPadding = PaddingValues(horizontal = 2.dp)
@@ -110,7 +108,8 @@ private fun AttachmentChip(
     var attempt by remember(draft.id) { mutableStateOf(0) }
     var showingMedia by remember(draft.id) { mutableStateOf(false) }
     if (showingMedia && localFile != null) {
-        MediaPreview(localFile!!, draft.kind == AttachmentKind.Video) { showingMedia = false }
+        if (draft.kind == AttachmentKind.Image) ImagePreview(localFile!!, draft.displayName) { showingMedia = false }
+        else MediaPreview(localFile!!, draft.kind == AttachmentKind.Video) { showingMedia = false }
     }
     LaunchedEffect(draft.id, draft.remoteId, draft.localPath, attempt) {
         if (localFile == null && draft.remoteId != null) {
@@ -123,7 +122,7 @@ private fun AttachmentChip(
     fun openPreview() {
         val file = localFile
         if (file == null) { attempt++; return }
-        if (draft.kind == AttachmentKind.Audio || draft.kind == AttachmentKind.Video) {
+        if (draft.kind == AttachmentKind.Audio || draft.kind == AttachmentKind.Video || draft.kind == AttachmentKind.Image) {
             showingMedia = true
             return
         }
