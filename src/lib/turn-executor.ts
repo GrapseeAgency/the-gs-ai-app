@@ -59,6 +59,7 @@ import { mapWithConcurrency } from '@/lib/concurrency'
 import { classifyErrorType, writeTurnTrace } from '@/lib/trace'
 import { getBackendRevision } from '@/lib/revision'
 import { ensureWidgets } from '@/lib/widgets/compile'
+import { presentationStream } from '@/lib/widgets/presentation-stream'
 import {
   recordResearchContext,
   getResearchContexts,
@@ -969,6 +970,8 @@ const MAX_GUARD_ATTEMPTS = 3
 export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnResult> {
   const id = prep.conversationId
   const content = prep.content
+  const presentation = presentationStream(content, push)
+  push = presentation.push
   const userMessage = prep.userMessage
   const cap = prep.cap
   const routerPlan = prep.routerPlan
@@ -2091,6 +2094,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       )
     }
     const finalText = compiled.text
+    presentation.release(chunkDeltas(finalText))
     const saved = await createAssistantMessage({
       conversationId: id,
       role: 'assistant',
