@@ -48,7 +48,7 @@ class LiveStreamTest {
             assertEquals(1, completions)
         } finally {
             stream.cancelAndJoin()
-            body.cancel()
+            body.cancel(null)
             client.close()
         }
     }
