@@ -109,9 +109,9 @@ object ThumbLoader {
                 BitmapFactory.decodeFile(file.absolutePath, bounds)
                 if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
                 var sample = 1
-                while (bounds.outWidth / (sample * 2) >= TARGET_PX &&
-                    bounds.outHeight / (sample * 2) >= TARGET_PX
-                ) {
+                // Bound the LONG edge: using the short edge left panoramas
+                // effectively full-size and could exhaust memory in the composer.
+                while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= TARGET_PX) {
                     sample *= 2
                 }
                 val options = BitmapFactory.Options().apply { inSampleSize = sample }
