@@ -553,27 +553,18 @@ final class ChatViewModel: ObservableObject {
         // Attachments are excluded: a local model cannot read the files that
         // were just uploaded, so answering from it would produce a confident
         // reply about content it never saw. That is worse than a slow one.
-        if SettingsStore.shared.preferLocal, attachments.isEmpty, GsNativeLoader.isAvailable,
-           let local = try? GsNative.chat(text), !local.isEmpty {
-            beginLocalStreaming(text: text, reply: local)
+        if SettingsStore.shared.preferLocal, attachments.isEmpty, GsNativeLoader.isAvailable {
+            beginLocalStreaming(text: text)
             return
         }
         beginStreaming(text: text, appendUserMessage: true, attachments: attachments.isEmpty ? nil : attachments, mode: chatMode)
     }
 
-    /// Commit 1(b): the local-first completion.
-    ///
-    /// This mirrors `beginStreaming`'s preamble exactly -- same trace reset, same
-    /// user row, same empty streaming assistant row -- and then skips the network
-    /// task entirely. Reusing the existing `StreamAccumulator` and
-    /// `finalizeLocal` rather than a parallel set of them is the point: a second
-    /// flush loop and a second finaliser would be two places for the
-    /// stop/cancel/regenerate logic to disagree.
-    ///
-    /// ONE delta, not a word-by-word stream. The provider path streams because
-    /// the SERVER streams; splitting a completed local answer with a timer would
-    /// imitate typing and would be a lie about where the text came from.
-    private func beginLocalStreaming(text: String, reply: String) {
+    /// Local-first turns publish the same live bubble as provider turns, but
+    /// use llama.cpp's real decoded-token callback on a detached worker. This
+    /// keeps inference off the main actor and makes the prefill/decode period
+    /// visible instead of freezing the screen before the first completed string.
+    private func beginLocalStreaming(text: String) {
         errorMessage = nil
         traceSteps = []
         liveSources = []
@@ -583,24 +574,87 @@ final class ChatViewModel: ObservableObject {
         effectiveEffort = nil
         streamSink = SearchEventSink()
 
-        messages.append(ChatMessage(
-            role: "user",
-            content: text,
-            createdAt: ConversationStore.now(),
-            attachments: nil))
+        if conversationID == nil {
+            let title = SettingsStore.shared.autoTitle && !text.isEmpty
+                ? String(text.prefix(40)) : "New chat"
+            conversationID = store.createLocalConversation(title: title).id
+        }
+        let stamp = ConversationStore.now()
+        let user = ChatMessage(role: "user", content: text, createdAt: stamp)
+        messages.append(user)
+        if let conversationID {
+            let identity = user.id.uuidString
+            store.append(StoredMessage(
+                id: identity,
+                conversationId: conversationID,
+                role: "user",
+                content: text,
+                createdAt: stamp))
+            messages[messages.count - 1].durableID = identity
+        }
         messages.append(ChatMessage(
             role: "assistant",
             content: "",
             isStreaming: true,
-            createdAt: ConversationStore.now()))
+            createdAt: stamp))
 
         streamBuffer = StreamAccumulator()
+        let accumulator = streamBuffer
         isStreaming = true
         startFlushLoop()
-
-        streamBuffer.append(reply)
-        flushStreamingText()
-        finalizeLocal()
+        guard let responseID = messages.last?.id else { return }
+        let prompt = text
+        streamTask = Task {
+            let generation = Task.detached(priority: .userInitiated) {
+                try GsNative.chatStream(prompt) { delta in
+                    guard !Task.isCancelled else { return false }
+                    accumulator.append(delta)
+                    return true
+                }
+            }
+            do {
+                let reply = try await withTaskCancellationHandler {
+                    try await generation.value
+                } onCancel: {
+                    generation.cancel()
+                }
+                guard self.isStreaming, self.messages.last?.id == responseID else { return }
+                let visible = accumulator.snapshot()
+                if reply.isEmpty, !visible.isEmpty {
+                    // Keep the exact text already published if a native build
+                    // returns an empty terminal payload after real callbacks.
+                } else if reply.hasPrefix(visible), reply.count > visible.count {
+                    accumulator.append(String(reply.dropFirst(visible.count)))
+                } else if visible.isEmpty, !reply.isEmpty {
+                    // Defensive compatibility for an older native framework
+                    // whose stream symbol is present but callback is a no-op.
+                    accumulator.append(reply)
+                } else if reply != visible {
+                    os_log("GS-PERF local native stream differed from terminal text", log: .default, type: .error)
+                }
+                self.stopFlushLoop()
+                while self.isStreaming, self.messages.last?.id == responseID,
+                      let index = self.messages.indices.last,
+                      self.messages[index].isStreaming,
+                      self.messages[index].content != accumulator.snapshot() {
+                    try Task.checkCancellation()
+                    self.flushStreamingText()
+                    try await Task.sleep(nanoseconds: 33_000_000)
+                }
+                if self.isStreaming, self.messages.last?.id == responseID { self.finalizeLocal() }
+            } catch {
+                guard self.isStreaming, self.messages.last?.id == responseID else { return }
+                if Self.isCancellation(error) {
+                    self.finalizeLocal()
+                } else {
+                    let hasPartial = !accumulator.isEmpty
+                    self.finalizeLocal()
+                    self.errorMessage = hasPartial
+                        ? "On-device generation stopped early. Your partial answer is saved."
+                        : "The on-device model could not answer. Try again or switch back to online mode."
+                }
+            }
+        }
     }
 
     /// PHASE 8.1 clarify quick-choice: the tapped label travels as a normal
