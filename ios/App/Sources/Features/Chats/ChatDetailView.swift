@@ -1408,7 +1408,7 @@ struct MessageBubble: View, Equatable {
     }
 
     private var showThinkingCard: Bool {
-        showThinkingStages || sourceCount > 0
+        message.isStreaming || showThinkingStages || sourceCount > 0
     }
 
     private var thinkingPhase: NexlyThinkingPhase {
