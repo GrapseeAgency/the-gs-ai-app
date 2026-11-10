@@ -928,7 +928,7 @@ struct NexlyThinkingCard: View {
         case .reasoning: return reasoningHint.flatMap { $0.isEmpty ? nil : $0 } ?? "Reasoning received"
         case .search: return "\(searchSources) source\(searchSources == 1 ? "" : "s") available"
         case .answer: return "Showing the response as it arrives"
-        default: return "Connected · awaiting response content"
+        default: return "Request in progress · waiting for content"
         }
     }
 
