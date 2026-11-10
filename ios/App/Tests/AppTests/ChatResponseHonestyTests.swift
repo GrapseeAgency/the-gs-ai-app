@@ -226,6 +226,8 @@ final class ChatResponseHonestyTests: XCTestCase {
         let answer = String(repeating: "Actual received answer text with বাংলা and :sparkles:. ", count: 180)
         let message = try JSONSerialization.data(withJSONObject: ["id": "burst-answer", "conversationId": "fixture", "role": "assistant", "content": answer])
         var response = try event("mode", "{\"effectiveMode\":\"thinking\",\"effort\":\"medium\"}")
+        response.append(try event("ledger", "{\"type\":\"branch_started\",\"branchId\":\"real-branch\",\"query\":\"Actual source query\"}"))
+        response.append(try event("ledger", "{\"type\":\"unknown-future-event\"}"))
         response.append(try event("delta", answer))
         response.append(try event("done", String(decoding: message, as: UTF8.self)))
         let bytes = response
@@ -249,6 +251,7 @@ final class ChatResponseHonestyTests: XCTestCase {
         XCTAssertTrue(answer.hasPrefix(partial.content))
         XCTAssertEqual(fixture.vm.effectiveMode, "thinking")
         XCTAssertEqual(fixture.vm.effectiveEffort, "medium")
+        XCTAssertEqual(fixture.vm.traceSteps.map(\.kind), [.toolActivity(title: "Researching", detail: "Actual source query")])
         try await fixture.finish()
         XCTAssertEqual(fixture.vm.messages.last?.content, answer)
         XCTAssertEqual(fixture.vm.messages.last?.serverId, "burst-answer")
