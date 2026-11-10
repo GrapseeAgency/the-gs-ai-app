@@ -393,7 +393,7 @@ function renderTextLeaf(text: string, keyPrefix: string): ReactNode {
     if (idx > last) nodes.push(<Fragment key={`${keyPrefix}-t${k++}`}>{normalised.slice(last, idx)}</Fragment>)
     const name = canonicalIconName(m[1])
     if (name) {
-      nodes.push(<GlassIcon key={`${keyPrefix}-i${k++}`} name={name} tile={18} size={11} className="nx-inline-icon" />)
+      nodes.push(<GlassIcon key={`${keyPrefix}-i${k++}`} name={name} bare size={12} className="nx-inline-icon" style={{ width: '0.9em', height: '0.9em' }} />)
     } else {
       nodes.push(<Fragment key={`${keyPrefix}-u${k++}`}>{m[0]}</Fragment>)
     }
