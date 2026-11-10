@@ -1022,6 +1022,14 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
     const result = compileWidgets({ reply: source, userPrompt: 'text only' })
     check('bare, JSON-fenced and tilde-fenced model data cannot bypass text-only', result.widgets === 0 && extractWidgetFences(result.text).length === 0 && result.text.includes('2026'))
   }
+  for (const prompt of ['Explain plain text encryption and its tradeoffs', 'Explain the phrase "no charts"', "Write code that prints 'no charts'", 'Explain `text only` as a network response type']) {
+    check('content mentions are not mistaken for presentation commands: ' + prompt,
+      compileWidgets({reply:fence,userPrompt:prompt}).widgets === 1 && !chartPreference(prompt).suppressed)
+  }
+  for (const prompt of ["Don't add any charts", 'Reply in plain text', 'Table only please']) {
+    check('natural format requests govern both supplied and recovered charts: ' + prompt,
+      compileWidgets({reply:fence,userPrompt:prompt}).widgets === 0 && chartPreference(prompt).suppressed)
+  }
   const table = '```table\n' + JSON.stringify({columns:['City','Value'], rows:[['Dhaka',12],['Feni',0]]}) + '\n```'
   const noCharts = compileWidgets({ reply: fence + '\n\n' + table, userPrompt: 'no charts, retain the table' })
   check('no-chart preference keeps a useful model table', noCharts.widgets === 1 && extractWidgetFences(noCharts.text).every(f => f.kind === 'table'))
