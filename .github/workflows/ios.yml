@@ -181,12 +181,25 @@ jobs:
           # take an arbitrary recent archive: its public C headers are compiled
           # into Swift, and an older archive can omit a symbol used by THIS
           # revision (the previous failure was gs_mobile_chat_stream).
-          read -r RUN_ID ART < <(python3 - <<'PYFRAMEWORK'
+          SELECTION_FILE="$RUNNER_TEMP/gs-ffi-xcframework.selection"
+          rm -f "$SELECTION_FILE"
+          python3 - <<'PYFRAMEWORK'
           import json
           import os
           import subprocess
           import sys
           import time
+
+          def fail(message):
+              safe = str(message).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print(f'::error title=Native framework selection failed::{safe}', file=sys.stdout)
+              raise SystemExit(1)
+
+          required = ('GITHUB_REPOSITORY', 'NATIVE_SOURCE_BRANCH', 'NATIVE_SOURCE_SHA',
+                      'NATIVE_WORKFLOW_SHA', 'SOURCE_EVENT', 'RUNNER_TEMP')
+          missing = [key for key in required if not os.environ.get(key)]
+          if missing:
+              fail('missing required environment values: ' + ', '.join(missing))
 
           repo = os.environ['GITHUB_REPOSITORY']
           target_branch = os.environ['NATIVE_SOURCE_BRANCH']
@@ -219,9 +232,7 @@ jobs:
                       last_error = f'{type(exc).__name__}: {exc}'
                       if attempt < 2:
                           time.sleep(2)
-              message = f'{path}: {last_error}'.replace('\n', ' ').replace('\r', ' ')
-              print(f'::error title=Native artifact lookup failed::{message}', file=sys.stdout)
-              raise SystemExit(1)
+              fail(f'{path}: {last_error}')
 
           def artifact_from(run):
               if run.get('status') in ('queued', 'pending'):
@@ -262,7 +273,11 @@ jobs:
               return True
 
           def emit(run, artifact):
-              print(run['id'], artifact['id'])
+              selection_path = os.path.join(os.environ['RUNNER_TEMP'], 'gs-ffi-xcframework.selection')
+              with open(selection_path, 'w', encoding='ascii') as selected:
+                  selected.write(f"{run['id']} {artifact['id']}\n")
+              print(f"Selected GsFfi artifact {artifact['id']} from ios-native run {run['id']}",
+                    file=sys.stderr)
               raise SystemExit(0)
 
           while True:
@@ -300,8 +315,8 @@ jobs:
                   if not pending:
                       details = ', '.join(f"run {r['id']}: {r.get('conclusion') or 'no producer artifact'}"
                                           for r in failures)
-                      sys.exit(f'ios-native xcframework producer for {target_branch}@{os.environ["NATIVE_SOURCE_SHA"]} '
-                               f'did not succeed ({details})')
+                      fail(f'ios-native xcframework producer for {target_branch}@{os.environ["NATIVE_SOURCE_SHA"]} '
+                           f'did not succeed ({details})')
               else:
                   elapsed = time.monotonic() - started
                   branch_runs = sorted(
@@ -338,18 +353,18 @@ jobs:
                       elif elapsed < fallback_after:
                           pending = True
                       else:
-                          sys.exit('No unexpired GsFfi.xcframework from a successful ios-native producer job')
+                          fail('No unexpired GsFfi.xcframework from a successful ios-native producer job')
 
               if time.monotonic() >= deadline:
-                  sys.exit(f'Timed out waiting for a source-compatible ios-native xcframework for '
-                           f'{target_branch}@{os.environ["NATIVE_SOURCE_SHA"]}')
+                  fail(f'Timed out waiting for a source-compatible ios-native xcframework for '
+                       f'{target_branch}@{os.environ["NATIVE_SOURCE_SHA"]}')
               if not announced_wait:
                   print(f'Waiting for ios-native xcframework for {target_branch}@{os.environ["NATIVE_SOURCE_SHA"]}',
                         file=sys.stderr)
                   announced_wait = True
               time.sleep(30)
           PYFRAMEWORK
-          )
+          read -r RUN_ID ART < "$SELECTION_FILE"
           test -n "$RUN_ID" && test -n "$ART"
           echo "Verified native producer run: $RUN_ID"
           echo "artifact id: $ART"
