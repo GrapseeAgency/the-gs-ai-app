@@ -281,4 +281,32 @@ final class ChatResponseHonestyTests: XCTestCase {
         XCTAssertNil(fixture.vm.errorMessage)
     }
 
+    @MainActor
+    func testStoppedRevealCannotFinalizeTheImmediatelyFollowingTurn() async throws {
+        let answer = String(repeating: "Actual response bytes. ", count: 500)
+        let message = try JSONSerialization.data(withJSONObject: ["id": "owned-answer", "conversationId": "fixture", "role": "assistant", "content": answer])
+        var response = try event("delta", answer)
+        response.append(try event("done", String(decoding: message, as: UTF8.self)))
+        let bytes = response
+        let fixture = try ActualChatFixture { _ in (200, bytes) }
+        defer { fixture.close() }
+        fixture.vm.draft = "First turn"
+        fixture.vm.send()
+        let deadline = Date().addingTimeInterval(3)
+        while (fixture.vm.messages.last?.role != "assistant" || fixture.vm.messages.last?.content.isEmpty != false) && Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        fixture.vm.stop()
+        fixture.vm.draft = "Second independent turn"
+        fixture.vm.send()
+        let secondID = try XCTUnwrap(fixture.vm.messages.last?.id)
+        try await Task.sleep(nanoseconds: 60_000_000)
+        XCTAssertTrue(fixture.vm.isStreaming, "The cancelled predecessor must not close the new turn")
+        XCTAssertEqual(fixture.vm.messages.last?.id, secondID)
+        try await fixture.finish()
+        XCTAssertEqual(fixture.vm.messages.filter { $0.role == "user" }.map(\.content), ["First turn", "Second independent turn"])
+        XCTAssertEqual(fixture.vm.messages.last?.content, answer)
+        XCTAssertNil(fixture.vm.errorMessage)
+    }
+
 }
