@@ -28,6 +28,12 @@ final class StreamAccumulator: @unchecked Sendable {
         lock.unlock()
     }
 
+    func reset() {
+        lock.lock()
+        text = ""
+        lock.unlock()
+    }
+
     func snapshot() -> String {
         lock.lock()
         defer { lock.unlock() }
@@ -52,6 +58,11 @@ enum ChatSearchPhase: Equatable {
     case working
     case composing
     case failed
+}
+
+enum ChatGenerationStatus: Equatable {
+    case generating
+    case checking
 }
 
 /**
@@ -450,6 +461,8 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var clarifyPrompt: ClarifyPrompt?
     /// The honest orb phase of the live turn (searching/working/…).
     @Published private(set) var searchPhase: ChatSearchPhase = .idle
+    /// Real synthesis lifecycle from the backend or native inference hand-off.
+    @Published private(set) var generationStatus: ChatGenerationStatus?
     /// FLASH-MODE BUG 1: the wire's resolved effective mode for THIS turn
     /// ("flash"|"thinking"; nil = no mode event — pre-v0.70 backend). The
     /// word "Thinking…" renders ONLY while this is "thinking".
@@ -570,6 +583,7 @@ final class ChatViewModel: ObservableObject {
         liveSources = []
         clarifyPrompt = nil
         searchPhase = .idle
+        generationStatus = .generating
         effectiveMode = nil
         effectiveEffort = nil
         streamSink = SearchEventSink()
@@ -787,6 +801,7 @@ final class ChatViewModel: ObservableObject {
         liveSources = []
         clarifyPrompt = nil
         searchPhase = .idle
+        generationStatus = nil
         effectiveMode = nil
         effectiveEffort = nil
         streamSink = SearchEventSink()
@@ -847,6 +862,12 @@ final class ChatViewModel: ObservableObject {
                         // Consume the canonical result before finalizing the
                         // stream, not in a separately scheduled actor task.
                         completedMessage = message
+                    },
+                    onReset: { [buffer = self.streamBuffer] in
+                        // The server discarded a provisional draft after a
+                        // real guard failure. Clearing the shared accumulator
+                        // makes the next display-cadence flush replace it.
+                        buffer.reset()
                     },
                     onEvent: { [sink = self.streamSink] event in
                         // The server titles a chat on its first turn and says so
@@ -1047,6 +1068,10 @@ final class ChatViewModel: ObservableObject {
             }
         case "search_failed":
             searchPhase = .failed
+        case "generating":
+            generationStatus = .generating
+        case "checking":
+            generationStatus = .checking
         default:
             break
         }
@@ -1311,6 +1336,7 @@ final class ChatViewModel: ObservableObject {
             isStreaming = false
             streamTask = nil
             searchPhase = .idle // done → the orb honestly goes idle
+            generationStatus = nil
         }
         stopFlushLoop()
         drainSearchEvents() // the tail events land before the trace closes
@@ -1352,6 +1378,7 @@ final class ChatViewModel: ObservableObject {
             isStreaming = false
             streamTask = nil
             searchPhase = .idle
+            generationStatus = nil
         }
         stopFlushLoop()
         drainSearchEvents() // stop/cancel keeps the trace that really happened
