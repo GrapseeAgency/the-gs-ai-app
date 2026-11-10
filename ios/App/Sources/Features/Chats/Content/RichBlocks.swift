@@ -2792,31 +2792,19 @@ private struct ListItemRowView: View {
     var citations: [Int: String] = [:]
 
     var body: some View {
-        let rawText = plainTextOfSpans(item.spans)
-        let (extractedIcon, _) = NexlyIcons.extractLeadingIcon(rawText)
-        let semanticMatchIcon: String? = {
-            guard extractedIcon == nil else { return nil }
-            let sem = NexlyIcons.semanticIcon(for: rawText, fallback: "")
-            return sem.icon.isEmpty || sem.icon == "sparkles" ? nil : sem.icon
-        }()
-        let leadingIcon = extractedIcon ?? semanticMatchIcon ?? (marker == "✓" ? "circle-check" : nil)
-        let displaySpans = extractedIcon != nil ? stripLeadingIconFromSpans(item.spans) : item.spans
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: leadingIcon != nil ? .top : .firstTextBaseline, spacing: 8) {
-                if let leadingIcon {
-                    NexlyGlassGlyphTile(
-                        name: leadingIcon,
-                        tone: marker == "✓" ? .green : NexlyIcons.tone(for: leadingIcon),
-                        size: 20,
-                        glyphSize: 12
-                    )
-                    .padding(.top, 1)
+            HStack(alignment: marker == "✓" ? .top : .firstTextBaseline, spacing: 8) {
+                if marker == "✓" {
+                    // Checkmark sections are a deliberate structured control;
+                    // ordinary bullet icons stay inline in their text instead.
+                    NexlyGlassGlyphTile(name: "circle-check", tone: .green, size: 20, glyphSize: 12)
+                        .padding(.top, 1)
                 } else {
                     Text(marker)
                         .font(Aero.body().weight(.bold))
                         .foregroundStyle(markerColor)
                 }
-                ParagraphView(spans: displaySpans, citations: citations)
+                ParagraphView(spans: item.spans, citations: citations)
             }
             if !item.children.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
