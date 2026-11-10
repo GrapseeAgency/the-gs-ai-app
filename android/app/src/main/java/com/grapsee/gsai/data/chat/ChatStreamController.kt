@@ -206,9 +206,13 @@ class ChatStreamController(private val chat: ChatRepository) {
         )
         job = scope.launch {
             var visibleChars = 0
+            // A paint can snapshot a draft just before a reset, then reach the
+            // UI after that reset. Tag snapshots so a stale paint cannot put a
+            // rejected draft back on screen after the replacement event.
+            var resetEpoch = 0L
             fun snapshotBuffer(): String = synchronized(buffer) { buffer.toString() }
             fun paintReceivedText() {
-                val visibleText = synchronized(buffer) {
+                val (visibleText, paintedEpoch) = synchronized(buffer) {
                     val fullText = buffer.toString()
                     if (visibleChars >= fullText.length) return
                     val remaining = fullText.length - visibleChars
@@ -216,7 +220,7 @@ class ChatStreamController(private val chat: ChatRepository) {
                     // Never split a UTF-16 surrogate pair at the reveal boundary.
                     if (end < fullText.length && Character.isHighSurrogate(fullText[end - 1])) end++
                     visibleChars = end
-                    fullText.substring(0, end)
+                    fullText.substring(0, end) to resetEpoch
                 }
                 if (!firstCharLogged && visibleText.isNotEmpty()) {
                     firstCharLogged = true
@@ -227,7 +231,11 @@ class ChatStreamController(private val chat: ChatRepository) {
                     )
                 }
                 publishIfMine(token) { current ->
-                    current.copy(streamText = visibleText,
+                    // Recheck under the same lock as reset: if the callback
+                    // cleared/replaced the buffer after this paint snapshot,
+                    // the old draft is discarded instead of republished.
+                    if (synchronized(buffer) { resetEpoch != paintedEpoch }) current
+                    else current.copy(streamText = visibleText,
                         reasoningEndMs = current.reasoningEndMs
                             ?: if (current.reasoning != null) SystemClock.uptimeMillis() else null)
                 }
@@ -256,6 +264,7 @@ class ChatStreamController(private val chat: ChatRepository) {
                         synchronized(buffer) {
                             buffer.setLength(0)
                             visibleChars = 0
+                            resetEpoch++
                         }
                         publishIfMine(token) { it.copy(streamText = "") }
                     },
@@ -328,9 +337,12 @@ class ChatStreamController(private val chat: ChatRepository) {
                         if (!doneContent.isNullOrBlank()) {
                             synchronized(buffer) {
                                 val visible = buffer.substring(0, minOf(visibleChars, buffer.length))
-                                buffer.setLength(0)
-                                buffer.append(doneContent)
-                                if (!doneContent.startsWith(visible)) visibleChars = 0
+                                if (buffer.toString() != doneContent) {
+                                    buffer.setLength(0)
+                                    buffer.append(doneContent)
+                                    if (!doneContent.startsWith(visible)) visibleChars = 0
+                                    resetEpoch++
+                                }
                             }
                         }
                         publishIfMine(token) { current ->
