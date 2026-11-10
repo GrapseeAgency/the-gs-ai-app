@@ -479,6 +479,41 @@ final class AttachmentStore: ObservableObject {
         return URL(fileURLWithPath: path)
     }
 
+    /// Restore real previews for history too, not just this session's drafts.
+    /// Fetch only the app's file endpoint; never follow an attachment-supplied host.
+    func previewURL(for attachment: Attachment) async throws -> URL {
+        if let staged = stagedLocalURL(forRemoteID: attachment.id),
+           FileManager.default.fileExists(atPath: staged.path) { return staged }
+        guard !attachment.id.isEmpty,
+              attachment.id.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_" }) else {
+            throw APIError.badResponse("Invalid attachment identifier")
+        }
+        let directory = Self.stagingDirectory(for: "preview-\(attachment.id)")
+        let target = directory.appendingPathComponent(AttachmentRules.sanitizeDisplayName(attachment.displayName))
+        if FileManager.default.fileExists(atPath: target.path) {
+            stagedByRemoteID[attachment.id] = target.path
+            return target
+        }
+        let request = try APIClient.shared.buildRequest(path: "/api/v1/files/\(attachment.id)")
+        let (temporary, response) = try await URLSession.shared.download(for: request)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw APIError.badResponse("Attachment preview is unavailable. Tap to retry.")
+        }
+        let bytes = (try FileManager.default.attributesOfItem(atPath: temporary.path)[.size] as? NSNumber)?.intValue ?? 0
+        guard bytes > 0, bytes <= AttachmentRules.maxBytes else {
+            throw APIError.badResponse("Attachment preview exceeds the file limit")
+        }
+        try Task.checkCancellation()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Another row may have fetched this same attachment while suspended.
+        if !FileManager.default.fileExists(atPath: target.path) {
+            try FileManager.default.moveItem(at: temporary, to: target)
+        }
+        stagedByRemoteID[attachment.id] = target.path
+        return target
+    }
+
     // MARK: Storage locations (spec §4)
 
     /// Application Support/Attachments/<uuid>/<displayName>
