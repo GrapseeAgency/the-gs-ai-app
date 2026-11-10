@@ -2989,50 +2989,19 @@ private fun ListItemRow(
     val bodyStyle = compact ?: MaterialTheme.typography.bodyMedium
     val ink = compact?.color ?: MaterialTheme.colorScheme.onSurface
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
-    val leadingIconAndSpans = remember(item.spans) {
-        val first = item.spans.firstOrNull()
-        when (first) {
-            is InlineSpan.TextSpan -> {
-                val (icon, stripped) = NexlyIcons.extractLeadingIcon(first.text)
-                if (icon != null) {
-                    icon to (listOf(InlineSpan.TextSpan(stripped)) + item.spans.drop(1))
-                } else {
-                    val (semIcon, _) = NexlyIcons.semanticIconFor(plainTextOfSpans(item.spans), "")
-                    (semIcon.takeIf { it.isNotBlank() && it != "sparkles" }) to item.spans
-                }
-            }
-            is InlineSpan.BoldSpan -> {
-                val innerFirst = first.children.firstOrNull()
-                if (innerFirst is InlineSpan.TextSpan) {
-                    val (icon, stripped) = NexlyIcons.extractLeadingIcon(innerFirst.text)
-                    if (icon != null) {
-                        val newBold = InlineSpan.BoldSpan(listOf(InlineSpan.TextSpan(stripped)) + first.children.drop(1))
-                        icon to (listOf(newBold) + item.spans.drop(1))
-                    } else {
-                        val (semIcon, _) = NexlyIcons.semanticIconFor(plainTextOfSpans(item.spans), "")
-                        (semIcon.takeIf { it.isNotBlank() && it != "sparkles" }) to item.spans
-                    }
-                } else null to item.spans
-            }
-            else -> null to item.spans
-        }
+    val styled = remember(item.spans, theme) {
+        spansToAnnotatedString(item.spans, theme)
     }
-    val leadingIcon = leadingIconAndSpans.first
-    val styled = remember(leadingIconAndSpans.second, theme) {
-        spansToAnnotatedString(leadingIconAndSpans.second, theme)
-    }
-    val bulletInlineContent = rememberNexlyInlineContent(styled)
+    val bulletInlineContent = rememberNexlyInlineContent(
+        styled = styled,
+        requestedFontSize = bodyStyle.fontSize,
+        requestedGlyphColor = ink
+    )
     Column {
         Row(verticalAlignment = Alignment.Top) {
-            if (leadingIcon != null) {
-                NexlyGlassGlyphTile(
-                    name = leadingIcon,
-                    size = 20.dp,
-                    glyphSize = 12.dp,
-                    modifier = Modifier.padding(top = 1.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-            } else if (marker == "✓") {
+            if (marker == "✓") {
+                // Checklist markers are deliberate controls. Emoji in ordinary
+                // bullet copy remain inline with the surrounding prose.
                 NexlyGlassGlyphTile(
                     name = "circle-check",
                     toneName = "lavender",
