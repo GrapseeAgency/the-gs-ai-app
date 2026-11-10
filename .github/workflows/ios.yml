@@ -309,6 +309,7 @@ jobs:
             -derivedDataPath "$DERIVED_DATA" \
             -only-testing:AppTests/CalcHonestyTests/testNativeJSONDelimiterRecoveryPreservesActualSourceBytesAndQuotedPunctuation \
             -only-testing:AppTests/ChatResponseHonestyTests \
+            -only-testing:AppTests/AttachmentLogicTests \
             -only-testing:AppTests/CalculatorSourceHonestyTests \
             -only-testing:GsChatUITests/PlatformRuntimeUITests/testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch \
             -resultBundlePath ios/build/GSApp-react-keyboard.xcresult \
@@ -408,6 +409,10 @@ jobs:
               ('ChatResponseHonestyTests', 'testInterruptedReplyPreservesOnlyActualTextAndDoesNotPromiseAutomaticContinuation'),
               ('ChatResponseHonestyTests', 'testEmptyCompletionIsAnErrorNotASuccessfulBlankAnswer'),
               ('ChatResponseHonestyTests', 'testFailedFirstCreationRetriesCreationAndPersistsOriginalUserOnceWithoutFakeIDs'),
+              ('ChatResponseHonestyTests', 'testBatchedAnswerRevealsProgressivelyAndModeReachesTheActualViewModel'),
+              ('ChatResponseHonestyTests', 'testStopDuringBurstRevealPreservesEveryReceivedCharacter'),
+              ('AttachmentLogicTests', 'testAllowlistMatchesBackend'),
+              ('AttachmentLogicTests', 'testKindForMime'),
               ('PlatformRuntimeUITests', 'testConversationActionsTapOpensRealOptionsWithoutLeavingChat'),
               ('CalcHonestyTests', 'testActualMessagePreviewIdentitySurvivesRehydrationWithoutInventingServerIDs'),
               ('CalcHonestyTests', 'testActualSQLiteHistoryAndOlderPagesKeepDurablePreviewIdentity'),
