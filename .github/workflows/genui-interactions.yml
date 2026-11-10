@@ -23,7 +23,7 @@ jobs:
           set -o pipefail
           npm run test:interactions 2>&1 | tee /tmp/gs-interaction-runtime.log
       - name: Full-context fast-route and complex-task routing regressions
-        run: npx --yes bun@1.3.14 test src/lib/catalog-router.test.ts
+        run: npx --yes bun@1.3.14 test src/lib/catalog-router.test.ts src/lib/reader-feedback.test.ts src/lib/model-capabilities.test.ts
       - name: Install pinned real-browser verification tools
         run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund @sparticuz/chromium@143.0.4 puppeteer-core@24.37.5 esbuild@0.27.3
       - name: Real browser controls, clipboard, terminal files, worker timeout and causal CSP denial
