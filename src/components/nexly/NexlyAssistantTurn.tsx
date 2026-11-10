@@ -32,7 +32,7 @@ export function NexlyAssistantTurn({
           <div className="nx-assistant-card">
             {preamble ? (
               <div className="nx-preamble">
-                <NexlyRichText text={preamble} />
+                <NexlyRichText text={preamble} inline />
               </div>
             ) : null}
             {thinking ? <NexlyThinkingCard thinking={thinking} /> : null}
