@@ -527,6 +527,8 @@ class ChatRepository(
         onLedger: (String) -> Unit = {},
         /** REASONING TRACE: raw {"delta":"..."} frames from thinking turns. */
         onReasoning: (String) -> Unit = {},
+        /** The server discarded a provisional streamed draft before a real retry. */
+        onReset: () -> Unit = {},
         onDone: (MessageDto?) -> Unit = {},
         onDelta: (String) -> Unit
     ): String {
@@ -638,6 +640,11 @@ class ChatRepository(
                 onResearchEvent = { r -> receivedAnyEvent = true; onResearch(r) },
                 onLedgerEvent = { l -> receivedAnyEvent = true; onLedger(l) },
                 onReasoningEvent = { r -> receivedAnyEvent = true; onReasoning(r) },
+                onReset = {
+                    receivedAnyEvent = true
+                    accumulated.setLength(0)
+                    onReset()
+                },
                 onDone = { done ->
                     doneMessage = done
                     val doneId = done?.id
