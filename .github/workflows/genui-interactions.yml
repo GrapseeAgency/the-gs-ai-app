@@ -18,6 +18,13 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate the real Prisma client and typecheck the complete application
+        env:
+          DATABASE_URL: file:/tmp/gs-ai-typecheck.db
+        run: |
+          set -o pipefail
+          npx prisma generate 2>&1 | tee /tmp/gs-prisma-generate.log
+          npx tsc --noEmit --pretty false 2>&1 | tee /tmp/gs-typecheck.log
       - name: Compile and exercise actual interaction controls
         run: |
           set -o pipefail
@@ -36,7 +43,7 @@ jobs:
         run: |
           python3 - <<'PYCODE'
           from pathlib import Path
-          for name in ['/tmp/gs-interaction-runtime.log', '/tmp/gs-code-browser-runtime.log', '/tmp/gs-react-preview-runtime.log']:
+          for name in ['/tmp/gs-prisma-generate.log', '/tmp/gs-typecheck.log', '/tmp/gs-interaction-runtime.log', '/tmp/gs-code-browser-runtime.log', '/tmp/gs-react-preview-runtime.log']:
               p = Path(name)
               if p.exists():
                   text = p.read_text()[-12000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
@@ -47,6 +54,8 @@ jobs:
         with:
           name: real-browser-code-runtime
           path: |
+            /tmp/gs-prisma-generate.log
+            /tmp/gs-typecheck.log
             /tmp/gs-interaction-runtime.log
             /tmp/gs-code-browser-runtime.log
             /tmp/gs-code-browser-runtime.png
