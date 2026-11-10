@@ -2514,6 +2514,39 @@ internal fun ReferenceThinkingCard(
     searchSources: Int = 0,
     showStages: Boolean = true,
 ) {
+    if (phase != NexlyThinkingPhase.DONE) {
+        val title = when (phase) {
+            NexlyThinkingPhase.REASONING -> "Reasoning"
+            NexlyThinkingPhase.SEARCH -> "Sources received"
+            NexlyThinkingPhase.ANSWER -> "Writing answer"
+            else -> "Waiting for response"
+        }
+        val detail = when (phase) {
+            NexlyThinkingPhase.REASONING -> reasoningHint?.takeIf { it.isNotBlank() } ?: "Reasoning received"
+            NexlyThinkingPhase.SEARCH -> "$searchSources source${if (searchSources == 1) "" else "s"} available"
+            NexlyThinkingPhase.ANSWER -> "Showing the response as it arrives"
+            else -> "Connected · awaiting response content"
+        }
+        val effortLabel = when (effort?.lowercase()) {
+            "low" -> "Low effort"
+            "medium" -> "Medium effort"
+            "high" -> "High effort"
+            "xhigh" -> "Extra-high effort"
+            else -> null
+        }
+        Row(Modifier.fillMaxWidth().widthIn(max = 460.dp)
+            .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(16.dp)).padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), color = NexlyInk.label, strokeWidth = 1.5.dp)
+            Column(Modifier.weight(1f)) {
+                Text(listOfNotNull(title, effortLabel).joinToString(" · "),
+                    style = MaterialTheme.typography.labelMedium, color = NexlyInk.label)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = NexlyInk.meta,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        return
+    }
     val thinkingSubtitle = if (phase == NexlyThinkingPhase.DONE) {
         "Request analyzed"
     } else if (isPlan) {
