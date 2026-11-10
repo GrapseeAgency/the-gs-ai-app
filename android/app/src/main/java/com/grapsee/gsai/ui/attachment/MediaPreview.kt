@@ -18,6 +18,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 import java.io.File
+import com.grapsee.gsai.ui.icons.GsIcons
 
 /** Native playback of actual staged bytes, no external player/install needed.
  * Timings come from MediaPlayer, never generated waveform or fake progress.
@@ -62,7 +63,12 @@ private fun NativeVideoPreview(file: File) {
 }
 
 @Composable
-private fun NativeAudioPreview(file: File) {
+internal fun InlineAudioPreview(file: File) {
+    NativeAudioPreview(file, compact = true)
+}
+
+@Composable
+private fun NativeAudioPreview(file: File, compact: Boolean = false) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val player = remember(file) { MediaPlayer() }
     var ready by remember(file) { mutableStateOf(false) }
@@ -92,6 +98,36 @@ private fun NativeAudioPreview(file: File) {
     }
     if (failed) {
         Text("This device could not decode the audio.", color = MaterialTheme.colorScheme.error)
+    } else if (compact) {
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            IconButton(
+                enabled = ready,
+                onClick = {
+                    if (playing) player.pause()
+                    else { if (position >= duration) player.seekTo(0); player.start() }
+                    playing = !playing
+                },
+                modifier = Modifier.size(40.dp)
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = if (playing) GsIcons.Pause else GsIcons.Play,
+                    contentDescription = if (playing) "Pause audio" else "Play audio"
+                )
+            }
+            Slider(
+                modifier = Modifier.weight(1f),
+                value = position.toFloat().coerceIn(0f, duration.coerceAtLeast(1).toFloat()),
+                onValueChange = { position = it.toInt(); player.seekTo(position) },
+                valueRange = 0f..duration.coerceAtLeast(1).toFloat(),
+                enabled = ready
+            )
+            Text(
+                text = if (ready) "${mediaTime(position)} / ${mediaTime(duration)}" else "…",
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1
+            )
+        }
+        if (!ready) LinearProgressIndicator(Modifier.fillMaxWidth())
     } else {
         if (!ready) LinearProgressIndicator(Modifier.fillMaxWidth())
         Slider(value = position.toFloat().coerceIn(0f, duration.coerceAtLeast(1).toFloat()),
