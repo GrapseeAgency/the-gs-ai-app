@@ -65,6 +65,22 @@ final class PlatformRuntimeUITests: XCTestCase {
         capture.name = "genui-actual-\(label.lowercased())-failure"; capture.lifetime = .keepAlways; add(capture)
     }
 
+    /// A fresh simulator can put Apple's slide-to-type introduction over the
+    /// entire app. Dismiss only that identified OS tutorial, not app forms.
+    private func dismissSystemKeyboardIntroductionIfPresented(_ app: XCUIApplication) {
+        let introduction = NSPredicate(format: "label BEGINSWITH %@", "Speed up your typing by sliding your finger")
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for owner in [app, springboard] {
+            let tutorial = owner.staticTexts.matching(introduction).firstMatch
+            if tutorial.waitForExistence(timeout: 2) {
+                let proceed = owner.buttons["Continue"].firstMatch
+                XCTAssertTrue(proceed.waitForExistence(timeout: 2), "The actual system keyboard tutorial must offer Continue")
+                if proceed.exists { proceed.tap() }
+                return
+            }
+        }
+    }
+
     func testGeneratedReactCodeRunsActualTaskControlsAndPersistsAcrossRelaunch() {
         let app = XCUIApplication()
         app.launchArguments = ["-gs_test_session_active", "-gs_test_react_preview"]
@@ -86,7 +102,9 @@ final class PlatformRuntimeUITests: XCTestCase {
         }
         guard run() else { return }
         let input = app.webViews.textFields["New task"]
-        XCTAssertTrue(input.waitForExistence(timeout: 10)); input.tap(); input.typeText("iOS React task")
+        XCTAssertTrue(input.waitForExistence(timeout: 10)); input.tap()
+        dismissSystemKeyboardIntroductionIfPresented(app)
+        input.typeText("iOS React task")
         let addTask = app.webViews.buttons["Add task"]
         let reachable = NSPredicate { _, _ in addTask.exists && addTask.isHittable }
         let formVisible = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: reachable, object: nil)], timeout: 5) == .completed
