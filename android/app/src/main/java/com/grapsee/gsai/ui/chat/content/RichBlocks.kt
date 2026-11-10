@@ -1157,8 +1157,18 @@ private fun appendNexlyText(
 }
 
 @Composable
-private fun rememberNexlyInlineContent(styled: AnnotatedString): Map<String, InlineTextContent> {
-    return remember(styled) {
+private fun rememberNexlyInlineContent(
+    styled: AnnotatedString,
+    requestedFontSize: androidx.compose.ui.unit.TextUnit? = null,
+    requestedGlyphColor: Color? = null
+): Map<String, InlineTextContent> {
+    val fallbackSize = MaterialTheme.typography.bodyMedium.fontSize
+    val sizeValue = requestedFontSize?.value?.takeIf { it.isFinite() && it > 0f }
+        ?: fallbackSize.value
+    val fontSize = sizeValue.sp
+    val glyphColor = requestedGlyphColor ?: MaterialTheme.colorScheme.primary
+    val glyphSize = with(LocalDensity.current) { fontSize.toDp() } * 0.88f
+    return remember(styled, fontSize, glyphColor, glyphSize) {
         val annotations = styled.getStringAnnotations(
             tag = NEXLY_INLINE_ICON_TAG,
             start = 0,
@@ -1170,8 +1180,8 @@ private fun rememberNexlyInlineContent(styled: AnnotatedString): Map<String, Inl
             annotations.map { it.item }.distinct().associate { iconName ->
                 "nexly_icon:$iconName" to InlineTextContent(
                     Placeholder(
-                        width = 20.sp,
-                        height = 18.sp,
+                        width = fontSize,
+                        height = fontSize,
                         placeholderVerticalAlign = PlaceholderVerticalAlign.Center
                     )
                 ) {
@@ -1179,11 +1189,12 @@ private fun rememberNexlyInlineContent(styled: AnnotatedString): Map<String, Inl
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        // Inline glyphs share the text baseline, never a separate tile.
+                        // Use the prose scale and ink so a custom glyph sits in
+                        // the sentence like a character, not an oversized badge.
                         NexlyGlyph(
                             name = iconName,
-                            size = 17.dp,
-                            color = MaterialTheme.colorScheme.primary
+                            size = glyphSize,
+                            color = glyphColor
                         )
                     }
                 }
@@ -1484,42 +1495,21 @@ private fun ParagraphBlock(
     val bodyStyle = compact ?: MaterialTheme.typography.bodyMedium
     val ink = compact?.color ?: MaterialTheme.colorScheme.onSurface
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
-    val leadingIcon = remember(block.spans) {
-        NexlyIcons.extractLeadingIcon(plainTextOfSpans(block.spans)).first
+    val styled = remember(block.spans, theme, showCaret) {
+        spansToAnnotatedString(block.spans, theme, showCaret)
     }
-    val displaySpans = remember(block.spans, leadingIcon) {
-        if (leadingIcon != null) stripLeadingIconFromSpans(block.spans) else block.spans
-    }
-    val styled = remember(displaySpans, theme, showCaret) {
-        spansToAnnotatedString(displaySpans, theme, showCaret)
-    }
-    val inlineContent = rememberNexlyInlineContent(styled)
+    val inlineContent = rememberNexlyInlineContent(
+        styled = styled,
+        requestedFontSize = bodyStyle.fontSize,
+        requestedGlyphColor = ink
+    )
     val text = @Composable {
-        if (leadingIcon != null) {
-            Row(verticalAlignment = Alignment.Top) {
-                NexlyGlassGlyphTile(
-                    name = leadingIcon,
-                    toneName = NexlyIcons.toneFor(leadingIcon),
-                    size = 21.dp,
-                    glyphSize = 12.dp,
-                    modifier = Modifier.padding(top = 1.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = styled,
-                    style = bodyStyle,
-                    color = ink,
-                    inlineContent = inlineContent
-                )
-            }
-        } else {
-            Text(
-                text = styled,
-                style = bodyStyle,
-                color = ink,
-                inlineContent = inlineContent
-            )
-        }
+        Text(
+            text = styled,
+            style = bodyStyle,
+            color = ink,
+            inlineContent = inlineContent
+        )
     }
     if (selectable) SelectionContainer { text() } else text()
 }
