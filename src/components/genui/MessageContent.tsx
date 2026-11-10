@@ -1320,14 +1320,19 @@ function renderProseBlock(
             {block.items.map((item, j) => {
               const { icon: leadTok, rest: stripped } = extractLeadingIcon(item.text)
               const boldLeadMatch = !leadTok ? item.text.trim().match(/^\*\*([^*]+)\*\*/) : null
-              const sem = leadTok
-                ? { icon: leadTok, tone: 'lavender' }
-                : boldLeadMatch
-                  ? semanticIconFor(boldLeadMatch[1], '')
-                  : { icon: '', tone: 'lavender' }
-              const resolvedIcon = isCheckmarkSection ? (leadTok || sem.icon || 'circle-check') : (leadTok || (sem.icon && sem.icon !== 'sparkles' ? sem.icon : ''))
+              // Ordinary Markdown bullets keep their actual prose (including
+              // custom glyphs) inline. Tiles belong to explicit structured
+              // checkmark rows, not every semantically guessed list item.
+              const sem = isCheckmarkSection
+                ? leadTok
+                  ? { icon: leadTok, tone: 'lavender' }
+                  : boldLeadMatch
+                    ? semanticIconFor(boldLeadMatch[1], '')
+                    : { icon: '', tone: 'lavender' }
+                : { icon: '', tone: 'lavender' }
+              const resolvedIcon = isCheckmarkSection ? (leadTok || sem.icon || 'circle-check') : ''
               const resolvedTone = isCheckmarkSection && !leadTok && !sem.icon ? 'green' : sem.tone
-              const bodyStr = leadTok ? stripped : item.text
+              const bodyStr = isCheckmarkSection && leadTok ? stripped : item.text
               return (
                 <li key={j} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                   {resolvedIcon ? (
