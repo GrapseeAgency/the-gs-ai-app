@@ -214,12 +214,16 @@ function SearchTracePanel({ steps, phase }: { steps: TraceStep[]; phase: string 
           ? 'Search failed'
           : phase === 'composing'
             ? 'Composing'
-            : null
+            : phase === 'generating'
+              ? 'Generating answer'
+              : phase === 'checking'
+                ? 'Rechecking answer'
+                : null
   return (
     <div
       className="rounded-xl border px-3.5 py-3"
       style={{ background: C.container, borderColor: C.outline }}
-      aria-label="Live research trace"
+      aria-label="Live activity"
       aria-live="polite"
     >
       <div className="mb-2 flex items-center gap-2">
@@ -695,6 +699,12 @@ export default function Home() {
               if (event.data === 'search_failed') {
                 pushStep('circle-x', 'The search could not be completed', 'fail')
               }
+            } else if (event.event === 'reset') {
+              // A real server-side check rejected a provisional draft. Replace
+              // it before retry deltas; never concatenate the two answers.
+              acc = ''
+              accRef.current = ''
+              setStreamText('')
             } else if (event.event === 'search') {
               const p = JSON.parse(event.data)
               if (p.type === 'started') {
@@ -1357,7 +1367,7 @@ export default function Home() {
                   )
                 )}
 
-              {isStreaming && trace.length > 0 && (
+              {isStreaming && (trace.length > 0 || phase !== null) && (
                 <SearchTracePanel steps={trace} phase={phase} />
               )}
 
