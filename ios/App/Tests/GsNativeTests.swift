@@ -259,6 +259,18 @@ final class GsNativeTests: XCTestCase {
         try XCTSkipUnless(GsNative.backendAvailable, "no generation backend in this build")
     }
 
+    /// Each screen-path integration test owns its SQLite store. Writing a turn
+    /// through `ConversationStore.shared` leaves durable history in the test host,
+    /// shifting Home's measured render probes in a later test case.
+    @MainActor
+    private func isolatedConversationStore() -> ConversationStore {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gs-native-chat-" + UUID().uuidString)
+        let sql = SQLiteChatStore(databaseURL: directory.appendingPathComponent("history.sqlite"))
+        XCTAssertTrue(sql.isAvailable, "the isolated native-chat SQLite fixture must open")
+        return ConversationStore(sql: sql)
+    }
+
     /// The prompt both tests use. The 0.5B answers it with one word.
     private let screenPrompt =
         "What is the capital of France? Answer with one word."
@@ -293,7 +305,8 @@ final class GsNativeTests: XCTestCase {
         store.preferLocal = true
         XCTAssertTrue(store.preferLocal, "the switch did not turn on")
 
-        let vm = ChatViewModel(conversationID: nil)
+        let conversationStore = isolatedConversationStore()
+        let vm = ChatViewModel(conversationID: nil, store: conversationStore)
         vm.draft = screenPrompt
         vm.send()
 
@@ -349,7 +362,8 @@ final class GsNativeTests: XCTestCase {
         store.preferLocal = false
         XCTAssertFalse(store.preferLocal, "the switch did not turn off")
 
-        let vm = ChatViewModel(conversationID: nil)
+        let conversationStore = isolatedConversationStore()
+        let vm = ChatViewModel(conversationID: nil, store: conversationStore)
         vm.draft = screenPrompt
         vm.send()
 
