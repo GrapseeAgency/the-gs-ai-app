@@ -588,7 +588,15 @@ final class ChatViewModel: ObservableObject {
         // Attachments are excluded: a local model cannot read the files that
         // were just uploaded, so answering from it would produce a confident
         // reply about content it never saw. That is worse than a slow one.
-        if SettingsStore.shared.preferLocal, attachments.isEmpty, GsNativeLoader.isAvailable {
+        let preferLocal = SettingsStore.shared.preferLocal
+        #if DEBUG
+        // The external on-device-reply UI test opts into the real loaded model
+        // without writing the reader's persisted Settings preference.
+        let preferLocalForUITest = ProcessInfo.processInfo.arguments.contains("-gs_test_prefer_local")
+        #else
+        let preferLocalForUITest = false
+        #endif
+        if (preferLocal || preferLocalForUITest), attachments.isEmpty, GsNativeLoader.isAvailable {
             beginLocalStreaming(text: text)
             return
         }
