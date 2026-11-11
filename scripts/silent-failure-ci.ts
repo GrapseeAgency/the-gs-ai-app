@@ -79,6 +79,11 @@ if (fetchErrors > 0) {
   process.exit(1)
 }
 if (violations > 0) {
+  const annotation = violationDetails.join('\n')
+    .replace(/%/g, '%25')
+    .replace(/\r/g, '%0D')
+    .replace(/\n/g, '%0A')
+  console.error(`::error title=Silent-failure violations (${violations})::${annotation}`)
   console.error(`SILENT-FAILURE GATE: BLOCK — ${violations} turn(s) with silent-failure violations (see above)`)
   process.exit(1)
 }
