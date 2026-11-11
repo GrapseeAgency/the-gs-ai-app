@@ -2514,6 +2514,16 @@ jobs:
           #                           3:00 for being exactly what it is (two
           #                           generations) -- a harness failure, not a
           #                           product one.
+          #   -parallel-testing-enabled NO
+          #                           Run the same full scheme serially, like
+          #                           the passing real-Xcode gate in ios.yml.
+          #                           This job also loads a real GGUF while the
+          #                           AppTests and UI tests create WebKit
+          #                           processes. Default parallel workers
+          #                           disappeared amid WebProcess assertion
+          #                           noise and xcodebuild exited 65 at the
+          #                           20-minute test allowance; reduce runner
+          #                           contention without weakening the test.
           #   the loop below          kills xcodebuild if it stalls outside a
           #                           test (simulator boot, runner handshake).
           # The step still runs to COMPLETION (no YAML timeout-minutes), so the
@@ -2523,6 +2533,7 @@ jobs:
             -project GSApp.xcodeproj \
             -scheme GSApp \
             -destination "id=$UDID" \
+            -parallel-testing-enabled NO \
             -test-timeouts-enabled YES \
             -default-test-execution-time-allowance 600 \
             -maximum-test-execution-time-allowance 1200 \
@@ -2666,24 +2677,50 @@ jobs:
               raise SystemExit(0)
 
           lines = path.read_text(errors="replace").splitlines()
-          marker = re.compile(
-              r"(?:Test Case\b.*\bfailed\b|Test Suite\b.*\bfailed\b|"
-              r"XCTAssert\w*\b.*\bfailed\b|XCTFail\b|"
-              r"Testing failed:|error:|Assertion failed|Fatal error:)",
+          failure_marker = re.compile(
+              r"(?:Test Case\b.*\b(?:failed|timed out)\b|"
+              r"Test Suite\b.*\bfailed\b|"
+              r"XCTAssert\w*\b.*\bfailed\b|XCTFail\b|Testing failed:|"
+              r"Assertion failed|Fatal error:|"
+              r"Test runner.*(?:crashed|exited|terminated)|"
+              r"Timed out waiting for the test runner)",
               re.IGNORECASE,
           )
-          hits = [i for i, line in enumerate(lines) if marker.search(line)]
-          if hits:
-              chosen = set()
-              for i in hits:
-                  chosen.update(range(max(0, i - 1), min(len(lines), i + 2)))
-              details = [f"{i + 1}: {lines[i]}" for i in sorted(chosen)]
-          else:
-              details = [f"{i + 1}: {line}" for i, line in enumerate(lines[-100:], start=max(0, len(lines) - 100))]
+          test_event = re.compile(
+              r"(?:Test Case\b|Test Suite\b|Testing (?:started|failed)|"
+              r"Test runner.*(?:crashed|exited|terminated)|"
+              r"error:.*(?:XCTest|test runner))",
+              re.IGNORECASE,
+          )
+          failures = [i for i, line in enumerate(lines) if failure_marker.search(line)]
+          events = [i for i, line in enumerate(lines) if test_event.search(line)]
 
-          payload = "\n".join(details[-120:])
+          def numbered(indexes):
+              return "\n".join(f"{i + 1}: {lines[i]}" for i in indexes)
+
+          def clipped(text, limit):
+              if len(text) <= limit:
+                  return text
+              return "[earlier lines trimmed]\n" + text[-limit:]
+
+          failure_context = set()
+          for i in failures:
+              failure_context.update(range(max(0, i - 1), min(len(lines), i + 2)))
+          failure_text = numbered(sorted(failure_context))
+          event_text = numbered(events[-45:])
+          tail_text = numbered(range(max(0, len(lines) - 60), len(lines)))
+
+          sections = []
+          if failure_text:
+              sections.append("=== explicit XCTest failure context ===\n" + clipped(failure_text, 5000))
+          else:
+              sections.append("No explicit XCTest failure marker was present; inspect the last test events and raw log tail.")
+          if event_text:
+              sections.append("=== last XCTest events ===\n" + clipped(event_text, 4500))
+          sections.append("=== last 60 raw log lines ===\n" + clipped(tail_text, 4000))
+          payload = "\n\n".join(sections)
           if len(payload) > 14000:
-              payload = payload[-14000:]
+              payload = payload[:14000]
           print("=== native XCTest failure details ===")
           print(payload)
           command_data = payload.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
