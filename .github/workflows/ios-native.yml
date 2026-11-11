@@ -2650,6 +2650,46 @@ jobs:
           printf 'iOS test arch (MEASURED by the test process): %s\n' "$RAN" >> "$GITHUB_STEP_SUMMARY"
           echo "VERIFIED: $PASSED passed, $SKIPPED skipped on the iOS simulator, arch=$RAN reported by the test process"
 
+      - name: Publish native XCTest failure details as annotations
+        if: failure()
+        env:
+          LOG_PATH: ios/test-simulator.log
+        run: |
+          python3 - <<'PYXCTEST'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path(os.environ["LOG_PATH"])
+          if not path.is_file():
+              print(f"::error::Native XCTest log is missing: {path}")
+              raise SystemExit(0)
+
+          lines = path.read_text(errors="replace").splitlines()
+          marker = re.compile(
+              r"(?:Test Case\b.*\bfailed\b|Test Suite\b.*\bfailed\b|"
+              r"XCTAssert\w*\b.*\bfailed\b|XCTFail\b|"
+              r"Testing failed:|error:|Assertion failed|Fatal error:)",
+              re.IGNORECASE,
+          )
+          hits = [i for i, line in enumerate(lines) if marker.search(line)]
+          if hits:
+              chosen = set()
+              for i in hits:
+                  chosen.update(range(max(0, i - 1), min(len(lines), i + 2)))
+              details = [f"{i + 1}: {lines[i]}" for i in sorted(chosen)]
+          else:
+              details = [f"{i + 1}: {line}" for i, line in enumerate(lines[-100:], start=max(0, len(lines) - 100))]
+
+          payload = "\n".join(details[-120:])
+          if len(payload) > 14000:
+              payload = payload[-14000:]
+          print("=== native XCTest failure details ===")
+          print(payload)
+          command_data = payload.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error::Native XCTest failure details: {command_data}")
+          PYXCTEST
+
       - name: Inventory the unsigned device App.app
         run: |
           set -uo pipefail
