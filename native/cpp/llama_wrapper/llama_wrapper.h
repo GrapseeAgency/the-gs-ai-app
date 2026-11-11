@@ -240,6 +240,17 @@ llama_result_t gs_llama_chat(gs_llama_context_t* ctx,
                              int32_t max_tokens,
                              float temperature);
 
+/* Same templated chat path, publishing real decoded UTF-8 as tokens arrive.
+ * A nonzero callback result stops generation at that token boundary and returns
+ * the visible partial text; NULL preserves the ordinary non-streaming path. */
+llama_result_t gs_llama_chat_stream(gs_llama_context_t* ctx,
+                                    const char* system,
+                                    const char* user,
+                                    int32_t max_tokens,
+                                    float temperature,
+                                    gs_token_callback_t on_token,
+                                    void* user_data);
+
 /* Releases result->text. Safe to call with NULL. */
 void gs_llama_free_result_text(llama_result_t* result);
 

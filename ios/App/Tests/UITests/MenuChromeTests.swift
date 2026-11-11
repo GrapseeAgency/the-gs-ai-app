@@ -70,9 +70,9 @@ final class MenuChromeTests: XCTestCase {
             }
             // Restart instead of fighting the panel: the drawer has no
             // tap-to-dismiss scrim and its Close button did not land twice
-            // (runs 40133180902, 40134206951). The seed lives in SQLite, so the
-            // rows survive a relaunch and the chats phase starts on a known
-            // screen.
+            // (runs 40133180902, 40134206951). Each seed launch now resets the
+            // persisted test history and reinstalls these exact rows, so the
+            // chats phase cannot inherit another UI test's conversation.
             app.terminate()
             app.launchArguments = ["-gs_test_session_active", "-gs_test_seed_chats"]
             app.launch()
@@ -445,9 +445,17 @@ final class MenuChromeTests: XCTestCase {
         let text = app.staticTexts[label].firstMatch
         let button = app.buttons[label].firstMatch
         if text.exists, !text.frame.isEmpty {
-            // A swipe button is a SMALL button wrapping its own text; a menu
-            // row's button is the whole row (no text child at all).
-            if button.exists, !button.frame.isEmpty, button.frame.height < 120 {
+            // A swipe action is a compact button around its own title. A menu
+            // row can also expose both a Button and StaticText, but its button
+            // spans the full row (and may be only ~44 pt tall); height alone
+            // therefore misclassifies ordinary menu rows as swipe buttons.
+            // Require a genuinely compact, padded button before using its frame
+            // as the row geometry. If accessibility exposes only a text-sized
+            // button, measure the title itself instead of inventing a row origin.
+            if button.exists, !button.frame.isEmpty,
+               button.frame.width < 120, button.frame.height < 120,
+               text.frame.minX - button.frame.minX > 3,
+               button.frame.maxX - text.frame.maxX > 3 {
                 return .textInRow(text: text.frame, row: button.frame)
             }
             return .text(text.frame)

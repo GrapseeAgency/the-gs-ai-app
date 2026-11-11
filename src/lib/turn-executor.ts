@@ -1715,17 +1715,20 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     return next as ChatMessageInput[] | VisionChatMessage[]
   }
 
+  const streamAnswerDelta = push ? (delta: string) => push('delta', delta) : undefined
+
   const synthesizeValidated = async (
     turn: TurnSearch,
     modelMessages: ChatMessageInput[] | VisionChatMessage[],
-    userTurnText: string
+    userTurnText: string,
+    onDelta?: (delta: string) => void
   ): Promise<{ text: string; violation: GuardViolation | null }> => {
     const state = executionStateFor(turn)
     let activeMessages = modelMessages
     let activeUserTurn = userTurnText
     let last: { text: string; violation: GuardViolation | null } = { text: '', violation: null }
     for (let attempt = 1; attempt <= MAX_GUARD_ATTEMPTS; attempt++) {
-      const text = await synthesize(activeMessages)
+      const text = await synthesize(activeMessages, onDelta)
       const violation = detectExecutionContradiction(text, state)
       last = { text, violation }
       if (!violation) return last
@@ -1733,19 +1736,17 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         `GS-GUARD conv=${id} attempt=${attempt}/${MAX_GUARD_ATTEMPTS} violation=${violation.kind} match="${violation.match.slice(0, 70)}"`
       )
       if (attempt === MAX_GUARD_ATTEMPTS) break
+      if (push) {
+        // The streamed draft contradicted the server's real turn activity.
+        // Replace it before retrying; never concatenate two provider drafts.
+        push('status', 'checking')
+        push('reset', '')
+      }
       const correction = buildCorrectionInstruction(state, violation, attempt)
       activeMessages = applyCorrection(activeMessages, activeUserTurn, correction)
       activeUserTurn = injectCorrection(activeUserTurn, correction)
     }
     return last
-  }
-
-  /** Flush a validated full text as delta events (buffered-synthesis path). */
-  const chunkDeltas = (text: string): string[] => {
-    const size = 140
-    const chunks: string[] = []
-    for (let i = 0; i < text.length; i += size) chunks.push(text.slice(i, i + size))
-    return chunks.length > 0 ? chunks : ['']
   }
 
   // REASONING TRACE (chat-reasoning panel) — thinking-enabled STREAM calls
@@ -1805,9 +1806,12 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     modelMessages: ChatMessageInput[] | VisionChatMessage[],
     onDelta?: (d: string) => void
   ): Promise<string> => {
-    // Validated answers still use the provider stream, so genuine reasoning
-    // and mode activity can arrive while their draft is checked. Only answer
-    // deltas are withheld; no invented progress or unvalidated text is emitted.
+    // A status is emitted only when this turn enters its real synthesis call;
+    // silence before that point is not dressed up as tool activity.
+    if (push) push('status', 'generating')
+    // Guarded answers consume the provider stream too. Their first draft is
+    // provisional until the real turn-activity guard accepts it; on a retry,
+    // `reset` clears the rejected draft before the next genuine deltas arrive.
     const answerDelta = onDelta ?? (push ? (_delta: string) => {} : undefined)
     if (!prep.runId) return synthesizeRaw(modelMessages, answerDelta)
     return tracked(
@@ -1866,7 +1870,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         .map((f) => f.reason)
         .join(',') || 'unknown'} — deterministic refusal, no model call`
     )
-    if (push) for (const chunk of chunkDeltas(reply)) push('delta', chunk)
+    if (push) push('delta', reply)
     const saved = await createAssistantMessage({
       conversationId: id,
       role: 'assistant',
@@ -1932,7 +1936,12 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
             ...(modelMessages as ChatMessageInput[]),
           ] as ChatMessageInput[])
         : modelMessages
-      const { text, violation } = await synthesizeValidated(turn, synthesisMessages, userTurnText)
+      const { text, violation } = await synthesizeValidated(
+        turn,
+        synthesisMessages,
+        userTurnText,
+        streamAnswerDelta
+      )
       if (violation) {
         console.log(`GS-GUARD conv=${id} emitted-after-retries violation=${violation.kind}`)
       }
@@ -1956,7 +1965,11 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
               userTurnText,
               buildAggregateCorrection(aggv)
             )
-            const retry = await synthesize(corrected)
+            // This aggregate guard runs after the first provider draft. Surface
+            // the real failed check and replace that draft before streaming the
+            // fresh provider attempt; never hide a second silent synthesis.
+            if (push) { push('status', 'checking'); push('reset', '') }
+            const retry = await synthesize(corrected, streamAnswerDelta)
             aggv = verifyCsvAggregates(retry, table)
             if (aggv.length === 0) {
               full = retry
@@ -1984,7 +1997,8 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
             `GS-CONSTRAINT-GUARD conv=${id} freshness ungrounded versions ${ungrounded.join(', ')} — regenerating`
           )
           const retryMsgs = buildFreshnessRetryMessages(modelMessages as ChatMessageInput[], ungrounded)
-          const retry = await synthesize(retryMsgs)
+          if (push) { push('status', 'checking'); push('reset', '') }
+          const retry = await synthesize(retryMsgs, streamAnswerDelta)
           const still = freshnessViolations(retry, turn.evidenceBlock)
           full = still.length === 0 ? retry : honestFreshnessFallback(retry, turn.evidenceBlock)
           console.log(`GS-CONSTRAINT-GUARD conv=${id} freshness ${still.length === 0 ? 'retry accepted' : 'honest fallback emitted'}`)
@@ -2003,20 +2017,20 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
             ? honestFreshnessFallback('', turn.evidenceBlock)
             : 'I could not complete this answer: the synthesis provider failed after every fallback. Please retry.'
       }
-      if (push) for (const chunk of chunkDeltas(sanitizeReplyEmojis(full))) push('delta', chunk)
     } else if (numericCheck) {
-      let draft = await synthesize(modelMessages)
+      let draft = await synthesize(modelMessages, streamAnswerDelta)
       let nv = checkNumericClaims(draft, userTurnText)
       if (nv) {
         console.log(
           `GS-NUMERIC-GUARD conv=${id} claimed=${nv.claimed} actual=${nv.actual} unit=${nv.unit} — regenerating`
         )
+        if (push) { push('status', 'checking'); push('reset', '') }
         const corrected = applyCorrection(
           modelMessages,
           userTurnText,
           buildNumericCorrection(nv, 1)
         )
-        draft = await synthesize(corrected)
+        draft = await synthesize(corrected, streamAnswerDelta)
         nv = checkNumericClaims(draft, userTurnText)
         if (nv) {
           const repaired = applyNumericCorrection(draft)
@@ -2033,15 +2047,15 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         }
       }
       full = draft
-      if (push) for (const chunk of chunkDeltas(sanitizeReplyEmojis(full))) push('delta', chunk)
     } else if (directive) {
       console.log(`GS-DIRECTIVE conv=${id} target=${directive.target} — approach B rewrite applied`)
       const dMsgs = buildDirectiveMessages(modelMessages as ChatMessageInput[], directive)
-      let draft = await synthesize(dMsgs)
+      let draft = await synthesize(dMsgs, streamAnswerDelta)
       const first = enforceDirective(draft, directive)
       if (first !== null) {
         console.log(`GS-DIRECTIVE conv=${id} draft non-compliant — approach C constraint retry`)
-        draft = await synthesize(buildDirectiveRetryMessages(dMsgs, directive))
+        if (push) { push('status', 'checking'); push('reset', '') }
+        draft = await synthesize(buildDirectiveRetryMessages(dMsgs, directive), streamAnswerDelta)
         const stripped = enforceDirective(draft, directive)
         if (stripped !== null) {
           console.log(`GS-DIRECTIVE conv=${id} retry non-compliant — approach A deterministic strip`)
@@ -2049,17 +2063,20 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         }
       }
       full = draft
-      if (push) for (const chunk of chunkDeltas(sanitizeReplyEmojis(full))) push('delta', chunk)
     } else if (constraints) {
       // GS-CONSTRAINT-GUARD (Failures A and B): mid-prompt word-count
       // constraints and forbidden-character constraints. Ladder: regenerate
       // once with the constraint as the only system message, then repair
       // deterministically, then state the failure honestly.
-      let draft = await synthesize(modelMessages)
+      let draft = await synthesize(modelMessages, streamAnswerDelta)
       let viols = constraintViolations(draft, constraints)
       if (viols.length > 0) {
         console.log(`GS-CONSTRAINT-GUARD conv=${id} ${viols.join('; ')} — regenerating with constraint restated`)
-        draft = await synthesize(buildConstraintRetryMessages(modelMessages as ChatMessageInput[], constraints))
+        if (push) { push('status', 'checking'); push('reset', '') }
+        draft = await synthesize(
+          buildConstraintRetryMessages(modelMessages as ChatMessageInput[], constraints),
+          streamAnswerDelta
+        )
         viols = constraintViolations(draft, constraints)
         if (viols.length > 0) {
           const repaired = repairConstraints(draft, constraints)
@@ -2075,7 +2092,6 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         }
       }
       full = draft
-      if (push) for (const chunk of chunkDeltas(sanitizeReplyEmojis(full))) push('delta', chunk)
     } else if (push) {
       // Deltas are transport, not presentation. A chunk can bisect a fence,
       // JSON escape, surrogate pair or executable string. Clients sanitize
@@ -2103,7 +2119,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       )
     }
     const finalText = compiled.text
-    presentation.release(chunkDeltas(finalText))
+    presentation.release(finalText)
     const saved = await createAssistantMessage({
       conversationId: id,
       role: 'assistant',

@@ -14,7 +14,9 @@
 //! That is propagated here as a typed error rather than as empty output, so a
 //! host app can route around it instead of treating "" as a real answer.
 
-use std::ffi::{c_char, c_int, CStr, CString};
+use std::ffi::{c_char, c_int, c_void, CStr, CString};
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::slice;
 
 pub const GS_OK: c_int = 0;
 pub const GS_ERR_UNAVAILABLE: c_int = -4;
@@ -127,6 +129,14 @@ extern "C" {
         max_tokens: c_int,
         temperature: f32,
     ) -> *mut c_char;
+    fn gs_mobile_chat_stream(
+        ctx: *mut GS_MobileCtx,
+        prompt: *const c_char,
+        max_tokens: c_int,
+        temperature: f32,
+        on_token: Option<ChatTokenCallback>,
+        user_data: *mut c_void,
+    ) -> *mut c_char;
     fn gs_mobile_ocr(ctx: *mut GS_MobileCtx, image_path: *const c_char) -> *mut c_char;
 
     // Image generation, IN-PROCESS. Nothing here spawns a process; see
@@ -177,6 +187,27 @@ extern "C" {
     fn gs_mobile_build_info() -> *const c_char;
     fn gs_last_error() -> *const c_char;
     fn gs_free_string(s: *mut c_char);
+}
+
+type ChatTokenCallback = unsafe extern "C" fn(*const c_char, c_int, *mut c_void) -> c_int;
+
+unsafe extern "C" fn chat_token_trampoline<F>(
+    bytes: *const c_char,
+    byte_count: c_int,
+    user_data: *mut c_void,
+) -> c_int
+where
+    F: FnMut(&str) -> bool,
+{
+    if bytes.is_null() || byte_count <= 0 || user_data.is_null() {
+        return 0;
+    }
+    let callback = unsafe { &mut *user_data.cast::<F>() };
+    let bytes = unsafe { slice::from_raw_parts(bytes.cast::<u8>(), byte_count as usize) };
+    let text = String::from_utf8_lossy(bytes);
+    let keep_going = catch_unwind(AssertUnwindSafe(|| callback(text.as_ref())))
+        .unwrap_or(false);
+    if keep_going { 0 } else { 1 }
 }
 
 #[derive(Debug)]
@@ -313,6 +344,46 @@ impl MobileCtx {
         let s = unsafe { CStr::from_ptr(raw) }.to_string_lossy().into_owned();
         unsafe { gs_free_string(raw) };
         Ok(s)
+    }
+
+    /// Generate a chat answer while forwarding each real decoded token to the
+    /// caller. Returning false from the sink stops between tokens; the returned
+    /// string then contains only text already delivered to that sink.
+    pub fn chat_stream<F>(
+        &self,
+        prompt: &str,
+        max_tokens: i32,
+        temperature: f32,
+        mut on_token: F,
+    ) -> Result<String, MobileError>
+    where
+        F: FnMut(&str) -> bool,
+    {
+        let p = CString::new(prompt)
+            .map_err(|_| MobileError::InvalidArg("prompt contains NUL".into()))?;
+        let callback_context = (&mut on_token as *mut F).cast::<c_void>();
+        let raw = catch_unwind(AssertUnwindSafe(|| unsafe {
+            gs_mobile_chat_stream(
+                self.raw,
+                p.as_ptr(),
+                max_tokens,
+                temperature,
+                Some(chat_token_trampoline::<F>),
+                callback_context,
+            )
+        }))
+        .map_err(|_| MobileError::Internal("panic in gs_mobile_chat_stream".into()))?;
+        if raw.is_null() {
+            let m = last_error();
+            return Err(if m.contains("no generation backend") {
+                MobileError::Unavailable(m)
+            } else {
+                MobileError::Internal(m)
+            });
+        }
+        let text = unsafe { CStr::from_ptr(raw) }.to_string_lossy().into_owned();
+        unsafe { gs_free_string(raw) };
+        Ok(text)
     }
 
     /// OCR. On a portable build this is `Unavailable`, never an empty string:

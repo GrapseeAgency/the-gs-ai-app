@@ -12,9 +12,10 @@ PHASE 5 addendum: deep-research turns (ledger-driven branching) also emit
 renders. Additive like everything else: old clients skip the event name, the
 transport forwards it with no whitelist.
 
-## Base events (unchanged from v1)
-- `status` — payload string: `searching` | `working` | `composing` | `search_failed`
-- `delta` — payload string: answer text chunk
+## Base events (additive lifecycle updates)
+- `status` — payload string. Search lifecycle: `searching` | `working` | `composing` | `search_failed`. Generation lifecycle: `generating` when synthesis starts, `checking` when a real response guard rejects a provisional draft and the server is about to retry.
+- `delta` — answer text from the provider's real stream when streaming is allowed. Presentation-deferred formats receive one authoritative final delta; completed text is never split into synthetic token chunks.
+- `reset` — empty payload. Clears a provisional streamed draft that failed a server-side consistency check, before the retry's real deltas arrive. Clients replace, never concatenate, the rejected draft.
 - `done` — payload string: JSON of the persisted Message (includes `sources[]`, optional `clarifyOptions`)
 - `error` — payload string: error text
 
@@ -79,14 +80,16 @@ research.started→research:started · search.query→search:query · search.eng
 search.results→search:results · source.discovered/opening/reading→source:discovered/opening/reading ·
 source.read→source:read (+ legacy completed) · source.snippet_only→source:failed(status snippet_only) ·
 source.failed→source:failed · evidence.extracted→source:evidence · research.round.completed→research:round_completed ·
-synthesis.started→research:synthesis_started (+ status composing) · answer.delta→delta ·
+synthesis.started→research:synthesis_started (+ status composing) ·
+model synthesis begins→status generating · rejected provisional draft→status checking + reset · answer.delta→delta ·
 citation.bound→research:completed.usedCitations (+ search:completed) · research.completed→research:completed ·
 research.failed→research:failed
 
 ## Honest-state rules (binding for every client)
 - Render ONLY from received events. No timers, no fake steps, no fake reading.
-- Orb: SEARCHING only during real engine/search activity; WORKING only while
-  source retrieval/evidence processing is in flight; COMPOSING on
+- `reset` replaces a draft; it is not another answer fragment. `done.content` is authoritative after all final sanitation/compilation.
+- Orb: SEARCHING only during real engine/search activity; WORKING during real
+  source retrieval or a reported generation/check phase; COMPOSING on
   `research:synthesis_started`; IDLE after done.
 - Favicons: `https://icons.duckduckgo.com/ip3/<domain>.ico` derived CLIENT-side
   from the domain; monogram fallback; never trust model text for URL/domain.

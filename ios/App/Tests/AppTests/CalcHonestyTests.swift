@@ -744,8 +744,16 @@ final class CalcHonestyTests: XCTestCase {
         let window: UIWindow
         if let scene = oldKeyWindow?.windowScene { window = UIWindow(windowScene: scene) }
         else { window = UIWindow(frame: UIScreen.main.bounds) }
+        // A UIWindow created for an existing scene can start with zero bounds
+        // in the XCTest host. HtmlSandboxWebView is a UIViewRepresentable, so
+        // give SwiftUI the same real, visible viewport used by the production
+        // WebKit network-acceptance test before waiting for its WKWebView.
+        window.frame = oldKeyWindow?.frame ?? UIScreen.main.bounds
+        host.view.frame = window.bounds
         window.rootViewController = host
         window.makeKeyAndVisible()
+        window.layoutIfNeeded()
+        host.view.layoutIfNeeded()
         defer { window.isHidden = true; window.rootViewController = nil; oldKeyWindow?.makeKeyAndVisible() }
         func findWebView(_ view: UIView) -> WKWebView? {
             if let web = view as? WKWebView { return web }

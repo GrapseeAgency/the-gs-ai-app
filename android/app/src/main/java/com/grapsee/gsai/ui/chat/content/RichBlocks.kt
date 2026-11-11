@@ -1157,8 +1157,18 @@ private fun appendNexlyText(
 }
 
 @Composable
-private fun rememberNexlyInlineContent(styled: AnnotatedString): Map<String, InlineTextContent> {
-    return remember(styled) {
+private fun rememberNexlyInlineContent(
+    styled: AnnotatedString,
+    requestedFontSize: androidx.compose.ui.unit.TextUnit? = null,
+    requestedGlyphColor: Color? = null
+): Map<String, InlineTextContent> {
+    val fallbackSize = MaterialTheme.typography.bodyMedium.fontSize
+    val sizeValue = requestedFontSize?.value?.takeIf { it.isFinite() && it > 0f }
+        ?: fallbackSize.value
+    val fontSize = sizeValue.sp
+    val glyphColor = requestedGlyphColor ?: MaterialTheme.colorScheme.primary
+    val glyphSize = with(LocalDensity.current) { fontSize.toDp() } * 0.88f
+    return remember(styled, fontSize, glyphColor, glyphSize) {
         val annotations = styled.getStringAnnotations(
             tag = NEXLY_INLINE_ICON_TAG,
             start = 0,
@@ -1170,8 +1180,8 @@ private fun rememberNexlyInlineContent(styled: AnnotatedString): Map<String, Inl
             annotations.map { it.item }.distinct().associate { iconName ->
                 "nexly_icon:$iconName" to InlineTextContent(
                     Placeholder(
-                        width = 20.sp,
-                        height = 18.sp,
+                        width = fontSize,
+                        height = fontSize,
                         placeholderVerticalAlign = PlaceholderVerticalAlign.Center
                     )
                 ) {
@@ -1179,11 +1189,12 @@ private fun rememberNexlyInlineContent(styled: AnnotatedString): Map<String, Inl
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        // Inline glyphs share the text baseline, never a separate tile.
+                        // Use the prose scale and ink so a custom glyph sits in
+                        // the sentence like a character, not an oversized badge.
                         NexlyGlyph(
                             name = iconName,
-                            size = 17.dp,
-                            color = MaterialTheme.colorScheme.primary
+                            size = glyphSize,
+                            color = glyphColor
                         )
                     }
                 }
@@ -1216,7 +1227,12 @@ private fun appendSpans(builder: AnnotatedString.Builder, spans: List<InlineSpan
                     // long-press path (GsLinks), never a plain tap.
                     linkInteractionListener = { _ -> theme.openLink(span.url) }
                 )
-            ) { builder.append(NexlyIcons.cleanPlainText(span.text).ifEmpty { "Link" }) }
+            ) {
+                // Preserve inline custom glyphs in link labels. cleanPlainText
+                // is for metadata, not rich runs, and would erase their icons.
+                if (span.text.isBlank()) builder.append("Link")
+                else appendNexlyText(builder, span.text, theme)
+            }
             is InlineSpan.CitationSpan -> {
                 // PHASE 8.1: [N] resolves against the turn's real sources → a
                 // small superscript-style tappable chip that opens the source
@@ -1484,42 +1500,21 @@ private fun ParagraphBlock(
     val bodyStyle = compact ?: MaterialTheme.typography.bodyMedium
     val ink = compact?.color ?: MaterialTheme.colorScheme.onSurface
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
-    val leadingIcon = remember(block.spans) {
-        NexlyIcons.extractLeadingIcon(plainTextOfSpans(block.spans)).first
+    val styled = remember(block.spans, theme, showCaret) {
+        spansToAnnotatedString(block.spans, theme, showCaret)
     }
-    val displaySpans = remember(block.spans, leadingIcon) {
-        if (leadingIcon != null) stripLeadingIconFromSpans(block.spans) else block.spans
-    }
-    val styled = remember(displaySpans, theme, showCaret) {
-        spansToAnnotatedString(displaySpans, theme, showCaret)
-    }
-    val inlineContent = rememberNexlyInlineContent(styled)
+    val inlineContent = rememberNexlyInlineContent(
+        styled = styled,
+        requestedFontSize = bodyStyle.fontSize,
+        requestedGlyphColor = ink
+    )
     val text = @Composable {
-        if (leadingIcon != null) {
-            Row(verticalAlignment = Alignment.Top) {
-                NexlyGlassGlyphTile(
-                    name = leadingIcon,
-                    toneName = NexlyIcons.toneFor(leadingIcon),
-                    size = 21.dp,
-                    glyphSize = 12.dp,
-                    modifier = Modifier.padding(top = 1.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = styled,
-                    style = bodyStyle,
-                    color = ink,
-                    inlineContent = inlineContent
-                )
-            }
-        } else {
-            Text(
-                text = styled,
-                style = bodyStyle,
-                color = ink,
-                inlineContent = inlineContent
-            )
-        }
+        Text(
+            text = styled,
+            style = bodyStyle,
+            color = ink,
+            inlineContent = inlineContent
+        )
     }
     if (selectable) SelectionContainer { text() } else text()
 }
@@ -2994,50 +2989,19 @@ private fun ListItemRow(
     val bodyStyle = compact ?: MaterialTheme.typography.bodyMedium
     val ink = compact?.color ?: MaterialTheme.colorScheme.onSurface
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
-    val leadingIconAndSpans = remember(item.spans) {
-        val first = item.spans.firstOrNull()
-        when (first) {
-            is InlineSpan.TextSpan -> {
-                val (icon, stripped) = NexlyIcons.extractLeadingIcon(first.text)
-                if (icon != null) {
-                    icon to (listOf(InlineSpan.TextSpan(stripped)) + item.spans.drop(1))
-                } else {
-                    val (semIcon, _) = NexlyIcons.semanticIconFor(plainTextOfSpans(item.spans), "")
-                    (semIcon.takeIf { it.isNotBlank() && it != "sparkles" }) to item.spans
-                }
-            }
-            is InlineSpan.BoldSpan -> {
-                val innerFirst = first.children.firstOrNull()
-                if (innerFirst is InlineSpan.TextSpan) {
-                    val (icon, stripped) = NexlyIcons.extractLeadingIcon(innerFirst.text)
-                    if (icon != null) {
-                        val newBold = InlineSpan.BoldSpan(listOf(InlineSpan.TextSpan(stripped)) + first.children.drop(1))
-                        icon to (listOf(newBold) + item.spans.drop(1))
-                    } else {
-                        val (semIcon, _) = NexlyIcons.semanticIconFor(plainTextOfSpans(item.spans), "")
-                        (semIcon.takeIf { it.isNotBlank() && it != "sparkles" }) to item.spans
-                    }
-                } else null to item.spans
-            }
-            else -> null to item.spans
-        }
+    val styled = remember(item.spans, theme) {
+        spansToAnnotatedString(item.spans, theme)
     }
-    val leadingIcon = leadingIconAndSpans.first
-    val styled = remember(leadingIconAndSpans.second, theme) {
-        spansToAnnotatedString(leadingIconAndSpans.second, theme)
-    }
-    val bulletInlineContent = rememberNexlyInlineContent(styled)
+    val bulletInlineContent = rememberNexlyInlineContent(
+        styled = styled,
+        requestedFontSize = bodyStyle.fontSize,
+        requestedGlyphColor = ink
+    )
     Column {
         Row(verticalAlignment = Alignment.Top) {
-            if (leadingIcon != null) {
-                NexlyGlassGlyphTile(
-                    name = leadingIcon,
-                    size = 20.dp,
-                    glyphSize = 12.dp,
-                    modifier = Modifier.padding(top = 1.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-            } else if (marker == "✓") {
+            if (marker == "✓") {
+                // Checklist markers are deliberate controls. Emoji in ordinary
+                // bullet copy remain inline with the surrounding prose.
                 NexlyGlassGlyphTile(
                     name = "circle-check",
                     toneName = "lavender",

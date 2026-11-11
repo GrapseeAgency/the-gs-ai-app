@@ -1125,6 +1125,33 @@ func chartSeriesColorIOS(_ obj: [String: Any], index: Int) -> Color {
     return WidgetPalette.at(index + 1)
 }
 
+/// Keep the axis label's SwiftUI type small enough for both simulator and
+/// iphoneos builds. The former inline expression exceeded the device compiler's
+/// type-check budget even though the simulator accepted the same view tree.
+private struct ChartAxisLabelIOS: View {
+    let text: String
+    let isActive: Bool
+    let width: CGFloat
+    let centerX: CGFloat
+
+    private var fontWeight: Font.Weight {
+        isActive ? .bold : .regular
+    }
+
+    private var labelColor: Color {
+        isActive ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 10, weight: fontWeight))
+            .foregroundStyle(labelColor)
+            .frame(width: width)
+            .lineLimit(1)
+            .position(x: centerX, y: 9)
+    }
+}
+
 private struct ChartBodyView: View {
     let obj: [String: Any]
     let accent: Color
@@ -1500,12 +1527,20 @@ private struct ChartBodyView: View {
                     let indices = chartAxisLabelIndicesIOS(count: pts.count)
                     let labelWidth = min(64, plotWidth / CGFloat(max(1, indices.count)))
                     ForEach(indices, id: \.self) { index in
-                        Text(pts[index].label)
-                            .font(.system(size: 10, weight: index == activeIdx ? .bold : .regular))
-                            .foregroundStyle(index == activeIdx ? Color(red: 0.357, green: 0.239, blue: 0.961) : Aero.textSecondary)
-                            .frame(width: labelWidth)
-                            .lineLimit(1)
-                            .position(x: min(geometry.size.width - labelWidth / 2, max(labelWidth / 2, 42 + plotWidth * CGFloat(index) / CGFloat(max(1, pts.count - 1)))), y: 9)
+                        let point = pts[index]
+                        let indexSpan = CGFloat(max(1, pts.count - 1))
+                        let requestedCenterX = 42 + plotWidth * CGFloat(index) / indexSpan
+                        let halfLabelWidth = labelWidth / 2
+                        let centerX = min(
+                            geometry.size.width - halfLabelWidth,
+                            max(halfLabelWidth, requestedCenterX)
+                        )
+                        ChartAxisLabelIOS(
+                            text: point.label,
+                            isActive: index == activeIdx,
+                            width: labelWidth,
+                            centerX: centerX
+                        )
                     }
                 }
                 .frame(height: 18)

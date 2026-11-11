@@ -112,6 +112,8 @@ class ChatStreamController(private val chat: ChatRepository) {
         val hasAttachments: Boolean = false,
         /** PHASE 8.1: last known wire status of the search chain (null = no search this turn). */
         val searchPhase: String? = null,
+        /** Real provider activity: generating a draft or checking it before a retry. */
+        val generationStatus: String? = null,
         /** PHASE 8.1: real received search-chain steps, in arrival order. */
         val traceItems: List<SearchTraceItem> = emptyList(),
         /** PHASE 8.1: live source cards; final value = the persisted done sources. */
@@ -189,7 +191,6 @@ class ChatStreamController(private val chat: ChatRepository) {
         if (isStreaming) cancelAndFinalize()
         val token = assistantMessageId
         val buffer = StringBuilder()
-        var lastPaint = 0L
         // TASK 2 — tap-to-first-visible-character stopwatch. send() is invoked
         // synchronously by the composer's send tap; the first PUBLISHED paint
         // with non-empty text is the first character the reader can see.
@@ -205,15 +206,36 @@ class ChatStreamController(private val chat: ChatRepository) {
         )
         job = scope.launch {
             var visibleChars = 0
+            // A paint can snapshot a draft just before a reset, then reach the
+            // UI after that reset. Tag snapshots so a stale paint cannot put a
+            // rejected draft back on screen after the replacement event.
+            var resetEpoch = 0L
+            fun snapshotBuffer(): String = synchronized(buffer) { buffer.toString() }
             fun paintReceivedText() {
-                if (visibleChars >= buffer.length) return
-                val remaining = buffer.length - visibleChars
-                var end = minOf(buffer.length, visibleChars + maxOf(32, remaining / 12))
-                // Never split a UTF-16 surrogate pair at the reveal boundary.
-                if (end < buffer.length && Character.isHighSurrogate(buffer[end - 1])) end++
-                visibleChars = end
+                val (visibleText, paintedEpoch) = synchronized(buffer) {
+                    val fullText = buffer.toString()
+                    if (visibleChars >= fullText.length) return
+                    val remaining = fullText.length - visibleChars
+                    var end = minOf(fullText.length, visibleChars + maxOf(32, remaining / 12))
+                    // Never split a UTF-16 surrogate pair at the reveal boundary.
+                    if (end < fullText.length && Character.isHighSurrogate(fullText[end - 1])) end++
+                    visibleChars = end
+                    fullText.substring(0, end) to resetEpoch
+                }
+                if (!firstCharLogged && visibleText.isNotEmpty()) {
+                    firstCharLogged = true
+                    val now = SystemClock.uptimeMillis()
+                    android.util.Log.i(
+                        "GS-PERF",
+                        "tapToFirstVisibleCharMs=${now - sendCalledAt} chars=${visibleText.length}"
+                    )
+                }
                 publishIfMine(token) { current ->
-                    current.copy(streamText = buffer.substring(0, end),
+                    // Recheck under the same lock as reset: if the callback
+                    // cleared/replaced the buffer after this paint snapshot,
+                    // the old draft is discarded instead of republished.
+                    if (synchronized(buffer) { resetEpoch != paintedEpoch }) current
+                    else current.copy(streamText = visibleText,
                         reasoningEndMs = current.reasoningEndMs
                             ?: if (current.reasoning != null) SystemClock.uptimeMillis() else null)
                 }
@@ -235,6 +257,16 @@ class ChatStreamController(private val chat: ChatRepository) {
                     // --- PHASE 8.1 search-chain events (protocol v1) -----------
                     onStatus = { status ->
                         publishIfMine(token) { search.applyStatus(it, status) }
+                    },
+                    onReset = {
+                        // A retry replaces, rather than appends to, the real
+                        // provider draft that failed the server's check.
+                        synchronized(buffer) {
+                            buffer.setLength(0)
+                            visibleChars = 0
+                            resetEpoch++
+                        }
+                        publishIfMine(token) { it.copy(streamText = "") }
                     },
                     // FLASH-MODE BUG 1: the first event of every turn — the
                     // backend's resolved effective mode. Parsed tolerantly; a
@@ -290,23 +322,11 @@ class ChatStreamController(private val chat: ChatRepository) {
                         }
                     },
                     onDelta = { delta ->
-                        // One growing buffer for the whole streamed answer —
-                        // per-chunk concatenation re-allocated the entire prefix
-                        // on every delta (quadratic over a long stream). Deltas
-                        // only coalesce into the paint state at ~30 Hz.
-                        buffer.append(delta)
-                        val now = SystemClock.uptimeMillis()
-                        if (now - lastPaint >= STREAM_PAINT_MS) {
-                            lastPaint = now
-                            if (!firstCharLogged && buffer.isNotEmpty()) {
-                                firstCharLogged = true
-                                android.util.Log.i(
-                                    "GS-PERF",
-                                    "tapToFirstVisibleCharMs=${now - sendCalledAt} chars=${buffer.length}"
-                                )
-                            }
-                            paintReceivedText()
-                        }
+                        // Native inference calls this on its dedicated worker;
+                        // network callbacks may also arrive off-main. Keep the
+                        // append atomic and let the single main-thread painter
+                        // publish at display cadence.
+                        synchronized(buffer) { buffer.append(delta) }
                     },
                     // The done message's persisted sources[] are the AUTHORITATIVE
                     // card list (cited ordinals only, with the used flag) — they
@@ -315,10 +335,15 @@ class ChatStreamController(private val chat: ChatRepository) {
                     onDone = { done ->
                         val doneContent = done?.content
                         if (!doneContent.isNullOrBlank()) {
-                            val visible = buffer.substring(0, minOf(visibleChars, buffer.length))
-                            buffer.setLength(0)
-                            buffer.append(doneContent)
-                            if (!doneContent.startsWith(visible)) visibleChars = 0
+                            synchronized(buffer) {
+                                val visible = buffer.substring(0, minOf(visibleChars, buffer.length))
+                                if (buffer.toString() != doneContent) {
+                                    buffer.setLength(0)
+                                    buffer.append(doneContent)
+                                    if (!doneContent.startsWith(visible)) visibleChars = 0
+                                    resetEpoch++
+                                }
+                            }
                         }
                         publishIfMine(token) { current ->
                             val cards = done?.sources?.map { it.toSourceCard() }
@@ -330,21 +355,29 @@ class ChatStreamController(private val chat: ChatRepository) {
                         }
                     }
                 )
-                while (visibleChars < buffer.length) { paintReceivedText(); delay(STREAM_PAINT_MS) }
-                publishIfMine(token) { it.copy(streamText = buffer.toString(), phase = Phase.Finalizing) }
+                while (true) {
+                    val completeText = snapshotBuffer()
+                    val paintedChars = synchronized(buffer) { visibleChars }
+                    if (paintedChars >= completeText.length) break
+                    paintReceivedText()
+                    delay(STREAM_PAINT_MS)
+                }
+                val finalText = snapshotBuffer()
+                publishIfMine(token) { it.copy(streamText = finalText, phase = Phase.Finalizing) }
                 publishIfMine(token) { it.copy(conversationId = returnedId, phase = Phase.Done) }
             } catch (ce: CancellationException) {
                 // Stop-generation / navigation-away land here: the repository
                 // already persisted the partial (NonCancellable); publish the
                 // full buffered text so the screen commits what is on disk.
-                publishIfMine(token) { it.copy(streamText = buffer.toString(), phase = Phase.Cancelled) }
+                val finalText = snapshotBuffer()
+                publishIfMine(token) { it.copy(streamText = finalText, phase = Phase.Cancelled) }
                 throw ce
             } catch (e: Exception) {
                 // Safety net only — the repository lands offline turns itself.
                 // The screen decides how an error state presents (quietly).
                 publishIfMine(token) {
                     it.copy(
-                        streamText = buffer.toString(),
+                        streamText = snapshotBuffer(),
                         phase = Phase.Done,
                         error = e.message ?: e.javaClass.simpleName
                     )
@@ -441,6 +474,7 @@ private class SearchStreamAccumulator {
         when (status) {
             "searching" -> state.copy(searchPhase = "searching")
             "working" -> state.copy(searchPhase = "working")
+            "generating", "checking" -> state.copy(generationStatus = status)
             "composing" -> state.copy(
                 searchPhase = "composing",
                 traceItems = if (state.traceItems.any { it.kind == SearchTraceItem.Kind.Composing }) {

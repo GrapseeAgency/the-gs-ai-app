@@ -252,6 +252,9 @@ struct AttachmentChip: View {
                 }
                 if !visual { Spacer(minLength: 0) }
             }
+            if draft.kind == .audio, let localURL = draft.localURL {
+                AttachmentAudioPlayer(url: localURL)
+            }
             if !visual || draft.phase == .failed { actions.frame(maxWidth: .infinity, alignment: .trailing) }
         }
         .frame(width: visual ? 160 : 224, alignment: .leading)
@@ -372,44 +375,179 @@ private struct MessageAttachmentPreview: View {
     private var visual: Bool { kind != .audio }
 
     var body: some View {
-        Button {
-            if let localURL { previewURL = localURL } else { attempt += 1 }
-        } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                if visual {
-                    AttachmentThumb(kind: kind, localURL: localURL, size: 208)
-                        .overlay {
-                            if kind == .video { Image(systemName: "play.circle.fill").font(.system(size: 32)).foregroundStyle(.white) }
-                        }
-                }
-                HStack(spacing: 10) {
-                    if !visual { AttachmentThumb(kind: kind, localURL: localURL, size: 64) }
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(attachment.displayName).font(Aero.label()).foregroundStyle(Aero.text).lineLimit(2)
-                        Text(AttachmentRules.humanBytes(attachment.byteSize)).font(Aero.metadata()).foregroundStyle(Aero.textMuted)
-                        if failed {
-                            Text("Preview unavailable · Tap to retry").font(Aero.metadata()).foregroundStyle(Aero.danger)
-                        } else if localURL == nil {
-                            ProgressView().scaleEffect(0.7)
-                        } else if kind == .audio || kind == .video {
-                            Text("Tap to play · Media preview").font(Aero.metadata()).foregroundStyle(Aero.textMuted)
-                        }
-                    }
-                }
-            }
+        previewContent
             .frame(maxWidth: visual ? 208 : 248, alignment: .leading)
             .padding(10)
             .background(RoundedRectangle(cornerRadius: 20).fill(Aero.elevatedSurface.opacity(0.72)))
             .overlay(RoundedRectangle(cornerRadius: 20).stroke(Aero.outline, lineWidth: 1))
+            .quickLookPreview($previewURL)
+            .accessibilityLabel("Preview \(attachment.displayName), \(AttachmentRules.humanBytes(attachment.byteSize))")
+            .task(id: "\(attachment.id):\(attempt)") {
+                failed = false
+                do { localURL = try await AttachmentStore.shared.previewURL(for: attachment) }
+                catch { if !Task.isCancelled { failed = true } }
+            }
+    }
+
+    @ViewBuilder
+    private var previewContent: some View {
+        if visual {
+            Button(action: openPreview) {
+                VStack(alignment: .leading, spacing: 8) {
+                    AttachmentThumb(kind: kind, localURL: localURL, size: 208)
+                        .overlay {
+                            if kind == .video {
+                                Image(systemName: "play.circle.fill")
+                                    .font(.system(size: 32)).foregroundStyle(.white)
+                            }
+                        }
+                    details
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else if kind == .audio {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    AttachmentThumb(kind: kind, localURL: localURL, size: 64)
+                    details
+                }
+                if let localURL { AttachmentAudioPlayer(url: localURL) }
+            }
+        } else {
+            Button(action: openPreview) {
+                HStack(spacing: 10) {
+                    AttachmentThumb(kind: kind, localURL: localURL, size: 64)
+                    details
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
-        .quickLookPreview($previewURL)
-        .accessibilityLabel("Preview \(attachment.displayName), \(AttachmentRules.humanBytes(attachment.byteSize))")
-        .task(id: "\(attachment.id):\(attempt)") {
-            failed = false
-            do { localURL = try await AttachmentStore.shared.previewURL(for: attachment) }
-            catch { if !Task.isCancelled { failed = true } }
+    }
+
+    @ViewBuilder
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(attachment.displayName).font(Aero.label()).foregroundStyle(Aero.text).lineLimit(2)
+            Text(AttachmentRules.humanBytes(attachment.byteSize)).font(Aero.metadata()).foregroundStyle(Aero.textMuted)
+            if failed {
+                Text("Preview unavailable · Tap to retry").font(Aero.metadata()).foregroundStyle(Aero.danger)
+            } else if localURL == nil {
+                ProgressView()
+            } else if kind == .video {
+                Text("Tap to preview video").font(Aero.metadata()).foregroundStyle(Aero.textMuted)
+            }
         }
+    }
+
+    private func openPreview() {
+        if let localURL { previewURL = localURL }
+        else { attempt += 1 }
+    }
+}
+
+/// A compact, real player for staged voice/audio attachments. The scrubber is
+/// driven by AVAudioPlayer's actual duration and playback position; no fake
+/// waveform or generated progress is shown.
+private struct AttachmentAudioPlayer: View {
+    let url: URL
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var player: AVAudioPlayer?
+    @State private var duration = 0.0
+    @State private var position = 0.0
+    @State private var isPlaying = false
+    @State private var isScrubbing = false
+    @State private var failed = false
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 7) {
+                Button(action: togglePlayback) {
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 34, height: 34)
+                        .background(Aero.containerHigh, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(player == nil || failed)
+                .accessibilityLabel(isPlaying ? "Pause audio" : "Play audio")
+
+                Slider(value: $position, in: 0...max(duration, 1), onEditingChanged: { editing in
+                    isScrubbing = editing
+                    if !editing { player?.currentTime = min(position, duration) }
+                })
+                .disabled(player == nil || duration <= 0 || failed)
+                .accessibilityLabel("Audio position")
+
+                Text("\(timeLabel(position)) / \(timeLabel(duration))")
+                    .font(Aero.metadata())
+                    .foregroundStyle(Aero.textMuted)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            if failed {
+                Text("This device could not play the audio.")
+                    .font(Aero.metadata()).foregroundStyle(Aero.danger)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 13).fill(Aero.containerHigh.opacity(0.72)))
+        .task(id: url) {
+            do {
+                let audio = try AVAudioPlayer(contentsOf: url)
+                audio.prepareToPlay()
+                player = audio
+                duration = audio.duration
+                position = 0
+                failed = false
+            } catch {
+                failed = true
+            }
+        }
+        .task(id: isPlaying) {
+            guard isPlaying else { return }
+            while !Task.isCancelled {
+                guard let player else { return }
+                if !isScrubbing { position = player.currentTime }
+                if !player.isPlaying {
+                    position = duration
+                    isPlaying = false
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase != .active { pausePlayback() }
+        }
+        .onDisappear {
+            player?.stop()
+            player = nil
+            isPlaying = false
+        }
+    }
+
+    private func togglePlayback() {
+        guard let player else { return }
+        if isPlaying {
+            player.pause()
+            isPlaying = false
+        } else {
+            if player.currentTime >= duration { player.currentTime = 0; position = 0 }
+            isPlaying = player.play()
+        }
+    }
+
+    private func pausePlayback() {
+        player?.pause()
+        isPlaying = false
+    }
+
+    private func timeLabel(_ seconds: Double) -> String {
+        let wholeSeconds = max(0, Int(seconds.isFinite ? seconds : 0))
+        return "\(wholeSeconds / 60):\(String(format: "%02d", wholeSeconds % 60))"
     }
 }
 

@@ -8,7 +8,7 @@ type Push = (event: string, data: string) => void
  */
 export function presentationStream(prompt: string, transport: Push | null): {
   push: Push | null
-  release: (chunks: Iterable<string>) => void
+  release: (text: string) => void
 } {
   const defer = presentationPreference(prompt) !== 'automatic'
   let released = false
@@ -16,10 +16,12 @@ export function presentationStream(prompt: string, transport: Push | null): {
     push: !transport ? null : !defer ? transport : (event, data) => {
       if (event !== 'delta') transport(event, data)
     },
-    release(chunks) {
+    release(text) {
       if (!defer || !transport || released) return
       released = true
-      for (const chunk of chunks) transport('delta', chunk)
+      // Deferred presentation is deliberately a single finalized replacement,
+      // never a synthetic token stream manufactured from a completed answer.
+      transport('delta', text)
     },
   }
 }

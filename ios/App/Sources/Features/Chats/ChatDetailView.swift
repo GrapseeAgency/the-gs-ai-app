@@ -535,7 +535,9 @@ struct ChatDetailView: View {
                         isStreaming: message.isStreaming,
                         liveContentEmpty: message.content.isEmpty,
                         requestHasAttachments: pendingTurnHasAttachments,
-                        searchPhase: vm.searchPhase),
+                        searchPhase: vm.searchPhase,
+                        generationStatus: vm.generationStatus),
+                    generationStatus: message.isStreaming ? vm.generationStatus : nil,
                     reasoning: message.isStreaming ? vm.reasoningText : nil,
                     reasoningStart: message.isStreaming ? vm.reasoningStart : nil,
                     reasoningEnd: message.isStreaming ? vm.reasoningEnd : nil,
@@ -1230,6 +1232,8 @@ struct MessageBubble: View, Equatable {
     /// caller from the real stream/search phase. nil = settled turn (the
     /// mapping helper already returned nil for non-streaming rows).
     var orbState: OrbState? = nil
+    /// Real provider/local generation state for the live status card.
+    var generationStatus: ChatGenerationStatus? = nil
     /// REASONING TRACE (chat-reasoning panel): the live turn's thinking
     /// stream + measured span, passed explicitly because this row is
     /// Equatable on visible inputs only (vm state is not observed here).
@@ -1274,6 +1278,7 @@ struct MessageBubble: View, Equatable {
         lhs.editEnabled == rhs.editEnabled &&
         lhs.highlight == rhs.highlight &&
         lhs.orbState == rhs.orbState &&
+        lhs.generationStatus == rhs.generationStatus &&
         lhs.reasoning == rhs.reasoning &&
         lhs.reasoningStart == rhs.reasoningStart &&
         lhs.reasoningEnd == rhs.reasoningEnd &&
@@ -1414,6 +1419,8 @@ struct MessageBubble: View, Equatable {
     private var thinkingPhase: NexlyThinkingPhase {
         guard message.isStreaming else { return .done }
         if !message.content.isEmpty { return .answer }
+        if generationStatus == .checking { return .checking }
+        if generationStatus == .generating { return .generating }
         if sourceCount > 0 { return .search }
         if let reasoning, !reasoning.isEmpty { return .reasoning }
         return .thinking

@@ -31,6 +31,8 @@ on:
       - 'scripts/run-eval-suite.ts'
       - 'scripts/validate-eval-suite.ts'
       - 'scripts/test-eval-graders.ts'
+      - 'scripts/silent-failure-ci.ts'
+      - 'scripts/test-silent-failure-ci.mjs'
       - '.github/workflows/eval-gate.yml'
   schedule:
     - cron: '30 2 * * *' # 02:30 UTC daily — live regression sweep
@@ -68,6 +70,9 @@ jobs:
 
       - name: Grader contract tests (deterministic fixtures)
         run: bun scripts/test-eval-graders.ts
+
+      - name: Silent-failure diagnostics export regression tests
+        run: bun scripts/test-silent-failure-ci.mjs
 
       - name: Baseline must exist and be committed
         run: |

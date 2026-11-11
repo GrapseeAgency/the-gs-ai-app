@@ -184,7 +184,8 @@ func orbStateForChatStreaming(
     isStreaming: Bool,
     liveContentEmpty: Bool,
     requestHasAttachments: Bool = false,
-    searchPhase: ChatSearchPhase = .idle
+    searchPhase: ChatSearchPhase = .idle,
+    generationStatus: ChatGenerationStatus? = nil
 ) -> OrbState? {
     guard isStreaming else { return nil }
     switch searchPhase {
@@ -193,6 +194,7 @@ func orbStateForChatStreaming(
     case .composing: return .composing
     case .failed, .idle: break // no search orb state — the turn keeps flowing
     }
+    if liveContentEmpty, generationStatus != nil { return .working }
     if liveContentEmpty {
         return requestHasAttachments ? .working : .breathing
     }

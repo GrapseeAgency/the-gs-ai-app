@@ -72,6 +72,7 @@ on:
       - ".github/scripts/check_gate_scripts_are_invoked.py"
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -85,7 +86,7 @@ jobs:
   ios-build-test:
     name: Compile + test (macOS runner, real Xcode)
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 120
 
     env:
       PROJECT_DIR: ios
@@ -167,50 +168,203 @@ jobs:
           test -d GSApp.xcodeproj || { echo "::error::GSApp.xcodeproj was not generated"; exit 1; }
           xcodebuild -list -project GSApp.xcodeproj
 
-      - name: Fetch the GsFfi xcframework from a successful native producer job
+      - name: Fetch the GsFfi xcframework built for this source revision
         env:
           GH_TOKEN: ${{ github.token }}
+          NATIVE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          NATIVE_SOURCE_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          NATIVE_WORKFLOW_SHA: ${{ github.sha }}
+          SOURCE_EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          # THE APP TARGET HARD-LINKS Frameworks/GsFfi.xcframework (project.yml
-          # dependencies), so a bare checkout cannot compile -- raw evidence,
-          # every push since ~2026-10-04 failed at exactly that link, e.g. run
-          # 37292984587:
-          #     error: There is no XCFramework found at
-          #     '.../ios/Frameworks/GsFfi.xcframework'. (in target 'App')
-          # The framework is native toolchain OUTPUT, never a committed file
-          # (no binaries in this repository). The producer is ios-native.yml,
-          # which uploads it as the GsFfi.xcframework artifact; this pull gate
-          # takes the latest successful one -- the same producer/consumer
-          # pattern android-device.yml uses for libgs_ffi.so.
-          # A completed native workflow can fail its separate app tests AFTER
-          # successfully producing the framework. Conversely, its last fully
-          # green workflow may have no remaining artifact. Require the actual
-          # xcframework producer job to pass and its artifact to be unexpired;
-          # the app compilation/tests below still gate THIS revision strictly.
-          read -r RUN_ID ART < <(python3 - <<'PYFRAMEWORK'
-          import json, subprocess, sys
+          # GsFfi is a native build artifact, never committed. Do not silently
+          # take an arbitrary recent archive: its public C headers are compiled
+          # into Swift, and an older archive can omit a symbol used by THIS
+          # revision (the previous failure was gs_mobile_chat_stream).
+          SELECTION_FILE="$RUNNER_TEMP/gs-ffi-xcframework.selection"
+          rm -f "$SELECTION_FILE"
+          python3 - <<'PYFRAMEWORK'
+          import json
           import os
+          import subprocess
+          import sys
+          import time
+
+          def fail(message):
+              safe = str(message).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print(f'::error title=Native framework selection failed::{safe}', file=sys.stdout)
+              raise SystemExit(1)
+
+          required = ('GITHUB_REPOSITORY', 'NATIVE_SOURCE_BRANCH', 'NATIVE_SOURCE_SHA',
+                      'NATIVE_WORKFLOW_SHA', 'SOURCE_EVENT', 'RUNNER_TEMP')
+          missing = [key for key in required if not os.environ.get(key)]
+          if missing:
+              fail('missing required environment values: ' + ', '.join(missing))
+
           repo = os.environ['GITHUB_REPOSITORY']
+          target_branch = os.environ['NATIVE_SOURCE_BRANCH']
+          target_shas = {os.environ['NATIVE_SOURCE_SHA'], os.environ['NATIVE_WORKFLOW_SHA']}
+          event = os.environ['SOURCE_EVENT']
+          bridge_path = os.path.join(os.environ.get('GITHUB_WORKSPACE', '.'),
+                                     'ios/App/Sources/Native/GsNative.swift')
+          try:
+              requires_stream_api = 'gs_mobile_chat_stream' in open(bridge_path, encoding='utf-8').read()
+          except OSError:
+              requires_stream_api = False
+
+          started = time.monotonic()
+          deadline = started + 50 * 60
+          fallback_after = 180
+          announced_wait = False
+
           def api(path):
-              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{path}']))
-          runs = api('actions/workflows/ios-native.yml/runs?status=completed&per_page=30')['workflow_runs']
-          for run in runs:
-              if run.get('head_repository', {}).get('full_name') != repo:
-                  continue
-              artifacts = [a for a in api(f"actions/runs/{run['id']}/artifacts?per_page=100")['artifacts']
-                           if a['name'] == 'GsFfi.xcframework' and not a['expired']]
-              if not artifacts:
-                  continue
-              jobs = api(f"actions/runs/{run['id']}/jobs?per_page=100")['jobs']
-              if not any(j['name'] == 'xcframework' and j['conclusion'] == 'success' for j in jobs):
-                  continue
-              print(run['id'], artifacts[0]['id'])
-              break
-          else:
-              sys.exit('No unexpired framework from a successful ios-native xcframework producer job')
+              last_error = None
+              for attempt in range(3):
+                  try:
+                      result = subprocess.run(
+                          ['gh', 'api', f'repos/{repo}/{path}'],
+                          check=False, capture_output=True, text=True, timeout=60)
+                      if result.returncode != 0:
+                          detail = (result.stderr or result.stdout).strip()
+                          raise RuntimeError(f'gh api exited {result.returncode}: {detail}')
+                      return json.loads(result.stdout)
+                  except Exception as exc:
+                      last_error = f'{type(exc).__name__}: {exc}'
+                      if attempt < 2:
+                          time.sleep(2)
+              fail(f'{path}: {last_error}')
+
+          def artifact_from(run):
+              if run.get('status') in ('queued', 'pending'):
+                  return None, 'pending'
+              jobs = api(f"actions/runs/{run['id']}/jobs?per_page=100").get('jobs', [])
+              producer = next((j for j in jobs if j.get('name') == 'xcframework'), None)
+              if producer is None or producer.get('status') != 'completed':
+                  return None, 'pending' if run.get('status') != 'completed' else 'failed'
+              if producer.get('conclusion') != 'success':
+                  return None, 'failed'
+              artifacts = api(f"actions/runs/{run['id']}/artifacts?per_page=100").get('artifacts', [])
+              artifact = next((a for a in artifacts
+                               if a.get('name') == 'GsFfi.xcframework' and not a.get('expired')), None)
+              if artifact:
+                  return artifact, 'success'
+              return None, 'pending' if run.get('status') != 'completed' else 'failed'
+
+          def native_sources_unchanged(run):
+              source_sha = run.get('head_sha')
+              target_sha = os.environ['NATIVE_SOURCE_SHA']
+              if not source_sha or not target_sha:
+                  return False
+              if source_sha == target_sha:
+                  return True
+              comparison = api(f'compare/{source_sha}...{target_sha}')
+              if comparison.get('status') not in ('ahead', 'identical'):
+                  return False
+              files = comparison.get('files', [])
+              # The compare API truncates very large file lists. Never call a
+              # truncated diff "compatible" by accident.
+              if len(files) >= 300:
+                  return False
+              for changed in files:
+                  path = changed.get('filename', '')
+                  if (path.startswith(('native/', '.cargo/', '.github/scripts/'))
+                          or path == '.github/workflows/ios-native.yml'):
+                      return False
+              return True
+
+          def emit(run, artifact):
+              selection_path = os.path.join(os.environ['RUNNER_TEMP'], 'gs-ffi-xcframework.selection')
+              with open(selection_path, 'w', encoding='ascii') as selected:
+                  selected.write(f"{run['id']} {artifact['id']}\n")
+              print(f"Selected GsFfi artifact {artifact['id']} from ios-native run {run['id']}",
+                    file=sys.stderr)
+              raise SystemExit(0)
+
+          while True:
+              runs = api('actions/workflows/ios-native.yml/runs?per_page=100').get('workflow_runs', [])
+              same_repo = [r for r in runs
+                           if (r.get('head_repository') or {}).get('full_name') == repo]
+              exact = [r for r in same_repo if r.get('head_sha') in target_shas]
+              pending = False
+
+              if exact:
+                  failures = []
+                  for run in sorted(exact, key=lambda r: r.get('created_at', ''), reverse=True):
+                      artifact, state = artifact_from(run)
+                      if state == 'success':
+                          emit(run, artifact)
+                      if state == 'pending':
+                          pending = True
+                      else:
+                          failures.append(run)
+                  if pending:
+                      # A prior PR artifact is safe to reuse only when every
+                      # native build input is byte-for-byte unchanged since its
+                      # source commit. This avoids rebuilding the XCFramework
+                      # for an iOS-workflow-only follow-up while never masking a
+                      # changed C/Rust ABI or implementation.
+                      prior = sorted(
+                          (r for r in same_repo if r.get('head_branch') == target_branch
+                           and r.get('head_sha') not in target_shas
+                           and r.get('status') in ('in_progress', 'completed')),
+                          key=lambda r: r.get('created_at', ''), reverse=True)
+                      for run in prior:
+                          artifact, state = artifact_from(run)
+                          if state == 'success' and native_sources_unchanged(run):
+                              emit(run, artifact)
+                  if not pending:
+                      details = ', '.join(f"run {r['id']}: {r.get('conclusion') or 'no producer artifact'}"
+                                          for r in failures)
+                      fail(f'ios-native xcframework producer for {target_branch}@{os.environ["NATIVE_SOURCE_SHA"]} '
+                           f'did not succeed ({details})')
+              else:
+                  elapsed = time.monotonic() - started
+                  branch_runs = sorted(
+                      (r for r in same_repo if r.get('head_branch') == target_branch
+                       and r.get('status') in ('in_progress', 'completed')),
+                      key=lambda r: r.get('created_at', ''), reverse=True)
+
+                  # Pull requests changing iOS/native sources start an exact-SHA
+                  # producer. Give its run time to appear before considering a
+                  # compatible prior artifact. When the Swift bridge needs the
+                  # new stream API, never fall back to another branch's binary.
+                  if event in ('pull_request', 'push') and elapsed < fallback_after:
+                      pending = True
+                  else:
+                      candidates = list(branch_runs)
+                      if not requires_stream_api or event == 'workflow_dispatch':
+                          candidates += [r for r in sorted(
+                              (r for r in same_repo if r not in branch_runs
+                               and r.get('status') in ('in_progress', 'completed')),
+                              key=lambda r: r.get('created_at', ''), reverse=True)]
+                      for run in candidates:
+                          artifact, state = artifact_from(run)
+                          if state == 'success':
+                              if requires_stream_api and not native_sources_unchanged(run):
+                                  continue
+                              emit(run, artifact)
+
+                      if requires_stream_api and event in ('pull_request', 'push'):
+                          # A source-compatible artifact may be produced by an
+                          # older commit on this same branch. If none exists,
+                          # keep waiting for the exact producer instead of
+                          # accepting a stale main/native-runtime archive.
+                          pending = True
+                      elif elapsed < fallback_after:
+                          pending = True
+                      else:
+                          fail('No unexpired GsFfi.xcframework from a successful ios-native producer job')
+
+              if time.monotonic() >= deadline:
+                  fail(f'Timed out waiting for a source-compatible ios-native xcframework for '
+                       f'{target_branch}@{os.environ["NATIVE_SOURCE_SHA"]}')
+              if not announced_wait:
+                  print(f'Waiting for ios-native xcframework for {target_branch}@{os.environ["NATIVE_SOURCE_SHA"]}',
+                        file=sys.stderr)
+                  announced_wait = True
+              time.sleep(30)
           PYFRAMEWORK
-          )
+          read -r RUN_ID ART < "$SELECTION_FILE"
           test -n "$RUN_ID" && test -n "$ART"
           echo "Verified native producer run: $RUN_ID"
           echo "artifact id: $ART"
@@ -228,6 +382,24 @@ jobs:
             find "$XF" -maxdepth 2 | sed -n '1,20p'
             exit 1
           }
+          # Swift imports the C module from each XCFramework slice. Assert that
+          # the staged artifact declares every symbol this source bridge calls;
+          # otherwise Xcode reports a misleading "cannot find ... in scope".
+          if grep -q 'gs_mobile_chat_stream' "$PROJECT_DIR/App/Sources/Native/GsNative.swift"; then
+            HEADER_COUNT=0
+            while IFS= read -r MOBILE_HEADER; do
+              HEADER_COUNT=$((HEADER_COUNT + 1))
+              if ! grep -Eq 'gs_mobile_chat_stream[[:space:]]*\(' "$MOBILE_HEADER"; then
+                echo "::error::stale GsFfi header omits gs_mobile_chat_stream: $MOBILE_HEADER"
+                exit 1
+              fi
+            done < <(find "$XF" -type f -name gs_mobile.h -print)
+            if [ "$HEADER_COUNT" -lt 2 ]; then
+              echo "::error::expected gs_mobile.h in both XCFramework slices; found $HEADER_COUNT"
+              exit 1
+            fi
+            echo "Verified gs_mobile_chat_stream in $HEADER_COUNT XCFramework slice headers"
+          fi
           # BOTH SLICES, asserted the way ios-native asserts them: the plist's
           # LibraryIdentifier names are the truth, and a simulator-only or
           # device-only framework fails later with a dyld error that reads
@@ -292,7 +464,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             2>&1 | tee ios/build/xcodebuild-build.log; then
-            grep -E 'error:' ios/build/xcodebuild-build.log | head -n 35 | while IFS= read -r line; do
+            { grep -E 'error:' ios/build/xcodebuild-build.log || true; } | sed -n '1,35p' | while IFS= read -r line; do
               echo "::error::$line"
             done
             exit 65
@@ -379,11 +551,34 @@ jobs:
 
       - name: Preserve native source archive byte evidence
         if: always()
+        id: source-archive-upload-primary
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ios-source-archive-${{ github.run_id }}
           path: ios/build/source-archive
           if-no-files-found: error
+
+      - name: Retry native source archive evidence upload after transient failure
+        if: always() && steps.source-archive-upload-primary.outcome == 'failure'
+        id: source-archive-upload-retry
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-source-archive-${{ github.run_id }}
+          path: ios/build/source-archive
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Require native source archive byte evidence to persist
+        if: always()
+        env:
+          PRIMARY_OUTCOME: ${{ steps.source-archive-upload-primary.outcome }}
+          RETRY_OUTCOME: ${{ steps.source-archive-upload-retry.outcome }}
+        run: |
+          if [[ "$PRIMARY_OUTCOME" != "success" && "$RETRY_OUTCOME" != "success" ]]; then
+            echo "::error::Native source archive evidence upload failed on both attempts (primary=$PRIMARY_OUTCOME, retry=$RETRY_OUTCOME)"
+            exit 1
+          fi
 
       - name: Select actual complete-suite diagnostics, not stale early output
         if: always()

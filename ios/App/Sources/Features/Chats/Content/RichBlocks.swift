@@ -1084,16 +1084,18 @@ private func append(
             if !style.isEmpty { run.inlinePresentationIntent = style }
             result.append(run)
         case .link(let text, let url):
-            let cleanText = NexlyIcons.cleanPlainText(text)
-            let label = cleanText.isEmpty ? "Link" : cleanText
+            // Keep custom icons in the same inline text run as the link label;
+            // cleaning first would silently erase every inline glyph.
+            let label = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Link" : text
             if let url = URL(string: url) {
-                var run = AttributedString(label)
+                var run = AttributedString()
+                appendText(label, into: &run, theme: theme, style: style)
                 run.link = url
                 run.underlineStyle = .single
                 run.foregroundColor = theme.linkColor
                 result.append(run)
             } else {
-                result.append(AttributedString(label))
+                appendText(label, into: &result, theme: theme, style: style)
             }
         case .math(let latex):
             if let rendered = renderMathAttributedString(latex, baseSize: theme.baseSize, color: theme.textColor) {
@@ -1126,9 +1128,10 @@ private func appendText(
             appendCitations(run, into: &result, theme: theme, style: style)
         case .icon(let name):
             var glyph = AttributedString(NexlyIcons.glyph(name))
-            glyph.font = .custom(NexlyIcons.family, size: theme.baseSize * 1.12)
-            glyph.foregroundColor = Color(red: 0.357, green: 0.239, blue: 0.961)
-            glyph.baselineOffset = -theme.baseSize * 0.08
+            glyph.font = .custom(NexlyIcons.family, size: theme.baseSize * 0.98)
+            glyph.foregroundColor = theme.textColor
+            glyph.baselineOffset = -theme.baseSize * 0.035
+            if !style.isEmpty { glyph.inlinePresentationIntent = style }
             result.append(glyph)
         }
     }
@@ -2181,32 +2184,15 @@ private struct ParagraphView: View {
                     baseSize: compact ? 13 : 15,
                     citations: citations
                 )
-                let leadingIcon = NexlyIcons.extractLeadingIcon(plainTextOfSpans(spans)).0
-                let displaySpans = leadingIcon != nil ? stripLeadingIconFromSpans(spans) : spans
-                if let leadingIcon {
-                    HStack(alignment: .top, spacing: 8) {
-                        NexlyGlassGlyphTile(
-                            name: leadingIcon,
-                            tone: NexlyIcons.tone(for: leadingIcon),
-                            size: 21,
-                            glyphSize: 12
-                        )
-                        .padding(.top, 1)
-                        Text(attributed(from: displaySpans, theme: theme))
-                            .font(compact ? .system(size: 13, weight: .regular) : Aero.body())
-                            .lineSpacing(compact ? 2 : 0)
-                            .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                } else {
-                    Text(attributed(from: displaySpans, theme: theme))
-                        .font(compact ? .system(size: 13, weight: .regular) : Aero.body())
-                        .lineSpacing(compact ? 2 : 0)
-                        .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
-                        .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                }
+                // Ordinary prose keeps a leading custom emoji/icon inline with
+                // its sentence. Glass tiles remain reserved for actual structured
+                // card/step icons, not every glyph at the start of a paragraph.
+                Text(attributed(from: spans, theme: theme))
+                    .font(compact ? .system(size: 13, weight: .regular) : Aero.body())
+                    .lineSpacing(compact ? 2 : 0)
+                    .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -2806,31 +2792,19 @@ private struct ListItemRowView: View {
     var citations: [Int: String] = [:]
 
     var body: some View {
-        let rawText = plainTextOfSpans(item.spans)
-        let (extractedIcon, _) = NexlyIcons.extractLeadingIcon(rawText)
-        let semanticMatchIcon: String? = {
-            guard extractedIcon == nil else { return nil }
-            let sem = NexlyIcons.semanticIcon(for: rawText, fallback: "")
-            return sem.icon.isEmpty || sem.icon == "sparkles" ? nil : sem.icon
-        }()
-        let leadingIcon = extractedIcon ?? semanticMatchIcon ?? (marker == "✓" ? "circle-check" : nil)
-        let displaySpans = extractedIcon != nil ? stripLeadingIconFromSpans(item.spans) : item.spans
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: leadingIcon != nil ? .top : .firstTextBaseline, spacing: 8) {
-                if let leadingIcon {
-                    NexlyGlassGlyphTile(
-                        name: leadingIcon,
-                        tone: marker == "✓" ? .green : NexlyIcons.tone(for: leadingIcon),
-                        size: 20,
-                        glyphSize: 12
-                    )
-                    .padding(.top, 1)
+            HStack(alignment: marker == "✓" ? .top : .firstTextBaseline, spacing: 8) {
+                if marker == "✓" {
+                    // Checkmark sections are a deliberate structured control;
+                    // ordinary bullet icons stay inline in their text instead.
+                    NexlyGlassGlyphTile(name: "circle-check", tone: .green, size: 20, glyphSize: 12)
+                        .padding(.top, 1)
                 } else {
                     Text(marker)
                         .font(Aero.body().weight(.bold))
                         .foregroundStyle(markerColor)
                 }
-                ParagraphView(spans: displaySpans, citations: citations)
+                ParagraphView(spans: item.spans, citations: citations)
             }
             if !item.children.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
