@@ -45,6 +45,7 @@ if (requestIds.length === 0) {
 
 let violations = 0
 let fetchErrors = 0
+const violationDetails: string[] = []
 for (const requestId of requestIds) {
   let verdicts: string[] | null = null
   for (let attempt = 0; attempt < 3; attempt++) {
