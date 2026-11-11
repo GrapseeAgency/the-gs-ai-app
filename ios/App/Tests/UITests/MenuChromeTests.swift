@@ -70,9 +70,9 @@ final class MenuChromeTests: XCTestCase {
             }
             // Restart instead of fighting the panel: the drawer has no
             // tap-to-dismiss scrim and its Close button did not land twice
-            // (runs 40133180902, 40134206951). The seed lives in SQLite, so the
-            // rows survive a relaunch and the chats phase starts on a known
-            // screen.
+            // (runs 40133180902, 40134206951). Each seed launch now resets the
+            // persisted test history and reinstalls these exact rows, so the
+            // chats phase cannot inherit another UI test's conversation.
             app.terminate()
             app.launchArguments = ["-gs_test_session_active", "-gs_test_seed_chats"]
             app.launch()
