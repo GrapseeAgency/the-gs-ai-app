@@ -47,11 +47,10 @@ on:
 
 concurrency:
   group: ios-native-${{ github.ref }}
-  # Verification runs must FINISH, not cancel each other. With
-  # cancel-in-progress: true a freshly dispatched run cancelled the previous
-  # one mid llama.cpp build, so the app-compile step (the only real Swift gate)
-  # never ran and every "result" was "cancelled" — indistinguishable from a
-  # failure without reading the step. Queue instead.
+  # Never let GitHub cancel a build mid-compilation: the current-source run
+  # must reach the app/XCTest gates. The ancestry-checked
+  # cancel-obsolete-native workflow retires superseded PR runs, while leaving
+  # the exact current source revision to finish and publish its verified output.
   cancel-in-progress: false
 
 env:
