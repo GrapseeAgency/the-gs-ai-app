@@ -262,5 +262,16 @@ final class GsChatUiTests: XCTestCase {
                        "i.e. it came from localReply(), NOT the local model")
         XCTAssertNotEqual(reply.trimmingCharacters(in: .whitespacesAndNewlines), "hello",
                           "reply is the sent prompt echoed back, not an answer")
+
+        // The New Chat input above sends through the real auto-send route; also
+        // prove the resulting ChatDetailView still presents its own production
+        // composer after the answer has settled. Match label or identifier so
+        // SwiftUI's TextField/TextView classification cannot mask the control.
+        let conversationComposer = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == %@ OR label == %@",
+                                  Self.chatComposerPlaceholder, Self.chatComposerPlaceholder))
+            .firstMatch
+        XCTAssertTrue(conversationComposer.waitForExistence(timeout: 10),
+                      "ChatDetailView's real `Ask anything...` composer did not remain available after the reply")
     }
 }
