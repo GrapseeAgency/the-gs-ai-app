@@ -3,83 +3,38 @@ import XCTest
 /// Blocker 4 — a real UI test, the iOS counterpart of Android's
 /// `ChatUiReplyTest`.
 ///
-/// Drives the app the way a user does: finds the chat composer's text field
-/// (placeholder "Ask me anything..." — NexlyComposerBar,
-/// ios/App/Sources/Features/Chats/NexlyChatShell.swift), types "hello", taps
-/// the Send button (accessibilityLabel "Send"), and asserts a real, non-blank
-/// assistant bubble appears in the UI within a bounded time — and that the
-/// text is NOT the canned greeting `ChatViewModel.localReply` fabricates
-/// when the engine is absent.
+/// Drives the app through its actual first-chat route: Home → NewChatView's
+/// `new-chat-input` → `new-chat-send` → the `.chatAutoSend` destination. That
+/// route enters the production `ChatDetailView` / `ChatViewModel.send` path,
+/// and the test asserts that the rendered answer came from the loaded local
+/// model rather than the canned fallback.
 ///
-/// WIRING STATUS: WIRED. This file lives in ios/App/Tests/UITests/ and belongs
-/// ONLY to the `GsChatUITests` bundle (bundle.ui-testing, ios/project.yml) —
-/// XCUITest drives the app from OUTSIDE its process, so it cannot and must not
-/// `@testable import GSApp`; that import compiled only while this file sat in
-/// the unit-test host and made the test SKIP instead of run. The remaining
-/// guards are the honest preconditions, not wiring gaps:
-///   1. `GS_UI_TEST_MODE=1` — baked into the GSApp scheme's test action
-///      (ios/project.yml environmentVariables).
-///   2. A 0.5B GGUF at `$GS_TEST_MODEL` — ios-native.yml copies the verified
-///      download to /tmp/gs-ui-model.gguf, the path the scheme bakes in.
-///      /tmp on the runner host is visible inside the simulator.
-///   3. The app is driven into a testable state with launch arguments that
-///      GSApp reads: `-gs_test_session_active` (past Auth + Onboarding) and
-///      `-gs_test_local_model <path>` (engine initialised with the model),
-///      so the reply comes from the local engine rather than the canned
-///      fallback. A reply that IS the canned prefix still FAILS this test —
-///      the launch arguments are provisioning, not a result.
+/// WIRING STATUS: WIRED. This file belongs ONLY to the `GsChatUITests` bundle
+/// (bundle.ui-testing, ios/project.yml). XCUITest drives the app from OUTSIDE
+/// its process, so it cannot and must not `@testable import GSApp`. The scheme
+/// supplies `GS_UI_TEST_MODE=1` and `GS_TEST_MODEL`; ios-native.yml stages the
+/// verified 0.5B GGUF at that path. The app launch arguments initialize that
+/// exact model and use the process-scoped, DEBUG-only
+/// `-gs_test_prefer_local` override, without changing the saved user setting.
 final class GsChatUiTests: XCTestCase {
 
-    /// The composer's placeholder, verbatim from NexlyComposerBar
-    /// (ios/App/Sources/Features/Chats/NexlyChatShell.swift):
-    ///
-    ///     TextField("Ask anything...", text: $text, axis: .vertical)
-    ///
-    /// THE STRING THIS SUITE USED TO LOOK FOR NO LONGER EXISTS. Until
-    /// 5f78d9f2 the queries asked for "Ask anything…" — AeroInputBar's
-    /// DEFAULT placeholder, which no conversation screen passes since the
-    /// reference redesign moved the composer into NexlyComposerBar. So every
-    /// probe at every element type was pointed at a string the app does not
-    /// render, and runs 40116678867 through 40167513280 all failed with
-    /// "composer field never appeared" while the composer was on screen the
-    /// whole time. (Run 40167513280's tap failure even names the element in
-    /// its "Possibly caused by" hint — a SwiftUI.VerticalTextView, i.e. this
-    /// exact TextField — under a query for the wrong identifier.)
-    ///
-    /// NOTE the three ASCII dots, not "…": ExploreView.swift carries a
-    /// DIFFERENT field whose placeholder is "Ask me anything…" with a real
-    /// ellipsis. The conversation composer is the ASCII-dots spelling (now
-    /// "Ask anything..." to match the reference), and a test that mixed them
-    /// up would quietly match the wrong screen's field.
-    private static let composerPlaceholder = "Ask anything..."
+    private static let newChatInputIdentifier = "new-chat-input"
+    private static let chatComposerPlaceholder = "Ask anything..."
 
-    /// The composer, whichever control the current simulator image exposes.
-    ///
-    /// The field is a `SwiftUI.VerticalTextView` on newer images and answers
-    /// as a `UITextField` on older ones, and on some images the two
-    /// classifications disagree with each other (run 40167513280:
-    /// "Automation type mismatch: computed TextField from legacy attributes
-    /// vs TextView from modern attribute") so NEITHER typed query resolves.
-    /// The third probe matches any element type by identifier or label, which
-    /// cannot be defeated by the classification — it asks for the string,
-    /// not the control.
-    private func composerElement(_ app: XCUIApplication, timeout: TimeInterval) -> XCUIElement {
-        let field = app.textFields[Self.composerPlaceholder].firstMatch
-        let view = app.textViews[Self.composerPlaceholder].firstMatch
-        let anyTyped = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier == %@ OR label == %@",
-                                  Self.composerPlaceholder, Self.composerPlaceholder))
+    /// NewChatView uses a vertical SwiftUI TextField whose UIKit automation
+    /// classification can vary by simulator. Query by its stable identifier,
+    /// independent of whether XCTest reports it as a text field or text view.
+    private func newChatInputElement(_ app: XCUIApplication, timeout: TimeInterval) -> XCUIElement {
+        let input = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == %@", Self.newChatInputIdentifier))
             .firstMatch
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
-            if field.exists { return field }
-            if view.exists { return view }
-            if anyTyped.exists { return anyTyped }
+            if input.exists { return input }
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         } while Date() < deadline
-        return field
+        return input
     }
-
 
     /// The model path, if one has been provisioned. `nil` means the model-backed
     /// tests skip.
@@ -155,67 +110,68 @@ final class GsChatUiTests: XCTestCase {
             throw XCTSkip("no 0.5B GGUF provisioned — never a fabricated pass")
         }
 
-        // The launch arguments are the ONLY app state a UI test can set: the
-        // test process is outside the app's sandbox and cannot touch its
-        // UserDefaults or stores. GSApp reads both arguments in init.
+        // The app starts on Home. New Chat opens the real pre-chat composer;
+        // sending there routes through .chatAutoSend into the conversation's
+        // normal ChatViewModel.send implementation. The DEBUG-only override
+        // selects the loaded engine for this process without persisting a
+        // preference change across other UI tests.
         let app = XCUIApplication()
         app.launchArguments += ["-gs_test_session_active",
-                                "-gs_test_local_model", model]
+                                "-gs_test_local_model", model,
+                                "-gs_test_prefer_local"]
         app.launch()
 
-        // The app opens on Home since the reference redesign (the composer
-        // lives inside a conversation), so reach a chat first. Without this the
-        // suite looked for the composer on the dashboard and failed at 15 s —
-        // which is what kept the whole iOS gate red.
-        let composer = composerElement(app, timeout: 6)
-        if !composer.exists {
-            let newChat = app.buttons["New Chat"].firstMatch
-            if newChat.waitForExistence(timeout: 5) {
-                newChat.tap()
-            } else {
-                let generate = app.buttons["Generate"].firstMatch
-                XCTAssertTrue(generate.waitForExistence(timeout: 5),
-                              "Home exposed neither New Chat nor Generate, so no chat can be opened")
-                generate.tap()
+        let newChat = app.buttons["New Chat"].firstMatch
+        if newChat.waitForExistence(timeout: 30) {
+            newChat.tap()
+        } else {
+            let generate = app.buttons["Generate"].firstMatch
+            guard generate.waitForExistence(timeout: 10) else {
+                let tree = app.debugDescription
+                print("GsChatUiTests: Home exposed neither New Chat nor Generate; tree:\n\(tree)")
+                let attachment = XCTAttachment(string: tree)
+                attachment.name = "new-chat-entry-missing-tree"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+                XCTFail("Home exposed neither New Chat nor Generate, so no chat can be opened")
+                return
             }
+            generate.tap()
         }
 
-        // 1. tap the chat input, 2. type "hello".
-        let field = composerElement(app, timeout: 20)
+        let field = newChatInputElement(app, timeout: 20)
         if !field.exists {
-            // THE ACCESSIBILITY TREE IS THE EVIDENCE. A "never appeared"
-            // failure without the tree is a guess about what was on screen;
-            // with it, the next reader can see which element type and
-            // identifier the composer really exposed. Printed (the workflow
-            // uploads the test log) and attached (it rides the result bundle).
+            // Preserve the live accessibility tree with the failure; the
+            // pre-chat field has a different identity from ChatDetailView's
+            // later `Ask anything...` composer.
             let tree = app.debugDescription
-            print("GsChatUiTests: composer '\(Self.composerPlaceholder)' absent; tree:\n\(tree)")
+            print("GsChatUiTests: `\(Self.newChatInputIdentifier)` absent; tree:\n\(tree)")
             let attachment = XCTAttachment(string: tree)
-            attachment.name = "composer-missing-tree"
+            attachment.name = "new-chat-input-missing-tree"
             attachment.lifetime = .keepAlways
             add(attachment)
         }
-        XCTAssertTrue(field.exists, "composer field never appeared")
-        // THE TAP CAN BE DROPPED WHILE THE APP IS STILL LOADING THE MODEL.
-        // GSApp.init initialises the GGUF synchronously, so the composer is in
-        // the tree long before the main thread is free. On run 39342295960
-        // field.tap() was accepted at t=37.6s and typeText() then failed with
-        // "Neither element nor any descendant has keyboard focus": the tap
-        // landed while the field could not become first responder. Tap, prove
-        // focus by requiring the keyboard, retry once, then type.
+        guard field.exists else {
+            XCTFail("NewChatView's `new-chat-input` field never appeared")
+            return
+        }
+
         let keyboard = app.keyboards.firstMatch
         field.tap()
         if !keyboard.waitForExistence(timeout: 10) {
             field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         }
-        XCTAssertTrue(keyboard.waitForExistence(timeout: 15),
-                      "composer never took keyboard focus, so the send path cannot be typed")
+        guard keyboard.waitForExistence(timeout: 15) else {
+            XCTFail("NewChatView's input never took keyboard focus, so the send path cannot be typed")
+            return
+        }
         field.typeText("hello")
 
-        // 3. send it.
-        let send = app.buttons["Send"].firstMatch
-        XCTAssertTrue(send.waitForExistence(timeout: 5),
-                      "Send button never appeared after typing")
+        let send = app.buttons["new-chat-send"].firstMatch
+        guard send.waitForExistence(timeout: 5) else {
+            XCTFail("NewChatView's Send button never appeared after typing")
+            return
+        }
         send.tap()
 
         // 4. a real reply bubble with non-blank assistant text within N s.
@@ -251,7 +207,7 @@ final class GsChatUiTests: XCTestCase {
         let stopGenerating = app.buttons["Stop generating"].firstMatch
         let replyQuery = app.staticTexts
             .matching(NSPredicate(format: "label != '' AND label != %@ AND label != %@ AND NOT (label BEGINSWITH %@)",
-                                  Self.composerPlaceholder, "hello", "Search"))
+                                  Self.chatComposerPlaceholder, "hello", "Search"))
         // 360 s, not the old 180/300: 120 s of named quiet wait plus a
         // generation the runner itself measures at ~135 s worst case
         // (GS-PERF tapToFirstVisibleCharMs=41704), still inside the
