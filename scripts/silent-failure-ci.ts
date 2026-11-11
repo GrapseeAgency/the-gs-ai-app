@@ -68,7 +68,9 @@ for (const requestId of requestIds) {
   if (verdicts === null) continue
   if (verdicts.length > 0) {
     violations++
-    console.error(`SILENT-FAILURE GATE: requestId=${requestId} violations=[${verdicts.join(' | ')}]`)
+    const detail = `requestId=${requestId} violations=[${verdicts.join(' | ')}]`
+    violationDetails.push(detail)
+    console.error(`SILENT-FAILURE GATE: ${detail}`)
   }
 }
 
