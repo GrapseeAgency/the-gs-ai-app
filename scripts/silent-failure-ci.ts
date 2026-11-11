@@ -44,7 +44,7 @@ if (requestIds.length === 0) {
 }
 
 let violations = 0
-let fetchErrors = 0
+const exportErrors: string[] = []
 const violationDetails: string[] = []
 for (const requestId of requestIds) {
   let verdicts: string[] | null = null
@@ -52,14 +52,29 @@ for (const requestId of requestIds) {
     try {
       const res = await fetch(`${origin}/api/v1/diagnostics?requestId=${encodeURIComponent(requestId)}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const body = (await res.json()) as { trace?: { silentFailures?: string[] }[] }
-      verdicts = body.trace?.[0]?.silentFailures ?? []
-      fetchErrors = 0
+      const body = (await res.json()) as { trace?: unknown }
+      if (!Array.isArray(body.trace)) throw new Error('diagnostics response is missing its trace array')
+      const traceRow = body.trace.find(
+        (candidate: unknown): candidate is Record<string, unknown> =>
+          typeof candidate === 'object' &&
+          candidate !== null &&
+          'requestId' in candidate &&
+          candidate.requestId === requestId,
+      )
+      if (!traceRow) throw new Error('no persisted trace row was returned for this request id')
+      if (
+        !Array.isArray(traceRow.silentFailures) ||
+        traceRow.silentFailures.some((entry: unknown) => typeof entry !== 'string')
+      ) {
+        throw new Error('trace row is missing a valid silentFailures array')
+      }
+      verdicts = traceRow.silentFailures as string[]
       break
     } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
       if (attempt === 2) {
-        fetchErrors++
-        console.error(`SILENT-FAILURE GATE: export failed for ${requestId}: ${e instanceof Error ? e.message : e}`)
+        exportErrors.push(`requestId=${requestId} error=${message}`)
+        console.error(`SILENT-FAILURE GATE: export failed for ${requestId}: ${message}`)
       } else {
         await new Promise((r) => setTimeout(r, 2000))
       }
@@ -74,8 +89,13 @@ for (const requestId of requestIds) {
   }
 }
 
-if (fetchErrors > 0) {
-  console.error(`SILENT-FAILURE GATE: BLOCK — ${fetchErrors} turn(s) could not be exported from a reachable origin; an unexportable run cannot gate green`)
+if (exportErrors.length > 0) {
+  const annotation = exportErrors.join('\n')
+    .replace(/%/g, '%25')
+    .replace(/\r/g, '%0D')
+    .replace(/\n/g, '%0A')
+  console.error(`::error title=Diagnostics export failures (${exportErrors.length})::${annotation}`)
+  console.error(`SILENT-FAILURE GATE: BLOCK — ${exportErrors.length} turn(s) could not be exported from a reachable origin; an unexportable run cannot gate green`)
   process.exit(1)
 }
 if (violations > 0) {
