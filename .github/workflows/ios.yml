@@ -543,8 +543,21 @@ jobs:
           python3 scripts/check_response_archive.py --self-test
           DIR=ios/build/source-archive
           mkdir -p "$DIR"
+          # The early acceptance result bundle is always produced. The full
+          # suite is intentionally skipped when that gate fails, so requiring
+          # only GSApp-tests.xcresult made this independent byte check fail
+          # before it could inspect the source-archive XCTest attachment.
+          RESULT_BUNDLE=ios/build/GSApp-tests.xcresult
+          if [ ! -d "$RESULT_BUNDLE" ]; then
+            RESULT_BUNDLE=ios/build/GSApp-react-keyboard.xcresult
+          fi
+          if [ ! -d "$RESULT_BUNDLE" ]; then
+            echo "::error::No XCTest result bundle exists for the actual source-archive byte proof"
+            exit 1
+          fi
+          echo "Exporting actual source archive attachment from $RESULT_BUNDLE"
           if ! xcrun xcresulttool export attachments \
-            --path ios/build/GSApp-tests.xcresult --output-path "$DIR/raw" > "$DIR/export.log" 2>&1; then
+            --path "$RESULT_BUNDLE" --output-path "$DIR/raw" > "$DIR/export.log" 2>&1; then
             python3 -c 'from pathlib import Path; print("::error::Native source attachment export failed: " + Path("ios/build/source-archive/export.log").read_text().replace("%", "%25").replace("\n", "%0A"))'
             exit 1
           fi
