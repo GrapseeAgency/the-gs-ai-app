@@ -324,8 +324,8 @@ struct SubscriptionUsageView: View {
             sourceFrame.wrappedValue = frame
         }
         .simultaneousGesture(
-            SpatialTapGesture(coordinateSpace: .named(Self.billingWaveCoordinateSpace))
-                .onEnded { billingWaveFocus = $0.location }
+            DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.billingWaveCoordinateSpace))
+                .onChanged { billingWaveFocus = $0.startLocation }
         )
     }
 
