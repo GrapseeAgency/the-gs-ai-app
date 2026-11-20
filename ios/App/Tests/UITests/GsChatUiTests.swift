@@ -122,22 +122,48 @@ final class GsChatUiTests: XCTestCase {
                                 "-gs_test_prefer_local"]
         app.launch()
 
-        let newChat = app.buttons["New Chat"].firstMatch
-        if newChat.waitForExistence(timeout: 30) {
-            newChat.tap()
+        // Home's empty-day card is the visible first-chat action. The New Chat
+        // quick pill and Generate dock use the same production route and cover
+        // non-empty stores / alternate scroll positions. Match the pill by
+        // contained label (its icon may join the accessibility label) and only
+        // tap a control XCTest says is actually hittable.
+        let emptyDay = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Start a conversation")
+        ).firstMatch
+        let newChat = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "New Chat")
+        ).firstMatch
+        let generate = app.buttons["Generate"].firstMatch
+
+        let entry: XCUIElement
+        if emptyDay.waitForExistence(timeout: 8), emptyDay.isHittable {
+            entry = emptyDay
+        } else if newChat.waitForExistence(timeout: 8), newChat.isHittable {
+            entry = newChat
+        } else if generate.waitForExistence(timeout: 8), generate.isHittable {
+            entry = generate
         } else {
-            let generate = app.buttons["Generate"].firstMatch
-            guard generate.waitForExistence(timeout: 10) else {
-                let tree = app.debugDescription
-                print("GsChatUiTests: Home exposed neither New Chat nor Generate; tree:\n\(tree)")
-                let attachment = XCTAttachment(string: tree)
-                attachment.name = "new-chat-entry-missing-tree"
-                attachment.lifetime = .keepAlways
-                add(attachment)
-                XCTFail("Home exposed neither New Chat nor Generate, so no chat can be opened")
-                return
-            }
-            generate.tap()
+            let tree = app.debugDescription
+            print("GsChatUiTests: Home exposed no hittable new-chat entry; tree:\n\(tree)")
+            let attachment = XCTAttachment(string: tree)
+            attachment.name = "new-chat-entry-missing-tree"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            XCTFail("Home exposed no hittable New Chat entry (empty-day card, New Chat pill, or Generate)")
+            return
+        }
+        entry.tap()
+
+        let newChatTitle = app.staticTexts["Start a New Chat"]
+        guard newChatTitle.waitForExistence(timeout: 15) else {
+            let tree = app.debugDescription
+            print("GsChatUiTests: Home new-chat action did not open NewChatView; tree:\n\(tree)")
+            let attachment = XCTAttachment(string: tree)
+            attachment.name = "new-chat-route-missing-tree"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            XCTFail("Tapping Home's real new-chat action did not open NewChatView")
+            return
         }
 
         let field = newChatInputElement(app, timeout: 20)
