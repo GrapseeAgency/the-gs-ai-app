@@ -63,8 +63,8 @@ struct NexlyAssistantBlocksView: View {
     var planTimestamp: String? = nil
     var conversationID: String? = nil
     /// Standalone render tests mount `NexlyAssistantBlocksView` directly and
-    /// expect its companion orb; `ChatDetailView` already renders `assistantAvatar`
-    /// for the turn, so it passes `showOrb: false` (one identity mark per turn).
+    /// expect its companion orb. `MessageBubble` renders the animated Clover
+    /// beside the turn, so chat passes `showOrb: false` (one identity mark per turn).
     var showOrb: Bool = true
 
     private enum Group {

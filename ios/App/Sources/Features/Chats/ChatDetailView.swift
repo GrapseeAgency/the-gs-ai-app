@@ -1,3 +1,4 @@
+import BotAvatarsKit
 import SwiftUI
 import UIKit
 
@@ -1446,54 +1447,62 @@ struct MessageBubble: View, Equatable {
     }
 
     private var assistantBubble: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            NexlyAssistantBlocksView(
-                blocks: message.isStreaming ? streamingBlocks : finalizedBlocks,
-                isStreaming: message.isStreaming,
-                showStatus: showThinkingCard,
-                thinkingPhase: thinkingPhase,
-                thinkingEffort: thinkingEffort,
-                thinkingReasoningHint: thinkingReasoningHint,
-                searchSourceCount: sourceCount,
-                showThinkingStages: showThinkingStages,
-                isPlanTurn: hasPlan,
-                statusAtEnd: hasPlan,
-                citations: citationLinks,
-                planTimestamp: message.createdAt,
-                conversationID: conversationID,
-                showOrb: false
+        HStack(alignment: .top, spacing: 8) {
+            BotAvatar(
+                type: .clover,
+                state: message.isStreaming ? .working : .default,
+                size: 32,
+                interactive: false
             )
-            .environment(\.reactPreviewScope, "\(conversationID ?? "chat"):\(message.reactPreviewIdentity)")
-            // RichBlocks owns each prose/plan glass surface and its inset.
-            // A second turn-wide surface/padding nests every real answer,
-            // narrows interactive controls, and diverges from render captures.
-            .overlay {
-                if highlight {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Aero.accent, lineWidth: 2)
-                }
-            }
-            .contextMenu { bubbleMenu }
 
-            // The reference footer: a timestamp, then a quiet action-chip row.
-            // Each chip calls the same real handler the long-press menu carries.
-            if !message.isStreaming && !hasPlan {
-                HStack(alignment: .center, spacing: 6) {
-                    assistantActionChips
-                    Spacer(minLength: 0)
-                    if let stamp = timeLabel(message.createdAt) {
-                        Text(stamp)
-                            .font(.system(size: 10.5, weight: .regular))
-                            .foregroundStyle(Aero.textMuted.opacity(0.85))
-                            .padding(.trailing, 2)
+            VStack(alignment: .leading, spacing: 6) {
+                NexlyAssistantBlocksView(
+                    blocks: message.isStreaming ? streamingBlocks : finalizedBlocks,
+                    isStreaming: message.isStreaming,
+                    showStatus: showThinkingCard,
+                    thinkingPhase: thinkingPhase,
+                    thinkingEffort: thinkingEffort,
+                    thinkingReasoningHint: thinkingReasoningHint,
+                    searchSourceCount: sourceCount,
+                    showThinkingStages: showThinkingStages,
+                    isPlanTurn: hasPlan,
+                    statusAtEnd: hasPlan,
+                    citations: citationLinks,
+                    planTimestamp: message.createdAt,
+                    conversationID: conversationID,
+                    showOrb: false
+                )
+                .environment(\.reactPreviewScope, "\(conversationID ?? \"chat\"):\(message.reactPreviewIdentity)")
+                // RichBlocks owns each prose/plan glass surface and its inset.
+                // A second turn-wide surface/padding nests every real answer,
+                // narrows interactive controls, and diverges from render captures.
+                .overlay {
+                    if highlight {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(Aero.accent, lineWidth: 2)
                     }
-                    verdictRow
                 }
-                .padding(.trailing, 2)
+                .contextMenu { bubbleMenu }
+
+                // The reference footer: a timestamp, then a quiet action-chip row.
+                // Each chip calls the same real handler the long-press menu carries.
+                if !message.isStreaming && !hasPlan {
+                    HStack(alignment: .center, spacing: 6) {
+                        assistantActionChips
+                        Spacer(minLength: 0)
+                        if let stamp = timeLabel(message.createdAt) {
+                            Text(stamp)
+                                .font(.system(size: 10.5, weight: .regular))
+                                .foregroundStyle(Aero.textMuted.opacity(0.85))
+                                .padding(.trailing, 2)
+                        }
+                        verdictRow
+                    }
+                    .padding(.trailing, 2)
+                }
             }
         }
     }
-
     /// True once the turn carries (or is streaming) a `plan` fence. The
     /// Thinking/Reasoning/Effort panel survives finalize for these turns.
     private var hasPlan: Bool {
