@@ -4,15 +4,16 @@ import SwiftUI
 ///
 /// The reference's inventory, in its order: the four-tab capability bar, the
 /// "Available Models" list with the Recommended card lit, the Reasoning Effort
-/// control, the Auto Select row and the Continue action.
+/// control, the automatic reasoning row and the Continue action.
 ///
 /// WHAT EACH CONTROL DOES (see `ModelRouter` for the rule):
 ///  - a tab filters the list by the capability the model declares;
 ///  - picking a card stores the model AND moves the effort chip to that model's
 ///    default, so the tap has a visible consequence;
 ///  - the effort control writes the wire mode the next reply uses;
-///  - Auto Select, when on, lets the send path choose the model per message and
-///    take that model's effort; when off, the effort control is the authority.
+///  - Automatic reasoning, when on, sends the server-supported `auto` mode;
+///    when off, the selected effort maps to the wire mode. Provider model
+///    selection remains server-side and uses the actual message and attachments.
 struct ModelSelectionView: View {
 
     var onBack: () -> Void
@@ -42,7 +43,7 @@ struct ModelSelectionView: View {
         GeometryReader { page in
             GsSettingsPage(
                 title: "Model Selection",
-                subtitle: "Choose the best model for your needs.",
+                subtitle: "Save a model preference and set reasoning effort.",
                 onBack: onBack,
                 backGlyph: "arrow-left"
             ) {
@@ -54,6 +55,11 @@ struct ModelSelectionView: View {
                             modelCard(model)
                         }
                     }
+                    Text("The model choice is saved as a preference; the GS server currently selects the model for each request.")
+                        .font(.custom(Aero.productName(.regular), size: 8.5))
+                        .foregroundStyle(Aero.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 5)
                     reasoningBlock
                     Spacer(minLength: 0)
                     continueButton
@@ -264,10 +270,10 @@ struct ModelSelectionView: View {
                 HStack(spacing: 11) {
                     AutoSelectTile(size: 34)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("Auto Select Model")
+                        Text("Automatic reasoning")
                             .font(.custom(Aero.productName(.medium), size: 10.5))
                             .foregroundStyle(Aero.text)
-                        Text("Let Nexly choose the best model for your message.")
+                        Text("Send Auto reasoning mode; the GS server routes by message and attachment capability.")
                             .font(.custom(Aero.productName(.regular), size: 8))
                             .foregroundStyle(Aero.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)

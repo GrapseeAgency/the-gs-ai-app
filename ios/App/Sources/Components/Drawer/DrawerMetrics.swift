@@ -110,7 +110,7 @@ enum DrawerDestination: String, CaseIterable, Identifiable {
         switch self {
         case .explore: return .explore
         case .imageStudio: return .chatPrefill(DrawerMetrics.imageStudioPrompt)
-        case .voice: return .voice
+        case .voice: return .voicePosition
         case .savedCreations: return .chatArchive
         }
     }

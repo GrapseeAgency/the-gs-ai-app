@@ -44,6 +44,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
@@ -106,6 +107,7 @@ internal enum class VoicePhase {
 @Composable
 fun VoiceScreen(
     onBack: () -> Unit,
+    onOpenPosition: () -> Unit = {},
     // Result hand-off: opens a new chat seeded with the spoken text.
     onSendToChat: (String) -> Unit = {}
 ) {
@@ -308,13 +310,20 @@ fun VoiceScreen(
                 .padding(GsMotion.spaceL)
         ) {
             // Close — top start, the same bare chevron/cross the reference uses.
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 RefIconButton(
                     icon = GsIcons.X,
                     label = "Close voice mode",
                     onClick = onBack,
                     tint = GsTheme.colors.textPrimary
                 )
+                TextButton(onClick = onOpenPosition) {
+                    Text("Position", color = GsTheme.colors.textPrimary)
+                }
             }
 
             Spacer(modifier = Modifier.weight(1f))

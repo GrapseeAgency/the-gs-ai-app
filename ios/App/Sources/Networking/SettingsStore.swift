@@ -17,6 +17,10 @@ final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
 
     private let defaults = UserDefaults.standard
+    /// A one-shot mode for the in-flight new-chat route when Remember is off.
+    /// It is consumed when ChatViewModel hydrates that route, never persisted as
+    /// the next conversation's default.
+    private var pendingNewChatMode: String?
 
     // Appearance
     @Published var theme: String { didSet { defaults.set(theme, forKey: K.theme) } }
@@ -24,6 +28,8 @@ final class SettingsStore: ObservableObject {
     // Chat
     @Published var enterToSend: Bool { didSet { defaults.set(enterToSend, forKey: K.enterToSend) } }
     @Published var autoTitle: Bool { didSet { defaults.set(autoTitle, forKey: K.autoTitle) } }
+    /// The bot identity shown beside every assistant reply; IDs match Android.
+    @Published var assistantAvatar: String { didSet { defaults.set(assistantAvatar, forKey: K.assistantAvatar) } }
     // AI
     @Published var memory: Bool { didSet { defaults.set(memory, forKey: K.memory) } }
 
@@ -43,12 +49,33 @@ final class SettingsStore: ObservableObject {
     // a cross-platform export carries one vocabulary.
     @Published var preferredModel: String { didSet { defaults.set(preferredModel, forKey: K.preferredModel) } }
     @Published var reasoningEffort: String { didSet { defaults.set(reasoningEffort, forKey: K.reasoningEffort) } }
-    @Published var rememberChoices: Bool { didSet { defaults.set(rememberChoices, forKey: K.rememberChoices) } }
-    /// "Auto Select Model" — the Model Selection reference draws it ON. When it
-    /// is on, the send path takes the picked model's own default effort
-    /// (`ModelRouter.modeForMessage`); when off, the effort control is the
-    /// authority. Either way a control the reader sees has a reader.
-    @Published var autoSelectModel: Bool { didSet { defaults.set(autoSelectModel, forKey: K.autoSelectModel) } }
+    @Published var rememberChoices: Bool {
+        didSet {
+            defaults.set(rememberChoices, forKey: K.rememberChoices)
+            if rememberChoices {
+                defaults.set(
+                    ModelRouter.modeForMessage(effort: reasoningEffort, autoSelect: autoSelectModel),
+                    forKey: "gs.mode.new")
+            } else {
+                defaults.removeObject(forKey: "gs.mode.new")
+                pendingNewChatMode = nil
+            }
+        }
+    }
+    /// Automatic reasoning starts ON. The send path sends `auto` so the GS
+    /// server can route from the real message and its attachments; when OFF,
+    /// the reader's explicit effort maps to the wire mode. Client-side keyword
+    /// guesses never masquerade as provider selection.
+    @Published var autoSelectModel: Bool {
+        didSet {
+            defaults.set(autoSelectModel, forKey: K.autoSelectModel)
+            if rememberChoices {
+                defaults.set(
+                    ModelRouter.modeForMessage(effort: reasoningEffort, autoSelect: autoSelectModel),
+                    forKey: "gs.mode.new")
+            }
+        }
+    }
 
     // Data Export & Account Deletion — the retention controls are read by
     // DataRetention.purgeExpired, the only consumer. Auto-delete defaults OFF
@@ -97,24 +124,41 @@ final class SettingsStore: ObservableObject {
     /// the tile remembers which one was tapped, the server cannot yet tell them
     /// apart. Widening this is a backend change, not a UI one.
     static func wireMode(forEffort effort: String) -> String {
-        switch effort {
-        case "minimal", "light": return "flash"
-        case "high": return "thinking"
-        default: return "auto"
+        ModelRouter.mode(for: effort)
+    }
+
+    /// Stage the mode for the route that is about to open. With Remember on,
+    /// it is also the persisted default for subsequent new conversations; with
+    /// Remember off, it exists only until the new ChatViewModel reads it.
+    func stageNewChatMode(_ mode: String) {
+        guard ["flash", "thinking", "auto"].contains(mode) else { return }
+        if rememberChoices {
+            pendingNewChatMode = nil
+            defaults.set(mode, forKey: "gs.mode.new")
+        } else {
+            defaults.removeObject(forKey: "gs.mode.new")
+            pendingNewChatMode = mode
         }
     }
 
-    /// Writes the tile AND the new-chat wire mode, so the chip that is lit and
-    /// what the next reply does never disagree. `gs.mode.new` is the key
-    /// ChatViewModel falls back to for a brand-new conversation.
-    ///
-    /// "Remember my choices" governs the NEW-chat default only — the same
-    /// contract Android's store implements — so with it off the default stays
-    /// flash while the tile still remembers what was tapped.
+    /// Read-and-clear the one-shot mode for a route when Remember is off.
+    func takePendingNewChatMode() -> String? {
+        defer { pendingNewChatMode = nil }
+        return pendingNewChatMode
+    }
+
+    /// Writes the tile and, when Remember is enabled, updates the default mode
+    /// for a brand-new chat. Automatic reasoning is resolved at send time from
+    /// the current setting; the GS server remains the provider-model router.
     func applyReasoningEffort(_ effort: String) {
         reasoningEffort = effort
-        let wire = rememberChoices ? Self.wireMode(forEffort: effort) : "flash"
-        defaults.set(wire, forKey: "gs.mode.new")
+        if rememberChoices {
+            defaults.set(
+                ModelRouter.modeForMessage(effort: effort, autoSelect: autoSelectModel),
+                forKey: "gs.mode.new")
+        } else {
+            defaults.removeObject(forKey: "gs.mode.new")
+        }
     }
 
     /// Picking a model also moves the effort chip to that model's default, so
@@ -158,6 +202,9 @@ final class SettingsStore: ObservableObject {
         reduceAnimations = defaults.object(forKey: K.reduceAnimations) as? Bool ?? false
         enterToSend = defaults.object(forKey: K.enterToSend) as? Bool ?? true
         autoTitle = defaults.object(forKey: K.autoTitle) as? Bool ?? true
+        assistantAvatar = AssistantAvatarStyle.fromStoredValue(
+            defaults.string(forKey: K.assistantAvatar)
+        ).rawValue
         memory = defaults.object(forKey: K.memory) as? Bool ?? true
         // false, not true. An absent key must mean OFF.
         preferLocal = defaults.object(forKey: K.preferLocal) as? Bool ?? false
@@ -168,6 +215,16 @@ final class SettingsStore: ObservableObject {
         // true, like Android: the tile the reader taps and the default the next
         // new chat picks are the same choice until they say otherwise.
         rememberChoices = defaults.object(forKey: K.rememberChoices) as? Bool ?? true
+        if rememberChoices {
+            let savedMode = defaults.string(forKey: "gs.mode.new")
+            if !["flash", "thinking", "auto"].contains(savedMode ?? "") {
+                defaults.set(
+                    ModelRouter.modeForMessage(effort: reasoningEffort, autoSelect: autoSelectModel),
+                    forKey: "gs.mode.new")
+            }
+        } else {
+            defaults.removeObject(forKey: "gs.mode.new")
+        }
         dataRetentionMonths = defaults.object(forKey: K.dataRetentionMonths) as? Int ?? 12
         autoDeleteInactive = defaults.object(forKey: K.autoDeleteInactive) as? Bool ?? false
         // false, not true: a lock is opt-in. Android's store has always
@@ -210,6 +267,7 @@ final class SettingsStore: ObservableObject {
         static let reduceAnimations = "settings.reduceAnimations"
         static let enterToSend = "settings.enterToSend"
         static let autoTitle = "settings.autoTitle"
+        static let assistantAvatar = "settings.assistantAvatar"
         static let memory = "settings.memory"
         static let preferLocal = "settings.preferLocal"
         static let reasoning = "settings.reasoning"

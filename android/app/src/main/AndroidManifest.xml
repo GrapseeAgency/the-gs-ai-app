@@ -20,7 +20,7 @@
          uses the framework API, not androidx.biometric. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <!-- Voice press-and-hold on the hero orb (SpeechRecognizer). -->
+    <!-- Talk mode dictation and local Voice Position stereo analysis. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- GS LiveUpdate: resolve the system package-installer for self-updates. -->

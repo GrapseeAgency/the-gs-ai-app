@@ -1,3 +1,4 @@
+import DistortionWavesKit
 import SwiftUI
 
 /// Subscription & Usage — docs/reference/pending/subscription-usage.png.
@@ -21,11 +22,19 @@ import SwiftUI
 struct SubscriptionUsageView: View {
 
     @ObservedObject private var plan = PlanStore.shared
+    @ObservedObject private var settings = SettingsStore.shared
     @EnvironmentObject private var router: Router
     @Environment(\.dismiss) private var dismiss
 
     @State private var usage = GSUsageMeter.unknown
     @State private var usageDetail: UsageRowKind?
+    @State private var isShowingBilling = false
+    @State private var managePlanFrame = CGRect.zero
+    @State private var viewPlanFrame = CGRect.zero
+    @State private var billingWaveSource = CGRect.zero
+    @State private var billingWaveFocus: CGPoint?
+
+    private static let billingWaveCoordinateSpace = "subscription-usage-billing-wave"
 
     private enum UsageRowKind: String, Identifiable {
         case messages, images, uploads, reasoning
@@ -33,6 +42,29 @@ struct SubscriptionUsageView: View {
     }
 
     var body: some View {
+        DistortionWave(
+            isRevealed: isShowingBilling,
+            source: billingWaveSource,
+            focus: billingWaveFocus,
+            style: billingWaveStyle
+        ) {
+            subscriptionPage
+                .background(Aero.background.ignoresSafeArea())
+        } revealed: {
+            BillingView(
+                onBack: { closeBillingWave() },
+                onOpenSubscription: { closeBillingWave() }
+            )
+            .background(Aero.background.ignoresSafeArea())
+        }
+        .coordinateSpace(name: Self.billingWaveCoordinateSpace)
+        // The upstream kit reads the system accessibility value; forward the
+        // app's own Reduce Animations / Reduce Motion choices through the same
+        // environment so both platforms stop the wave consistently.
+        .environment(\.accessibilityReduceMotion, settings.animationReduced)
+    }
+
+    private var subscriptionPage: some View {
         GsSheetPage(
             title: "Subscription & Usage",
             subtitle: "Your plan, usage, and billing details",
@@ -114,9 +146,7 @@ struct SubscriptionUsageView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 6)
-                    GsSheetPillButton(label: "View Plan") {
-                        router.path.append(.billing)
-                    }
+                    planButton(label: "View Plan", sourceFrame: $viewPlanFrame)
                 }
             }
 
@@ -188,9 +218,7 @@ struct SubscriptionUsageView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 6)
-                GsSheetPillButton(label: "Manage Plan") {
-                    router.path.append(.billing)
-                }
+                planButton(label: "Manage Plan", sourceFrame: $managePlanFrame)
             }
         }
     }
@@ -276,6 +304,50 @@ struct SubscriptionUsageView: View {
             tone: .peach,
             footnote: "Counted from this device's own store, not from a server report.",
             onDismiss: { usageDetail = nil })
+    }
+
+    // MARK: Plan transition
+
+    /// A full-screen page opens from the plan button that was touched. The
+    /// colorful vertical preset is tuned for a button source; this route fills
+    /// the screen, so its edge radius is zero. No payment is simulated here:
+    /// this build's existing plan action opens billing details only.
+    private var billingWaveStyle: DistortionWaveStyle {
+        var style = DistortionWaveStyle.vertical
+        style.cornerRadius = 0
+        style.palette = .colorful
+        return style
+    }
+
+    private func planButton(label: String, sourceFrame: Binding<CGRect>) -> some View {
+        GsSheetPillButton(label: label) {
+            openBilling(from: sourceFrame.wrappedValue)
+        }
+        .onGeometryChange(for: CGRect.self) { proxy in
+            proxy.frame(in: .named(Self.billingWaveCoordinateSpace))
+        } action: { frame in
+            sourceFrame.wrappedValue = frame
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.billingWaveCoordinateSpace))
+                .onChanged { billingWaveFocus = $0.startLocation }
+        )
+    }
+
+    private func openBilling(from source: CGRect) {
+        billingWaveSource = source
+        if source.isEmpty {
+            billingWaveFocus = nil
+        } else if billingWaveFocus.map(source.contains) != true {
+            // If VoiceOver or another non-spatial activation opened the
+            // button, its centre is the honest focus point.
+            billingWaveFocus = CGPoint(x: source.midX, y: source.midY)
+        }
+        isShowingBilling = true
+    }
+
+    private func closeBillingWave() {
+        isShowingBilling = false
     }
 
     // MARK: Helpers
