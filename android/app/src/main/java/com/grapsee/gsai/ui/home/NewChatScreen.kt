@@ -222,16 +222,14 @@ fun NewChatScreen(
 }
 
 /**
- * The send path's one decision: Auto Select ON means the model is chosen for
- * the message and its effort follows; OFF means the reader's effort wins.
- * Written before navigating so the next reply is the mode the reader saw.
+ * The send path's one decision: Auto on sends the supported `auto` mode, which
+ * leaves provider-model routing to the GS server; Auto off maps the selected
+ * effort to `flash`, `thinking`, or `auto`. This describes reasoning mode, not
+ * a client-side provider-model choice.
  */
 private fun startChat(prompt: String, autoSend: Boolean, onStartChat: (String, Boolean) -> Unit) {
     if (prompt.isNotBlank()) {
         val mode = ModelRouter.modeForMessage(
-            text = prompt,
-            hasImage = false,
-            preferred = com.grapsee.gsai.data.GsModel.byId(SettingsStore.preferredModel),
             effort = SettingsStore.reasoningEffort,
             autoSelect = SettingsStore.autoSelectModel,
         )
@@ -636,7 +634,7 @@ private fun ExploreModelsCard(onClick: () -> Unit) {
                 color = colors.accent,
             )
             androidx.compose.material3.Text(
-                "Choose the right model for your needs.",
+                "Browse model profiles and save a preference.",
                 fontSize = 11.5.sp,
                 fontFamily = GsFonts.Product,
                 color = colors.textTertiary,

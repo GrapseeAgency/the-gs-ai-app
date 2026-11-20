@@ -39,7 +39,16 @@ struct VoiceSpeechView: View {
             GsGroupHeader(title: "Voice", caption: nil)
             GsGroupCard {
                 GsSettingsRow(
-                    title: "Open voice mode",
+                    title: "Voice Position",
+                    detail: "Calibrate left, ahead and right for this phone",
+                    action: { router.path.append(.voicePosition) }
+                ) {
+                    GsWellTile(glyph: "compass", tone: .mint, size: 28)
+                } trailing: {
+                    GsSheetChevron()
+                }
+                GsSettingsRow(
+                    title: "Open Talk mode",
                     detail: "Speak a question instead of typing it",
                     action: { router.path.append(.voice) }
                 ) {

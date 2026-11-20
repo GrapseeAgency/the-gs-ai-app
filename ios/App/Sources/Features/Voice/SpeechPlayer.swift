@@ -1,4 +1,23 @@
 import AVFoundation
+import Combine
+
+/// Process-wide read-aloud state shared with Voice Position's distance gate.
+final class SpeechPlaybackState: ObservableObject {
+    static let shared = SpeechPlaybackState()
+
+    @Published private(set) var isSpeaking = false
+    private var activePlayers = Set<UUID>()
+
+    func setSpeaking(_ speaking: Bool, playerID: UUID) {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.setSpeaking(speaking, playerID: playerID) }
+            return
+        }
+        if speaking { activePlayers.insert(playerID) }
+        else { activePlayers.remove(playerID) }
+        isSpeaking = !activePlayers.isEmpty
+    }
+}
 
 /// Read-aloud for assistant messages — on-device AVSpeechSynthesizer, zero
 /// error surface: devices without a voice simply stay silent, never alert.
@@ -13,6 +32,7 @@ final class SpeechPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegat
 
     @Published var speakingMessageID: String?
 
+    private let playbackID = UUID()
     private let synthesizer = AVSpeechSynthesizer()
     /// Utterances handed to the synthesizer that have not yet delivered their
     /// terminal delegate callback. Mutated on the main queue only.
@@ -55,11 +75,13 @@ final class SpeechPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegat
         outstandingUtterances += 1
         synthesizer.speak(utterance)
         speakingMessageID = messageID
+        SpeechPlaybackState.shared.setSpeaking(true, playerID: playbackID)
     }
 
     func stop() {
         synthesizer.stopSpeaking(at: .immediate)
         speakingMessageID = nil
+        SpeechPlaybackState.shared.setSpeaking(false, playerID: playbackID)
     }
 
     // MARK: Audio session
@@ -94,6 +116,8 @@ final class SpeechPlayer: NSObject, ObservableObject, AVSpeechSynthesizerDelegat
         DispatchQueue.main.async {
             self.outstandingUtterances = max(0, self.outstandingUtterances - 1)
             if self.outstandingUtterances == 0 && !self.synthesizer.isSpeaking {
+                self.speakingMessageID = nil
+                SpeechPlaybackState.shared.setSpeaking(false, playerID: self.playbackID)
                 self.deactivateSession()
             }
         }

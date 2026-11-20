@@ -15,9 +15,9 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>GS turns your voice into text for your prompts when you use voice mode.</string>
+	<string>GS turns your voice into text for your prompts when you use Talk mode.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>GS uses the microphone when you talk in voice mode.</string>
+	<string>GS uses the microphone for dictation and local Voice Position analysis on this device.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>GS uses the camera when you attach a photo you take in the moment.</string>
 	<key>UIApplicationShortcutItems</key>

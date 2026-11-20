@@ -141,6 +141,7 @@
 .gs-model-badges > div { flex: 0 0 auto; }
 .gs-model-badges em { padding: 4px 8px; border-radius: 7px; color: #b36c40; background: rgba(255,222,194,.55); font-size: 10px; font-style: normal; font-weight: 500; }
 .gs-model-row small { color: var(--gs-muted); font-size: 12px; line-height: 1.4; }
+.gs-model-routing-note { margin: 8px 4px 0; color: var(--gs-muted); font-size: 11px; line-height: 1.45; }
 .gs-radio { flex: 0 0 auto; width: 24px; height: 24px; display: grid; place-items: center; border: 1.5px solid rgba(120,90,77,.22); border-radius: 50%; color: #dc864c; }
 .is-selected > .gs-radio { border-color: transparent; background: rgba(255,239,224,.65); }
 .gs-effort-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }

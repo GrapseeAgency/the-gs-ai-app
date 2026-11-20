@@ -195,12 +195,9 @@ struct NewChatView: View {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         let mode = ModelRouter.modeForMessage(
-            text: text,
-            hasImage: false,
-            preferred: GsModel.byId(settings.preferredModel),
             effort: settings.reasoningEffort,
             autoSelect: settings.autoSelectModel)
-        UserDefaults.standard.set(mode, forKey: "gs.mode.new")
+        settings.stageNewChatMode(mode)
         // Release the pre-chat field before pushing the auto-send destination.
         // Otherwise SwiftUI can carry this view's keyboard through navigation,
         // covering ChatDetailView's own composer after the first reply.
@@ -329,7 +326,7 @@ struct NewChatView: View {
                         .font(.custom(Aero.productName(.medium), size: 9.5))
                         // The mock inks this entry in the accent, not the row ink.
                         .foregroundStyle(Aero.refAccent)
-                    Text("Choose the right model for your needs.")
+                    Text("Browse model profiles and save a preference.")
                         .font(.custom(Aero.productName(.regular), size: 7.5))
                         .foregroundStyle(Aero.textTertiary)
                         .lineLimit(1)

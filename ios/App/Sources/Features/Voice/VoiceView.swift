@@ -77,9 +77,23 @@ struct VoiceView: View {
             }
             .buttonStyle(KineticPressStyle())
             Spacer()
-            Text("Voice mode")
+            Text("Talk mode")
                 .font(Aero.caption())
                 .foregroundStyle(Aero.textMuted)
+            Spacer()
+            Button {
+                router.path.append(.voicePosition)
+            } label: {
+                Label("Position", systemImage: "dot.radiowaves.left.and.right")
+                    .font(Aero.label())
+                    .foregroundStyle(Aero.text)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Aero.container))
+                    .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+            }
+            .buttonStyle(KineticPressStyle())
+            .accessibilityLabel("Open Voice Position")
         }
     }
 

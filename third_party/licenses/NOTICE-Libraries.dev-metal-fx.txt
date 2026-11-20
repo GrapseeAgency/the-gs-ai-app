@@ -1,0 +1,14 @@
+metal-fx
+Copyright (c) Jakub Antalik
+
+This product includes software developed by Paper Design, Inc.
+
+  Paper Shaders (https://github.com/paper-design/shaders)
+  Copyright (c) Paper Design, Inc.
+  Licensed under the Apache License, Version 2.0
+  http://www.apache.org/licenses/LICENSE-2.0
+
+Specifically, the upstream metal-fx implementation consumes the `liquidMetal`
+fragment shader from `@paper-design/shaders` version 0.0.80. GS's Android
+implementation is a derived port of that shader's equations to AGSL and a CPU
+bitmap fallback; it is not an unmodified copy of the upstream shader source.

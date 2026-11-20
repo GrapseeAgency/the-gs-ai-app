@@ -5,7 +5,30 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import com.grapsee.gsai.data.SettingsStore
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+
+/** Shared truthful state used to suspend microphone distance reads during app TTS. */
+object VoicePlaybackState {
+    private val lock = Any()
+    private val activePlayers = ConcurrentHashMap.newKeySet<String>()
+    private val mutableIsSpeaking = MutableStateFlow(false)
+    val isSpeaking = mutableIsSpeaking.asStateFlow()
+
+    internal fun started(id: String) = synchronized(lock) {
+        activePlayers.add(id)
+        mutableIsSpeaking.value = activePlayers.isNotEmpty()
+    }
+
+    internal fun stopped(id: String) = synchronized(lock) {
+        activePlayers.remove(id)
+        mutableIsSpeaking.value = activePlayers.isNotEmpty()
+    }
+}
 
 /**
  * Read-aloud with audio-focus discipline. Every TextToSpeech instance in the
@@ -31,6 +54,11 @@ class TtsFocus(
     private val onReady: (Boolean) -> Unit = {},
     private val onStoppedByFocusLoss: () -> Unit = {}
 ) {
+    private val playbackId = UUID.randomUUID().toString()
+    private val playbackLock = Any()
+    private var activeUtteranceId: String? = null
+    private var utteranceGeneration = 0L
+
     val engine: TextToSpeech =
         TextToSpeech(context) { status -> onReady(status == TextToSpeech.SUCCESS) }
 
@@ -61,14 +89,41 @@ class TtsFocus(
             .setOnAudioFocusChangeListener(focusListener)
             .build()
 
+    init {
+        // Screens may install their own listener for UI state, but settings and
+        // other callers still get accurate shared playback state by default.
+        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) = Unit
+            override fun onDone(utteranceId: String?) { finishUtterance(utteranceId) }
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) { finishUtterance(utteranceId) }
+        })
+    }
+
     private fun requestFocus(): Boolean =
         runCatching { audioManager.requestAudioFocus(focusRequest) }
             .getOrDefault(AudioManager.AUDIOFOCUS_REQUEST_FAILED) ==
             AudioManager.AUDIOFOCUS_REQUEST_GRANTED
 
-    /** Release the ear — called on stop/shutdown/utterance completion. */
-    fun abandonFocus() {
+    /** Finish only the currently active utterance; stale QUEUE_FLUSH callbacks are ignored. */
+    fun finishUtterance(utteranceId: String?): Boolean = synchronized(playbackLock) {
+        if (utteranceId == null || utteranceId != activeUtteranceId) return@synchronized false
+        activeUtteranceId = null
+        releaseFocusLocked()
+        true
+    }
+
+    fun hasActiveUtterance(): Boolean = synchronized(playbackLock) { activeUtteranceId != null }
+
+    /** Release the ear — called on stop/shutdown/focus loss. */
+    fun abandonFocus() = synchronized(playbackLock) {
+        activeUtteranceId = null
+        releaseFocusLocked()
+    }
+
+    private fun releaseFocusLocked() {
         runCatching { audioManager.abandonAudioFocusRequest(focusRequest) }
+        VoicePlaybackState.stopped(playbackId)
     }
 
     /**
@@ -79,23 +134,41 @@ class TtsFocus(
      * one write is enough for chat playback, voice-mode read-back and the
      * "Test voice" button on the Speech engine page.
      */
-    fun speak(text: String, utteranceId: String): Int {
-        if (!requestFocus()) return TextToSpeech.ERROR
+    fun speak(text: String, utteranceId: String): Int = synchronized(playbackLock) {
+        if (!requestFocus()) return@synchronized TextToSpeech.ERROR
         runCatching {
             engine.setSpeechRate(SettingsStore.ttsRate)
             engine.setPitch(SettingsStore.ttsPitch)
         }
-        return engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        val previousUtteranceId = activeUtteranceId
+        utteranceGeneration += 1
+        val engineUtteranceId = "$utteranceId#$utteranceGeneration"
+        activeUtteranceId = engineUtteranceId
+        val result = engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, engineUtteranceId)
+        if (result == TextToSpeech.SUCCESS) {
+            if (activeUtteranceId == engineUtteranceId) VoicePlaybackState.started(playbackId)
+        } else if (activeUtteranceId == engineUtteranceId) {
+            val stillSpeaking = runCatching { engine.isSpeaking }.getOrDefault(false)
+            activeUtteranceId = previousUtteranceId.takeIf { stillSpeaking }
+            if (activeUtteranceId == null) VoicePlaybackState.stopped(playbackId)
+        }
+        result
     }
 
     fun stop() {
-        runCatching { engine.stop() }
-        abandonFocus()
+        synchronized(playbackLock) {
+            runCatching { engine.stop() }
+            activeUtteranceId = null
+            releaseFocusLocked()
+        }
     }
 
     fun shutdown() {
-        runCatching { engine.stop() }
-        abandonFocus()
-        runCatching { engine.shutdown() }
+        synchronized(playbackLock) {
+            runCatching { engine.stop() }
+            activeUtteranceId = null
+            releaseFocusLocked()
+            runCatching { engine.shutdown() }
+        }
     }
 }

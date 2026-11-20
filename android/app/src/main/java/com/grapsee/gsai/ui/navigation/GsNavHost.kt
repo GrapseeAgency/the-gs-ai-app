@@ -62,6 +62,7 @@ import com.grapsee.gsai.ui.integrations.ConnectedAppsScreen
 import com.grapsee.gsai.ui.support.HelpArticleScreen
 import com.grapsee.gsai.ui.support.HelpSupportScreen
 import com.grapsee.gsai.ui.settings.AccountSecurityScreen
+import com.grapsee.gsai.ui.settings.AssistantAvatarSettingsScreen
 import com.grapsee.gsai.ui.settings.AiIntelligenceScreen
 import com.grapsee.gsai.ui.settings.DataExportAccountDeletionScreen
 import com.grapsee.gsai.ui.settings.AppearanceSettingsScreen
@@ -80,6 +81,7 @@ import com.grapsee.gsai.ui.settings.SpeechEngineScreen
 import com.grapsee.gsai.ui.settings.ThemeCustomisationScreen
 import com.grapsee.gsai.ui.settings.VoiceSettingsScreen
 import com.grapsee.gsai.ui.specimen.GlassSpecimenScreen
+import com.grapsee.gsai.ui.voice.VoicePositionScreen
 import com.grapsee.gsai.ui.voice.VoiceScreen
 import com.grapsee.gsai.ui.explore.CollectionScreen
 import com.grapsee.gsai.ui.explore.DiscoverScreen
@@ -301,7 +303,7 @@ fun GsNavHost(
                 onOpenDrawer = { scope.launch { drawerState.open() } },
                 onOpenChats = { open(GsRoutes.CHATS) },
                 onOpenAgent = { open(GsRoutes.EXPLORE) },
-                onOpenVoice = { open(GsRoutes.VOICE) },
+                onOpenVoice = { open(GsRoutes.VOICE_POSITION) },
                 onOpenSettings = { open(GsRoutes.SETTINGS) },
             )
         }
@@ -467,6 +469,9 @@ fun GsNavHost(
         composable(GsRoutes.SETTINGS_CHAT) {
             ChatSettingsScreen(onBack = back, onNavigate = open)
         }
+        composable(GsRoutes.SETTINGS_ASSISTANT_AVATAR) {
+            AssistantAvatarSettingsScreen(onBack = back)
+        }
         composable(GsRoutes.SETTINGS_APPEARANCE) {
             AppearanceSettingsScreen(onBack = back, onNavigate = open)
         }
@@ -613,9 +618,16 @@ fun GsNavHost(
         composable(GsRoutes.GLASS_SPECIMEN) {
             GlassSpecimenScreen(onBack = back)
         }
+        composable(GsRoutes.VOICE_POSITION) {
+            VoicePositionScreen(
+                onBack = back,
+                onOpenSpeech = { open(GsRoutes.VOICE) },
+            )
+        }
         composable(GsRoutes.VOICE) {
             VoiceScreen(
                 onBack = back,
+                onOpenPosition = { open(GsRoutes.VOICE_POSITION) },
                 onSendToChat = { spoken ->
                     // A finished utterance is a SEND: dispatch it so the chat
                     // opens on the answer, never on a blank draft-holding surface.

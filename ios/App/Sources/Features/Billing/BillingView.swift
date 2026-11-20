@@ -14,6 +14,15 @@ struct BillingView: View {
     @ObservedObject private var plan = PlanStore.shared
     @EnvironmentObject private var router: Router
     @Environment(\.dismiss) private var dismiss
+    /// Optional local-wave callbacks; route destinations retain their normal
+    /// NavigationStack behavior when these are nil.
+    var onBack: (() -> Void)? = nil
+    var onOpenSubscription: (() -> Void)? = nil
+
+    init(onBack: (() -> Void)? = nil, onOpenSubscription: (() -> Void)? = nil) {
+        self.onBack = onBack
+        self.onOpenSubscription = onOpenSubscription
+    }
 
     var body: some View {
         ZStack {
@@ -26,7 +35,11 @@ struct BillingView: View {
                         planCard
                         factsCard
                         Button {
-                            router.path.append(.subscriptionUsage)
+                            if let onOpenSubscription {
+                                onOpenSubscription()
+                            } else {
+                                router.path.append(.subscriptionUsage)
+                            }
                         } label: {
                             Text("Subscription & Usage")
                                 .font(Aero.button())
@@ -57,7 +70,11 @@ struct BillingView: View {
                 .foregroundStyle(Aero.text)
             Spacer()
             Button {
-                dismiss()
+                if let onBack {
+                    onBack()
+                } else {
+                    dismiss()
+                }
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 13, weight: .semibold))

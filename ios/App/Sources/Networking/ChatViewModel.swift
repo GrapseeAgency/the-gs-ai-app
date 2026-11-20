@@ -447,24 +447,38 @@ final class ChatViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var conversationID: String?
 
-    /// FLASH MODE (Phase 3) — the composer's thinking mode, persisted per
-    /// conversation in UserDefaults (gs.mode.<conversationId>, gs.mode.new
-    /// fallback for brand-new chats — same semantics as the web client).
-    /// Default 'flash'.
+    /// The composer's server-supported reasoning mode. Existing conversations
+    /// keep their own value; new chats start from Model Preferences, and the
+    /// server still selects the compatible provider model from message content.
     @Published var chatMode: String
     static func loadChatMode(_ conversationID: String?) -> String {
-        let d = UserDefaults.standard
+        let defaults = UserDefaults.standard
         let valid = Set(["flash", "thinking", "auto"])
-        if let id = conversationID, let saved = d.string(forKey: "gs.mode.\(id)"), valid.contains(saved) {
+        if let id = conversationID,
+           let saved = defaults.string(forKey: "gs.mode.\(id)"), valid.contains(saved) {
             return saved
         }
-        if let fresh = d.string(forKey: "gs.mode.new"), valid.contains(fresh) { return fresh }
-        return "flash"
+        let settings = SettingsStore.shared
+        if conversationID == nil,
+           let pending = settings.takePendingNewChatMode(), valid.contains(pending) {
+            return pending
+        }
+        if settings.rememberChoices,
+           let fresh = defaults.string(forKey: "gs.mode.new"), valid.contains(fresh) {
+            return fresh
+        }
+        return ModelRouter.modeForMessage(
+            effort: settings.reasoningEffort,
+            autoSelect: settings.autoSelectModel)
     }
     func setChatMode(_ mode: String) {
         guard ["flash", "thinking", "auto"].contains(mode) else { return }
         chatMode = mode
-        UserDefaults.standard.set(mode, forKey: "gs.mode.\(conversationID ?? "new")")
+        if let conversationID {
+            UserDefaults.standard.set(mode, forKey: "gs.mode.\(conversationID)")
+        } else {
+            SettingsStore.shared.stageNewChatMode(mode)
+        }
     }
     /// Deep-perf pass #2b: the transcript is a newest-window — true while the
     /// store still holds turns above the loaded page. Scrolling up prepends
@@ -621,7 +635,11 @@ final class ChatViewModel: ObservableObject {
         if conversationID == nil {
             let title = SettingsStore.shared.autoTitle && !text.isEmpty
                 ? String(text.prefix(40)) : "New chat"
-            conversationID = store.createLocalConversation(title: title).id
+            let createdID = store.createLocalConversation(title: title).id
+            conversationID = createdID
+            if ["flash", "thinking", "auto"].contains(chatMode) {
+                UserDefaults.standard.set(chatMode, forKey: "gs.mode.\(createdID)")
+            }
         }
         let stamp = ConversationStore.now()
         let user = ChatMessage(role: "user", content: text, createdAt: stamp)
@@ -738,7 +756,7 @@ final class ChatViewModel: ObservableObject {
             self.store.truncateMessages(fromUserContent: original, in: conversation)
         }
         lastSentText = text
-        beginStreaming(text: text, appendUserMessage: true)
+        beginStreaming(text: text, appendUserMessage: true, mode: chatMode)
     }
 
     /// Cancels the in-flight stream; the task throws CancellationError and
@@ -969,6 +987,9 @@ final class ChatViewModel: ObservableObject {
         // histories are not deleted or reassigned by this failure path.
         let conversation = try await self.apiClient.createConversation(title: title)
         conversationID = conversation.id
+        if ["flash", "thinking", "auto"].contains(chatMode) {
+            UserDefaults.standard.set(chatMode, forKey: "gs.mode.\(conversation.id)")
+        }
         return conversation.id
     }
 
