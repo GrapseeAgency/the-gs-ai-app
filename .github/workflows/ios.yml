@@ -480,6 +480,7 @@ jobs:
             -destination "$IOS_DESTINATION" \
             -derivedDataPath "$DERIVED_DATA" \
             -only-testing:AppTests/CalcHonestyTests/testNativeJSONDelimiterRecoveryPreservesActualSourceBytesAndQuotedPunctuation \
+            -only-testing:AppTests/CalcHonestyTests/testSourceArchivePreservesRealBytesAndKnownCRCWithoutInventingAProject \
             -only-testing:AppTests/ChatResponseHonestyTests \
             -only-testing:AppTests/AttachmentLogicTests \
             -only-testing:AppTests/AttachmentPreviewTests \
