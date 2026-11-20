@@ -2,7 +2,7 @@ name: GSApp
 options:
   bundleIdPrefix: com.grapsee
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "17.0"
   createIntermediateGroups: true
 settings:
   base:
@@ -11,7 +11,7 @@ settings:
     # marker, never compiler-validated) hard-errors on every xcodebuild:
     # "SWIFT_VERSION '5.9' is unsupported". Swift-5 mode is the intended mode.
     SWIFT_VERSION: "5.0"
-    # THE APP'S FLOOR: 16.0, AND IT IS NOT THE LIBRARY'S NUMBER.
+    # THE APP'S FLOOR: 17.0, AND IT IS NOT THE NATIVE LIBRARY'S NUMBER.
     #
     # This line said "15.0" until run 36751766601, which was the first run to get
     # as far as building the app:
@@ -35,24 +35,30 @@ settings:
     #                the prebuilt archives are configured with. That is the
     #                job-level IPHONEOS_DEPLOYMENT_TARGET in ios-native.yml, and it
     #                stays 15.0.
-    #   THE APP       needs >= 16, because PhotosPickerItem is PhotosUI, iOS 16.0.
+    #   THE APP       needs >= 17, because BotAvatarsKit is iOS 17+.
+    #                The app's own PhotosPickerItem API floor is 16.0; the
+    #                Swift package raises the app's required floor to 17.0.
     #                That is this line.
     #
-    # A library built for 15.0 links perfectly well into an app whose floor is 16,
-    # so the floors are independent and the app's is the higher of the two. 16.0
-    # is chosen as the minimum the source actually requires rather than the
-    # highest version available, because a floor nobody needs is a floor that
-    # needlessly excludes devices.
+    # A library built for 15.0 links perfectly well into an app whose floor is
+    # 17.0, so the native-library and app floors are independent. 17.0 is the
+    # lowest target supported by BotAvatarsKit, not an unnecessary bump to the
+    # highest version available.
     #
     # Asserted, not just documented:
     #   .github/scripts/check_ios_deployment_target.py
     # reads the floors the Swift source actually uses and fails if this value is
     # below the highest of them. A comment could not have stopped this -- a number
     # cannot be wrong about itself, only a comparison can.
-    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
     CODE_SIGNING_ALLOWED: "NO"
+packages:
+  Libraries.dev:
+    url: https://github.com/Jakubantalik/Libraries.dev
+    branch: main
+
 targets:
   App:
     type: application
@@ -80,6 +86,8 @@ targets:
     dependencies:
       - framework: Frameworks/GsFfi.xcframework
         embed: false
+      - package: Libraries.dev
+        product: BotAvatarsKit
     sources:
       - path: App/Sources
       - path: App/Assets.xcassets
