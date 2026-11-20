@@ -204,9 +204,8 @@ import com.grapsee.gsai.ui.chat.content.NexlyGlyph
 import com.grapsee.gsai.ui.chat.content.NexlyInk
 import com.grapsee.gsai.ui.chat.content.containsNexlyPlan
 import com.grapsee.gsai.ui.chat.content.nexlyPearlBackdrop
-import com.grapsee.gsai.ui.orbs.OrbSize
 import com.grapsee.gsai.ui.orbs.OrbState
-import com.grapsee.gsai.ui.orbs.ThinkingOrb
+import com.grapsee.gsai.ui.orbs.chatActivityLabel
 import com.grapsee.gsai.ui.orbs.orbStateForChatStream
 import com.grapsee.gsai.ui.theme.GsFonts
 import com.grapsee.gsai.ui.theme.GsTheme
@@ -508,6 +507,22 @@ fun ChatScreen(
                 streamStateRaw.value?.searchPhase,
                 streamStateRaw.value?.generationStatus
             )
+        }
+    }
+    // The composer exposes a concise status only when its real source changes:
+    // a plain pre-token wait is Working, Thinking requires the resolved thinking
+    // mode/trace, and Answering starts only once response tokens are flowing.
+    val liveActivityLabel by remember {
+        derivedStateOf {
+            val raw = streamStateRaw.value
+            liveOrbState?.let { state ->
+                chatActivityLabel(
+                    state = state,
+                    effectiveMode = raw?.effectiveMode,
+                    hasReasoningTrace = !raw?.reasoning.isNullOrBlank(),
+                    generationStatus = raw?.generationStatus
+                )
+            }
         }
     }
     // This screen's live-stream token (saveable): a rotation re-attach only
@@ -1681,8 +1696,8 @@ fun ChatScreen(
                                     message.sources.isEmpty() &&
                                     liveOrbState == OrbState.BREATHING
                             ) {
-                                // Intentionally empty: the composer's orb is
-                                // the status for this window.
+                                // Intentionally empty: the composer supplies
+                                // the phase label, bot identity, and Stop action.
                             } else {
                                 // 0.81.3: the prompt that asked for this answer,
                                 // plus the turn before it. Widget recovery needs
@@ -1752,30 +1767,11 @@ fun ChatScreen(
                 }
             }
 
-            // The composer NEVER disappears while streaming: the send slot
-            // inside the input bar becomes the stop control (stop lives exactly
-            // where send always is), and the static thinking dots sit directly
-            // on top of the composer row. The REAL stream phase drives it (Phase 4):
-            // "Thinking…" before the first token, "Composing…" while tokens
-            // flow — never a fabricated state, never a full-width bar
-            // replacing the composer, never a distraction from the answer.
-            // FLASH-MODE BUG 1: the word "Thinking…" renders ONLY when the
-            // wire's `mode` event resolved this turn to effectiveMode=
-            // "thinking" — a Flash turn shows the bare dots (neutral, no
-            // label). Search/Working states keep their honest labels in every
-            // mode: those are real pipeline phases, not mode statements.
-            // NO STATUS LINE HERE ANY MORE.
-            //
-            // There used to be a centred "Thinking…" / "Composing…" /
-            // "Searching…" row sitting directly above the composer, next to a
-            // three-dot indicator, while the send slot showed a generic stop
-            // square. Three signals for one fact, and the two words collided
-            // with the "Thinking ▾" mode chip INSIDE the composer — same word,
-            // two meanings, one above the other.
-            //
-            // The orb in the send slot is the status now: it is the real
-            // phase, animated, in the place the thumb already is. TalkBack
-            // still gets the phase from the orb's own contentDescription.
+            // The composer stays visible and editable during generation. Show
+            // one concise phase label from the actual stream state, keep the
+            // selected bot avatar animated in the trailing slot, and make the
+            // adjacent Stop action unmistakable. No generic spinner or invented
+            // "coding" / reasoning phases are shown.
             ComposerRow(
                 draftText = { draft },
                 onDraftChange = { draft = it },
@@ -1789,9 +1785,9 @@ fun ChatScreen(
                 // field. The field and send slot stay exactly where the thumb
                 // expects them.
                 isStreaming = isStreaming,
-                // The honest phase, already derived from the real stream state
-                // at the screen scope — the orb in the send slot renders it.
-                orbState = liveOrbState,
+                // Phase label is derived from real stream signals at screen
+                // scope, avoiding whole-screen recomposition for each token.
+                activityLabel = liveActivityLabel,
                 onStop = {
                     // Cancelling finalizes in the controller: the cancelled
                     // repository job persists the partial (NonCancellable)
@@ -2284,14 +2280,15 @@ internal fun UserMessage(
 /**
  * The reference composer — ONE glass capsule, nothing competing:
  *
- *   [sparkle/attach] [ field ] [queue?] (paper-plane send | stop orb)
+ *   [sparkle/attach] [ field ] [queue?] (paper-plane send | bot avatar + Stop)
  *
  * The pill carries the floating-control glass; the field is borderless inside
  * it, grows to six lines, then scrolls internally. The leading sparkle opens
  * the attach/mode sheet the old plus and mic used to reach, so no capability
  * was traded for the simpler chrome. Send is the peach paper-plane with the
  * layered press (uiverse dull-ladybug-18 intent: the icon lifts as the
- * container scales); the stop orb owns the slot while a turn runs.
+ * container scales). While a turn runs, the selected bot avatar and an explicit
+ * Stop button own the trailing slot, with the real phase label directly above.
  */
 @Composable
 internal fun ComposerRow(
@@ -2306,10 +2303,8 @@ internal fun ComposerRow(
     queuedText: () -> String,
     onQueue: () -> Unit,
     onUnqueue: () -> Unit,
-    // The live activity state for the send slot while a turn runs. The slot
-    // renders the orb instead of a stop glyph: the thing that is happening is
-    // the control, and tapping it stops the turn.
-    orbState: OrbState? = null,
+    // Plain-language status derived from real stream events; null when idle.
+    activityLabel: String? = null,
     // PHASE 5: the live attachment drafts — chips row above the field,
     // recomposition stays scoped to the row (the transcript never reacts).
     drafts: List<AttachmentDraft> = emptyList(),
@@ -2333,6 +2328,31 @@ internal fun ComposerRow(
         // with an X that hands the draft straight back to the composer.
         if (queuedText().isNotBlank() && isStreaming) {
             QueuedDraftRow(text = queuedText(), onCancel = onUnqueue)
+        }
+        if (isStreaming) {
+            activityLabel?.let { label ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 14.dp, end = 14.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(GsTheme.colors.aiActive)
+                    )
+                    Spacer(Modifier.width(7.dp))
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = GsTheme.colors.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
         val canSend = draftText().isNotBlank() || drafts.isNotEmpty()
         // Queue-send is streaming-only and text-only: attachments still in
@@ -2381,7 +2401,7 @@ internal fun ComposerRow(
     // answering, the composer died — you could not write the next question or
     // task. Every native AI app keeps the composer editable while an answer
     // streams (a drafted next turn can queue; see the queue-send affordance).
-    // The send slot still shows the stop orb while a turn runs, so the field
+    // The trailing Stop action replaces Send while a turn runs, so the field
     // being live can never fire a second concurrent stream by accident.
     // Enter is a NEWLINE, never a send (there is a dedicated send button), so
     // multi-line messages type the way a phone expects. Sentence
@@ -2414,16 +2434,26 @@ internal fun ComposerRow(
                         }
                     }
                 )
-                // While a turn runs the slot belongs to the stop orb — but a
-                // drafted next message must still be able to GO. The queue
-                // arrow sits left of the orb: it parks the draft and sends it
-                // the moment the reply lands. Both actions stay reachable:
-                // nothing is replaced, the field is simply never locked again.
+                // While a turn runs, the selected bot avatar and an explicit
+                // Stop button own the trailing slot. A drafted next message
+                // remains reachable: the queue arrow sits to their left and
+                // parks it for delivery when this reply finishes.
                 if (canQueue) {
                     GsQueueSendButton(onQueue = onQueue)
                 }
                 if (isStreaming) {
-                    OrbStopControl(state = orbState ?: OrbState.BREATHING, onStop = onStop)
+                    Row(
+                        modifier = Modifier.padding(end = 4.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        GsBotAvatar(
+                            style = SettingsStore.assistantAvatar,
+                            size = 30.dp,
+                            isWorking = true
+                        )
+                        StopGeneratingButton(onStop = onStop)
+                    }
                 } else {
                     // ONE trailing control. It used to be two — a send button
                     // with a mic parked beside it — which put a second, always
@@ -2698,7 +2728,7 @@ private fun LiveReasoning(live: State<ChatStreamController.StreamState?>?) {
 
 /**
  * The queue affordance: the send arrow with a small clock badge, shown while a
- * turn runs and a next message is drafted (left of the stop orb). The arrow is
+ * turn runs and a next message is drafted (left of the Stop button). The arrow is
  * the same shape as [GsComposerAction]'s arrow — same verb, later timing — and the clock
  * badge is what distinguishes "this goes when the reply finishes" from "this
  * goes now". Text-only by construction (the queue carries no attachments).
@@ -2806,43 +2836,39 @@ private fun QueuedDraftRow(text: String, onCancel: () -> Unit) {
     }
 }
 
-/** The streaming-active affordance, living in the composer's send slot.
- *
- *  It used to be a white disc with a stop square — a second, unrelated symbol
- *  next to the orb that was already animating above the composer. Now the
- *  slot renders the REAL activity orb for the turn's actual phase (breathing
- *  before the first token, ribbon while composing, globe while searching),
- *  and the orb itself is the stop target: the thing that is happening is the
- *  thing you press. Tap target stays 36dp; the orb keeps its tuned INLINE
- *  geometry (20dp) so its dot counts and speeds are the designed ones.
- */
+/** Clearly labeled, touch-sized stop action for an in-flight assistant turn. */
 @Composable
-private fun OrbStopControl(state: OrbState, onStop: () -> Unit) {
-    Box(
+private fun StopGeneratingButton(onStop: () -> Unit) {
+    Row(
         modifier = Modifier
-            .padding(end = 4.dp, bottom = 2.dp)
-            .size(36.dp)
+            .height(36.dp)
             .clip(CircleShape)
+            .background(GsTheme.colors.error)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 role = Role.Button,
                 onClickLabel = "Stop generating"
             ) { onStop() }
-            .semantics { contentDescription = "Stop generating" },
-        contentAlignment = Alignment.Center
+            .semantics { contentDescription = "Stop generating" }
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
     ) {
-        ThinkingOrb(
-            state = state,
-            // STANDARD, not INLINE. Both presets were rasterised at this exact
-            // size and compared: INLINE scaled UP to 34dp is fifteen fat blobs
-            // that read as a broken spinner, while STANDARD scaled DOWN keeps
-            // its 44-segment ribbon / 11-ring globe and reads as an orb. The
-            // two presets are separate designs, and at 34dp the denser one is
-            // the one that survives.
-            size = OrbSize.STANDARD,
-            renderScale = 0.53f,
-            contentDescription = state.label
+        Box(
+            Modifier
+                .size(10.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(GsTheme.colors.onError)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = "Stop",
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = GsTheme.colors.onError
         )
     }
 }
@@ -3688,9 +3714,9 @@ private fun VerdictThumb(
 }
 
 /**
- * (design-3-b's three static dots lived here. They are gone: the composer's
- * send slot now renders the real activity orb for the turn's actual phase, so
- * a second abstract three-dot indicator was saying the same thing twice.)
+ * The composer now shows one plain-language phase label above the field. A
+ * generic three-dot loader is intentionally omitted; the selected bot avatar
+ * marks the active turn and the explicit Stop action remains available.
  */
 
 
