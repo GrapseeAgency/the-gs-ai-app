@@ -66,7 +66,7 @@ fun AssistantAvatarSettingsScreen(onBack: () -> Unit) {
                                     )
                                     .border(
                                         width = if (selected) 1.5.dp else 1.dp,
-                                        color = if (selected) colors.accentStrong else colors.outline,
+                                        color = if (selected) colors.accentStrong else colors.borderStrong,
                                         shape = RoundedCornerShape(18.dp),
                                     )
                                     .selectable(

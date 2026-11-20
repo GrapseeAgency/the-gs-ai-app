@@ -596,7 +596,12 @@ fun parseWidget(kind: String, rawJson: String): Widget? {
                     fun sourceNumber(value: JsonElement?): Float? =
                         (value as? JsonPrimitive)?.floatOrNull?.takeIf { it.isFinite() }
                     val suppliedSeries = source?.get("series") as? JsonArray
-                    require(suppliedSeries != null && suppliedSeries.all { series ->
+                    // A payload with NO series is not a malformed paired chart:
+                    // a ```gantt fence may carry a dated schedule (`entries`)
+                    // instead, and the timeline fallback below is exactly what
+                    // that shape means. Demanding coordinates here rejected it
+                    // before the fallback could run.
+                    require(suppliedSeries == null || suppliedSeries.all { series ->
                         val points = (series as? JsonObject)?.get("data") as? JsonArray
                         points != null && points.all { point ->
                             when (point) {

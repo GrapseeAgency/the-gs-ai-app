@@ -81,9 +81,13 @@ final class GsNoticeInbox: ObservableObject {
         persist()
     }
 
-    func markAllRead() {
-        guard entries.contains(where: { !$0.read }) else { return }
+    /// Marks everything read — or, when `kinds` is given, only the notices the
+    /// reader is actually looking at. The inbox draws this action inside a
+    /// filtered list, so a global sweep cleared tabs nobody opened.
+    func markAllRead(kinds: Set<String>? = nil) {
+        guard entries.contains(where: { !$0.read && (kinds == nil || kinds!.contains($0.kindId)) }) else { return }
         entries = entries.map { entry in
+            guard kinds == nil || kinds!.contains(entry.kindId) else { return entry }
             var copy = entry
             copy.read = true
             return copy
@@ -101,14 +105,18 @@ final class GsNoticeInbox: ObservableObject {
     #endif
 
     /// Real per-chip counts, computed from the stored rows.
-    /// Billing is always zero: no payment processor exists to produce one.
+    ///
+    /// One key per kind the app can actually send. There used to be a `billing`
+    /// key hard-wired to 0 behind a chip that could never fill — this build has
+    /// no payment processor — while Tips, a real kind with its own switch, had
+    /// no key at all: you could receive one and never filter to it.
     var counts: [String: Int] {
         [
             "all": entries.count,
             "messages": entries.filter { $0.kindId == "messages" }.count,
             "updates": entries.filter { $0.kindId == "product-updates" || $0.kindId == "ai-updates" }.count,
             "account": entries.filter { $0.kindId == "account-activity" }.count,
-            "billing": 0,
+            "tips": entries.filter { $0.kindId == "tips" }.count,
         ]
     }
 

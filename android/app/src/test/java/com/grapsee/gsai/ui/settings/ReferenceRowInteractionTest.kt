@@ -155,12 +155,15 @@ class ReferenceRowInteractionTest {
         assertFalse(SettingsStore.rememberChoices)
         compose.onNodeWithText("Remember my choices").assertIsOff()
 
-        // With the switch OFF, a new effort must not change the new-chat
-        // default — that suppression is the only thing the switch controls.
+        // With the switch OFF, nothing is written to `mode.new` — that
+        // suppression is the only thing the switch controls. The mode of the
+        // chat you are about to start still follows the effort you just tapped
+        // (and tapping it turned Automatic reasoning off, so the tap is what
+        // the next reply uses).
         compose.onNodeWithText("High").performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals("high", SettingsStore.reasoningEffort)
-        assertEquals("flash", SettingsStore.chatMode(null))
+        assertEquals("thinking", SettingsStore.chatMode(null))
 
         compose.onNodeWithText("Remember my choices").performScrollTo().performClick()
         compose.waitForIdle()
@@ -168,13 +171,30 @@ class ReferenceRowInteractionTest {
     }
 
     @Test
-    fun autoSelectModelStaysOffAndDisabled() {
+    fun automaticReasoningIsARealSwitchThatEffortTapsOverride() {
+        // The store is a singleton shared with the tests above, and an effort
+        // tap now switches Auto off — so this test states its starting point
+        // instead of inheriting one.
+        SettingsStore.updateAutoSelectModel(true)
         renderModelScreen()
 
-        // Kept-off on purpose: the backend chooses the model, so a tappable
-        // switch here would promise a choice the app cannot make.
-        compose.onNodeWithText("Auto-select model").performScrollTo().assertIsNotEnabled()
-        compose.onNodeWithText("Auto-select model").assertIsOff()
+        // The backend chooses the provider model, but the wire mode is the
+        // app's to send, so this switch is real: ON sends `auto`.
+        compose.onNodeWithText("Automatic reasoning").performScrollTo().assertIsOn()
+        compose.onNodeWithText("Automatic reasoning").performClick()
+        compose.waitForIdle()
+        assertFalse(SettingsStore.autoSelectModel)
+        compose.onNodeWithText("Automatic reasoning").assertIsOff()
+
+        // An explicit effort tap is a manual override: leaving Auto on would
+        // send `auto` and make the tap invisible.
+        SettingsStore.updateAutoSelectModel(true)
+        compose.waitForIdle()
+        compose.onNodeWithText("Minimal").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertFalse(SettingsStore.autoSelectModel)
+        assertEquals("minimal", SettingsStore.reasoningEffort)
+        assertEquals("flash", SettingsStore.chatMode(null))
     }
 
     @Test

@@ -6204,3 +6204,28 @@ Work Log:
 Stage Summary:
 - All static gates (`swift_structure_gate.py`, `ios_static_gates.py`, `audit-android-parity.py`, `check_kt_*.py`) and all 4 TypeScript/GenUI test suites (`test-widget-compiler.ts` 146/146, `test-widget-render.ts` 170/170, `test-widget-catalogue.ts` 208/208, `test-genui-pipeline.ts` 24/24) pass with zero errors.
 
+
+---
+Task ID: release-0.86.28-build-repair
+Agent: main
+Task: pull main, make the tree compile from a clean build, ship a signed release APK, and publish it.
+
+Work Log:
+- PULLED 1,277 COMMITS AND THE ANDROID TREE DID NOT COMPILE. The merge kept an older `ModelRouter.kt` (its `GsModel` enum, `pick()` and the message-aware `modeForMessage` gone) while the model picker, `SettingsStore` and two test classes kept importing it. An incremental build had been hiding it behind a stale class file. Restored the enum and both entry points: the 5-argument form picks a model from the message, the 2-argument form is for callers with no message yet and can only mean "server decides" (`auto`).
+- Five more merge casualties, all fixed at the definition rather than the call site:
+  - `GsDistortionWave` imported `matchParentSize` (a `BoxScope` member, not a top-level function), read `px.aberration` where the field lives on `style`, and called `drawContent()` inside `clipPath`, whose plain `DrawScope` receiver shadows the `ContentDrawScope`.
+  - `AssistantAvatarSettingsScreen` used `colors.outline`; the palette calls it `borderStrong`.
+  - `SubscriptionUsageScreen` used a trailing lambda for `RefSheetPillButton`, whose last parameter is now `modifier`.
+  - `StereoFrameAnalyzer` lost `import kotlin.math.log10`.
+  - `VoicePositionMath` referenced `LEVEL_BANDS`; the constant is `LEVEL_BANDS_HZ`.
+- ```gantt WITH A SCHEDULE WAS REJECTED BEFORE THE TIMELINE FALLBACK COULD RUN. The paired-chart guard demanded supplied coordinates whenever the type was gantt/scatter/bubble/candlestick — but a gantt fence carrying dated `entries` has no series at all, and the fallback below is exactly what that shape means. The guard now only applies when a series is actually supplied.
+- THE CATALOGUE SHIPPED A CANDLE THE APP REFUSED TO DRAW: `WidgetShowcase` built `candlestick` from two numbers per day, and the renderer requires [open, high, low, close] with high >= max(open, close). New `candleFence` emits real OHLC.
+- Two tests encoded shapes the renderer never accepted (one 2-value payload for every chart type, including bubble's [x,y,size] and candle's OHLC); they now use per-type points, and `correlation` uses coefficients.
+- `VoicePositionMathTest` ran on a bare JVM and died on `org.json` stubs ("Method optString not mocked"); it is a Robolectric test now.
+- NOTIFICATION INBOX, BOTH PLATFORMS: the strip carried a **Billing** chip that could never fill (no payment processor in this build) while **Tips** — a real kind with a real switch — had no chip and no filter. Tips replaced Billing. "Mark all as read" sat inside a filtered list but swept every tab; it is scoped to the tab now. An empty TAB said "Nexly has not sent you a notice yet" while nine notices sat one chip away — it now names the tab and offers "Show all notifications". The closing "You're all caught up!" appeared under unread rows; it only appears when true, and otherwise names the unread notices elsewhere. The inbox gained a row to its own Notification settings, which were three taps away. The detail page's honesty note claimed every row followed a system post; `GsNotifier.record` also writes in-app events, so the sentence now describes the writer it has.
+- EFFORT TILES WERE INERT WHILE AUTOMATIC REASONING WAS ON: the tap wrote `auto`, so four tiles changed nothing the next reply would use. A tile tap is now a manual override — it switches Automatic reasoning off — while picking a model does not. Reset to default restores Automatic reasoning too, and says so in the dialog.
+- versionCode 151 / 0.86.28. Android: 559 tests, 0 failures (104 skipped are the gated screenshot probes). `assembleRelease` signed with `gs-live.keystore`, 73 MB, verified with `apksigner`.
+
+Known, not done:
+- iOS is still uncompiled here (no Swift toolchain in this sandbox). The three Swift files touched were brace/paren balanced and their glyph names checked against `Resources/nexly-icons.json`.
+- The `gsOpenNotificationSettings` observer lands on Settings → Notifications, not on a dedicated inbox-settings page; that page does not exist yet.

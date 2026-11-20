@@ -6,9 +6,19 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import kotlin.math.PI
 import kotlin.math.sin
 
+/**
+ * The model file is read through `org.json`, which is a stub on a plain JVM —
+ * two of these tests threw "Method optString not mocked" rather than failing on
+ * a number. Robolectric supplies the real implementation.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], manifest = Config.NONE)
 class VoicePositionMathTest {
 
     @Test
@@ -124,9 +134,15 @@ class VoicePositionMathTest {
         assertEquals(1.0, right.sum(), 1e-9)
 
         val distance = model.distanceModel(PhonePose.DESK)!!
-        assertTrue(distance.large(listOf(-1.0)) < 0.5)
-        assertTrue(distance.large(listOf(1.0)) > 0.5)
-        assertFalse(distance.large(emptyList()) != null)
+        // `large` answers null when the feature vector has the wrong arity, so
+        // the comparison needs the value, not a nullable box.
+        val near = distance.large(listOf(-1.0))
+        val far = distance.large(listOf(1.0))
+        assertNotNull(near)
+        assertNotNull(far)
+        assertTrue(near!! < 0.5)
+        assertTrue(far!! > 0.5)
+        assertNull(distance.large(emptyList()))
     }
 
     private fun calibration(

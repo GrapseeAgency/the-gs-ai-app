@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import com.grapsee.gsai.data.SettingsStore
@@ -108,7 +109,9 @@ class NewChatAndModelPickerTest {
         compose.onNodeWithTag("auto-select-row").performClick()
         assertEquals(false, auto)
 
-        compose.onNodeWithTag("model-continue").performClick()
+        // The action sits at the end of a scrolling page; a click at an
+        // off-screen coordinate lands outside the window and is dropped.
+        compose.onNodeWithTag("model-continue").performScrollTo().performClick()
         assertEquals(1, continued)
     }
 

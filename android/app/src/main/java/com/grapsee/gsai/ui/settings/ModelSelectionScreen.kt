@@ -38,6 +38,7 @@ import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsMetallicAutoControl
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefCard
+import com.grapsee.gsai.ui.components.RefFootnote
 import com.grapsee.gsai.ui.components.RefGroupHeader
 import com.grapsee.gsai.ui.components.RefSettingsPage
 import com.grapsee.gsai.ui.components.RefWellTile

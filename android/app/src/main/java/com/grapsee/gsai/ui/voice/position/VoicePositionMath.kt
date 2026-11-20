@@ -338,7 +338,7 @@ internal class DistanceGate {
     private var voiced = 0.0
 
     fun step(frame: StereoFrame, dt: Double) {
-        if (frame.bandPower.size != LEVEL_BANDS.size - 1 || frame.coherence.size != LEVEL_BANDS.size - 1) return
+        if (frame.bandPower.size != LEVEL_BANDS_HZ.size - 1 || frame.coherence.size != LEVEL_BANDS_HZ.size - 1) return
         val power = frame.power
         val oldFloor = floor ?: power
         floor = if (power < oldFloor) power else oldFloor + (power - oldFloor) * (1.0 - exp(-dt / 4.0))

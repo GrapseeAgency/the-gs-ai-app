@@ -174,7 +174,7 @@ fun NotificationDetailScreen(
                 title = destination.label,
                 subtitle = destination.detail,
                 onClick = { onNavigate(destination.route) },
-                leading = { RefWellTile(destination.icon, GsWellTone.Blue, 28.dp) },
+                leading = { RefWellTile(destination.icon, style.tone, 28.dp) },
             )
         }
 
@@ -201,7 +201,11 @@ fun NotificationDetailScreen(
 
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "Nexly only writes a notice here after the system has actually posted it, so this list cannot contain a message you were never sent.",
+            // The old line claimed every row followed a system post. It does
+            // not: `GsNotifier.record` writes in-app events (a sign-in, a
+            // finished download) that the shade never showed. The claim is
+            // about honesty, so it has to describe the writer it actually has.
+            text = "Nexly writes a notice here only after it has actually told you something — a banner the device posted, or an event it recorded. It cannot contain a message you were never sent.",
             fontSize = 10.5.sp,
             lineHeight = 14.sp,
             fontFamily = GsFonts.Product,

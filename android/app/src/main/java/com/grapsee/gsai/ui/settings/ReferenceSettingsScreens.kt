@@ -706,15 +706,19 @@ fun AiIntelligenceScreen(
     if (confirmReset) {
         GsConfirmDialog(
             title = "Reset to Nexly's recommended settings?",
-            message = "The model returns to Nexly Pro, reasoning effort to Standard, and " +
-                "\"Remember my choices\" turns back on.",
+            message = "The model returns to Nexly Pro, reasoning effort to Standard, " +
+                "\"Automatic reasoning\" turns back on and \"Remember my choices\" too.",
             confirmLabel = "Reset",
             dismissLabel = "Cancel",
             destructive = false,
             onConfirm = {
                 SettingsStore.updatePreferredModel(MODEL_PRO)
                 SettingsStore.updateRememberChoices(true)
-                SettingsStore.updateReasoningEffort("standard")
+                // Recommended defaults include Automatic reasoning ON; the
+                // effort tile is written without the tile's manual-override
+                // rule, which would otherwise switch Auto back off.
+                SettingsStore.updateAutoSelectModel(true)
+                SettingsStore.updateReasoningEffort("standard", fromTile = false)
             },
             onDismiss = { confirmReset = false },
         )

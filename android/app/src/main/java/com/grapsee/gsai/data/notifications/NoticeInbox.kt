@@ -80,8 +80,19 @@ object NoticeInbox {
         write(context, (listOf(entry) + existing).take(MAX_ENTRIES))
     }
 
-    fun markAllRead(context: Context) {
-        val updated = read(context).map { it.copy(read = true) }
+    /**
+     * Marks everything read — or, when [kinds] is given, only the notices the
+     * reader is actually looking at.
+     *
+     * The inbox draws this action inside a filtered list, so a global sweep
+     * silently cleared tabs the reader never opened: press "Mark all as read"
+     * on Account and your three unread messages lose their dots too. The
+     * button must do what its position says it does.
+     */
+    fun markAllRead(context: Context, kinds: Set<String>? = null) {
+        val updated = read(context).map {
+            if (kinds == null || it.kindId in kinds) it.copy(read = true) else it
+        }
         write(context, updated)
     }
 
@@ -118,7 +129,15 @@ object NoticeInbox {
         revision++
     }
 
-    /** Real per-tab counts, computed from the stored rows. */
+    /**
+     * Real per-tab counts, computed from the stored rows.
+     *
+     * One key per kind the app can actually send. There used to be a `billing`
+     * key hard-wired to 0 for a chip that could never fill: this build has no
+     * payment processor, so a Billing tab was a permanent empty room. Tips, a
+     * real kind with its own switch in Settings, had no key and no chip — you
+     * could receive one and never filter to it.
+     */
     fun counts(context: Context): Map<String, Int> {
         val entries = read(context)
         return mapOf(
@@ -126,9 +145,6 @@ object NoticeInbox {
             "messages" to entries.count { it.kindId == "messages" },
             "updates" to entries.count { it.kindId == "product-updates" || it.kindId == "ai-updates" },
             "account" to entries.count { it.kindId == "account-activity" },
-            // Nothing in this build produces a billing notice: there is no
-            // payment processor, so the tab is honestly always empty.
-            "billing" to 0,
             "tips" to entries.count { it.kindId == "tips" },
         )
     }

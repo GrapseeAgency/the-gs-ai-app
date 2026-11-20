@@ -15,6 +15,7 @@ struct NotificationDetailView: View {
     var now: Date = Date()
 
     @ObservedObject private var inbox = GsNoticeInbox.shared
+    @EnvironmentObject private var router: Router
     @Environment(\.dismiss) private var dismiss
 
     @State private var confirmDelete = false
@@ -104,9 +105,9 @@ struct NotificationDetailView: View {
             GsSheetRow(
                 title: destination.label,
                 detail: destination.detail,
-                action: { destination.route?(dismiss) }
+                action: { open(destination) }
             ) {
-                GsWellTile(glyph: destination.glyph, tone: .blue, size: 28)
+                GsWellTile(glyph: destination.glyph, tone: style.tone, size: 28)
             } trailing: {
                 NexlyGlyph(name: "chevron-right", size: 12, color: Aero.textTertiary)
             }
@@ -141,11 +142,28 @@ struct NotificationDetailView: View {
             .gsSheetCard(corner: 20)
 
             Spacer().frame(height: 12)
-            Text("Nexly only writes a notice here after the system has actually posted it, so this list cannot contain a message you were never sent.")
+            Text("Nexly writes a notice here only after it has actually told you something — a banner the device posted, or an event it recorded. It cannot contain a message you were never sent.")
                 .font(.custom(Aero.productName(.regular), size: 10.5, relativeTo: .caption2))
                 .lineSpacing(2)
                 .foregroundStyle(Aero.textTertiary)
                 .padding(.horizontal, 6)
+        }
+    }
+
+    /// Follows a notice to the screen it is about. A section root replaces the
+    /// stack (chats is a drawer section, not a page stacked on this one); every
+    /// other destination is pushed, so Back returns to the notice.
+    ///
+    /// Before this existed the row was a chevron over `route: nil` for four of
+    /// the five kinds — a control that promised a page and did nothing — and
+    /// the one route that did exist ("Open your chats") called `dismiss()`,
+    /// which closed the notice and left you in Notifications.
+    private func open(_ destination: NoticeDestination) {
+        guard let route = destination.route else { return }
+        if destination.isSectionRoot {
+            router.path = [route]
+        } else {
+            router.path.append(route)
         }
     }
 
@@ -181,27 +199,32 @@ private struct NoticeDestination {
     let label: String
     let detail: String
     let glyph: String
-    /// nil when the destination is a root the sheet cannot reach; the row then
-    /// reads as information rather than pretending to navigate.
-    let route: ((DismissAction) -> Void)?
+    /// Every kind this build can send has a real destination. The old struct
+    /// allowed `nil` and still painted a chevron over it, which is the dead
+    /// control this repo keeps deleting — and the one live route it did have
+    /// just dismissed the page.
+    let route: AeroRoute?
+    /// True when the destination is a section root the drawer owns; the stack
+    /// is replaced instead of pushed onto.
+    let isSectionRoot: Bool
 
     static func forKind(_ kindId: String) -> NoticeDestination {
         switch kindId {
         case "messages":
             return .init(label: "Open your chats", detail: "The conversation this message was about",
-                         glyph: "message-circle", route: { dismiss in dismiss() })
+                         glyph: "message-circle", route: .chats, isSectionRoot: true)
         case "account-activity":
             return .init(label: "Account & Security", detail: "Sessions, biometrics and the address on this install",
-                         glyph: "user", route: nil)
+                         glyph: "user", route: .accountSecurity, isSectionRoot: false)
         case "product-updates", "ai-updates":
             return .init(label: "About Nexly", detail: "Version, build and what changed",
-                         glyph: "sparkles", route: nil)
+                         glyph: "sparkles", route: .settingsSection(.about), isSectionRoot: false)
         case "tips":
             return .init(label: "Help & Support", detail: "Guides for what this build can do",
-                         glyph: "bulb", route: nil)
+                         glyph: "bulb", route: .helpSupport, isSectionRoot: false)
         default:
             return .init(label: "Notification settings", detail: "Choose what Nexly is allowed to tell you",
-                         glyph: "bell", route: nil)
+                         glyph: "bell", route: .notificationsAlerts, isSectionRoot: false)
         }
     }
 }

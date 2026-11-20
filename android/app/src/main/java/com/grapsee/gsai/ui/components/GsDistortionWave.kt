@@ -14,7 +14,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -843,7 +842,7 @@ private fun DrawScope.drawWaveArtwork(
             alpha = glow * 0.48f,
             style = Stroke(width = max(2f, min(px.lensWidth * 0.34f, bandWidth * 0.38f)), cap = StrokeCap.Round),
         )
-        val fringeOffset = px.aberration * px.lensWidth * 0.12f
+        val fringeOffset = style.aberration * px.lensWidth * 0.12f
         drawPath(
             path = wavePath(frame, fringeOffset),
             color = style.palette.ahead,
@@ -957,10 +956,14 @@ fun GsDistortionWave(
                         .matchParentSize()
                         .graphicsLayer { alpha = if (reduceMotion) progress else 1f }
                         .drawWithContent {
+                            // `clipPath`'s lambda has a plain DrawScope receiver,
+                            // which shadows this ContentDrawScope — so the content
+                            // draw has to be named explicitly.
+                            val content = this
                             if (reduceMotion) {
-                                drawContent()
+                                content.drawContent()
                             } else if (frame.launched) {
-                                clipPath(wavePath(frame, 66f)) { drawContent() }
+                                clipPath(wavePath(frame, 66f)) { content.drawContent() }
                             }
                         },
                 ) { revealed() }

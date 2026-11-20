@@ -169,7 +169,19 @@ class WidgetBlocksTest {
         )
         assertEquals(CHART_TYPES, types.toSet())
         for (type in types) {
-            val json = """{"type":"$type","labels":["A","B"],"series":[{"name":"s","data":[[0,3],[1,7],[2,5]]}]}"""
+            // Each type gets the point shape its renderer actually needs: a
+            // bubble is [x, y, size], a candle is [open, high, low, close] and
+            // a gantt bar is one [start, end] range per series. Feeding all of
+            // them the same two-number pair tested the fixture, not the parser.
+            val points = when (type) {
+                "bubble" -> "[[0,3,2],[1,7,4],[2,5,1]]"
+                "candlestick" -> "[[12,15,11,14],[14,18,13,17],[17,19,15,16]]"
+                "gantt" -> "[[0,2],[2,4],[4,5]]"
+                // A correlation point is a coefficient: |y| <= 1 by definition.
+                "correlation" -> "[[0,0.2],[1,-0.4],[2,0.6]]"
+                else -> "[[0,3],[1,7],[2,5]]"
+            }
+            val json = """{"type":"$type","labels":["A","B"],"series":[{"name":"s","data":$points}]}"""
             val w = parseWidget("chart", json)
             assertTrue("chart type '$type' should parse", w is Widget.Chart)
             assertEquals(type, (w as Widget.Chart).w.type)

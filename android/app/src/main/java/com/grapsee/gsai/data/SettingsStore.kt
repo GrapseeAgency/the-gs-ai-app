@@ -367,14 +367,29 @@ object SettingsStore {
         val model = GsModel.entries.firstOrNull { it.id == v }
         preferredModel = v
         put(K.preferredModel, v)
-        if (model != null) updateReasoningEffort(model.defaultEffort)
+        // Not a tile tap: picking a model must not silently switch Automatic
+        // reasoning off, it only moves the effort chip to that model's default.
+        if (model != null) updateReasoningEffort(model.defaultEffort, fromTile = false)
     }
 
-    /** Writes the tile AND the wire mode, so "the chip I tapped" and "what the
-     *  next reply does" never disagree. */
-    fun updateReasoningEffort(v: String) {
+    /**
+     * Writes the tile AND the wire mode, so "the chip I tapped" and "what the
+     * next reply does" never disagree.
+     *
+     * A tap on an effort tile is an explicit instruction, so it also turns
+     * Automatic reasoning OFF: with it ON the send path would use `auto` and
+     * the tap would leave no trace — four tiles that do nothing visible. The
+     * switch stays available for the reader who wants the server to decide;
+     * picking a model ([updatePreferredModel]) is not a tile tap and leaves it
+     * alone.
+     */
+    fun updateReasoningEffort(v: String, fromTile: Boolean = true) {
         reasoningEffort = v
         put(K.reasoningEffort, v)
+        if (fromTile && autoSelectModel) {
+            autoSelectModel = false
+            put(K.autoSelectModel, false)
+        }
         if (rememberChoices) {
             put("mode.new", ModelRouter.modeForMessage(v, autoSelectModel))
         } else {

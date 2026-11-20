@@ -351,10 +351,13 @@ private fun BillingWavePlanButton(
                 }
             },
     ) {
-        RefSheetPillButton(label = label) {
-            onOpenBilling(bounds, focus)
-            focus = null
-        }
+        RefSheetPillButton(
+            label = label,
+            onClick = {
+                onOpenBilling(bounds, focus)
+                focus = null
+            },
+        )
     }
 }
 

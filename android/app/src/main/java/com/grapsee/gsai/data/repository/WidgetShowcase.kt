@@ -227,7 +227,22 @@ You are GS, a warm, concise assistant. Never output raw Unicode emojis; use `:ic
         append("\n")
         append(chartFence("treemap", "Where the storage goes", listOf("Models", "Media", "Chats", "Cache"), listOf("Size" to listOf(0f to 48f, 1f to 26f, 2f to 18f, 3f to 8f))))
         append("\n")
-        append(chartFence("candlestick", "A week of tokens", listOf("Mon", "Tue", "Wed", "Thu", "Fri"), listOf("Price" to listOf(0f to 12f, 1f to 18f, 2f to 15f, 3f to 19f, 4f to 17f))))
+        // A candle is four numbers per day — open, high, low, close — and the
+        // renderer rejects a pair. The two-number helper below was producing a
+        // chart the app itself refused to draw.
+        append(
+            candleFence(
+                "A week of tokens",
+                listOf("Mon", "Tue", "Wed", "Thu", "Fri"),
+                listOf(
+                    listOf(12f, 15f, 11f, 14f),
+                    listOf(14f, 18f, 13f, 17f),
+                    listOf(17f, 19f, 15f, 16f),
+                    listOf(16f, 20f, 15f, 19f),
+                    listOf(19f, 21f, 17f, 18f),
+                ),
+            )
+        )
         append("\n")
         append(fence("chart", """
 {"type":"sankey","title":"Where prompts go","nodes":[{"id":"Prompts","label":"Prompts"},{"id":"Chat","label":"Chat"},{"id":"Widgets","label":"Widgets"},{"id":"Rendered","label":"Rendered"},{"id":"Prose","label":"Prose"}],"links":[{"source":"Prompts","target":"Chat","value":70},{"source":"Prompts","target":"Widgets","value":30},{"source":"Chat","target":"Prose","value":58},{"source":"Widgets","target":"Rendered","value":26}]}
@@ -453,8 +468,25 @@ You are GS, a warm, concise assistant. Never output raw Unicode emojis; use `:ic
         )
     }
 
-    private fun pieJson(): String = """
-{"type":"pie","title":"Where the week went","labels":["Deep work","Meetings","Admin","Rest"],"series":[{"name":"Deep work","data":[[0,18]]},{"name":"Meetings","data":[[1,9]]},{"name":"Admin","data":[[2,6]]},{"name":"Rest","data":[[3,11]]}]}
+    /**
+     * A candlestick page. Each bar is [open, high, low, close]; the renderer
+     * checks high >= max(open, close) and low <= min(open, close), so the rows
+     * have to be real OHLC rather than one close per day.
+     */
+    private fun candleFence(
+        title: String,
+        labels: List<String>,
+        bars: List<List<Float>>,
+    ): String {
+        val labelsJson = labels.joinToString(",") { "\"${escape(it)}\"" }
+        val points = bars.joinToString(",") { bar -> "[${bar.joinToString(",") { num(it) }}]" }
+        return fence(
+            "chart",
+            """{"type":"candlestick","title":"${escape(title)}","labels":[$labelsJson],"series":[{"name":"Price","data":[$points]}]}"""
+        )
+    }
+
+    private fun pieJson(): String = """{"type":"pie","title":"Where the week went","labels":["Deep work","Meetings","Admin","Rest"],"series":[{"name":"Deep work","data":[[0,18]]},{"name":"Meetings","data":[[1,9]]},{"name":"Admin","data":[[2,6]]},{"name":"Rest","data":[[3,11]]}]}
 """.trim()
 
     private fun donutJson(): String = """

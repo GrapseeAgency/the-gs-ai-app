@@ -19,8 +19,11 @@ private struct GsInboxTab: Identifiable {
 /// was first built — it does now, and the row is still written only after the
 /// device actually showed something.
 ///
-/// The Billing chip is always empty because nothing in this build produces a
-/// billing notice: there is no payment processor to take a payment from.
+/// The strip carries one chip per kind this build can actually send. It used
+/// to carry a Billing chip that could never fill — there is no payment
+/// processor here — while Tips, a real kind with its own switch in Notification
+/// settings, had no chip at all: a tips notice counted towards All and could
+/// never be filtered to.
 struct NotificationsView: View {
 
     @ObservedObject private var inbox = GsNoticeInbox.shared
@@ -44,26 +47,38 @@ struct NotificationsView: View {
     private let tabs: [GsInboxTab] = [
         GsInboxTab(id: "all", label: "All", glyph: "bell", tone: .peach),
         GsInboxTab(id: "account", label: "Account", glyph: "user", tone: .blue),
-        GsInboxTab(id: "billing", label: "Billing", glyph: "credit-card", tone: .mint),
+        GsInboxTab(id: "tips", label: "Tips", glyph: "bulb", tone: .peach),
         GsInboxTab(id: "messages", label: "Messages", glyph: "message-circle", tone: .rose),
         GsInboxTab(id: "updates", label: "Updates", glyph: "sparkles", tone: .lilac),
     ]
+
+    /// The kinds a tab covers; nil = every kind (the All tab).
+    private func kindsFor(_ id: String) -> Set<String>? {
+        switch id {
+        case "messages": return ["messages"]
+        case "updates": return ["product-updates", "ai-updates"]
+        case "account": return ["account-activity"]
+        case "tips": return ["tips"]
+        default: return nil
+        }
+    }
 
     private var filtered: [GsNoticeEntry] {
         // Newest first is the reader's contract, not the producer's: the store
         // prepends today, but a restored backup or a future producer may not,
         // and the Today/Earlier split below assumes the order.
-        inbox.entries
-            .filter { entry in
-                switch tab {
-                case "messages": return entry.kindId == "messages"
-                case "updates": return entry.kindId == "product-updates" || entry.kindId == "ai-updates"
-                case "account": return entry.kindId == "account-activity"
-                case "billing": return false
-                default: return true
-                }
-            }
+        let kinds = kindsFor(tab)
+        return inbox.entries
+            .filter { kinds == nil || kinds!.contains($0.kindId) }
             .sorted { $0.createdAtMillis > $1.createdAtMillis }
+    }
+
+    private var unreadAnywhere: Int {
+        inbox.entries.filter { !$0.read }.count
+    }
+
+    private var tabLabel: String {
+        tabs.first { $0.id == tab }?.label ?? "All"
     }
 
     private var dayStart: Date {
@@ -93,10 +108,22 @@ struct NotificationsView: View {
 
             if filtered.isEmpty {
                 Spacer().frame(height: 18)
-                caughtUp(
-                    body: tab == "billing"
-                        ? "Payments aren't processed in this build, so no billing notices exist yet."
-                        : "Nexly has not sent you a notice yet.")
+                // An empty TAB is not an empty INBOX. The old copy said "Nexly
+                // has not sent you a notice yet" while nine message notices sat
+                // one chip to the right — the page contradicted its own counts.
+                if inbox.entries.isEmpty {
+                    caughtUp(
+                        title: "You're all caught up!",
+                        body: "Nothing has been sent yet. A notice only lands here after this device actually showed one — a finished reply, a sign-in, a new on-device model.")
+                } else {
+                    caughtUp(
+                        title: "Nothing in \(tabLabel) yet",
+                        body: inbox.entries.count == 1
+                            ? "You have 1 notice in another kind."
+                            : "You have \(inbox.entries.count) notices in other kinds.",
+                        actionLabel: "Show all notifications",
+                        action: { tab = "all" })
+                }
             } else {
                 let today = filtered.filter { $0.createdAt >= dayStart }
                 let earlier = filtered.filter { $0.createdAt < dayStart }
@@ -113,15 +140,48 @@ struct NotificationsView: View {
                     rows(shown)
                 }
                 Spacer().frame(height: 14)
-                caughtUp(body: "No more notifications for now.")
+                // "You're all caught up!" used to sit under a list of unread
+                // rows. It now only appears when it is true for what is on
+                // screen, and names the unread mail it is not counting.
+                if unreadCount == 0 {
+                    if unreadAnywhere > 0 {
+                        caughtUp(
+                            title: "You're all caught up here",
+                            body: unreadAnywhere == 1
+                                ? "1 unread notice is waiting in another kind."
+                                : "\(unreadAnywhere) unread notices are waiting in other kinds.",
+                            actionLabel: "Show all notifications",
+                            action: { tab = "all" })
+                    } else {
+                        caughtUp(title: "You're all caught up!", body: "No more notifications for now.")
+                    }
+                }
             }
+
+            // The inbox could not reach its own settings: the only route was
+            // Settings → Notifications, three taps from the page whose contents
+            // they govern.
+            Spacer().frame(height: 14)
+            GsSheetGroupHeader("Settings", caption: "Where these come from")
+            GsSheetRow(
+                title: "Notification settings",
+                detail: "Choose which kinds Nexly may send, and when",
+                action: {
+                    NotificationCenter.default.post(name: .gsOpenNotificationSettings, object: nil)
+                }
+            ) {
+                GsWellTile(glyph: "bell", tone: .blue, size: 28)
+            } trailing: {
+                NexlyGlyph(name: "chevron-right", size: 12, color: Aero.textTertiary)
+            }
+            .gsSheetCard(corner: 20)
         }
         // The filter was a half-height sheet — a menu wearing a page's clothes.
         // It is a glass chooser now, and a notice is a pushed page.
         .gsDialog(isPresented: showFilter) {
             GsChoiceDialog(
                 title: "Filter notifications",
-                subtitle: "Five kinds, counted from what was actually sent",
+                subtitle: "Every kind Nexly can send, counted from what it actually sent",
                 options: tabs.map { item in
                     GsChoice(
                         id: item.id,
@@ -244,7 +304,9 @@ struct NotificationsView: View {
 
     private var markAllButton: some View {
         Button {
-            inbox.markAllRead()
+            // Scoped to this tab: the control sits in a filtered list, so a
+            // global sweep cleared tabs the reader never opened.
+            inbox.markAllRead(kinds: kindsFor(tab))
         } label: {
             HStack(spacing: 4) {
                 NexlyGlyph(
@@ -263,7 +325,12 @@ struct NotificationsView: View {
 
     // MARK: Closing card
 
-    private func caughtUp(body: String) -> some View {
+    private func caughtUp(
+        title: String,
+        body: String,
+        actionLabel: String? = nil,
+        action: (() -> Void)? = nil
+    ) -> some View {
         // Short rules flank the title itself, as the mock draws them; flexible
         // full-width rules disappeared into the cream glass.
         VStack(spacing: 2) {
@@ -271,7 +338,7 @@ struct NotificationsView: View {
                 Rectangle()
                     .fill(Aero.textTertiary.opacity(0.35))
                     .frame(width: 28, height: 1)
-                Text("You're all caught up!")
+                Text(title)
                     .font(.custom(Aero.productName(.medium), size: 10.5, relativeTo: .caption2))
                     .foregroundStyle(Aero.textSecondary)
                 Rectangle()
@@ -283,6 +350,18 @@ struct NotificationsView: View {
                 .foregroundStyle(Aero.textTertiary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+            if let actionLabel, let action {
+                Spacer().frame(height: 8)
+                Button(action: action) {
+                    Text(actionLabel)
+                        .font(.custom(Aero.productName(.medium), size: 10, relativeTo: .caption2))
+                        .foregroundStyle(GsWellTone.peach.ink)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(GsWellTone.peach.wash.opacity(0.55)))
+                }
+                .buttonStyle(KineticPressStyle())
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 16)
