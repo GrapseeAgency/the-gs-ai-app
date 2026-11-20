@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.BuildConfig
 import com.grapsee.gsai.data.AccountStore
+import com.grapsee.gsai.data.AssistantAvatarStyle
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelStore
@@ -370,6 +371,20 @@ fun ChatSettingsScreen(
         subtitle = "How new chats behave.",
         onBack = onBack
     ) {
+        RefSection(label = "Assistant appearance", role = GsGlassRole.CardLight) {
+            RefRow(
+                title = "Bot avatar",
+                subtitle = SettingsStore.assistantAvatar.label,
+                icon = when (SettingsStore.assistantAvatar) {
+                    AssistantAvatarStyle.CLOVER -> GsIcons.Clover
+                    AssistantAvatarStyle.FLOWER -> GsIcons.Flower
+                    AssistantAvatarStyle.TRIANGLE -> GsIcons.Triangle
+                    AssistantAvatarStyle.SQUARE -> GsIcons.Square
+                },
+                onClick = { onNavigate(GsRoutes.SETTINGS_ASSISTANT_AVATAR) },
+            )
+        }
+
         RefSection(label = "Response mode", role = GsGlassRole.CardLight) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 RefSegmented(
@@ -468,7 +483,7 @@ fun AiIntelligenceScreen(
 
     RefSettingsPage(
         title = "Model Selection & Reasoning Effort",
-        subtitle = "Choose the best model and how deeply Nexly thinks",
+        subtitle = "Save a model preference and set reasoning effort",
         onBack = onBack
     ) {
         // ---- AI Model -----------------------------------------------------
@@ -561,16 +576,15 @@ fun AiIntelligenceScreen(
         // ---- Model Preferences -------------------------------------------
         RefGroupHeader("Model Preferences", "Customize your experience")
         RefCard(role = GsGlassRole.CardLight) {
-            // The mock draws this switch OFF. It is off and DISABLED because the
-            // backend always chooses the model — a tappable switch that changes
-            // nothing is the failure this repo keeps recording.
+            // The actual NewChatScreen send path consumes this state: ON sends
+            // `auto`; OFF maps the selected effort to the supported wire mode.
+            // The GS server remains the provider-model router for each message.
             RefToggleRow(
-                title = "Auto-select model",
-                subtitle = "Nexly always chooses the best model for each task.",
+                title = "Automatic reasoning",
+                subtitle = "Send Auto mode and let the GS server route by message capability.",
                 icon = GsIcons.Settings,
-                checked = false,
-                onCheckedChange = {},
-                enabled = false,
+                checked = SettingsStore.autoSelectModel,
+                onCheckedChange = { SettingsStore.updateAutoSelectModel(it) },
             )
             RefRowDivider()
             RefToggleRow(
@@ -1317,7 +1331,14 @@ fun VoiceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
 
         RefSection(label = "Voice", role = GsGlassRole.CardLight) {
             RefRow(
-                title = "Open voice mode",
+                title = "Voice Position",
+                subtitle = "Calibrate left, ahead and right for this phone",
+                icon = GsIcons.Activity,
+                onClick = { onNavigate(GsRoutes.VOICE_POSITION) }
+            )
+            RefDivider()
+            RefRow(
+                title = "Open Talk mode",
                 subtitle = "Speak a question instead of typing it",
                 icon = GsIcons.Mic,
                 onClick = { onNavigate(GsRoutes.VOICE) }

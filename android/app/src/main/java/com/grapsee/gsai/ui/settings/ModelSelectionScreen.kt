@@ -54,13 +54,12 @@ import com.grapsee.gsai.ui.theme.LocalGsIsDark
  * control, the Auto Select row and the Continue action.
  *
  * WHAT EACH CONTROL DOES (see [com.grapsee.gsai.data.ModelRouter] for the rule):
- *  - a tab filters the list by the capability the model declares;
- *  - picking a card stores the model AND moves the effort chip to that model's
- *    default, so the tap has a visible consequence;
- *  - the effort control writes the wire mode the next reply uses;
- *  - Auto Select, when on, lets the send path choose the model per message and
- *    take that model's effort; when off, the effort control above is the
- *    authority. Both states are read by `ModelRouter.modeForMessage`.
+ *  - a tab filters the model-profile list by declared capabilities;
+ *  - picking a card stores a preference and moves the effort chip to that
+ *    profile's default; the backend currently ignores the client model ID;
+ *  - the effort control writes the server-supported mode for the next reply;
+ *  - Automatic reasoning ON sends `auto`; OFF maps the selected effort to the
+ *    wire mode. The GS server selects the compatible provider model per request.
  */
 @Composable
 fun ModelSelectionScreen(
@@ -80,7 +79,7 @@ fun ModelSelectionScreen(
 
     RefSettingsPage(
         title = "Model Selection",
-        subtitle = "Choose the best model for your needs.",
+        subtitle = "Save a model preference and set reasoning effort.",
         onBack = onBack,
     ) {
         ModelTabs(selected = tab.value, onSelect = { tab.value = it })
@@ -99,6 +98,7 @@ fun ModelSelectionScreen(
                 )
             }
         }
+        RefFootnote("The model choice is saved as a preference; the GS server currently selects the model for each request.")
 
         Spacer(Modifier.height(18.dp))
         ReasoningBlock(
@@ -577,7 +577,7 @@ private fun AutoSelectRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) 
         Spacer(Modifier.width(11.dp))
         Column(Modifier.weight(1f)) {
             androidx.compose.material3.Text(
-                "Auto Select Model",
+                "Automatic reasoning",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = GsFonts.Product,
@@ -585,7 +585,7 @@ private fun AutoSelectRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) 
             )
             Spacer(Modifier.height(1.dp))
             androidx.compose.material3.Text(
-                "Let Nexly choose the best model for your message.",
+                "Send Auto reasoning mode; the GS server routes the message to a compatible model.",
                 fontSize = 10.5.sp,
                 lineHeight = 10.5.sp,
                 fontFamily = GsFonts.Product,

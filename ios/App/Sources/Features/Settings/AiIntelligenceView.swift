@@ -88,7 +88,7 @@ struct AiIntelligenceView: View {
     var body: some View {
         GsSettingsPage(
             title: "Model Selection & Reasoning Effort",
-            subtitle: "Choose the best model and how deeply Nexly thinks",
+            subtitle: "Save a model preference and set reasoning effort",
             onBack: { dismiss() }
         ) {
             // ---- AI Model -------------------------------------------------
@@ -112,15 +112,17 @@ struct AiIntelligenceView: View {
             // ---- Model Preferences ----------------------------------------
             GsGroupHeader(title: "Model Preferences", caption: "Customize your experience")
             GsGroupCard {
-                // The mock draws this switch OFF. It is off and DISABLED
-                // because the backend always chooses the model — a tappable
-                // switch that changes nothing is the failure this repo keeps
-                // recording.
+                // This setting is consumed by NewChatView.send(): ON sends
+                // `auto`; OFF maps the selected effort to the supported wire
+                // mode. The GS server still selects the provider model from
+                // the message and attachments.
                 toggleRow(
-                    "Auto-select model",
-                    detail: "Nexly always chooses the best model for each task.",
+                    "Automatic reasoning",
+                    detail: "Send Auto mode and let the GS server route this message by capability.",
                     glyph: "settings", tone: .peach,
-                    isOn: .constant(false), enabled: false)
+                    isOn: Binding(
+                        get: { settings.autoSelectModel },
+                        set: { settings.autoSelectModel = $0; GSHaptics.select() }))
                 cardDivider
                 toggleRow(
                     "Remember my choices",

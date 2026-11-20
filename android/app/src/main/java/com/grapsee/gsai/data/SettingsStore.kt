@@ -24,6 +24,8 @@ import androidx.compose.runtime.setValue
 object SettingsStore {
     private const val PREFS = "gs_settings"
     private var prefs: SharedPreferences? = null
+    /** One-shot mode held only in memory when a new chat must not remember it. */
+    private var pendingNewChatMode: String? = null
 
     // Appearance
     var themeMode by mutableStateOf("System"); private set
@@ -83,6 +85,8 @@ object SettingsStore {
      *  SettingsStore.memory. The Memory Management mock's "Memory is ON" pill
      *  reads and writes this; default ON because the app already remembers. */
     var memory by mutableStateOf(true); private set
+    /** The assistant's four-way bot-avatar selection, used by every reply. */
+    var assistantAvatar by mutableStateOf(AssistantAvatarStyle.CLOVER); private set
     // Accessibility
     var fontScale by mutableStateOf(1.0f); private set
     var highContrast by mutableStateOf(false); private set
@@ -116,10 +120,10 @@ object SettingsStore {
     var reasoningEffort by mutableStateOf("standard"); private set
     /** "Remember my choices" — decides whether a new chat keeps the last mode. */
     var rememberChoices by mutableStateOf(true); private set
-    /** "Auto Select Model" — the Model Selection reference draws it ON. When it
-     *  is on, the send path takes the model's own default effort
-     *  ([ModelRouter.modeForMessage]); when it is off, the effort control is the
-     *  authority. Either way a control the reader sees has a reader. */
+    /** Automatic reasoning starts ON. The send path sends `auto` so the GS
+     *  server can route from the real message/attachments; when OFF, the user's
+     *  explicit effort maps to the wire mode. Client keyword guesses never
+     *  masquerade as provider selection. */
     var autoSelectModel by mutableStateOf(true); private set
 
     // ---- Data Export & Account Deletion ----
@@ -173,6 +177,7 @@ object SettingsStore {
         biometricUnlock = p.bool(K.biometricUnlock, biometricUnlock)
         lastSecurityCheckMillis = p.long(K.lastSecurityCheckMillis, lastSecurityCheckMillis)
         memory = p.bool(K.memory, memory)
+        assistantAvatar = AssistantAvatarStyle.fromId(p.string(K.assistantAvatar, assistantAvatar.id))
         fontScale = p.flt(K.fontScale, fontScale)
         highContrast = p.bool(K.highContrast, highContrast)
         reduceMotion = p.bool(K.reduceMotion, reduceMotion)
@@ -184,6 +189,17 @@ object SettingsStore {
         reasoningEffort = p.string(K.reasoningEffort, reasoningEffort)
         rememberChoices = p.bool(K.rememberChoices, rememberChoices)
         autoSelectModel = p.bool(K.autoSelectModel, autoSelectModel)
+        if (!rememberChoices) {
+            p.edit().remove("mode.new").apply()
+        } else {
+            val saved = p.getString("mode.new", null)
+            if (saved !in setOf("flash", "thinking", "auto")) {
+                p.edit().putString(
+                    "mode.new",
+                    ModelRouter.modeForMessage(reasoningEffort, autoSelectModel),
+                ).apply()
+            }
+        }
         dataRetentionMonths = p.integer(K.dataRetentionMonths, dataRetentionMonths)
         autoDeleteInactive = p.bool(K.autoDeleteInactive, autoDeleteInactive)
         searchHistory = decodeSearchHistory(p.string(K.searchHistory, ""))
@@ -223,6 +239,7 @@ object SettingsStore {
         const val biometricUnlock = "settings.biometricUnlock"
         const val lastSecurityCheckMillis = "settings.lastSecurityCheck"
         const val memory = "settings.memory"
+        const val assistantAvatar = "settings.assistantAvatar"
         const val fontScale = "settings.fontScale"
         const val highContrast = "settings.highContrast"
         const val reduceMotion = "settings.reduceMotion"
@@ -263,30 +280,51 @@ object SettingsStore {
      * FLASH MODE (Phase 3) — the composer's thinking mode, persisted PER
      * CONVERSATION (key `mode.<conversationId>`; a brand-new chat falls back
      * to `mode.new` so the choice survives until the conversation exists).
-     * Only the three wire values are honored; anything else degrades to
-     * 'flash' (the backend default).
+     * Only the three wire values are honored; an invalid or missing value
+     * falls back to the currently selected reasoning controls. Remember
+     * controls the new-chat default, not whether the current chat can use a
+     * selected mode.
      */
     fun chatMode(conversationId: String?): String {
-        val p = prefs ?: return "flash"
+        // Use the selected controls for the current chat. Remember controls
+        // whether this mode becomes the persisted new-chat default, not whether
+        // the current request can honor the choice.
+        val defaultMode = ModelRouter.modeForMessage(reasoningEffort, autoSelectModel)
         val valid = setOf("flash", "thinking", "auto")
-        val perChat = conversationId?.let { p.getString("mode.$it", null) }
-        return when {
-            perChat != null && perChat in valid -> perChat
-            else -> p.getString("mode.new", null)?.takeIf { it in valid } ?: "flash"
+        if (conversationId == null) {
+            pendingNewChatMode?.takeIf { it in valid }?.let { pending ->
+                pendingNewChatMode = null
+                return pending
+            }
         }
+        val p = prefs
+        if (conversationId != null) {
+            val perChat = p?.getString("mode.$conversationId", null)
+            if (perChat != null && perChat in valid) return perChat
+            pendingNewChatMode?.takeIf { it in valid }?.let { pending ->
+                pendingNewChatMode = null
+                put("mode.$conversationId", pending)
+                return pending
+            }
+        }
+        if (!rememberChoices) return defaultMode
+        return p?.getString("mode.new", null)?.takeIf { it in valid } ?: defaultMode
     }
 
     fun setChatMode(conversationId: String?, mode: String) {
-        val key = if (conversationId != null) "mode.$conversationId" else "mode.new"
-        // "Remember my choices" (model-selection reference) governs the NEW-chat
-        // default only. A per-conversation choice belongs to that conversation
-        // and is never suppressed — otherwise reopening a chat would silently
-        // change how it answers.
-        if (conversationId == null && !rememberChoices) {
-            put(key, "flash")
+        if (mode !in setOf("flash", "thinking", "auto")) return
+        if (conversationId == null) {
+            // Keep the current new-chat choice available to this screen even
+            // when it must not become the default for future conversations.
+            pendingNewChatMode = mode
+            if (rememberChoices) put("mode.new", mode)
+            else prefs?.edit()?.remove("mode.new")?.apply()
             return
         }
-        put(key, mode)
+        // A per-conversation choice belongs to that conversation and is never
+        // suppressed by Remember my choices.
+        put("mode.$conversationId", mode)
+        pendingNewChatMode = null
     }
 
     // ---- Model selection -------------------------------------------------
@@ -337,12 +375,26 @@ object SettingsStore {
     fun updateReasoningEffort(v: String) {
         reasoningEffort = v
         put(K.reasoningEffort, v)
-        setChatMode(null, wireModeForEffort(v))
+        if (rememberChoices) {
+            put("mode.new", ModelRouter.modeForMessage(v, autoSelectModel))
+        } else {
+            prefs?.edit()?.remove("mode.new")?.apply()
+        }
     }
 
-    fun updateRememberChoices(v: Boolean) { rememberChoices = v; put(K.rememberChoices, v) }
+    fun updateRememberChoices(v: Boolean) {
+        rememberChoices = v
+        put(K.rememberChoices, v)
+        pendingNewChatMode = null
+        if (v) put("mode.new", ModelRouter.modeForMessage(reasoningEffort, autoSelectModel))
+        else prefs?.edit()?.remove("mode.new")?.apply()
+    }
 
-    fun updateAutoSelectModel(v: Boolean) { autoSelectModel = v; put(K.autoSelectModel, v) }
+    fun updateAutoSelectModel(v: Boolean) {
+        autoSelectModel = v
+        put(K.autoSelectModel, v)
+        if (rememberChoices) put("mode.new", ModelRouter.modeForMessage(reasoningEffort, v))
+    }
 
     // ---- Data retention --------------------------------------------------
     fun updateDataRetentionMonths(v: Int) {
@@ -407,6 +459,10 @@ object SettingsStore {
         lastSecurityCheckMillis = millis; put(K.lastSecurityCheckMillis, millis)
     }
     fun updateMemory(v: Boolean) { memory = v; put(K.memory, v) }
+    fun updateAssistantAvatar(v: AssistantAvatarStyle) {
+        assistantAvatar = v
+        put(K.assistantAvatar, v.id)
+    }
     // Accessibility
     /** Live stage during a slider drag: memory only, no disk write per frame.
      *  The commit lands once in [updateFontScale] on release. */

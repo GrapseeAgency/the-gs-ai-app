@@ -70,7 +70,9 @@ import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.chat.NexlyPlanProgressStore
 import com.grapsee.gsai.data.remote.PlanProgressDto
 import com.grapsee.gsai.data.remote.PlanProgressItemDto
+import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.di.ServiceLocator
+import com.grapsee.gsai.ui.components.GsBotAvatar
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.theme.GsTheme
@@ -623,28 +625,10 @@ fun NexlyGlyph(
     )
 }
 
-/** The companion identity mark outside each glass assistant card. */
+/** The selected assistant identity mark outside each glass assistant card. */
 @Composable
 fun NexlyAssistantOrb(size: Dp = 30.dp) {
-    // The reference identity mark: a lilac sparkle in a lit glass circle, the
-    // same language as the header brand — not the peach orb.
-    Box(
-        modifier = Modifier
-            .size(size)
-            .shadow(4.dp, CircleShape)
-            .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.94f), CircleShape)
-            .border(1.dp, Color.White, CircleShape)
-            .semantics { contentDescription = "Nexly" },
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            GsIcons.Sparkles,
-            contentDescription = null,
-            tint = Color(0xFF8E7BFF),
-            modifier = Modifier.size(size * 0.5f),
-        )
-    }
+    GsBotAvatar(style = SettingsStore.assistantAvatar, size = size)
 }
 
 // ---------------------------------------------------------------------------

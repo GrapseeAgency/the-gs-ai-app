@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
+import com.grapsee.gsai.data.AssistantAvatarStyle
 import com.grapsee.gsai.data.PlanStore
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.integrations.ConnectedAppsScreen
@@ -241,17 +242,16 @@ class ReferenceSheetsContentTest {
     }
 
     @Test
-    fun subscriptionManagePlanAndSupportResolveToRealRoutes() {
+    fun subscriptionPlanRevealsBillingAndSupportKeepsItsRealRoute() {
         val routes = mutableListOf<String>()
         render { SubscriptionUsageScreen(onBack = {}, onNavigate = { routes += it }) }
 
-        compose.onNodeWithText("Manage Plan").performScrollTo().performClick()
         compose.onNodeWithText("Need help?").performScrollTo().performClick()
+        compose.onNodeWithText("Manage Plan").performScrollTo().performClick()
+        compose.waitForIdle()
 
-        assertEquals(
-            listOf(GsRoutes.BILLING, GsRoutes.SETTINGS_HELP),
-            routes,
-        )
+        assertPresent("Billing", "Your plan and payment details.")
+        assertEquals(listOf(GsRoutes.SETTINGS_HELP), routes)
     }
 
     @Test
@@ -299,6 +299,43 @@ class ReferenceSheetsContentTest {
             ),
             routes,
         )
+    }
+
+    @Test
+    fun voiceSettingsKeepTalkAndAddVoicePosition() {
+        val routes = mutableListOf<String>()
+        render { VoiceSettingsScreen(onBack = {}, onNavigate = { routes += it }) }
+
+        compose.onNodeWithText("Voice Position").performScrollTo().performClick()
+        compose.onNodeWithText("Open Talk mode").performScrollTo().performClick()
+
+        assertEquals(listOf(GsRoutes.VOICE_POSITION, GsRoutes.VOICE), routes)
+    }
+
+    @Test
+    fun chatSettingsReachesBotAvatarPicker() {
+        val routes = mutableListOf<String>()
+        render { ChatSettingsScreen(onBack = {}, onNavigate = { routes += it }) }
+
+        compose.onNodeWithText("Bot avatar").performScrollTo().performClick()
+
+        assertEquals(listOf(GsRoutes.SETTINGS_ASSISTANT_AVATAR), routes)
+    }
+
+    @Test
+    fun botAvatarChoicePersistsAndUpdatesTheSharedSetting() {
+        SettingsStore.updateAssistantAvatar(AssistantAvatarStyle.CLOVER)
+        try {
+            render { AssistantAvatarSettingsScreen(onBack = {}) }
+            compose.onNodeWithText("Triangle").performScrollTo().performClick()
+
+            assertEquals(
+                AssistantAvatarStyle.TRIANGLE,
+                SettingsStore.assistantAvatar,
+            )
+        } finally {
+            SettingsStore.updateAssistantAvatar(AssistantAvatarStyle.CLOVER)
+        }
     }
 
     @Test

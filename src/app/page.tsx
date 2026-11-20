@@ -2,6 +2,7 @@
 
 import { GlassIcon } from '@/components/nexly/GlassIcon'
 import { MetalFx } from 'metal-fx'
+import { isRequestMode, readModelPreferences, requestModeForPreferences, type RequestMode } from '@/lib/model-preferences'
 
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { MessageContent, type Citation } from '@/components/genui'
@@ -56,27 +57,33 @@ const AURORA = 'linear-gradient(90deg, #FFB36D, #FF8847, #F36F2C)'
 
 /**
  * FLASH MODE (Phase 3) — the composer's thinking-mode selector.
- * Persistence: per conversation (ChatGPT-style), localStorage key
- * `gs.mode.{conversationId}`; a brand-new chat uses `gs.mode.new` and the
- * choice carries into the conversation once it is created. Default 'flash'
- * everywhere; switching mid-conversation applies to the next turn.
+ * Existing conversations keep a per-conversation mode. A new conversation
+ * starts from the shared Model Preferences setting; a manual composer choice
+ * is copied into the new conversation when it is created. The server remains
+ * responsible for selecting the actual model from message capability.
  */
-type Mode = 'flash' | 'thinking' | 'auto'
+type Mode = RequestMode
 const MODE_STORAGE_PREFIX = 'gs.mode.'
 
 function loadMode(conversationId: string | null): Mode {
-  if (typeof window === 'undefined') return 'flash'
-  const key = `${MODE_STORAGE_PREFIX}${conversationId ?? 'new'}`
-  const raw = window.localStorage.getItem(key)
-  return raw === 'thinking' || raw === 'auto' || raw === 'flash' ? raw : 'flash'
+  if (typeof window === 'undefined') return 'auto'
+  if (conversationId) {
+    try {
+      const stored = window.localStorage.getItem(`${MODE_STORAGE_PREFIX}${conversationId}`)
+      if (isRequestMode(stored)) return stored
+    } catch {
+      // Fall through to the shared preference when storage is unavailable.
+    }
+  }
+  return requestModeForPreferences(readModelPreferences())
 }
 
 function storeMode(conversationId: string | null, mode: Mode): void {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined' || !conversationId) return
   try {
-    window.localStorage.setItem(`${MODE_STORAGE_PREFIX}${conversationId ?? 'new'}`, mode)
+    window.localStorage.setItem(`${MODE_STORAGE_PREFIX}${conversationId}`, mode)
   } catch {
-    // private-mode / storage-disabled — mode just won't persist
+    // private-mode / storage-disabled — the current session still uses `mode`
   }
 }
 
@@ -515,7 +522,7 @@ export default function Home() {
   const [startingChat, setStartingChat] = useState<string | null>(null)
 
   // FLASH MODE (Phase 3) — composer sheet state.
-  const [mode, setMode] = useState<Mode>('flash')
+  const [mode, setMode] = useState<Mode>('auto')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -692,6 +699,9 @@ export default function Home() {
             },
             ...prev,
           ])
+          const initialMode = requestModeForPreferences(readModelPreferences())
+          storeMode(created.id, initialMode)
+          setMode(initialMode)
           setConversationId(created.id)
           setActiveAssistant({ id: a.id, name: a.name })
           setMessages([])
@@ -768,6 +778,7 @@ export default function Home() {
             body: JSON.stringify({ title: text.slice(0, 40) }),
           }).then((r) => readJson<{ id: string }>(r))
           convId = created?.id ?? null
+          if (convId) storeMode(convId, mode)
           setConversationId(convId)
         }
         if (!convId) throw new Error('Could not create conversation')
@@ -1656,7 +1667,7 @@ export default function Home() {
                   style={{ color: C.text }}
                   aria-label="Message GS AI"
                 />
-                <MetalFx variant="circle" preset="silver" theme="light" strength={0.88} innerShadow className="shrink-0">
+                <MetalFx variant="circle" preset="silver" theme="auto" strength={0.88} innerShadow className="shrink-0">
                   <button
                     type="button"
                     onClick={() => send()}
