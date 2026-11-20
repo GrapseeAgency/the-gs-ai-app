@@ -266,13 +266,17 @@ final class GsChatUiTests: XCTestCase {
 
         // The New Chat input above sends through the real auto-send route; also
         // prove the resulting ChatDetailView still presents its own production
-        // composer after the answer has settled. Match label or identifier so
-        // SwiftUI's TextField/TextView classification cannot mask the control.
+        // composer after the answer has settled. Its stable accessibility
+        // identifier is independent of the simulator's TextField/TextView type.
         let conversationComposer = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier == %@ OR label == %@",
-                                  Self.chatComposerPlaceholder, Self.chatComposerPlaceholder))
+            .matching(NSPredicate(format: "identifier == %@", Self.chatComposerIdentifier))
             .firstMatch
-        XCTAssertTrue(conversationComposer.waitForExistence(timeout: 10),
+        let composerAppeared = conversationComposer.waitForExistence(timeout: 10)
+        XCTAssertTrue(composerAppeared,
                       "ChatDetailView's real `Ask anything...` composer did not remain available after the reply")
+        if composerAppeared {
+            XCTAssertTrue(conversationComposer.isHittable,
+                          "ChatDetailView's real `Ask anything...` composer exists but is not available for input")
+        }
     }
 }
