@@ -1,14 +1,18 @@
 package com.grapsee.gsai.ui.subscription
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -27,6 +31,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -36,6 +46,8 @@ import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.PlanStore
 import com.grapsee.gsai.data.UsageMeter
 import com.grapsee.gsai.di.ServiceLocator
+import com.grapsee.gsai.ui.billing.BillingScreen
+import com.grapsee.gsai.ui.components.GsDistortionWave
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefArt
@@ -86,6 +98,21 @@ fun SubscriptionUsageScreen(
     onNavigate: (String) -> Unit = {},
 ) {
     var meters by remember { mutableStateOf(UsageMeter.Zero) }
+    var billingWaveVisible by remember { mutableStateOf(false) }
+    var billingWaveSource by remember { mutableStateOf(Rect.Zero) }
+    var billingWaveFocus by remember { mutableStateOf<Offset?>(null) }
+
+    // This is a page transition to existing billing details, not a purchase
+    // result. The build has no processor; never show a receipt or activate a
+    // plan from this navigation gesture.
+    BackHandler(enabled = billingWaveVisible) {
+        billingWaveVisible = false
+    }
+    val openBilling: (Rect, Offset?) -> Unit = { source, focus ->
+        billingWaveSource = source
+        billingWaveFocus = focus ?: source.takeUnless { it.width <= 0f || it.height <= 0f }?.center
+        billingWaveVisible = true
+    }
 
     // The counts are a real query over the message table, run off the main
     // thread. A meter that cannot be counted stays at -1 and renders as "—",
@@ -97,194 +124,232 @@ fun SubscriptionUsageScreen(
         }
     }
 
-    RefSettingsPage(
-        title = "Subscription & Usage",
-        subtitle = "Your plan, usage, and billing details",
-        onBack = onBack,
-    ) {
-        // ---- Hero ---------------------------------------------------------
-        RefHeroCard {
-            RefWellTile(GsIcons.Crown, GsWellTone.Peach, 44.dp)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        PlanStore.planName,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = GsFonts.Product,
-                        color = GsTheme.colors.textPrimary,
-                    )
-                    Spacer(Modifier.width(7.dp))
-                    if (PlanStore.active) {
-                        RefTagPill("Active", GsWellTone.Mint.ink)
-                    } else {
-                        RefTagPill("Not activated", GsTheme.colors.textSecondary)
+    GsDistortionWave(
+        isRevealed = billingWaveVisible,
+        source = billingWaveSource,
+        focus = billingWaveFocus,
+        modifier = Modifier.fillMaxSize(),
+        content = {
+            RefSettingsPage(
+                title = "Subscription & Usage",
+                subtitle = "Your plan, usage, and billing details",
+                onBack = onBack,
+            ) {
+                // ---- Hero ---------------------------------------------------------
+                RefHeroCard {
+                    RefWellTile(GsIcons.Crown, GsWellTone.Peach, 44.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                PlanStore.planName,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = GsFonts.Product,
+                                color = GsTheme.colors.textPrimary,
+                            )
+                            Spacer(Modifier.width(7.dp))
+                            if (PlanStore.active) {
+                                RefTagPill("Active", GsWellTone.Mint.ink)
+                            } else {
+                                RefTagPill("Not activated", GsTheme.colors.textSecondary)
+                            }
+                        }
+                        Spacer(Modifier.height(1.dp))
+                        Text(
+                            "Unlock more limits, advanced models, and premium features.",
+                            fontSize = 10.5.sp,
+                            lineHeight = 11.sp,
+                            fontFamily = GsFonts.Product,
+                            color = GsTheme.colors.textTertiary,
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    BillingWavePlanButton(label = "Manage Plan", onOpenBilling = openBilling)
+                }
+
+                // ---- Plan Details -------------------------------------------------
+                RefGroupHeader("Plan Details", "Current plan information")
+                RefCard(role = GsGlassRole.CardLight, padding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            RefFactRow("Plan Name", PlanStore.planName)
+                            RefFactRow("Billing Cycle", PlanStore.cycleLabel)
+                            RefFactRow("Next Billing Date", formatDate(PlanStore.nextBillingMillis()))
+                            RefFactRow("Price", PlanStore.priceLabel)
+                        }
+                        // The mock bleeds its crystal into this card's right edge;
+                        // the app's own pearl-lotus photograph is the artwork set
+                        // this build actually ships.
+                        androidx.compose.foundation.Image(
+                            painter = androidx.compose.ui.res.painterResource(
+                                com.grapsee.gsai.R.drawable.gs_home_lotus_new
+                            ),
+                            contentDescription = null,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .alpha(0.85f)
+                                .border(2.dp, Color.White.copy(alpha = 0.55f), CircleShape),
+                        )
                     }
                 }
-                Spacer(Modifier.height(1.dp))
-                Text(
-                    "Unlock more limits, advanced models, and premium features.",
-                    fontSize = 10.5.sp,
-                    lineHeight = 11.sp,
-                    fontFamily = GsFonts.Product,
-                    color = GsTheme.colors.textTertiary,
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            RefSheetPillButton(
-                label = "Manage Plan",
-                onClick = { onNavigate(GsRoutes.BILLING) },
-            )
-        }
 
-        // ---- Plan Details -------------------------------------------------
-        RefGroupHeader("Plan Details", "Current plan information")
-        RefCard(role = GsGlassRole.CardLight, padding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    RefFactRow("Plan Name", PlanStore.planName)
-                    RefFactRow("Billing Cycle", PlanStore.cycleLabel)
-                    RefFactRow("Next Billing Date", formatDate(PlanStore.nextBillingMillis()))
-                    RefFactRow("Price", PlanStore.priceLabel)
-                }
-                // The mock bleeds its crystal into this card's right edge;
-                // the app's own pearl-lotus photograph is the artwork set
-                // this build actually ships.
-                androidx.compose.foundation.Image(
-                    painter = androidx.compose.ui.res.painterResource(
-                        com.grapsee.gsai.R.drawable.gs_home_lotus_new
-                    ),
-                    contentDescription = null,
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .alpha(0.85f)
-                        .border(2.dp, Color.White.copy(alpha = 0.55f), CircleShape),
-                )
-            }
-        }
-
-        // ---- Usage Overview ----------------------------------------------
-        RefGroupHeader("Usage Overview", "Your current month's usage")
-        RefCard(role = GsGlassRole.CardLight, padding = PaddingValues(vertical = 2.dp)) {
-            UsageRow(
-                icon = GsIcons.MessageCircle,
-                tone = GsWellTone.Lilac,
-                title = "Messages",
-                subtitle = "AI conversations",
-                used = meters.messages,
-                limit = PlanStore.LIMIT_MESSAGES,
-            )
-            RefRowDivider(startIndent = 57.dp)
-            // Image generation is not recorded anywhere in this build, so there
-            // is nothing honest to count.
-            UsageRow(
-                icon = GsIcons.Image,
-                tone = GsWellTone.Rose,
-                title = "Images",
-                subtitle = "Not metered in this build",
-                used = -1,
-                limit = PlanStore.LIMIT_IMAGES,
-            )
-            RefRowDivider(startIndent = 57.dp)
-            UsageRow(
-                icon = GsIcons.Upload,
-                tone = GsWellTone.Mint,
-                title = "File Uploads",
-                subtitle = "Documents, files, and more",
-                used = meters.uploads,
-                limit = PlanStore.LIMIT_UPLOADS,
-            )
-            RefRowDivider(startIndent = 57.dp)
-            // The wire only stores flash/thinking/auto per conversation, not per
-            // message, so a per-month deep-thinking count cannot be derived.
-            UsageRow(
-                icon = GsIcons.BrainCircuit,
-                tone = GsWellTone.Blue,
-                title = "Advanced Reasoning",
-                subtitle = "Not metered per message in this build",
-                used = -1,
-                limit = PlanStore.LIMIT_REASONING,
-            )
-        }
-
-        // ---- Billing & Payment -------------------------------------------
-        RefGroupHeader("Billing & Payment", "Manage your payment method")
-        RefCard(role = GsGlassRole.CardLight, padding = PaddingValues(vertical = 2.dp)) {
-            RefSheetRow(
-                title = "Payment Method",
-                subtitle = "No card is stored — this build has no payment processor",
-                onClick = null,
-                leading = { RefWellTile(GsIcons.CreditCard, GsWellTone.Blue, 34.dp) },
-                trailing = { RefTagPill("Not set", GsTheme.colors.textSecondary) },
-            )
-            RefRowDivider(startIndent = 57.dp)
-            RefSheetRow(
-                title = "Billing History",
-                subtitle = "No invoices — none can be issued in this build",
-                onClick = null,
-                trailing = {},
-                leading = { RefWellTile(GsIcons.Receipt, GsWellTone.Peach, 34.dp) },
-            )
-        }
-
-        // ---- Upgrade Options ---------------------------------------------
-        RefGroupHeader("Upgrade Options", "Your plan")
-        RefQuietWashCard {
-            RefWellTile(GsIcons.Sparkles, GsWellTone.Lilac, 44.dp)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "Nexly Pro — everything included",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GsFonts.Product,
-                    color = GsTheme.colors.textPrimary,
-                )
-                Spacer(Modifier.height(1.dp))
-                Text(
-                    "One plan, $12.99/month: more usage, advanced models, exclusive features and priority support.",
-                    fontSize = 10.5.sp,
-                    lineHeight = 11.sp,
-                    fontFamily = GsFonts.Product,
-                    color = GsTheme.colors.textTertiary,
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            RefSheetPillButton(
-                label = "View Plan",
-                onClick = { onNavigate(GsRoutes.BILLING) },
-            )
-        }
-
-        Spacer(Modifier.height(14.dp))
-        // The closing card is a real destination: the sheet's "Need help?" is
-        // billing support, and this build's support page is where that lives.
-        Box(Modifier.fillMaxWidth()) {
-            RefInfoCard(
-                icon = GsIcons.Crown,
-                title = "Need help?",
-                text = "Our support team is here to assist you with any billing or plan questions.",
-                trailing = {
-                    Icon(
-                        GsIcons.ChevronRight,
-                        contentDescription = null,
-                        tint = GsTheme.colors.textTertiary,
-                        modifier = Modifier.size(15.dp),
+                // ---- Usage Overview ----------------------------------------------
+                RefGroupHeader("Usage Overview", "Your current month's usage")
+                RefCard(role = GsGlassRole.CardLight, padding = PaddingValues(vertical = 2.dp)) {
+                    UsageRow(
+                        icon = GsIcons.MessageCircle,
+                        tone = GsWellTone.Lilac,
+                        title = "Messages",
+                        subtitle = "AI conversations",
+                        used = meters.messages,
+                        limit = PlanStore.LIMIT_MESSAGES,
                     )
-                },
+                    RefRowDivider(startIndent = 57.dp)
+                    // Image generation is not recorded anywhere in this build, so there
+                    // is nothing honest to count.
+                    UsageRow(
+                        icon = GsIcons.Image,
+                        tone = GsWellTone.Rose,
+                        title = "Images",
+                        subtitle = "Not metered in this build",
+                        used = -1,
+                        limit = PlanStore.LIMIT_IMAGES,
+                    )
+                    RefRowDivider(startIndent = 57.dp)
+                    UsageRow(
+                        icon = GsIcons.Upload,
+                        tone = GsWellTone.Mint,
+                        title = "File Uploads",
+                        subtitle = "Documents, files, and more",
+                        used = meters.uploads,
+                        limit = PlanStore.LIMIT_UPLOADS,
+                    )
+                    RefRowDivider(startIndent = 57.dp)
+                    // The wire only stores flash/thinking/auto per conversation, not per
+                    // message, so a per-month deep-thinking count cannot be derived.
+                    UsageRow(
+                        icon = GsIcons.BrainCircuit,
+                        tone = GsWellTone.Blue,
+                        title = "Advanced Reasoning",
+                        subtitle = "Not metered per message in this build",
+                        used = -1,
+                        limit = PlanStore.LIMIT_REASONING,
+                    )
+                }
+
+                // ---- Billing & Payment -------------------------------------------
+                RefGroupHeader("Billing & Payment", "Manage your payment method")
+                RefCard(role = GsGlassRole.CardLight, padding = PaddingValues(vertical = 2.dp)) {
+                    RefSheetRow(
+                        title = "Payment Method",
+                        subtitle = "No card is stored — this build has no payment processor",
+                        onClick = null,
+                        leading = { RefWellTile(GsIcons.CreditCard, GsWellTone.Blue, 34.dp) },
+                        trailing = { RefTagPill("Not set", GsTheme.colors.textSecondary) },
+                    )
+                    RefRowDivider(startIndent = 57.dp)
+                    RefSheetRow(
+                        title = "Billing History",
+                        subtitle = "No invoices — none can be issued in this build",
+                        onClick = null,
+                        trailing = {},
+                        leading = { RefWellTile(GsIcons.Receipt, GsWellTone.Peach, 34.dp) },
+                    )
+                }
+
+                // ---- Upgrade Options ---------------------------------------------
+                RefGroupHeader("Upgrade Options", "Your plan")
+                RefQuietWashCard {
+                    RefWellTile(GsIcons.Sparkles, GsWellTone.Lilac, 44.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "Nexly Pro — everything included",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = GsFonts.Product,
+                            color = GsTheme.colors.textPrimary,
+                        )
+                        Spacer(Modifier.height(1.dp))
+                        Text(
+                            "One plan, $12.99/month: more usage, advanced models, exclusive features and priority support.",
+                            fontSize = 10.5.sp,
+                            lineHeight = 11.sp,
+                            fontFamily = GsFonts.Product,
+                            color = GsTheme.colors.textTertiary,
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    BillingWavePlanButton(label = "View Plan", onOpenBilling = openBilling)
+                }
+
+                Spacer(Modifier.height(14.dp))
+                // The closing card is a real destination: the sheet's "Need help?" is
+                // billing support, and this build's support page is where that lives.
+                Box(Modifier.fillMaxWidth()) {
+                    RefInfoCard(
+                        icon = GsIcons.Crown,
+                        title = "Need help?",
+                        text = "Our support team is here to assist you with any billing or plan questions.",
+                        trailing = {
+                            Icon(
+                                GsIcons.ChevronRight,
+                                contentDescription = null,
+                                tint = GsTheme.colors.textTertiary,
+                                modifier = Modifier.size(15.dp),
+                            )
+                        },
+                    )
+                    Box(
+                        Modifier
+                            .matchParentSize()
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color.Transparent)
+                            .androidxClickable { onNavigate(GsRoutes.SETTINGS_HELP) },
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+        },
+        revealed = {
+            BillingScreen(
+                onBack = { billingWaveVisible = false },
+                onOpenSubscription = { billingWaveVisible = false },
             )
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color.Transparent)
-                    .androidxClickable { onNavigate(GsRoutes.SETTINGS_HELP) },
-            )
+        },
+    )
+}
+
+/** Measures the CTA and captures its down-point without consuming its click. */
+@Composable
+private fun BillingWavePlanButton(
+    label: String,
+    onOpenBilling: (Rect, Offset?) -> Unit,
+) {
+    var bounds by remember { mutableStateOf(Rect.Zero) }
+    var focus by remember { mutableStateOf<Offset?>(null) }
+    var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+
+    Box(
+        modifier = Modifier
+            .onGloballyPositioned { layout ->
+                coordinates = layout
+                bounds = layout.boundsInRoot()
+            }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    focus = coordinates?.localToRoot(down.position)
+                }
+            },
+    ) {
+        RefSheetPillButton(label = label) {
+            onOpenBilling(bounds, focus)
+            focus = null
         }
-        Spacer(Modifier.height(10.dp))
     }
 }
 

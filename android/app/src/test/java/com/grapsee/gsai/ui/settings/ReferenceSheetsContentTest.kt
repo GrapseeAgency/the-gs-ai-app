@@ -241,17 +241,16 @@ class ReferenceSheetsContentTest {
     }
 
     @Test
-    fun subscriptionManagePlanAndSupportResolveToRealRoutes() {
+    fun subscriptionPlanRevealsBillingAndSupportKeepsItsRealRoute() {
         val routes = mutableListOf<String>()
         render { SubscriptionUsageScreen(onBack = {}, onNavigate = { routes += it }) }
 
-        compose.onNodeWithText("Manage Plan").performScrollTo().performClick()
         compose.onNodeWithText("Need help?").performScrollTo().performClick()
+        compose.onNodeWithText("Manage Plan").performScrollTo().performClick()
+        compose.waitForIdle()
 
-        assertEquals(
-            listOf(GsRoutes.BILLING, GsRoutes.SETTINGS_HELP),
-            routes,
-        )
+        assertPresent("Billing", "Your plan and payment details.")
+        assertEquals(listOf(GsRoutes.SETTINGS_HELP), routes)
     }
 
     @Test

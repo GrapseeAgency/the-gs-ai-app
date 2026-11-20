@@ -168,6 +168,7 @@ import com.grapsee.gsai.data.notifications.ReplyNotifier
 import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsInputBar
 import com.grapsee.gsai.ui.components.GsComposerAction
+import com.grapsee.gsai.ui.components.GsCloverAvatar
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsAnchoredPopover
 import com.grapsee.gsai.ui.components.GsFloatingOverlay
@@ -3014,7 +3015,7 @@ internal fun AssistantMessage(
     Box(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             if (showIdentity) {
-                AssistantAvatar()
+                AssistantAvatar(isWorking = message.isStreaming)
                 Spacer(Modifier.width(9.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
@@ -3483,45 +3484,10 @@ private fun SheetActionRow(
     }
 }
 
-/**
- * The assistant identity mark: the real companion orb, outside the glass card,
- * exactly as the reference frames it. No "GS" monogram and no second logo.
- */
+/** Clover identity beside assistant replies; the mark breathes while streaming. */
 @Composable
-private fun AssistantAvatar() {
-    val dark = LocalGsIsDark.current
-    // The reference identity mark: a lilac sparkle set in a lit glass circle —
-    // the same white-tile + glyph language the pre-chat header uses, not the
-    // peach orb.
-    Box(
-        modifier = Modifier
-            .size(38.dp)
-            // A WHITE DISC ON A NEAR-WHITE PAGE IS NOT A MARK. It vanished, and
-            // what was left was a lilac sparkle floating in the margin with no
-            // container — one of the two "stray avatars" on every answer. The
-            // tile carries a lilac wash in light and a white lift in dark, so it
-            // reads as a tile in both.
-            .shadow(3.dp, CircleShape, ambientColor = Color(0x2A7C5CFF), spotColor = Color(0x2A7C5CFF))
-            .clip(CircleShape)
-            .background(
-                if (dark) Color.White.copy(alpha = 0.10f) else Color(0xFFF1EBFF),
-                CircleShape
-            )
-            .border(
-                1.dp,
-                if (dark) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.95f),
-                CircleShape
-            )
-            .semantics { contentDescription = "Nexly" },
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            GsIcons.Sparkles,
-            contentDescription = null,
-            tint = Color(0xFF8E7BFF),
-            modifier = Modifier.size(18.dp),
-        )
-    }
+private fun AssistantAvatar(isWorking: Boolean) {
+    GsCloverAvatar(size = 38.dp, isWorking = isWorking)
 }
 
 /**
