@@ -20,6 +20,7 @@ final class GsChatUiTests: XCTestCase {
 
     private static let newChatInputIdentifier = "new-chat-input"
     private static let chatComposerPlaceholder = "Ask anything..."
+    private static let chatComposerIdentifier = "chat-composer-input"
 
     /// NewChatView uses a vertical SwiftUI TextField whose UIKit automation
     /// classification can vary by simulator. Query by its stable identifier,
