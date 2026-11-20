@@ -90,9 +90,12 @@ struct SettingsView: View {
                 HStack(spacing: 11) {
                     GsWellTile(glyph: "sparkles", tone: .peach, size: 34)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Upgrade to Nexly Pro")
-                            .font(Aero.bodyMedium().weight(.semibold))
-                            .foregroundStyle(Aero.text)
+                        HStack(spacing: 6) {
+                            Text("Upgrade to Nexly Pro")
+                                .font(Aero.bodyMedium().weight(.semibold))
+                                .foregroundStyle(Aero.text)
+                            GsMetallicBadge(label: "PRO")
+                        }
                         // The mock's caption is 12.5pt (settings-geometry.json),
                         // the same size as a row's detail. `Aero.caption()` is 13pt,
                         // and at 13 the line box pushed this sentence onto a third
