@@ -406,7 +406,7 @@ final class MenuChromeTests: XCTestCase {
                 case .row(let rect), .textInRow(_, let rect):
                     let center = probe.bbox.midX / scale - rect.minX
                     if center < 25 || center > 48 {
-                        record("\(name)/\(label): icon center is \(String(format: \"%.1f\", center)) pt into the row — outside the leading slot")
+                        record("\(name)/\(label): icon center is \(String(format: "%.1f", center)) pt into the row — outside the leading slot")
                     }
                     if case .textInRow(let title, _) = box,
                        probe.bbox.maxX / scale >= title.minX - 1 {
