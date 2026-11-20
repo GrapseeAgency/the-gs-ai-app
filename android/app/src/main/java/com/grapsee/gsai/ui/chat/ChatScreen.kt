@@ -168,7 +168,7 @@ import com.grapsee.gsai.data.notifications.ReplyNotifier
 import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsInputBar
 import com.grapsee.gsai.ui.components.GsComposerAction
-import com.grapsee.gsai.ui.components.GsCloverAvatar
+import com.grapsee.gsai.ui.components.GsBotAvatar
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.GsAnchoredPopover
 import com.grapsee.gsai.ui.components.GsFloatingOverlay
@@ -3484,10 +3484,14 @@ private fun SheetActionRow(
     }
 }
 
-/** Clover identity beside assistant replies; the mark breathes while streaming. */
+/** Selected bot identity beside assistant replies; it breathes while streaming. */
 @Composable
 private fun AssistantAvatar(isWorking: Boolean) {
-    GsCloverAvatar(size = 38.dp, isWorking = isWorking)
+    GsBotAvatar(
+        style = SettingsStore.assistantAvatar,
+        size = 38.dp,
+        isWorking = isWorking,
+    )
 }
 
 /**

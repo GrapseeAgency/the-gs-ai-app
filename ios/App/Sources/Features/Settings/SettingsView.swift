@@ -1,3 +1,4 @@
+import BotAvatarsKit
 import SwiftUI
 import AVFoundation
 
@@ -353,6 +354,20 @@ struct SettingsView: View {
         section("Chat") {
             toggleRow("Enter to send", isOn: $settings.enterToSend)
             toggleRow("Auto-title chats", isOn: $settings.autoTitle)
+            AeroListRow(
+                title: "Bot avatar",
+                subtitle: AssistantAvatarStyle.fromStoredValue(settings.assistantAvatar).title,
+                leading: {
+                    BotAvatar(
+                        type: AssistantAvatarStyle.fromStoredValue(settings.assistantAvatar).botAvatarType,
+                        state: .default,
+                        size: 34,
+                        interactive: false
+                    )
+                },
+                trailing: { chevron },
+                action: { onRoute?(.assistantAvatar) }
+            )
         }
     }
 

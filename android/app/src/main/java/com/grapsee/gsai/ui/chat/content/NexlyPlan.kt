@@ -70,8 +70,9 @@ import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.chat.NexlyPlanProgressStore
 import com.grapsee.gsai.data.remote.PlanProgressDto
 import com.grapsee.gsai.data.remote.PlanProgressItemDto
+import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.di.ServiceLocator
-import com.grapsee.gsai.ui.components.GsCloverAvatar
+import com.grapsee.gsai.ui.components.GsBotAvatar
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.theme.GsTheme
@@ -624,10 +625,10 @@ fun NexlyGlyph(
     )
 }
 
-/** The companion clover identity mark outside each glass assistant card. */
+/** The selected assistant identity mark outside each glass assistant card. */
 @Composable
 fun NexlyAssistantOrb(size: Dp = 30.dp) {
-    GsCloverAvatar(size = size)
+    GsBotAvatar(style = SettingsStore.assistantAvatar, size = size)
 }
 
 // ---------------------------------------------------------------------------

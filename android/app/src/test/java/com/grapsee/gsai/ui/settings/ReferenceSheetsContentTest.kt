@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
+import com.grapsee.gsai.data.AssistantAvatarStyle
 import com.grapsee.gsai.data.PlanStore
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.integrations.ConnectedAppsScreen
@@ -309,6 +310,32 @@ class ReferenceSheetsContentTest {
         compose.onNodeWithText("Open Talk mode").performScrollTo().performClick()
 
         assertEquals(listOf(GsRoutes.VOICE_POSITION, GsRoutes.VOICE), routes)
+    }
+
+    @Test
+    fun chatSettingsReachesBotAvatarPicker() {
+        val routes = mutableListOf<String>()
+        render { ChatSettingsScreen(onBack = {}, onNavigate = { routes += it }) }
+
+        compose.onNodeWithText("Bot avatar").performScrollTo().performClick()
+
+        assertEquals(listOf(GsRoutes.SETTINGS_ASSISTANT_AVATAR), routes)
+    }
+
+    @Test
+    fun botAvatarChoicePersistsAndUpdatesTheSharedSetting() {
+        SettingsStore.updateAssistantAvatar(AssistantAvatarStyle.CLOVER)
+        try {
+            render { AssistantAvatarSettingsScreen(onBack = {}) }
+            compose.onNodeWithText("Triangle").performScrollTo().performClick()
+
+            assertEquals(
+                AssistantAvatarStyle.TRIANGLE,
+                SettingsStore.assistantAvatar,
+            )
+        } finally {
+            SettingsStore.updateAssistantAvatar(AssistantAvatarStyle.CLOVER)
+        }
     }
 
     @Test

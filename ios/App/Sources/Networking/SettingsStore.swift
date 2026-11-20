@@ -24,6 +24,8 @@ final class SettingsStore: ObservableObject {
     // Chat
     @Published var enterToSend: Bool { didSet { defaults.set(enterToSend, forKey: K.enterToSend) } }
     @Published var autoTitle: Bool { didSet { defaults.set(autoTitle, forKey: K.autoTitle) } }
+    /// The bot identity shown beside every assistant reply; IDs match Android.
+    @Published var assistantAvatar: String { didSet { defaults.set(assistantAvatar, forKey: K.assistantAvatar) } }
     // AI
     @Published var memory: Bool { didSet { defaults.set(memory, forKey: K.memory) } }
 
@@ -158,6 +160,9 @@ final class SettingsStore: ObservableObject {
         reduceAnimations = defaults.object(forKey: K.reduceAnimations) as? Bool ?? false
         enterToSend = defaults.object(forKey: K.enterToSend) as? Bool ?? true
         autoTitle = defaults.object(forKey: K.autoTitle) as? Bool ?? true
+        assistantAvatar = AssistantAvatarStyle.fromStoredValue(
+            defaults.string(forKey: K.assistantAvatar)
+        ).rawValue
         memory = defaults.object(forKey: K.memory) as? Bool ?? true
         // false, not true. An absent key must mean OFF.
         preferLocal = defaults.object(forKey: K.preferLocal) as? Bool ?? false
@@ -210,6 +215,7 @@ final class SettingsStore: ObservableObject {
         static let reduceAnimations = "settings.reduceAnimations"
         static let enterToSend = "settings.enterToSend"
         static let autoTitle = "settings.autoTitle"
+        static let assistantAvatar = "settings.assistantAvatar"
         static let memory = "settings.memory"
         static let preferLocal = "settings.preferLocal"
         static let reasoning = "settings.reasoning"

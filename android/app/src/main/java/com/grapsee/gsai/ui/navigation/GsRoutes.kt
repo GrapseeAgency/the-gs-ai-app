@@ -47,6 +47,7 @@ object GsRoutes {
     const val SETTINGS_ACCOUNT = "settings/account"
     const val SETTINGS_IDENTITY = "settings/identity"
     const val SETTINGS_CHAT = "settings/chat"
+    const val SETTINGS_ASSISTANT_AVATAR = "settings/chat/assistant-avatar"
     const val SETTINGS_APPEARANCE = "settings/appearance"
     const val SETTINGS_THEME = "settings/theme"
     const val SETTINGS_LANGUAGE = "settings/language"

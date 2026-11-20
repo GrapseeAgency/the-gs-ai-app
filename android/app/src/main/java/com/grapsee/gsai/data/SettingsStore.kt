@@ -83,6 +83,8 @@ object SettingsStore {
      *  SettingsStore.memory. The Memory Management mock's "Memory is ON" pill
      *  reads and writes this; default ON because the app already remembers. */
     var memory by mutableStateOf(true); private set
+    /** The assistant's four-way bot-avatar selection, used by every reply. */
+    var assistantAvatar by mutableStateOf(AssistantAvatarStyle.CLOVER); private set
     // Accessibility
     var fontScale by mutableStateOf(1.0f); private set
     var highContrast by mutableStateOf(false); private set
@@ -173,6 +175,7 @@ object SettingsStore {
         biometricUnlock = p.bool(K.biometricUnlock, biometricUnlock)
         lastSecurityCheckMillis = p.long(K.lastSecurityCheckMillis, lastSecurityCheckMillis)
         memory = p.bool(K.memory, memory)
+        assistantAvatar = AssistantAvatarStyle.fromId(p.string(K.assistantAvatar, assistantAvatar.id))
         fontScale = p.flt(K.fontScale, fontScale)
         highContrast = p.bool(K.highContrast, highContrast)
         reduceMotion = p.bool(K.reduceMotion, reduceMotion)
@@ -223,6 +226,7 @@ object SettingsStore {
         const val biometricUnlock = "settings.biometricUnlock"
         const val lastSecurityCheckMillis = "settings.lastSecurityCheck"
         const val memory = "settings.memory"
+        const val assistantAvatar = "settings.assistantAvatar"
         const val fontScale = "settings.fontScale"
         const val highContrast = "settings.highContrast"
         const val reduceMotion = "settings.reduceMotion"
@@ -407,6 +411,10 @@ object SettingsStore {
         lastSecurityCheckMillis = millis; put(K.lastSecurityCheckMillis, millis)
     }
     fun updateMemory(v: Boolean) { memory = v; put(K.memory, v) }
+    fun updateAssistantAvatar(v: AssistantAvatarStyle) {
+        assistantAvatar = v
+        put(K.assistantAvatar, v.id)
+    }
     // Accessibility
     /** Live stage during a slider drag: memory only, no disk write per frame.
      *  The commit lands once in [updateFontScale] on release. */

@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.BuildConfig
 import com.grapsee.gsai.data.AccountStore
+import com.grapsee.gsai.data.AssistantAvatarStyle
 import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.local.ModelCatalog
 import com.grapsee.gsai.data.local.ModelStore
@@ -370,6 +371,20 @@ fun ChatSettingsScreen(
         subtitle = "How new chats behave.",
         onBack = onBack
     ) {
+        RefSection(label = "Assistant appearance", role = GsGlassRole.CardLight) {
+            RefRow(
+                title = "Bot avatar",
+                subtitle = SettingsStore.assistantAvatar.label,
+                icon = when (SettingsStore.assistantAvatar) {
+                    AssistantAvatarStyle.CLOVER -> GsIcons.Clover
+                    AssistantAvatarStyle.FLOWER -> GsIcons.Flower
+                    AssistantAvatarStyle.TRIANGLE -> GsIcons.Triangle
+                    AssistantAvatarStyle.SQUARE -> GsIcons.Square
+                },
+                onClick = { onNavigate(GsRoutes.SETTINGS_ASSISTANT_AVATAR) },
+            )
+        }
+
         RefSection(label = "Response mode", role = GsGlassRole.CardLight) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 RefSegmented(

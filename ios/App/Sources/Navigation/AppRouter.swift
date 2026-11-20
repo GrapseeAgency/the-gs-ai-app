@@ -40,6 +40,8 @@ enum AeroRoute: Hashable {
     case tool(String)
     /// Tone, detail level and language (Android: `SETTINGS_RESPONSE_STYLE`).
     case responseStyle
+    /// User-selectable assistant avatar shared by every conversation.
+    case assistantAvatar
     /// Interests and the pinned tools (Android: `SETTINGS_PROFILE_PREFS`) —
     /// the two Profile rows that used to be static text with no editor.
     case profilePersonalization
@@ -353,6 +355,7 @@ struct AeroDestinations: ViewModifier {
             case .collection(let id): CollectionView(collectionID: id)
             case .tool(let id): ToolDetailView(toolID: id)
             case .responseStyle: ResponseStyleView()
+            case .assistantAvatar: AssistantAvatarSettingsView()
             case .profilePersonalization: ProfilePersonalizationView()
             case .library: SavedLibraryView()
             case .libraryItem(let id): LibraryItemView(itemID: id)

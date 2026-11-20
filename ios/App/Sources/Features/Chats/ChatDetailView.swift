@@ -69,6 +69,7 @@ struct ChatDetailView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dismiss) private var dismiss
     @FocusState private var composerFocused: Bool
+    @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var conversations = ConversationStore.shared
     // Voice entry (Step 4): the same shared Router every pushed surface reads
     // (ChatsListView, VoiceView, …) — the composer mic
@@ -525,6 +526,7 @@ struct ChatDetailView: View {
                 }
                 MessageBubble(
                     message: message,
+                    assistantAvatarStyle: AssistantAvatarStyle.fromStoredValue(settings.assistantAvatar),
                     conversationID: vm.conversationID,
                     sourceCount: message.isStreaming
                         ? vm.liveSources.count
@@ -1224,6 +1226,7 @@ private struct TranslationSheet: View {
 struct MessageBubble: View, Equatable {
 
     let message: ChatViewModel.ChatMessage
+    var assistantAvatarStyle: AssistantAvatarStyle = .clover
     var conversationID: String? = nil
     var sourceCount: Int = 0
     var isSpeaking: Bool = false
@@ -1273,6 +1276,7 @@ struct MessageBubble: View, Equatable {
      */
     static func == (lhs: MessageBubble, rhs: MessageBubble) -> Bool {
         lhs.message == rhs.message &&
+        lhs.assistantAvatarStyle == rhs.assistantAvatarStyle &&
         lhs.conversationID == rhs.conversationID &&
         lhs.sourceCount == rhs.sourceCount &&
         lhs.isSpeaking == rhs.isSpeaking &&
@@ -1449,7 +1453,7 @@ struct MessageBubble: View, Equatable {
     private var assistantBubble: some View {
         HStack(alignment: .top, spacing: 8) {
             BotAvatar(
-                type: .clover,
+                type: assistantAvatarStyle.botAvatarType,
                 state: message.isStreaming ? .working : .default,
                 size: 32,
                 interactive: false
