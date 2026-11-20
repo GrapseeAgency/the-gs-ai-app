@@ -88,6 +88,8 @@ targets:
         embed: false
       - package: Libraries.dev
         product: BotAvatarsKit
+      - package: Libraries.dev
+        product: DistortionWavesKit
     sources:
       - path: App/Sources
       - path: App/Assets.xcassets
