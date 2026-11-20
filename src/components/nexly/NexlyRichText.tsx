@@ -14,11 +14,14 @@ export function NexlyRichText({
   text,
   iconTile = 20,
   iconSize = 11,
+  inline = false,
   className,
 }: {
   text: string
   iconTile?: number
   iconSize?: number
+  /** Prose mode: bare glyphs inherit text color and scale with the line. */
+  inline?: boolean
   className?: string
 }) {
   const normalised = emojiToIconTokens(text)
@@ -38,9 +41,11 @@ export function NexlyRichText({
         <GlassIcon
           key={`i${key++}`}
           name={name}
+          bare={inline}
           tile={iconTile}
           size={iconSize}
           className="nx-inline-icon"
+          style={inline ? { width: '0.9em', height: '0.9em' } : undefined}
         />
       )
     } else {

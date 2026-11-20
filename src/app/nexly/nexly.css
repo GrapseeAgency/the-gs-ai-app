@@ -480,6 +480,18 @@
   vertical-align: -5px;
 }
 
+/* Bare inline prose glyphs scale with the surrounding font and share its ink;
+   the glass-tile treatment stays available to structured cards and controls. */
+.nx-inline-icon.nx-icon-bare {
+  margin: 0 0.08em;
+  vertical-align: -0.1em;
+}
+
+.nx-inline-icon.nx-icon-bare .nx-glyph {
+  width: 0.9em;
+  height: 0.9em;
+}
+
 /* ------------------------------------------------------------- thinking */
 
 .nx-thinking {

@@ -24,15 +24,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Each native revision has an independent concurrency group so a
-          # runner stranded before allocation cannot pin the next revision.
-          # Retire obsolete groups explicitly instead of spending every macOS
-          # and emulator slot on source already replaced by a newer fix.
-          # Never cancel producers, another PR, a completed evidence run, or
-          # any acceptance/review job for this exact current source revision.
+          # Retire superseded same-repository runs explicitly instead of
+          # spending every macOS and emulator slot on source already replaced
+          # by a newer fix. This includes an obsolete ios-native producer: its
+          # uploaded framework artifact remains available, while consumers
+          # independently verify exact/source-compatible inputs before using it.
+          # The producer for PR_HEAD_SHA is excluded below and must finish.
+          # Never cancel a fork/other branch, a completed evidence run, or an
+          # acceptance/review job for this exact current source revision.
           gh api --method GET "repos/$GH_REPO/actions/runs" \
             -f branch="$PR_BRANCH" -f event=pull_request -f per_page=100 \
-            --paginate --jq '.workflow_runs[] | select(.head_branch == env.PR_BRANCH and .head_sha != env.PR_HEAD_SHA and .status != "completed") | select(.name == "iOS (macOS) — Xcode build & test" or .name == "Platform runtime contracts") | [.id, .head_sha] | @tsv' > /tmp/obsolete-native-runs
+            --paginate --jq '.workflow_runs[] | select(.head_branch == env.PR_BRANCH and .head_repository.full_name == env.GH_REPO and .head_sha != env.PR_HEAD_SHA and .status != "completed") | select(.name == "ios-native" or .name == "iOS (macOS) — Xcode build & test" or .name == "Platform runtime contracts") | [.id, .head_sha] | @tsv' > /tmp/obsolete-native-runs
           while IFS=$'\t' read -r id source_sha; do
             [[ "$id" =~ ^[0-9]+$ && "$source_sha" =~ ^[0-9a-f]{40}$ ]] || continue
             # An older cleanup job can itself start late. Only a verified

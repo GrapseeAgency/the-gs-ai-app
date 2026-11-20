@@ -86,20 +86,27 @@ final class PlatformRuntimeUITests: XCTestCase {
         app.launchArguments = ["-gs_test_session_active", "-gs_test_react_preview"]
         app.launchEnvironment["GS_REACT_ACCEPTANCE_SCOPE"] = UUID().uuidString
         app.launch()
+        func webElement(_ label: String) -> XCUIElement {
+            app.webViews.descendants(matching: .any)
+                .matching(NSPredicate(format: "label == %@", label)).firstMatch
+        }
         func run() -> Bool {
             let button = app.buttons["Run in Browser"]
             let offered = button.waitForExistence(timeout: 20)
             XCTAssertTrue(offered)
             guard offered else { printPresentationDiagnostics(app, label: "REACT"); return false }
             button.tap()
-            let mounted = app.webViews.staticTexts["React preview running"].waitForExistence(timeout: 20)
+            // A React h1 is exposed as an accessibility heading (not a static
+            // text node), while the live status region can be omitted from the
+            // XCTest tree. Wait for the component's real heading through the
+            // web content's accessibility elements, rather than either a
+            // narrower element type or the source card.
+            let mounted = webElement("Response tasks").waitForExistence(timeout: 45)
             XCTAssertTrue(mounted, "An actual React component must mount, not just a source card")
             if !mounted { printPresentationDiagnostics(app, label: "REACT") }
             return mounted
         }
-        func complete(_ text: String) -> XCUIElement {
-            app.webViews.descendants(matching: .any).matching(NSPredicate(format: "label == %@", text)).firstMatch
-        }
+        func complete(_ text: String) -> XCUIElement { webElement(text) }
         guard run() else { return }
         let input = app.webViews.textFields["New task"]
         XCTAssertTrue(input.waitForExistence(timeout: 10)); input.tap()
@@ -123,7 +130,7 @@ final class PlatformRuntimeUITests: XCTestCase {
         title.tap(); title.typeText(" edited")
         let edited = title.value as? String ?? ""
         XCTAssertTrue(edited.contains("edited"), "Real keyboard input must update the React task, not just its DOM label")
-        app.webViews.staticTexts["Response tasks"].tap()
+        webElement("Response tasks").tap()
         guard run() else { return }
         XCTAssertEqual(app.webViews.textFields["Task title"].value as? String, edited)
         XCTAssertTrue(complete("1/1 complete").exists)

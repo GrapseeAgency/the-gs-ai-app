@@ -1045,15 +1045,15 @@ check('repairJson rejects garbage', repairJson('hello world') === null)
     stream.push?.('source', 'Actual source progress')
     stream.push?.('delta', fence)
     check('format safety defers only unvalidated deltas: ' + prompt, events.length === 2 && events[0][0] === 'reasoning' && events[1][0] === 'source')
-    stream.release(['Complete ', 'answer with all supplied facts.'])
-    stream.release(['duplicate'])
+    stream.release('Complete answer with all supplied facts.')
+    stream.release('duplicate')
     stream.push?.('done', 'persisted message')
     check('format-safe streaming releases the complete projection exactly once: ' + prompt, events.filter(e => e[0] === 'delta').map(e => e[1]).join('') === 'Complete answer with all supplied facts.' && events[events.length - 1]?.[0] === 'done')
   }
   const events: string[] = []
   const automatic = presentationStream('Explain this', (event, data) => { events.push(data) })
   automatic.push?.('delta', 'Live ordinary answer')
-  automatic.release(['Do not duplicate'])
+  automatic.release('Do not duplicate')
   check('normal answers retain live streaming', events.join('') === 'Live ordinary answer')
   const forbiddenRecipes = /A reply is a LAYOUT|WHICH KIND, WHEN|PRE-FLIGHT|never carry a bold label followed by a colon/i
   check('generation reference no longer imposes a layout or mechanical prose recipe', !forbiddenRecipes.test(WIDGET_PROMPT + PROSE_PROMPT))

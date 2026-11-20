@@ -873,7 +873,7 @@ private struct NexlyPlanRowPressStyle: ButtonStyle {
 // ---------------------------------------------------------------------------
 
 enum NexlyThinkingPhase {
-    case thinking, reasoning, search, answer, done
+    case thinking, reasoning, search, generating, checking, answer, done
 }
 
 /// Thinking / Reasoning / Answer-or-Search. It is a sibling of the preamble
@@ -918,6 +918,8 @@ struct NexlyThinkingCard: View {
         switch phase {
         case .reasoning: return "Reasoning"
         case .search: return "Sources received"
+        case .generating: return "Generating answer"
+        case .checking: return "Rechecking answer"
         case .answer: return "Writing answer"
         default: return "Waiting for response"
         }
@@ -927,6 +929,8 @@ struct NexlyThinkingCard: View {
         switch phase {
         case .reasoning: return reasoningHint.flatMap { $0.isEmpty ? nil : $0 } ?? "Reasoning received"
         case .search: return "\(searchSources) source\(searchSources == 1 ? "" : "s") available"
+        case .generating: return "The response-generation call has started"
+        case .checking: return "A consistency check requested a fresh draft"
         case .answer: return "Showing the response as it arrives"
         default: return "Request in progress · waiting for content"
         }

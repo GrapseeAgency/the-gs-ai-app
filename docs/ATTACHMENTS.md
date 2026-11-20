@@ -1,8 +1,8 @@
 # ATTACHMENTS.md — GS input & multimodal foundation (PHASE 5)
 
-The cross-platform reference for the real attachment/input layer. Both the
-Android (Kotlin/Compose) and iOS (SwiftUI) implementations MUST satisfy this
-spec. Like `docs/ORBS.md`, this doc is the anti-drift contract.
+The cross-platform reference for the real attachment/input layer. Android
+(Kotlin/Compose), iOS (SwiftUI), and the web preview MUST satisfy this spec.
+Like `docs/ORBS.md`, this doc is the anti-drift contract.
 
 ## 0. Honest-capability statement (read first)
 
@@ -18,14 +18,19 @@ spec. Like `docs/ORBS.md`, this doc is the anti-drift contract.
 - **Receive/preview kinds:** `image | pdf | document | audio | video`.
   MP3, WAV, M4A/MP4 audio, MP4, MOV and WebM are signature-validated by the
   server, with the unchanged **10 MB/file, six files/message** limits.
-- **Real previews:** image pixels, PDF first page, bounded text excerpt, and
-  video frame where the native codec can decode it. Missing previews have
-  explicit fallback/retry; history restores files from the app endpoint into
-  private attachment storage, covered by the existing privacy wipe.
-- **Opening:** iOS uses native Quick Look; Android audio/video use in-app
-  native players with actual measured timing and lifecycle cleanup. Android
-  documents/images can open through read-granted, attachment-scoped viewer
-  URIs. Missing codec/viewer support is reported, not simulated.
+- **Real previews:** native clients decode image pixels, PDF first pages,
+  bounded text excerpts, and video frames when the local decoder supports them.
+  Audio/video playback uses the actual attachment bytes; there are no generated
+  waveforms or playback percentages. Missing previews have an explicit
+  fallback/retry; history restores files from the app endpoint into private
+  attachment storage, covered by the existing privacy wipe.
+- **Opening/playback:** iOS uses Quick Look plus an inline native audio player;
+  Android uses in-app native audio/video players and attachment-scoped viewer
+  URIs for other files. Both players use measured duration/position and stop
+  with the app lifecycle. The web transcript uses same-origin file routes for
+  browser-native image/video/audio controls, inline PDF previews, sandboxed
+  plain-text/JSON/CSV previews, and an honest open-file card for other formats.
+  Missing codec/viewer support is reported, not simulated.
 - **Chat activity:** regular SSE responses must be read while open (Android
   `HttpStatement.execute`, iOS `URLSession.bytes`). Live status is visible
   even on flash turns without a reasoning trace. Model reasoning and real
@@ -42,7 +47,7 @@ and reserved-media statements.
 ```text
 Attachment
 - id            : String   — server id once uploaded (client uuid before that)
-- kind          : image | pdf | document            (extensible, see §0)
+- kind          : image | pdf | document | audio | video
 - source        : gallery | camera | files          (where it came from)
 - displayName   : String  — sanitized, ≤ 200 chars
 - mimeType      : String  — one of the allowlist (§3)
@@ -89,7 +94,7 @@ server is the authority — never trust client validation):
 
 ## 3. Client pre-flight validation (identical rules, both platforms)
 
-1. MIME/kind: must map to `image | pdf | document`; else → honest
+1. MIME/kind: must map to `image | pdf | document | audio | video`; else → honest
    "unsupported" failure (or the picker simply cannot select it).
 2. Size: > 10 MB → fail BEFORE any upload with reason `too_large`.
 3. Existence + readability: the staged copy must exist and be non-empty.
@@ -136,9 +141,9 @@ idle → selected → preparing → uploading → ready
 `attach → choose → preview → remove → send`:
 
 - Attachment chips live in a single horizontal row **above** the text field,
-  inside the existing composer zone. Chip: 48–56 dp/pt square thumb (real
-  thumbnail for images, monochrome kind-icon for pdf/document) + name
-  (1 line, ellipsized) + human byte size + remove (×) 44 pt min target.
+  inside the existing composer zone. Chip: real image/PDF/text/video thumbnail
+  where supported, otherwise a monochrome kind icon + name (1 line,
+  ellipsized) + human byte size + remove (×) 44 pt min target.
 - Max height of the row ≈ 2 chip heights; scroll horizontally; adding beyond 6
   is disabled, not silently dropped.
 - The attach sheet exposes ONLY real capabilities plus honest "unavailable"
@@ -150,9 +155,13 @@ idle → selected → preparing → uploading → ready
 
 ## 7. Transcript rendering (additive only — message anatomy unchanged)
 
-- User messages render their attachments as chips/thumbnails above/with the
-  text bubble. Images: real thumbnail from the staged local file (fallback:
-  remoteURL). PDF/document: monochrome kind icon + name + size.
+- User-message attachments stay inside the existing user bubble. Images show
+  real thumbnails; video shows a real frame where available and opens native
+  playback; audio has inline native play/pause and a real scrubber; PDFs and
+  text files show real page/excerpt thumbnails and open through the platform
+  viewer. Unsupported documents retain a truthful type/name/size card.
+- Web messages use the same-origin `/api/v1/files/<id>` route for image, video,
+  audio, PDF, and safe text previews. Generic formats retain an Open action.
 - Assistant messages carry no attachments today.
 - No "analyzing…" affordances anywhere.
 
@@ -200,9 +209,11 @@ URLSession multipart). No WebView anywhere. No cross-platform rendering code.
 
 ## 12. Deliberately NOT built in Phase 5
 
-Paste-image into composer, share extension, drag & drop, audio/video receive,
-screenshot ingest, server-side analysis of any kind, presigned-URL uploads,
-CDN. Each is listed with its blocker in the PHASE 5 report (deliverable O).
+This original Phase 5 list predates the later audio/video receive work. Audio
+and video are now supported for attachment preview/playback only; they are not
+transcribed or interpreted. Paste-image into composer, share extension,
+drag & drop, screenshot ingest, presigned-URL uploads and CDN remain out of
+scope and are listed with their blockers in the PHASE 5 report (deliverable O).
 
 ## 13. Document understanding (PHASE 7 — real extraction, honest bounds)
 

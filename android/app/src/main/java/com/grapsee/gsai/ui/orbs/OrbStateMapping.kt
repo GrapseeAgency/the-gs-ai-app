@@ -60,7 +60,8 @@ internal fun orbStateForChatStream(
     phase: ChatStreamController.Phase?,
     streamText: String?,
     requestHasAttachments: Boolean = false,
-    searchPhase: String? = null
+    searchPhase: String? = null,
+    generationStatus: String? = null
 ): OrbState? =
     when {
         phase != ChatStreamController.Phase.Streaming -> null
@@ -69,6 +70,9 @@ internal fun orbStateForChatStream(
         // the backend is verifiably doing right now.
         streamText.isNullOrBlank() && searchPhase == "searching" -> OrbState.SEARCHING
         streamText.isNullOrBlank() && searchPhase == "working" -> OrbState.WORKING
+        // A real provider generation or server consistency retry is working,
+        // not an inferred search or hidden-reasoning stage.
+        streamText.isNullOrBlank() && generationStatus in setOf("generating", "checking") -> OrbState.WORKING
         streamText.isNullOrBlank() && requestHasAttachments -> OrbState.WORKING
         streamText.isNullOrBlank() -> OrbState.BREATHING
         else -> OrbState.COMPOSING

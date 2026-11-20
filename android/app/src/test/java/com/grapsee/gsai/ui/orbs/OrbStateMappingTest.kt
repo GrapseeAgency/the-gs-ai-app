@@ -54,6 +54,23 @@ class OrbStateMappingTest {
         assertEquals(OrbState.COMPOSING, orbStateForChatStream(streaming, "Hello", requestHasAttachments = false))
     }
 
+    @Test
+    fun `real provider generation and answer rechecks map to WORKING`() {
+        assertEquals(
+            OrbState.WORKING,
+            orbStateForChatStream(streaming, "", requestHasAttachments = false, generationStatus = "generating")
+        )
+        assertEquals(
+            OrbState.WORKING,
+            orbStateForChatStream(streaming, "", requestHasAttachments = false, generationStatus = "checking")
+        )
+        // Once actual answer text is flowing, that more specific state wins.
+        assertEquals(
+            OrbState.COMPOSING,
+            orbStateForChatStream(streaming, "Draft", requestHasAttachments = false, generationStatus = "checking")
+        )
+    }
+
     // ---- terminal phases never map (settled turn = no orb) ----
 
     @Test

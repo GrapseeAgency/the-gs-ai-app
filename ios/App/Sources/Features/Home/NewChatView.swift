@@ -201,6 +201,10 @@ struct NewChatView: View {
             effort: settings.reasoningEffort,
             autoSelect: settings.autoSelectModel)
         UserDefaults.standard.set(mode, forKey: "gs.mode.new")
+        // Release the pre-chat field before pushing the auto-send destination.
+        // Otherwise SwiftUI can carry this view's keyboard through navigation,
+        // covering ChatDetailView's own composer after the first reply.
+        focused = false
         draft = ""
         onStartChat(text, true)
     }

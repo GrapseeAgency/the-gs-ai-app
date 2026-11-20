@@ -85,7 +85,16 @@ const MODE_META: Record<Mode, { label: string; hint: string }> = {
   auto: { label: 'Auto', hint: 'System decides' },
 }
 
-type PendingAttachment = { id: string; displayName: string; kind: string; uploading?: boolean }
+type AttachmentPreviewData = {
+  id: string
+  kind: string
+  displayName: string
+  mimeType?: string
+  byteSize?: number
+  url?: string
+}
+
+type PendingAttachment = AttachmentPreviewData & { uploading?: boolean }
 
 type ConversationInfo = {
   id: string
@@ -151,9 +160,93 @@ type ChatMessage = {
   id: string
   role: 'user' | 'assistant'
   content: string
+  attachments?: AttachmentPreviewData[]
   sources?: SourceCard[]
   traceSummary?: string
   clarifyOptions?: ClarifyChoices | null
+}
+
+function humanAttachmentSize(bytes?: number): string {
+  if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes < 0) return 'Size unavailable'
+  if (bytes < 1024) return `${bytes} B`
+  const units = ['KB', 'MB', 'GB']
+  let size = bytes / 1024
+  let unit = 0
+  while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit++ }
+  return `${size < 10 ? size.toFixed(1) : Math.round(size)} ${units[unit]}`
+}
+
+function attachmentKindLabel(kind: string): string {
+  switch (kind.toLowerCase()) {
+    case 'image': return 'Image'
+    case 'video': return 'Video'
+    case 'audio': return 'Audio'
+    case 'pdf': return 'PDF'
+    default: return 'File'
+  }
+}
+
+/** Native browser media controls inside the existing user bubble; URLs stay
+ * same-origin and are derived from the server-owned attachment id. */
+function MessageAttachmentPreviews({ attachments }: { attachments: AttachmentPreviewData[] }) {
+  return (
+    <div className="mb-2 flex max-w-full flex-col gap-2">
+      {attachments.map((attachment) => {
+        const kind = attachment.kind.toLowerCase()
+        const mime = (attachment.mimeType ?? '').toLowerCase().split(';')[0]
+        const url = `/api/v1/files/${encodeURIComponent(attachment.id)}`
+        const isImage = kind === 'image' || mime.startsWith('image/')
+        const isVideo = kind === 'video' || mime.startsWith('video/')
+        const isAudio = kind === 'audio' || mime.startsWith('audio/')
+        const isPdf = kind === 'pdf' || mime === 'application/pdf'
+        const isSafeText = ['text/plain', 'text/markdown', 'text/csv', 'application/json'].includes(mime)
+        const isDocument = !isImage && !isVideo && !isAudio
+        const canEmbedDocument = isPdf || isSafeText
+        const label = isImage ? 'Image' : isVideo ? 'Video' : isAudio ? 'Audio' : isPdf ? 'PDF' : 'Document'
+        return (
+          <div key={attachment.id} className="max-w-full overflow-hidden rounded-xl border" style={{ borderColor: C.outline, background: C.surface }}>
+            {isImage && (
+              <a href={url} target="_blank" rel="noreferrer noopener" aria-label={`Open image ${attachment.displayName}`}>
+                <img src={url} alt={attachment.displayName} loading="lazy" className="block max-h-64 w-full bg-white object-contain" />
+              </a>
+            )}
+            {isVideo && (
+              <video src={url} controls playsInline preload="metadata" aria-label={attachment.displayName}
+                className="block max-h-64 w-full bg-black object-contain" />
+            )}
+            {isAudio && (
+              <div className="px-3 pt-3">
+                <audio src={url} controls preload="metadata" aria-label={attachment.displayName} className="w-full" />
+              </div>
+            )}
+            {isDocument && canEmbedDocument && (
+              <iframe src={url} title={`Preview ${attachment.displayName}`} loading="lazy" sandbox={isPdf ? undefined : ''}
+                className="block h-56 w-full border-0 bg-white" />
+            )}
+            {isDocument && !canEmbedDocument && (
+              <div className="flex h-16 items-center gap-3 px-3" style={{ background: C.container }}>
+                <span className="flex h-9 min-w-9 items-center justify-center rounded-lg border px-1.5 text-[10px] font-bold" style={{ borderColor: C.outline, color: C.accentDeep, background: C.surface }}>
+                  {attachment.displayName.split('.').pop()?.slice(0, 4).toUpperCase() || 'FILE'}
+                </span>
+                <span className="truncate text-xs" style={{ color: C.muted }}>Document preview</span>
+              </div>
+            )}
+            <div className="flex min-w-0 items-center justify-between gap-3 px-3 py-2">
+              <div className="min-w-0">
+                <div className="truncate text-xs font-medium" style={{ color: C.text }}>{attachment.displayName}</div>
+                <div className="text-[10px]" style={{ color: C.muted }}>{label} · {humanAttachmentSize(attachment.byteSize)}</div>
+              </div>
+              {isDocument && (
+                <a href={url} target="_blank" rel="noreferrer noopener" className="shrink-0 text-[11px] font-medium underline" style={{ color: C.accentDeep }}>
+                  Open
+                </a>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 /* ---------- small helpers ---------- */
@@ -214,12 +307,16 @@ function SearchTracePanel({ steps, phase }: { steps: TraceStep[]; phase: string 
           ? 'Search failed'
           : phase === 'composing'
             ? 'Composing'
-            : null
+            : phase === 'generating'
+              ? 'Generating answer'
+              : phase === 'checking'
+                ? 'Rechecking answer'
+                : null
   return (
     <div
       className="rounded-xl border px-3.5 py-3"
       style={{ background: C.container, borderColor: C.outline }}
-      aria-label="Live research trace"
+      aria-label="Live activity"
       aria-live="polite"
     >
       <div className="mb-2 flex items-center gap-2">
@@ -489,6 +586,7 @@ export default function Home() {
         id: string
         role: string
         content: string
+        attachments?: AttachmentPreviewData[]
         sources?: SourceCard[]
         clarifyOptions?: string | null
       }[]
@@ -509,6 +607,7 @@ export default function Home() {
               id: m.id,
               role: m.role as 'user' | 'assistant',
               content: m.content,
+              ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
               ...(m.sources && m.sources.length > 0 ? { sources: m.sources } : {}),
               ...(clarifyChoices ? { clarifyOptions: clarifyChoices } : {}),
             }
@@ -615,10 +714,19 @@ export default function Home() {
   const send = useCallback(
     async (override?: string) => {
       const text = (override ?? draft).trim()
-      if (!text || isStreaming) return
+      if (isStreaming) return
       const attachmentsUploading = pendingAttachments.some((a) => a.uploading)
       if (attachmentsUploading) return
-      const attachmentIds = pendingAttachments.map((a) => a.id)
+      const sentAttachments = pendingAttachments.map((a) => ({
+        id: a.id,
+        kind: a.kind,
+        displayName: a.displayName,
+        mimeType: a.mimeType,
+        byteSize: a.byteSize,
+        url: a.url,
+      }))
+      if (!text && sentAttachments.length === 0) return
+      const attachmentIds = sentAttachments.map((a) => a.id)
       setDraft('')
       setPendingAttachments([])
       setError(null)
@@ -630,7 +738,12 @@ export default function Home() {
       setReasoningOpen(true)
       setReasoningStart(null)
       setReasoningEnd(null)
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', content: text }])
+      setMessages((prev) => [...prev, {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: text,
+        ...(sentAttachments.length > 0 ? { attachments: sentAttachments } : {}),
+      }])
       setIsStreaming(true)
 
       const controller = new AbortController()
@@ -695,6 +808,12 @@ export default function Home() {
               if (event.data === 'search_failed') {
                 pushStep('circle-x', 'The search could not be completed', 'fail')
               }
+            } else if (event.event === 'reset') {
+              // A real server-side check rejected a provisional draft. Replace
+              // it before retry deltas; never concatenate the two answers.
+              acc = ''
+              accRef.current = ''
+              setStreamText('')
             } else if (event.event === 'search') {
               const p = JSON.parse(event.data)
               if (p.type === 'started') {
@@ -1039,7 +1158,12 @@ export default function Home() {
         {
           id: tempId,
           displayName: file.name,
-          kind: file.type.startsWith('image/') ? 'image' : 'document',
+          kind: file.type.startsWith('image/') ? 'image'
+            : file.type.startsWith('video/') ? 'video'
+              : file.type.startsWith('audio/') ? 'audio'
+                : file.type === 'application/pdf' ? 'pdf' : 'document',
+          mimeType: file.type || 'application/octet-stream',
+          byteSize: file.size,
           uploading: true,
         },
       ])
@@ -1048,13 +1172,11 @@ export default function Home() {
         form.append('file', file)
         const res = await fetch('/api/v1/uploads', { method: 'POST', body: form })
         if (!res.ok) throw new Error(`upload failed (${res.status})`)
-        const saved = (await readJson<{ id: string; kind: string; displayName?: string }>(res))
+        const payload = await readJson<{ attachment?: AttachmentPreviewData }>(res)
+        const saved = payload.attachment
+        if (!saved?.id) throw new Error('Upload response did not include an attachment')
         setPendingAttachments((prev) =>
-          prev.map((a) =>
-            a.id === tempId
-              ? { ...a, id: saved.id, kind: saved.kind, displayName: saved.displayName ?? file.name, uploading: false }
-              : a
-          )
+          prev.map((a) => a.id === tempId ? { ...saved, uploading: false } : a)
         )
       } catch {
         setPendingAttachments((prev) => prev.filter((a) => a.id !== tempId))
@@ -1299,6 +1421,7 @@ export default function Home() {
                         className="max-w-[85%] rounded-2xl rounded-br-md px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap"
                         style={{ background: 'rgba(255,145,66,0.12)', color: C.text }}
                       >
+                        {m.attachments && m.attachments.length > 0 && <MessageAttachmentPreviews attachments={m.attachments} />}
                         {m.content}
                       </div>
                     </div>
@@ -1357,7 +1480,7 @@ export default function Home() {
                   )
                 )}
 
-              {isStreaming && trace.length > 0 && (
+              {isStreaming && (trace.length > 0 || phase !== null) && (
                 <SearchTracePanel steps={trace} phase={phase} />
               )}
 
@@ -1465,7 +1588,7 @@ export default function Home() {
                       className="inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]"
                       style={{ borderColor: C.outline, color: a.uploading ? C.muted : C.text, background: C.raised }}
                     >
-                      {a.kind === 'image' ? 'Image' : 'File'} <span className="truncate">{a.displayName}</span>
+                      {attachmentKindLabel(a.kind)} <span className="truncate">{a.displayName}</span>
                       {a.uploading ? (
                         <span className="animate-pulse" style={{ color: C.accent }}>···</span>
                       ) : (
@@ -1534,7 +1657,7 @@ export default function Home() {
                 />
                 <button
                   onClick={() => send()}
-                  disabled={!draft.trim() || isStreaming}
+                  disabled={(!draft.trim() && pendingAttachments.length === 0) || isStreaming || pendingAttachments.some((a) => a.uploading)}
                   className="rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all hover:shadow-[0_0_14px_rgba(255,145,66,0.35)] active:scale-95 disabled:opacity-40"
                   style={{ background: C.accent, color: '#3A1B10' }}
                 >

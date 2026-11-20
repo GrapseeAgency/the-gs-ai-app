@@ -160,6 +160,7 @@ struct NexlyComposerBar: View {
                 .focused(focused)
                 .submitLabel(.send)
                 .onSubmit(onSubmit)
+                .accessibilityIdentifier("chat-composer-input")
                 .onChange(of: text) { newValue in
                     guard SettingsStore.shared.enterToSend, newValue.hasSuffix("\n") else { return }
                     text = String(newValue.dropLast())

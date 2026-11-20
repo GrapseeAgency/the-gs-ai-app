@@ -37,6 +37,15 @@ typedef enum gs_status {
     GS_ERR_NOT_FOUND      = -9
 } gs_status_t;
 
+/* Optional live-generation sink used by mobile chat. Receives UTF-8 text
+ * chunks with an explicit byte length (never a null-terminated assumption).
+ * Return 0 to continue generation; nonzero asks the engine to stop at the next
+ * token boundary. The callback is invoked synchronously on the inference
+ * thread and must not retain `utf8_bytes` after it returns. */
+typedef int32_t (*gs_token_callback_t)(const char* utf8_bytes,
+                                       int32_t byte_count,
+                                       void* user_data);
+
 /* Last error text for the calling thread. Never freed by the caller; owned by
  * the library. Returns "" when no error is pending. */
 const char* gs_last_error(void);

@@ -55,6 +55,10 @@ struct GSApp: App {
         }
         #if DEBUG
         if args.contains("-gs_test_seed_chats") {
+            // The persisted chat database is shared by serial UI test cases.
+            // Start the menu harness from a real, deterministic store rather
+            // than inheriting the previous test's newly generated conversation.
+            ConversationStore.shared.clearHistory()
             MenuChromeSeed.install()
         }
         #endif

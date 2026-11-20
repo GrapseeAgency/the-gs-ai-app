@@ -4,6 +4,24 @@ import Foundation
 import GsFfi
 #endif
 
+private final class NativeChatTokenSink {
+    let deliver: (String) -> Bool
+    init(deliver: @escaping (String) -> Bool) { self.deliver = deliver }
+}
+
+/// C ABI callback: chunks are real decoded text from llama.cpp, bounded to
+/// complete UTF-8 code points. No timer or token fabrication.
+private let nativeChatTokenCallback: @convention(c) (
+    UnsafePointer<CChar>?, Int32, UnsafeMutableRawPointer?
+) -> Int32 = { bytes, byteCount, userData in
+    guard let bytes, byteCount > 0, let userData else { return 0 }
+    let sink = Unmanaged<NativeChatTokenSink>.fromOpaque(userData).takeUnretainedValue()
+    let utf8 = UnsafeBufferPointer(
+        start: UnsafeRawPointer(bytes).assumingMemoryBound(to: UInt8.self),
+        count: Int(byteCount))
+    return sink.deliver(String(decoding: utf8, as: UTF8.self)) ? 0 : 1
+}
+
 /// The native engine, as a Swift surface. Declarations and thin C-interop only:
 /// the engine itself is Rust and C++, reached through the `GsFfi` xcframework.
 ///
@@ -137,6 +155,26 @@ public final class GsNative {
         //   "Generic owned-string release. Every gs_free_* in other headers
         //    forwards here so callers only need one free convention."
         // So this is the intended call, not a workaround.
+        defer { gs_free_string(out) }
+        return String(cString: out)
+    }
+
+    /// Generate on the calling worker while delivering the model's actual
+    /// decoded token text to the chat accumulator. Returning false cooperatively
+    /// stops the native loop at the next token boundary.
+    public static func chatStream(
+        _ prompt: String,
+        maxTokens: Int32 = 256,
+        onToken: @escaping (String) -> Bool
+    ) throws -> String {
+        let ctx = try requireContext("chatStream")
+        let sink = NativeChatTokenSink(deliver: onToken)
+        let userData = Unmanaged.passUnretained(sink).toOpaque()
+        let out = prompt.withCString { pointer in
+            gs_mobile_chat_stream(
+                ctx, pointer, maxTokens, 0.2, nativeChatTokenCallback, userData)
+        }
+        guard let out else { throw makeError("chatStream") }
         defer { gs_free_string(out) }
         return String(cString: out)
     }

@@ -19,8 +19,14 @@ import os.log
  */
 final class StreamAccumulator: @unchecked Sendable {
 
+    struct Snapshot {
+        let text: String
+        let resetVersion: UInt64
+    }
+
     private let lock = NSLock()
     private var text = ""
+    private var resetVersion: UInt64 = 0
 
     func append(_ delta: String) {
         lock.lock()
@@ -28,10 +34,32 @@ final class StreamAccumulator: @unchecked Sendable {
         lock.unlock()
     }
 
+    func reset() {
+        lock.lock()
+        text = ""
+        resetVersion &+= 1
+        lock.unlock()
+    }
+
     func snapshot() -> String {
+        snapshotWithVersion().text
+    }
+
+    func snapshotWithVersion() -> Snapshot {
         lock.lock()
         defer { lock.unlock() }
-        return text
+        return Snapshot(text: text, resetVersion: resetVersion)
+    }
+
+    /// Serialize a UI publish against server draft resets. A stale display
+    /// snapshot cannot race past a reset and restore text the server rejected.
+    @MainActor
+    func applyIfCurrent(_ version: UInt64, _ body: () -> Void) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard resetVersion == version else { return false }
+        body()
+        return true
     }
 
     var isEmpty: Bool { snapshot().isEmpty }
@@ -52,6 +80,11 @@ enum ChatSearchPhase: Equatable {
     case working
     case composing
     case failed
+}
+
+enum ChatGenerationStatus: Equatable {
+    case generating
+    case checking
 }
 
 /**
@@ -450,6 +483,8 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var clarifyPrompt: ClarifyPrompt?
     /// The honest orb phase of the live turn (searching/working/…).
     @Published private(set) var searchPhase: ChatSearchPhase = .idle
+    /// Real synthesis lifecycle from the backend or native inference hand-off.
+    @Published private(set) var generationStatus: ChatGenerationStatus?
     /// FLASH-MODE BUG 1: the wire's resolved effective mode for THIS turn
     /// ("flash"|"thinking"; nil = no mode event — pre-v0.70 backend). The
     /// word "Thinking…" renders ONLY while this is "thinking".
@@ -553,54 +588,117 @@ final class ChatViewModel: ObservableObject {
         // Attachments are excluded: a local model cannot read the files that
         // were just uploaded, so answering from it would produce a confident
         // reply about content it never saw. That is worse than a slow one.
-        if SettingsStore.shared.preferLocal, attachments.isEmpty, GsNativeLoader.isAvailable,
-           let local = try? GsNative.chat(text), !local.isEmpty {
-            beginLocalStreaming(text: text, reply: local)
+        let preferLocal = SettingsStore.shared.preferLocal
+        #if DEBUG
+        // The external on-device-reply UI test opts into the real loaded model
+        // without writing the reader's persisted Settings preference.
+        let preferLocalForUITest = ProcessInfo.processInfo.arguments.contains("-gs_test_prefer_local")
+        #else
+        let preferLocalForUITest = false
+        #endif
+        if (preferLocal || preferLocalForUITest), attachments.isEmpty, GsNativeLoader.isAvailable {
+            beginLocalStreaming(text: text)
             return
         }
         beginStreaming(text: text, appendUserMessage: true, attachments: attachments.isEmpty ? nil : attachments, mode: chatMode)
     }
 
-    /// Commit 1(b): the local-first completion.
-    ///
-    /// This mirrors `beginStreaming`'s preamble exactly -- same trace reset, same
-    /// user row, same empty streaming assistant row -- and then skips the network
-    /// task entirely. Reusing the existing `StreamAccumulator` and
-    /// `finalizeLocal` rather than a parallel set of them is the point: a second
-    /// flush loop and a second finaliser would be two places for the
-    /// stop/cancel/regenerate logic to disagree.
-    ///
-    /// ONE delta, not a word-by-word stream. The provider path streams because
-    /// the SERVER streams; splitting a completed local answer with a timer would
-    /// imitate typing and would be a lie about where the text came from.
-    private func beginLocalStreaming(text: String, reply: String) {
+    /// Local-first turns publish the same live bubble as provider turns, but
+    /// use llama.cpp's real decoded-token callback on a detached worker. This
+    /// keeps inference off the main actor and makes the prefill/decode period
+    /// visible instead of freezing the screen before the first completed string.
+    private func beginLocalStreaming(text: String) {
         errorMessage = nil
         traceSteps = []
         liveSources = []
         clarifyPrompt = nil
         searchPhase = .idle
+        generationStatus = .generating
         effectiveMode = nil
         effectiveEffort = nil
         streamSink = SearchEventSink()
 
-        messages.append(ChatMessage(
-            role: "user",
-            content: text,
-            createdAt: ConversationStore.now(),
-            attachments: nil))
+        if conversationID == nil {
+            let title = SettingsStore.shared.autoTitle && !text.isEmpty
+                ? String(text.prefix(40)) : "New chat"
+            conversationID = store.createLocalConversation(title: title).id
+        }
+        let stamp = ConversationStore.now()
+        let user = ChatMessage(role: "user", content: text, createdAt: stamp)
+        messages.append(user)
+        if let conversationID {
+            let identity = user.id.uuidString
+            store.append(StoredMessage(
+                id: identity,
+                conversationId: conversationID,
+                role: "user",
+                content: text,
+                createdAt: stamp))
+            messages[messages.count - 1].durableID = identity
+        }
         messages.append(ChatMessage(
             role: "assistant",
             content: "",
             isStreaming: true,
-            createdAt: ConversationStore.now()))
+            createdAt: stamp))
 
         streamBuffer = StreamAccumulator()
+        let accumulator = streamBuffer
         isStreaming = true
         startFlushLoop()
-
-        streamBuffer.append(reply)
-        flushStreamingText()
-        finalizeLocal()
+        guard let responseID = messages.last?.id else { return }
+        let prompt = text
+        streamTask = Task {
+            let generation = Task.detached(priority: .userInitiated) {
+                try GsNative.chatStream(prompt) { delta in
+                    guard !Task.isCancelled else { return false }
+                    accumulator.append(delta)
+                    return true
+                }
+            }
+            do {
+                let reply = try await withTaskCancellationHandler {
+                    try await generation.value
+                } onCancel: {
+                    generation.cancel()
+                }
+                guard self.isStreaming, self.messages.last?.id == responseID else { return }
+                let visible = accumulator.snapshot()
+                if reply.isEmpty, !visible.isEmpty {
+                    // Keep the exact text already published if a native build
+                    // returns an empty terminal payload after real callbacks.
+                } else if reply.hasPrefix(visible), reply.count > visible.count {
+                    accumulator.append(String(reply.dropFirst(visible.count)))
+                } else if visible.isEmpty, !reply.isEmpty {
+                    // Defensive compatibility for an older native framework
+                    // whose stream symbol is present but callback is a no-op.
+                    accumulator.append(reply)
+                } else if reply != visible {
+                    os_log("GS-PERF local native stream differed from terminal text", log: .default, type: .error)
+                }
+                self.stopFlushLoop()
+                while self.isStreaming, self.messages.last?.id == responseID,
+                      let index = self.messages.indices.last,
+                      self.messages[index].isStreaming,
+                      self.messages[index].content != accumulator.snapshot() {
+                    try Task.checkCancellation()
+                    self.flushStreamingText()
+                    try await Task.sleep(nanoseconds: 33_000_000)
+                }
+                if self.isStreaming, self.messages.last?.id == responseID { self.finalizeLocal() }
+            } catch {
+                guard self.isStreaming, self.messages.last?.id == responseID else { return }
+                if Self.isCancellation(error) {
+                    self.finalizeLocal()
+                } else {
+                    let hasPartial = !accumulator.isEmpty
+                    self.finalizeLocal()
+                    self.errorMessage = hasPartial
+                        ? "On-device generation stopped early. Your partial answer is saved."
+                        : "The on-device model could not answer. Try again or switch back to online mode."
+                }
+            }
+        }
     }
 
     /// PHASE 8.1 clarify quick-choice: the tapped label travels as a normal
@@ -733,6 +831,7 @@ final class ChatViewModel: ObservableObject {
         liveSources = []
         clarifyPrompt = nil
         searchPhase = .idle
+        generationStatus = nil
         effectiveMode = nil
         effectiveEffort = nil
         streamSink = SearchEventSink()
@@ -793,6 +892,17 @@ final class ChatViewModel: ObservableObject {
                         // Consume the canonical result before finalizing the
                         // stream, not in a separately scheduled actor task.
                         completedMessage = message
+                    },
+                    onReset: { [weak self, buffer = self.streamBuffer] in
+                        // Invalidate any display snapshot already in flight,
+                        // then flush on the main actor. If retry bytes have
+                        // arrived by then, that one valid replacement is shown.
+                        buffer.reset()
+                        Task { @MainActor [weak self] in
+                            guard let self, self.isStreaming,
+                                  self.messages.last?.id == responseID else { return }
+                            self.flushStreamingText()
+                        }
                     },
                     onEvent: { [sink = self.streamSink] event in
                         // The server titles a chat on its first turn and says so
@@ -890,29 +1000,35 @@ final class ChatViewModel: ObservableObject {
 
     private func flushStreamingText(drainAll: Bool = false) {
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
-        let text = streamBuffer.snapshot()
-        guard messages[index].content != text else { return }
-        if !firstCharLogged, !text.isEmpty {
-            firstCharLogged = true
-            // The first answer paint freezes the measured thinking span.
-            if reasoningStart != nil, reasoningEnd == nil { reasoningEnd = Date() }
-            if let tappedAt = sendTappedAt {
-                let ms = Int(Date().timeIntervalSince(tappedAt) * 1000)
-                // OSLog has no `.app` member (raw: iOS run 38470835743, "type
-                // 'OSLog' has no member 'app'"). The GS-PERF prefix keeps the
-                // line greppable from the process' default log handle.
-                os_log("GS-PERF tapToFirstVisibleCharMs=%d chars=%d", log: .default, type: .info, ms, text.count)
+        let snapshot = streamBuffer.snapshotWithVersion()
+        let text = snapshot.text
+        var didPublish = false
+        var shouldLogFirstCharacter = false
+        let current = streamBuffer.applyIfCurrent(snapshot.resetVersion) {
+            guard messages[index].content != text else { return }
+            if !firstCharLogged, !text.isEmpty {
+                firstCharLogged = true
+                shouldLogFirstCharacter = true
+                // The first answer paint freezes the measured thinking span.
+                if reasoningStart != nil, reasoningEnd == nil { reasoningEnd = Date() }
             }
+            let visible = messages[index].content
+            let remaining = max(0, text.count - visible.count)
+            // Normal provider tokens paint immediately; bursts catch up adaptively.
+            // String prefixes are grapheme-safe (including custom-icon tokens' text).
+            if !drainAll, text.hasPrefix(visible), remaining > 32 {
+                messages[index].content = String(text.prefix(visible.count + max(32, remaining / 12)))
+            } else {
+                messages[index].content = text
+            }
+            didPublish = true
         }
-        let visible = messages[index].content
-        let remaining = max(0, text.count - visible.count)
-        // Normal provider tokens paint immediately; bursts catch up adaptively.
-        // String prefixes are grapheme-safe (including custom-icon tokens' text).
-        if !drainAll, text.hasPrefix(visible), remaining > 32 {
-            messages[index].content = String(text.prefix(visible.count + max(32, remaining / 12)))
-        } else {
-            messages[index].content = text
-        }
+        guard current, didPublish, shouldLogFirstCharacter, let tappedAt = sendTappedAt else { return }
+        let ms = Int(Date().timeIntervalSince(tappedAt) * 1000)
+        // OSLog has no `.app` member (raw: iOS run 38470835743, "type
+        // 'OSLog' has no member 'app'"). The GS-PERF prefix keeps the
+        // line greppable from the process' default log handle.
+        os_log("GS-PERF tapToFirstVisibleCharMs=%d chars=%d", log: .default, type: .info, ms, text.count)
     }
 
     // MARK: - Search event ingest (PHASE 8.1 + 8.2 v2)
@@ -976,8 +1092,9 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    /// `status` payloads: `searching` | `working` | `composing` | `search_failed`.
-    /// The trace's `composing` line also comes from here — it is a real
+    /// `status` payloads include search activity plus real synthesis states
+    /// (`generating` / `checking`). The trace's `composing` line also comes from
+    /// here — it is a real
     /// synthesis signal, not a guess. Phases only move forward; a late
     /// status event never regresses the orb backwards.
     private func applyStatus(_ payload: String) {
@@ -993,6 +1110,10 @@ final class ChatViewModel: ObservableObject {
             }
         case "search_failed":
             searchPhase = .failed
+        case "generating":
+            generationStatus = .generating
+        case "checking":
+            generationStatus = .checking
         default:
             break
         }
@@ -1257,6 +1378,7 @@ final class ChatViewModel: ObservableObject {
             isStreaming = false
             streamTask = nil
             searchPhase = .idle // done → the orb honestly goes idle
+            generationStatus = nil
         }
         stopFlushLoop()
         drainSearchEvents() // the tail events land before the trace closes
@@ -1298,6 +1420,7 @@ final class ChatViewModel: ObservableObject {
             isStreaming = false
             streamTask = nil
             searchPhase = .idle
+            generationStatus = nil
         }
         stopFlushLoop()
         drainSearchEvents() // stop/cancel keeps the trace that really happened

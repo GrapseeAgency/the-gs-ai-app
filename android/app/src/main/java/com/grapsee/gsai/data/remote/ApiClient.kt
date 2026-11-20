@@ -225,8 +225,9 @@ class ApiClient(
      * PHASE 8.1 (docs/search-event-protocol.md v1, additive): the search chain
      * events are forwarded raw and the client stays silent on unknown event
      * names — the exact tolerance the protocol promises old clients:
-     *  - [onStatus] — payload is the plain status string
-     *    (searching | working | composing | search_failed),
+     *  - [onStatus] — payload is the plain status string (searching | working |
+     *    composing | search_failed | generating | checking),
+     *  - [onReset] — the server rejected a provisional draft and is replacing it,
      *  - [onSearchEvent] / [onSourceEvent] / [onClarifyEvent] — the payload is
      *    a JSON-encoded object STRING (double-encoded, like `done`); parsing is
      *    the stream layer's job, this walker never interprets it.
@@ -267,6 +268,8 @@ class ApiClient(
         /** REASONING TRACE: raw {"delta":"..."} frames from thinking-enabled
          *  stream turns. Forwarded untouched; empty payload ignored. */
         onReasoningEvent: (String) -> Unit = {},
+        /** A provisional provider draft failed a real server check; replace its text before retry deltas. */
+        onReset: () -> Unit = {},
         /** CLOCK (GenUI): the device IANA zone (e.g. "Asia/Dhaka") used by the
          *  backend to anchor relative dates in widgets. Defaults to THIS
          *  DEVICE's zone, so every turn — including the translation scratch
@@ -371,6 +374,7 @@ class ApiClient(
                             // REASONING TRACE — unknown to pre-reasoning parsers, which
                             // skip it silently (when-without-else contract).
                             "reasoning" -> if (!event.data.isNullOrBlank()) onReasoningEvent(event.data)
+                            "reset" -> onReset()
                             "done" -> {
                                 val message = event.data?.let { data ->
                                     runCatching { GsApiJson.decodeFromString<MessageDto>(data) }.getOrNull()

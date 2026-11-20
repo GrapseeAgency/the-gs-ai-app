@@ -157,6 +157,12 @@ const char* gs_mobile_backend_name(gs_mobile_ctx_t* ctx) {
 }
 
 char* gs_mobile_chat(gs_mobile_ctx_t* ctx, const char* prompt, int32_t max_tokens, float temperature) {
+    return gs_mobile_chat_stream(ctx, prompt, max_tokens, temperature, nullptr, nullptr);
+}
+
+char* gs_mobile_chat_stream(gs_mobile_ctx_t* ctx, const char* prompt,
+                            int32_t max_tokens, float temperature,
+                            gs_token_callback_t on_token, void* user_data) {
     if (!ctx || !prompt) {
         set_err("ctx or prompt is null");
         return nullptr;
@@ -164,21 +170,13 @@ char* gs_mobile_chat(gs_mobile_ctx_t* ctx, const char* prompt, int32_t max_token
     if (max_tokens <= 0) max_tokens = 256;
 #ifdef GS_MOBILE_HAVE_LLAMA
     if (ctx->llama) {
-        // TEMPLATED, NOT RAW. The raw prompt produced a prompt FRAGMENT rather
-        // than an answer, from a passing test on the emulator:
-        //
-        //   chat("hello") -> ", i have a question about the following code:"
-        //
-        // which is a base model completing a document, because nothing told it a
-        // user was speaking. The template comes from the GGUF itself, so this is
-        // not a Qwen-specific assumption.
-        //
-        // The system prompt is terse on purpose. This is a phone assistant and
-        // the tokens spent on a persona are tokens not spent answering.
+        // TEMPLATED, NOT RAW. The model supplies its own chat template; the
+        // same path is used whether or not a live token sink is attached.
         static const char* kSystem = "You are a helpful assistant on a phone. "
                                      "Answer briefly and directly.";
-        llama_result_t r = gs_llama_chat(ctx->llama, kSystem, prompt,
-                                         max_tokens, temperature);
+        llama_result_t r = gs_llama_chat_stream(ctx->llama, kSystem, prompt,
+                                                max_tokens, temperature,
+                                                on_token, user_data);
         if (r.status != GS_OK) {
             set_err(std::string("generate failed: ") + gs_last_error());
             return nullptr;
@@ -186,6 +184,8 @@ char* gs_mobile_chat(gs_mobile_ctx_t* ctx, const char* prompt, int32_t max_token
         return r.text;  // owned by caller; gs_llama_free_result_text releases
     }
 #endif
+    (void)on_token;
+    (void)user_data;
     set_err(kNoBackend);
     return nullptr;
 }

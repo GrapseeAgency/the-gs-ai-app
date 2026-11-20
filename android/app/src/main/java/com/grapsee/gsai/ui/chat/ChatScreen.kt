@@ -495,7 +495,8 @@ fun ChatScreen(
                 // PHASE 8.1: the wire's honest search phase (searching/working)
                 // drives SEARCHING/WORKING before the first token. Null for a
                 // plain turn — the mapping is unchanged without a search.
-                streamStateRaw.value?.searchPhase
+                streamStateRaw.value?.searchPhase,
+                streamStateRaw.value?.generationStatus
             )
         }
     }
@@ -2493,7 +2494,7 @@ private fun LiveStreamText(
  * first assistant card, after the preamble, and stays visible while the plan
  * streams — not just before the first token.
  */
-enum class NexlyThinkingPhase { THINKING, REASONING, SEARCH, ANSWER, DONE }
+enum class NexlyThinkingPhase { THINKING, REASONING, SEARCH, GENERATING, CHECKING, ANSWER, DONE }
 
 /** First meaningful sentence of the live reasoning, capped for one line. */
 private fun reasoningHint(text: String?): String? {
@@ -2518,12 +2519,16 @@ internal fun ReferenceThinkingCard(
         val title = when (phase) {
             NexlyThinkingPhase.REASONING -> "Reasoning"
             NexlyThinkingPhase.SEARCH -> "Sources received"
+            NexlyThinkingPhase.GENERATING -> "Generating answer"
+            NexlyThinkingPhase.CHECKING -> "Rechecking answer"
             NexlyThinkingPhase.ANSWER -> "Writing answer"
             else -> "Waiting for response"
         }
         val detail = when (phase) {
             NexlyThinkingPhase.REASONING -> reasoningHint?.takeIf { it.isNotBlank() } ?: "Reasoning received"
             NexlyThinkingPhase.SEARCH -> "$searchSources source${if (searchSources == 1) "" else "s"} available"
+            NexlyThinkingPhase.GENERATING -> "The response-generation call has started"
+            NexlyThinkingPhase.CHECKING -> "A consistency check requested a fresh draft"
             NexlyThinkingPhase.ANSWER -> "Showing the response as it arrives"
             else -> "Request in progress · waiting for content"
         }
@@ -2943,6 +2948,9 @@ internal fun AssistantMessage(
     val liveAnswerStarted by remember(live) {
         derivedStateOf { !live?.value?.streamText.isNullOrEmpty() }
     }
+    val liveGenerationStatus by remember(live) {
+        derivedStateOf { live?.value?.generationStatus }
+    }
     val livePlanStarted by remember(live) {
         derivedStateOf { live?.value?.streamText?.contains("```plan", ignoreCase = true) == true }
     }
@@ -2992,6 +3000,8 @@ internal fun AssistantMessage(
     val thinkingPhase = when {
         !message.isStreaming -> NexlyThinkingPhase.DONE
         liveAnswerStarted -> NexlyThinkingPhase.ANSWER
+        liveGenerationStatus == "checking" -> NexlyThinkingPhase.CHECKING
+        liveGenerationStatus == "generating" -> NexlyThinkingPhase.GENERATING
         turnSources.isNotEmpty() -> NexlyThinkingPhase.SEARCH
         liveReasoningActive -> NexlyThinkingPhase.REASONING
         else -> NexlyThinkingPhase.THINKING

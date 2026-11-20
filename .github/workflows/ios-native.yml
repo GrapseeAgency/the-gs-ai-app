@@ -9,8 +9,20 @@ name: ios-native
 
 on:
   workflow_dispatch:
+  pull_request:
+    # Build the native framework from the PR source itself. The iOS app job
+    # imports its C declarations from this artifact, so a main-branch archive
+    # can be stale even when the Swift source in the PR has changed.
+    paths:
+      - 'native/**'
+      - 'ios/**'
+      - 'shared-contracts/**'
+      - '.github/workflows/ios-native.yml'
+      - '.github/workflows/ios.yml'
+      - '.github/scripts/**'
+      - '.cargo/config.toml'
   push:
-    branches: [native-runtime]
+    branches: [main, native-runtime]
     paths:
       - 'native/**'
       # ios/** WAS MISSING, and the omission is the same class of bug as a check
@@ -25,6 +37,7 @@ on:
       # accident, and only as often as someone remembers to dispatch it.
       - 'ios/**'
       - '.github/workflows/ios-native.yml'
+      - '.github/workflows/ios.yml'
       # The workflow RUNS scripts under .github/scripts/, so a change to one of
       # them has to reach this workflow or the script is unmaintainable in
       # practice: edit it, nothing reruns, and the edit is silently inert.
@@ -34,11 +47,10 @@ on:
 
 concurrency:
   group: ios-native-${{ github.ref }}
-  # Verification runs must FINISH, not cancel each other. With
-  # cancel-in-progress: true a freshly dispatched run cancelled the previous
-  # one mid llama.cpp build, so the app-compile step (the only real Swift gate)
-  # never ran and every "result" was "cancelled" — indistinguishable from a
-  # failure without reading the step. Queue instead.
+  # Never let GitHub cancel a build mid-compilation: the current-source run
+  # must reach the app/XCTest gates. The ancestry-checked
+  # cancel-obsolete-native workflow retires superseded PR runs, while leaving
+  # the exact current source revision to finish and publish its verified output.
   cancel-in-progress: false
 
 env:
@@ -1486,13 +1498,28 @@ jobs:
           # `generic/platform=iOS` is the DEVICE platform; `generic/platform=iOS
           # Simulator` is the other one, and mixing them up produces a green
           # build of the wrong thing -- which is what this step exists to avoid.
-          xcodebuild build -project GSApp.xcodeproj -scheme GSApp \
+          if xcodebuild build -project GSApp.xcodeproj -scheme GSApp \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
-            2>&1 | tee build-device.log
+            2>&1 | tee build-device.log; then
+            :
+          else
+            BUILD_RC=$?
+            # The failed device-only link was otherwise invisible in Actions:
+            # the log was written to build-device.log, but the upload step only
+            # included simulator logs. Emit the concise compiler/linker errors
+            # now, and preserve the full device log below for the next diagnosis.
+            { grep -E 'error:|Undefined symbols|duplicate symbol|ld:' build-device.log || true; } \
+              | sed -n '1,35p' \
+              | while IFS= read -r line; do
+                  echo "::error::Device build: $line"
+                done
+            echo "::error::Device xcodebuild failed (exit $BUILD_RC); full log: ios/build-device.log"
+            exit "$BUILD_RC"
+          fi
 
           echo "=== the device product ==="
           # `sed -n '1,3p'`, never `head`: see the note in the simulator step
@@ -2486,15 +2513,30 @@ jobs:
           #                           3:00 for being exactly what it is (two
           #                           generations) -- a harness failure, not a
           #                           product one.
+          #   -parallel-testing-enabled NO
+          #                           Run the same full scheme serially, like
+          #                           the passing real-Xcode gate in ios.yml.
+          #                           This job also loads a real GGUF while the
+          #                           AppTests and UI tests create WebKit
+          #                           processes. Default parallel workers
+          #                           disappeared amid WebProcess assertion
+          #                           noise and xcodebuild exited 65 at the
+          #                           20-minute test allowance; reduce runner
+          #                           contention without weakening the test.
           #   the loop below          kills xcodebuild if it stalls outside a
           #                           test (simulator boot, runner handshake).
           # The step still runs to COMPLETION (no YAML timeout-minutes), so the
           # log upload and the per-test evidence below still happen on failure.
           BUDGET_S="${GS_TEST_BUDGET_S:-2700}"
+          RESULT_BUNDLE="$RUNNER_TEMP/GSApp-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.xcresult"
+          rm -rf "$RESULT_BUNDLE"
+          printf 'GS_IOS_RESULT_BUNDLE=%s\n' "$RESULT_BUNDLE" >> "$GITHUB_ENV"
           xcodebuild test \
+            -resultBundlePath "$RESULT_BUNDLE" \
             -project GSApp.xcodeproj \
             -scheme GSApp \
             -destination "id=$UDID" \
+            -parallel-testing-enabled NO \
             -test-timeouts-enabled YES \
             -default-test-execution-time-allowance 600 \
             -maximum-test-execution-time-allowance 1200 \
@@ -2622,6 +2664,158 @@ jobs:
           printf 'iOS test arch (MEASURED by the test process): %s\n' "$RAN" >> "$GITHUB_STEP_SUMMARY"
           echo "VERIFIED: $PASSED passed, $SKIPPED skipped on the iOS simulator, arch=$RAN reported by the test process"
 
+      - name: Publish native XCTest failure details as annotations
+        if: failure()
+        env:
+          LOG_PATH: ios/test-simulator.log
+        run: |
+          python3 - <<'PYXCTEST'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path(os.environ["LOG_PATH"])
+          if not path.is_file():
+              print(f"::error::Native XCTest log is missing: {path}")
+              raise SystemExit(0)
+
+          lines = path.read_text(errors="replace").splitlines()
+          failure_marker = re.compile(
+              r"(?:Test Case\b.*\b(?:failed|timed out)\b|"
+              r"Test Suite\b.*\bfailed\b|"
+              r"XCTAssert\w*\b.*\bfailed\b|XCTFail\b|Testing failed:|"
+              r"Assertion failed|Fatal error:|"
+              r"Test runner.*(?:crashed|exited|terminated)|"
+              r"Timed out waiting for the test runner)",
+              re.IGNORECASE,
+          )
+          test_event = re.compile(
+              r"(?:Test Case\b|Test Suite\b|Testing (?:started|failed)|"
+              r"Test runner.*(?:crashed|exited|terminated)|"
+              r"error:.*(?:XCTest|test runner))",
+              re.IGNORECASE,
+          )
+          failures = [i for i, line in enumerate(lines) if failure_marker.search(line)]
+          events = [i for i, line in enumerate(lines) if test_event.search(line)]
+
+          def numbered(indexes):
+              return "\n".join(f"{i + 1}: {lines[i]}" for i in indexes)
+
+          def clipped(text, limit):
+              if len(text) <= limit:
+                  return text
+              return "[earlier lines trimmed]\n" + text[-limit:]
+
+          failure_context = set()
+          for i in failures:
+              failure_context.update(range(max(0, i - 1), min(len(lines), i + 2)))
+          failure_text = numbered(sorted(failure_context))
+          event_text = numbered(events[-45:])
+          tail_text = numbered(range(max(0, len(lines) - 60), len(lines)))
+
+          # One annotation per failed test preserves the actual XCTest output.
+          # A single multiline annotation is capped by GitHub at 4 KB, which
+          # previously cut off the third UI-test failure before its diagnosis.
+          case_start = re.compile(r"Test Case '([^']+)' started", re.IGNORECASE)
+          case_failure = re.compile(r"Test Case '([^']+)' (?:failed|timed out)\b", re.IGNORECASE)
+          diagnostic_line = re.compile(
+              r"error:|XCTAssert|XCTFail|assertion|timed out|timeout|crash|exception|failed|MENU-|Tear Down|test runner",
+              re.IGNORECASE,
+          )
+          active_cases = {}
+          case_diagnostics = []
+          for i, line in enumerate(lines):
+              started = case_start.search(line)
+              if started:
+                  active_cases[started.group(1)] = i
+              failed_case = case_failure.search(line)
+              if not failed_case:
+                  continue
+              name = failed_case.group(1)
+              begin = active_cases.pop(name, max(0, i - 45))
+              selected = {j for j in range(begin, i + 1) if diagnostic_line.search(lines[j])}
+              selected.update(range(max(begin, i - 24), i + 1))
+              detail = numbered(sorted(selected))
+              case_diagnostics.append((name, clipped(detail, 2600)))
+
+          sections = []
+          if failure_text:
+              sections.append("=== explicit XCTest failure context ===\n" + clipped(failure_text, 5000))
+          else:
+              sections.append("No explicit XCTest failure marker was present; inspect the last test events and raw log tail.")
+          if event_text:
+              sections.append("=== last XCTest events ===\n" + clipped(event_text, 4500))
+          sections.append("=== last 60 raw log lines ===\n" + clipped(tail_text, 4000))
+          payload = "\n\n".join(sections)
+          if len(payload) > 14000:
+              payload = payload[:14000]
+          print("=== native XCTest failure details ===")
+          print(payload)
+          command_data = payload.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error::Native XCTest failure details: {command_data}")
+          for name, detail in case_diagnostics:
+              case_payload = f"Failed XCTest case: {name}\n{detail}"
+              encoded = case_payload.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::error::Native XCTest case details: {encoded}")
+          PYXCTEST
+
+      - name: Export native XCTest result-bundle failures
+        if: always()
+        env:
+          RESULT_BUNDLE: ${{ runner.temp }}/GSApp-${{ github.run_id }}-${{ github.run_attempt }}.xcresult
+        run: |
+          set -uo pipefail
+          if [ ! -d "$RESULT_BUNDLE" ]; then
+            echo "::notice::No XCTest result bundle was produced"
+            exit 0
+          fi
+          SUMMARY_PATH="$RUNNER_TEMP/gs-xctest-summary.json"
+          if ! xcrun xcresulttool get test-results summary --path "$RESULT_BUNDLE" --format json > "$SUMMARY_PATH"; then
+            echo "::warning::xcresulttool could not summarize the native XCTest result bundle"
+            exit 0
+          fi
+          python3 - "$SUMMARY_PATH" <<'PYXCSUMMARY'
+          import json
+          import sys
+          from pathlib import Path
+
+          summary = json.loads(Path(sys.argv[1]).read_text())
+          failure_keys = {"failuretext", "failuremessage", "failuredescription", "issuedescription"}
+          name_keys = ("testCaseName", "testName", "name", "nodeIdentifier", "testIdentifier")
+          message_keys = ("failureText", "failureMessage", "failureDescription", "issueDescription")
+
+          def failures(node):
+              if isinstance(node, dict):
+                  if any(key.lower() in failure_keys and isinstance(value, str) and value.strip()
+                         for key, value in node.items()):
+                      yield node
+                  else:
+                      for value in node.values():
+                          yield from failures(value)
+              elif isinstance(node, list):
+                  for value in node:
+                      yield from failures(value)
+
+          records = list(failures(summary))
+          def command_data(value):
+              return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          if records:
+              for index, record in enumerate(records, 1):
+                  name = next((str(record[key]) for key in name_keys if record.get(key)), f"failure {index}")
+                  message = next((str(record[key]) for key in message_keys
+                                  if isinstance(record.get(key), str) and record[key].strip()), "")
+                  location = record.get("documentLocationInCreatingWorkspace")
+                  detail = f"{name}: {message}" if message else json.dumps(record, ensure_ascii=False, sort_keys=True)
+                  if location:
+                      detail += f"; location={location}"
+                  detail = detail[:2800]
+                  print(f"::error::Native XCTest result-bundle failure: {command_data(detail)}")
+          else:
+              serialized = json.dumps(summary, ensure_ascii=False, separators=(",", ":"))
+              print(f"::notice::Native XCTest result-bundle summary: {command_data(serialized[:2800])}")
+          PYXCSUMMARY
+
       - name: Inventory the unsigned device App.app
         run: |
           set -uo pipefail
@@ -2724,8 +2918,10 @@ jobs:
         with:
           name: ios-simulator-logs
           path: |
+            ios/build-device.log
             ios/build-simulator.log
             ios/test-simulator.log
+            ${{ runner.temp }}/GSApp-${{ github.run_id }}-${{ github.run_attempt }}.xcresult
           if-no-files-found: warn
           retention-days: 14
 

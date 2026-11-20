@@ -53,6 +53,42 @@ namespace {
 // Copy a borrowed C string into std::string, tolerating NULL.
 inline std::string borrow(const char* s) { return s ? std::string(s) : std::string(); }
 
+// Return the longest prefix ending at a UTF-8 code-point boundary. llama.cpp
+// may return one multi-byte character over several token pieces; publishing an
+// incomplete prefix would replace it with U+FFFD in both native clients.
+std::size_t utf8_complete_prefix(const std::string& bytes, std::size_t limit) {
+    const std::size_t end = limit < bytes.size() ? limit : bytes.size();
+    std::size_t i = 0;
+    while (i < end) {
+        const unsigned char lead = static_cast<unsigned char>(bytes[i]);
+        std::size_t width = 1;
+        if (lead <= 0x7f) width = 1;
+        else if (lead >= 0xc2 && lead <= 0xdf) width = 2;
+        else if (lead >= 0xe0 && lead <= 0xef) width = 3;
+        else if (lead >= 0xf0 && lead <= 0xf4) width = 4;
+        else { ++i; continue; } // Preserve invalid bytes for the host's lossy decoder.
+
+        if (i + width > end) break;
+        bool valid = true;
+        for (std::size_t j = 1; j < width; ++j) {
+            if ((static_cast<unsigned char>(bytes[i + j]) & 0xc0) != 0x80) {
+                valid = false;
+                break;
+            }
+        }
+        if (valid && width > 1) {
+            const unsigned char second = static_cast<unsigned char>(bytes[i + 1]);
+            valid = !((lead == 0xe0 && second < 0xa0) ||
+                      (lead == 0xed && second >= 0xa0) ||
+                      (lead == 0xf0 && second < 0x90) ||
+                      (lead == 0xf4 && second >= 0x90));
+        }
+        if (!valid) { ++i; continue; }
+        i += width;
+    }
+    return i;
+}
+
 } // namespace
 
 extern "C" {
@@ -253,7 +289,9 @@ llama_result_t gs_llama_generate_opts(gs_llama_context_t* ctx,
                               int32_t max_tokens,
                               float temperature,
                               int32_t clear_cache,
-                              int32_t start_pos) {
+                              int32_t start_pos,
+                              gs_token_callback_t on_token,
+                              void* user_data) {
     llama_result_t r{};
     r.text     = nullptr;
     r.n_tokens = 0;
@@ -415,6 +453,12 @@ llama_result_t gs_llama_generate_opts(gs_llama_context_t* ctx,
         } sampler_guard{ctx->sampler};
 
         std::string out;
+        std::string streamTail;
+        std::size_t streamedBytes = 0;
+        bool stoppedByCallback = false;
+        // Hold enough trailing bytes that a control marker split across token
+        // pieces can be removed before it ever reaches the reader.
+        constexpr std::size_t kControlMarkerTail = 16;
         std::vector<llama_token> emitted;
         emitted.reserve((size_t)max_tokens);
         int n_cur = base_pos + (int)toks.size();
@@ -438,7 +482,26 @@ llama_result_t gs_llama_generate_opts(gs_llama_context_t* ctx,
             // this only changes what a token RENDERS as.
             const int n = llama_token_to_piece(ctx->vocab, next, piece,
                                                sizeof(piece), 0, false);
-            if (n > 0) out.append(piece, (size_t)n);
+            if (n > 0) {
+                out.append(piece, (size_t)n);
+                if (on_token) {
+                    streamTail.append(piece, (size_t)n);
+                    const std::size_t complete = utf8_complete_prefix(streamTail, streamTail.size());
+                    const std::size_t safeLimit = complete > kControlMarkerTail
+                        ? complete - kControlMarkerTail : 0;
+                    const std::size_t emitBytes = utf8_complete_prefix(streamTail, safeLimit);
+                    if (emitBytes > 0) {
+                        const int32_t stop = on_token(
+                            streamTail.data(), static_cast<int32_t>(emitBytes), user_data);
+                        streamTail.erase(0, emitBytes);
+                        streamedBytes += emitBytes;
+                        if (stop != 0) {
+                            stoppedByCallback = true;
+                            break;
+                        }
+                    }
+                }
+            }
 
             // Feed the sampled token back in at the next position. The batch
             // is reused in place: allocating a new one per token is the
@@ -454,6 +517,10 @@ llama_result_t gs_llama_generate_opts(gs_llama_context_t* ctx,
         }
         llama_batch_free(batch);
 
+        // If the reader explicitly stopped the stream, return exactly the text
+        // already delivered; never persist or reveal the unobserved tail.
+        if (stoppedByCallback && streamedBytes < out.size()) out.resize(streamedBytes);
+
         // A tokenizer may render a control token as literal text rather than as
         // an EOG, which is what produced the trailing <|im_end|> above. Remove
         // any that survive, so a caller never sees template syntax.
@@ -465,6 +532,18 @@ llama_result_t gs_llama_generate_opts(gs_llama_context_t* ctx,
                 std::string::size_type at;
                 while ((at = out.find(j)) != std::string::npos) {
                     out.erase(at, std::strlen(j));
+                }
+            }
+        }
+
+        // Flush the final UTF-8-safe suffix only after template/control-token
+        // cleanup. This keeps live text byte-for-byte consistent with `done`.
+        if (on_token && !stoppedByCallback && streamedBytes < out.size()) {
+            const std::size_t complete = utf8_complete_prefix(out, out.size());
+            if (complete > streamedBytes) {
+                const std::size_t remaining = complete - streamedBytes;
+                if (remaining <= static_cast<std::size_t>(INT32_MAX)) {
+                    on_token(out.data() + streamedBytes, static_cast<int32_t>(remaining), user_data);
                 }
             }
         }
@@ -496,16 +575,17 @@ llama_result_t gs_llama_generate_opts(gs_llama_context_t* ctx,
         return r;
     }
 #else
-    (void)max_tokens; (void)temperature;
+    (void)max_tokens; (void)temperature; (void)on_token; (void)user_data;
     r.status = GS_ERR_UNAVAILABLE;
     set_err("libllama not linked");
     return r;
 #endif
 }
 
-llama_result_t gs_llama_chat(gs_llama_context_t* ctx, const char* system,
-                             const char* user, int32_t max_tokens,
-                             float temperature) {
+llama_result_t gs_llama_chat_stream(gs_llama_context_t* ctx, const char* system,
+                                    const char* user, int32_t max_tokens,
+                                    float temperature, gs_token_callback_t on_token,
+                                    void* user_data) {
     llama_result_t r;
     std::memset(&r, 0, sizeof(r));
     r.status = GS_ERR_GENERATION;
@@ -545,7 +625,9 @@ llama_result_t gs_llama_chat(gs_llama_context_t* ctx, const char* system,
 
     // Generation already stops on EOG (llama_vocab_is_eog breaks the decode
     // loop), so <|im_end|> ends the assistant turn with no string matching.
-    return gs_llama_generate(ctx, buf.c_str(), max_tokens, temperature);
+    return gs_llama_generate_opts(ctx, buf.c_str(), max_tokens, temperature,
+                                  /*clear_cache=*/1, /*start_pos=*/0,
+                                  on_token, user_data);
 #else
     // The wrapper is compiled on hosts with no llama.cpp at all, so every
     // llama.h symbol above must sit behind this guard. Raw, run 36553404233:
@@ -556,16 +638,25 @@ llama_result_t gs_llama_chat(gs_llama_context_t* ctx, const char* system,
     // The second error is the first one seen twice: with the type unresolved the
     // declaration does not parse as a declaration.
     (void)ctx; (void)system; (void)user; (void)max_tokens; (void)temperature;
+    (void)on_token; (void)user_data;
     set_err("libllama not linked: rebuild with GS_LLAMA_HAVE_LLAMA");
     return r;
 #endif
+}
+
+llama_result_t gs_llama_chat(gs_llama_context_t* ctx, const char* system,
+                             const char* user, int32_t max_tokens,
+                             float temperature) {
+    return gs_llama_chat_stream(ctx, system, user, max_tokens, temperature, nullptr, nullptr);
 }
 
 llama_result_t gs_llama_generate(gs_llama_context_t* ctx,
                                   const char* prompt,
                                   int32_t max_tokens,
                                   float temperature) {
-    return gs_llama_generate_opts(ctx, prompt, max_tokens, temperature, /*clear_cache=*/1, /*start_pos=*/0);
+    return gs_llama_generate_opts(ctx, prompt, max_tokens, temperature,
+                                  /*clear_cache=*/1, /*start_pos=*/0,
+                                  nullptr, nullptr);
 }
 
 void gs_llama_free_result_text(llama_result_t* result) {

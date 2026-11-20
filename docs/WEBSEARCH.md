@@ -112,8 +112,10 @@ inside the evidence block; the answer proceeds on remaining evidence.
 
 ## SSE protocol additions
 
-`status` events (`searching` → `composing` | `search_failed`) are emitted
-around REAL search activity only. Audited client tolerance: Android
+`status` events distinguish real search phases (`searching` / `working` /
+`composing` / `search_failed`) from actual synthesis (`generating`) and a real
+consistency retry (`checking`). A `reset` event replaces a rejected provisional
+draft before the retry stream; no fabricated answer chunks are emitted. Audited client tolerance: Android
 (`ApiClient.kt` `when` has no else → unknown events ignored) and iOS
 (`APIClient.swift` explicit `continue` for unknown events). Old clients show
 the WORKING orb during search turns (real pre-first-token work) — SEARCHING
