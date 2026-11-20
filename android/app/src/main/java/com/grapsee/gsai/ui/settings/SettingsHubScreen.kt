@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.data.AccountStore
 import com.grapsee.gsai.ui.components.GsGlassRole
+import com.grapsee.gsai.ui.components.GsMetallicBadge
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.LOTUS_BLEED_ALPHA
 import com.grapsee.gsai.ui.components.RefAvatar
@@ -195,13 +196,19 @@ fun SettingsHubScreen(
                 RefWellTile(icon = GsIcons.Sparkles, tone = GsWellTone.Peach, size = 34.dp)
                 Spacer(Modifier.width(11.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        "Upgrade to Nexly Pro",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = GsFonts.Product,
-                        color = colors.textPrimary,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Upgrade to Nexly Pro",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = GsFonts.Product,
+                            color = colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.width(5.dp))
+                        GsMetallicBadge("PRO")
+                    }
                     Spacer(Modifier.height(2.dp))
                     Text(
                         "Get more power, faster responses, and exclusive features.",

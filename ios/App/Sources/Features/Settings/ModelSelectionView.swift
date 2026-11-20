@@ -273,7 +273,7 @@ struct ModelSelectionView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 8)
-                    GsGlassSwitch(isOn: Binding(
+                    GsMetallicAutoControl(isOn: Binding(
                         get: { settings.autoSelectModel },
                         set: { settings.autoSelectModel = $0 }))
                 }

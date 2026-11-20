@@ -1,6 +1,7 @@
 'use client'
 
 import { GlassIcon } from '@/components/nexly/GlassIcon'
+import { MetalFx } from 'metal-fx'
 
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { MessageContent, type Citation } from '@/components/genui'
@@ -1655,14 +1656,18 @@ export default function Home() {
                   style={{ color: C.text }}
                   aria-label="Message GS AI"
                 />
-                <button
-                  onClick={() => send()}
-                  disabled={(!draft.trim() && pendingAttachments.length === 0) || isStreaming || pendingAttachments.some((a) => a.uploading)}
-                  className="rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all hover:shadow-[0_0_14px_rgba(255,145,66,0.35)] active:scale-95 disabled:opacity-40"
-                  style={{ background: C.accent, color: '#3A1B10' }}
-                >
-                  Send
-                </button>
+                <MetalFx variant="circle" preset="silver" theme="light" strength={0.88} innerShadow className="shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => send()}
+                    disabled={(!draft.trim() && pendingAttachments.length === 0) || isStreaming || pendingAttachments.some((a) => a.uploading)}
+                    aria-label="Send"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/70 shadow-sm transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                    style={{ background: C.accent, color: '#3A1B10' }}
+                  >
+                    <GlassIcon name="arrow-up" size={18} bare />
+                  </button>
+                </MetalFx>
               </div>
 
               {/* The sheet — anchored popover (web/desktop; mobile renders it

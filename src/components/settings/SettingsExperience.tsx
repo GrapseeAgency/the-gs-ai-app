@@ -12,6 +12,7 @@ import {
   UserRound, Wifi, X, Zap, type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { MetalBadge, MetalFx } from 'metal-fx'
 
 export type SettingsScreen = 'privacy' | 'history' | 'model'
 type Tone = 'peach' | 'violet' | 'mint' | 'blue' | 'pink' | 'purple' | 'red'
@@ -40,6 +41,14 @@ function GlassIcon({ icon: Icon, tone = 'peach', size = 22 }: { icon: LucideIcon
 
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (next: boolean) => void; label: string }) {
   return <button type="button" role="switch" aria-checked={checked} aria-label={label} className={`gs-toggle ${checked ? 'is-on' : ''}`} onClick={() => onChange(!checked)}><span /></button>
+}
+
+function MetalAutoToggle({ checked, onChange, label }: { checked: boolean; onChange: (next: boolean) => void; label: string }) {
+  return <MetalFx variant="button" preset="silver" theme="light" strength={0.86} innerShadow className="gs-metal-auto-frame">
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} className={`gs-metal-auto ${checked ? 'is-on' : ''}`} onClick={() => onChange(!checked)}>
+      <span>Auto</span><span className="gs-metal-auto-indicator" aria-hidden="true">{checked ? <Check size={10} strokeWidth={3} /> : null}</span>
+    </button>
+  </MetalFx>
 }
 
 function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
@@ -171,9 +180,25 @@ function ModelScreen({ notify }: { notify: (message: string) => void }) {
     try { localStorage.setItem('nexly-model-preferences', JSON.stringify({ model, effort, auto, remember })) } catch { /* Browser-only preference. */ }
   }, [model, effort, auto, remember, hydrated])
   return <ScreenShell screen="model" title="Model Selection & Reasoning Effort" subtitle="Choose the best model and how deeply Nexly thinks">
-    <section className="gs-section gs-model-section"><SectionHeading title="AI Model" hint="Different models for different needs" /><div className="gs-glass-card gs-model-list" role="radiogroup" aria-label="AI model">{MODELS.map((item) => <button key={item.id} type="button" role="radio" aria-checked={model === item.id} className={`gs-model-row ${model === item.id ? 'is-selected' : ''}`} onClick={() => setModel(item.id)}><GlassIcon icon={item.icon} tone={item.tone} size={25} /><span><strong>{item.title}{item.recommended && <em>Recommended</em>}</strong><small>{item.description}</small><small>{item.detail}</small></span><span className="gs-radio">{model === item.id && <Check size={17} />}</span></button>)}</div></section>
+    <section className="gs-section gs-model-section">
+      <SectionHeading title="AI Model" hint="Different models for different needs" />
+      <div className="gs-glass-card gs-model-list" role="radiogroup" aria-label="AI model">
+        {MODELS.map((item) => <button key={item.id} type="button" role="radio" aria-checked={model === item.id} className={`gs-model-row ${model === item.id ? 'is-selected' : ''}`} onClick={() => setModel(item.id)}>
+          <GlassIcon icon={item.icon} tone={item.tone} size={25} />
+          <div className="gs-model-copy">
+            <div className="gs-model-heading">
+              <strong>{item.title}</strong>
+              {item.recommended && <div className="gs-model-badges"><MetalBadge theme="light" scale={0.68} strength={0.78} metalOpacity={0.72} glow={0.12}>PRO</MetalBadge><em>Recommended</em></div>}
+            </div>
+            <small>{item.description}</small>
+            <small>{item.detail}</small>
+          </div>
+          <span className="gs-radio">{model === item.id && <Check size={17} />}</span>
+        </button>)}
+      </div>
+    </section>
     <section className="gs-section"><SectionHeading title="Reasoning Effort" hint="Control how much Nexly thinks" /><div className="gs-effort-grid" role="radiogroup" aria-label="Reasoning effort">{EFFORTS.map((item) => <button key={item.id} type="button" role="radio" aria-checked={effort === item.id} className={effort === item.id ? 'is-selected' : ''} onClick={() => setEffort(item.id)}><GlassIcon icon={item.icon} tone={item.tone} size={21} /><strong>{item.title}</strong><span>{item.description}</span><small>{item.time}</small><i className="gs-radio">{effort === item.id && <span />}</i></button>)}</div><div className="gs-effort-note"><Sparkles size={22} /><p>Higher reasoning effort helps Nexly provide more thoughtful, detailed and accurate responses — especially for complex questions.</p></div></section>
-    <section className="gs-section"><SectionHeading title="Model Preferences" hint="Customize your experience" /><div className="gs-glass-card gs-preferences-card"><div className="gs-preference-row"><GlassIcon icon={Settings2} tone="peach" /><span><strong>Auto-select model</strong><small>Let Nexly choose the best model for each task.</small></span><Toggle checked={auto} onChange={setAuto} label="Auto-select model" /></div><div className="gs-preference-row"><GlassIcon icon={SlidersHorizontal} tone="pink" /><span><strong>Remember my choices</strong><small>Keep using your preferred model and reasoning effort.</small></span><Toggle checked={remember} onChange={(next) => { setRemember(next); if (!next) localStorage.removeItem('nexly-model-preferences') }} label="Remember my choices" /></div><button type="button" className="gs-reset-row" onClick={() => { setModel('pro'); setEffort('standard'); setAuto(false); setRemember(true); notify('Recommended model settings restored.') }}><GlassIcon icon={RotateCcw} tone="peach" /><span><strong>Reset to default</strong><small>Go back to Nexly’s recommended settings.</small></span><ChevronRight size={18} /></button></div></section>
+    <section className="gs-section"><SectionHeading title="Model Preferences" hint="Customize your experience" /><div className="gs-glass-card gs-preferences-card"><div className="gs-preference-row"><GlassIcon icon={Settings2} tone="peach" /><span><strong>Auto-select model</strong><small>Let Nexly choose the best model for each task.</small></span><MetalAutoToggle checked={auto} onChange={setAuto} label="Auto-select model" /></div><div className="gs-preference-row"><GlassIcon icon={SlidersHorizontal} tone="pink" /><span><strong>Remember my choices</strong><small>Keep using your preferred model and reasoning effort.</small></span><Toggle checked={remember} onChange={(next) => { setRemember(next); if (!next) localStorage.removeItem('nexly-model-preferences') }} label="Remember my choices" /></div><button type="button" className="gs-reset-row" onClick={() => { setModel('pro'); setEffort('standard'); setAuto(false); setRemember(true); notify('Recommended model settings restored.') }}><GlassIcon icon={RotateCcw} tone="peach" /><span><strong>Reset to default</strong><small>Go back to Nexly’s recommended settings.</small></span><ChevronRight size={18} /></button></div></section>
     <footer className="gs-model-footer"><Sparkles size={25} /><div><strong>Smarter choices. Better conversations.</strong><p>The right model + the right thinking = the best Nexly experience.</p></div><span className="gs-flower gs-flower-model" style={{ backgroundImage: MODEL_FLOWER }} aria-hidden="true" /></footer>
   </ScreenShell>
 }

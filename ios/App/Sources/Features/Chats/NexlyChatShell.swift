@@ -188,8 +188,10 @@ struct NexlyComposerBar: View {
                         Circle()
                             .fill(
                                 LinearGradient(
-                                    colors: [Color(red: 0.655, green: 0.545, blue: 1.0),
-                                             Color(red: 0.486, green: 0.361, blue: 1.0)],
+                                    colors: [Color.white,
+                                             Color(red: 0.73, green: 0.78, blue: 0.83),
+                                             Color(red: 0.99, green: 1.00, blue: 1.00),
+                                             Color(red: 0.62, green: 0.68, blue: 0.74)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
@@ -197,7 +199,14 @@ struct NexlyComposerBar: View {
                             .opacity(morph)
                             .overlay(
                                 Circle()
-                                    .strokeBorder(Color.white.opacity(0.55), lineWidth: 1)
+                                    .strokeBorder(
+                                        LinearGradient(
+                                            colors: [.white.opacity(0.98), Color.gray.opacity(0.52), .white.opacity(0.88)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 1
+                                    )
                                     .opacity(morph)
                             )
                         Circle()
@@ -208,7 +217,7 @@ struct NexlyComposerBar: View {
                             .opacity(1 - morph)
                             .scaleEffect(1 - 0.40 * morph)
                             .rotationEffect(.degrees(-90 * Double(morph)))
-                        NexlyGlyph(name: "arrow-up", size: 17, color: .white)
+                        NexlyGlyph(name: "arrow-up", size: 17, color: Color(red: 0.22, green: 0.27, blue: 0.33))
                             .opacity(morph)
                             .scaleEffect(0.55 + 0.45 * morph)
                             .rotationEffect(.degrees(90 * Double(1 - morph)))

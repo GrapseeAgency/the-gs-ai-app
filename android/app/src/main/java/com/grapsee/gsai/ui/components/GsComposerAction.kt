@@ -123,12 +123,14 @@ fun GsComposerAction(
                 .background(
                     Brush.linearGradient(
                         listOf(
-                            Color(0xFFA78BFF),
-                            Color(0xFF7C5CFF),
+                            Color(0xFFFFFFFF),
+                            Color(0xFFBAC3CD),
+                            Color(0xFFFCFDFE),
+                            Color(0xFF99A5B1),
                         )
                     )
                 )
-                .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
+                .border(1.dp, Brush.linearGradient(listOf(Color.White, Color(0xFF8994A0), Color.White)), CircleShape)
         )
         // --- the voice disc: floating-control glass --------------------------
         if (onVoice != null) {
@@ -159,8 +161,8 @@ fun GsComposerAction(
         NexlyGlyph(
             name = "arrow-up",
             size = 17.dp,
-            color = if (hasContent || onVoice == null) Color.White
-            else Color.White.copy(alpha = 0.88f),
+            color = if (hasContent || onVoice == null) Color(0xFF35414D)
+            else Color(0xFF35414D).copy(alpha = 0.88f),
             modifier = Modifier.graphicsLayer {
                 alpha = morph
                 val s = 0.55f + 0.45f * morph
