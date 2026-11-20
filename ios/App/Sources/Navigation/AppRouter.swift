@@ -62,6 +62,8 @@ enum AeroRoute: Hashable {
     case subscriptionUsage
     case helpSupport
     case connectedApps
+    /// Local stereo voice-position sensing; Talk/dictation remains a separate route.
+    case voicePosition
     case voice
     case chatArchive
     case chatSearch
@@ -173,9 +175,9 @@ struct RootView: View {
                     onOpenAgent: { router.path.append(.explore) },
                     onOpenConversation: { id in router.path.append(.chat(id)) },
                     onStartPrompt: { prompt in router.path.append(.chatPrefill(prompt)) },
-                    // Both routes already existed; the Home controls that name
-                    // them just were not wired to them.
-                    onOpenVoice: { router.path.append(.voice) },
+                    // The primary Voice entry opens local position sensing;
+                    // dictation remains reachable from the Talk surface.
+                    onOpenVoice: { router.path.append(.voicePosition) },
                     onOpenSettings: { router.path.append(.settings) }
                 )
                 .aeroDestinations()
@@ -361,6 +363,7 @@ struct AeroDestinations: ViewModifier {
             case .subscriptionUsage: SubscriptionUsageView()
             case .helpSupport: HelpSupportView()
             case .connectedApps: ConnectedAppsView()
+            case .voicePosition: VoicePositionView()
             case .voice: VoiceView()
             case .chatArchive: ArchivedChatsView()
             case .chatSearch: ChatSearchView()

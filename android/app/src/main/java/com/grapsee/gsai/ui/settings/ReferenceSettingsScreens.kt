@@ -1317,7 +1317,14 @@ fun VoiceSettingsScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
 
         RefSection(label = "Voice", role = GsGlassRole.CardLight) {
             RefRow(
-                title = "Open voice mode",
+                title = "Voice Position",
+                subtitle = "Calibrate left, ahead and right for this phone",
+                icon = GsIcons.Activity,
+                onClick = { onNavigate(GsRoutes.VOICE_POSITION) }
+            )
+            RefDivider()
+            RefRow(
+                title = "Open Talk mode",
                 subtitle = "Speak a question instead of typing it",
                 icon = GsIcons.Mic,
                 onClick = { onNavigate(GsRoutes.VOICE) }

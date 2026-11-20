@@ -48,14 +48,14 @@ data class DrawerFixture(
  *  - Image Studio   no studio screen exists yet, so the row lands in the
  *                   composer with a seeded prompt — the same `chatPrefill`
  *                   contract Home's Create tile already uses.
- *  - Voice          the existing voice screen.
+ *  - Voice          the local Voice Position screen; Talk/dictation remains available from it.
  *  - Saved creations the existing archive, which is where saved/archived
  *                   conversations live ("Saved responses" in the old drawer).
  */
 val DESTINATIONS: List<DrawerDestination> = listOf(
     DrawerDestination("Explore", GsIcons.Compass, GsRoutes.EXPLORE),
     DrawerDestination("Image Studio", GsIcons.Image, GsRoutes.chat(null, IMAGE_STUDIO_PROMPT)),
-    DrawerDestination("Voice", GsIcons.Activity, GsRoutes.VOICE),
+    DrawerDestination("Voice", GsIcons.Activity, GsRoutes.VOICE_POSITION),
     DrawerDestination("Saved creations", GsIcons.Bookmark, GsRoutes.CHAT_ARCHIVE),
 )
 

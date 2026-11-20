@@ -90,6 +90,10 @@ targets:
         product: BotAvatarsKit
       - package: Libraries.dev
         product: DistortionWavesKit
+      - package: Libraries.dev
+        product: VoiceRingKit
+      - package: Libraries.dev
+        product: VoicePositionKit
     sources:
       - path: App/Sources
       - path: App/Assets.xcassets
@@ -203,8 +207,8 @@ targets:
           - InterTight-Bold.ttf
           - TablerIcons.ttf
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-        NSSpeechRecognitionUsageDescription: GS turns your voice into text for your prompts when you use voice mode.
-        NSMicrophoneUsageDescription: GS uses the microphone when you talk in voice mode.
+        NSSpeechRecognitionUsageDescription: GS turns your voice into text for your prompts when you use Talk mode.
+        NSMicrophoneUsageDescription: GS uses the microphone for dictation and to analyse Voice Position locally on this device.
         # PHASE 5 (attachments): camera capture handoff for in-the-moment photo
         # attachments. PhotosPicker and fileImporter need NO permission keys —
         # do not add others.

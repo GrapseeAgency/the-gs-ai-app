@@ -85,7 +85,10 @@ object GsRoutes {
      *  each of those needs a page. */
     const val NOTIFICATION_DETAIL = "notification/{noticeId}"
     const val ARG_NOTICE = "noticeId"
+    /** Speech-to-text dictation and read-aloud voice mode. */
     const val VOICE = "voice"
+    /** Local stereo voice-position sensing (direction only when calibrated). */
+    const val VOICE_POSITION = "voice-position"
     /** Mandate §3 material specimen. Internal tooling: dispatched directly, never
      *  linked from the app, so it can be screenshotted without a nav path. */
     const val GLASS_SPECIMEN = "glass-specimen"

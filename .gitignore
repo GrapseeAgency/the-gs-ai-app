@@ -120,6 +120,9 @@ native/prebuilts/
 **/*.gguf
 **/*.onnx
 
+# Libraries.dev Voice Position model (separately licensed; bundle locally only).
+**/VoicePosition.mfxl
+
 # Object files: cc writes these next to the source in a manual in-tree build.
 *.o
 *.obj

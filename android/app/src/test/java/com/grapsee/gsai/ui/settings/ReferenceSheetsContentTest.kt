@@ -301,6 +301,17 @@ class ReferenceSheetsContentTest {
     }
 
     @Test
+    fun voiceSettingsKeepTalkAndAddVoicePosition() {
+        val routes = mutableListOf<String>()
+        render { VoiceSettingsScreen(onBack = {}, onNavigate = { routes += it }) }
+
+        compose.onNodeWithText("Voice Position").performScrollTo().performClick()
+        compose.onNodeWithText("Open Talk mode").performScrollTo().performClick()
+
+        assertEquals(listOf(GsRoutes.VOICE_POSITION, GsRoutes.VOICE), routes)
+    }
+
+    @Test
     fun privacyReachesConnectedApps() {
         var route: String? = null
         render { PrivacySettingsScreen(onBack = {}, onNavigate = { route = it }) }
