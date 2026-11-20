@@ -358,9 +358,11 @@ final class MenuChromeTests: XCTestCase {
             let height = probe.bbox.height / scale
             let width = probe.bbox.width / scale
             let inset = probe.bbox.minX / scale - box.rowOriginX
+            let centerInset = probe.bbox.midX / scale - box.rowOriginX
             print("MEASURE \(name)/\(label) geometry=\(box.kind) ink=\(probe.count) "
                   + "h=\(String(format: "%.1f", height)) w=\(String(format: "%.1f", width)) "
-                  + "inset=\(String(format: "%.1f", inset)) band=\(String(format: "%.0fx%.0f", band.width, band.height))")
+                  + "inset=\(String(format: "%.1f", inset)) center=\(String(format: "%.1f", centerInset)) "
+                  + "band=\(String(format: "%.0fx%.0f", band.width, band.height))")
             measurements.append([
                 "menu": name,
                 "item": label,
@@ -370,6 +372,7 @@ final class MenuChromeTests: XCTestCase {
                 "inkHeightPt": Double(round(height * 10) / 10),
                 "inkWidthPt": Double(round(width * 10) / 10),
                 "leadingInsetPt": Double(round(inset * 10) / 10),
+                "leadingCenterInsetPt": Double(round(centerInset * 10) / 10),
             ])
 
             // 1. The icon is drawn at all. The floor is generous on purpose:
@@ -387,18 +390,29 @@ final class MenuChromeTests: XCTestCase {
             if extent < 9 || extent > 26 {
                 record("\(name)/\(label): glyph extent \(String(format: "%.1f", extent)) pt is outside 9–26 pt")
             }
-            // 3. It sits in the slot its label implies.
-            if slot == .leading, case .text(let rect) = box, probe.bbox.maxX > rect.minX + 1 {
-                record("\(name)/\(label): ink reaches x=\(Int(probe.bbox.maxX / scale)) but the title starts at \(Int(rect.minX)) — the icon is not in the leading slot")
-            }
-            if slot == .leading, case .row(let rect) = box, inset > 34 {
-                // iOS puts a menu's icon column 27–29 pt in from the row's
-                // leading edge (measured on SF). 34 catches an icon parked
-                // mid-row without failing a menu's own gutter.
-                record("\(name)/\(label): ink starts \(Int(inset)) pt into the row — not the leading slot")
-            }
-            if slot == .leading, case .textInRow(_, _) = box, inset > 34 {
-                record("\(name)/\(label): ink starts \(Int(inset)) pt into the row — not the leading slot")
+            // 3. It sits in the slot its label implies. A glyph's first ink
+            //    column depends on the artwork: Lucide mic has a 5/24-unit
+            //    leading margin, while search starts at 3/24. The row-only
+            //    accessibility shape cannot expose the icon view frame, so
+            //    measure the ink cluster's centre against the actual leading
+            //    rail. iOS 26.2/26.4 put that centre around 35/40 pt. This
+            //    catches a mid-row icon without penalising transparent padding.
+            if slot == .leading {
+                switch box {
+                case .text(let rect):
+                    if probe.bbox.maxX / scale > rect.minX + 1 {
+                        record("\(name)/\(label): ink reaches x=\(Int(probe.bbox.maxX / scale)) but the title starts at \(Int(rect.minX)) — the icon is not in the leading slot")
+                    }
+                case .row(let rect), .textInRow(_, let rect):
+                    let center = probe.bbox.midX / scale - rect.minX
+                    if center < 25 || center > 48 {
+                        record("\(name)/\(label): icon center is \(String(format: \"%.1f\", center)) pt into the row — outside the leading slot")
+                    }
+                    if case .textInRow(let title, _) = box,
+                       probe.bbox.maxX / scale >= title.minX - 1 {
+                        record("\(name)/\(label): icon ink overlaps the title's leading edge")
+                    }
+                }
             }
         }
     }
