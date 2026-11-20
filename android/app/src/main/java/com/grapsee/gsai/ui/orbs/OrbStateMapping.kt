@@ -78,6 +78,24 @@ internal fun orbStateForChatStream(
         else -> OrbState.COMPOSING
     }
 
+/** Plain-language chat status for the composer, limited to phases we observe. */
+internal fun chatActivityLabel(
+    state: OrbState,
+    effectiveMode: String? = null,
+    hasReasoningTrace: Boolean = false,
+    generationStatus: String? = null
+): String = when {
+    state == OrbState.SEARCHING -> "Searching…"
+    state == OrbState.WORKING && generationStatus == "checking" -> "Checking answer…"
+    state == OrbState.WORKING -> "Working…"
+    state == OrbState.COMPOSING -> "Answering…"
+    state == OrbState.BREATHING && (effectiveMode == "thinking" || hasReasoningTrace) -> "Thinking…"
+    // A flash request may simply be waiting for its first token; don't imply
+    // hidden reasoning when the server hasn't exposed a reasoning phase.
+    state == OrbState.BREATHING -> "Working…"
+    else -> state.label
+}
+
 internal fun orbStateForVoice(phase: VoicePhase): OrbState? = when (phase) {
     VoicePhase.Listening -> OrbState.LISTENING
     VoicePhase.Processing -> OrbState.WORKING

@@ -55,6 +55,21 @@ class OrbStateMappingTest {
     }
 
     @Test
+    fun `composer labels expose only observed chat activity in plain language`() {
+        assertEquals("Working…", chatActivityLabel(OrbState.BREATHING))
+        assertEquals("Thinking…", chatActivityLabel(OrbState.BREATHING, effectiveMode = "thinking"))
+        assertEquals("Working…", chatActivityLabel(OrbState.BREATHING, effectiveMode = "flash"))
+        assertEquals(
+            "Thinking…",
+            chatActivityLabel(OrbState.BREATHING, effectiveMode = "flash", hasReasoningTrace = true)
+        )
+        assertEquals("Working…", chatActivityLabel(OrbState.WORKING))
+        assertEquals("Checking answer…", chatActivityLabel(OrbState.WORKING, generationStatus = "checking"))
+        assertEquals("Searching…", chatActivityLabel(OrbState.SEARCHING))
+        assertEquals("Answering…", chatActivityLabel(OrbState.COMPOSING))
+    }
+
+    @Test
     fun `real provider generation and answer rechecks map to WORKING`() {
         assertEquals(
             OrbState.WORKING,
