@@ -1,7 +1,6 @@
 package com.grapsee.gsai
 
 import android.graphics.Bitmap
-import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -131,8 +129,6 @@ class BotAvatarWebViewDeviceTest {
     }
 
     @Test fun authenticCanvasIsPaintedAndWorkingFramesMove() {
-        Settings.Global.putFloat(compose.activity.contentResolver,
-            Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
         screen(false)
         compose.onNodeWithContentDescription("Clover bot, idle").assertIsDisplayed()
         compose.onNodeWithText("Ask anything…").assertIsDisplayed()
