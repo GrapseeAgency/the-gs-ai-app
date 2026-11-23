@@ -1,6 +1,7 @@
 package com.grapsee.gsai
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
@@ -97,8 +98,7 @@ class BotAvatarWebViewDeviceTest {
             ?: error("Android WebView missing from the rendered chat row")
         val location = IntArray(2)
         instrumentation.runOnMainSync { browser.getLocationOnScreen(location) }
-        val image = instrumentation.uiAutomation.takeScreenshot()
-            ?: error("Android device screenshot unavailable")
+        val image = captureNativeViewBitmap()
         var green = 0
         val left = location[0].coerceAtLeast(0)
         val top = location[1].coerceAtLeast(0)
@@ -131,9 +131,20 @@ class BotAvatarWebViewDeviceTest {
         assertAvatarHasVisibleGreenPixels()
     }
 
+    private fun captureNativeViewBitmap(): Bitmap {
+        val root = compose.activity.window.decorView
+        val width = root.width.coerceAtLeast(1)
+        val height = root.height.coerceAtLeast(1)
+        val image = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        // Unlike UiAutomation screenshots (which can return null on a headless
+        // CI emulator), drawing the real decor view always captures the actual
+        // native Compose Image overlay alongside the rest of the chat.
+        instrumentation.runOnMainSync { root.draw(Canvas(image)) }
+        return image
+    }
+
     private fun capture(file: String) {
-        val bitmap = instrumentation.uiAutomation.takeScreenshot()
-            ?: error("Native emulator screenshot unavailable")
+        val bitmap = captureNativeViewBitmap()
         val output = File(screenshots, file)
         output.outputStream().use {
             assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
