@@ -618,15 +618,16 @@ fun parseClarifyPayload(payload: String?): ClarifyPrompt? {
 }
 
 /**
- * REASONING TRACE payload — `{"delta":"..."}` from thinking-enabled stream
- * turns. Tolerant by contract: any malformed frame yields null and the
- * stream never breaks on a reasoning event.
+ * A non-empty private reasoning delta arrived. Parse only its presence: raw
+ * chain-of-thought is discarded before it enters stream UI state. Malformed
+ * frames remain ignorable and can never break the answer stream.
  */
-fun parseReasoningPayload(payload: String?): String? {
-    if (payload.isNullOrBlank()) return null
+fun hasReasoningDelta(payload: String?): Boolean {
+    if (payload.isNullOrBlank()) return false
     return runCatching {
-        GsApiJson.parseToJsonElement(payload).jsonObject["delta"]?.jsonPrimitive?.content
-    }.getOrNull()?.takeIf { it.isNotEmpty() }
+        val delta = GsApiJson.parseToJsonElement(payload).jsonObject["delta"] as? JsonPrimitive
+        delta?.isString == true && delta.content.isNotEmpty()
+    }.getOrDefault(false)
 }
 
 /** Wire source record → UI card. `used` wins over `status` (cited in the answer). */

@@ -61,10 +61,11 @@ class OrbStateMappingTest {
         assertEquals("Working…", chatActivityLabel(OrbState.BREATHING, effectiveMode = "flash"))
         assertEquals(
             "Thinking…",
-            chatActivityLabel(OrbState.BREATHING, effectiveMode = "flash", hasReasoningTrace = true)
+            chatActivityLabel(OrbState.BREATHING, effectiveMode = "flash", hasReasoningSignal = true)
         )
         assertEquals("Working…", chatActivityLabel(OrbState.WORKING))
         assertEquals("Checking answer…", chatActivityLabel(OrbState.WORKING, generationStatus = "checking"))
+        assertEquals("Generating answer…", chatActivityLabel(OrbState.WORKING, generationStatus = "generating"))
         assertEquals("Searching…", chatActivityLabel(OrbState.SEARCHING))
         assertEquals("Answering…", chatActivityLabel(OrbState.COMPOSING))
     }
@@ -83,6 +84,18 @@ class OrbStateMappingTest {
         assertEquals(
             OrbState.COMPOSING,
             orbStateForChatStream(streaming, "Draft", requestHasAttachments = false, generationStatus = "checking")
+        )
+    }
+
+    @Test
+    fun `research status moves the composer into answer composition before text arrives`() {
+        assertEquals(
+            OrbState.COMPOSING,
+            orbStateForChatStream(streaming, "", searchPhase = "composing")
+        )
+        assertEquals(
+            OrbState.COMPOSING,
+            orbStateForChatStream(streaming, "", requestHasAttachments = true, searchPhase = "composing")
         )
     }
 

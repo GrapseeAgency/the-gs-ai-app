@@ -87,7 +87,8 @@ class ChatStreamController(private val chat: ChatRepository) {
      * PHASE 8.1 additions (all derived ONLY from received events):
      *  - [searchPhase] mirrors the wire statuses: "searching" | "working" |
      *    "composing" | "search_failed" — the honest orb mapping consumes it
-     *    (searching → SEARCHING, working → WORKING); null for plain turns.
+     *    (searching → SEARCHING, working → WORKING, composing → COMPOSING);
+     *    null for plain turns.
      *  - [traceItems] is one entry per real search-chain event, in arrival
      *    order; the trace card renders it verbatim and collapses to
      *    [searchSummary] (+ the failed flag) once the turn settles.
@@ -142,15 +143,9 @@ class ChatStreamController(private val chat: ChatRepository) {
          *  ("low"|"medium"|"high"; null when the provider used its default or
          *  the turn was flash). Drives the Effort row, never a guessed label. */
         val effectiveEffort: String? = null,
-        /** REASONING TRACE (chat-reasoning panel): the model's thinking stream
-         *  for THIS turn (null = none arrived — flash turns, buffered paths).
-         *  Stream-only by design: never persisted, the panel lives with the
-         *  turn and is gone at the next send. */
-        val reasoning: String? = null,
-        /** Measured thinking span: first reasoning delta → first answer delta.
-         *  Wall-clock from the moment the delta published; no timer. */
-        val reasoningStartMs: Long? = null,
-        val reasoningEndMs: Long? = null
+        /** A non-empty private reasoning event arrived. Its content is discarded;
+         *  the UI may show activity/effort, never chain-of-thought text. */
+        val hasReasoningSignal: Boolean = false
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -235,9 +230,7 @@ class ChatStreamController(private val chat: ChatRepository) {
                     // cleared/replaced the buffer after this paint snapshot,
                     // the old draft is discarded instead of republished.
                     if (synchronized(buffer) { resetEpoch != paintedEpoch }) current
-                    else current.copy(streamText = visibleText,
-                        reasoningEndMs = current.reasoningEndMs
-                            ?: if (current.reasoning != null) SystemClock.uptimeMillis() else null)
+                    else current.copy(streamText = visibleText)
                 }
             }
             // Independent of network callbacks: a small final delta must not
@@ -311,13 +304,12 @@ class ChatStreamController(private val chat: ChatRepository) {
                         }
                     },
                     onReasoning = { payload ->
-                        parseReasoningPayload(payload)?.let { delta ->
+                        if (hasReasoningDelta(payload)) {
+                            // Keep only the signal. Private provider reasoning is
+                            // never accumulated in UI state or rendered to the user.
                             publishIfMine(token) { current ->
-                                current.copy(
-                                    reasoning = (current.reasoning ?: "") + delta,
-                                    reasoningStartMs = current.reasoningStartMs
-                                        ?: SystemClock.uptimeMillis()
-                                )
+                                if (current.hasReasoningSignal) current
+                                else current.copy(hasReasoningSignal = true)
                             }
                         }
                     },

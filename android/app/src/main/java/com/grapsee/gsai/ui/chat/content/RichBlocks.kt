@@ -1148,7 +1148,12 @@ private fun appendNexlyText(
             val iconName = NexlyIcons.resolve(part.value)
             val inlineId = "nexly_icon:$iconName"
             builder.pushStringAnnotation(tag = NEXLY_INLINE_ICON_TAG, annotation = iconName)
-            builder.appendInlineContent(id = inlineId, alternateText = " ")
+            // The placeholder is an icon character, not a highlighted token.
+            // Explicitly clear any surrounding span backplate while retaining
+            // inherited weight/decoration/color behavior for the text run.
+            builder.withStyle(SpanStyle(background = Color.Transparent)) {
+                appendInlineContent(id = inlineId, alternateText = " ")
+            }
             builder.pop()
         } else {
             builder.append(part.value)
@@ -1162,7 +1167,9 @@ private fun rememberNexlyInlineContent(
     requestedFontSize: androidx.compose.ui.unit.TextUnit? = null,
     requestedGlyphColor: Color? = null
 ): Map<String, InlineTextContent> {
-    val fallbackSize = MaterialTheme.typography.bodyMedium.fontSize
+    val proseFontSize = LocalNexlyProseStyle.current?.fontSize
+        ?.takeIf { it.value.isFinite() && it.value > 0f }
+    val fallbackSize = proseFontSize ?: MaterialTheme.typography.bodyMedium.fontSize
     val sizeValue = requestedFontSize?.value?.takeIf { it.isFinite() && it > 0f }
         ?: fallbackSize.value
     val fontSize = sizeValue.sp
@@ -1189,8 +1196,9 @@ private fun rememberNexlyInlineContent(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        // Use the prose scale and ink so a custom glyph sits in
-                        // the sentence like a character, not an oversized badge.
+                        // Bare glyph only: no glass tile or backplate. Match
+                        // the surrounding line's size and ink so the icon
+                        // remains a character in the sentence, not a badge.
                         NexlyGlyph(
                             name = iconName,
                             size = glyphSize,
@@ -1468,7 +1476,11 @@ private fun NexlyCalloutCard(
                 color = titleColor
             )
             if (bodyText != null && bodyText.isNotEmpty()) {
-                val inlineContent = rememberNexlyInlineContent(bodyText)
+                val inlineContent = rememberNexlyInlineContent(
+                    styled = bodyText,
+                    requestedFontSize = bodyStyle.fontSize,
+                    requestedGlyphColor = bodyColor
+                )
                 Text(
                     text = bodyText,
                     style = bodyStyle,
@@ -1556,7 +1568,6 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
         stripLeadingIconFromSpans(block.spans)
     }
     val styled = remember(cleanSpans, theme) { spansToAnnotatedString(cleanSpans, theme) }
-    val inlineContent = rememberNexlyInlineContent(styled)
     val style = if (compact) {
         val size = if (block.level <= 1) 18.sp else if (block.level == 2) 16.sp else 14.sp
         TextStyle(fontSize = size, lineHeight = (size.value + 5).sp, fontWeight = FontWeight.Bold, color = headingInk)
@@ -1571,6 +1582,11 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+    val inlineContent = rememberNexlyInlineContent(
+        styled = styled,
+        requestedFontSize = style.fontSize,
+        requestedGlyphColor = headingInk
+    )
     Column {
         if (!isFirst && block.level <= 3) Spacer(Modifier.height(8.dp))
         SelectionContainer {
@@ -2671,7 +2687,11 @@ private fun InteractiveChecklistItemRow(
                 }
             }
             Spacer(Modifier.width(9.dp))
-            val checklistInlineContent = rememberNexlyInlineContent(styled)
+            val checklistInlineContent = rememberNexlyInlineContent(
+                styled = styled,
+                requestedFontSize = bodyStyle.fontSize,
+                requestedGlyphColor = ink
+            )
             Text(
                 text = styled,
                 style = bodyStyle.copy(
@@ -2945,16 +2965,26 @@ private fun StepOrderedListItemRow(
                         )
                     }
                     Spacer(Modifier.height(2.dp))
-                    val detailInlineContent = rememberNexlyInlineContent(detailStyled)
+                    val detailStyle = MaterialTheme.typography.bodySmall
+                    val detailInk = MaterialTheme.colorScheme.onSurfaceVariant
+                    val detailInlineContent = rememberNexlyInlineContent(
+                        styled = detailStyled,
+                        requestedFontSize = detailStyle.fontSize,
+                        requestedGlyphColor = detailInk
+                    )
                     Text(
                         text = detailStyled,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = detailStyle,
+                        color = detailInk,
                         inlineContent = detailInlineContent
                     )
                 } else {
                     val styled = remember(item.spans, theme) { spansToAnnotatedString(item.spans, theme) }
-                    val stepInlineContent = rememberNexlyInlineContent(styled)
+                    val stepInlineContent = rememberNexlyInlineContent(
+                        styled = styled,
+                        requestedFontSize = bodyStyle.fontSize,
+                        requestedGlyphColor = ink
+                    )
                     Text(
                         text = styled,
                         style = bodyStyle.copy(
@@ -3476,10 +3506,15 @@ private fun androidx.compose.foundation.layout.RowScope.TableCell(
         }
         return
     }
-    val cellInlineContent = rememberNexlyInlineContent(displayText)
+    val cellTextStyle = if (emphasize) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodySmall
+    val cellInlineContent = rememberNexlyInlineContent(
+        styled = displayText,
+        requestedFontSize = cellTextStyle.fontSize,
+        requestedGlyphColor = cellColor
+    )
     Text(
         text = displayText,
-        style = if (emphasize) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodySmall,
+        style = cellTextStyle,
         fontWeight = if (emphasize || isTrend || (isPrimaryNameCol && !raw.all { it.isDigit() })) FontWeight.Bold else FontWeight.Normal,
         color = cellColor,
         inlineContent = cellInlineContent,

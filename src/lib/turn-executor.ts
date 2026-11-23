@@ -1235,13 +1235,15 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       console.log(`RESEARCH-AGAIN conv=${id} no prior research context — falling back to the planner`)
     }
 
+    const plannerStartedAt = Date.now()
     const plan = await planSearch({
       userText: content,
       historyLines,
       previousClarifyOptions: prep.previousClarifyOptions,
     })
+    const plannerMs = Date.now() - plannerStartedAt
     console.log(
-      `SEARCH-PLAN conv=${id} intent=${plan.intent} needs=${plan.needsSearch} ambiguous=${plan.ambiguity.isAmbiguous} queries=[${plan.queries.join(' | ')}] range=${plan.timeRange} depth=${plan.depth} stop=${plan.stopSignal} forced=${cap.searchPlanned}`
+      `SEARCH-PLAN conv=${id} plannerMs=${plannerMs} intent=${plan.intent} needs=${plan.needsSearch} ambiguous=${plan.ambiguity.isAmbiguous} queries=[${plan.queries.join(' | ')}] range=${plan.timeRange} depth=${plan.depth} stop=${plan.stopSignal} forced=${cap.searchPlanned}`
     )
 
     if (plan.ambiguity.isAmbiguous && plan.ambiguity.prompt && !cap.searchPlanned) {

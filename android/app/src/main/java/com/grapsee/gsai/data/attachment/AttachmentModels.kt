@@ -152,20 +152,76 @@ object AttachmentRules {
     fun isAllowed(mimeType: String): Boolean = mimeType.lowercase() in ALLOWED_MIME_TYPES
 
     /**
-     * PHASE 7 — map legacy/vendor MIME aliases onto the canonical allowlist
-     * names. Document providers disagree on CSV/Markdown spelling; the file
-     * is what it is, so normalise honestly before the allowlist check.
+     * Map common provider/vendor MIME aliases onto the backend's canonical
+     * allowlist names. Android document providers disagree on media and
+     * Markdown/CSV spellings; the staged bytes are still checked by the server.
      */
-    fun canonicalMime(mimeType: String): String = when (mimeType.lowercase()) {
+    fun canonicalMime(mimeType: String): String = when (mimeType.trim().lowercase()) {
+        "image/jpg", "image/pjpeg" -> "image/jpeg"
         "text/comma-separated-values",
         "text/x-comma-separated-values",
         "text/x-csv",
         "application/csv" -> "text/csv"
         "text/x-markdown" -> "text/markdown"
+        "audio/mp3" -> "audio/mpeg"
         "audio/x-m4a" -> "audio/mp4"
         "audio/x-wav", "audio/wave" -> "audio/wav"
-        else -> mimeType.lowercase()
+        // M4V uses the same ISO-BMFF container accepted by the server's
+        // video/mp4 signature check.
+        "video/x-m4v", "video/m4v" -> "video/mp4"
+        else -> mimeType.trim().lowercase()
     }
+
+    /**
+     * Resolve a picker MIME without throwing away a useful extension when a
+     * cloud/file provider reports only a generic binary type. An explicit,
+     * specific provider MIME always wins; unsupported content is never
+     * relabelled from its filename.
+     */
+    fun mimeFromPicker(providerMimeType: String?, displayName: String): String {
+        val providerMime = providerMimeType
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let(::canonicalMime)
+        if (providerMime == null || isGenericMime(providerMime)) {
+            return mimeFromExtension(displayName) ?: providerMime ?: "application/octet-stream"
+        }
+        return providerMime
+    }
+
+    /** The locally supported file suffixes, independent of device MIME tables. */
+    fun mimeFromExtension(name: String): String? = when (name.substringAfterLast('.', "").lowercase()) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "png" -> "image/png"
+        "webp" -> "image/webp"
+        "gif" -> "image/gif"
+        "heic" -> "image/heic"
+        "heif" -> "image/heif"
+        "pdf" -> "application/pdf"
+        "txt", "text" -> "text/plain"
+        "md", "markdown" -> "text/markdown"
+        "csv" -> "text/csv"
+        "mp3" -> "audio/mpeg"
+        "wav" -> "audio/wav"
+        "m4a" -> "audio/mp4"
+        "mp4", "m4v" -> "video/mp4"
+        "mov" -> "video/quicktime"
+        "webm" -> "video/webm"
+        else -> null
+    }
+
+    private val GENERIC_MIME_TYPES = setOf(
+        "application/octet-stream",
+        "binary/octet-stream",
+        "application/x-octet-stream",
+        "application/unknown",
+        "application/x-unknown",
+        "application/download",
+        "application/x-download"
+    )
+
+    private fun isGenericMime(mimeType: String): Boolean =
+        mimeType in GENERIC_MIME_TYPES || mimeType == "*/*" || mimeType.endsWith("/*")
 
     /** image kinds map to Image, application/pdf to Pdf, text kinds to Document, else null. */
     fun kindForMime(mimeType: String): AttachmentKind? {
