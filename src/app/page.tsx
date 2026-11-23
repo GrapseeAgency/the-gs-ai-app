@@ -2,6 +2,7 @@
 
 import { GlassIcon } from '@/components/nexly/GlassIcon'
 import { MetalFx } from 'metal-fx'
+import { BotAvatar } from 'bot-avatars'
 import { isRequestMode, readModelPreferences, requestModeForPreferences, type RequestMode } from '@/lib/model-preferences'
 
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
@@ -490,6 +491,38 @@ function ClarifyChips({ clarify, onPick }: { clarify: ClarifyChoices; onPick: (l
         </div>
       </div>
     </div>
+  )
+}
+
+function ComposerMetalFx({ children }: { children: ReactNode }) {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setMounted(true))
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
+
+  // metal-fx chooses different markup depending on WebGL support. Keep the
+  // send button identical through hydration, then attach the visual effect.
+  if (!mounted) return <span className="shrink-0">{children}</span>
+  return (
+    <MetalFx variant="circle" preset="silver" theme="auto" strength={0.88} innerShadow className="shrink-0">
+      {children}
+    </MetalFx>
+  )
+}
+
+function AssistantAvatar({ working = false }: { working?: boolean }) {
+  return (
+    <BotAvatar
+      type="clover"
+      state={working ? 'working' : 'default'}
+      size={28}
+      color="#2FCB7A"
+      theme="light"
+      interactive={false}
+      aria-label={working ? 'Assistant response in progress' : 'Assistant response'}
+    />
   )
 }
 
@@ -1359,6 +1392,7 @@ export default function Home() {
 
           {/* Right: live chat */}
           <section
+            data-testid="chat-panel"
             className="flex flex-col rounded-2xl border lg:col-span-3"
             style={{ background: C.surface, borderColor: C.outline }}
           >
@@ -1438,56 +1472,62 @@ export default function Home() {
                       </div>
                     </div>
                   ) : (
-                    <div key={i} className="group">
-                      <div className="flex justify-start">
-                        <div
-                          className="max-w-[92%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap"
-                          style={{
-                            background: C.raised,
-                            color: C.text,
-                            border: `1px solid ${C.outline}`,
-                          }}
-                        >
-                          <MessageContent
-                            responseScope={`${conversationId ?? 'draft'}:${m.id}`}
-                            text={m.content}
-                            dark
-                            onPrompt={(prompt) => sendRef.current(prompt)}
-                            citations={
-                              m.sources?.map(
-                                (src): Citation => ({
-                                  ordinal: src.ordinal,
-                                  title: src.title,
-                                  url: src.url,
-                                  domain: src.domain,
-                                })
-                              ) ?? undefined
-                            }
-                          />
-                          <span className="mt-2 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-                            <button
-                              onClick={() => copyMessage(i, m.content)}
-                              aria-label="Copy reply"
-                              className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors"
-                              style={{ borderColor: C.outline, color: copiedIdx === i ? C.accent : C.muted }}
-                            >
-                              <CopyIcon />
-                              {copiedIdx === i ? 'Copied' : 'Copy'}
-                            </button>
-                          </span>
+                    <div key={i} className="group" data-testid="assistant-reply-row">
+                      <div className="flex items-start gap-2">
+                        <div className="mt-2.5 shrink-0">
+                          <AssistantAvatar />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div
+                            data-testid="assistant-reply"
+                            className="w-fit max-w-[92%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap"
+                            style={{
+                              background: C.raised,
+                              color: C.text,
+                              border: `1px solid ${C.outline}`,
+                            }}
+                          >
+                            <MessageContent
+                              responseScope={`${conversationId ?? 'draft'}:${m.id}`}
+                              text={m.content}
+                              dark={false}
+                              onPrompt={(prompt) => sendRef.current(prompt)}
+                              citations={
+                                m.sources?.map(
+                                  (src): Citation => ({
+                                    ordinal: src.ordinal,
+                                    title: src.title,
+                                    url: src.url,
+                                    domain: src.domain,
+                                  })
+                                ) ?? undefined
+                              }
+                            />
+                            <span className="mt-2 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                              <button
+                                onClick={() => copyMessage(i, m.content)}
+                                aria-label="Copy reply"
+                                className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors"
+                                style={{ borderColor: C.outline, color: copiedIdx === i ? C.accent : C.muted }}
+                              >
+                                <CopyIcon />
+                                {copiedIdx === i ? 'Copied' : 'Copy'}
+                              </button>
+                            </span>
+                          </div>
+                          {m.traceSummary && (
+                            <p className="mt-1.5 pl-1 text-[11px]" style={{ color: C.muted }}>
+                              <span style={{ color: C.accent }}><GlassIcon name="circle-check" size={12} tile={18} /></span> {m.traceSummary}
+                            </p>
+                          )}
+                          {m.sources && m.sources.length > 0 && <SourceCards sources={m.sources} />}
+                          {m.clarifyOptions && (
+                            <div className="mt-2">
+                              <ClarifyChips clarify={m.clarifyOptions} onPick={(label) => sendRef.current(label)} />
+                            </div>
+                          )}
                         </div>
                       </div>
-                      {m.traceSummary && (
-                        <p className="mt-1.5 pl-1 text-[11px]" style={{ color: C.muted }}>
-                          <span style={{ color: C.accent }}><GlassIcon name="circle-check" size={12} tile={18} /></span> {m.traceSummary}
-                        </p>
-                      )}
-                      {m.sources && m.sources.length > 0 && <SourceCards sources={m.sources} />}
-                      {m.clarifyOptions && (
-                        <div className="mt-2">
-                          <ClarifyChips clarify={m.clarifyOptions} onPick={(label) => sendRef.current(label)} />
-                        </div>
-                      )}
                     </div>
                   )
                 )}
@@ -1549,27 +1589,33 @@ export default function Home() {
               )}
 
               {streamText && (
-                <div className="flex justify-start">
-                  <div
-                    className="max-w-[92%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap"
-                    style={{ background: C.raised, color: C.text, border: `1px solid ${C.outline}` }}
-                  >
-                    <MessageContent
-                      text={streamText}
-                      dark
-                      streaming
-                      onPrompt={(prompt) => sendRef.current(prompt)}
-                    />
-                    <span
-                      className="ml-0.5 inline-block h-4 w-0.5 animate-pulse align-middle"
-                      style={{ background: C.accent }}
-                    />
+                <div className="flex items-start gap-2" data-testid="assistant-streaming-row">
+                  <div className="mt-2.5 shrink-0">
+                    <AssistantAvatar working />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className="w-fit max-w-[92%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap"
+                      style={{ background: C.raised, color: C.text, border: `1px solid ${C.outline}` }}
+                    >
+                      <MessageContent
+                        text={streamText}
+                        dark={false}
+                        streaming
+                        onPrompt={(prompt) => sendRef.current(prompt)}
+                      />
+                      <span
+                        className="ml-0.5 inline-block h-4 w-0.5 animate-pulse align-middle"
+                        style={{ background: C.accent }}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
 
-              {isStreaming && !streamText && trace.length === 0 && (
-                <div className="flex justify-start">
+              {isStreaming && !streamText && (
+                <div className="flex items-center gap-2" data-testid="assistant-streaming-row">
+                  <AssistantAvatar working />
                   <div className="h-2 w-40 animate-pulse rounded-full" style={{ background: AURORA }} />
                 </div>
               )}
@@ -1590,7 +1636,7 @@ export default function Home() {
             </div>
 
             {/* Composer — FLASH MODE (Phase 3): [+] sheet, mode chip, pending attachments */}
-            <div className="border-t p-4" style={{ borderColor: C.outline }}>
+            <div data-testid="chat-composer" className="border-t p-4" style={{ borderColor: C.outline }}>
               {/* Pending attachments (uploaded through the sheet's Attach row). */}
               {pendingAttachments.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-1.5 pl-1">
@@ -1667,7 +1713,7 @@ export default function Home() {
                   style={{ color: C.text }}
                   aria-label="Message GS AI"
                 />
-                <MetalFx variant="circle" preset="silver" theme="auto" strength={0.88} innerShadow className="shrink-0">
+                <ComposerMetalFx>
                   <button
                     type="button"
                     onClick={() => send()}
@@ -1678,7 +1724,7 @@ export default function Home() {
                   >
                     <GlassIcon name="arrow-up" size={18} bare />
                   </button>
-                </MetalFx>
+                </ComposerMetalFx>
               </div>
 
               {/* The sheet — anchored popover (web/desktop; mobile renders it

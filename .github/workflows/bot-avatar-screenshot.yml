@@ -1,0 +1,51 @@
+name: Bot avatar mobile screenshot
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'src/app/page.tsx'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/test-bot-avatar-screenshot.cjs'
+      - '.github/workflows/bot-avatar-screenshot.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-screenshot:
+    name: Real BotAvatar in mobile chat UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install application dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install pinned Chromium browser tools
+        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund @sparticuz/chromium@143.0.4 puppeteer-core@24.37.5
+
+      - name: Run real mobile browser check and capture screenshots
+        env:
+          DATABASE_URL: file:/tmp/bot-avatar-ci.db
+          NEXT_TELEMETRY_DISABLED: '1'
+          SCREENSHOT_DIR: /tmp/bot-avatar-screenshots
+        run: node scripts/test-bot-avatar-screenshot.cjs
+
+      - name: Upload mobile screenshots and Next.js logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-avatar-mobile-${{ github.run_number }}
+          path: |
+            /tmp/bot-avatar-screenshots/*.png
+          if-no-files-found: warn
+          retention-days: 30
