@@ -12,7 +12,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.fetchSemanticsNode
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -32,7 +31,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
-import javax.imageio.ImageIO
+import android.graphics.BitmapFactory
 
 /**
  * Native Roborazzi evidence for real ChatScreen components, not a React preview.
@@ -150,8 +149,8 @@ class AssistantAvatarVisualTest {
 
         val bounds = compose.onNodeWithContentDescription("Clover bot, working")
             .fetchSemanticsNode().boundsInRoot
-        val one = ImageIO.read(File(first))
-        val two = ImageIO.read(File(second))
+        val one = BitmapFactory.decodeFile(first)
+        val two = BitmapFactory.decodeFile(second)
         var pixelsChanged = 0
         val x0 = bounds.left.toInt().coerceAtLeast(0)
         val y0 = (bounds.top - 12).toInt().coerceAtLeast(0)
