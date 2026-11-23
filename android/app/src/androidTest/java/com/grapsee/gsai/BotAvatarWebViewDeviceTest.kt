@@ -119,6 +119,18 @@ class BotAvatarWebViewDeviceTest {
         )
     }
 
+    private fun awaitVisibleAvatar() {
+        repeat(24) {
+            try {
+                assertAvatarHasVisibleGreenPixels()
+                return
+            } catch (_: AssertionError) {
+                Thread.sleep(250)
+            }
+        }
+        assertAvatarHasVisibleGreenPixels()
+    }
+
     private fun capture(file: String) {
         val bitmap = instrumentation.uiAutomation.takeScreenshot()
             ?: error("Native emulator screenshot unavailable")
@@ -163,7 +175,7 @@ class BotAvatarWebViewDeviceTest {
         compose.onNodeWithText("Ask anything…").assertIsDisplayed()
         val idle = awaitPaint()
         Thread.sleep(280)
-        assertAvatarHasVisibleGreenPixels()
+        awaitVisibleAvatar()
         capture("original-avatar-idle.png")
 
         screen(true)
@@ -183,7 +195,7 @@ class BotAvatarWebViewDeviceTest {
         assertTrue("The original React component missed the native working state: " + actualState,
             actualState.contains("working"))
         Thread.sleep(280)
-        assertAvatarHasVisibleGreenPixels()
+        awaitVisibleAvatar()
         capture("original-avatar-working-1.png")
         Thread.sleep(900)
         val frame2 = canvasHash()

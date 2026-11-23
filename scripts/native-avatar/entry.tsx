@@ -16,6 +16,7 @@ function normalize(value: Partial<Config>): Config {
 declare global { interface Window {
   gsAvatarUpdate?: (value: Partial<Config>) => void
   gsAvatarGetState?: () => AvatarState
+  AndroidAvatarFrames?: { frame(dataUrl: string): void }
 } }
 
 let latest = normalize({})
@@ -49,3 +50,18 @@ function Avatar() {
   />
 }
 createRoot(document.getElementById('root')!).render(<Avatar />)
+
+// Paint the exact canvas produced by bot-avatars into the native Compose layer.
+// This is live frame transfer (not a static asset or a reimplemented animation).
+// Android's own WebView surface can be invisible even while canvas pixels exist.
+let lastFrame = 0
+const deliverCanvas = (time: number) => {
+  requestAnimationFrame(deliverCanvas)
+  if (time - lastFrame < 100) return
+  lastFrame = time
+  const bridge = window.AndroidAvatarFrames
+  const canvas = document.querySelector('canvas')
+  if (!bridge || !canvas || !canvas.width || !canvas.height) return
+  try { bridge.frame(canvas.toDataURL('image/png')) } catch {}
+}
+requestAnimationFrame(deliverCanvas)
