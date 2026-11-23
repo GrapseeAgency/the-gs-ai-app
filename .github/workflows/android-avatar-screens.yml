@@ -1,0 +1,77 @@
+name: Android native assistant-avatar pixels
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android/app/src/main/java/com/grapsee/gsai/ui/chat/**'
+      - 'android/app/src/main/java/com/grapsee/gsai/ui/components/GsBotAvatar.kt'
+      - 'android/app/src/test/java/com/grapsee/gsai/ui/chat/AssistantAvatarVisualTest.kt'
+      - '.github/workflows/android-avatar-screens.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'android/app/src/main/java/com/grapsee/gsai/ui/chat/**'
+      - 'android/app/src/main/java/com/grapsee/gsai/ui/components/GsBotAvatar.kt'
+      - 'android/app/src/test/java/com/grapsee/gsai/ui/chat/AssistantAvatarVisualTest.kt'
+      - '.github/workflows/android-avatar-screens.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-avatars:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Render actual Compose assistant and composer at mobile size
+        working-directory: android
+        run: |
+          set -euo pipefail
+          gradle :app:testDebugUnitTest \
+            --tests com.grapsee.gsai.ui.chat.AssistantAvatarVisualTest \
+            -PgsShots=true --no-daemon --stacktrace
+      - name: Confirm native screenshots exist and have the correct dimensions
+        working-directory: android
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct
+          root = Path('app/build/screenshots')
+          names = [
+            'android-avatar-reply-393x852.png',
+            'android-avatar-working-393x852.png',
+            'android-avatar-working-frame-1.png',
+            'android-avatar-working-frame-2.png',
+          ]
+          for name in names:
+            f = root / name
+            if not f.exists() or f.stat().st_size < 20000:
+              raise SystemExit(f'MISSING or blank actual native screenshot: {f}')
+            data = f.read_bytes()[:24]
+            if data[:8] != b'\x89PNG\r\n\x1a\n':
+              raise SystemExit(f'Invalid PNG: {f}')
+            width, height = struct.unpack('>II', data[16:24])
+            if width < 393 or height < 852:
+              raise SystemExit(f'Unexpected native screenshot dimensions: {f}: {width}x{height}')
+            print(f'{f}: {width}x{height}, {f.stat().st_size} bytes')
+          PY
+      - name: Always preserve screenshots and test reports for visual inspection
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-avatar-native-pixels
+          path: |
+            android/app/build/screenshots/android-avatar-*.png
+            android/app/build/test-results/testDebugUnitTest/TEST-com.grapsee.gsai.ui.chat.AssistantAvatarVisualTest.xml
+          if-no-files-found: warn
+          retention-days: 30
