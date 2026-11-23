@@ -398,3 +398,43 @@ tasks.withType<Test>().configureEach {
     // unit-test pass.
     systemProperty("gs.screenshots", providers.gradleProperty("gsShots").getOrElse("false"))
 }
+
+
+/**
+ * Every APK (including release builds) must ship the actual Libraries.dev
+ * bot-avatars React canvas runtime. Never silently fall back to an icon.
+ * The bundle is generated locally from exact pinned npm versions when absent;
+ * CI's avatar workflow pre-generates it, so the task is then up-to-date.
+ */
+val botAvatarDir = rootProject.projectDir.parentFile.resolve("scripts/native-avatar")
+val botAvatarBundle = project.projectDir.resolve("src/main/assets/bot-avatar/avatar.bundle.js")
+tasks.register("bundleAuthenticBotAvatars") {
+    inputs.files(
+        botAvatarDir.resolve("entry.tsx"),
+        botAvatarDir.resolve("package.json"),
+        botAvatarDir.resolve("build.mjs"),
+    )
+    outputs.file(botAvatarBundle)
+    doLast {
+        fun invoke(vararg parts: String, directory: java.io.File) {
+            val process = ProcessBuilder(*parts)
+                .directory(directory)
+                .inheritIO()
+                .start()
+            check(process.waitFor() == 0) {
+                "Cannot bundle authentic bot-avatars from npm: " + parts.joinToString(" ")
+            }
+        }
+        if (!botAvatarBundle.isFile) {
+            invoke("npm", "install", "--no-audit", "--no-fund", directory = botAvatarDir)
+            invoke("node", "scripts/native-avatar/build.mjs",
+                directory = rootProject.projectDir.parentFile)
+        }
+        check(botAvatarBundle.isFile && botAvatarBundle.length() > 20_000) {
+            "Authentic bot-avatars JS missing from APK assets; refusing to package blank avatars"
+        }
+    }
+}
+tasks.named("preBuild").configure {
+    dependsOn("bundleAuthenticBotAvatars")
+}
