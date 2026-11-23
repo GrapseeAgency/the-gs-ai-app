@@ -36,6 +36,20 @@ class AttachmentRulesTest {
         assertFalse(AttachmentRules.isAllowed("audio/unknown"))
         assertEquals("audio/mp4", AttachmentRules.canonicalMime("audio/x-m4a"))
         assertEquals("audio/wav", AttachmentRules.canonicalMime("audio/x-wav"))
+        assertEquals("image/jpeg", AttachmentRules.canonicalMime("image/jpg"))
+        assertEquals("audio/mpeg", AttachmentRules.canonicalMime("audio/mp3"))
+        assertEquals("video/mp4", AttachmentRules.canonicalMime("video/x-m4v"))
+    }
+
+    @Test
+    fun `picker uses supported file extension when the provider MIME is generic`() {
+        assertEquals("image/jpeg", AttachmentRules.mimeFromPicker("application/octet-stream", "photo.jpg"))
+        assertEquals("application/pdf", AttachmentRules.mimeFromPicker(null, "report.pdf"))
+        assertEquals("video/mp4", AttachmentRules.mimeFromPicker("binary/octet-stream", "clip.m4v"))
+        assertEquals("image/webp", AttachmentRules.mimeFromPicker("image/*", "portrait.webp"))
+        assertEquals("application/octet-stream", AttachmentRules.mimeFromPicker("application/octet-stream", "opaque.bin"))
+        // A specific provider type is not overridden by a misleading suffix.
+        assertEquals("application/x-msdownload", AttachmentRules.mimeFromPicker("application/x-msdownload", "safe.pdf"))
     }
 
     @Test

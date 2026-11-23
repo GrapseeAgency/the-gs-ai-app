@@ -70,6 +70,9 @@ internal fun orbStateForChatStream(
         // the backend is verifiably doing right now.
         streamText.isNullOrBlank() && searchPhase == "searching" -> OrbState.SEARCHING
         streamText.isNullOrBlank() && searchPhase == "working" -> OrbState.WORKING
+        // The research pipeline explicitly reports when it moves from retrieval
+        // into answer composition; do not leave the composer on a generic wait.
+        streamText.isNullOrBlank() && searchPhase == "composing" -> OrbState.COMPOSING
         // A real provider generation or server consistency retry is working,
         // not an inferred search or hidden-reasoning stage.
         streamText.isNullOrBlank() && generationStatus in setOf("generating", "checking") -> OrbState.WORKING
@@ -82,14 +85,15 @@ internal fun orbStateForChatStream(
 internal fun chatActivityLabel(
     state: OrbState,
     effectiveMode: String? = null,
-    hasReasoningTrace: Boolean = false,
+    hasReasoningSignal: Boolean = false,
     generationStatus: String? = null
 ): String = when {
     state == OrbState.SEARCHING -> "Searching…"
     state == OrbState.WORKING && generationStatus == "checking" -> "Checking answer…"
+    state == OrbState.WORKING && generationStatus == "generating" -> "Generating answer…"
     state == OrbState.WORKING -> "Working…"
     state == OrbState.COMPOSING -> "Answering…"
-    state == OrbState.BREATHING && (effectiveMode == "thinking" || hasReasoningTrace) -> "Thinking…"
+    state == OrbState.BREATHING && (effectiveMode == "thinking" || hasReasoningSignal) -> "Thinking…"
     // A flash request may simply be waiting for its first token; don't imply
     // hidden reasoning when the server hasn't exposed a reasoning phase.
     state == OrbState.BREATHING -> "Working…"

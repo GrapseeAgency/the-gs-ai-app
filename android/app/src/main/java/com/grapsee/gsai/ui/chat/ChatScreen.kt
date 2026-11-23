@@ -501,9 +501,9 @@ fun ChatScreen(
                 streamStateRaw.value?.phase,
                 streamStateRaw.value?.streamText,
                 streamStateRaw.value?.hasAttachments == true,
-                // PHASE 8.1: the wire's honest search phase (searching/working)
-                // drives SEARCHING/WORKING before the first token. Null for a
-                // plain turn — the mapping is unchanged without a search.
+                // PHASE 8.1: the wire's honest search phase drives SEARCHING,
+                // WORKING, or COMPOSING before the first token. Null for plain
+                // turns until a real provider-generation status arrives.
                 streamStateRaw.value?.searchPhase,
                 streamStateRaw.value?.generationStatus
             )
@@ -519,7 +519,7 @@ fun ChatScreen(
                 chatActivityLabel(
                     state = state,
                     effectiveMode = raw?.effectiveMode,
-                    hasReasoningTrace = !raw?.reasoning.isNullOrBlank(),
+                    hasReasoningSignal = raw?.hasReasoningSignal == true,
                     generationStatus = raw?.generationStatus
                 )
             }
@@ -1678,27 +1678,12 @@ fun ChatScreen(
                                         onCopy = copyText
                                     )
                                 }
-                            } else if (
-                                // NOTHING TO READ YET — draw nothing.
-                                //
-                                // Before the first token an assistant turn has
-                                // no text, no trace and no sources, so all it
-                                // painted was the avatar, the "GS" label and a
-                                // bare streaming caret. On a real screen that
-                                // reads as a SECOND, empty input bar parked at
-                                // the top of the transcript: a monogram, a name
-                                // and a cursor. It carries no information the
-                                // orb in the composer does not already carry,
-                                // so the row waits for its first token.
-                                message.isStreaming &&
-                                    message.content.isBlank() &&
-                                    message.traceItems.isEmpty() &&
-                                    message.sources.isEmpty() &&
-                                    liveOrbState == OrbState.BREATHING
-                            ) {
-                                // Intentionally empty: the composer supplies
-                                // the phase label, bot identity, and Stop action.
                             } else {
+                                // Keep the assistant row mounted before the first
+                                // answer token. Its real stream status card says
+                                // either what the backend reported or that we are
+                                // still waiting for response content; an empty
+                                // transcript used to look like generation was idle.
                                 // 0.81.3: the prompt that asked for this answer,
                                 // plus the turn before it. Widget recovery needs
                                 // both: "show me a bar chart" often carries no
@@ -1849,7 +1834,7 @@ fun ChatScreen(
                     showSnack("Up to ${AttachmentRules.MAX_PER_MESSAGE} attachments per message")
                 } else {
                     galleryPicker.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
                     )
                 }
             },
@@ -2542,27 +2527,17 @@ private fun LiveStreamText(
  */
 enum class NexlyThinkingPhase { THINKING, REASONING, SEARCH, GENERATING, CHECKING, ANSWER, DONE }
 
-/** First meaningful sentence of the live reasoning, capped for one line. */
-private fun reasoningHint(text: String?): String? {
-    if (text.isNullOrBlank()) return null
-    val clean = com.grapsee.gsai.ui.chat.content.NexlyIcons.cleanPlainText(text)
-    if (clean.isEmpty()) return null
-    val end = clean.indexOfFirst { it == '.' || it == '!' || it == '?' }
-    val sentence = if (end >= 0) clean.substring(0, end + 1) else clean
-    return sentence.take(96).trim()
-}
-
 @Composable
 internal fun ReferenceThinkingCard(
     phase: NexlyThinkingPhase = NexlyThinkingPhase.DONE,
     effort: String? = null,
     isPlan: Boolean = true,
-    reasoningHint: String? = null,
     searchSources: Int = 0,
     showStages: Boolean = true,
 ) {
     if (phase != NexlyThinkingPhase.DONE) {
         val title = when (phase) {
+            NexlyThinkingPhase.THINKING -> if (showStages) "Thinking" else "Waiting for response"
             NexlyThinkingPhase.REASONING -> "Reasoning"
             NexlyThinkingPhase.SEARCH -> "Sources received"
             NexlyThinkingPhase.GENERATING -> "Generating answer"
@@ -2571,7 +2546,8 @@ internal fun ReferenceThinkingCard(
             else -> "Waiting for response"
         }
         val detail = when (phase) {
-            NexlyThinkingPhase.REASONING -> reasoningHint?.takeIf { it.isNotBlank() } ?: "Reasoning received"
+            NexlyThinkingPhase.THINKING -> if (showStages) "Thinking mode is active" else "Waiting for the first response content"
+            NexlyThinkingPhase.REASONING -> "Reasoning activity received · private details hidden"
             NexlyThinkingPhase.SEARCH -> "$searchSources source${if (searchSources == 1) "" else "s"} available"
             NexlyThinkingPhase.GENERATING -> "The response-generation call has started"
             NexlyThinkingPhase.CHECKING -> "A consistency check requested a fresh draft"
@@ -2605,10 +2581,9 @@ internal fun ReferenceThinkingCard(
     } else {
         "Understanding your request..."
     }
-    // Show a real reasoning sentence only when the provider streamed one.
-    // Otherwise this row must not imply a trace the app never received.
-    val reasoningSubtitle = reasoningHint?.takeIf { it.isNotBlank() }
-        ?: "No reasoning trace exposed"
+    // The provider's reasoning content is private. Surface only the fact that
+    // a thinking signal was received, never a quote or summary of its content.
+    val reasoningSubtitle = "Private reasoning details are hidden"
     val hasSearch = searchSources > 0
     val finalTitle = if (hasSearch) "Search" else "Answer"
     val finalSubtitle = if (hasSearch) {
@@ -2705,25 +2680,6 @@ private fun ThinkingRow(
             )
         }
     }
-}
-
-/**
- * perf-smooth-1 (cause 4/5): the reasoning text flushes per token, so the
- * live?.value read lives here -- inside the smallest possible scope --
- * instead of in [AssistantMessage], where it used to re-compose the whole
- * assistant row ~30 times a second while a reasoning phase streamed. Emits
- * the panel plus its trailing spacer only while reasoning text is present.
- */
-@Composable
-private fun LiveReasoning(live: State<ChatStreamController.StreamState?>?) {
-    val st = live?.value ?: return
-    if (st.reasoning.isNullOrEmpty()) return
-    ReasoningPanel(
-        text = st.reasoning.orEmpty(),
-        startMs = st.reasoningStartMs,
-        endMs = st.reasoningEndMs
-    )
-    Spacer(Modifier.height(8.dp))
 }
 
 /**
@@ -2962,7 +2918,7 @@ internal fun AssistantMessage(
     // perf-smooth-1 (cause 4/5): token flushes (~30 Hz) must NOT recompose
     // this row. The old code read live?.value here, subscribing the whole
     // AssistantMessage scope to every stream token even though only the text
-    // node (LiveStreamText) and the reasoning panel consume per-token data.
+    // node (LiveStreamText) consumes per-token data; status reads coarse signals.
     // Each field now reads through derivedStateOf keyed on list identity:
     // StreamState.copy() preserves field instances, so these recompose only
     // when that field actually changes (source events, trace rows) -- never
@@ -2980,12 +2936,7 @@ internal fun AssistantMessage(
     val liveMode by remember(live) { derivedStateOf { live?.value?.effectiveMode } }
     val liveEffort by remember(live) { derivedStateOf { live?.value?.effectiveEffort } }
     val liveReasoningActive by remember(live) {
-        derivedStateOf { !live?.value?.reasoning.isNullOrEmpty() }
-    }
-    // The first sentence changes only once or twice while reasoning streams,
-    // so the card does not join the per-token recomposition path.
-    val liveReasoningHint by remember(live) {
-        derivedStateOf { reasoningHint(live?.value?.reasoning) }
+        derivedStateOf { live?.value?.hasReasoningSignal == true }
     }
     val liveAnswerStarted by remember(live) {
         derivedStateOf { !live?.value?.streamText.isNullOrEmpty() }
@@ -3027,18 +2978,13 @@ internal fun AssistantMessage(
     val planVisible = hasPlan || livePlanStarted
     var sawThinking by remember(message.id) { mutableStateOf(false) }
     var lastEffort by remember(message.id) { mutableStateOf<String?>(null) }
-    var lastReasoningHint by remember(message.id) { mutableStateOf<String?>(null) }
     LaunchedEffect(liveMode, liveReasoningActive) {
         if (liveMode == "thinking" || liveReasoningActive) sawThinking = true
     }
     LaunchedEffect(liveEffort) {
         if (!liveEffort.isNullOrBlank()) lastEffort = liveEffort
     }
-    LaunchedEffect(liveReasoningHint) {
-        if (!liveReasoningHint.isNullOrBlank()) lastReasoningHint = liveReasoningHint
-    }
     val cardEffort = liveEffort ?: lastEffort
-    val cardReasoningHint = liveReasoningHint ?: lastReasoningHint
     val thinkingPhase = when {
         !message.isStreaming -> NexlyThinkingPhase.DONE
         liveAnswerStarted -> NexlyThinkingPhase.ANSWER
@@ -3101,11 +3047,10 @@ internal fun AssistantMessage(
                     Spacer(Modifier.height(8.dp))
                 }
             }
-            // THE NEXLY GLASS TRANSCRIPT. The Thinking panel now lives INSIDE
-            // the first prose card, after the preamble, and stays there while
-            // the plan streams. The raw reasoning panel is intentionally not
-            // rendered here: the reference has one three-stage card, not a
-            // second competing trace.
+            // THE NEXLY GLASS TRANSCRIPT. The real activity card lives INSIDE
+            // the first prose card, after the preamble, and stays mounted while
+            // the answer streams. Private reasoning text is discarded; only its
+            // received/not-received signal can affect the status label.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3159,7 +3104,6 @@ internal fun AssistantMessage(
                                 phase = thinkingPhase,
                                 effort = cardEffort,
                                 isPlan = planVisible,
-                                reasoningHint = cardReasoningHint,
                                 searchSources = turnSources.size,
                                 showStages = showThinkingStages
                             )
@@ -4017,7 +3961,7 @@ internal fun AttachPanelContent(
             GsPopoverRow(
                 icon = option.icon,
                 label = when (option.label) {
-                    "Gallery" -> "Photos"
+                    "Gallery" -> "Photos & videos"
                     else -> option.label
                 },
                 enabled = true,
@@ -4329,76 +4273,3 @@ private fun dayLabel(iso: String): String? = runCatching {
         else -> date.format(DAY_LABEL_FORMAT)
     }
 }.getOrNull()
-
-/**
- * REASONING TRACE panel (the 21st chat-reasoning intent, monochrome): a quiet
- * collapsible card above the streamed answer. Open while the model thinks,
- * auto-collapsed once the answer's first token lands, reopenable. The seconds
- * label is the MEASURED span from the first reasoning delta to the first
- * answer delta, never a timer. Stream-only: renders while this turn is live.
- */
-@Composable
-private fun ReasoningPanel(
-    text: String,
-    startMs: Long?,
-    endMs: Long?
-) {
-    val colors = GsTheme.colors
-    var expanded by remember { mutableStateOf(true) }
-    // The answer started: collapse once. A manual re-open after that sticks —
-    // the effect only fires on the endMs null → set transition.
-    LaunchedEffect(endMs) {
-        if (endMs != null) expanded = false
-    }
-    val chevron by animateFloatAsState(
-        targetValue = if (expanded) 90f else 0f,
-        animationSpec = GsEase.state(),
-        label = "reasoningChevron"
-    )
-    Surface(
-        shape = RoundedCornerShape(GsRadius.card),
-        color = colors.raisedSurface,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    GsIcons.ChevronRight,
-                    contentDescription = if (expanded) "Collapse reasoning" else "Expand reasoning",
-                    tint = colors.textSecondary,
-                    modifier = Modifier
-                        .size(14.dp)
-                        .graphicsLayer { rotationZ = chevron }
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = if (startMs != null && endMs != null) {
-                        val seconds = ((endMs - startMs).coerceAtLeast(0L)) / 1000.0
-                        String.format(java.util.Locale.US, "Thought for %.1f seconds", seconds)
-                    } else {
-                        "Thinking…"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.textSecondary
-                )
-            }
-            if (expanded) {
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textSecondary.copy(alpha = 0.85f),
-                    modifier = Modifier
-                        .heightIn(max = 240.dp)
-                        .verticalScroll(rememberScrollState())
-                        .padding(start = 32.dp, end = 12.dp, bottom = 12.dp)
-                )
-            }
-        }
-    }
-}

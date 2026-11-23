@@ -3,7 +3,6 @@ package com.grapsee.gsai.data.attachment
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.webkit.MimeTypeMap
 import com.grapsee.gsai.data.remote.AttachmentUploader
 import com.grapsee.gsai.data.remote.GsApiJson
 import com.grapsee.gsai.ocr.MlKitOcr
@@ -403,13 +402,11 @@ class AttachmentStore(
                 }
             }
         }
-        val displayName = AttachmentRules.sanitizeDisplayName(
-            name ?: uri.lastPathSegment ?: "attachment"
-        )
-        val mime = AttachmentRules.canonicalMime(
-            resolver.getType(uri)
-                ?: mimeFromExtension(displayName)
-                ?: "application/octet-stream"
+        val pickerName = name ?: uri.lastPathSegment ?: "attachment"
+        val displayName = AttachmentRules.sanitizeDisplayName(pickerName)
+        val mime = AttachmentRules.mimeFromPicker(
+            providerMimeType = resolver.getType(uri),
+            displayName = pickerName
         )
         ResolvedContent(
             displayName = displayName,
@@ -466,21 +463,6 @@ class AttachmentStore(
             // The draft dir holds exactly this draft's staged copy.
             File(path).parentFile?.deleteRecursively()
         }
-    }
-
-    private fun mimeFromExtension(name: String): String? {
-        val ext = name.substringAfterLast('.', "").lowercase()
-        if (ext.isEmpty()) return null
-        // PHASE 7: Android's MimeTypeMap has no .md entry on many API levels
-        // and vendor builds disagree on .csv — the supported document types
-        // are mapped explicitly (the server remains the authority).
-        when (ext) {
-            "pdf" -> return "application/pdf"
-            "txt", "text" -> return "text/plain"
-            "md", "markdown" -> return "text/markdown"
-            "csv" -> return "text/csv"
-        }
-        return runCatching { MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) }.getOrNull()
     }
 
     companion object {

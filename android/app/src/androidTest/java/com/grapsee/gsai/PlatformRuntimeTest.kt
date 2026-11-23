@@ -155,20 +155,47 @@ class PlatformRuntimeTest {
 
     @Test fun liveActivityShowsActualPhaseAndEffortWithoutInventingOtherSteps() {
         var phase by androidx.compose.runtime.mutableStateOf(com.grapsee.gsai.ui.chat.NexlyThinkingPhase.THINKING)
+        var showStages by androidx.compose.runtime.mutableStateOf(false)
         compose.activity.setContentForPlatformTest {
             TheGsAiTheme {
-                com.grapsee.gsai.ui.chat.ReferenceThinkingCard(phase = phase, effort = "high", reasoningHint = "Public reasoning from the stream")
+                com.grapsee.gsai.ui.chat.ReferenceThinkingCard(phase = phase, effort = "high", showStages = showStages)
             }
         }
         compose.onNodeWithText("Waiting for response · High effort").assertIsDisplayed()
+        compose.onNodeWithText("Waiting for the first response content").assertIsDisplayed()
         compose.onNodeWithText("Reasoning").assertDoesNotExist()
         compose.onNodeWithText("Answer").assertDoesNotExist()
+        compose.runOnIdle { showStages = true }
+        compose.onNodeWithText("Thinking · High effort").assertIsDisplayed()
+        compose.onNodeWithText("Thinking mode is active").assertIsDisplayed()
         compose.runOnIdle { phase = com.grapsee.gsai.ui.chat.NexlyThinkingPhase.REASONING }
         compose.onNodeWithText("Reasoning · High effort").assertIsDisplayed()
-        compose.onNodeWithText("Public reasoning from the stream").assertIsDisplayed()
+        compose.onNodeWithText("Reasoning activity received · private details hidden").assertIsDisplayed()
         compose.runOnIdle { phase = com.grapsee.gsai.ui.chat.NexlyThinkingPhase.ANSWER }
         compose.onNodeWithText("Writing answer · High effort").assertIsDisplayed()
-        compose.onNodeWithText("Public reasoning from the stream").assertDoesNotExist()
+        compose.onNodeWithText("Showing the response as it arrives").assertIsDisplayed()
+        compose.onNodeWithText("Reasoning activity received · private details hidden").assertDoesNotExist()
+    }
+
+    @Test fun emptyStreamingTranscriptShowsStatusBeforeTheFirstAnswerToken() {
+        compose.activity.setContentForPlatformTest {
+            TheGsAiTheme {
+                com.grapsee.gsai.ui.chat.content.BlocksContent(
+                    content = "",
+                    isStreaming = true,
+                    onCopyCode = {},
+                    glassAssistant = true,
+                    statusCard = {
+                        com.grapsee.gsai.ui.chat.ReferenceThinkingCard(
+                            phase = com.grapsee.gsai.ui.chat.NexlyThinkingPhase.THINKING,
+                            showStages = false
+                        )
+                    }
+                )
+            }
+        }
+        compose.onNodeWithText("Waiting for response").assertIsDisplayed()
+        compose.onNodeWithText("Waiting for the first response content").assertIsDisplayed()
     }
 
     @Test fun generatedChecklistEditsDeletesAddsAndKeepsCompletionWithTheActualTask() {
