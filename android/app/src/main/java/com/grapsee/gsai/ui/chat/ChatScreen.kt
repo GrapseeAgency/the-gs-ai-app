@@ -1640,16 +1640,7 @@ fun ChatScreen(
                                 ) stamp else null
                             }
                             if (dayHeader != null) DaySeparator(dayHeader!!)
-                            // Turn-group identity: the assistant identity row
-                            // renders only when the previous VISIBLE turn is not
-                            // an assistant turn — a day separator resets the
-                            // group. Failed-status rows are system notices, not
-                            // assistant turns, and never suppress the next
-                            // group's identity.
-                            val prevMessage = if (index > 0) messages[index - 1] else null
-                            val assistantGroupStart = message.role == "assistant" && !message.failed &&
-                                (prevMessage == null || prevMessage.failed ||
-                                    prevMessage.role != "assistant" || dayHeader != null)
+                            // The real assistant avatar belongs to the reply, not to the composer.
                             if (message.failed && message.content.isBlank()) {
                                 // A failed stream with nothing committed: the
                                 // empty bubble is already gone, so the honest
@@ -1705,7 +1696,7 @@ fun ChatScreen(
                                         conversationId = activeConversationId,
                                         isSpeaking = speakingMessageId == message.id,
                                         highlight = index == activeMatchIndex,
-                                        showIdentity = false,
+                                        showIdentity = true,
                                         // The growing answer is read inside the bubble
                                         // (controller State), so mid-stream flushes
                                         // touch exactly one item instead of the whole
@@ -2419,26 +2410,13 @@ internal fun ComposerRow(
                         }
                     }
                 )
-                // While a turn runs, the selected bot avatar and an explicit
-                // Stop button own the trailing slot. A drafted next message
-                // remains reachable: the queue arrow sits to their left and
-                // parks it for delivery when this reply finishes.
+                // The assistant's identity is in the transcript. The input is only
+                // for composing, queuing and stopping a turn.
                 if (canQueue) {
                     GsQueueSendButton(onQueue = onQueue)
                 }
                 if (isStreaming) {
-                    Row(
-                        modifier = Modifier.padding(end = 4.dp, bottom = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        GsBotAvatar(
-                            style = SettingsStore.assistantAvatar,
-                            size = 30.dp,
-                            isWorking = true
-                        )
-                        StopGeneratingButton(onStop = onStop)
-                    }
+                    StopGeneratingButton(onStop = onStop)
                 } else {
                     // ONE trailing control. It used to be two — a send button
                     // with a mic parked beside it — which put a second, always
