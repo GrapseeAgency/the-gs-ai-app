@@ -16,7 +16,8 @@ function normalize(value: Partial<Config>): Config {
 declare global { interface Window {
   gsAvatarUpdate?: (value: Partial<Config>) => void
   gsAvatarGetState?: () => AvatarState
-  AndroidAvatarFrames?: { frame(dataUrl: string): void }
+  AndroidAvatarFrames?: { frame(dataUrl: string): void; diagnostics(): string }
+  gsAvatarFrameDiagnostics?: () => string
 } }
 
 let latest = normalize({})
@@ -55,6 +56,13 @@ createRoot(document.getElementById('root')!).render(<Avatar />)
 // This is live frame transfer (not a static asset or a reimplemented animation).
 // Android's own WebView surface can be invisible even while canvas pixels exist.
 let lastFrame = 0
+let sendAttempts = 0
+let sentFrames = 0
+let frameErrors = 0
+let lastFrameError = ''
+window.gsAvatarFrameDiagnostics = () =>
+  'attempts=' + sendAttempts + ',sent=' + sentFrames +
+  ',errors=' + frameErrors + ',last=' + lastFrameError
 const deliverCanvas = (time: number) => {
   requestAnimationFrame(deliverCanvas)
   if (time - lastFrame < 100) return
@@ -62,6 +70,13 @@ const deliverCanvas = (time: number) => {
   const bridge = window.AndroidAvatarFrames
   const canvas = document.querySelector('canvas')
   if (!bridge || !canvas || !canvas.width || !canvas.height) return
-  try { bridge.frame(canvas.toDataURL('image/png')) } catch {}
+  sendAttempts++
+  try {
+    bridge.frame(canvas.toDataURL('image/png'))
+    sentFrames++
+  } catch (e) {
+    frameErrors++
+    lastFrameError = String(e)
+  }
 }
 requestAnimationFrame(deliverCanvas)

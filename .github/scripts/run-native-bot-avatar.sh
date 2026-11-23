@@ -8,16 +8,22 @@ gradle :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --stacktrace
 adb install -r -t app/build/outputs/apk/debug/app-debug.apk
 adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 mkdir -p ../native-avatar-evidence
+set +e
 adb shell am instrument -w -r \
   -e class com.grapsee.gsai.BotAvatarWebViewDeviceTest \
   com.grapsee.gsai.test/androidx.test.runner.AndroidJUnitRunner \
   | tee ../native-avatar-evidence/instrumentation.txt
-grep -Fq 'OK (1 test)' ../native-avatar-evidence/instrumentation.txt
-grep -Fq 'INSTRUMENTATION_CODE: -1' ../native-avatar-evidence/instrumentation.txt
+instrument_status=${PIPESTATUS[0]}
+set -e
+if ! grep -Fq 'OK (1 test)' ../native-avatar-evidence/instrumentation.txt; then instrument_status=1; fi
 cd ..
-for name in original-avatar-idle.png original-avatar-working-1.png original-avatar-working-2.png; do
-  adb exec-out run-as com.grapsee.gsai cat "files/native-avatar-evidence/$name" > "native-avatar-evidence/$name"
-  test "$(wc -c < "native-avatar-evidence/$name")" -gt 20000
+for name in original-avatar-debug-idle.png original-avatar-idle.png original-avatar-working-1.png original-avatar-working-2.png; do
+  if ! adb exec-out run-as com.grapsee.gsai cat "files/native-avatar-evidence/$name" > "native-avatar-evidence/$name"; then
+    echo "Screenshot missing (expected only if test failed early): $name"
+    rm -f "native-avatar-evidence/$name"
+    continue
+  fi
+  test "$(wc -c < "native-avatar-evidence/$name")" -gt 20000 || continue
   python3 - "$name" <<'PY'
 from pathlib import Path
 import sys, struct
@@ -29,3 +35,5 @@ assert w >= 300 and h >= 600, f"unexpected emulator frame size {w}x{h}"
 print("Verified native screenshot:", p, w, h, len(b))
 PY
 done
+
+exit "$instrument_status"

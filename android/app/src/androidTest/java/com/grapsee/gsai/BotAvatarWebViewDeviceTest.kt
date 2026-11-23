@@ -99,9 +99,14 @@ class BotAvatarWebViewDeviceTest {
         val location = IntArray(2)
         instrumentation.runOnMainSync { browser.getLocationOnScreen(location) }
         val image = captureNativeViewBitmap()
+        val rootOffset = IntArray(2)
+        instrumentation.runOnMainSync {
+            compose.activity.window.decorView.getLocationOnScreen(rootOffset)
+        }
         var green = 0
-        val left = location[0].coerceAtLeast(0)
-        val top = location[1].coerceAtLeast(0)
+        var contrast = 0
+        val left = (location[0] - rootOffset[0]).coerceAtLeast(0)
+        val top = (location[1] - rootOffset[1]).coerceAtLeast(0)
         val right = (left + browser.width).coerceAtMost(image.width)
         val bottom = (top + browser.height).coerceAtMost(image.height)
         for (y in top until bottom) for (x in left until right) {
@@ -110,11 +115,18 @@ class BotAvatarWebViewDeviceTest {
             val g = android.graphics.Color.green(pixel)
             val b = android.graphics.Color.blue(pixel)
             if (g > r + 20 && g > b + 10 && g > 70) green++
+            if (kotlin.math.abs(r - 244) + kotlin.math.abs(g - 229) +
+                kotlin.math.abs(b - 242) > 110) contrast++
         }
         image.recycle()
+        val debug = javascriptResult(
+            "window.AndroidAvatarFrames && window.AndroidAvatarFrames.diagnostics()"
+        )
+        val jsDebug = javascriptResult("window.gsAvatarFrameDiagnostics && window.gsAvatarFrameDiagnostics()")
         assertTrue(
-            "Authentic bot-avatars canvas exists in JS but is INVISIBLE on the Android screen: " +
-                green + " green pixels in " + (right - left) + "x" + (bottom - top),
+            "Original bot-avatars NOT visible: " + green + " green, " + contrast +
+                " contrasted pixels, region=" + left + "," + top + " " +
+                (right - left) + "x" + (bottom - top) + "; bridge=" + debug + "; js=" + jsDebug,
             green > 25
         )
     }
@@ -129,6 +141,19 @@ class BotAvatarWebViewDeviceTest {
             }
         }
         assertAvatarHasVisibleGreenPixels()
+    }
+
+    private fun javascriptResult(expression: String): String {
+        val latch = CountDownLatch(1)
+        var result = ""
+        instrumentation.runOnMainSync {
+            findWebView(compose.activity.window.decorView)!!
+                .evaluateJavascript(expression) { value ->
+                    result = value
+                    latch.countDown()
+                }
+        }
+        return if (latch.await(8, TimeUnit.SECONDS)) result else "JS_TIMEOUT"
     }
 
     private fun captureNativeViewBitmap(): Bitmap {
@@ -186,6 +211,7 @@ class BotAvatarWebViewDeviceTest {
         compose.onNodeWithText("Ask anything…").assertIsDisplayed()
         val idle = awaitPaint()
         Thread.sleep(280)
+        capture("original-avatar-debug-idle.png")
         awaitVisibleAvatar()
         capture("original-avatar-idle.png")
 
