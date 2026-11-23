@@ -90,6 +90,35 @@ class BotAvatarWebViewDeviceTest {
         error("Original bot-avatars did not paint an opaque canvas: " + canvasHash())
     }
 
+
+    /** Fails if the canvas has pixels internally but is invisible on screen. */
+    private fun assertAvatarHasVisibleGreenPixels() {
+        val browser = findWebView(compose.activity.window.decorView)
+            ?: error("Android WebView missing from the rendered chat row")
+        val location = IntArray(2)
+        instrumentation.runOnMainSync { browser.getLocationOnScreen(location) }
+        val image = instrumentation.uiAutomation.takeScreenshot()
+            ?: error("Android device screenshot unavailable")
+        var green = 0
+        val left = location[0].coerceAtLeast(0)
+        val top = location[1].coerceAtLeast(0)
+        val right = (left + browser.width).coerceAtMost(image.width)
+        val bottom = (top + browser.height).coerceAtMost(image.height)
+        for (y in top until bottom) for (x in left until right) {
+            val pixel = image.getPixel(x, y)
+            val r = android.graphics.Color.red(pixel)
+            val g = android.graphics.Color.green(pixel)
+            val b = android.graphics.Color.blue(pixel)
+            if (g > r + 20 && g > b + 10 && g > 70) green++
+        }
+        image.recycle()
+        assertTrue(
+            "Authentic bot-avatars canvas exists in JS but is INVISIBLE on the Android screen: " +
+                green + " green pixels in " + (right - left) + "x" + (bottom - top),
+            green > 25
+        )
+    }
+
     private fun capture(file: String) {
         val bitmap = instrumentation.uiAutomation.takeScreenshot()
             ?: error("Native emulator screenshot unavailable")
@@ -133,6 +162,8 @@ class BotAvatarWebViewDeviceTest {
         compose.onNodeWithContentDescription("Clover bot, idle").assertIsDisplayed()
         compose.onNodeWithText("Ask anything…").assertIsDisplayed()
         val idle = awaitPaint()
+        Thread.sleep(280)
+        assertAvatarHasVisibleGreenPixels()
         capture("original-avatar-idle.png")
 
         screen(true)
@@ -151,6 +182,8 @@ class BotAvatarWebViewDeviceTest {
         assertTrue(bridgeState.await(15, TimeUnit.SECONDS))
         assertTrue("The original React component missed the native working state: " + actualState,
             actualState.contains("working"))
+        Thread.sleep(280)
+        assertAvatarHasVisibleGreenPixels()
         capture("original-avatar-working-1.png")
         Thread.sleep(900)
         val frame2 = canvasHash()

@@ -52,6 +52,11 @@ fun GsBotAvatar(
     AndroidView(
         factory = { ctx ->
             WebView(ctx).apply {
+                // Software compositing keeps the transparent inline canvas on
+                // the same visible Android window layer as its Compose row.
+                // The GPU-backed WebView painted to its DOM canvas but the
+                // emulator screenshot showed only the empty 38dp slot.
+                setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                 setBackgroundColor(Color.TRANSPARENT)
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
