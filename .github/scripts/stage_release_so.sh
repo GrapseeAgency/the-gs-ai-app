@@ -162,5 +162,11 @@ test "$STAGED" -eq 4 || {
   exit 1
 }
 
+# Expose the actual producer run to later workflow steps so the release
+# provenance records the binary source rather than only the app build run.
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  printf 'source_run_id=%s\n' "$SO_RUN" >> "$GITHUB_OUTPUT"
+fi
+
 echo "staged $STAGED ABI(s) of libgs_ffi.so"
 echo "libgs_sd.so deliberately NOT staged -- diffusion is off on mobile"

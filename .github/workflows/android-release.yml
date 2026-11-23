@@ -45,6 +45,7 @@ jobs:
       # the APK. Tesseract is absent by construction: it is in the :ocr-fallback
       # module, which :app does not depend on, and ML Kit is a direct dependency.
       - name: Stage libgs_ffi.so into jniLibs for every ABI
+        id: stage-native
         env:
           GH_TOKEN: ${{ github.token }}
         # `inputs` is EMPTY on a tag push -- workflow_dispatch defaults do not
@@ -185,6 +186,23 @@ jobs:
             echo "::error::profile was not packaged, so first-launch is still cold JIT."
             exit 1
           fi
+          # Staging jniLibs is not proof that AGP packaged them. Compare every
+          # extracted APK library byte-for-byte with the four validated inputs.
+          # A release without one of these really would be a hollow app on that ABI.
+          for ABI in armeabi-v7a arm64-v8a x86 x86_64; do
+            EXPECTED="app/src/main/jniLibs/$ABI/libgs_ffi.so"
+            EMBEDDED="/tmp/gs-ai-release-$ABI.so"
+            unzip -p "$APK" "lib/$ABI/libgs_ffi.so" > "$EMBEDDED" || {
+              echo "::error::APK is missing lib/$ABI/libgs_ffi.so"
+              exit 1
+            }
+            test -s "$EMBEDDED" || { echo "::error::empty native library for $ABI"; exit 1; }
+            cmp -s "$EXPECTED" "$EMBEDDED" || {
+              echo "::error::APK's $ABI native library differs from the staged build"
+              exit 1
+            }
+            echo "  embedded libgs_ffi.so: $ABI $(stat -c%s "$EMBEDDED") bytes (matches staged input)"
+          done
           echo "  dex count: $(unzip -l "$APK" | grep -c 'classes.*\.dex')"
           echo "gates ok"
 
@@ -200,14 +218,67 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      - name: Attach to release
+      - name: Attach verified assets to release
         if: startsWith(github.ref, 'refs/tags/')
         working-directory: android
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          NATIVE_SOURCE_RUN_ID: ${{ steps.stage-native.outputs.source_run_id }}
         run: |
-          cp app/build/outputs/apk/release/app-release.apk GS-AI-App.apk
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          BADGING=$("$TOOLS/aapt2" dump badging "$APK")
+          VERSION=$(printf '%s\n' "$BADGING" | sed -n "s/.*versionName='\\([^']*\\)'.*/\\1/p")
+          BUILD_NUMBER=$(printf '%s\n' "$BADGING" | sed -n "s/.*versionCode='\\([^']*\\)'.*/\\1/p")
+          test -n "$VERSION" && test -n "$BUILD_NUMBER"
+          test "$TAG" = "v$VERSION" || {
+            echo "::error::tag $TAG does not match APK version v$VERSION"
+            exit 1
+          }
+
+          APK_NAME="GS-AI-App-v${VERSION}.apk"
+          cp "$APK" "$APK_NAME"
+          sha256sum "$APK_NAME" > SHA256SUMS.txt
+          {
+            echo "Release tag: $TAG"
+            echo "Source commit: $SOURCE_COMMIT"
+            echo "Build workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$WORKFLOW_RUN_ID"
+            echo "Native library producer run: $NATIVE_SOURCE_RUN_ID"
+            echo ""
+            echo "aapt2 badging:"
+            printf '%s\n' "$BADGING"
+            echo ""
+            echo "apksigner verification:"
+            "$TOOLS/apksigner" verify --verbose --print-certs "$APK"
+            echo ""
+            echo "Release gates passed: unit tests, shipping certificate, package identity,"
+            echo "public service origin, non-debuggable release, baseline profile, and"
+            echo "four byte-for-byte verified libgs_ffi.so ABI payloads."
+          } > android-verification.txt
+
+          export VERSION BUILD_NUMBER APK_NAME
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          apk = pathlib.Path(os.environ['APK_NAME'])
+          data = {
+              'version': os.environ['VERSION'],
+              'buildNumber': int(os.environ['BUILD_NUMBER']),
+              'sourceCommit': os.environ['SOURCE_COMMIT'],
+              'workflowRun': os.environ['WORKFLOW_RUN_ID'],
+              'nativeLibraryRun': os.environ['NATIVE_SOURCE_RUN_ID'],
+              'artifact': {
+                  'file': apk.name,
+                  'bytes': apk.stat().st_size,
+                  'sha256': hashlib.sha256(apk.read_bytes()).hexdigest(),
+              },
+          }
+          pathlib.Path('build-provenance.json').write_text(json.dumps(data, indent=2))
+          PY
+
           gh release create "$TAG" --verify-tag --title "$TAG" --notes "CI build" 2>/dev/null || true
-          gh release upload "$TAG" GS-AI-App.apk --clobber
-          echo "uploaded GS-AI-App.apk for $TAG"
+          gh release upload "$TAG" "$APK_NAME" SHA256SUMS.txt android-verification.txt build-provenance.json --clobber
+          echo "uploaded $APK_NAME and verified sidecars for $TAG"
