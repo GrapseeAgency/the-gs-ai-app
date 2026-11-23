@@ -13,12 +13,28 @@ function normalize(value: Partial<Config>): Config {
     paused: value.paused === true,
   }
 }
-declare global { interface Window { gsAvatarUpdate?: (value: Partial<Config>) => void } }
+declare global { interface Window {
+  gsAvatarUpdate?: (value: Partial<Config>) => void
+  gsAvatarGetState?: () => AvatarState
+} }
+
+let latest = normalize({})
+let onChange: ((value: Config) => void) | null = null
+// Register BEFORE React's asynchronous first paint. The Android page-finished
+// bridge can fire before Avatar() mounts; its initial working state must stick.
+window.gsAvatarUpdate = (value) => {
+  latest = normalize(value ?? {})
+  onChange?.(latest)
+}
+window.gsAvatarGetState = () => latest.state
 
 function Avatar() {
-  const [config, setConfig] = useState<Config>(() => normalize({}))
-  // Native streaming changes are real; no synthetic activity state.
-  window.gsAvatarUpdate = (value) => setConfig(normalize(value ?? {}))
+  const [config, setConfig] = useState<Config>(() => latest)
+  React.useEffect(() => {
+    onChange = setConfig
+    setConfig(latest)
+    return () => { onChange = null }
+  }, [])
   return <BotAvatar
     type={config.type}
     state={config.state}

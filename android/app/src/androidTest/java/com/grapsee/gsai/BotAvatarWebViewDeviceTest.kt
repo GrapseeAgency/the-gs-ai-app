@@ -139,6 +139,18 @@ class BotAvatarWebViewDeviceTest {
         compose.onNodeWithContentDescription("Clover bot, working").assertIsDisplayed()
         compose.onNodeWithText("Ask anything…").assertIsDisplayed()
         val frame1 = awaitPaint()
+        val bridgeState = CountDownLatch(1)
+        var actualState = ""
+        instrumentation.runOnMainSync {
+            findWebView(compose.activity.window.decorView)!!
+                .evaluateJavascript("window.gsAvatarGetState && window.gsAvatarGetState()") {
+                    actualState = it
+                    bridgeState.countDown()
+                }
+        }
+        assertTrue(bridgeState.await(15, TimeUnit.SECONDS))
+        assertTrue("The original React component missed the native working state: " + actualState,
+            actualState.contains("working"))
         capture("original-avatar-working-1.png")
         Thread.sleep(900)
         val frame2 = canvasHash()
