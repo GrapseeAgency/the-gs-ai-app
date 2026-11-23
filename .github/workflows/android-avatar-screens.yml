@@ -8,6 +8,7 @@ on:
       - 'android/app/src/main/assets/bot-avatar/**'
       - 'android/app/src/androidTest/java/com/grapsee/gsai/BotAvatarWebViewDeviceTest.kt'
       - 'scripts/native-avatar/**'
+      - '.github/scripts/run-native-bot-avatar.sh'
       - '.github/workflows/android-avatar-screens.yml'
   push:
     branches: [main]
@@ -67,6 +68,7 @@ jobs:
           name: authentic-bot-avatars-android
           path: |
             native-avatar-evidence/*.png
+            native-avatar-evidence/instrumentation.txt
             android/app/src/main/assets/bot-avatar/avatar.bundle.js
             android/app/build/outputs/androidTest-results/connected/**
           if-no-files-found: warn

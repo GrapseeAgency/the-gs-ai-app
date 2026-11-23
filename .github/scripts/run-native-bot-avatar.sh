@@ -1,14 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# android-emulator-runner executes each YAML script line in a fresh shell.
-# Keep cd, gradle, screenshot retrieval in THIS single bash process.
+# Run instrumentation directly so Android remains installed while evidence
+# is copied. Gradle connectedDebugAndroidTest uninstalls the test target during
+# its cleanup, making run-as report "unknown package" even after 1/1 tests PASS.
 cd android
-gradle :app:connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.class=com.grapsee.gsai.BotAvatarWebViewDeviceTest \
-  --no-daemon --stacktrace
+gradle :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --stacktrace
+adb install -r -t app/build/outputs/apk/debug/app-debug.apk
+adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+mkdir -p ../native-avatar-evidence
+adb shell am instrument -w -r \
+  -e class com.grapsee.gsai.BotAvatarWebViewDeviceTest \
+  com.grapsee.gsai.test/androidx.test.runner.AndroidJUnitRunner \
+  | tee ../native-avatar-evidence/instrumentation.txt
+grep -Fq 'OK (1 test)' ../native-avatar-evidence/instrumentation.txt
+grep -Fq 'INSTRUMENTATION_CODE: -1' ../native-avatar-evidence/instrumentation.txt
 cd ..
-mkdir -p native-avatar-evidence
 for name in original-avatar-idle.png original-avatar-working-1.png original-avatar-working-2.png; do
   adb exec-out run-as com.grapsee.gsai cat "files/native-avatar-evidence/$name" > "native-avatar-evidence/$name"
   test "$(wc -c < "native-avatar-evidence/$name")" -gt 20000
+  python3 - "$name" <<'PY'
+from pathlib import Path
+import sys, struct
+p = Path("native-avatar-evidence") / sys.argv[1]
+b = p.read_bytes()
+assert b[:8] == b"\x89PNG\r\n\x1a\n", f"invalid native PNG {p}"
+w, h = struct.unpack(">II", b[16:24])
+assert w >= 300 and h >= 600, f"unexpected emulator frame size {w}x{h}"
+print("Verified native screenshot:", p, w, h, len(b))
+PY
 done
