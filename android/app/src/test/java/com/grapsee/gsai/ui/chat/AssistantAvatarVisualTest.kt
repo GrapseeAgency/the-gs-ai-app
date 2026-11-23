@@ -157,7 +157,7 @@ class AssistantAvatarVisualTest {
         val x1 = bounds.right.toInt().coerceAtMost(one.width)
         val y1 = (bounds.bottom + 12).toInt().coerceAtMost(one.height)
         for (y in y0 until y1) for (x in x0 until x1) {
-            if (one.getRGB(x, y) != two.getRGB(x, y)) pixelsChanged++
+            if (one.getPixel(x, y) != two.getPixel(x, y)) pixelsChanged++
         }
         assertTrue("Native avatar must PAINT different frames when working; not only declare animation",
             pixelsChanged > 80)
