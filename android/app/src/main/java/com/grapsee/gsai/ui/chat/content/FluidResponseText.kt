@@ -197,19 +197,27 @@ internal fun FluidResponseText(
                     return@onDrawWithContent
                 }
                 val now = pulse.now
-                val active = regions.filter { it.band.progress(now) < 1f }
-                if (active.isEmpty()) {
-                    drawContent()
-                    return@onDrawWithContent
-                }
-                // Isolate the visible part of the arriving ink only. The
-                // settled paragraph is drawn directly outside this layer.
-                // On long answers the offscreen text never allocates a texture.
+                // Compute only the intersection of the animated ink and
+                // native viewport. No intermediate active-list allocation,
+                // and offscreen lines cannot enlarge the offscreen layer.
                 val hasClip = drawContext.canvas.nativeCanvas.getClipBounds(nativeClip)
-                val l = maxOf(0f, active.minOf { it.rect.left } - 1f, if (hasClip) nativeClip.left.toFloat() else 0f)
-                val t = maxOf(0f, active.minOf { it.rect.top } - 1f, if (hasClip) nativeClip.top.toFloat() else 0f)
-                val r = minOf(size.width, active.maxOf { it.rect.right } + 1f, if (hasClip) nativeClip.right.toFloat() else size.width)
-                val b = minOf(size.height, active.maxOf { it.rect.bottom } + 1f, if (hasClip) nativeClip.bottom.toFloat() else size.height)
+                val clipL = if (hasClip) maxOf(0f, nativeClip.left.toFloat()) else 0f
+                val clipT = if (hasClip) maxOf(0f, nativeClip.top.toFloat()) else 0f
+                val clipR = if (hasClip) minOf(size.width, nativeClip.right.toFloat()) else size.width
+                val clipB = if (hasClip) minOf(size.height, nativeClip.bottom.toFloat()) else size.height
+                var l = clipR
+                var t = clipB
+                var r = clipL
+                var b = clipT
+                for (region in regions) {
+                    if (region.band.progress(now) >= 1f) continue
+                    val rect = region.rect
+                    if (rect.right <= clipL || rect.left >= clipR || rect.bottom <= clipT || rect.top >= clipB) continue
+                    l = minOf(l, maxOf(clipL, rect.left - 1f))
+                    t = minOf(t, maxOf(clipT, rect.top - 1f))
+                    r = maxOf(r, minOf(clipR, rect.right + 1f))
+                    b = maxOf(b, minOf(clipB, rect.bottom + 1f))
+                }
                 if (r <= l || b <= t) {
                     drawContent()
                     return@onDrawWithContent
@@ -221,8 +229,9 @@ internal fun FluidResponseText(
                     drawContext.canvas.saveLayer(Rect(l, t, r, b), layerPaint)
                     try {
                         this@onDrawWithContent.drawContent()
-                        for (region in active) {
+                        for (region in regions) {
                             val (band, path, rect, first, last, rtl) = region
+                            if (band.progress(now) >= 1f) continue
                             if (rect.right <= l || rect.left >= r || rect.bottom <= t || rect.top >= b) continue
                             val logicalFirst = if (rtl) last else first
                             val logicalLast = if (rtl) first else last

@@ -554,7 +554,7 @@ private fun StructuredBlockSequenceContent(
         else if (hasCode && tabs.size >= 3) tabs += "Code"
         if (tabs.size >= 3) tabs else emptyList()
     }
-    var activeDashboardTab by remember(normalizedBlocks.size) { mutableStateOf("Dashboard") }
+    var activeDashboardTab by remember { mutableStateOf("Dashboard") }
     val visibleDashboardTab = activeDashboardTab.takeIf { it in dashboardTabs } ?: "Dashboard"
 
     if (dashboardTabs.isNotEmpty()) {

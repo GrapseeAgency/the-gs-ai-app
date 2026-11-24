@@ -76,8 +76,9 @@ struct FluidResponseText: View {
                     marked.textRenderer(FluidGlyphRenderer(now: ProcessInfo.processInfo.systemUptime))
                 }
             } else {
+                let segments = prepareLegacySegments(bands: active ? preview.bands : [])
                 TimelineView(.animation(paused: !active || preview.bands.isEmpty)) { _ in
-                    Text(preview.bands.isEmpty ? value : fadedText(bands: preview.bands, now: ProcessInfo.processInfo.systemUptime))
+                    Text(preview.bands.isEmpty ? value : fadedText(segments: segments, now: ProcessInfo.processInfo.systemUptime))
                 }
             }
         }
@@ -102,64 +103,94 @@ struct FluidResponseText: View {
         return next
     }
 
-    private func index(_ offset: Int) -> AttributedString.Index {
-        value.characters.index(value.startIndex, offsetBy: offset)
-    }
-
+    // Move the attributed-string index forward from its last position.
+    // Repeated offsetBy from startIndex is especially costly for long
+    // paragraphs containing extended grapheme clusters.
     @available(iOS 18.0, *)
     private func markedText(bands: [FluidTextBand]) -> Text {
         var result = Text("")
         var cursor = 0
+        var index = value.startIndex
         let count = value.characters.count
         for band in bands where band.start >= cursor && band.end <= count {
             if cursor < band.start {
-                result = result + Text(AttributedString(value[index(cursor)..<index(band.start)]))
+                let start = value.characters.index(index, offsetBy: band.start - cursor)
+                result = result + Text(AttributedString(value[index..<start]))
+                index = start
             }
-            let fragment = AttributedString(value[index(band.start)..<index(band.end)])
+            let end = value.characters.index(index, offsetBy: band.end - band.start)
+            let fragment = AttributedString(value[index..<end])
             result = result + Text(fragment).customAttribute(FluidRevealAttribute(band: band))
+            index = end
             cursor = band.end
         }
-        if cursor < count {
-            result = result + Text(AttributedString(value[index(cursor)..<value.endIndex]))
+        if index < value.endIndex {
+            result = result + Text(AttributedString(value[index..<value.endIndex]))
         }
         return result
     }
 
-    // iOS 17: same timing, stable native Text and existing inline attributes.
-    // No unsupported shader or fake typewriter fallback.
-    private func fadedText(bands: [FluidTextBand], now: TimeInterval) -> AttributedString {
-        var result = AttributedString()
+    private struct LegacySegment {
+        let value: AttributedString
+        let band: FluidTextBand?
+        let position: Double
+        let color: Color?
+    }
+
+    // Prepare immutable styled runs once per published text snapshot. The
+    // legacy path changes only ink opacity at frame cadence; it never walks
+    // the complete source's character indices or splits the old text again.
+    private func prepareLegacySegments(bands: [FluidTextBand]) -> [LegacySegment] {
+        guard !bands.isEmpty else {
+            return [LegacySegment(value: value, band: nil, position: 0, color: nil)]
+        }
+        var segments: [LegacySegment] = []
         var cursor = 0
+        var index = value.startIndex
         let count = value.characters.count
         for band in bands where band.start >= cursor && band.end <= count {
             if cursor < band.start {
-                result.append(AttributedString(value[index(cursor)..<index(band.start)]))
+                let start = value.characters.index(index, offsetBy: band.start - cursor)
+                segments.append(LegacySegment(value: AttributedString(value[index..<start]), band: nil, position: 0, color: nil))
+                index = start
             }
-            // The older native text path also travels across the arriving
-            // range instead of fading the entire packet at a single opacity.
             let length = max(1, band.end - band.start)
             let step = max(1, (length + 7) / 8)
             var offset = band.start
             while offset < band.end {
                 let end = min(band.end, offset + step)
-                let range = index(offset)..<index(end)
+                let next = value.characters.index(index, offsetBy: end - offset)
                 let position = Double(offset + end - 2 * band.start) / (2 * Double(length))
-                let alpha = band.opacity(at: now, position: position)
-                if alpha >= 1 {
-                    result.append(AttributedString(value[range]))
-                } else {
-                    for run in value[range].runs {
-                        var part = AttributedString(value[run.range])
-                        part.foregroundColor = (run.foregroundColor ?? ink).opacity(alpha)
-                        result.append(part)
-                    }
+                for run in value[index..<next].runs {
+                    segments.append(LegacySegment(value: AttributedString(value[run.range]),
+                        band: band, position: position, color: run.foregroundColor ?? ink))
                 }
+                index = next
                 offset = end
             }
             cursor = band.end
         }
-        if cursor < count {
-            result.append(AttributedString(value[index(cursor)..<value.endIndex]))
+        if index < value.endIndex {
+            segments.append(LegacySegment(value: AttributedString(value[index..<value.endIndex]), band: nil, position: 0, color: nil))
+        }
+        return segments
+    }
+
+    private func fadedText(segments: [LegacySegment], now: TimeInterval) -> AttributedString {
+        var result = AttributedString()
+        for segment in segments {
+            guard let band = segment.band, let color = segment.color else {
+                result.append(segment.value)
+                continue
+            }
+            let alpha = band.opacity(at: now, position: segment.position)
+            if alpha >= 1 {
+                result.append(segment.value)
+            } else {
+                var part = segment.value
+                part.foregroundColor = color.opacity(alpha)
+                result.append(part)
+            }
         }
         return result
     }
@@ -186,7 +217,7 @@ private struct FluidGlyphRenderer: TextRenderer {
         var totals: [FluidTextBand: Int] = [:]
         for line in layout {
             for run in line {
-                if let attribute = run[FluidRevealAttribute.self] {
+                if let attribute = run[FluidRevealAttribute.self], attribute.band.progress(at: now) < 1 {
                     totals[attribute.band, default: 0] += run.count
                 }
             }
@@ -199,13 +230,13 @@ private struct FluidGlyphRenderer: TextRenderer {
                     continue
                 }
                 let band = attribute.band
-                let offset = consumed[band, default: 0]
-                let count = max(1, totals[band, default: run.count])
-                consumed[band] = offset + run.count
                 if band.progress(at: now) >= 1 {
                     context.draw(run)
                     continue
                 }
+                let offset = consumed[band, default: 0]
+                let count = max(1, totals[band, default: run.count])
+                consumed[band] = offset + run.count
                 let bounds = run.typographicBounds.rect
                 let startPhase = Double(offset) / Double(count)
                 let endPhase = Double(offset + run.count) / Double(count)

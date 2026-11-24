@@ -513,21 +513,11 @@ private struct StructuredProseSequenceView: View {
     @State private var activeDashboardTab: String = "Dashboard"
     @StateObject private var codeActions = ResponseCodeActionsIOS()
 
-    private var normalizedProse: [Block] {
-        promoteStandaloneBoldHeadingsIOS(prose)
-    }
-
     private var fluidMotionAllowed: Bool {
         !reduceMotion && !motionSettings.reduceMotion &&
             !motionSettings.reduceAnimations && !motionSettings.highContrast && contrast != .increased
     }
-    private var fluidMotionEnabled: Bool { isStreaming && fluidMotionAllowed }
-
-    private var visibleDashboardTab: String {
-        dashboardTabs.contains(activeDashboardTab) ? activeDashboardTab : "Dashboard"
-    }
-
-    private var dashboardTabs: [String] {
+    private func dashboardTabs(for normalizedProse: [Block]) -> [String] {
         var tabs = ["Dashboard"]
         let hasTable = normalizedProse.contains {
             if case .table = $0 { return true }
@@ -572,8 +562,7 @@ private struct StructuredProseSequenceView: View {
         }
     }
 
-    private var entries: [SequenceEntry] {
-        let sourceBlocks = normalizedProse
+    private func entries(for sourceBlocks: [Block]) -> [SequenceEntry] {
         var out: [SequenceEntry] = []
         var mode: SectionListMode = .normal
         var i = 0
@@ -659,7 +648,15 @@ private struct StructuredProseSequenceView: View {
 
     @ViewBuilder
     private var sequenceBody: some View {
-        let tabs = dashboardTabs
+        // Build each derived snapshot once, not once per row. Calling the
+        // computed normalization and tab properties inside ForEach previously
+        // rescanned the whole reply for every entry on every publication.
+        let normalizedProse = promoteStandaloneBoldHeadingsIOS(prose)
+        let tabs = dashboardTabs(for: normalizedProse)
+        let visibleDashboardTab = tabs.contains(activeDashboardTab) ? activeDashboardTab : "Dashboard"
+        let entries = entries(for: normalizedProse)
+        let lastMotionIndex = normalizedProse.count - 1
+        let allowed = fluidMotionAllowed
         if !tabs.isEmpty {
             HStack(spacing: 4) {
                 ForEach(tabs, id: \.self) { (tab: String) in
@@ -694,12 +691,12 @@ private struct StructuredProseSequenceView: View {
                     NexlyQuickCalculatorCardView(spec: calc)
                 } else if let (callout, extraItems) = entry.coalescedCallout {
                     NexlyCalloutCardView(callout: callout, extraItems: extraItems, citations: citations)
-                        .environment(\.fluidResponseStreaming, fluidMotionAllowed && ((isStreaming && entry.index + entry.consumedCount >= normalizedProse.count - 1) ||
+                        .environment(\.fluidResponseStreaming, allowed && ((isStreaming && entry.index + entry.consumedCount >= lastMotionIndex) ||
                             entry.block.sourceStart >= newBlockFloor))
                 } else {
                     BlockView(block: entry.block, isLast: entry.index == prose.count - 1, citations: citations)
                         .environment(\.nexlySectionListMode, entry.sectionMode)
-                        .environment(\.fluidResponseStreaming, fluidMotionAllowed && ((isStreaming && entry.index + entry.consumedCount >= normalizedProse.count - 1) ||
+                        .environment(\.fluidResponseStreaming, allowed && ((isStreaming && entry.index + entry.consumedCount >= lastMotionIndex) ||
                             entry.block.sourceStart >= newBlockFloor))
                 }
             }
