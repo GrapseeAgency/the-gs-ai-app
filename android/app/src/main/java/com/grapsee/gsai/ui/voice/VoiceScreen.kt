@@ -13,18 +13,6 @@ import android.speech.tts.UtteranceProgressListener
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.StartOffset
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,7 +36,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,11 +56,6 @@ import androidx.core.app.ActivityCompat
 import com.grapsee.gsai.data.tts.TtsFocus
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.RefIconButton
-import com.grapsee.gsai.ui.orbs.OrbSize
-import com.grapsee.gsai.ui.orbs.ThinkingOrb
-import com.grapsee.gsai.ui.orbs.OrbPhase
-import com.grapsee.gsai.ui.orbs.luminance
-import com.grapsee.gsai.ui.orbs.orbStateForVoice
 import com.grapsee.gsai.ui.theme.GsHaptics
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsTheme
@@ -123,6 +105,7 @@ fun VoiceScreen(
     var transcript by remember { mutableStateOf("") }
     var finalTranscript by remember { mutableStateOf("") }
     var speakerOn by remember { mutableStateOf(false) }
+    var playbackActive by remember { mutableStateOf(false) }
     // Permission state survives recomposition so re-entry skips the prompt.
     var micGranted by remember {
         mutableStateOf(
@@ -138,8 +121,7 @@ fun VoiceScreen(
     val rmsLevel = remember { mutableStateOf(0f) }
     // Capability probe: some OEM recognizers never invoke onRmsChanged. The
     // first callback flips this true; while the mic is open and it is still
-    // false, the waveform falls back to its oscillator so the screen is never
-    // dead during real speech.
+    // false, the ring uses silence rather than inventing microphone readings.
     val rmsSeen = remember { mutableStateOf(false) }
 
     // Read-aloud engine for the speaker toggle — same discipline as chat: the
@@ -151,16 +133,23 @@ fun VoiceScreen(
         TtsFocus(
             context,
             onReady = { ttsReady = it },
-            onStoppedByFocusLoss = { speakerOn = false }
+            onStoppedByFocusLoss = { speakerOn = false; playbackActive = false }
         )
     }
     DisposableEffect(tts) {
         tts.engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) = Unit
+            override fun onStart(utteranceId: String?) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    if (tts.hasActiveUtterance()) playbackActive = true
+                }
+            }
             override fun onDone(utteranceId: String?) {
                 if (tts.finishUtterance(utteranceId)) {
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        if (!tts.hasActiveUtterance()) speakerOn = false
+                        if (!tts.hasActiveUtterance()) {
+                            speakerOn = false
+                            playbackActive = false
+                        }
                     }
                 }
             }
@@ -168,7 +157,10 @@ fun VoiceScreen(
             override fun onError(utteranceId: String?) {
                 if (tts.finishUtterance(utteranceId)) {
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        if (!tts.hasActiveUtterance()) speakerOn = false
+                        if (!tts.hasActiveUtterance()) {
+                            speakerOn = false
+                            playbackActive = false
+                        }
                     }
                 }
             }
@@ -297,6 +289,7 @@ fun VoiceScreen(
         if (speakerOn && phase == VoicePhase.Result && ttsReady) {
             runCatching { tts.speak(finalTranscript, "voice-result") }
         } else if (!speakerOn) {
+            playbackActive = false
             tts.stop()
         }
     }
@@ -340,32 +333,34 @@ fun VoiceScreen(
                     onClick = onBack,
                     tint = GsTheme.colors.textPrimary
                 )
-                TextButton(onClick = onOpenPosition) {
+                TextButton(onClick = {
+                    // Position owns a different stereo capture. Release the
+                    // recognizer and playback before navigating, never open two mics.
+                    recognizer.value?.runCatching { cancel(); destroy() }
+                    recognizer.value = null
+                    phase = VoicePhase.Paused
+                    tts.stop()
+                    speakerOn = false
+                    playbackActive = false
+                    onOpenPosition()
+                }) {
                     Text("Position", color = GsTheme.colors.textPrimary)
                 }
             }
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Phase 4: the activity orb mirrors the recognizer's REAL phase —
-            // "Listening…" while the mic is live, "Working…" while it
-            // processes. Idle, error and permission states show no orb: an
-            // absent state is never faked.
-            orbStateForVoice(phase)?.let { orbState ->
-                // The live RMS feeds the orb's reactive core (mandate: RECORDING
-                // glows with the voice); processing falls back to the default
-                // luminous wash. This is the Android mirror of the iOS
-                // RMS-in-installTap path.
-                val live = phase == VoicePhase.Listening
-                ThinkingOrb(
-                    state = orbState,
-                    size = OrbSize.STANDARD,
-                    contentDescription = orbState.label,
-                    luminance = if (live) OrbPhase.RECORDING.luminance else null,
-                    amplitude = if (live) rmsLevel.value else -1f,
-                    modifier = Modifier.padding(bottom = GsMotion.spaceM)
-                )
-            }
+            GsVoiceRing(
+                phase = if (playbackActive) RingPhase.Speaking else when (phase) {
+                    VoicePhase.Listening -> RingPhase.Listening
+                    VoicePhase.Processing -> RingPhase.Processing
+                    else -> RingPhase.Idle
+                },
+                level = { if (phase == VoicePhase.Listening && !playbackActive && rmsSeen.value) rmsLevel.value else 0f },
+                diameter = 224,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+                label = "Voice ring"
+            )
 
             Text(
                 text = statusLine,
@@ -413,24 +408,6 @@ fun VoiceScreen(
                     } else {
                         GsChip(text = "Open Settings", selected = false, onClick = openAppSettings)
                     }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(GsMotion.spaceL))
-
-            // Waveform — 24 aurora bars, breathing only while the mic is live.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                repeat(24) { index ->
-                    WaveformBar(
-                        index = index,
-                        active = phase == VoicePhase.Listening,
-                        level = rmsLevel,
-                        driven = rmsSeen.value,
-                    )
                 }
             }
 
@@ -541,75 +518,6 @@ fun VoiceScreen(
             Spacer(modifier = Modifier.height(GsMotion.spaceS))
         }
     }
-}
-
-/** One waveform bar. Height spans 8–56dp.
- *
- *  When the recognizer reports a live level ([driven], proven by the onRmsChanged
- *  probe) the bar's amplitude follows the microphone: loud speech pushes it up,
- *  silence lets it settle near the baseline. A per-index oscillator is layered on
- *  top so the surface shimmers rather than moving as one slab. When no level ever
- *  arrives the oscillator carries the bar alone, so older recognizers still get a
- *  lively — if not audio-true — waveform.
- *
- *  Draw-phase throughout: [level] and the oscillator are read inside drawBehind,
- *  so a level change invalidates the draw but never recomposes or re-lays-out the
- *  bar. Bars rest at a calm 10dp whenever the microphone is not genuinely open. */
-@Composable
-private fun WaveformBar(
-    index: Int,
-    active: Boolean,
-    level: State<Float>,
-    driven: Boolean,
-) {
-    val aurora = GsTheme.colors.aurora
-    val brush = remember(aurora) { Brush.verticalGradient(colors = aurora) }
-    if (!active) {
-        Box(
-            modifier = Modifier
-                .width(4.dp)
-                .height(56.dp)
-                .drawBehind {
-                    val barHeight = 10.dp.toPx()
-                    drawRoundRect(
-                        brush = brush,
-                        topLeft = Offset(0f, size.height - barHeight),
-                        size = Size(size.width, barHeight),
-                        cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
-                    )
-                }
-        )
-        return
-    }
-    val transition = rememberInfiniteTransition(label = "wave")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 850, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-            initialStartOffset = StartOffset(index * 45)
-        ),
-        label = "wavePhase"
-    )
-    Box(
-        modifier = Modifier
-            .width(4.dp)
-            .height(56.dp)
-            .drawBehind {
-                // Oscillator gives each bar its own rhythm; the live level scales
-                // the whole excursion so the group breathes with the speaker.
-                val shimmer = 0.55f + 0.45f * phase
-                val amp = if (driven) level.value * shimmer else shimmer
-                val barHeight = 8.dp.toPx() + 48.dp.toPx() * amp.coerceIn(0f, 1f)
-                drawRoundRect(
-                    brush = brush,
-                    topLeft = Offset(0f, size.height - barHeight),
-                    size = Size(size.width, barHeight),
-                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
-                )
-            }
-    )
 }
 
 @Composable

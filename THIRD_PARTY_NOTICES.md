@@ -33,3 +33,5 @@ The Android code in `android/app/src/main/java/com/grapsee/gsai/ui/voice/positio
 Copyright (c) 2026 Jakub Antalik, MIT. License: [MIT-Libraries.dev-border-beam.txt](third_party/licenses/MIT-Libraries.dev-border-beam.txt). Source: <https://github.com/Jakubantalik/Libraries.dev/tree/14ae9d2dad18fcee251f4b06333b492a2a41d2ed/packages/border-beam>.
 
 iOS uses upstream BorderBeamKit. Android uses the upstream React Native SkSL rotate-layer shader and md/colorful preset data adapted to native Android Canvas/AGSL; the native software fallback implements the same rotating mask and colored gradient blob layers.
+
+The Android neutral mono Voice Ring renderer in `GsVoiceRing.kt` translates the upstream Voice Ring level follower, two-loop geometry, depth-sorted tube painter and direction lean field (revision `14ae9d2dad18fcee251f4b06333b492a2a41d2ed`). It is a native port, not an official Android package. iOS Talk and Voice Position use upstream VoiceRingKit directly.

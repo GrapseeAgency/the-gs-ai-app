@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import Speech
 import AVFoundation
+import VoiceRingKit
 
 /// Full-screen voice session — kinetic aurora waveform, live transcript,
 /// call controls. Now real: the on-device SpeechRecognizer (via VoiceDictation)
@@ -17,15 +18,6 @@ struct VoiceView: View {
     @StateObject private var dictation = VoiceDictation()
     @StateObject private var speech = SpeechPlayer()
 
-    private let barCount = 24
-
-    /// Deterministic waveform targets (24…56pt) — stable between runs.
-    private var heights: [CGFloat] {
-        (0..<barCount).map { index in
-            CGFloat(24 + abs(sin(Double(index) * 1.37)) * 32)
-        }
-    }
-
     var body: some View {
         ZStack {
             Aero.background.ignoresSafeArea()
@@ -33,7 +25,6 @@ struct VoiceView: View {
                 topBar
                 Spacer()
                 status
-                waveform
                 Spacer()
                 transcript
                 controls
@@ -82,6 +73,8 @@ struct VoiceView: View {
                 .foregroundStyle(Aero.textMuted)
             Spacer()
             Button {
+                dictation.suspendForBackground()
+                speech.stop()
                 router.path.append(.voicePosition)
             } label: {
                 Label("Position", systemImage: "dot.radiowaves.left.and.right")
@@ -121,25 +114,14 @@ struct VoiceView: View {
 
     private var status: some View {
         VStack(spacing: Aero.Spacing.xs) {
-            // Phase 4: the activity orb mirrors the recognizer's REAL phase —
-            // "Listening…" while the mic is live, "Working…" while it
-            // processes. Idle, error and permission states show no orb: an
-            // absent state is never faked.
-            if let orbState = orbStateForVoiceSession(dictation.sessionState) {
-                // The luminous layer is phase-honest: live capture glows in
-                // the ACTIVE role with the microphone's real RMS lifting the
-                // core (VoiceDictation.level, the tap-RMS twin of Android's
-                // onRmsChanged); processing borrows the reasoning profile.
-                let live = dictation.sessionState == .listening
-                ThinkingOrbView(
-                    state: orbState,
-                    size: .standard,
-                    contentDescription: orbState.label,
-                    luminance: live ? OrbPhase.recording.luminance : OrbPhase.reasoning.luminance,
-                    amplitude: live ? Double(dictation.level) : -1
-                )
-                .padding(.bottom, Aero.Spacing.xs)
-            }
+            VoiceRing(
+                .mono,
+                state: ringState,
+                source: .level { dictation.isListening ? Double(dictation.level) : 0 },
+                style: ringStyle,
+                size: 224
+            )
+            .accessibilityLabel("Voice ring")
             Text(statusLine)
                 .font(Aero.display())
                 .foregroundStyle(statusIsTrouble ? Aero.textMuted : Aero.text)
@@ -165,26 +147,19 @@ struct VoiceView: View {
         }
     }
 
-    // MARK: Waveform (aurora — the one AI-active moment)
-
-    private var waveform: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<barCount, id: \.self) { index in
-                Capsule()
-                    .fill(LinearGradient(colors: Aero.aurora, startPoint: .top, endPoint: .bottom))
-                    .frame(width: 4, height: dictation.isListening ? heights[index] : 8)
-                    .animation(
-                        SettingsStore.shared.animationReduced
-                            ? nil
-                            : .easeInOut(duration: 0.5)
-                                .repeatForever(autoreverses: true)
-                                .delay(Double(index) * 0.04),
-                        value: dictation.isListening
-                    )
-            }
+    private var ringState: VoiceState {
+        if speech.speakingMessageID == "voice-result" { return .speaking }
+        switch dictation.sessionState {
+        case .listening: return .listening
+        case .processing: return .processing
+        default: return .idle
         }
-        .frame(height: 56)
-        .accessibilityHidden(true)
+    }
+
+    private var ringStyle: VoiceStyle {
+        var style = VoiceStyle()
+        style.paused = SettingsStore.shared.animationReduced || SettingsStore.shared.reduceMotion
+        return style
     }
 
     // MARK: Transcript

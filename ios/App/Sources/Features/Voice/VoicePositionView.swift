@@ -95,6 +95,8 @@ struct VoicePositionView: View {
                 .foregroundStyle(Aero.textMuted)
             Spacer()
             Button {
+                calibrationTask?.cancel()
+                position.stop()
                 router.path.append(.voice)
             } label: {
                 Label("Talk", systemImage: "waveform")
@@ -125,6 +127,12 @@ struct VoicePositionView: View {
         .padding(.top, Aero.Spacing.s)
     }
 
+    private var ringStyle: VoiceStyle {
+        var style = VoiceStyle()
+        style.paused = SettingsStore.shared.animationReduced || SettingsStore.shared.reduceMotion
+        return style
+    }
+
     private var positionCard: some View {
         AeroCard {
             VStack(spacing: Aero.Spacing.s) {
@@ -132,6 +140,7 @@ struct VoicePositionView: View {
                     .mono,
                     state: meter.isRunning ? .listening : .idle,
                     source: .meter(meter),
+                    style: ringStyle,
                     direction: position.reading == nil ? nil : position.pan,
                     size: 224
                 )

@@ -52,11 +52,6 @@ import com.grapsee.gsai.data.tts.VoicePlaybackState
 import com.grapsee.gsai.ui.components.GsChip
 import com.grapsee.gsai.ui.components.RefIconButton
 import com.grapsee.gsai.ui.icons.GsIcons
-import com.grapsee.gsai.ui.orbs.OrbPhase
-import com.grapsee.gsai.ui.orbs.OrbSize
-import com.grapsee.gsai.ui.orbs.OrbState
-import com.grapsee.gsai.ui.orbs.ThinkingOrb
-import com.grapsee.gsai.ui.orbs.luminance
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.voice.position.CalibrationIssue
@@ -310,14 +305,12 @@ private fun PositionHeroCard(state: VoicePositionUiState, onToggle: () -> Unit) 
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(GsMotion.spaceS)
         ) {
-            ThinkingOrb(
-                state = OrbState.LISTENING,
-                size = OrbSize.STANDARD,
-                contentDescription = if (state.running) "Listening for stereo voice position" else "Voice Position is paused",
-                luminance = if (state.running) OrbPhase.RECORDING.luminance else OrbPhase.LISTENING.luminance,
-                amplitude = if (state.running) state.level else -1f,
-                renderScale = 1.65f,
-                modifier = Modifier.padding(vertical = GsMotion.spaceS)
+            GsVoiceRing(
+                phase = if (state.running) RingPhase.Listening else RingPhase.Idle,
+                level = { if (state.running) state.level else 0f },
+                direction = if (state.running && state.input == PositionInput.STEREO) direction?.pan else null,
+                diameter = 224,
+                label = if (state.running) "Voice position ring" else "Voice Position is paused"
             )
             Text(
                 text = headline,
