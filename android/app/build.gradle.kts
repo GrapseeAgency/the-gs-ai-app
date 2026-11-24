@@ -11,6 +11,7 @@ android {
     namespace = "com.grapsee.gsai"
     // Shared display policy is bundled locally; previews never fetch it.
     sourceSets.getByName("main").assets.srcDir(rootProject.file("../shared-contracts"))
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/originalAvatarAssets"))
     compileSdk = 35
     // Decision 1: RECONNECTED. The module now uses com.android.dynamic-feature
     // (it was com.android.library, which is why the variant never matched) and
@@ -401,37 +402,41 @@ tasks.withType<Test>().configureEach {
 
 
 /**
- * Every APK (including release builds) must ship the actual Libraries.dev
- * bot-avatars React canvas runtime. Never silently fall back to an icon.
- * The bundle is generated locally from exact pinned npm versions when absent;
- * CI's avatar workflow pre-generates it, so the task is then up-to-date.
+ * Generate lossless native playback atlases directly from the pinned
+ * original React package at build time. All APK variants package them.
+ * No WebView or JS engine is used for the avatar on the device.
  */
 val botAvatarDir = rootProject.projectDir.parentFile.resolve("scripts/native-avatar")
-val botAvatarBundle = project.projectDir.resolve("src/main/assets/bot-avatar/avatar.bundle.js")
+val originalAvatarAssets = layout.buildDirectory.dir("generated/originalAvatarAssets/bot-avatar/native")
 tasks.register("bundleAuthenticBotAvatars") {
     inputs.files(
         botAvatarDir.resolve("entry.tsx"),
         botAvatarDir.resolve("package.json"),
         botAvatarDir.resolve("build.mjs"),
     )
-    outputs.file(botAvatarBundle)
+    outputs.dir(originalAvatarAssets)
     doLast {
-        fun invoke(vararg parts: String, directory: java.io.File) {
+        fun invoke(vararg parts: String) {
             val process = ProcessBuilder(*parts)
-                .directory(directory)
+                .directory(botAvatarDir)
                 .inheritIO()
                 .start()
             check(process.waitFor() == 0) {
-                "Cannot bundle authentic bot-avatars from npm: " + parts.joinToString(" ")
+                "Cannot generate original bot-avatars assets: " + parts.joinToString(" ")
             }
         }
-        if (!botAvatarBundle.isFile) {
-            invoke("npm", "install", "--no-audit", "--no-fund", directory = botAvatarDir)
-            invoke("node", "scripts/native-avatar/build.mjs",
-                directory = rootProject.projectDir.parentFile)
+        invoke("npm", "install", "--no-audit", "--no-fund")
+        if (System.getenv("GS_AVATAR_CHROMIUM_EXECUTABLE").isNullOrBlank()) {
+            invoke("npm", "exec", "--", "playwright", "install", "chromium")
         }
-        check(botAvatarBundle.isFile && botAvatarBundle.length() > 20_000) {
-            "Authentic bot-avatars JS missing from APK assets; refusing to package blank avatars"
+        val output = originalAvatarAssets.get().asFile
+        invoke("node", "build.mjs", output.absolutePath)
+        check(output.resolve("manifest.json").isFile)
+        for (style in listOf("clover", "flower", "triangle", "square")) {
+            for (state in listOf("default", "working")) {
+                check(output.resolve("$style-$state-atlas.png").length() > 20_000)
+                check(output.resolve("$style-$state-poster.png").length() > 100)
+            }
         }
     }
 }

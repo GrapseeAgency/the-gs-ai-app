@@ -1,23 +1,20 @@
 package com.grapsee.gsai.ui.components
 
-import android.annotation.SuppressLint
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Color
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
-import android.util.Base64
+import android.util.LruCache
+import android.util.Log
 import android.view.View
-import android.view.ViewGroup
-import android.webkit.JavascriptInterface
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.widget.FrameLayout
-import android.widget.ImageView
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -26,171 +23,179 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.size
 import androidx.compose.ui.viewinterop.AndroidView
 import com.grapsee.gsai.data.AssistantAvatarStyle
-import org.json.JSONObject
-import java.io.ByteArrayInputStream
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.Executors
 
 /**
- * Decodes only bounded PNG frames from our OFFLINE, original bot-avatars npm
- * canvas. Public class is intentional: Android's reflection-backed
- * @JavascriptInterface bridge needs a publicly accessible declaring class.
+ * Lossless native playback of the actual bot-avatars@0.2.2 React canvas
+ * captured by scripts/native-avatar/build.mjs. All artwork and animated
+ * poses come from the package. No WebView, hand-drawn avatar or frame
+ * transfer on the device. This is recorded original-library animation,
+ * not a Kotlin implementation of the procedural engine.
  */
-class AuthenticCanvasBridge(private val publish: (Bitmap) -> Unit) {
-    private val live = AtomicBoolean(true)
-    private val received = AtomicInteger()
-    private val decoded = AtomicInteger()
-    @Volatile private var failure = "none"
+private object OriginalAvatarAssets {
+    const val FRAME_SIZE = 144
+    const val COLUMNS = 12
+    const val FRAME_COUNT = 180
+    const val FPS = 30
+    private val main = Handler(Looper.getMainLooper())
+    private val pool = Executors.newFixedThreadPool(2)
+    private val atlases = object : LruCache<String, Bitmap>(48 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount
+    }
+    private val posters = LruCache<String, Bitmap>(16)
+    private val pending = mutableMapOf<String, MutableList<(Bitmap?) -> Unit>>()
 
-    fun release() { live.set(false) }
-
-    @JavascriptInterface
-    fun frame(dataUrl: String) {
-        received.incrementAndGet()
-        if (!live.get()) return
-        if (!dataUrl.startsWith("data:image/png;base64,") || dataUrl.length > 140_000) {
-            failure = "bad-data-url length=" + dataUrl.length
-            return
+    private fun decode(context: Context, name: String): Bitmap =
+        context.assets.open("bot-avatar/native/" + name).use { stream ->
+            checkNotNull(BitmapFactory.decodeStream(stream, null, BitmapFactory.Options().apply {
+                inScaled = false
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            })) { "Invalid original avatar asset: " + name }
         }
-        try {
-            val raw = Base64.decode(dataUrl.substringAfter(','), Base64.DEFAULT)
-            val frame = BitmapFactory.decodeByteArray(raw, 0, raw.size)
-                ?: error("BitmapFactory returned null")
-            decoded.incrementAndGet()
-            publish(frame)
-        } catch (e: Exception) {
-            failure = e.javaClass.simpleName + ":" + e.message
+
+    fun poster(context: Context, key: String): Bitmap =
+        posters.get(key) ?: decode(context, key + "-poster.png").also { posters.put(key, it) }
+
+    // All calls are on the UI thread. Share each decoded atlas across rows.
+    fun load(context: Context, key: String, callback: (Bitmap?) -> Unit) {
+        atlases.get(key)?.let { callback(it); return }
+        pending[key]?.let { it.add(callback); return }
+        pending[key] = mutableListOf(callback)
+        val app = context.applicationContext
+        pool.execute {
+            val atlas = runCatching {
+                decode(app, key + "-atlas.png").also {
+                    check(it.width == FRAME_SIZE * COLUMNS &&
+                        it.height == FRAME_SIZE * (FRAME_COUNT / COLUMNS)) {
+                        "Invalid original frame atlas dimensions"
+                    }
+                }
+            }.onFailure { Log.e("GsBotAvatar", "Original atlas load failed: " + key, it) }
+                .getOrNull()
+            main.post {
+                atlas?.let { atlases.put(key, it) }
+                pending.remove(key)?.forEach { it(atlas) }
+            }
+        }
+    }
+}
+
+internal class OriginalBotAvatarView(context: Context) : View(context) {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val source = Rect()
+    private val target = RectF()
+    private var poster: Bitmap? = null
+    private var atlas: Bitmap? = null
+    private var motionDisabled = false
+    private var originMs = 0L
+    private var lastFrame = -1
+    private var request = 0
+    internal var animationKey = ""
+        private set
+    internal var presentedFrames = 0
+        private set
+    internal val animationReady get() = atlas != null
+
+    init {
+        tag = "gs-original-native-avatar"
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+        isClickable = false
+        isFocusable = false
+        setWillNotDraw(false)
+    }
+
+    fun display(style: AssistantAvatarStyle, working: Boolean, reducedMotion: Boolean) {
+        val key = style.id + "-" + if (working) "working" else "default"
+        if (animationKey == key && motionDisabled == reducedMotion) return
+        animationKey = key
+        motionDisabled = reducedMotion
+        val ticket = ++request
+        lastFrame = -1
+        atlas = null
+        // A valid original frame is visible even while the animation texture loads.
+        poster = OriginalAvatarAssets.poster(context, key)
+        invalidate()
+        if (!reducedMotion) {
+            OriginalAvatarAssets.load(context, key) { bitmap ->
+                if (ticket == request && animationKey == key) {
+                    atlas = bitmap
+                    originMs = SystemClock.uptimeMillis()
+                    invalidate()
+                }
+            }
         }
     }
 
-    @JavascriptInterface
-    fun diagnostics(): String =
-        "received=" + received.get() + ",decoded=" + decoded.get() + ",error=" + failure
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        if (width <= 0 || height <= 0) return
+        val side = minOf(width, height).toFloat()
+        val left = (width - side) / 2f
+        val top = (height - side) / 2f
+        target.set(left, top, left + side, top + side)
+        val texture = atlas
+        if (texture == null || motionDisabled) {
+            poster?.let { canvas.drawBitmap(it, null, target, paint) }
+            return
+        }
+        val elapsed = (SystemClock.uptimeMillis() - originMs).coerceAtLeast(0L)
+        val ticks = elapsed * OriginalAvatarAssets.FPS / 1000L
+        val frame = (ticks % OriginalAvatarAssets.FRAME_COUNT).toInt()
+        val x = (frame % OriginalAvatarAssets.COLUMNS) * OriginalAvatarAssets.FRAME_SIZE
+        val y = (frame / OriginalAvatarAssets.COLUMNS) * OriginalAvatarAssets.FRAME_SIZE
+        source.set(x, y, x + OriginalAvatarAssets.FRAME_SIZE, y + OriginalAvatarAssets.FRAME_SIZE)
+        canvas.drawBitmap(texture, source, target, paint)
+        if (frame != lastFrame) {
+            lastFrame = frame
+            presentedFrames++
+        }
+        if (isAttachedToWindow && isShown && windowVisibility == VISIBLE) {
+            val nextMs = ((ticks + 1) * 1000L + OriginalAvatarAssets.FPS - 1) /
+                OriginalAvatarAssets.FPS
+            postInvalidateDelayed((nextMs - elapsed).coerceIn(1L, 34L))
+        }
+    }
+
+    override fun onVisibilityAggregated(isVisible: Boolean) {
+        super.onVisibilityAggregated(isVisible)
+        if (isVisible) invalidate()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        invalidate()
+    }
+
+    fun release() {
+        request++
+        atlas = null
+        poster = null
+        animationKey = ""
+    }
 }
 
-private data class AvatarViewHolder(
-    val browser: WebView,
-    val image: ImageView,
-    val bridge: AuthenticCanvasBridge,
-    var command: String,
-)
-
-/**
- * Runs the real bot-avatars React renderer locally, then presents its live
- * canvas frames using a native Android ImageView OVER the WebView. The image
- * is not re-drawn by Kotlin, nor is it a static picture: every frame comes
- * from the package's JavaScript canvas.
- */
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun GsBotAvatar(
     style: AssistantAvatarStyle,
-    size: Dp = 38.dp,
+    size: Dp = 34.dp,
     isWorking: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val main = remember { Handler(Looper.getMainLooper()) }
     val reducedMotion = remember(context) {
         Settings.Global.getFloat(
             context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f
         ) == 0f
     }
-    val command = remember(style, isWorking, reducedMotion) {
-        val state = JSONObject().apply {
-            put("type", style.id)
-            put("state", if (isWorking) "working" else "default")
-            put("paused", reducedMotion)
-        }
-        "window.gsAvatarUpdate && window.gsAvatarUpdate(" + state.toString() + ");"
-    }
-
     AndroidView(
-        factory = { ctx ->
-            val image = ImageView(ctx).apply {
-                setBackgroundColor(Color.TRANSPARENT)
-                scaleType = ImageView.ScaleType.FIT_XY
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                isClickable = false
-            }
-            val bridge = AuthenticCanvasBridge { bitmap ->
-                main.post { image.setImageBitmap(bitmap) }
-            }
-            val browser = WebView(ctx).apply {
-                setBackgroundColor(Color.TRANSPARENT)
-                isVerticalScrollBarEnabled = false
-                isHorizontalScrollBarEnabled = false
-                overScrollMode = View.OVER_SCROLL_NEVER
-                isFocusable = false
-                isFocusableInTouchMode = false
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = false
-                settings.allowContentAccess = false
-                settings.allowFileAccess = true
-                settings.allowFileAccessFromFileURLs = false
-                settings.allowUniversalAccessFromFileURLs = false
-                settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                // Only a trusted bundled file loads; URLs cannot navigate away
-                // or fetch arbitrary remote resources.
-                addJavascriptInterface(bridge, "AndroidAvatarFrames")
-                webViewClient = object : WebViewClient() {
-                    override fun shouldOverrideUrlLoading(
-                        view: WebView, request: WebResourceRequest,
-                    ): Boolean = true
-
-                    override fun shouldInterceptRequest(
-                        view: WebView, request: WebResourceRequest,
-                    ): WebResourceResponse? =
-                        if (request.url.scheme == "http" || request.url.scheme == "https") {
-                            WebResourceResponse(
-                                "text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0))
-                            )
-                        } else null
-
-                    override fun onPageFinished(view: WebView, url: String) {
-                        view.evaluateJavascript(command, null)
-                    }
-                }
-            }
-            FrameLayout(ctx).apply {
-                setBackgroundColor(Color.TRANSPARENT)
-                addView(browser, FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-                ))
-                // A native ImageView ABOVE Chromium's texture: Compose or
-                // WebView surface ordering cannot hide the delivered pixels.
-                addView(image, FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
-                ))
-                tag = AvatarViewHolder(browser, image, bridge, command)
-                browser.loadUrl("file:///android_asset/bot-avatar/index.html")
-            }
+        factory = { OriginalBotAvatarView(it) },
+        update = { it.display(style, isWorking, reducedMotion) },
+        onRelease = { it.release() },
+        modifier = modifier.size(size).semantics {
+            contentDescription = style.label +
+                if (isWorking) " bot, working" else " bot, idle"
         },
-        update = { container ->
-            val holder = container.tag as AvatarViewHolder
-            if (holder.command != command) {
-                holder.command = command
-                holder.browser.evaluateJavascript(command, null)
-            }
-        },
-        onRelease = { container ->
-            val holder = container.tag as AvatarViewHolder
-            holder.bridge.release()
-            holder.browser.stopLoading()
-            holder.browser.removeJavascriptInterface("AndroidAvatarFrames")
-            container.removeAllViews()
-            holder.browser.destroy()
-            holder.image.setImageDrawable(null)
-        },
-        modifier = modifier
-            .size(size)
-            .semantics {
-                contentDescription = style.label +
-                    if (isWorking) " bot, working" else " bot, idle"
-            },
     )
 }
