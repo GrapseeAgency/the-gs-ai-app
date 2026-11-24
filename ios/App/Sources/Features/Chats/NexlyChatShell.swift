@@ -130,30 +130,11 @@ struct NexlyComposerBar: View {
     var onSubmit: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    var body: some View {
-        HStack(alignment: .bottom, spacing: 4) {
-            Button(action: onAttach) {
-                NexlyGlyph(
-                    name: "plus",
-                    size: 19,
-                    color: Color(red: 0.56, green: 0.48, blue: 1.0)
-                )
-                .frame(width: 38, height: 38)
-            }
-            .buttonStyle(KineticPressStyle())
-            .accessibilityLabel("Nexly tools, attachments and modes")
-            .contextMenu {
-                Button(action: onAttach) {
-                    Label("Attachments & modes", systemImage: "paperclip")
-                }
-                Button(action: onVoice) {
-                    Label("Voice input", systemImage: "mic")
-                }
-                Button(action: onSearch) {
-                    Label("Search in chat", systemImage: "magnifyingglass")
-                }
-            }
+    var selectedMode: String = "auto"
+    var onModeSelected: (String) -> Void = { _ in }
 
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
             TextField("Ask anything...", text: $text, axis: .vertical)
                 .font(.system(size: 14))
                 .foregroundStyle(Aero.text)
@@ -167,53 +148,125 @@ struct NexlyComposerBar: View {
                     text = String(newValue.dropLast())
                     onSubmit()
                 }
-                .padding(.vertical, 8)
+                .frame(minHeight: 24, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            if isStreaming {
-                Button(action: onStop) {
-                    NexlyGlyph(name: "player-stop", size: 17, color: Aero.text)
-                        .frame(width: 36, height: 36)
-                        .background(Circle().fill(Aero.surface.opacity(0.55)))
-                        .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
+            HStack(alignment: .center, spacing: 6) {
+
+                Button(action: onAttach) {
+                    NexlyGlyph(
+                        name: "plus",
+                        size: 19,
+                        color: Color(red: 0.56, green: 0.48, blue: 1.0)
+                    )
+                    .frame(width: 38, height: 38)
+                    .gsGlass(.floatingControl, corner: 19)
                 }
                 .buttonStyle(KineticPressStyle())
-                .accessibilityLabel("Stop generating")
-            } else {
-                // ONE trailing control, two verbs. The mic and the send disc
-                // used to sit side by side; the mic now BECOMES the send arrow
-                // the moment there is something to send, and becomes the mic
-                // again when the field empties. Mount the original MetalFx
-                // shader only in send mode, so an idle voice control does not
-                // keep a hidden motion sensor or metal ring running.
-                Button(action: canSend ? onSend : onVoice) {
-                    ZStack {
-                        if canSend {
-                            GsMetallicSendFace()
-                                .transition(.opacity.combined(with: .scale(scale: 0.85)))
-                        } else {
-                            NexlyGlyph(name: "microphone", size: 17, color: Aero.text.opacity(0.75))
-                                .frame(width: 36, height: 36)
-                                .background(Circle().fill(Aero.surface.opacity(0.55)))
-                                .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
-                                .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                .accessibilityLabel("Nexly tools, attachments and modes")
+                .contextMenu {
+                    Button(action: onAttach) {
+                        Label("Attachments & modes", systemImage: "paperclip")
+                    }
+                    Button(action: onVoice) {
+                        Label("Voice input", systemImage: "mic")
+                    }
+                    Button(action: onSearch) {
+                        Label("Search in chat", systemImage: "magnifyingglass")
+                    }
+                }
+
+                Spacer(minLength: 0)
+                Menu {
+                    Button("Web Search") { seed("Search the web for ") }
+                    Button("Code") { seed("Help me code ") }
+                    Button("Write") { seed("Help me write ") }
+                    Button("Analyze") { seed("Analyze ") }
+                } label: {
+                    choiceLabel("Agent")
+                }
+                .accessibilityLabel("Agent tasks")
+
+                Menu {
+                    ForEach(["auto", "flash", "thinking"], id: \.self) { mode in
+                        Button {
+                            onModeSelected(mode)
+                        } label: {
+                            if selectedMode == mode {
+                                Label(mode.capitalized, systemImage: "checkmark")
+                            } else {
+                                Text(mode.capitalized)
+                            }
                         }
                     }
-                    .frame(width: 44, height: 44)
-                    .contentShape(Circle())
-                    .animation(
-                        (SettingsStore.shared.reduceMotion || SettingsStore.shared.animationReduced || reduceMotion)
-                            ? nil
-                            : .spring(response: 0.34, dampingFraction: 0.72),
-                        value: canSend
-                    )
+                } label: {
+                    choiceLabel(selectedMode.capitalized)
                 }
-                .buttonStyle(KineticPressStyle())
-                .accessibilityLabel(canSend ? "Send" : "Voice")
+                .accessibilityLabel("Response mode, \(selectedMode.capitalized)")
+                if isStreaming {
+                    Button(action: onStop) {
+                        NexlyGlyph(name: "player-stop", size: 17, color: Aero.text)
+                            .frame(width: 36, height: 36)
+                            .background(Circle().fill(Aero.surface.opacity(0.55)))
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
+                    }
+                    .buttonStyle(KineticPressStyle())
+                    .accessibilityLabel("Stop generating")
+                } else {
+                    // ONE trailing control, two verbs. The mic and the send disc
+                    // used to sit side by side; the mic now BECOMES the send arrow
+                    // the moment there is something to send, and becomes the mic
+                    // again when the field empties. Mount the original MetalFx
+                    // shader only in send mode, so an idle voice control does not
+                    // keep a hidden motion sensor or metal ring running.
+                    Button(action: canSend ? onSend : onVoice) {
+                        ZStack {
+                            if canSend {
+                                GsMetallicSendFace()
+                                    .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                            } else {
+                                NexlyGlyph(name: "microphone", size: 17, color: Aero.text.opacity(0.75))
+                                    .frame(width: 36, height: 36)
+                                    .background(Circle().fill(Aero.surface.opacity(0.55)))
+                                    .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
+                                    .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                            }
+                        }
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
+                        .animation(
+                            (SettingsStore.shared.reduceMotion || SettingsStore.shared.animationReduced || reduceMotion)
+                                ? nil
+                                : .spring(response: 0.34, dampingFraction: 0.72),
+                            value: canSend
+                        )
+                    }
+                    .buttonStyle(KineticPressStyle())
+                    .accessibilityLabel(canSend ? "Send" : "Voice")
+                }
             }
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 5)
-        .gsCapsuleGlass(.floatingControl)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .gsGlass(.floatingControl, corner: 24)
     }
 
+    private func seed(_ prefix: String) {
+        if !text.hasPrefix(prefix) { text = prefix + text }
+        focused.wrappedValue = true
+    }
+
+    private func choiceLabel(_ title: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .font(.custom(Aero.productName(.medium), size: 11))
+                .lineLimit(1)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10, weight: .medium))
+        }
+        .foregroundStyle(Aero.text)
+        .padding(.horizontal, 10)
+        .frame(height: 36)
+        .gsGlass(.floatingControl, corner: 18)
+    }
 }

@@ -701,7 +701,9 @@ struct ChatDetailView: View {
                     sendAndClearDraft()
                 },
                 onStop: { vm.stop() },
-                onSubmit: submitComposer
+                onSubmit: submitComposer,
+                selectedMode: vm.chatMode,
+                onModeSelected: { vm.setChatMode($0) }
             )
         }
         .padding(.horizontal, Aero.Spacing.m)

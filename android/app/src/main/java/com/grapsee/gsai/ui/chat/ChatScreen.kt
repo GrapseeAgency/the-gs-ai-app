@@ -1704,11 +1704,8 @@ fun ChatScreen(
                 }
             }
 
-            // The composer stays visible and editable during generation. Show
-            // one concise phase label from the actual stream state, keep the
-            // selected bot avatar animated in the trailing slot, and make the
-            // adjacent Stop action unmistakable. No generic spinner or invented
-            // "coding" / reasoning phases are shown.
+            // Composer remains editable while the response streams; generation
+            // status and the animated avatar belong only to the transcript.
             ComposerRow(
                 draftText = { draft },
                 onDraftChange = { draft = it },
@@ -1721,6 +1718,11 @@ fun ChatScreen(
                 // sparkle's attach/mode sheet, not as extra chrome beside the
                 // field. The field and send slot stay exactly where the thumb
                 // expects them.
+                selectedMode = chatMode,
+                onModeSelected = { next ->
+                    chatMode = next
+                    SettingsStore.setChatMode(activeConversationId, next)
+                },
                 isStreaming = isStreaming,
                 onStop = {
                     // Cancelling finalizes in the controller: the cancelled
@@ -2214,9 +2216,10 @@ internal fun UserMessage(
 /**
  * The reference composer — ONE glass capsule, nothing competing:
  *
- *   [sparkle/attach] [ field ] [queue?] (paper-plane send | bot avatar + Stop)
+ *   [ full-width multiline field ]
+ *   [plus] [space] [Agent] [Auto] [queue?] [send / voice / Stop]
  *
- * The pill carries the floating-control glass; the field is borderless inside
+ * The rounded card carries floating-control glass; the field is borderless inside
  * it, grows to six lines, then scrolls internally. The leading sparkle opens
  * the attach/mode sheet the old plus and mic used to reach, so no capability
  * was traded for the simpler chrome. Send is the peach paper-plane with the
@@ -2242,10 +2245,9 @@ internal fun ComposerRow(
     drafts: List<AttachmentDraft> = emptyList(),
     onRemoveAttachment: (String) -> Unit = {},
     onRetryAttachment: (String) -> Unit = {},
-    // FLASH-MODE BUG 2 — the mode chip sat INSIDE the pill, LEFT of the text
-    // input; the one-capsule reference moved it into the sparkle's sheet.
-    modeLabel: String? = null,
-    onModeChipClick: () -> Unit = {},
+    // The existing server-supported routing mode, shared with the attachment sheet.
+    selectedMode: String = "auto",
+    onModeSelected: (String) -> Unit = {},
     // The reference composer's trailing mic: opens the real voice screen.
     onVoice: (() -> Unit)? = null
 ) {
@@ -2266,27 +2268,58 @@ internal fun ComposerRow(
         // flight cannot ride a queue (their upload state is real), so with
         // staged drafts the queue affordance honestly stays away.
         val canQueue = isStreaming && draftText().isNotBlank() && drafts.isEmpty()
-        // uiverse Cobp dangerous-dolphin-47, materialized WITHOUT its
-        // gradient: the one-pill composer as a calm bordered container — a
-        // clean 1dp hairline (outlineVariant) wrapped on a 28dp pill.
-        // THE COMPOSER carries the four-cue floating-control glass: thinnest
-        // fill, brightest directional rim, warm hover shadow — it must read as
-        // glass lifted off the bloom, not a flat tinted pill with a hairline.
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(26.dp))
+                .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(24.dp))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // Independent full-width input: grows above the anchored toolbar.
+            // Keep it editable during streaming so the next turn can be drafted.
+            BasicTextField(
+                value = draftText(),
+                onValueChange = onDraftChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 24.dp),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    color = GsTheme.colors.textPrimary,
+                    fontFamily = GsFonts.Product,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                ),
+                cursorBrush = SolidColor(GsTheme.colors.accentStrong),
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Sentences
+                ),
+                maxLines = 6,
+                decorationBox = { inner ->
+                    Box(Modifier.fillMaxWidth()) {
+                        if (draftText().isEmpty()) {
+                            Text(
+                                text = "Ask anything…",
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontSize = 14.sp,
+                                    lineHeight = 20.sp,
+                                    fontFamily = GsFonts.Product
+                                ),
+                                color = GsTheme.colors.textPlaceholder
+                            )
+                        }
+                        inner()
+                    }
+                }
+            )
             Row(
-                modifier = Modifier.padding(horizontal = 5.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.Bottom
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // The reference has one leading sparkle. It opens the same
-                // attach/mode sheet the removed plus and mic used to reach, so
-                // no capability disappeared with the chrome.
                 Box(
                     modifier = Modifier
                         .size(38.dp)
+                        .gsGlass(GsGlassRole.FloatingControl, CircleShape)
                         .clip(CircleShape)
                         .clickable(
                             role = Role.Button,
@@ -2303,65 +2336,89 @@ internal fun ComposerRow(
                         modifier = Modifier.size(17.dp)
                     )
                 }
-    // The field is LIVE during a turn. It used to be `enabled = !isStreaming`,
-    // and the effect was exactly opposite to native: while the AI was
-    // answering, the composer died — you could not write the next question or
-    // task. Every native AI app keeps the composer editable while an answer
-    // streams (a drafted next turn can queue; see the queue-send affordance).
-    // The trailing Stop action replaces Send while a turn runs, so the field
-    // being live can never fire a second concurrent stream by accident.
-    // Enter is a NEWLINE, never a send (there is a dedicated send button), so
-    // multi-line messages type the way a phone expects. Sentence
-    // auto-capitalisation is what every native composer does.
-    BasicTextField(
-        value = draftText(),
-        onValueChange = onDraftChange,
-        modifier = Modifier
-            .weight(1f)
-            .padding(vertical = 8.dp),
-        textStyle = MaterialTheme.typography.bodyLarge.copy(
-            color = GsTheme.colors.textPrimary,
-            fontSize = 14.sp
-        ),
-        cursorBrush = SolidColor(GsTheme.colors.accentStrong),
-        keyboardOptions = KeyboardOptions(
-            capitalization = KeyboardCapitalization.Sentences
-        ),
-        maxLines = 6,
-                    decorationBox = { inner ->
-                        Box {
-                            if (draftText().isEmpty()) {
-                                Text(
-                                    text = "Ask anything…",
-                                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 14.sp),
-                                    color = GsTheme.colors.textPlaceholder
-                                )
-                            }
-                            inner()
-                        }
+                Spacer(Modifier.weight(1f))
+                // A task shortcut edits the draft; it never sends automatically
+                // or implies a separate backend agent that the API does not offer.
+                ComposerChoiceMenu(
+                    label = "Agent",
+                    description = "Agent tasks",
+                    choices = listOf(
+                        "Web Search" to "Search the web for ",
+                        "Code" to "Help me code ",
+                        "Write" to "Help me write ",
+                        "Analyze" to "Analyze "
+                    ),
+                    onChoice = { prefix ->
+                        val existing = draftText()
+                        if (!existing.startsWith(prefix)) onDraftChange(prefix + existing)
                     }
                 )
-                // The assistant's identity is in the transcript. The input is only
-                // for composing, queuing and stopping a turn.
-                if (canQueue) {
-                    GsQueueSendButton(onQueue = onQueue)
-                }
+                ComposerChoiceMenu(
+                    label = when (selectedMode) {
+                        "flash" -> "Flash"
+                        "thinking" -> "Thinking"
+                        else -> "Auto"
+                    },
+                    description = "Response mode",
+                    choices = listOf("Auto" to "auto", "Flash" to "flash", "Thinking" to "thinking"),
+                    selected = selectedMode,
+                    onChoice = onModeSelected
+                )
+                if (canQueue) GsQueueSendButton(onQueue = onQueue)
                 if (isStreaming) {
                     StopGeneratingButton(onStop = onStop)
                 } else {
-                    // ONE trailing control. It used to be two — a send button
-                    // with a mic parked beside it — which put a second, always
-                    // dead-looking disc in the pill and made the reader pick
-                    // between two glyphs for one slot. The mic now BECOMES the
-                    // send arrow the moment there is something to send, and
-                    // becomes the mic again when the field empties: one
-                    // affordance, one place, a continuous morph between verbs.
                     GsComposerAction(
                         hasContent = canSend,
                         onSend = { onSend(draftText().trim()) },
-                        onVoice = onVoice,
+                        onVoice = onVoice
                     )
                 }
+            }
+        }
+    }
+}
+
+/** Compact glass dropdown, with real actions and selected-mode accessibility. */
+@Composable
+private fun ComposerChoiceMenu(
+    label: String,
+    description: String,
+    choices: List<Pair<String, String>>,
+    onChoice: (String) -> Unit,
+    selected: String? = null
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val colors = GsTheme.colors
+    Box {
+        Row(
+            modifier = Modifier
+                .height(36.dp)
+                .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(18.dp))
+                .clickable(role = Role.Button, onClick = { expanded = true })
+                .semantics { contentDescription = "$description, $label" }
+                .padding(horizontal = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(label, fontSize = 11.sp, fontFamily = GsFonts.Product,
+                color = colors.textPrimary, maxLines = 1)
+            Icon(GsIcons.ChevronDown, contentDescription = null,
+                tint = colors.textSecondary, modifier = Modifier.size(12.dp))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            choices.forEach { (title, value) ->
+                DropdownMenuItem(
+                    text = { Text(title) },
+                    trailingIcon = if (selected == value) {
+                        { Icon(GsIcons.Check, contentDescription = "Selected") }
+                    } else null,
+                    onClick = {
+                        expanded = false
+                        onChoice(value)
+                    }
+                )
             }
         }
     }
