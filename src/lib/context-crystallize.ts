@@ -132,16 +132,41 @@ export function projectHistory(history: HistoryRow[], question: string, required
   candidates.sort((a, b) => Number(b.user) - Number(a.user) || b.hits - a.hits || b.index - a.index)
   let remaining = ARCHIVE_BUDGET
   const selected: { index: number; text: string; relevant: boolean }[] = []
+  const included = new Set<number>()
+  function take(item: typeof candidates[number], allowance = remaining): number {
+    if (included.has(item.index)) return 0
+    const available = Math.min(remaining, allowance)
+    if (available < 160) return 0
+    const role = item.user ? 'user' : 'assistant'
+    let budget = Math.min(available - 64, item.user ? 2400 : item.hits > 0 ? 1800 : 500)
+    // Escaped code/JSON can be larger than its source excerpt. Reduce the
+    // source budget instead of dropping the entire relevant historical turn.
+    while (budget >= 64) {
+      const body = excerpt(item.row.content, budget, terms)
+      if (!body) return 0
+      const text = JSON.stringify({ turn: item.index + 1, role, text: body, partial: body !== item.row.content })
+      if (text.length + 1 <= available) {
+        selected.push({ index: item.index, text, relevant: item.hits > 0 })
+        included.add(item.index)
+        remaining -= text.length + 1
+        return text.length + 1
+      }
+      budget = Math.floor(budget * 0.65)
+    }
+    return 0
+  }
+  // A long run of user turns must not starve the answer a follow-up
+  // references. Reserve at most one third for matched assistant passages,
+  // then give any unused reservation back to the ordinary history ranking.
+  let evidenceAllowance = Math.floor(ARCHIVE_BUDGET / 3)
+  const matchedAnswers = candidates.filter(item => !item.user && item.hits > 0)
+  for (const item of matchedAnswers) {
+    if (evidenceAllowance < 160) break
+    evidenceAllowance -= take(item, evidenceAllowance)
+  }
   for (const item of candidates) {
     if (remaining < 160) break
-    const role = item.user ? 'user' : 'assistant'
-    const budget = Math.min(remaining - 64, item.user ? 2400 : item.hits > 0 ? 1800 : 500)
-    const body = excerpt(item.row.content, budget, terms)
-    if (!body) continue
-    const text = JSON.stringify({ turn: item.index + 1, role, text: body, partial: body !== item.row.content })
-    if (text.length > remaining) continue
-    selected.push({ index: item.index, text, relevant: item.hits > 0 })
-    remaining -= text.length + 1
+    take(item)
   }
   selected.sort((a, b) => a.index - b.index)
   const omitted = older.length - selected.length - older.filter(row => required.has(row.id)).length
