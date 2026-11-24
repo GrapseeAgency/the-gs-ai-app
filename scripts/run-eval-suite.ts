@@ -66,6 +66,8 @@ const BASELINE = argv.includes('--baseline') ? argOf('--baseline', '') : null
 const MERGE_BASELINE = argv.includes('--merge-baseline') ? argOf('--merge-baseline', '') : null
 const JSONL = argv.includes('--jsonl') ? argOf('--jsonl', '') : null
 const STRICT = argv.includes('--strict')
+const DURABLE = argv.includes('--durable')
+const SUITE_FILE = argOf('--suite', 'tests/eval-suite-v1.json')
 const ANNOTATE = argv.includes('--github-annotations')
 const APP_VERSION = '0.68.2'
 
@@ -102,11 +104,11 @@ interface Suite {
   categories: string[]
   cases: EvalCase[]
 }
-const suite = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'eval-suite-v1.json'), 'utf8')) as Suite
+const suite = JSON.parse(fs.readFileSync(path.resolve(ROOT, SUITE_FILE), 'utf8')) as Suite
 
 // Production-path turn client (shared with the register judge runner) — same
 // wire path, same recovery, same trace read. Initialized with THIS run's args.
-initTurnClient({ origin: ORIGIN, appVersion: APP_VERSION })
+initTurnClient({ origin: ORIGIN, appVersion: APP_VERSION, transport: DURABLE ? 'durable' : 'legacy' })
 
 // --- deterministic graders (shared core: src/lib/eval-grader.ts) -----------------
 
@@ -154,20 +156,32 @@ async function runCase(c: EvalCase): Promise<CaseResult> {
   // Setup turns (context-isolation T1) in the SAME conversation. Their mode
   // defaults to the case's main mode; setupMode overrides (M07's cross-mode
   // continuity: thinking setup, flash main turn).
-  for (const setupPrompt of setupTurns) {
-    await sseTurn(conv, setupPrompt, c.setupMode ?? c.mode)
+  for (const [index, setupPrompt] of setupTurns.entries()) {
+    const setup = await sseTurn(conv, setupPrompt, c.setupMode ?? c.mode)
+    let settled = setup.done && !!setup.answer.trim() && !setup.errorEvent
+    if (!settled && !setup.errorEvent && !DURABLE) {
+      const recovered = await refetchSettledAnswer(conv, index + 1)
+      settled = recovered.settled && !!recovered.answer?.trim()
+    }
+    if (!settled) {
+      base.status = 'ERROR'
+      base.note = `setup turn ${index + 1} did not produce a settled answer`
+      return base
+    }
     await new Promise((r) => setTimeout(r, 4_000))
   }
   const expectedAssistants = setupTurns.length + 1
   const turn = await sseTurn(conv, prompt, c.mode)
   let answer = turn.answer
   let note = ''
-  if (!turn.done && !turn.errorEvent) {
+  let settledAnswer = turn.done && !!answer.trim()
+  if (!turn.done && !turn.errorEvent && !DURABLE) {
     // View cut before done (30s proxy cap on public origin) — poll for the
     // persisted answer of THIS turn, never grade the previous turn's text.
     const { answer: recovered, settled } = await refetchSettledAnswer(conv, expectedAssistants)
     if (recovered !== null && settled) {
       answer = recovered
+      settledAnswer = true
       note = 'recovered-persisted (view cut before done)'
     } else if (recovered !== null) {
       answer = recovered
@@ -205,7 +219,7 @@ async function runCase(c: EvalCase): Promise<CaseResult> {
   // throttle / upstream failure is infrastructure, not an assertion failure
   // and never a pass (case-i lesson). Re-run these; the baseline merge
   // upserts by case id.
-  if (turn.errorEvent !== null || trace.finalStatus === 'error') {
+  if (!settledAnswer || turn.errorEvent !== null || trace.finalStatus === 'error') {
     base.status = 'ERROR'
     base.note = `${base.note} provider-error errorType=${trace.errorType ?? 'unknown'}`.trim()
     return base
@@ -340,7 +354,9 @@ async function main(): Promise<void> {
   }
 
   // Scorecard for THIS run
-  const blockingFail = results.some((r) => r.status === 'FAIL' && BLOCKING_CATS.has(r.category))
+  const blockingFail = results.some((r) =>
+    (r.status === 'FAIL' || r.status === 'ERROR' || r.status === 'SKIP') &&
+    (BLOCKING_CATS.has(r.category) || suite.cases.find(c => c.id === r.id)?.blocking === true))
   const live = results.filter((r) => r.status !== 'SKIP')
   console.log('\n=== RUN SCORECARD ===')
   console.log('CATEGORY          PASS  FAIL  ERROR  SKIP')
@@ -388,7 +404,7 @@ async function main(): Promise<void> {
     console.log(`baseline written: ${BASELINE}`)
   }
   if (STRICT && blockingFail) {
-    console.error('STRICT: blocking-category failures present — exit 1')
+    console.error('STRICT: blocking cases failed or remain unverified — exit 1')
     process.exit(1)
   }
 }

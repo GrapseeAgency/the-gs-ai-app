@@ -22,12 +22,14 @@ interface ClientConfig {
   origin: string
   appVersion: string
   dbPath: string
+  transport: 'legacy' | 'durable'
 }
 
 const cfg: ClientConfig = {
   origin: 'http://localhost:3000',
   appVersion: '0.68.1',
   dbPath: path.join(ROOT, 'db', 'custom.db'),
+  transport: 'legacy',
 }
 
 /** Point the client at a specific origin/app version before running cases. */
@@ -53,6 +55,7 @@ export interface TurnResult {
 }
 
 export function sseTurn(conv: string, message: string, mode?: string | null): Promise<TurnResult> {
+  if (cfg.transport === 'durable') return durableTurn(conv, message, mode)
   return new Promise((resolve) => {
     const result: TurnResult = { requestId: null, answer: '', done: false, errorEvent: null, events: [], httpError: null, ttftMs: null }
     const startedAt = Date.now()
@@ -100,6 +103,8 @@ export function sseTurn(conv: string, message: string, mode?: string | null): Pr
                     // FLASH MODE (Phase 6) — runner-measured TTFT (first delta).
                     if (result.ttftMs === null) result.ttftMs = Date.now() - startedAt
                     result.answer += ev.data
+                  } else if (ev.event === 'reset') {
+                    result.answer = ''
                   } else if (ev.event === 'done' && typeof ev.data === 'string') {
                     result.done = true
                     try {
@@ -127,6 +132,77 @@ export function sseTurn(conv: string, message: string, mode?: string | null): Pr
         resolve(result)
       })
   })
+}
+
+/** Exercise the same start/subscribe contract as Android and iOS. Grade the
+ * canonical message for this run, not whichever answer happened to arrive. */
+async function durableTurn(conv: string, message: string, mode?: string | null): Promise<TurnResult> {
+  const result: TurnResult = { requestId: null, answer: '', done: false, errorEvent: null, events: [], httpError: null, ttftMs: null }
+  const startedAt = Date.now()
+  const headers = { 'Content-Type': 'application/json', 'x-gs-app-version': cfg.appVersion }
+  try {
+    const start = await fetch(`${cfg.origin}/api/v1/messages/start`, {
+      method: 'POST', headers, signal: AbortSignal.timeout(30_000),
+      body: JSON.stringify({ conversationId: conv, content: message, timezone: 'Asia/Dhaka', ...(mode ? { mode } : {}) }),
+    })
+    if (!start.ok) throw new Error(`start HTTP ${start.status}`)
+    const {runId, streamId} = await start.json() as {runId?: string; streamId?: string}
+    if (!runId || !streamId) throw new Error('start returned no durable run')
+    result.requestId = runId
+    const deadline = startedAt + 240_000
+    const response = await fetch(`${cfg.origin}/api/v1/stream/${encodeURIComponent(streamId)}`, {
+      headers, signal: AbortSignal.timeout(120_000),
+    }).catch(() => null)
+    if (response?.ok && response.body) {
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      try {
+        for (;;) {
+          const chunk = await reader.read()
+          if (chunk.done) break
+          buffer += decoder.decode(chunk.value, {stream:true})
+          const lines = buffer.split('\n'); buffer = lines.pop() ?? ''
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue
+            let ev: {event:string;data:unknown}
+            try { ev = JSON.parse(line.slice(5)) } catch { continue }
+            result.events.push(ev.event)
+            if (ev.event === 'delta' && typeof ev.data === 'string') {
+              if (result.ttftMs === null) result.ttftMs = Date.now() - startedAt
+              result.answer += ev.data
+            } else if (ev.event === 'reset') result.answer = ''
+          }
+        }
+      } catch { /* subscriber cut: the run is authoritative */ }
+      finally { void reader.cancel().catch(() => undefined); try {reader.releaseLock()} catch {} }
+    }
+    while (Date.now() < deadline) {
+      const stateResponse = await fetch(`${cfg.origin}/api/v1/runs/${encodeURIComponent(runId)}`, { headers, signal: AbortSignal.timeout(10_000) })
+      if (!stateResponse.ok) throw new Error(`run HTTP ${stateResponse.status}`)
+      const state = await stateResponse.json() as { status:string; assistantMessageId?:string; finalStatus?:string }
+      if (state.status === 'completed' && state.assistantMessageId) {
+        const messages = await fetch(`${cfg.origin}/api/v1/conversations/${encodeURIComponent(conv)}/messages`, { headers, signal: AbortSignal.timeout(10_000) })
+        if (!messages.ok) throw new Error('canonical message fetch failed')
+        const rows = await messages.json() as { id:string; role:string; content:string }[]
+        const canonical = rows.find(row => row.id === state.assistantMessageId && row.role === 'assistant')
+        if (!canonical?.content.trim()) throw new Error('canonical answer missing')
+        result.answer = canonical.content
+        result.done = true
+        return result
+      }
+      if (state.status === 'failed' || state.status === 'cancelled' || state.finalStatus === 'error') {
+        result.errorEvent = 'Durable run terminated without a completed answer'
+        return result
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000))
+    }
+    result.errorEvent = 'Durable run did not settle before evaluation deadline'
+  } catch (error) {
+    result.httpError = error instanceof Error ? error.message : String(error)
+    result.errorEvent = 'Durable evaluation transport failed'
+  }
+  return result
 }
 
 export async function newConversation(title: string): Promise<string> {

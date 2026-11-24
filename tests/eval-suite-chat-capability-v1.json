@@ -1,0 +1,189 @@
+{
+  "suite": "chat-capability-v1",
+  "categories": [
+    "REASONING",
+    "CONTEXT_ISOLATION",
+    "INSTRUCTION",
+    "TOOLS"
+  ],
+  "cases": [
+    {
+      "id": "Q01",
+      "category": "REASONING",
+      "prompt": "A warehouse has 37 crates of 24 items. 113 items are sold and 9 are damaged. How many usable items remain? Return only the integer.",
+      "setup": [],
+      "mode": "auto",
+      "blocking": true,
+      "assertions": [
+        {
+          "type": "response.matchesRegex",
+          "value": "^\\s*766\\s*$"
+        }
+      ]
+    },
+    {
+      "id": "Q02",
+      "category": "REASONING",
+      "prompt": "A task takes A 6 hours and B 3 hours working independently. How many hours do they need together? Give only the number.",
+      "setup": [],
+      "mode": "auto",
+      "blocking": true,
+      "assertions": [
+        {
+          "type": "response.matchesRegex",
+          "value": "^\\s*2(?:\\.0+)?\\s*$"
+        }
+      ]
+    },
+    {
+      "id": "Q03",
+      "category": "CONTEXT_ISOLATION",
+      "prompt": "What is the final approved project code? Output only the code.",
+      "setup": [
+        "The provisional project code is MX-182. Acknowledge.",
+        "Correction: replace the provisional code with QZ-671. Acknowledge."
+      ],
+      "mode": "auto",
+      "blocking": true,
+      "assertions": [
+        {
+          "type": "response.matchesRegex",
+          "value": "^\\s*QZ-671\\s*$"
+        }
+      ]
+    },
+    {
+      "id": "Q04",
+      "category": "CONTEXT_ISOLATION",
+      "prompt": "Continue with the same response format. State the final budget.",
+      "setup": [
+        "For this conversation, output amounts only, including two decimal places. Our provisional budget is $399.50.",
+        "Update the budget to $472.35. Acknowledge."
+      ],
+      "mode": "auto",
+      "blocking": true,
+      "assertions": [
+        {
+          "type": "response.matchesRegex",
+          "value": "^\\s*\\$?472\\.35\\s*$"
+        },
+        {
+          "type": "response.notContains",
+          "value": "399.50"
+        }
+      ]
+    },
+    {
+      "id": "Q05",
+      "category": "INSTRUCTION",
+      "prompt": "Return precisely two lines: the first line is Alpha7, the second is Beta9. No punctuation or formatting.",
+      "setup": [],
+      "mode": "auto",
+      "blocking": true,
+      "assertions": [
+        {
+          "type": "response.matchesRegex",
+          "value": "^Alpha7\\r?\\nBeta9\\s*$"
+        }
+      ]
+    },
+    {
+      "id": "Q06",
+      "category": "INSTRUCTION",
+      "prompt": "বাংলায় উত্তর দিন। শুধু লিখুন: নীল আকাশ",
+      "setup": [],
+      "mode": "auto",
+      "blocking": true,
+      "assertions": [
+        {
+          "type": "response.matchesRegex",
+          "value": "^\\s*নীল আকাশ\\s*$"
+        }
+      ]
+    },
+    {
+      "id": "Q07",
+      "category": "TOOLS",
+      "prompt": "Calculate (1250*0.18)+37",
+      "setup": [],
+      "mode": "auto",
+      "blocking": true,
+      "assertions": [
+        {
+          "type": "response.matchesRegex",
+          "value": "^\\s*262\\s*$"
+        },
+        {
+          "type": "trace.searchExecuted",
+          "value": false
+        }
+      ]
+    },
+    {
+      "id": "Q08",
+      "category": "TOOLS",
+      "prompt": "Compute 17^3-9*31",
+      "setup": [],
+      "mode": "auto",
+      "blocking": true,
+      "assertions": [
+        {
+          "type": "response.matchesRegex",
+          "value": "^\\s*4634\\s*$"
+        },
+        {
+          "type": "trace.searchExecuted",
+          "value": false
+        }
+      ]
+    },
+    {
+      "id": "Q09",
+      "category": "TOOLS",
+      "prompt": "I have no external email account connected to this chat. Send an email to a fictional supplier and report whether it was actually sent.",
+      "setup": [],
+      "mode": "auto",
+      "blocking": true,
+      "assertions": [
+        {
+          "type": "response.notContains",
+          "value": "email has been sent"
+        },
+        {
+          "type": "response.notContains",
+          "value": "successfully sent"
+        },
+        {
+          "type": "response.notContains",
+          "value": "I've sent the email"
+        }
+      ]
+    },
+    {
+      "id": "Q10",
+      "category": "CONTEXT_ISOLATION",
+      "prompt": "What was the identifier I supplied in the first message? Return only that identifier.",
+      "setup": [
+        "The reference identifier is VX-8031. Acknowledge.",
+        "Context filler 1: discuss the differences between paper and digital notebooks in one short sentence.",
+        "Context filler 2: discuss the differences between paper and digital notebooks in one short sentence.",
+        "Context filler 3: discuss the differences between paper and digital notebooks in one short sentence.",
+        "Context filler 4: discuss the differences between paper and digital notebooks in one short sentence.",
+        "Context filler 5: discuss the differences between paper and digital notebooks in one short sentence.",
+        "Context filler 6: discuss the differences between paper and digital notebooks in one short sentence.",
+        "Context filler 7: discuss the differences between paper and digital notebooks in one short sentence.",
+        "Context filler 8: discuss the differences between paper and digital notebooks in one short sentence.",
+        "Context filler 9: discuss the differences between paper and digital notebooks in one short sentence.",
+        "Context filler 10: discuss the differences between paper and digital notebooks in one short sentence."
+      ],
+      "mode": "auto",
+      "blocking": true,
+      "assertions": [
+        {
+          "type": "response.matchesRegex",
+          "value": "^\\s*VX-8031\\s*$"
+        }
+      ]
+    }
+  ]
+}
