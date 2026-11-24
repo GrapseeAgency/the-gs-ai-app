@@ -153,12 +153,15 @@ export async function foldRunState(runId: string): Promise<FoldedRunState> {
       payload = {}
     }
     if (type.endsWith('Requested')) {
-      open.set(`${type}:${payload.step ?? ''}`, { seq: ev.seq, eventType: type, payload })
+      open.set(String(ev.seq), { seq: ev.seq, eventType: type, payload })
     } else if (type.endsWith('Completed') || type.endsWith('Failed')) {
       // close the matching Requested
       for (const [k, v] of open) {
         const closer = PAIRS[v.eventType]
-        if (closer && (type === closer || type === 'ToolCallFailed')) {
+        const failedType = v.eventType === 'LLMCallRequested' ? 'LLMCallFailed'
+          : v.eventType === 'ToolCallRequested' || v.eventType === 'SearchRequested' ? 'ToolCallFailed' : null
+        if (closer && (type === closer || type === failedType) &&
+            (typeof payload.seq === 'number' ? payload.seq === v.seq : payload.step === v.payload.step)) {
           open.delete(k)
           break
         }

@@ -2005,14 +2005,19 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     if (process.env.GS_REMOTE_TOOLS === '1' && nativeToolModel && prep.thinking.effective === 'thinking' &&
       !useVision && !docContext.block && turn.kind === 'none' && !explicitCalculation(content) &&
       !/\b(?:no tools|without (?:using )?tools|(?:do not|don't|never) use (?:any )?tools)\b/i.test(content)) {
+      const toolSequences = new Map<string, number>()
       const result = await collectRemoteToolEvidence(modelMessages as ChatMessageInput[], {
         request: (messages, signal) => orRequestTools(messages, nativeToolModel, signal),
         clock: timezone => buildTimeEvidence(timezone || clientTimezone).meta,
         stopped: () => !!prep.runId && runStopFlag(prep.runId),
         record: async (stage, entry) => {
           if (!prep.runId) return
-          await appendEvent(prep.runId, stage === 'requested' ? 'ToolCallRequested' :
-            stage === 'completed' ? 'ToolCallCompleted' : 'ToolCallFailed', entry)
+          if (stage === 'requested') {
+            toolSequences.set(entry.callId, await appendEvent(prep.runId, 'ToolCallRequested', entry))
+          } else {
+            await appendEvent(prep.runId, stage === 'completed' ? 'ToolCallCompleted' : 'ToolCallFailed',
+              {...entry, seq: toolSequences.get(entry.callId)})
+          }
         },
       })
       const evidence = remoteToolEvidence(result.results)

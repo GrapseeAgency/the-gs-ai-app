@@ -1,0 +1,97 @@
+name: Chat capability validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/chat-capability-validation.yml'
+      - 'src/lib/remote-tools*.ts'
+      - 'src/lib/turn-executor.ts'
+      - 'src/lib/provider-sse*.ts'
+      - 'src/lib/context-crystallize*.ts'
+      - 'src/lib/turn-resume*.ts'
+      - 'src/lib/calc/**'
+      - 'src/lib/quality-routing*.ts'
+      - 'scripts/benchmark-free-models.ts'
+  workflow_dispatch:
+    inputs:
+      models:
+        description: 'Comma-separated explicit free model IDs (optional)'
+        required: false
+        default: ''
+      integration:
+        description: 'Start an isolated backend and run durable end-to-end tests'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: chat-capability-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Focused chat regressions
+        run: |
+          bun test src/lib/remote-tools.test.ts src/lib/context-crystallize.test.ts src/lib/provider-sse.test.ts src/lib/turn-resume.test.ts src/lib/calc/turn-calculator.test.ts src/lib/quality-routing.test.ts
+  model-benchmark:
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Benchmark concrete free models
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GS_BENCH_MODELS: ${{ inputs.models }}
+        run: bun scripts/benchmark-free-models.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: free-model-benchmark
+          path: free-model-benchmark.json
+          if-no-files-found: warn
+  isolated-backend:
+    if: github.event_name == 'workflow_dispatch' && inputs.integration
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      DATABASE_URL: file:${{ runner.temp }}/chat-capability.db
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      GS_REMOTE_TOOLS: '1'
+      BACKGROUND_RUNS_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Verify configured free provider
+        run: test -n "$OPENROUTER_API_KEY" || { echo 'Live integration blocked: missing free-provider credential'; exit 2; }
+      - run: bun install --frozen-lockfile
+      - run: bunx prisma generate && bunx prisma db push --skip-generate
+      - name: Run isolated backend and durable evaluation
+        run: |
+          bun --bun next dev -p 3000 > backend.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/api/v1/conversations >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:3000/api/v1/conversations >/dev/null
+          bun scripts/run-eval-suite.ts --suite tests/eval-suite-chat-capability-v1.json --durable --strict --db-path "${{ runner.temp }}/chat-capability.db" --delay 1000 --baseline capability-results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: isolated-capability-results
+          path: capability-results.json
+          if-no-files-found: warn

@@ -83,7 +83,7 @@ export async function collectRemoteToolEvidence(
     try { completion = await hooks.request(messages,timeout) }
     catch { return {results,status:'unavailable'} }
     const choice = completion.choices?.[0], reply = choice?.message
-    if (!reply || reply.role !== 'assistant') return {results,status:'unavailable'}
+    if (!choice || !reply || reply.role !== 'assistant') return {results,status:'unavailable'}
     const raw = reply.tool_calls
     if (!raw || (Array.isArray(raw) && !raw.length)) return {results,status:choice.finish_reason==='stop'?'complete':'unavailable'}
     if (choice.finish_reason !== 'tool_calls' || !Array.isArray(raw) || raw.length > maxCalls-results.length)

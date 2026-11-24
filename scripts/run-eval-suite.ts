@@ -110,7 +110,8 @@ const suite = JSON.parse(fs.readFileSync(path.resolve(ROOT, SUITE_FILE), 'utf8')
 
 // Production-path turn client (shared with the register judge runner) — same
 // wire path, same recovery, same trace read. Initialized with THIS run's args.
-initTurnClient({ origin: ORIGIN, appVersion: APP_VERSION, transport: DURABLE ? 'durable' : 'legacy' })
+initTurnClient({ origin: ORIGIN, appVersion: APP_VERSION, transport: DURABLE ? 'durable' : 'legacy',
+  ...(argv.includes('--db-path') ? {dbPath: path.resolve(argOf('--db-path', 'db/custom.db'))} : {}) })
 
 // --- deterministic graders (shared core: src/lib/eval-grader.ts) -----------------
 
