@@ -18,22 +18,23 @@ class FluidTextMotionTest {
         val bands = motion.update("old new words", 1_000_000L, true)
         assertEquals(4, bands.first().start)
         assertEquals(13, bands.last().end)
-        assertTrue(bands.first().opacity(1_000_000L) >= 0.57f)
-        assertEquals(1f, bands.first().opacity(200_000_000L), 0.001f)
-        assertTrue(motion.update("old new words", 200_000_000L, true).isEmpty())
+        assertEquals(0.18f, bands.first().opacity(1_000_000L), 0.001f)
+        assertTrue(bands.first().opacity(80_000_000L) > bands.first().opacity(1_000_000L))
+        assertEquals(1f, bands.first().opacity(350_000_000L), 0.001f)
+        assertTrue(motion.update("old new words", 350_000_000L, true).isEmpty())
     }
 
     @Test fun burstAndRepeatedUpdatesHaveBoundedWork() {
         val motion = FluidTextMotion("")
         val text = "a".repeat(1000)
         val bands = motion.update(text, 1, true)
-        assertEquals(952, bands.first().start)
+        assertEquals(928, bands.first().start)
         assertEquals(1000, bands.last().end)
-        assertTrue(bands.size <= 4)
+        assertTrue(bands.size <= 6)
         var current = text
         repeat(30) {
             current += "x"
-            assertTrue(motion.update(current, 2L + it * 1_000_000L, true).size <= 8)
+            assertTrue(motion.update(current, 2L + it * 1_000_000L, true).size <= 12)
         }
     }
 

@@ -49,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -205,6 +206,13 @@ fun BlocksContent(
     val context = LocalContext.current
     NexlyIcons.ensureLoaded(context)
     val cache = remember { StreamBlockCache() }
+    // Only a genuine live append may reveal freshly mounted paragraphs/rows.
+    // Entering an existing conversation leaves its existing text settled.
+    val prior = remember { arrayOf(content) }
+    val freshMount = remember(content, isStreaming) {
+        isStreaming && content != prior[0] && content.startsWith(prior[0])
+    }
+    SideEffect { prior[0] = content }
     // Recovery must be decided BEFORE parsing, because a successful recovery
     // also removes the model's false "I can't render" sentence from the prose.
     val recovered = remember(content, isStreaming, userPrompt, priorContext) {
@@ -226,6 +234,7 @@ fun BlocksContent(
     // defect. Prose blocks keep selection; every interactive block (widgets,
     // charts, code cards, mermaid, collapsibles, citation chips, tool results)
     // renders OUTSIDE the container and owns its own taps.
+    CompositionLocalProvider(LocalFluidFreshMount provides freshMount) {
     if (glassAssistant) {
         NexlyAssistantBlocks(
             blocks = blocks,
@@ -254,6 +263,7 @@ fun BlocksContent(
                 onStatusPlaced = {}
             )
         }
+    }
     }
 }
 
@@ -645,7 +655,7 @@ private fun StructuredBlockSequenceContent(
             val (titleText, tone, icon) = calloutHeadingMatch
             val bodySpans = if (nextBlock is Block.Paragraph) nextBlock.spans else emptyList()
             key("callout:${block.sourceStart}") {
-                CompositionLocalProvider(LocalFluidResponseText provides (isStreaming && i + 1 == normalizedBlocks.lastIndex)) {
+                CompositionLocalProvider(LocalFluidResponseText provides (isStreaming && i + 1 >= normalizedBlocks.lastIndex - 1)) {
                 NexlyCalloutCard(
                     callout = CalloutParsed(
                         tone = tone,
@@ -686,7 +696,7 @@ private fun StructuredBlockSequenceContent(
             key(streamBlockKey(block, i)) {
                 CompositionLocalProvider(
                     LocalSectionListMode provides modeForBlock,
-                    LocalFluidResponseText provides (isStreaming && i == normalizedBlocks.lastIndex)
+                    LocalFluidResponseText provides (isStreaming && i >= normalizedBlocks.lastIndex - 1)
                 ) {
                     val blockContent: @Composable () -> Unit = {
                         BlockView(

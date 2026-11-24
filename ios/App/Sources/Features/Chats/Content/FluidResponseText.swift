@@ -4,7 +4,15 @@ private struct FluidResponseStreamingKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+private struct FluidFreshMountKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
+    var fluidFreshMount: Bool {
+        get { self[FluidFreshMountKey.self] }
+        set { self[FluidFreshMountKey.self] = newValue }
+    }
     var fluidResponseStreaming: Bool {
         get { self[FluidResponseStreamingKey.self] }
         set { self[FluidResponseStreamingKey.self] = newValue }
@@ -15,6 +23,7 @@ extension EnvironmentValues {
 /// ranges receive paint-level motion; no artificial pacing or layout animation.
 struct FluidResponseText: View {
     @Environment(\.fluidResponseStreaming) private var streaming
+    @Environment(\.fluidFreshMount) private var freshMount
     let value: AttributedString
     let ink: Color
 
@@ -25,7 +34,7 @@ struct FluidResponseText: View {
 
     var body: some View {
         if streaming {
-            LiveFluidResponseText(value: value, ink: ink)
+            LiveFluidResponseText(value: value, ink: ink, freshMount: freshMount)
         } else {
             Text(value)
         }
@@ -37,10 +46,10 @@ private struct LiveFluidResponseText: View {
     let ink: Color
     @State private var motion: FluidTextMotion
 
-    init(value: AttributedString, ink: Color) {
+    init(value: AttributedString, ink: Color, freshMount: Bool) {
         self.value = value
         self.ink = ink
-        _motion = State(initialValue: FluidTextMotion(initial: String(value.characters)))
+        _motion = State(initialValue: FluidTextMotion(initial: freshMount ? "" : String(value.characters)))
     }
 
     var body: some View {
@@ -65,6 +74,7 @@ private struct LiveFluidResponseText: View {
                 }
             }
         }
+        .onAppear { motion.update(raw, now: ProcessInfo.processInfo.systemUptime) }
         .onChange(of: raw) { newValue in
             motion.update(newValue, now: ProcessInfo.processInfo.systemUptime)
         }
@@ -72,7 +82,7 @@ private struct LiveFluidResponseText: View {
         // network delivery, copying, scrolling or completion.
         .task(id: raw) {
             guard !preview.bands.isEmpty else { return }
-            try? await Task.sleep(nanoseconds: 190_000_000)
+            try? await Task.sleep(nanoseconds: 340_000_000)
             guard !Task.isCancelled else { return }
             motion.settle()
         }
@@ -161,10 +171,9 @@ private struct FluidGlyphRenderer: TextRenderer {
                 } else {
                     var copy = context
                     copy.opacity = attribute.band.opacity(at: now)
-                    // Sub-point, localized softening only, with no glyph
-                    // translation or layout movement. Already settled runs
-                    // are drawn directly without a filter.
-                    copy.addFilter(.blur(radius: 0.7 * (1 - progress)))
+                    let remaining = 1 - progress
+                    copy.translateBy(x: 0, y: 0.9 * remaining * remaining)
+                    copy.addFilter(.blur(radius: 1.8 * remaining))
                     copy.draw(run)
                 }
             }

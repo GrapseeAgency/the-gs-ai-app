@@ -47,6 +47,7 @@ struct BlocksView: View {
 /// that planning happened), exactly like the reference.
 struct NexlyAssistantBlocksView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @State private var previousLiveBlocks: [Block]? = nil
     let blocks: [Block]
     var isStreaming: Bool = false
     var showStatus: Bool = false
@@ -129,6 +130,10 @@ struct NexlyAssistantBlocksView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .environment(\.fluidFreshMount, isStreaming && previousLiveBlocks != nil && previousLiveBlocks != blocks)
+        .onAppear { previousLiveBlocks = isStreaming ? blocks : nil }
+        .onChange(of: blocks) { next in previousLiveBlocks = isStreaming ? next : nil }
+        .onChange(of: isStreaming) { active in previousLiveBlocks = active ? blocks : nil }
     }
 
     @ViewBuilder
@@ -637,11 +642,11 @@ private struct StructuredProseSequenceView: View {
                     NexlyQuickCalculatorCardView(spec: calc)
                 } else if let (callout, extraItems) = entry.coalescedCallout {
                     NexlyCalloutCardView(callout: callout, extraItems: extraItems, citations: citations)
-                        .environment(\.fluidResponseStreaming, fluidMotionEnabled && entry.index + entry.consumedCount == normalizedProse.count)
+                        .environment(\.fluidResponseStreaming, fluidMotionEnabled && entry.index + entry.consumedCount >= normalizedProse.count - 1)
                 } else {
                     BlockView(block: entry.block, isLast: entry.index == prose.count - 1, citations: citations)
                         .environment(\.nexlySectionListMode, entry.sectionMode)
-                        .environment(\.fluidResponseStreaming, fluidMotionEnabled && entry.index + entry.consumedCount == normalizedProse.count)
+                        .environment(\.fluidResponseStreaming, fluidMotionEnabled && entry.index + entry.consumedCount >= normalizedProse.count - 1)
                 }
             }
             if isStatusHost && showStatus && entry.index <= statusHostIndex && statusHostIndex < entry.index + entry.consumedCount {

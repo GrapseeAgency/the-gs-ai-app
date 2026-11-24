@@ -1,7 +1,7 @@
 import Foundation
 
 /// Character ranges are extended grapheme clusters, never UTF-16 slices.
-struct FluidTextBand: Equatable {
+struct FluidTextBand: Hashable {
     let start: Int
     let end: Int
     let born: TimeInterval
@@ -13,7 +13,7 @@ struct FluidTextBand: Equatable {
 
     func opacity(at now: TimeInterval) -> Double {
         let remaining = 1 - progress(at: now)
-        return 1 - 0.42 * remaining * remaining * remaining
+        return 1 - 0.82 * remaining * remaining
     }
 }
 
@@ -45,19 +45,19 @@ struct FluidTextMotion {
             return
         }
         previous = text
-        let duration = lastArrival.map { min(0.150, max(0.100, 0.100 + (now - $0) * 0.5)) } ?? 0.150
+        let duration = lastArrival.map { min(0.250, max(0.170, 0.170 + (now - $0) * 0.5)) } ?? 0.230
         lastArrival = now
-        let floor = max(oldCount, count - 48)
-        bands.removeAll { $0.end <= count - 48 }
+        let floor = max(oldCount, count - 72)
+        bands.removeAll { $0.end <= count - 72 }
         var start = floor
         var incoming = 0
-        while start < count && incoming < 4 {
-            let end = incoming == 3 ? count : min(count, start + 12)
-            bands.append(FluidTextBand(start: start, end: end, born: now + Double(incoming) * 0.008, duration: duration))
+        while start < count && incoming < 6 {
+            let end = incoming == 5 ? count : min(count, start + 12)
+            bands.append(FluidTextBand(start: start, end: end, born: now + Double(incoming) * 0.013, duration: duration))
             start = end
             incoming += 1
         }
-        bands = Array(bands.suffix(8))
+        bands = Array(bands.suffix(12))
     }
 
     mutating func settle() { bands = [] }

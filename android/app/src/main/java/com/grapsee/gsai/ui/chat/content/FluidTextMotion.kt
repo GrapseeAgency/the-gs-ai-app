@@ -15,7 +15,7 @@ internal data class FluidTextBand(
 
     fun opacity(now: Long): Float {
         val remaining = 1f - progress(now)
-        return 1f - 0.42f * remaining * remaining * remaining
+        return 1f - 0.82f * remaining * remaining
     }
 }
 
@@ -42,7 +42,7 @@ internal class FluidTextMotion(initial: String) {
         previous = text
         val interval = lastArrival?.let { (now - it).coerceAtLeast(0L) / 1_000_000L }
         lastArrival = now
-        val duration = (interval?.let { 100L + it / 2 } ?: 150L).coerceIn(100L, 150L) * 1_000_000L
+        val duration = (interval?.let { 170L + it / 2 } ?: 230L).coerceIn(170L, 250L) * 1_000_000L
         val boundary = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(text) }
 
         // Do not animate an existing grapheme if an arriving combining mark extends it.
@@ -63,21 +63,21 @@ internal class FluidTextMotion(initial: String) {
             return if (pos == BreakIterator.DONE) text.length else pos
         }
 
-        val floor = atOrAfter(maxOf(oldLength, text.length - 48))
+        val floor = atOrAfter(maxOf(oldLength, text.length - 72))
         var start = floor
         val incoming = mutableListOf<FluidTextBand>()
-        while (start < text.length && incoming.size < 4) {
-            val end = if (incoming.size == 3) text.length
+        while (start < text.length && incoming.size < 6) {
+            val end = if (incoming.size == 5) text.length
                 else atOrAfter(minOf(text.length, start + 12))
             if (end <= start) break
-            incoming += FluidTextBand(start, end, now + incoming.size * 8_000_000L, duration)
+            incoming += FluidTextBand(start, end, now + incoming.size * 13_000_000L, duration)
             start = end
         }
-        // Large chunks are readable immediately; only the last 48 UTF-16 units
+        // Large chunks are readable immediately; only the last 72 UTF-16 units
         // receive a bounded, overlapping feather. Earlier ranges never replay.
         bands = (alive.filter {
-            it.end > text.length - 48 && atOrAfter(it.start) == it.start && atOrAfter(it.end) == it.end
-        } + incoming).takeLast(8)
+            it.end > text.length - 72 && atOrAfter(it.start) == it.start && atOrAfter(it.end) == it.end
+        } + incoming).takeLast(12)
         return bands
     }
 }
