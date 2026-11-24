@@ -75,7 +75,9 @@ internal class FluidTextMotion(initial: String) {
         }
         // Large chunks are readable immediately; only the last 48 UTF-16 units
         // receive a bounded, overlapping feather. Earlier ranges never replay.
-        bands = (alive.filter { it.end > text.length - 48 } + incoming).takeLast(8)
+        bands = (alive.filter {
+            it.end > text.length - 48 && atOrAfter(it.start) == it.start && atOrAfter(it.end) == it.end
+        } + incoming).takeLast(8)
         return bands
     }
 }

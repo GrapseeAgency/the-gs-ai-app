@@ -38,5 +38,9 @@ final class FluidTextMotionTests: XCTestCase {
         }
         motion.settle()
         XCTAssertTrue(motion.bands.isEmpty)
+        var cluster = FluidTextMotion(initial: "")
+        cluster.update("e", now: 0)
+        cluster.update("e\u0301", now: 0.01)
+        XCTAssertTrue(cluster.bands.isEmpty)
     }
 }

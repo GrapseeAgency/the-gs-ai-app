@@ -34,14 +34,16 @@ internal fun FluidResponseText(
     text: AnnotatedString,
     style: TextStyle,
     color: Color,
-    inlineContent: Map<String, InlineTextContent>,
-    modifier: Modifier = Modifier
+    inlineContent: Map<String, InlineTextContent> = emptyMap(),
+    modifier: Modifier = Modifier,
+    softWrap: Boolean = true,
+    animate: Boolean = true
 ) {
-    val enabled = LocalFluidResponseText.current &&
+    val enabled = animate && LocalFluidResponseText.current &&
         !SettingsStore.reduceMotion && !SettingsStore.reduceAnimations &&
         !SettingsStore.highContrast && ValueAnimator.areAnimatorsEnabled()
     if (!enabled) {
-        Text(text = text, style = style, color = color, inlineContent = inlineContent, modifier = modifier)
+        Text(text = text, style = style, color = color, inlineContent = inlineContent, modifier = modifier, softWrap = softWrap)
         return
     }
 
@@ -55,9 +57,10 @@ internal fun FluidResponseText(
         clock.longValue = now
     }
     LaunchedEffect(text.text) {
-        while (bands.value.any { it.progress(clock.longValue) < 1f }) {
+        // The first frame also covers the initial effect/SideEffect ordering.
+        do {
             withFrameNanos { clock.longValue = System.nanoTime() }
-        }
+        } while (bands.value.any { it.progress(clock.longValue) < 1f })
     }
 
     Text(
@@ -65,6 +68,7 @@ internal fun FluidResponseText(
         style = style,
         color = color,
         inlineContent = inlineContent,
+        softWrap = softWrap,
         onTextLayout = { layout.value = it },
         modifier = modifier.drawWithCache {
             val measured = layout.value
@@ -81,7 +85,10 @@ internal fun FluidResponseText(
             val bounds = Rect(0f, 0f, size.width, size.height)
             onDrawWithContent {
                 val now = clock.longValue
-                if (paths.none { it.first.progress(now) < 1f } || size.width <= 0f || size.height <= 0f) {
+                if (paths.none { it.first.progress(now) < 1f } || size.width <= 0f || size.height <= 0f ||
+                    size.width * size.height > 3_000_000f) {
+                    // Never allocate a huge transient GPU layer for a pathological
+                    // unbroken paragraph; immediate full-contrast text wins.
                     drawContent()
                 } else {
                     // DstOut is confined to this text's own temporary layer.

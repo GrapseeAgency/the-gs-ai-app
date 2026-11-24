@@ -339,8 +339,9 @@ fun CodeBlockCard(
                             modifier = Modifier.weight(1f)
                         )
                     } else {
-                        Text(
+                        FluidResponseText(
                             text = highlighted,
+                            animate = open,
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontFamily = FontFamily.Monospace,
                                 lineHeight = 19.sp

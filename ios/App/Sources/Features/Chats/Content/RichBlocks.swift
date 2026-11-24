@@ -3291,8 +3291,11 @@ struct CodeBlockCardView: View {
                         .frame(width: 22, alignment: .trailing)
                     Group {
                         if open {
-                            Text(CodeDisplayIOS.escape(line.isEmpty ? " " : line))
-                                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                            FluidResponseText(
+                                AttributedString(CodeDisplayIOS.escape(line.isEmpty ? " " : line)),
+                                ink: Color(red: 0.933, green: 0.922, blue: 1.0)
+                            )
+                            .font(.system(size: 12, weight: .regular, design: .monospaced))
                         } else {
                             highlightedCode(CodeDisplayIOS.escape(line.isEmpty ? " " : line), language: language, darkSurface: true)
                         }

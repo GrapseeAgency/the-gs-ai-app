@@ -45,5 +45,8 @@ class FluidTextMotionTest {
         val text = "a".repeat(11) + "😀" + "b".repeat(15)
         val bands = emoji.update(text, 0, true)
         assertTrue(bands.none { it.start == 12 || it.end == 12 })
+        val growingCluster = FluidTextMotion("")
+        growingCluster.update("e", 0, true)
+        assertTrue(growingCluster.update("e\u0301", 1_000_000, true).isEmpty())
     }
 }

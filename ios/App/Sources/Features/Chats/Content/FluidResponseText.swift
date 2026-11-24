@@ -52,15 +52,16 @@ private struct LiveFluidResponseText: View {
         Group {
             if preview.bands.isEmpty {
                 Text(value)
+            } else if #available(iOS 18.0, *) {
+                // Build the marked runs once per incoming chunk. The display
+                // clock changes only the native renderer, not the text runs.
+                let marked = markedText(bands: preview.bands)
+                TimelineView(.animation) { _ in
+                    marked.textRenderer(FluidGlyphRenderer(now: ProcessInfo.processInfo.systemUptime))
+                }
             } else {
                 TimelineView(.animation) { _ in
-                    let time = ProcessInfo.processInfo.systemUptime
-                    if #available(iOS 18.0, *) {
-                        markedText(bands: preview.bands)
-                            .textRenderer(FluidGlyphRenderer(now: time))
-                    } else {
-                        Text(fadedText(bands: preview.bands, now: time))
-                    }
+                    Text(fadedText(bands: preview.bands, now: ProcessInfo.processInfo.systemUptime))
                 }
             }
         }
@@ -109,17 +110,30 @@ private struct LiveFluidResponseText: View {
     // iOS 17: same timing, stable native Text and existing inline attributes.
     // No unsupported shader or fake typewriter fallback.
     private func fadedText(bands: [FluidTextBand], now: TimeInterval) -> AttributedString {
-        var result = value
-        for band in bands where band.end <= value.characters.count {
+        var result = AttributedString()
+        var cursor = 0
+        let count = value.characters.count
+        for band in bands where band.start >= cursor && band.end <= count {
+            if cursor < band.start {
+                result.append(AttributedString(value[index(cursor)..<index(band.start)]))
+            }
             let range = index(band.start)..<index(band.end)
             let alpha = band.opacity(at: now)
-            guard alpha < 1 else { continue }
-            // Preserve citation/link/custom glyph colors rather than painting
-            // every new run with the default paragraph color.
-            let runs = value[range].runs.map { ($0.range, $0.foregroundColor ?? ink) }
-            for (runRange, color) in runs {
-                result[runRange].foregroundColor = color.opacity(alpha)
+            if alpha >= 1 {
+                result.append(AttributedString(value[range]))
+            } else {
+                // Copy each immutable source run; do not reuse indices into
+                // storage whose attribute runs have already been mutated.
+                for run in value[range].runs {
+                    var part = AttributedString(value[run.range])
+                    part.foregroundColor = (run.foregroundColor ?? ink).opacity(alpha)
+                    result.append(part)
+                }
             }
+            cursor = band.end
+        }
+        if cursor < count {
+            result.append(AttributedString(value[index(cursor)..<value.endIndex]))
         }
         return result
     }
