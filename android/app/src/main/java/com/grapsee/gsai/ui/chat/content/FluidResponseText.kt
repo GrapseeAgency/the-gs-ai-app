@@ -31,10 +31,42 @@ import androidx.compose.ui.text.style.ResolvedTextDirection
 import com.grapsee.gsai.data.SettingsStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
+import kotlin.coroutines.coroutineContext
 
 internal val LocalFluidResponseText = staticCompositionLocalOf { false }
 internal val LocalFluidFreshMount = staticCompositionLocalOf { false }
 internal val LocalFluidNewBlockFloor = staticCompositionLocalOf { Int.MAX_VALUE }
+internal val LocalFluidFramePulse = staticCompositionLocalOf<FluidFramePulse?> { null }
+
+/** One display-clock lease per mounted response, not one per paragraph.
+ * Writes are observed in draw, never in the transcript's composition.
+ * Empty/settled replies do not ask the display for continuous frames. */
+internal class FluidFramePulse {
+    private val clock = mutableLongStateOf(System.nanoTime())
+    private val deadline = mutableLongStateOf(0L)
+    val now: Long get() = clock.longValue
+
+    fun arm(until: Long, receivedAt: Long) {
+        if (deadline.longValue <= clock.longValue) clock.longValue = receivedAt
+        if (until > deadline.longValue) deadline.longValue = until
+    }
+
+    suspend fun run() {
+        while (coroutineContext.isActive) {
+            snapshotFlow { deadline.longValue }.first { it > clock.longValue }
+            do {
+                withFrameNanos { clock.longValue = System.nanoTime() }
+            } while (deadline.longValue > clock.longValue)
+        }
+    }
+}
+
+@Composable
+internal fun rememberFluidFramePulse(): FluidFramePulse {
+    val pulse = remember { FluidFramePulse() }
+    LaunchedEffect(pulse) { pulse.run() }
+    return pulse
+}
 
 private data class FluidRegion(
     val band: FluidTextBand,
@@ -74,31 +106,25 @@ internal fun FluidResponseText(
     val fresh = LocalFluidFreshMount.current
     val motion = remember { FluidTextMotion(if (live && fresh) "" else text.text) }
     val bands = remember { mutableStateOf(emptyList<FluidTextBand>()) }
-    val clock = remember { mutableLongStateOf(System.nanoTime()) }
+    val pulse = LocalFluidFramePulse.current ?: rememberFluidFramePulse()
     val layout = remember { mutableStateOf<TextLayoutResult?>(null) }
     val stillLive = rememberUpdatedState(live)
     SideEffect {
         if (live) retained.value = true
         val now = System.nanoTime()
         val next = motion.update(text.text, now, true, sourceAppend = fresh)
-        clock.longValue = now
         bands.value = next
+        next.maxOfOrNull { it.bornNanos + it.durationNanos }?.let { pulse.arm(it, now) }
         if (!live && next.isEmpty()) retained.value = false
     }
 
-    // A single clock waits when idle and runs at the actual display cadence.
-    // New tokens cannot restart it; generation completion is not a visual cut.
-    LaunchedEffect(Unit) {
-        while (isActive) {
-            snapshotFlow { bands.value }.first { list ->
-                val now = System.nanoTime()
-                list.any { it.progress(now) < 1f }
-            }
-            do {
-                withFrameNanos { clock.longValue = System.nanoTime() }
-            } while (bands.value.any { it.progress(clock.longValue) < 1f })
-            if (!stillLive.value) retained.value = false
-        }
+    // Only the finishing node waits for its own last frame. While live,
+    // short-circuiting avoids subscribing this coroutine to display ticks.
+    LaunchedEffect(pulse) {
+        snapshotFlow {
+            !stillLive.value && bands.value.all { it.progress(pulse.now) >= 1f }
+        }.first { it }
+        retained.value = false
     }
 
     Text(
@@ -132,7 +158,7 @@ internal fun FluidResponseText(
             val layerPaint = Paint()
             val nativeClip = android.graphics.Rect()
             onDrawWithContent {
-                val now = clock.longValue
+                val now = pulse.now
                 val active = regions.filter { it.band.progress(now) < 1f }
                 if (active.isEmpty()) {
                     drawContent()

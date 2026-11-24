@@ -209,11 +209,16 @@ fun BlocksContent(
     // Only a genuine live append may reveal freshly mounted paragraphs/rows.
     // Entering an existing conversation leaves its existing text settled.
     val prior = remember { arrayOf(content) }
+    val wasStreaming = remember { booleanArrayOf(isStreaming) }
     val freshMount = remember(content, isStreaming) {
-        isStreaming && content != prior[0] && content.startsWith(prior[0])
+        (isStreaming || wasStreaming[0]) && content != prior[0] && content.startsWith(prior[0])
     }
     val newBlockFloor = if (freshMount) prior[0].length else Int.MAX_VALUE
-    SideEffect { prior[0] = content }
+    SideEffect {
+        prior[0] = content
+        wasStreaming[0] = isStreaming
+    }
+    val fluidPulse = rememberFluidFramePulse()
     // Recovery must be decided BEFORE parsing, because a successful recovery
     // also removes the model's false "I can't render" sentence from the prose.
     val recovered = remember(content, isStreaming, userPrompt, priorContext) {
@@ -237,7 +242,8 @@ fun BlocksContent(
     // renders OUTSIDE the container and owns its own taps.
     CompositionLocalProvider(
         LocalFluidFreshMount provides freshMount,
-        LocalFluidNewBlockFloor provides newBlockFloor
+        LocalFluidNewBlockFloor provides newBlockFloor,
+        LocalFluidFramePulse provides fluidPulse
     ) {
     if (glassAssistant) {
         NexlyAssistantBlocks(

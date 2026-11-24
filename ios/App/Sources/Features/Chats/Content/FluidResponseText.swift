@@ -60,7 +60,9 @@ struct FluidResponseText: View {
         let raw = String(value.characters)
         let now = ProcessInfo.processInfo.systemUptime
         let allowed = motionAllowed && !reduceMotion && contrast != .increased
-        let active = allowed && (streaming || motion?.bands.isEmpty == false)
+        // A provider can finish with a final append after a short quiet
+        // period. A previously live node must still reveal that real suffix.
+        let active = allowed && (streaming || motion?.bands.isEmpty == false || (freshMount && motion != nil))
         let input = Input(raw: raw, streaming: streaming, allowed: allowed)
         let preview = snapshot(raw, now: now, active: active)
         let deadline = preview.bands.map { $0.born + $0.duration }.max()

@@ -47,8 +47,15 @@ struct BlocksView: View {
 /// that planning happened), exactly like the reference.
 struct NexlyAssistantBlocksView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
-    @State private var previousLiveBlocks: [Block]? = nil
-    @State private var previousSourceText: String? = nil
+    // A reference cursor is deliberately not an ObservableObject: updating
+    // the previous source must not invalidate the whole response a second
+    // time after every actual token publication.
+    private final class SourceCursor {
+        var blocks: [Block]?
+        var text: String?
+        var wasStreaming = false
+    }
+    @State private var sourceCursor = SourceCursor()
     let blocks: [Block]
     var sourceText: String? = nil
     var isStreaming: Bool = false
@@ -76,12 +83,12 @@ struct NexlyAssistantBlocksView: View {
     }
 
     private var sourceDidAppend: Bool {
-        guard isStreaming else { return false }
-        if let sourceText, let previousSourceText {
-            return sourceText != previousSourceText && sourceText.hasPrefix(previousSourceText)
+        guard isStreaming || sourceCursor.wasStreaming else { return false }
+        if let sourceText, let previous = sourceCursor.text {
+            return sourceText != previous && sourceText.hasPrefix(previous)
         }
         // Standalone native renderer fixtures may supply blocks without source.
-        return sourceText == nil && previousLiveBlocks != nil && previousLiveBlocks != blocks
+        return sourceText == nil && sourceCursor.blocks != nil && sourceCursor.blocks != blocks
     }
 
     var body: some View {
@@ -143,16 +150,18 @@ struct NexlyAssistantBlocksView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .environment(\.fluidFreshMount, sourceDidAppend)
         .environment(\.fluidNewBlockFloor, sourceDidAppend
-                     ? (previousSourceText?.count ?? previousLiveBlocks?.last.map { $0.sourceStart + 1 } ?? 0) : Int.max)
+                     ? (sourceCursor.text?.count ?? sourceCursor.blocks?.last.map { $0.sourceStart + 1 } ?? 0) : Int.max)
         .onAppear {
-            previousLiveBlocks = isStreaming ? blocks : nil
-            previousSourceText = isStreaming ? sourceText : nil
+            sourceCursor.blocks = isStreaming ? blocks : nil
+            sourceCursor.text = isStreaming ? sourceText : nil
+            sourceCursor.wasStreaming = isStreaming
         }
-        .onChange(of: blocks) { next in previousLiveBlocks = isStreaming ? next : nil }
-        .onChange(of: sourceText) { next in previousSourceText = isStreaming ? next : nil }
+        .onChange(of: blocks) { next in sourceCursor.blocks = isStreaming ? next : nil }
+        .onChange(of: sourceText) { next in sourceCursor.text = isStreaming ? next : nil }
         .onChange(of: isStreaming) { active in
-            previousLiveBlocks = active ? blocks : nil
-            previousSourceText = active ? sourceText : nil
+            sourceCursor.blocks = active ? blocks : nil
+            sourceCursor.text = active ? sourceText : nil
+            sourceCursor.wasStreaming = active
         }
     }
 
