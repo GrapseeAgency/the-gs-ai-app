@@ -117,7 +117,8 @@
           "type": "trace.searchExecuted",
           "value": false
         }
-      ]
+      ],
+      "calculatorResult": 262
     },
     {
       "id": "Q08",
@@ -135,7 +136,8 @@
           "type": "trace.searchExecuted",
           "value": false
         }
-      ]
+      ],
+      "calculatorResult": 4634
     },
     {
       "id": "Q09",

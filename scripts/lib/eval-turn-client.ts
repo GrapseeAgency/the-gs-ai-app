@@ -314,3 +314,22 @@ export async function readTrace(requestId: string | null): Promise<TraceRow | nu
     db.close()
   }
 }
+
+/** Tool evidence comes from the durable execution ledger, not answer prose. */
+export function readCompletedCalculator(runId: string, expected: number): boolean {
+  const db = new Database(cfg.dbPath, { readonly: true })
+  try {
+    const rows = db.query('SELECT seq, eventType, payload FROM turn_events WHERE runId = ? ORDER BY seq')
+      .all(runId) as {seq:number;eventType:string;payload:string}[]
+    const requests = new Map<number,string>()
+    for (const row of rows) {
+      let p: {tool?:string;expression?:string;value?:number;seq?:number}
+      try { p = JSON.parse(row.payload) } catch { continue }
+      if (p.tool !== 'calculator' || typeof p.expression !== 'string') continue
+      if (row.eventType === 'ToolCallRequested') requests.set(row.seq, p.expression)
+      if (row.eventType === 'ToolCallCompleted' && typeof p.seq === 'number' &&
+          requests.get(p.seq) === p.expression && p.value === expected) return true
+    }
+    return false
+  } finally { db.close() }
+}

@@ -9,6 +9,7 @@ export type CalculationResult =
 const ALLOWED_NAMES = new Set(['pi','e','sqrt','abs','ln','log','log10','exp','sin','cos','tan','floor','ceil','round','min','max','pow','clamp'])
 export function executeCalculation(expression: string): CalculationResult {
   const fail = (error: string): CalculationResult => ({ expression, ok: false, error })
+  if (expression.includes('%')) return fail('Ambiguous percentage notation; express the ratio explicitly')
   if (!expression || expression.length > 200 || !/^[\d\s.+\-*/%^(),a-z]+$/i.test(expression))
     return fail('Unsupported or oversized numeric expression')
   if ([...expression.matchAll(/[a-z][a-z0-9]*/gi)].some(m => !ALLOWED_NAMES.has(m[0].toLowerCase())))

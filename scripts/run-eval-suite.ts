@@ -43,6 +43,7 @@ import {
   initTurnClient,
   newConversation,
   readTrace,
+  readCompletedCalculator,
   refetchSettledAnswer,
   sseTurn,
   type TraceRow,
@@ -96,6 +97,7 @@ interface EvalCase {
   grading?: string
   skipReason?: string
   judgeCriteria?: string
+  calculatorResult?: number
   auditRef?: string
   assertions: Assertion[]
 }
@@ -223,6 +225,22 @@ async function runCase(c: EvalCase): Promise<CaseResult> {
     base.status = 'ERROR'
     base.note = `${base.note} provider-error errorType=${trace.errorType ?? 'unknown'}`.trim()
     return base
+  }
+  if (c.calculatorResult !== undefined) {
+    if (!DURABLE || !turn.requestId) {
+      base.status = 'ERROR'
+      base.note = 'Calculator evidence requires the durable transport'
+      return base
+    }
+    try {
+      if (!readCompletedCalculator(turn.requestId, c.calculatorResult)) {
+        failures.push({ ok: false, detail: 'No matched calculator request and completed result in the execution ledger' })
+      }
+    } catch {
+      base.status = 'ERROR'
+      base.note = 'Calculator execution ledger could not be read'
+      return base
+    }
   }
   base.status = failures.length === 0 ? 'PASS' : 'FAIL'
   base.failures = failures.map((f) => f.detail)

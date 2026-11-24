@@ -1107,7 +1107,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
   }
 
   /** Shared execution tail for every search execution (planner or code-driven). */
-  const runSearchExecution = async (
+  const runSearchExecutionRaw = async (
     params: {
       queries: string[]
       intent: SearchIntent
@@ -1193,6 +1193,23 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       hintDomain
     )
     return { kind: 'research', outcome, evidenceBlock: block, maxOrdinal, historySources: [], startedAt, researchId }
+  }
+
+  const runSearchExecution = async (...args: Parameters<typeof runSearchExecutionRaw>): Promise<TurnSearch> => {
+    if (!prep.runId) return runSearchExecutionRaw(...args)
+    const seq = await appendEvent(prep.runId, 'SearchRequested', {
+      intent: args[0].intent, queries: args[0].queries, depth: args[0].depth,
+    })
+    try {
+      const result = await runSearchExecutionRaw(...args)
+      const ok = result.kind === 'research' && result.outcome.ok && !!result.evidenceBlock
+      await appendEvent(prep.runId, ok ? 'SearchCompleted' : 'ToolCallFailed',
+        { seq, tool: 'web_search', ok, sourceCount: result.kind === 'research' ? result.outcome.sources.length : 0 })
+      return result
+    } catch (error) {
+      await appendEvent(prep.runId, 'ToolCallFailed', { seq, tool: 'web_search', error: 'Search execution failed' })
+      throw error
+    }
   }
 
   const executeSearchPhase = async (emit: SearchEventEmitter | null): Promise<TurnSearch> => {
@@ -1887,15 +1904,6 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       () => synthesizeRaw(modelMessages, answerDelta)
     )
   }
-  const executeSearchLogged = async (emit: SearchEventEmitter | null): Promise<TurnSearch> => {
-    if (!prep.runId) return executeSearchPhase(emit)
-    return tracked(
-      prep.runId,
-      { request: 'SearchRequested', completed: 'SearchCompleted', failed: 'ToolCallFailed' },
-      { capability: cap.capability },
-      () => executeSearchPhase(emit)
-    )
-  }
   /** The ONE side effect of a turn: persisting the assistant answer. */
   const createAssistantMessage = async (data: {
     conversationId: string
@@ -1962,7 +1970,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
   // ---- the turn (verbatim from the route's stream body; the json body is
   // the same pipeline with push === null and response mapping) -----------
   try {
-    const turn = await executeSearchLogged(emit)
+    const turn = await executeSearchPhase(emit)
 
     if (turn.kind === 'clarify') {
       emit?.('clarify', { question: turn.question, options: turn.options })
@@ -1991,7 +1999,10 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     const { messages: modelMessages, historySources, userTurnText } = await buildModelMessages(turn)
     let full: string
     const directExpression = explicitCalculation(content)
-    const exact = directExpression && calculationResults.length === 1 &&
+    // Historical instructions or assistant customization may require a
+    // particular explanation/format. Keep the result as evidence in those
+    // cases rather than bypassing the user's requested presentation.
+    const exact = history.length === 0 && !prep.conversation.assistantId && directExpression && calculationResults.length === 1 &&
       calculationResults[0].expression === directExpression && calculationResults[0].ok
       ? calculationResults[0].value : null
     if (exact !== null && !docContext.block && !useVision && turn.kind === 'none') {
