@@ -75,7 +75,8 @@ jobs:
         with:
           bun-version: latest
       - name: Verify configured free provider
-        run: test -n "$OPENROUTER_API_KEY" || { echo 'Live integration blocked: missing free-provider credential'; exit 2; }
+        run: |
+          test -n "$OPENROUTER_API_KEY" || { echo 'Live integration blocked: missing free-provider credential'; exit 2; }
       - run: bun install --frozen-lockfile
       - run: bunx prisma generate && bunx prisma db push --skip-generate
       - name: Run isolated backend and durable evaluation
