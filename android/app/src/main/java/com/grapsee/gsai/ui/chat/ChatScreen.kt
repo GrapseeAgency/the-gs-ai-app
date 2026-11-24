@@ -3452,7 +3452,7 @@ private fun SheetActionRow(
 private fun AssistantAvatar(isWorking: Boolean) {
     GsBotAvatar(
         style = SettingsStore.assistantAvatar,
-        size = 38.dp,
+        size = 34.dp,
         isWorking = isWorking,
     )
 }

@@ -2,33 +2,37 @@ package com.grapsee.gsai
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.grapsee.gsai.data.AssistantAvatarStyle
-import com.grapsee.gsai.ui.components.GsBotAvatar
+import com.grapsee.gsai.data.SettingsStore
+import com.grapsee.gsai.ui.chat.AssistantMessage
+import com.grapsee.gsai.ui.chat.ChatUiMessage
+import com.grapsee.gsai.ui.chat.ComposerRow
+import com.grapsee.gsai.ui.chat.UserMessage
+import com.grapsee.gsai.ui.chat.content.nexlyPearlBackdrop
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
-import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -37,209 +41,234 @@ import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/** Runs on a real Android emulator WebView; verifies the actual npm canvas. */
+/**
+ * Uses the actual production transcript and composer, not a fabricated
+ * Text("Working") sample. Verify the original renderer's *visible* pixels,
+ * presentation cadence and sustained frame changes during a live state
+ * transition. Capture the real Android view hierarchy for review.
+ */
 @RunWith(AndroidJUnit4::class)
 class BotAvatarWebViewDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
-    private val screenshots get() = File(compose.activity.filesDir, "native-avatar-evidence").apply { mkdirs() }
+    private val screenshots get() = File(
+        compose.activity.filesDir, "native-avatar-evidence"
+    ).apply { mkdirs() }
+    private val working = mutableStateOf(false)
 
-    private fun findWebView(view: View): WebView? {
-        if (view is WebView) return view
-        if (view is ViewGroup) for (n in 0 until view.childCount) {
-            val found = findWebView(view.getChildAt(n))
-            if (found != null) return found
-        }
-        return null
-    }
-
-    private fun canvasHash(): String {
-        val latch = CountDownLatch(1)
-        var result = ""
-        // Check actual canvas pixels, not an empty <canvas> shell or static PNG.
-        val js = """(function(){
-          var c=document.querySelector('canvas');
-          if(!c||!c.width||!c.height)return 'NO_CANVAS';
-          var p=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
-          var h=2166136261,n=0;
-          for(var i=0;i<p.length;i+=16) {
-            h=Math.imul(h^p[i],16777619);
-            h=Math.imul(h^p[i+1],16777619);
-            h=Math.imul(h^p[i+2],16777619);
-            if(p[i+3]>0)n++;
-          }
-          return n+':'+(h>>>0);
-        })()"""
-        instrumentation.runOnMainSync {
-            val browser = findWebView(compose.activity.window.decorView)
-                ?: error("Actual Android WebView is missing")
-            browser.evaluateJavascript(js) { value ->
-                result = value
-                latch.countDown()
-            }
-        }
-        assertTrue("WebView JavaScript callback timed out", latch.await(15, TimeUnit.SECONDS))
-        return result
-    }
-
-    private fun awaitPaint(): String {
-        repeat(28) {
-            val hash = canvasHash()
-            if (hash.matches(Regex(".*[1-9][0-9]*:[0-9]+.*"))) return hash
-            Thread.sleep(250)
-        }
-        error("Original bot-avatars did not paint an opaque canvas: " + canvasHash())
-    }
-
-
-    /** Fails if the canvas has pixels internally but is invisible on screen. */
-    private fun assertAvatarHasVisibleGreenPixels() {
-        val browser = findWebView(compose.activity.window.decorView)
-            ?: error("Android WebView missing from the rendered chat row")
-        val location = IntArray(2)
-        instrumentation.runOnMainSync { browser.getLocationOnScreen(location) }
-        val image = captureNativeViewBitmap()
-        val rootOffset = IntArray(2)
-        instrumentation.runOnMainSync {
-            compose.activity.window.decorView.getLocationOnScreen(rootOffset)
-        }
-        var green = 0
-        var contrast = 0
-        val left = (location[0] - rootOffset[0]).coerceAtLeast(0)
-        val top = (location[1] - rootOffset[1]).coerceAtLeast(0)
-        val right = (left + browser.width).coerceAtMost(image.width)
-        val bottom = (top + browser.height).coerceAtMost(image.height)
-        for (y in top until bottom) for (x in left until right) {
-            val pixel = image.getPixel(x, y)
-            val r = android.graphics.Color.red(pixel)
-            val g = android.graphics.Color.green(pixel)
-            val b = android.graphics.Color.blue(pixel)
-            if (g > r + 20 && g > b + 10 && g > 70) green++
-            if (kotlin.math.abs(r - 244) + kotlin.math.abs(g - 229) +
-                kotlin.math.abs(b - 242) > 110) contrast++
-        }
-        image.recycle()
-        val debug = javascriptResult(
-            "window.AndroidAvatarFrames && window.AndroidAvatarFrames.diagnostics()"
-        )
-        val jsDebug = javascriptResult("window.gsAvatarFrameDiagnostics && window.gsAvatarFrameDiagnostics()")
-        assertTrue(
-            "Original bot-avatars NOT visible: " + green + " green, " + contrast +
-                " contrasted pixels, region=" + left + "," + top + " " +
-                (right - left) + "x" + (bottom - top) + "; bridge=" + debug + "; js=" + jsDebug,
-            green > 25
-        )
-    }
-
-    private fun awaitVisibleAvatar() {
-        repeat(24) {
-            try {
-                assertAvatarHasVisibleGreenPixels()
-                return
-            } catch (_: AssertionError) {
-                Thread.sleep(250)
-            }
-        }
-        assertAvatarHasVisibleGreenPixels()
-    }
-
-    private fun javascriptResult(expression: String): String {
-        val latch = CountDownLatch(1)
-        var result = ""
-        instrumentation.runOnMainSync {
-            findWebView(compose.activity.window.decorView)!!
-                .evaluateJavascript(expression) { value ->
-                    result = value
-                    latch.countDown()
-                }
-        }
-        return if (latch.await(8, TimeUnit.SECONDS)) result else "JS_TIMEOUT"
-    }
-
-    private fun captureNativeViewBitmap(): Bitmap {
-        val root = compose.activity.window.decorView
-        val width = root.width.coerceAtLeast(1)
-        val height = root.height.coerceAtLeast(1)
-        val image = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        // Unlike UiAutomation screenshots (which can return null on a headless
-        // CI emulator), drawing the real decor view always captures the actual
-        // native Compose Image overlay alongside the rest of the chat.
-        instrumentation.runOnMainSync { root.draw(Canvas(image)) }
-        return image
-    }
-
-    private fun capture(file: String) {
-        val bitmap = captureNativeViewBitmap()
-        val output = File(screenshots, file)
-        output.outputStream().use {
-            assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
-        }
-        assertTrue("Screenshot missing actual native screen", output.length() > 20000)
-        bitmap.recycle()
-    }
-
-    private fun screen(working: Boolean) {
-        instrumentation.runOnMainSync {
-            compose.activity.setContent {
-                TheGsAiTheme(darkTheme = false) {
-                    Column(
-                        Modifier.fillMaxSize()
-                            .background(Color(0xFFF4E5F2))
-                            .padding(24.dp),
-                        verticalArrangement = Arrangement.spacedBy(18.dp)
-                    ) {
-                        Text("Can you summarise the thread with Acme?")
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            GsBotAvatar(AssistantAvatarStyle.CLOVER, isWorking = working)
-                            Text(
-                                if (working) "Working…" else
-                                    "They only sign annual, Dana approves, and pricing is unchanged.",
-                                modifier = Modifier.padding(start = 10.dp)
-                            )
-                        }
-                        Spacer(Modifier.weight(1f))
-                        Text("Ask anything…")
+    @Composable
+    private fun NativeChat() {
+        TheGsAiTheme(darkTheme = false) {
+            Box(Modifier.fillMaxSize().nexlyPearlBackdrop()) {
+                Column(
+                    Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    UserMessage(
+                        message = ChatUiMessage(
+                            id = "avatar-user", role = "user",
+                            content = "Can you summarise the thread with Acme?",
+                            createdAt = "2026-11-23T16:23:00Z"
+                        )
+                    )
+                    Box(Modifier.testTag("native.reply")) {
+                        AssistantMessage(
+                            message = ChatUiMessage(
+                                id = "avatar-assistant", role = "assistant",
+                                content = if (working.value) "" else
+                                    "They only sign annual, Dana approves, and pricing is the same thread as last quarter.",
+                                isStreaming = working.value,
+                                createdAt = "2026-11-23T16:24:00Z"
+                            ),
+                            showIdentity = true,
+                            isSpeaking = false,
+                            onCopy = {},
+                            onRegenerate = {}
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Box(Modifier.testTag("native.composer")) {
+                        ComposerRow(
+                            draftText = { "" }, onDraftChange = {},
+                            onSend = {}, onAttach = {}, isStreaming = working.value,
+                            onStop = {}, queuedText = { "" }, onQueue = {},
+                            onUnqueue = {}, onVoice = {}
+                        )
                     }
                 }
             }
         }
     }
 
-    @Test fun authenticCanvasIsPaintedAndWorkingFramesMove() {
-        screen(false)
-        compose.onNodeWithContentDescription("Clover bot, idle").assertIsDisplayed()
-        compose.onNodeWithText("Ask anything…").assertIsDisplayed()
-        val idle = awaitPaint()
-        Thread.sleep(280)
-        capture("original-avatar-debug-idle.png")
-        awaitVisibleAvatar()
-        capture("original-avatar-idle.png")
-
-        screen(true)
-        compose.onNodeWithContentDescription("Clover bot, working").assertIsDisplayed()
-        compose.onNodeWithText("Ask anything…").assertIsDisplayed()
-        val frame1 = awaitPaint()
-        val bridgeState = CountDownLatch(1)
-        var actualState = ""
-        instrumentation.runOnMainSync {
-            findWebView(compose.activity.window.decorView)!!
-                .evaluateJavascript("window.gsAvatarGetState && window.gsAvatarGetState()") {
-                    actualState = it
-                    bridgeState.countDown()
-                }
+    private fun findView(view: View, predicate: (View) -> Boolean): View? {
+        if (predicate(view)) return view
+        if (view is ViewGroup) for (n in 0 until view.childCount) {
+            findView(view.getChildAt(n), predicate)?.let { return it }
         }
-        assertTrue(bridgeState.await(15, TimeUnit.SECONDS))
-        assertTrue("The original React component missed the native working state: " + actualState,
-            actualState.contains("working"))
-        Thread.sleep(280)
-        awaitVisibleAvatar()
-        capture("original-avatar-working-1.png")
-        Thread.sleep(900)
-        val frame2 = canvasHash()
-        capture("original-avatar-working-2.png")
-        assertNotEquals("Original Libraries.dev canvas must animate while working",
-            frame1, frame2)
-        assertTrue("The original JS engine must paint a real image: " + idle,
-            idle.contains(":"))
+        return null
+    }
+
+    private fun javascript(expression: String): String {
+        val latch = CountDownLatch(1)
+        var result = ""
+        instrumentation.runOnMainSync {
+            val browser = findView(compose.activity.window.decorView) { it is WebView }
+                as? WebView ?: error("Original WebView is absent")
+            browser.evaluateJavascript(expression) {
+                result = it
+                latch.countDown()
+            }
+        }
+        assertTrue("JavaScript diagnostics timed out", latch.await(10, TimeUnit.SECONDS))
+        return result
+    }
+
+    private fun diagnostics() = javascript(
+        "window.AndroidAvatarFrames && window.AndroidAvatarFrames.diagnostics()"
+    )
+
+    private fun presented(): Int =
+        Regex("presented=([0-9]+)").find(diagnostics())
+            ?.groupValues?.get(1)?.toInt() ?: 0
+
+    private fun awaitPaint() {
+        repeat(60) {
+            if (presented() > 0) return
+            Thread.sleep(250)
+        }
+        error("No real vendor canvas reached the native ImageView: " + diagnostics() +
+            "; " + javascript("window.gsAvatarFrameDiagnostics && window.gsAvatarFrameDiagnostics()"))
+    }
+
+    private fun assertPlacement(working: Boolean) {
+        val avatar = compose.onNodeWithContentDescription(
+            if (working) "Clover bot, working" else "Clover bot, idle"
+        )
+        avatar.assertIsDisplayed()
+        val avatarBounds = avatar.fetchSemanticsNode().boundsInRoot
+        val reply = compose.onNodeWithTag("native.reply").fetchSemanticsNode().boundsInRoot
+        val composer = compose.onNodeWithTag("native.composer").fetchSemanticsNode().boundsInRoot
+        assertTrue("Avatar belongs beside the production assistant reply",
+            avatarBounds.top >= reply.top && avatarBounds.bottom <= reply.bottom)
+        assertTrue("Avatar cannot be in composer", avatarBounds.bottom < composer.top)
+        instrumentation.runOnMainSync {
+            val root = compose.activity.window.decorView
+            val browser = findView(root) { it is WebView }!!
+            val image = findView(root) { it.tag == "gs-original-avatar-image" }!!
+            assertEquals("There must not be two superimposed avatar layers",
+                0f, browser.alpha, 0f)
+            assertTrue("Native avatar must keep its square aspect ratio", image.width == image.height)
+        }
+    }
+
+    private data class Frame(val full: Bitmap, val crop: Bitmap, val signature: Int, val green: Int)
+
+    private fun captureFrame(): Frame {
+        val root = compose.activity.window.decorView
+        var full: Bitmap? = null
+        var crop: Bitmap? = null
+        instrumentation.runOnMainSync {
+            val image = findView(root) { it.tag == "gs-original-avatar-image" }
+                ?: error("Native original avatar ImageView missing")
+            val rootOffset = IntArray(2)
+            val imageOffset = IntArray(2)
+            root.getLocationOnScreen(rootOffset)
+            image.getLocationOnScreen(imageOffset)
+            val x = imageOffset[0] - rootOffset[0]
+            val y = imageOffset[1] - rootOffset[1]
+            val screenshot = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+            root.draw(Canvas(screenshot))
+            full = screenshot
+            crop = Bitmap.createBitmap(screenshot, x, y, image.width, image.height)
+        }
+        val visible = crop!!
+        val pixels = IntArray(visible.width * visible.height)
+        visible.getPixels(pixels, 0, visible.width, 0, 0, visible.width, visible.height)
+        var green = 0
+        for (pixel in pixels) {
+            val r = android.graphics.Color.red(pixel)
+            val g = android.graphics.Color.green(pixel)
+            val b = android.graphics.Color.blue(pixel)
+            if (g > r + 20 && g > b + 10 && g > 70) green++
+        }
+        return Frame(full!!, visible, pixels.contentHashCode(), green)
+    }
+
+    private fun save(bitmap: Bitmap, name: String) {
+        File(screenshots, name).outputStream().use {
+            assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+        }
+    }
+
+    private fun assertVisible(frame: Frame) {
+        assertTrue("Actual visible native avatar is blank: " + diagnostics(),
+            frame.green > 25)
+    }
+
+    @Test fun authenticCanvasIsPaintedAndWorkingFramesMove() {
+        instrumentation.runOnMainSync {
+            SettingsStore.updateAssistantAvatar(AssistantAvatarStyle.CLOVER)
+            compose.activity.setContent { NativeChat() }
+        }
+        assertPlacement(false)
+        awaitPaint()
+        val idle = captureFrame()
+        save(idle.full, "original-avatar-idle.png")
+        assertVisible(idle)
+        idle.full.recycle()
+        idle.crop.recycle()
+
+        // State change in the same mounted real reply; don't create a second
+        // WebView and mistake a remount for an animation.
+        instrumentation.runOnMainSync { working.value = true }
+        assertPlacement(true)
+        repeat(20) {
+            if (!javascript("window.gsAvatarGetState && window.gsAvatarGetState()")
+                    .contains("working")) Thread.sleep(100)
+        }
+        assertTrue("Native working state failed to reach React",
+            javascript("document.querySelector('canvas') && document.querySelector('canvas').dataset.state")
+                .contains("working"))
+        Thread.sleep(350)
+
+        // Measure unique frames actually presented by the native ImageView.
+        // A single differing screenshot is not proof of smooth animation.
+        val startCount = presented()
+        val start = SystemClock.elapsedRealtime()
+        Thread.sleep(2500)
+        val fps = (presented() - startCount) * 1000.0 /
+            (SystemClock.elapsedRealtime() - start).coerceAtLeast(1)
+        println("GS_AVATAR_PRESENTATION_FPS=" + fps + " " + diagnostics())
+        assertTrue("Working avatar must sustain at least 20 presented frames/sec; actual=" +
+            fps + " " + diagnostics(), fps >= 20.0)
+
+        val signatures = mutableSetOf<Int>()
+        for (n in 0 until 12) {
+            Thread.sleep(125)
+            val frame = captureFrame()
+            assertVisible(frame)
+            signatures.add(frame.signature)
+            save(frame.crop, "avatar-motion-" + n.toString().padStart(2, '0') + ".png")
+            if (n == 0) save(frame.full, "original-avatar-working-1.png")
+            if (n == 11) save(frame.full, "original-avatar-working-2.png")
+            frame.full.recycle()
+            frame.crop.recycle()
+        }
+        println("GS_AVATAR_VISIBLE_UNIQUE_FRAMES=" + signatures.size + "/12")
+        assertTrue("Visible avatar froze or only changed once: " + signatures.size + "/12",
+            signatures.size >= 10)
+
+        // Verify the same native reply can settle back to original idle.
+        instrumentation.runOnMainSync { working.value = false }
+        assertPlacement(false)
+        Thread.sleep(350)
+        assertTrue("Native settled state failed to reach React",
+            javascript("document.querySelector('canvas') && document.querySelector('canvas').dataset.state")
+                .contains("default"))
+        val settled = captureFrame()
+        save(settled.full, "original-avatar-settled.png")
+        assertVisible(settled)
+        settled.full.recycle()
+        settled.crop.recycle()
     }
 }

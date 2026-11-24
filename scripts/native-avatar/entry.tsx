@@ -22,8 +22,6 @@ declare global { interface Window {
 
 let latest = normalize({})
 let onChange: ((value: Config) => void) | null = null
-// Register BEFORE React's asynchronous first paint. The Android page-finished
-// bridge can fire before Avatar() mounts; its initial working state must stick.
 window.gsAvatarUpdate = (value) => {
   latest = normalize(value ?? {})
   onChange?.(latest)
@@ -37,25 +35,32 @@ function Avatar() {
     setConfig(latest)
     return () => { onChange = null }
   }, [])
+  // Match the original web chat's green clover and original fabric material.
+  // Render a high-resolution complete 1.5x overscan canvas (not a cropped
+  // screenshot). The actual transcript slot is smaller and scaled once.
   return <BotAvatar
     type={config.type}
     state={config.state}
     paused={config.paused}
-    size={40}
-    color={config.type === 'clover' ? '#24DF79' : undefined}
+    size={48}
+    color={config.type === 'clover' ? '#2FCB7A' : undefined}
     shading="fabric"
     face="eyes"
     theme="light"
     interactive={false}
     speed={1}
+    style={{ margin: 0 }}
   />
 }
 createRoot(document.getElementById('root')!).render(<Avatar />)
 
-// Paint the exact canvas produced by bot-avatars into the native Compose layer.
-// This is live frame transfer (not a static asset or a reimplemented animation).
-// Android's own WebView surface can be invisible even while canvas pixels exist.
+// The vendor's requestAnimationFrame rig is untouched. Sample its original
+// changing pixels at a 30 fps target (instead of the old 10 fps bottleneck).
+// Never retransmit an identical image, including when reduced motion freezes
+// the avatar. All visual motion still originates in bot-avatars itself.
+const frameInterval = 1000 / 30 - 3
 let lastFrame = 0
+let lastImage = ''
 let sendAttempts = 0
 let sentFrames = 0
 let frameErrors = 0
@@ -65,14 +70,19 @@ window.gsAvatarFrameDiagnostics = () =>
   ',errors=' + frameErrors + ',last=' + lastFrameError
 const deliverCanvas = (time: number) => {
   requestAnimationFrame(deliverCanvas)
-  if (time - lastFrame < 100) return
+  if (time - lastFrame < frameInterval) return
   lastFrame = time
   const bridge = window.AndroidAvatarFrames
   const canvas = document.querySelector('canvas')
   if (!bridge || !canvas || !canvas.width || !canvas.height) return
+  // Respect the real library's initial fabric-material readiness/fade.
+  if (Number(getComputedStyle(canvas).opacity) < 0.99) return
   sendAttempts++
   try {
-    bridge.frame(canvas.toDataURL('image/png'))
+    const png = canvas.toDataURL('image/png')
+    if (png === lastImage) return
+    bridge.frame(png)
+    lastImage = png
     sentFrames++
   } catch (e) {
     frameErrors++

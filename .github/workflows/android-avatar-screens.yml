@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'android/app/src/main/java/com/grapsee/gsai/ui/components/GsBotAvatar.kt'
+      - 'android/app/src/main/java/com/grapsee/gsai/ui/chat/ChatScreen.kt'
+      - 'android/app/build.gradle.kts'
       - 'android/app/src/main/assets/bot-avatar/**'
       - 'android/app/src/androidTest/java/com/grapsee/gsai/BotAvatarWebViewDeviceTest.kt'
       - 'scripts/native-avatar/**'
@@ -14,6 +16,8 @@ on:
     branches: [main]
     paths:
       - 'android/app/src/main/java/com/grapsee/gsai/ui/components/GsBotAvatar.kt'
+      - 'android/app/src/main/java/com/grapsee/gsai/ui/chat/ChatScreen.kt'
+      - 'android/app/build.gradle.kts'
       - 'android/app/src/main/assets/bot-avatar/**'
       - 'android/app/src/androidTest/java/com/grapsee/gsai/BotAvatarWebViewDeviceTest.kt'
       - 'scripts/native-avatar/**'

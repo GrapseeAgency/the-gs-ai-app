@@ -425,11 +425,11 @@ tasks.register("bundleAuthenticBotAvatars") {
                 "Cannot bundle authentic bot-avatars from npm: " + parts.joinToString(" ")
             }
         }
-        if (!botAvatarBundle.isFile) {
-            invoke("npm", "install", "--no-audit", "--no-fund", directory = botAvatarDir)
-            invoke("node", "scripts/native-avatar/build.mjs",
-                directory = rootProject.projectDir.parentFile)
-        }
+        // A previous APK bundle may exist even when entry.tsx changed.
+        // Gradle owns invalidation: rebuild whenever this task executes.
+        invoke("npm", "install", "--no-audit", "--no-fund", directory = botAvatarDir)
+        invoke("node", "scripts/native-avatar/build.mjs",
+            directory = rootProject.projectDir.parentFile)
         check(botAvatarBundle.isFile && botAvatarBundle.length() > 20_000) {
             "Authentic bot-avatars JS missing from APK assets; refusing to package blank avatars"
         }
