@@ -153,7 +153,8 @@ Schema:
  "region": string|null,
  "sourceHint": string|null,
  "depth": "quick"|"deep",
- "officialOnly": boolean
+ "officialOnly": boolean,
+ "calculations": string[]
 }
 
 Rules:
@@ -169,6 +170,7 @@ Rules:
 - Deeper multi-part research ("explain the situation with X") => depth="deep", intent="research".
 - Facts that need current data (weather, scores, prices, releases) => intent=factual.
 - Ordinary chat/general knowledge => needsSearch=false, intent="none".
+- When the latest request needs arithmetic, set calculations to up to four self-contained numeric expressions using ordinary arithmetic (+,-,*,/,^, parentheses) or sqrt, abs, min, max, pow. Use only numbers explicitly provided by the user or established in prior conversation, not estimated values. Do not put a prose explanation, currency symbols, percentages, assignments, code, or units in expressions. Convert percentages into ratios explicitly. Do not request calculations for an expression that is merely being quoted or discussed. If unknown numbers require search, leave calculations empty until evidence is available. These expressions will be executed by the application, not by you.
 - GENERAL AMBIGUITY: if answering would require guessing a key fact (which programming language/framework/version, which platform, which project/file, which person or topic), set ambiguous=true, write ONE short clarifyQuestion, and return 2-5 clarifyOptions as {id,label}. Do NOT clarify ordinary questions that already name the subject; answer those. Do NOT clarify when a web search can resolve the missing fact.
 - Do not ask for permission, preferences, or extra detail that is not required to answer. A clarification is a last resort, not a conversation starter.
 - SOFTWARE RELEASES: "latest version of X", "what version is X", "is X released", "latest stable X" => intent="source_specific", sourceHint="github.com", officialOnly=true, needsSearch=true, queries include "<X> latest release github". Prefer the project's official release page over news.
@@ -265,6 +267,7 @@ function normalizePlan(raw: Record<string, unknown>, fallbackQuery: string): Sea
     officialOnly: raw.officialOnly === true,
     stopSignal: false,
     reuseEvidence: raw.reuseEvidence === true,
+    calculations: asStringArray(raw.calculations, 4),
   }
 }
 

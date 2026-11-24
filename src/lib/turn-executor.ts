@@ -157,6 +157,8 @@ import {
 import { runBranchingResearch } from '@/lib/research/branching'
 import { crystallizeIfNeeded } from '@/lib/context-crystallize'
 import { attachmentMatchesTurn } from '@/lib/turn-resume'
+import { explicitCalculation, executeCalculation, calculationEvidence, type CalculationResult } from '@/lib/calc/turn-calculator'
+import { needsQualityChain } from '@/lib/quality-routing'
 import {
   NOOP_EMIT,
   type ClarifyOption,
@@ -659,18 +661,19 @@ export async function prepareTurn(
     estimatedInputChars: Buffer.byteLength(baseSystemPrompt + content + recentDesc.map(message => message.content).join('\n'), 'utf8'),
   })
   const baseRoute = resolveModelRoute(routerPlan.internalModelId)
+  const qualityChain = needsQualityChain({
+    route: routerPlan.route, requestedMode, effectiveMode: thinking.effective,
+    registerClass: routerPlan.registerClass, hasHistory: history.length > 0,
+    hasConstraints: numericCheck || !!directive || !!constraints, content,
+  })
   const freeChain = forceFreeEligible
-    ? routerPlan.route === 'TEXT_SIMPLE' && !routerPlan.registerClass
-      ? OPENROUTER_MODELS['gs-free']
-      : OPENROUTER_MODELS['gs-free-big']
+    ? qualityChain ? OPENROUTER_MODELS['gs-free-big'] : OPENROUTER_MODELS['gs-free']
     : lock === 'openrouter'
       ? OPENROUTER_MODELS[routerPlan.internalModelId] ?? OPENROUTER_MODELS['gs-free-big']
       : lock === 'zai'
         ? null
         : openRouterKeyAvailable && tierFreeEligible
-          ? routerPlan.route === 'TEXT_SIMPLE' && !routerPlan.registerClass
-            ? OPENROUTER_MODELS['gs-free']
-            : OPENROUTER_MODELS['gs-free-big']
+          ? qualityChain ? OPENROUTER_MODELS['gs-free-big'] : OPENROUTER_MODELS['gs-free']
           : null
   const modelRoute: ModelRoute = freeChain
     ? { backend: 'openrouter', models: freeChain }
@@ -1006,6 +1009,24 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
   const historyWebSources = prep.historyWebSources
   const includeHistoryEvidence = prep.includeHistoryEvidence
   const historyLines = prep.historyLines
+  let calculationResults: CalculationResult[] = []
+  // Remote orchestration invokes the existing expression engine. No local
+  // agent loop or general-purpose execution environment is duplicated here.
+  const calculate = async (expressions: readonly string[]) => {
+    for (const expression of [...new Set(expressions)].slice(0, 4)) {
+      const run = async () => executeCalculation(expression)
+      const payload = { tool: 'calculator', expression }
+      if (!prep.runId) {
+        calculationResults.push(await run())
+        continue
+      }
+      const requestSeq = await appendEvent(prep.runId, 'ToolCallRequested', payload)
+      const outcome = await run()
+      await appendEvent(prep.runId, outcome.ok ? 'ToolCallCompleted' : 'ToolCallFailed',
+        { ...payload, seq: requestSeq, ...(outcome.ok ? { value: outcome.value } : { error: outcome.error }) })
+      calculationResults.push(outcome)
+    }
+  }
 
   // FLASH-MODE BUG 1 (server side) — the FIRST event of every streamed turn
   // carries the resolved effective mode: {"state":"streaming","effectiveMode":
@@ -1248,6 +1269,15 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       console.log(`RESEARCH-AGAIN conv=${id} no prior research context — falling back to the planner`)
     }
 
+    // An explicit standalone arithmetic expression needs neither a search
+    // classifier nor another model to perform the calculation.
+    const directExpression = !cap.searchPlanned && !useVision && !docContext.block
+      ? explicitCalculation(content) : null
+    if (directExpression) {
+      await calculate([directExpression])
+      return { kind: 'none' }
+    }
+
     const plannerStartedAt = Date.now()
     const plan = await planSearch({
       userText: content,
@@ -1263,6 +1293,12 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       return { kind: 'clarify', question: plan.ambiguity.prompt.question, options: plan.ambiguity.prompt.options }
     }
 
+    // A planner may request bounded, read-only arithmetic. Do not execute
+    // its proposals on stop/reuse/search turns whose inputs may be unknown.
+    if (!plan.needsSearch && !plan.stopSignal && !cap.searchPlanned &&
+        !useVision && !docContext.block && plan.calculations?.length) {
+      await calculate(plan.calculations)
+    }
     if ((!plan.needsSearch || plan.stopSignal) && !cap.searchPlanned) return { kind: 'none' }
 
     if (cap.searchPlanned) {
@@ -1359,6 +1395,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       docContext.block,
       historyBlock?.block ?? null,
       toolResultBlock,
+      calculationEvidence(calculationResults),
       // TASK 3 — OCR sidecar evidence. Present ONLY when the image bytes
       // could not be sent (allImagesFailed); the prefix is the operator's
       // exact contract wording, so the model reads it as text, not a
@@ -1953,7 +1990,15 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
 
     const { messages: modelMessages, historySources, userTurnText } = await buildModelMessages(turn)
     let full: string
-    if (turn.kind !== 'none' || docContext.block) {
+    const directExpression = explicitCalculation(content)
+    const exact = directExpression && calculationResults.length === 1 &&
+      calculationResults[0].expression === directExpression && calculationResults[0].ok
+      ? calculationResults[0].value : null
+    if (exact !== null && !docContext.block && !useVision && turn.kind === 'none') {
+      // Real deterministic result, not a simulated model token stream.
+      full = String(exact)
+      if (push) push('delta', full)
+    } else if (turn.kind !== 'none' || docContext.block || calculationResults.length > 0) {
       // GS-CONSTRAINT-GUARD (Failure D, proactive): freshness-critical turns
       // get the grounding requirement injected BEFORE the first synthesis, so
       // the answer is composed from retrieved evidence, not model memory.
@@ -2140,7 +2185,9 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     // the same renderable content regardless of model compliance.
     const priorAssistant =
       [...history].reverse().find((m) => m.role.toLowerCase() === 'assistant')?.content ?? ''
-    const compiled = ensureWidgets(baseText, { userPrompt: content, priorText: priorAssistant })
+    const compiled = exact !== null && turn.kind === 'none' && !docContext.block && !useVision
+      ? { text: baseText, errors: [], path: 'none', widgets: 0 }
+      : ensureWidgets(baseText, { userPrompt: content, priorText: priorAssistant })
     if (compiled.errors.length > 0 || compiled.path !== 'none') {
       console.log(
         `GS-GENUI conv=${id} path=${compiled.path} widgets=${compiled.widgets}` +

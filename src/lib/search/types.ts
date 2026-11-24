@@ -147,6 +147,8 @@ export type SearchPlan = {
   stopSignal?: boolean
   /** Answerable from earlier evidence already in the conversation (§29-M). */
   reuseEvidence?: boolean
+  /** Read-only calculation requests, validated by the server before execution. */
+  calculations?: string[]
 }
 
 /**

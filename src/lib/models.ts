@@ -64,6 +64,8 @@ const OPENROUTER_MODELS: Record<string, string[]> = {
     'openrouter/free', // auto free router — spreads load across the whole free pool
     'nvidia/nemotron-3-ultra-550b-a55b:free', // verified live fallback
   ],
+  // Availability was observed on the pinned candidate; current concrete
+  // model quality must be evaluated separately from historical tier scores.
   'gs-free-big': ['nvidia/nemotron-3-ultra-550b-a55b:free', 'openrouter/free'],
   // 2026-11-24 — dedicated PLANNER chain. The search planner runs on EVERY
   // chat turn (clarify/answer/search classification) and was riding gs-free,
