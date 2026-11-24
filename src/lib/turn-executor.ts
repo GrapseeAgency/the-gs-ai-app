@@ -26,7 +26,8 @@ import {
   type ThinkingMode,
 } from '@/lib/model-capabilities'
 import { loadKeyPool } from '@/lib/keypool'
-import { orCompleteChat, orStreamChat } from '@/lib/openrouter'
+import { orCompleteChat, orStreamChat, orRequestTools } from '@/lib/openrouter'
+import { collectRemoteToolEvidence, remoteToolEvidence } from '@/lib/remote-tools'
 import { planRoute } from '@/lib/router'
 import {
   selectCatalogFastRoutes,
@@ -1996,7 +1997,35 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       }
     }
 
-    const { messages: modelMessages, historySources, userTurnText } = await buildModelMessages(turn)
+    let { messages: modelMessages, historySources, userTurnText } = await buildModelMessages(turn)
+    // Opt-in until a real provider compatibility benchmark passes. No
+    // autonomous external actions and no hidden extra call on flash turns.
+    const nativeToolModel = openRouterModels?.find(model => model.endsWith(':free') &&
+      OPENROUTER_MODELS['gs-free-big'].includes(model))
+    if (process.env.GS_REMOTE_TOOLS === '1' && nativeToolModel && prep.thinking.effective === 'thinking' &&
+      !useVision && !docContext.block && turn.kind === 'none' && !explicitCalculation(content) &&
+      !/\b(?:no tools|without (?:using )?tools|(?:do not|don't|never) use (?:any )?tools)\b/i.test(content)) {
+      const result = await collectRemoteToolEvidence(modelMessages as ChatMessageInput[], {
+        request: (messages, signal) => orRequestTools(messages, nativeToolModel, signal),
+        clock: timezone => buildTimeEvidence(timezone || clientTimezone).meta,
+        stopped: () => !!prep.runId && runStopFlag(prep.runId),
+        record: async (stage, entry) => {
+          if (!prep.runId) return
+          await appendEvent(prep.runId, stage === 'requested' ? 'ToolCallRequested' :
+            stage === 'completed' ? 'ToolCallCompleted' : 'ToolCallFailed', entry)
+        },
+      })
+      const evidence = remoteToolEvidence(result.results)
+      if (evidence) {
+        userTurnText = evidence + '\n\n' + userTurnText
+        const next = [...modelMessages] as ChatMessageInput[]
+        const last = next.length - 1
+        if (next[last]?.role === 'user') {
+          next[last] = {...next[last], content: userTurnText}
+          modelMessages = next
+        }
+      }
+    }
     let full: string
     const directExpression = explicitCalculation(content)
     // Historical instructions or assistant customization may require a

@@ -31,6 +31,7 @@ import { consumeSseStream, type ChatMessageInput } from '@/lib/ai'
 import { loadKeyPool } from '@/lib/keypool'
 import { OPENROUTER_MODELS } from '@/lib/models'
 import { FreeCapacityUnavailableError } from '@/lib/capacity-policy'
+import { REMOTE_TOOLS, type RemoteMessage, type RemoteCompletion } from './remote-tools'
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
 
@@ -484,4 +485,31 @@ export async function orHealthProbe(): Promise<OrProbeResult> {
     error: lastError.slice(0, 200),
     latencyMs: Date.now() - t0,
   }
+}
+
+/** Native remote function-call adapter. Deliberately excludes the auto-router:
+ * never send a paid or unverified implicit route a tool-enabled request.
+ * One bounded request per round; failed compatibility falls back to existing
+ * planner evidence, not a long key walk. The body is covered by the deadline. */
+export async function orRequestTools(
+  messages: RemoteMessage[], model: string, signal: AbortSignal
+): Promise<RemoteCompletion> {
+  if (!model.endsWith(':free') || !OPENROUTER_MODELS['gs-free-big'].includes(model))
+    throw new Error('No eligible free tool route')
+  const keys = (await loadKeyPool()).keys
+  const key = keys.find(k => !keyIsCooled(k))
+  if (!key) throw new Error('No free tool capacity')
+  const response = await fetch(`${OPENROUTER_BASE}/chat/completions`,{
+    method:'POST', signal, headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json','X-Title':'GS AI'},
+    body:JSON.stringify({model,messages,stream:false,temperature:0.2,max_tokens:2048,
+      tools:REMOTE_TOOLS,tool_choice:'auto',provider:{require_parameters:true}})
+  })
+  if (!response.ok) {
+    if (response.status===429 || response.status===402 || response.status===401) coolKey(key,'tool request capacity')
+    void response.body?.cancel().catch(()=>undefined)
+    throw new Error('Free tool request unavailable')
+  }
+  const result = await response.json() as RemoteCompletion
+  if (result.model && result.model !== model) throw new Error('Unexpected tool model')
+  return result
 }
