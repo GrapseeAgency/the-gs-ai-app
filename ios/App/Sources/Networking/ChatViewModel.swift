@@ -1006,8 +1006,12 @@ final class ChatViewModel: ObservableObject {
         flushTask?.cancel()
         flushTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 17_000_000)
-                guard let self, self.isStreaming else { break }
+                // Do not re-layout the growing native Markdown transcript
+                // on every display refresh. Motion itself keeps its own
+                // display-rate clock. No received characters are discarded.
+                let longReply = (self?.messages.last?.content.utf8.count ?? 0) >= 240
+                try? await Task.sleep(nanoseconds: longReply ? 32_000_000 : 17_000_000)
+                guard !Task.isCancelled, let self, self.isStreaming else { break }
                 self.drainSearchEvents()
                 self.flushStreamingText()
             }
@@ -1439,7 +1443,7 @@ final class ChatViewModel: ObservableObject {
         }
         stopFlushLoop()
         drainSearchEvents() // stop/cancel keeps the trace that really happened
-        flushStreamingText(drainAll: true) // stop/error retains ALL received text
+        flushStreamingText() // every flush now retains ALL received text
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
         if messages[index].content.isEmpty {
             messages.remove(at: index)

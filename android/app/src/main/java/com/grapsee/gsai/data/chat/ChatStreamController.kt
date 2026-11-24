@@ -234,7 +234,14 @@ class ChatStreamController(private val chat: ChatRepository) {
             // Independent of network callbacks: a small final delta must not
             // remain invisible until another chunk or done happens to arrive.
             val painter = launch {
-                while (isActive) { paintReceivedText(); delay(STREAM_PAINT_MS) }
+                while (isActive) {
+                    paintReceivedText()
+                    // Native text layout and Markdown are not animation frames.
+                    // After the first short passage, coalesce at ~30Hz; the
+                    // independent display pulse still runs at the screen rate.
+                    val size = synchronized(buffer) { visibleChars }
+                    delay(if (size < 240) STREAM_PAINT_MS else STREAM_LAYOUT_MS)
+                }
             }
             try {
                 val returnedId = chat.send(
@@ -406,6 +413,7 @@ class ChatStreamController(private val chat: ChatRepository) {
         /** Coalesce provider events, not characters. The independent display
          *  clock animates at the device refresh rate; empty ticks do no work. */
         const val STREAM_PAINT_MS = 17L
+        const val STREAM_LAYOUT_MS = 32L
     }
 }
 

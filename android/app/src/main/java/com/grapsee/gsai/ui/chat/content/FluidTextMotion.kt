@@ -43,6 +43,10 @@ internal class FluidTextMotion(initial: String) {
     private var previous = initial
     private var lastArrival: Long? = null
     private var cadenceMs = 42.0
+    // This is the optical front's arrival cursor, not a text delivery queue.
+    // A received range is present from the first frame, even while its
+    // leading contrast is low. The cursor never runs far ahead of real time.
+    private var frontUntilNanos = 0L
     var bands: List<FluidTextBand> = emptyList()
         private set
 
@@ -51,6 +55,7 @@ internal class FluidTextMotion(initial: String) {
             previous = text
             lastArrival = null
             cadenceMs = 42.0
+            frontUntilNanos = now
             bands = emptyList()
             return bands
         }
@@ -90,7 +95,10 @@ internal class FluidTextMotion(initial: String) {
         // A low-pass cadence estimator prevents packet timing from changing
         // the animation speed violently from one frame to the next.
         val duration = (175.0 + cadenceMs * 0.85).coerceIn(185.0, 265.0).toLong() * 1_000_000L
-        val stagger = (cadenceMs * 0.25).coerceIn(8.0, 20.0).toLong() * 1_000_000L
+        // Carry the front across packet boundaries. A burst may broaden the
+        // front, but cannot accumulate a fake typing backlog.
+        val horizon = now + 75_000_000L
+        var front = maxOf(now, minOf(frontUntilNanos, horizon))
         val boundary = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(text) }
 
         // Do not animate an existing grapheme if an arriving combining mark extends it.
@@ -128,14 +136,20 @@ internal class FluidTextMotion(initial: String) {
             if (end <= start) break
             // A long real packet has a longer spatial front, not a uniform
             // flash. Small packets still overlap without withholding content.
-            val travel = (0.18f + (end - start).coerceAtMost(120) * 0.0025f).coerceIn(0.18f, 0.48f)
-            incoming += FluidTextBand(start, end, now + incoming.size * stagger, duration, travel = travel)
+            val length = end - start
+            val travel = (0.18f + length.coerceAtMost(120) * 0.0025f).coerceIn(0.18f, 0.48f)
+            incoming += FluidTextBand(start, end, front, duration, travel = travel)
+            // The next range joins while this one is still resolving. The
+            // maximum optical lead is 75ms regardless of provider speed.
+            val advance = (9_000_000L + length.coerceAtMost(60) * 1_000_000L).coerceAtMost(45_000_000L)
+            front = minOf(horizon, front + advance)
             start = end
         }
         // An in-flight range is never evicted just because another packet
         // arrives. Only its own deadline (or a genuine rewrite) settles it.
         // Cost is time-bounded by the publisher's coalescing interval, with at
         // most four ranges per received snapshot, not by response length.
+        if (incoming.isNotEmpty()) frontUntilNanos = front
         bands = alive.filter {
             atOrAfter(it.start) == it.start && atOrAfter(it.end) == it.end
         } + incoming

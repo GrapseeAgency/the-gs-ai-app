@@ -9,7 +9,6 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
@@ -95,36 +94,31 @@ internal fun FluidResponseText(
 ) {
     val allowed = !SettingsStore.reduceMotion && !SettingsStore.reduceAnimations &&
         !SettingsStore.highContrast && ValueAnimator.areAnimatorsEnabled()
-    val live = animate && LocalFluidResponseText.current && allowed
-    val retained = remember { mutableStateOf(false) }
-    if (!allowed || (!live && !retained.value)) {
-        SideEffect { if (!allowed) retained.value = false }
-        Text(text = text, style = style, color = color, inlineContent = inlineContent, modifier = modifier, softWrap = softWrap)
-        return
-    }
-
     val fresh = LocalFluidFreshMount.current
+    val live = animate && LocalFluidResponseText.current && allowed
+    // Keep the native Text call site stable. A branch swapping two Text
+    // nodes changes layout/selection identity precisely at the reveal edge.
     val motion = remember { FluidTextMotion(if (live && fresh) "" else text.text) }
     val bands = remember { mutableStateOf(emptyList<FluidTextBand>()) }
+    val wasLive = remember { booleanArrayOf(live) }
     val pulse = LocalFluidFramePulse.current ?: rememberFluidFramePulse()
     val layout = remember { mutableStateOf<TextLayoutResult?>(null) }
-    val stillLive = rememberUpdatedState(live)
+    val active = allowed && (live || bands.value.isNotEmpty() || (fresh && wasLive[0]))
     SideEffect {
-        if (live) retained.value = true
         val now = System.nanoTime()
-        val next = motion.update(text.text, now, true, sourceAppend = fresh)
+        val next = motion.update(text.text, now, active, sourceAppend = fresh)
         bands.value = next
         next.maxOfOrNull { it.bornNanos + it.durationNanos }?.let { pulse.arm(it, now) }
-        if (!live && next.isEmpty()) retained.value = false
+        wasLive[0] = live || (allowed && wasLive[0] && next.isNotEmpty())
     }
-
-    // Only the finishing node waits for its own last frame. While live,
-    // short-circuiting avoids subscribing this coroutine to display ticks.
-    LaunchedEffect(pulse) {
-        snapshotFlow {
-            !stillLive.value && bands.value.all { it.progress(pulse.now) >= 1f }
-        }.first { it }
-        retained.value = false
+    val deadline = bands.value.maxOfOrNull { it.bornNanos + it.durationNanos }
+    // Cleanup is driven by the same clock, not a restarted animation or
+    // a fixed sleep. The modifier detaches only after the final ink frame.
+    LaunchedEffect(pulse, deadline) {
+        if (deadline != null) {
+            snapshotFlow { pulse.now }.first { it >= deadline }
+            bands.value = bands.value.filter { it.progress(pulse.now) < 1f }
+        }
     }
 
     Text(
@@ -134,7 +128,7 @@ internal fun FluidResponseText(
         inlineContent = inlineContent,
         softWrap = softWrap,
         onTextLayout = { layout.value = it },
-        modifier = modifier.drawWithCache {
+        modifier = modifier.then(if (active) Modifier.drawWithCache {
             val measured = layout.value
             val regions = if (measured != null && measured.layoutInput.text.text == text.text) {
                 bands.value.flatMap { band ->
@@ -198,6 +192,6 @@ internal fun FluidResponseText(
                     }
                 }
             }
-        }
+        } else Modifier)
     )
 }

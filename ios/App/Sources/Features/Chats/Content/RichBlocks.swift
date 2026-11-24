@@ -681,12 +681,12 @@ private struct StructuredProseSequenceView: View {
                     NexlyQuickCalculatorCardView(spec: calc)
                 } else if let (callout, extraItems) = entry.coalescedCallout {
                     NexlyCalloutCardView(callout: callout, extraItems: extraItems, citations: citations)
-                        .environment(\.fluidResponseStreaming, fluidMotionEnabled && (entry.index + entry.consumedCount >= normalizedProse.count - 1 ||
+                        .environment(\.fluidResponseStreaming, fluidMotionAllowed && ((isStreaming && entry.index + entry.consumedCount >= normalizedProse.count - 1) ||
                             entry.block.sourceStart >= newBlockFloor))
                 } else {
                     BlockView(block: entry.block, isLast: entry.index == prose.count - 1, citations: citations)
                         .environment(\.nexlySectionListMode, entry.sectionMode)
-                        .environment(\.fluidResponseStreaming, fluidMotionEnabled && (entry.index + entry.consumedCount >= normalizedProse.count - 1 ||
+                        .environment(\.fluidResponseStreaming, fluidMotionAllowed && ((isStreaming && entry.index + entry.consumedCount >= normalizedProse.count - 1) ||
                             entry.block.sourceStart >= newBlockFloor))
                 }
             }

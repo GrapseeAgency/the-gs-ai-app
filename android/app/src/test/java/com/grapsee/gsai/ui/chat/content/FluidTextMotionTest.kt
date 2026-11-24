@@ -78,6 +78,23 @@ class FluidTextMotionTest {
         assertTrue(motion.update("word word!", 1, true).single().start == 9)
     }
 
+    @Test fun consecutivePacketsJoinWithoutAccumulatingAVisualBacklog() {
+        val motion = FluidTextMotion("")
+        var text = ""
+        var previousBirth = Long.MIN_VALUE
+        repeat(60) { tick ->
+            val now = tick * 5_000_000L
+            text += "abcdefghij"
+            val newest = motion.update(text, now, true).last()
+            assertTrue(newest.bornNanos in now..(now + 75_000_000L))
+            assertTrue(newest.bornNanos >= previousBirth)
+            assertEquals(text.length, newest.end)
+            assertTrue(newest.opacity(now, 1f) >= 0.179f)
+            previousBirth = newest.bornNanos
+        }
+        assertTrue(motion.update(text, 800_000_000L, true).isEmpty())
+    }
+
     @Test fun cadenceIsContinuousAndDoesNotRestartOldBands() {
         val motion = FluidTextMotion("")
         val first = motion.update("first word ", 0, true).first()

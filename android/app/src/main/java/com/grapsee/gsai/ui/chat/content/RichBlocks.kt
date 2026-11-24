@@ -665,8 +665,8 @@ private fun StructuredBlockSequenceContent(
             val (titleText, tone, icon) = calloutHeadingMatch
             val bodySpans = if (nextBlock is Block.Paragraph) nextBlock.spans else emptyList()
             key("callout:${block.sourceStart}") {
-                CompositionLocalProvider(LocalFluidResponseText provides (isStreaming && (i + 1 >= normalizedBlocks.lastIndex - 1 ||
-                    nextBlock.sourceStart >= LocalFluidNewBlockFloor.current))) {
+                CompositionLocalProvider(LocalFluidResponseText provides ((isStreaming && i + 1 >= normalizedBlocks.lastIndex - 1) ||
+                    nextBlock.sourceStart >= LocalFluidNewBlockFloor.current)) {
                 NexlyCalloutCard(
                     callout = CalloutParsed(
                         tone = tone,
@@ -707,8 +707,8 @@ private fun StructuredBlockSequenceContent(
             key(streamBlockKey(block, i)) {
                 CompositionLocalProvider(
                     LocalSectionListMode provides modeForBlock,
-                    LocalFluidResponseText provides (isStreaming && (i >= normalizedBlocks.lastIndex - 1 ||
-                        block.sourceStart >= LocalFluidNewBlockFloor.current))
+                    LocalFluidResponseText provides ((isStreaming && i >= normalizedBlocks.lastIndex - 1) ||
+                        block.sourceStart >= LocalFluidNewBlockFloor.current)
                 ) {
                     val blockContent: @Composable () -> Unit = {
                         BlockView(

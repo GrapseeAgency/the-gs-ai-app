@@ -66,17 +66,17 @@ struct FluidResponseText: View {
         let input = Input(raw: raw, streaming: streaming, allowed: allowed)
         let preview = snapshot(raw, now: now, active: active)
         let deadline = preview.bands.map { $0.born + $0.duration }.max()
+        // Keep the same native rendering branch throughout the reply.
+        // Pausing the display schedule does not replace the Text view.
         Group {
-            if !active || preview.bands.isEmpty {
-                Text(value)
-            } else if #available(iOS 18.0, *) {
-                let marked = markedText(bands: preview.bands)
-                TimelineView(.animation) { _ in
+            if #available(iOS 18.0, *) {
+                let marked = preview.bands.isEmpty ? Text(value) : markedText(bands: preview.bands)
+                TimelineView(.animation(paused: !active || preview.bands.isEmpty)) { _ in
                     marked.textRenderer(FluidGlyphRenderer(now: ProcessInfo.processInfo.systemUptime))
                 }
             } else {
-                TimelineView(.animation) { _ in
-                    Text(fadedText(bands: preview.bands, now: ProcessInfo.processInfo.systemUptime))
+                TimelineView(.animation(paused: !active || preview.bands.isEmpty)) { _ in
+                    Text(preview.bands.isEmpty ? value : fadedText(bands: preview.bands, now: ProcessInfo.processInfo.systemUptime))
                 }
             }
         }

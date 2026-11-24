@@ -66,6 +66,25 @@ final class FluidTextMotionTests: XCTestCase {
         XCTAssertEqual(motion.bands.first?.start, 9)
     }
 
+    func testConsecutivePacketsJoinWithoutAccumulatingVisualBacklog() throws {
+        var motion = FluidTextMotion(initial: "")
+        var text = ""
+        var previousBirth = -Double.infinity
+        for tick in 0..<60 {
+            let now = Double(tick) * 0.005
+            text += "abcdefghij"
+            motion.update(text, now: now)
+            let newest = try XCTUnwrap(motion.bands.last)
+            XCTAssertTrue(newest.born >= now && newest.born <= now + 0.075 + 0.000001)
+            XCTAssertGreaterThanOrEqual(newest.born, previousBirth)
+            XCTAssertEqual(newest.end, text.count)
+            XCTAssertGreaterThanOrEqual(newest.opacity(at: now, position: 1), 0.179)
+            previousBirth = newest.born
+        }
+        motion.update(text, now: 0.8)
+        XCTAssertTrue(motion.bands.isEmpty)
+    }
+
     func testCadenceDoesNotRestartOldBands() throws {
         var motion = FluidTextMotion(initial: "")
         motion.update("first word ", now: 0)

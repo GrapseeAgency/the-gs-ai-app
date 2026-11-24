@@ -38,6 +38,7 @@ struct FluidTextMotion {
     private var previous: String
     private var lastArrival: TimeInterval?
     private var cadence: TimeInterval = 0.042
+    private var frontUntil: TimeInterval = 0
     private(set) var bands: [FluidTextBand] = []
 
     init(initial: String) { previous = initial }
@@ -49,6 +50,7 @@ struct FluidTextMotion {
             previous = text
             lastArrival = nil
             cadence = 0.042
+            frontUntil = now
             bands = []
             return
         }
@@ -84,7 +86,10 @@ struct FluidTextMotion {
         }
         lastArrival = now
         let duration = min(0.265, max(0.185, 0.175 + cadence * 0.85))
-        let stagger = min(0.020, max(0.008, cadence * 0.25))
+        // An optical arrival cursor joins consecutive real packets. It
+        // never gates source text and is bounded even under burst delivery.
+        let horizon = now + 0.075
+        var front = max(now, min(frontUntil, horizon))
         // Cover the entire append, including large provider bursts. Retain
         // every unfinished band until its own deadline; no tail-size eviction.
         let suffix = Array(text.suffix(count - oldCount))
@@ -101,15 +106,18 @@ struct FluidTextMotion {
             }
             let preferred = word > lower ? word : ideal
             let end = incoming == 3 ? count : preferred
-            let travel = min(0.48, max(0.18, 0.18 + Double(min(120, end - start)) * 0.0025))
-            bands.append(FluidTextBand(start: start, end: end, born: now + Double(incoming) * stagger,
+            let length = end - start
+            let travel = min(0.48, max(0.18, 0.18 + Double(min(120, length)) * 0.0025))
+            bands.append(FluidTextBand(start: start, end: end, born: front,
                                        duration: duration, travel: travel))
+            front = min(horizon, front + min(0.045, 0.009 + Double(min(60, length)) * 0.001))
             start = end
             incoming += 1
         }
+        if incoming > 0 { frontUntil = front }
     }
 
-    mutating func settle() { bands = [] }
+    mutating func settle() { bands = []; frontUntil = 0 }
 }
 
 struct FluidMatchSpan {
