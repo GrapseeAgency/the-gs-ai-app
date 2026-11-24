@@ -220,7 +220,14 @@ class BotAvatarWebViewDeviceTest {
             }
             Thread.sleep(1000)
             val view = browser()
-            awaitState(view, "default")
+            try {
+                awaitState(view, "default")
+            } catch (failure: Throwable) {
+                // Preserve the hardware-composited screen even for a failed
+                // bounds/readiness assertion, without weakening the test.
+                runCatching { fullScreenshot("original-avatar-idle.png") }
+                throw failure
+            }
             fullScreenshot("original-avatar-idle.png")
             assertTrue("Idle avatar must be present in Android's hardware window", visible(view))
 

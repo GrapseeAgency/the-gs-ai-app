@@ -34,16 +34,9 @@ function Avatar() {
     setConfig(latest)
     return () => { onChange = null }
   }, [])
-  // The original library draws a 1.5x overscan canvas. Render it at 48 CSS px
-  // body size (72 CSS px canvas), then fit the WHOLE canvas into the actual
-  // native slot with CSS. Do not crop its jumps or replace its motion.
-  const [scale, setScale] = useState(() => Math.min(innerWidth, innerHeight) / 72)
-  React.useEffect(() => {
-    const resize = () => setScale(Math.min(innerWidth, innerHeight) / 72)
-    window.addEventListener('resize', resize)
-    resize()
-    return () => window.removeEventListener('resize', resize)
-  }, [])
+  // Keep the original 144px backing canvas. The Android host CSS maps the
+  // entire square canvas to the native slot, independent of the vendor's
+  // negative margins and inline positioning for ordinary web chat layouts.
   return <BotAvatar
     type={config.type}
     state={config.state}
@@ -55,7 +48,6 @@ function Avatar() {
     theme="light"
     interactive={false}
     speed={1}
-    style={{ margin: 0, transform: 'scale(' + scale + ')', transformOrigin: 'center' }}
   />
 }
 createRoot(document.getElementById('root')!).render(<Avatar />)
