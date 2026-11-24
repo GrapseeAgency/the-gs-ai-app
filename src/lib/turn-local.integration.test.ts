@@ -47,3 +47,23 @@ isolatedTest('real durable calculator turn completes with no model call or provi
   expect(chunks.some(c=>c?.event==='done')).toBe(true)
   expect((await terminalOf(stream))?.status).toBe('completed')
 },30000)
+
+isolatedTest('real preparation resolves contextual auto against the chosen free route and respects explicit Flash',async()=>{
+  const routeConv=conv+'-route'
+  await db.conversation.create({data:{id:routeConv,title:'Reasoning route regression'}})
+  try{
+    await db.message.create({data:{conversationId:routeConv,role:'user',content:'Our project plan has three dependent stages.',createdAt:new Date(Date.now()-3000)}})
+    await db.message.create({data:{conversationId:routeConv,role:'assistant',content:'I have the plan.',createdAt:new Date(Date.now()-2000)}})
+    for(const mode of ['auto','flash'] as const){
+      const content='Continue with the same format.'
+      const prepared=await prepareTurn({conversationId:routeConv,content,clientVersion:'web',requestId:routeConv+'-'+mode,
+        attachmentIds:[],mode},{content,attachments:[]})
+      if(prepared.kind!=='ready')throw Error('Preparation failed')
+      expect(prepared.prep.requestedMode).toBe(mode)
+      expect(prepared.prep.thinking.effective).toBe(mode==='auto'?'thinking':'flash')
+      expect(prepared.prep.openRouterModels?.[0]).toBe('nvidia/nemotron-3-ultra-550b-a55b:free')
+      expect(prepared.prep.catalogFastRoutes).toEqual([])
+      expect(prepared.prep.localExactCalculation).toBeNull()
+    }
+  }finally{await db.conversation.delete({where:{id:routeConv}})}
+},30000)
