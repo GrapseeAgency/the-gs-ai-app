@@ -70,7 +70,7 @@ struct FluidResponseText: View {
         // Pausing the display schedule does not replace the Text view.
         Group {
             if #available(iOS 18.0, *) {
-                let marked = preview.bands.isEmpty ? Text(value) : markedText(bands: preview.bands)
+                let marked = !active || preview.bands.isEmpty ? Text(value) : markedText(bands: preview.bands)
                 TimelineView(.animation(paused: !active || preview.bands.isEmpty)) { _ in
                     marked.textRenderer(FluidGlyphRenderer(now: ProcessInfo.processInfo.systemUptime))
                 }
@@ -207,34 +207,44 @@ private struct FluidGlyphRenderer: TextRenderer {
                     context.draw(run)
                     continue
                 }
-                // One optical layer per active native run, not one filtered
-                // render pass per letter. The fully settled glyphs are drawn
-                // outside the filter and never move again.
-                var optical = context
-                let softness = (1 - last) * (1 - last)
-                optical.addFilter(.blur(radius: 0.85 * softness))
-                optical.drawLayer { layer in
-                    for slice in run {
-                        let rect = slice.typographicBounds.rect
-                        let x = min(1, max(0, (rect.midX - bounds.minX) / max(1, bounds.width)))
-                        let directed = run.layoutDirection == .rightToLeft ? 1 - x : x
-                        let position = startPhase + (endPhase - startPhase) * Double(directed)
-                        let local = band.localProgress(at: now, position: position)
-                        if local >= 1 { continue }
-                        var copy = layer
-                        copy.opacity = fluidInkOpacity(local)
-                        copy.draw(slice)
-                    }
+                // Draw each shaped run once through a continuous alpha
+                // mask. No per-glyph draw calls, no blur-pass split that
+                // changes glyph edges as they switch into the settled path.
+                let reversed = run.layoutDirection == .rightToLeft
+                let first = reversed ? endPhase : startPhase
+                let lastPhase = reversed ? startPhase : endPhase
+                let phaseFrom = band.phaseFrom + (band.phaseTo - band.phaseFrom) * first
+                let phaseTo = band.phaseFrom + (band.phaseTo - band.phaseFrom) * lastPhase
+                let stops = fluidInkStops(progress: band.progress(at: now),
+                                          phaseFrom: phaseFrom, phaseTo: phaseTo, travel: band.travel)
+                if bounds.width < 0.5 || (stops.count == 2 && abs(stops[0].opacity - stops[1].opacity) < 0.0001) {
+                    var ink = context
+                    ink.opacity = stops[0].opacity
+                    ink.draw(run)
+                    continue
                 }
-                for slice in run {
-                    let rect = slice.typographicBounds.rect
-                    let x = min(1, max(0, (rect.midX - bounds.minX) / max(1, bounds.width)))
-                    let directed = run.layoutDirection == .rightToLeft ? 1 - x : x
-                    let position = startPhase + (endPhase - startPhase) * Double(directed)
-                    if band.localProgress(at: now, position: position) >= 1 {
-                        context.draw(slice)
-                    }
+                // Extend the endpoint alpha beyond typographic bounds so
+                // italic overhangs and tall accents are not clipped.
+                let padding = max(8, bounds.height)
+                let maskBounds = bounds.insetBy(dx: -padding, dy: -padding)
+                let gradient = Gradient(stops: stops.map {
+                    Gradient.Stop(color: .white.opacity($0.opacity), location: CGFloat($0.position))
+                })
+                var ink = context
+                ink.clipToLayer { mask in
+                    let left = CGRect(x: maskBounds.minX, y: maskBounds.minY,
+                                      width: padding, height: maskBounds.height)
+                    let right = CGRect(x: bounds.maxX, y: maskBounds.minY,
+                                       width: padding, height: maskBounds.height)
+                    mask.fill(Path(left), with: .color(.white.opacity(stops[0].opacity)))
+                    mask.fill(Path(right), with: .color(.white.opacity(stops[stops.count - 1].opacity)))
+                    let middle = CGRect(x: bounds.minX, y: maskBounds.minY,
+                                        width: bounds.width, height: maskBounds.height)
+                    mask.fill(Path(middle), with: .linearGradient(gradient,
+                        startPoint: CGPoint(x: bounds.minX, y: bounds.midY),
+                        endPoint: CGPoint(x: bounds.maxX, y: bounds.midY)))
                 }
+                ink.draw(run)
             }
         }
     }

@@ -109,7 +109,7 @@ internal fun FluidResponseText(
         val next = motion.update(text.text, now, active, sourceAppend = fresh)
         bands.value = next
         next.maxOfOrNull { it.bornNanos + it.durationNanos }?.let { pulse.arm(it, now) }
-        wasLive[0] = live || (allowed && wasLive[0] && next.isNotEmpty())
+        wasLive[0] = allowed && (live || wasLive[0])
     }
     val deadline = bands.value.maxOfOrNull { it.bornNanos + it.durationNanos }
     // Cleanup is driven by the same clock, not a restarted animation or
@@ -152,6 +152,13 @@ internal fun FluidResponseText(
             val layerPaint = Paint()
             val nativeClip = android.graphics.Rect()
             onDrawWithContent {
+                // A settled node must not subscribe to other paragraphs'
+                // display pulses. Check its cached geometry before reading
+                // the shared frame state.
+                if (regions.isEmpty()) {
+                    drawContent()
+                    return@onDrawWithContent
+                }
                 val now = pulse.now
                 val active = regions.filter { it.band.progress(now) < 1f }
                 if (active.isEmpty()) {
@@ -180,12 +187,20 @@ internal fun FluidResponseText(
                         for (region in active) {
                             val (band, path, rect, first, last, rtl) = region
                             if (rect.right <= l || rect.left >= r || rect.bottom <= t || rect.top >= b) continue
-                            val stops = (0..6).map { j ->
-                                val x = j / 6f
-                                val phase = first + (last - first) * (if (rtl) 1f - x else x)
-                                Color.Black.copy(alpha = (1f - band.opacity(now, phase)).coerceIn(0f, 1f))
+                            val logicalFirst = if (rtl) last else first
+                            val logicalLast = if (rtl) first else last
+                            val phaseFirst = band.phaseFrom + (band.phaseTo - band.phaseFrom) * logicalFirst
+                            val phaseLast = band.phaseFrom + (band.phaseTo - band.phaseFrom) * logicalLast
+                            val stops = fluidInkStops(band.progress(now), phaseFirst, phaseLast, band.travel)
+                            // Exact-position stops in native coordinates. Flat
+                            // regions use a solid paint, not a gradient.
+                            if (stops.size == 2 && kotlin.math.abs(stops[0].opacity - stops[1].opacity) < 0.0001f) {
+                                val removal = 1f - stops[0].opacity
+                                if (removal > 0f) drawPath(path, Color.Black.copy(alpha = removal), blendMode = BlendMode.DstOut)
+                            } else {
+                                val colors = stops.map { it.position to Color.Black.copy(alpha = (1f - it.opacity).coerceIn(0f, 1f)) }.toTypedArray()
+                                drawPath(path, Brush.horizontalGradient(*colors, startX = rect.left, endX = rect.right), blendMode = BlendMode.DstOut)
                             }
-                            drawPath(path, Brush.horizontalGradient(stops, rect.left, rect.right), blendMode = BlendMode.DstOut)
                         }
                     } finally {
                         drawContext.canvas.restore()

@@ -33,9 +33,12 @@ internal fun fluidLocalProgress(progress: Float, position: Float, travel: Float 
 
 internal fun fluidInkOpacity(progress: Float): Float {
     val p = progress.coerceIn(0f, 1f)
-    // Quintic smoothstep: continuous velocity and acceleration at both ends.
-    val eased = p * p * p * (p * (p * 6f - 15f) + 10f)
-    return 0.18f + 0.82f * eased
+    // A small immediate response, followed by a soft accelerating front and
+    // a zero-velocity finish. Pure quintic starts too slowly on tiny deltas.
+    val q = 1f - p
+    val quintic = p * p * p * (p * (p * 6f - 15f) + 10f)
+    val eased = 0.22f * (1f - q * q * q) + 0.78f * quintic
+    return (0.18f + 0.82f * eased).coerceIn(0.18f, 1f)
 }
 
 /** Initial/mounted text is already settled. Only a genuine append earns motion. */
@@ -193,4 +196,25 @@ internal fun reconcileFluidAppend(old: String, next: String): FluidAppendMatch {
     }
     spans += FluidMatchSpan(oldStart, oldEnd, newStart)
     return FluidAppendMatch(spans, at + needle.length)
+}
+
+/** A continuous piecewise-linear projection of the ink curve into native
+ *  text space. Stops at the clamp boundaries prevent flat spots and avoid
+ *  quantizing narrow optical fronts to glyph or packet boundaries. */
+internal data class FluidInkStop(val position: Float, val opacity: Float)
+internal fun fluidInkStops(progress: Float, phaseFrom: Float, phaseTo: Float, travel: Float): List<FluidInkStop> {
+    val start = (progress - travel * phaseFrom) / (1f - travel)
+    val end = (progress - travel * phaseTo) / (1f - travel)
+    val delta = end - start
+    val stops = mutableListOf(FluidInkStop(0f, fluidInkOpacity(start)))
+    if (kotlin.math.abs(delta) > 0.000001f) {
+        val interior = (0..16).mapNotNull { index ->
+            val p = index / 16f
+            val x = (p - start) / delta
+            if (x > 0.00001f && x < 0.99999f) FluidInkStop(x, fluidInkOpacity(p)) else null
+        }.sortedBy { it.position }
+        stops.addAll(interior)
+    }
+    stops.add(FluidInkStop(1f, fluidInkOpacity(end)))
+    return stops
 }

@@ -25,6 +25,27 @@ final class FluidTextMotionTests: XCTestCase {
         XCTAssertTrue(motion.bands.isEmpty)
     }
 
+    func testContinuousInkProjectionMatchesCurveInBothDirections() throws {
+        for (first, last) in [(0.0, 1.0), (1.0, 0.0), (0.3, 0.42)] {
+            for tick in 0...100 {
+                let progress = Double(tick) / 100
+                let stops = fluidInkStops(progress: progress, phaseFrom: first, phaseTo: last, travel: 0.48)
+                XCTAssertEqual(stops.first?.position, 0)
+                XCTAssertEqual(stops.last?.position, 1)
+                for (a, b) in zip(stops, stops.dropFirst()) {
+                    XCTAssertLessThan(a.position, b.position)
+                }
+                for x in 0...100 {
+                    let f = Double(x) / 100
+                    let (a, b) = try XCTUnwrap(zip(stops, stops.dropFirst()).first { $0.1.position >= f })
+                    let alpha = a.opacity + (b.opacity - a.opacity) * (f - a.position) / (b.position - a.position)
+                    let phase = first + (last - first) * f
+                    XCTAssertEqual(alpha, fluidInkOpacity(fluidLocalProgress(progress, position: phase, travel: 0.48)), accuracy: 0.008)
+                }
+            }
+        }
+    }
+
     func testOpticalFrontMovesAcrossRealInkAndSettlesTogether() {
         let band = FluidTextBand(start: 0, end: 12, born: 0, duration: 0.2)
         for tick in 0...200 {

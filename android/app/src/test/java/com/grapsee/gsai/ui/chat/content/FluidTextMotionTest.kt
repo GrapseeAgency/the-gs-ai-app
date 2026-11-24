@@ -42,6 +42,26 @@ class FluidTextMotionTest {
         assertTrue(motion.update(current, 600_000_000L, true).isEmpty())
     }
 
+    @Test fun continuousInkProjectionMatchesCurveInBothDirections() {
+        for (direction in listOf(0f to 1f, 1f to 0f, 0.3f to 0.42f)) {
+            for (tick in 0..100) {
+                val progress = tick / 100f
+                val stops = fluidInkStops(progress, direction.first, direction.second, 0.48f)
+                assertEquals(0f, stops.first().position, 0.0001f)
+                assertEquals(1f, stops.last().position, 0.0001f)
+                assertTrue(stops.zipWithNext().all { (a, b) -> a.position < b.position })
+                for (x in 0..100) {
+                    val f = x / 100f
+                    val pair = stops.zipWithNext().first { (_, b) -> b.position >= f }
+                    val (a, b) = pair
+                    val alpha = a.opacity + (b.opacity - a.opacity) * (f - a.position) / (b.position - a.position)
+                    val phase = direction.first + (direction.second - direction.first) * f
+                    assertEquals(fluidInkOpacity(fluidLocalProgress(progress, phase, 0.48f)), alpha, 0.008f)
+                }
+            }
+        }
+    }
+
     @Test fun opticalFrontMovesAcrossRealInkAndSettlesTogether() {
         val band = FluidTextBand(0, 12, 0, 200_000_000)
         for (tick in 0..200) {

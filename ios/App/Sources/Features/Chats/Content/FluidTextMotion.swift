@@ -29,8 +29,10 @@ func fluidLocalProgress(_ progress: Double, position: Double, travel: Double = 0
 
 func fluidInkOpacity(_ progress: Double) -> Double {
     let p = min(1, max(0, progress))
-    let eased = p * p * p * (p * (p * 6 - 15) + 10)
-    return 0.18 + 0.82 * eased
+    let q = 1 - p
+    let quintic = p * p * p * (p * (p * 6 - 15) + 10)
+    let eased = 0.22 * (1 - q * q * q) + 0.78 * quintic
+    return min(1, max(0.18, 0.18 + 0.82 * eased))
 }
 
 /// A bounded, monotonic visual clock independent of the response transport.
@@ -163,4 +165,29 @@ func reconcileFluidAppend(_ old: String, _ next: String) -> FluidAppendMatch {
     }
     spans.append(FluidMatchSpan(oldStart: oldStart, oldEnd: oldEnd, newStart: newStart))
     return FluidAppendMatch(spans: spans, newTailStart: at + length)
+}
+
+/// Project the same continuous ink curve into native text coordinates.
+/// Include exact clamped endpoints and the curve's interior knots so narrow
+/// fronts never collapse into discrete letter or packet-level steps.
+struct FluidInkStop {
+    let position: Double
+    let opacity: Double
+}
+func fluidInkStops(progress: Double, phaseFrom: Double, phaseTo: Double, travel: Double) -> [FluidInkStop] {
+    let start = (progress - travel * phaseFrom) / (1 - travel)
+    let end = (progress - travel * phaseTo) / (1 - travel)
+    let delta = end - start
+    var stops = [FluidInkStop(position: 0, opacity: fluidInkOpacity(start))]
+    if abs(delta) > 0.000001 {
+        let interior = (0...16).compactMap { index -> FluidInkStop? in
+            let p = Double(index) / 16
+            let x = (p - start) / delta
+            guard x > 0.00001, x < 0.99999 else { return nil }
+            return FluidInkStop(position: x, opacity: fluidInkOpacity(p))
+        }.sorted { $0.position < $1.position }
+        stops.append(contentsOf: interior)
+    }
+    stops.append(FluidInkStop(position: 1, opacity: fluidInkOpacity(end)))
+    return stops
 }
