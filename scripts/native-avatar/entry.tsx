@@ -16,8 +16,7 @@ function normalize(value: Partial<Config>): Config {
 declare global { interface Window {
   gsAvatarUpdate?: (value: Partial<Config>) => void
   gsAvatarGetState?: () => AvatarState
-  AndroidAvatarFrames?: { frame(dataUrl: string): void; diagnostics(): string }
-  gsAvatarFrameDiagnostics?: () => string
+  gsAvatarDiagnostics?: () => object
 } }
 
 let latest = normalize({})
@@ -35,9 +34,16 @@ function Avatar() {
     setConfig(latest)
     return () => { onChange = null }
   }, [])
-  // Match the original web chat's green clover and original fabric material.
-  // Render a high-resolution complete 1.5x overscan canvas (not a cropped
-  // screenshot). The actual transcript slot is smaller and scaled once.
+  // The original library draws a 1.5x overscan canvas. Render it at 48 CSS px
+  // body size (72 CSS px canvas), then fit the WHOLE canvas into the actual
+  // native slot with CSS. Do not crop its jumps or replace its motion.
+  const [scale, setScale] = useState(() => Math.min(innerWidth, innerHeight) / 72)
+  React.useEffect(() => {
+    const resize = () => setScale(Math.min(innerWidth, innerHeight) / 72)
+    window.addEventListener('resize', resize)
+    resize()
+    return () => window.removeEventListener('resize', resize)
+  }, [])
   return <BotAvatar
     type={config.type}
     state={config.state}
@@ -49,44 +55,22 @@ function Avatar() {
     theme="light"
     interactive={false}
     speed={1}
-    style={{ margin: 0 }}
+    style={{ margin: 0, transform: 'scale(' + scale + ')', transformOrigin: 'center' }}
   />
 }
 createRoot(document.getElementById('root')!).render(<Avatar />)
 
-// The vendor's requestAnimationFrame rig is untouched. Sample its original
-// changing pixels at a 30 fps target (instead of the old 10 fps bottleneck).
-// Never retransmit an identical image, including when reduced motion freezes
-// the avatar. All visual motion still originates in bot-avatars itself.
-const frameInterval = 1000 / 30 - 3
-let lastFrame = 0
-let lastImage = ''
-let sendAttempts = 0
-let sentFrames = 0
-let frameErrors = 0
-let lastFrameError = ''
-window.gsAvatarFrameDiagnostics = () =>
-  'attempts=' + sendAttempts + ',sent=' + sentFrames +
-  ',errors=' + frameErrors + ',last=' + lastFrameError
-const deliverCanvas = (time: number) => {
-  requestAnimationFrame(deliverCanvas)
-  if (time - lastFrame < frameInterval) return
-  lastFrame = time
-  const bridge = window.AndroidAvatarFrames
+// Debugging only. No per-frame work or bridge in the production renderer.
+window.gsAvatarDiagnostics = () => {
   const canvas = document.querySelector('canvas')
-  if (!bridge || !canvas || !canvas.width || !canvas.height) return
-  // Respect the real library's initial fabric-material readiness/fade.
-  if (Number(getComputedStyle(canvas).opacity) < 0.99) return
-  sendAttempts++
-  try {
-    const png = canvas.toDataURL('image/png')
-    if (png === lastImage) return
-    bridge.frame(png)
-    lastImage = png
-    sentFrames++
-  } catch (e) {
-    frameErrors++
-    lastFrameError = String(e)
+  const rect = canvas?.getBoundingClientRect()
+  return {
+    state: canvas?.dataset.state,
+    opacity: canvas ? Number(getComputedStyle(canvas).opacity) : 0,
+    width: canvas?.width, height: canvas?.height,
+    viewport: [innerWidth, innerHeight],
+    bounds: rect && [rect.left, rect.top, rect.right, rect.bottom],
+    reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+    paused: latest.paused
   }
 }
-requestAnimationFrame(deliverCanvas)
