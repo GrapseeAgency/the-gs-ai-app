@@ -205,6 +205,7 @@ model TurnTrace {
   sourcesFailed     Int // status === 'failed' among the turn's fresh sources
   domains           String // JSON string[] — distinct domains returned
   modelRoute        String // INTERNAL ONLY — never sent to a client
+  modelExecutions   String? // JSON provider-reported synthesis identities; INTERNAL ONLY
   finalStatus       String // done | error | clarify
   cited             String // JSON number[] — cited source ordinals
   latencyMs         Int

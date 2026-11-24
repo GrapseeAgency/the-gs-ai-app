@@ -16,6 +16,11 @@
 
 import { db } from '@/lib/db'
 
+/** Successful synthesis calls in chronological order, including drafts
+ * subsequently retried or rejected. Null means the provider did not report
+ * a concrete model; never fill it using the requested alias. Internal only. */
+export type ModelExecution={provider:string;reportedModel:string|null;transport:'stream'|'completion'}
+
 export interface TurnTraceRecord {
   requestId: string
   conversationId: string
@@ -38,6 +43,7 @@ export interface TurnTraceRecord {
   domains: string[]
   /** Internal execution route, e.g. 'openrouter/gs-swift' — never client-visible. */
   modelRoute: string
+  modelExecutions?: ModelExecution[]
   /** done | error | clarify */
   finalStatus: string
   /** Which source ordinals the final answer cited. */
@@ -95,6 +101,7 @@ export async function writeTurnTrace(record: TurnTraceRecord): Promise<void> {
         sourcesFailed: record.sourcesFailed,
         domains: JSON.stringify(record.domains),
         modelRoute: record.modelRoute,
+        modelExecutions:record.modelExecutions?JSON.stringify(record.modelExecutions):null,
         finalStatus: record.finalStatus,
         cited: JSON.stringify(record.cited),
         latencyMs: Math.max(0, Math.round(record.latencyMs)),

@@ -188,7 +188,8 @@ export async function streamChat(
   onDelta: (t: string) => Promise<void> | void,
   providerModel?: string | null,
   thinking?: ThinkingCallConfig,
-  onReasoning?: (t: string) => void
+  onReasoning?: (t: string) => void,
+  onModel?: (model:string|null)=>void
 ): Promise<string> {
   let lastError = 'Upstream unavailable'
   let activeModel = typeof providerModel === 'string' && providerModel.length > 0 ? providerModel : null
@@ -219,17 +220,21 @@ export async function streamChat(
           forwarded = true
           return onDelta(t)
         }
-        return await consumeSseStream(response, guardedOnDelta, undefined, onReasoning)
+        let reportedModel:string|null=null
+        const text=await consumeSseStream(response,guardedOnDelta,m=>{reportedModel=m},onReasoning)
+        onModel?.(reportedModel)
+        return text
       }
 
       // Upstream ignored `stream: true` — fall back to a single full-text delta.
-      const completion = response as { choices?: { message?: { content?: unknown } }[] } | null
+      const completion = response as { choices?: { message?: { content?: unknown } }[];model?:unknown } | null
       const text = completion?.choices?.[0]?.message?.content
       const full = typeof text === 'string' ? text : ''
       if (full) {
         forwarded = true
         await onDelta(full)
       }
+      onModel?.(typeof completion?.model==='string'?completion.model:null)
       return full
     } catch (e) {
       lastError = errMessage(e)

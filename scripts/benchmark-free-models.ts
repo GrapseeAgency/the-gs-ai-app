@@ -14,7 +14,12 @@ const cases = [
   {id:'reasoning',prompt:'A and B complete a job in 8 and 24 hours separately. Together how many hours? Return only the number.',expected:/^6(?:\.0+)?$/},
   {id:'format',prompt:'Return only these two lines, no punctuation: first line Kappa6, second line Delta4.',expected:/^Kappa6\r?\nDelta4$/},
   {id:'bengali',prompt:'শুধু লিখুন: সবুজ পাতা',expected:/^সবুজ পাতা$/},
-  {id:'correction',prompt:'Earlier provisional code was RQ-310. Correction: approved code is DX-729. Return only the approved code.',expected:/^DX-729$/},
+  {id:'correction',prompt:'Return only the approved code.',history:[
+    {role:'user' as const,content:'Earlier provisional code was RQ-310.'},
+    {role:'assistant' as const,content:'The provisional code is RQ-310.'},
+    {role:'user' as const,content:'Correction: approved code is DX-729.'},
+    {role:'assistant' as const,content:'Noted the correction.'},
+  ],expected:/^DX-729$/},
 ]
 const results: {model:string;caseId:string;trial:number;status:string;latencyMs:number;reason?:string}[]=[]
 async function request(model:string,messages:RemoteMessage[],signal:AbortSignal,toolMode=false):Promise<RemoteCompletion>{
@@ -48,7 +53,7 @@ for(const model of models)for(let trial=1;trial<=trials;trial++){
     }
     const start=Date.now()
     try{
-      const data=await request(model,[{role:'user',content:c.prompt}],AbortSignal.timeout(35000))
+      const data=await request(model,[...('history' in c?c.history??[]:[]),{role:'user',content:c.prompt}],AbortSignal.timeout(35000))
       const choice=data.choices?.[0]
       const text=choice?.message?.content?.trim()
       results.push({model,caseId:c.id,trial,status:choice?.finish_reason==='stop'&&text&&c.expected.test(text)?'PASS':'FAIL',latencyMs:Date.now()-start})

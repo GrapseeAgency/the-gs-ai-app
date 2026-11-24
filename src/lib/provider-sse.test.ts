@@ -44,3 +44,13 @@ describe('provider answer integrity', () => {
     expect(cancelled).toBe(true)
   })
 })
+
+test('provider-reported identity is distinct from answer text and is not invented',async()=>{
+  const identities:string[]=[]
+  const text=await consumeSseStream(stream(
+    'data: {"model":"actual/model","choices":[{"delta":{"content":"answer"}}]}\n\n',
+    'data: {"choices":[{"finish_reason":"stop"}]}\n\n'
+  ),()=>{},model=>{identities.push(model)})
+  expect(text).toBe('answer')
+  expect(identities).toEqual(['actual/model'])
+})

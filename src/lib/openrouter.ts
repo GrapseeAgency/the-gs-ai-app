@@ -315,7 +315,8 @@ export async function orStreamChat(
   models: string[],
   onDelta: (t: string) => Promise<void> | void,
   reasoning?: OrReasoningConfig,
-  onReasoning?: (t: string) => void
+  onReasoning?: (t: string) => void,
+  onModel?: (model:string|null)=>void
 ): Promise<string> {
   const keys = (await loadKeyPool()).keys
   if (keys.length === 0) {
@@ -372,7 +373,8 @@ export async function orStreamChat(
           forwarded = true
           return onDelta(t)
         }
-        const full = await consumeSseStream(response.body, guardedOnDelta, undefined, onReasoning)
+        let reportedModel:string|null=null
+        const full = await consumeSseStream(response.body,guardedOnDelta,m=>{reportedModel=m},onReasoning)
         if (full.trim().length === 0 && !forwarded) {
           // PHASE 8.1b — nothing reached the client yet: safe to rotate.
           // 2026-11-24 — bounded like the non-stream walker below/above.
@@ -381,6 +383,7 @@ export async function orStreamChat(
           if (emptyAttempts >= MAX_EMPTY_ATTEMPTS_PER_MODEL && !isLastModel) break
           continue
         }
+        onModel?.(reportedModel)
         return full
       } catch (e) {
         if (e instanceof FreeCapacityUnavailableError) throw e

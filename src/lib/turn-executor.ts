@@ -22,6 +22,8 @@ import { deriveTitle, DEFAULT_CHAT_TITLE } from '@/lib/conversation-title'
 import {
   parseThinkingMode,
   resolveThinkingConfig,
+  effectiveModeFor,
+  thinkingProfileFor,
   type ResolvedThinking,
   type ThinkingMode,
 } from '@/lib/model-capabilities'
@@ -48,7 +50,7 @@ import {
   VISION_GROUNDING_PROMPT,
   VISION_OCR_FALLBACK_PREFIX,
   streamChat,
-  completeChat,
+  completeChatWithMeta,
   streamVisionChat,
   completeVisionChat,
   type ChatMessageInput,
@@ -57,7 +59,7 @@ import {
 } from '@/lib/ai'
 import { decideCapability, validTimeZone } from '@/lib/capability'
 import { mapWithConcurrency } from '@/lib/concurrency'
-import { classifyErrorType, writeTurnTrace } from '@/lib/trace'
+import { classifyErrorType, writeTurnTrace, type ModelExecution } from '@/lib/trace'
 import { getBackendRevision } from '@/lib/revision'
 import { ensureWidgets } from '@/lib/widgets/compile'
 import { presentationStream } from '@/lib/widgets/presentation-stream'
@@ -161,7 +163,7 @@ import { loadConversationArchive } from '@/lib/conversation-archive'
 import { plannerHistory } from '@/lib/search/planner-context'
 import { attachmentMatchesTurn } from '@/lib/turn-resume'
 import { explicitCalculation, executeCalculation, calculationEvidence, standaloneCalculation, type CalculationResult } from '@/lib/calc/turn-calculator'
-import { needsQualityChain } from '@/lib/quality-routing'
+import { needsQualityChain, contextualReasoningRoute } from '@/lib/quality-routing'
 import {
   NOOP_EMIT,
   type ClarifyOption,
@@ -285,6 +287,7 @@ export type Prep = {
   thinking: ResolvedThinking
   /** TTFT of the thinking path, set by the executor on streaming thinking calls. */
   thinkingLatencyMs: number | null
+  modelExecutions: ModelExecution[]
   historyWebSources: WebSource[]
   includeHistoryEvidence: boolean
   historyLines: string[]
@@ -655,27 +658,16 @@ export async function prepareTurn(
     // Vision has no verified free adapter yet; queue instead of paying.
     routerPlan.route !== 'VISION'
   const requestedMode = parseThinkingMode(args.mode)
-  const thinking = resolveThinkingConfig(
-    requestedMode,
-    routerPlan.internalModelId,
-    routerPlan.route,
-    cap.capability
-  )
-  const catalogFastRoutes = selectCatalogFastRoutes({
-    route: routerPlan.route,
-    // Metadata-only fast candidates are for standalone simple requests.
-    requiresReasoning: requestedMode === 'thinking' || thinking.config?.mode === 'thinking' ||
-      routerPlan.registerClass || history.length > 0 || numericCheck || !!directive || !!constraints ||
-      content.length > 240,
-    hasImages: useVision,
-    hasDocuments: currentTurnDocs.length > 0 || historyDocTurns.length > 0,
-    estimatedInputChars: Buffer.byteLength(baseSystemPrompt + content + recentDesc.map(message => message.content).join('\n'), 'utf8'),
+  const reasoningRoute = contextualReasoningRoute({
+    route:routerPlan.route,requestedMode,hasHistory:history.length>0,
+    hasConstraints:numericCheck||!!constraints,content,
   })
+  const desiredMode = effectiveModeFor(requestedMode,reasoningRoute,cap.capability)
   const baseRoute = resolveModelRoute(routerPlan.internalModelId)
   const qualityChain = needsQualityChain({
-    route: routerPlan.route, requestedMode, effectiveMode: thinking.effective,
-    registerClass: routerPlan.registerClass, hasHistory: history.length > 0,
-    hasConstraints: numericCheck || !!directive || !!constraints, content,
+    route:routerPlan.route,requestedMode,effectiveMode:desiredMode,
+    registerClass:routerPlan.registerClass,hasHistory:history.length>0,
+    hasConstraints:numericCheck||!!directive||!!constraints,content,
   })
   const freeChain = forceFreeEligible
     ? qualityChain ? OPENROUTER_MODELS['gs-free-big'] : OPENROUTER_MODELS['gs-free']
@@ -686,10 +678,27 @@ export async function prepareTurn(
         : openRouterKeyAvailable && tierFreeEligible
           ? qualityChain ? OPENROUTER_MODELS['gs-free-big'] : OPENROUTER_MODELS['gs-free']
           : null
-  const modelRoute: ModelRoute = freeChain
-    ? { backend: 'openrouter', models: freeChain }
-    : baseRoute
+  const chosenRoute:ModelRoute=freeChain?{backend:'openrouter',models:freeChain}:baseRoute
+  // Resolve thinking against the actual first concrete route, not an
+  // unrelated legacy tier selected before free-only routing was applied.
+  // Do not promote any new candidate from metadata alone.
+  const modelRoute:ModelRoute=chosenRoute.backend==='openrouter'&&desiredMode==='thinking'
+    ? {backend:'openrouter',models:[...chosenRoute.models].sort((a,b)=>
+        Number(thinkingProfileFor(b).supportsThinking)-Number(thinkingProfileFor(a).supportsThinking))}
+    : chosenRoute
   const providerModel = modelRoute.backend === 'zai' ? modelRoute.providerModel : null
+  const primaryProfile=modelRoute.backend==='openrouter'
+    ? modelRoute.models[0]??routerPlan.internalModelId
+    : providerModel??routerPlan.internalModelId
+  const thinking=resolveThinkingConfig(requestedMode,primaryProfile,reasoningRoute,cap.capability)
+  const catalogFastRoutes=selectCatalogFastRoutes({
+    route:routerPlan.route,
+    requiresReasoning:desiredMode==='thinking'||routerPlan.registerClass||history.length>0||
+      numericCheck||!!directive||!!constraints||content.length>240,
+    hasImages:useVision,
+    hasDocuments:currentTurnDocs.length>0||historyDocTurns.length>0,
+    estimatedInputChars:Buffer.byteLength(baseSystemPrompt+content+recentDesc.map(message=>message.content).join('\n'),'utf8'),
+  })
   const catalogOpenRouterModels = catalogFastRoutes
     .filter((candidate) => candidate.provider === 'openrouter')
     .map((candidate) => candidate.modelId)
@@ -785,6 +794,7 @@ export async function prepareTurn(
     requestedMode,
     thinking,
     thinkingLatencyMs: null,
+    modelExecutions: [],
     historyWebSources: [],
     includeHistoryEvidence: false,
     historyLines: [],
@@ -972,6 +982,7 @@ function buildGsCapLog(prep: Prep): Prep['gsCapLog'] {
         new Set([...freshSources, ...reuseSources].map((s) => s.domain).filter((d) => d.length > 0))
       ),
       modelRoute: `${modelRoute.backend}/${routerPlan.internalModelId}`,
+      modelExecutions: prep.modelExecutions,
       finalStatus,
       cited: extra?.cited ?? [],
       latencyMs: Date.now() - prep.turnStartedAt,
@@ -1632,10 +1643,18 @@ async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: Abor
     // TASK 3 — the vision endpoint is used only when images actually ride the
     // request. An OCR-fallback turn (allImagesFailed, OCR text present) is a
     // TEXT turn end to end: text-shaped messages, text model, flash speed.
+    const transport = onDelta ? 'stream' : 'completion'
+    const observed = (provider:string,model:string|null) => {
+      if(prep.modelExecutions.length<16)prep.modelExecutions.push({
+        provider,reportedModel:typeof model==='string'&&model.trim()?model.slice(0,240):null,transport,
+      })
+    }
     if (useVision && !allImagesFailed) {
-      return onDelta
-        ? (await streamVisionChat(modelMessages as VisionChatMessage[], onDelta)).text
-        : (await completeVisionChat(modelMessages as VisionChatMessage[])).text
+      const result=onDelta
+        ? await streamVisionChat(modelMessages as VisionChatMessage[],onDelta)
+        : await completeVisionChat(modelMessages as VisionChatMessage[])
+      observed('zai',result.model)
+      return result.text
     }
     const msgs = modelMessages as ChatMessageInput[]
     // Free-only is a hard spend guard. The durable queue waits for capacity.
@@ -1724,6 +1743,7 @@ async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: Abor
               apiKey,
               temperature: 0.2,
             })
+        observed(route.provider,result.model)
         return result.text
       } catch (error) {
         if (catalogOutputStarted) throw error
@@ -1745,16 +1765,16 @@ async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: Abor
       if (fittingOpenRouterModels?.length) {
         callStartedAt = Date.now()
         const text = wrappedOnDelta
-          ? await orStreamChat(msgs, fittingOpenRouterModels, wrappedOnDelta, orReasoning, reasoningForward?.onDelta)
-          : await orCompleteChat(msgs, fittingOpenRouterModels, orReasoning).then((r) => r.text)
+          ? await orStreamChat(msgs, fittingOpenRouterModels, wrappedOnDelta, orReasoning, reasoningForward?.onDelta, model=>observed('openrouter',model))
+          : await orCompleteChat(msgs, fittingOpenRouterModels, orReasoning).then(r=>{observed('openrouter',r.model);return r.text})
         reasoningForward?.flush()
         if (!text.trim()) throw emptyRejection('OpenRouter chain')
         return text
       }
       callStartedAt = Date.now()
       const primaryText = wrappedOnDelta
-        ? await streamChat(msgs, wrappedOnDelta, activeProviderModel, prep.thinking.config, reasoningForward?.onDelta)
-        : await completeChat(msgs, activeProviderModel, prep.thinking.config)
+        ? await streamChat(msgs, wrappedOnDelta, activeProviderModel, prep.thinking.config, reasoningForward?.onDelta, model=>observed('zai',model))
+        : await completeChatWithMeta(msgs, activeProviderModel, prep.thinking.config).then(r=>{observed('zai',r.model);return r.text})
       reasoningForward?.flush()
       if (!primaryText.trim()) throw emptyRejection('primary provider')
       return primaryText
@@ -1769,8 +1789,8 @@ async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: Abor
           )
           callStartedAt = Date.now()
           const fb = wrappedOnDelta
-            ? await streamChat(msgs, wrappedOnDelta, activeProviderModel, prep.thinking.config, reasoningForward?.onDelta)
-            : await completeChat(msgs, activeProviderModel, prep.thinking.config)
+            ? await streamChat(msgs, wrappedOnDelta, activeProviderModel, prep.thinking.config, reasoningForward?.onDelta, model=>observed('zai',model))
+            : await completeChatWithMeta(msgs, activeProviderModel, prep.thinking.config).then(r=>{observed('zai',r.model);return r.text})
           reasoningForward?.flush()
           if (!fb.trim()) throw emptyRejection('primary provider (fallback)')
           return fb
@@ -1783,8 +1803,8 @@ async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: Abor
         )
         callStartedAt = Date.now()
         const fb = wrappedOnDelta
-          ? await orStreamChat(msgs, OPENROUTER_MODELS['gs-free'], wrappedOnDelta, orReasoning, reasoningForward?.onDelta)
-          : await orCompleteChat(msgs, OPENROUTER_MODELS['gs-free'], orReasoning).then((r) => r.text)
+          ? await orStreamChat(msgs, OPENROUTER_MODELS['gs-free'], wrappedOnDelta, orReasoning, reasoningForward?.onDelta, model=>observed('openrouter',model))
+          : await orCompleteChat(msgs, OPENROUTER_MODELS['gs-free'], orReasoning).then(r=>{observed('openrouter',r.model);return r.text})
         reasoningForward?.flush()
         if (!fb.trim()) throw emptyRejection('OpenRouter free chain (fallback)')
         return fb

@@ -22,3 +22,7 @@ The Chat capability validation workflow runs focused unit tests and a concrete-m
 The queue now persists the provider retry deadline in the additive nullable `TurnRun.retryNotBefore` column and indexes due work. The additive `requiresProvider` boolean defaults to true for existing rows; only proven context-free arithmetic may be admitted as local-only work. Before deploying this revision to an existing SQLite database, back up the database and apply the reviewed Prisma schema with `npx prisma db push` (without accepting destructive changes). The source change and fresh-database regression do not migrate a production database. Existing rows with a null deadline retain their legacy local backoff. No paid fallback or rate-limit bypass is introduced.
 
 The isolated SQLite job also tests a real calculator turn through durable preparation, worker reconstruction, tool execution, event persistence and the stream broker, without model access. It is a deterministic execution test, not an intelligence benchmark.
+
+### Model attribution
+
+The additive nullable `TurnTrace.modelExecutions` column records successful synthesis calls in chronological order, including regenerated drafts. It contains only provider-reported identity (null when not supplied), not inferred model aliases. It remains internal and is not exposed by diagnostics. Apply the reviewed schema update before deploying. The planned route is still recorded separately. The live model benchmark now passes the correction case as a real multi-message history; that suite still requires provider capacity.

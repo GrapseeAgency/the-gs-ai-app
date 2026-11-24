@@ -270,6 +270,7 @@ export interface TraceRow {
   sourcesFailed: number
   domains: string
   modelRoute: string
+  modelExecutions?: string|null
   finalStatus: string
   cited: string
   latencyMs: number
@@ -293,11 +294,13 @@ export async function readTrace(requestId: string | null): Promise<TraceRow | nu
     try {
       db.run('PRAGMA busy_timeout = 10000')
     } catch { /* older bun: pragma may be unsupported — retry loop below still applies */ }
+    const columns=db.query('PRAGMA table_info(turns)').all() as {name:string}[]
+    const modelColumn=columns.some(c=>c.name==='modelExecutions')?', modelExecutions':''
     for (let i = 0; i < 20; i++) {
       for (let attempt = 0; attempt < 6; attempt++) {
         try {
           const row = db
-            .query('SELECT requestId, capability, trigger, searchExecuted, sourceCount, sourcesRead, sourcesFailed, domains, modelRoute, finalStatus, cited, latencyMs, errorType, requestedMode, effectiveMode, thinkingLatencyMs, modeNote FROM turns WHERE requestId = ?')
+            .query(`SELECT requestId, capability, trigger, searchExecuted, sourceCount, sourcesRead, sourcesFailed, domains, modelRoute, finalStatus, cited, latencyMs, errorType, requestedMode, effectiveMode, thinkingLatencyMs, modeNote${modelColumn} FROM turns WHERE requestId = ?`)
             .get(requestId) as TraceRow | undefined
           if (row) return row
           break

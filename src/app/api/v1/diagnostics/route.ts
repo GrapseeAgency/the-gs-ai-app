@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
     requestedMode: r.requestedMode,
     effectiveMode: r.effectiveMode,
     thinkingLatencyMs: r.thinkingLatencyMs,
-    modeNote: r.modeNote,
+    modeNote: r.modeNote ? 'Reasoning mode adjusted for this request.' : null,
     promptPreview: promptById.get(r.messageId) ?? null,
   }))
 
