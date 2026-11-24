@@ -128,6 +128,7 @@ struct NexlyComposerBar: View {
     var onSend: () -> Void
     var onStop: () -> Void
     var onSubmit: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 4) {
@@ -181,50 +182,26 @@ struct NexlyComposerBar: View {
                 // ONE trailing control, two verbs. The mic and the send disc
                 // used to sit side by side; the mic now BECOMES the send arrow
                 // the moment there is something to send, and becomes the mic
-                // again when the field empties. Both glyphs ride the same 0…1
-                // progress so the exchange can never desynchronise.
+                // again when the field empties. Mount the original MetalFx
+                // shader only in send mode, so an idle voice control does not
+                // keep a hidden motion sensor or metal ring running.
                 Button(action: canSend ? onSend : onVoice) {
                     ZStack {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color.white,
-                                             Color(red: 0.73, green: 0.78, blue: 0.83),
-                                             Color(red: 0.99, green: 1.00, blue: 1.00),
-                                             Color(red: 0.62, green: 0.68, blue: 0.74)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .opacity(morph)
-                            .overlay(
-                                Circle()
-                                    .strokeBorder(
-                                        LinearGradient(
-                                            colors: [.white.opacity(0.98), Color.gray.opacity(0.52), .white.opacity(0.88)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        ),
-                                        lineWidth: 1
-                                    )
-                                    .opacity(morph)
-                            )
-                        Circle()
-                            .fill(Aero.surface.opacity(0.55))
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
-                            .opacity(1 - morph)
-                        NexlyGlyph(name: "microphone", size: 17, color: Aero.text.opacity(0.75))
-                            .opacity(1 - morph)
-                            .scaleEffect(1 - 0.40 * morph)
-                            .rotationEffect(.degrees(-90 * Double(morph)))
-                        NexlyGlyph(name: "arrow-up", size: 17, color: Color(red: 0.22, green: 0.27, blue: 0.33))
-                            .opacity(morph)
-                            .scaleEffect(0.55 + 0.45 * morph)
-                            .rotationEffect(.degrees(90 * Double(1 - morph)))
+                        if canSend {
+                            GsMetallicSendFace()
+                                .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                        } else {
+                            NexlyGlyph(name: "microphone", size: 17, color: Aero.text.opacity(0.75))
+                                .frame(width: 36, height: 36)
+                                .background(Circle().fill(Aero.surface.opacity(0.55)))
+                                .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
+                                .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                        }
                     }
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
                     .animation(
-                        SettingsStore.shared.reduceMotion
+                        (SettingsStore.shared.reduceMotion || SettingsStore.shared.animationReduced || reduceMotion)
                             ? nil
                             : .spring(response: 0.34, dampingFraction: 0.72),
                         value: canSend
@@ -239,7 +216,4 @@ struct NexlyComposerBar: View {
         .gsCapsuleGlass(.floatingControl)
     }
 
-    /// The morph progress: 1 = send, 0 = voice. Reading it from `canSend`
-    /// (instead of storing it) keeps the two glyph layers on one clock.
-    private var morph: CGFloat { canSend ? 1 : 0 }
 }

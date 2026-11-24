@@ -155,16 +155,13 @@ struct NewChatView: View {
                 composerButton("dots", "More", action: onOpenExplore)
                 Spacer(minLength: 0)
                 Button(action: send) {
-                    ZStack {
-                        // The reference page's lilac, not the chrome's peach.
-                        Circle().fill(Aero.refAccent.opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.35 : 1))
-                        // The paper plane the chat composer sends with — same
-                        // glyph, same verb, one stage earlier.
-                        NexlyGlyph(name: "send-2", size: 17, color: .white)
-                    }
+                    GsMetallicSendFace(
+                        enabled: !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
                     .frame(width: 44, height: 44)
+                    .contentShape(Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(KineticPressStyle())
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityLabel("Send")
                 .accessibilityIdentifier("new-chat-send")

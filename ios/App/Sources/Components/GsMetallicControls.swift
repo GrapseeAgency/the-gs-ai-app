@@ -79,3 +79,39 @@ struct GsMetallicAutoControl: View {
         GSHaptics.select()
     }
 }
+
+
+/// The real Libraries.dev chromatic send ring. The enclosing Button owns
+/// the action, accessibility label and press feedback; the shader is visual
+/// only. No custom gradient or WebView is involved.
+struct GsMetallicSendFace: View {
+    var size: CGFloat = 40
+    var enabled: Bool = true
+
+    @ObservedObject private var settings = SettingsStore.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+
+    private var motionAllowed: Bool {
+        enabled && !reduceMotion && !settings.animationReduced &&
+            !settings.reduceMotion && scenePhase == .active
+    }
+
+    var body: some View {
+        MetalFx(
+            variant: .circle,
+            preset: .chromatic,
+            theme: .auto,
+            strength: enabled ? 0.9 : 0.35,
+            innerShadow: true,
+            paused: !motionAllowed,
+            source: motionAllowed ? .tilt : .none
+        ) {
+            Image(systemName: "arrow.up")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Color.primary.opacity(enabled ? 1 : 0.5))
+                .frame(width: size, height: size)
+        }
+        .accessibilityHidden(true)
+    }
+}

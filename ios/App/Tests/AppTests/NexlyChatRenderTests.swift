@@ -169,6 +169,31 @@ final class NexlyChatRenderTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
     }
 
+    /// Capture the production send/voice composer, using the actual SwiftUI
+    /// shader in each color scheme. These are reviewable native screenshots,
+    /// not proof of tilt response on a physical device.
+    func testMetalSendComposerRendersInLightAndDark() async throws {
+        let directory = Self.outputDirectory()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let size = CGSize(width: 393, height: 240)
+        for dark in [false, true] {
+            let view = MetalSendComposerFixture()
+                .preferredColorScheme(dark ? .dark : .light)
+                .environment(\.colorScheme, dark ? .dark : .light)
+                .environment(\.scenePhase, .active)
+            let rendered = try await Self.capture(view: view, size: size)
+            let image = try XCTUnwrap(rendered)
+            let data = try XCTUnwrap(image.pngData())
+            XCTAssertGreaterThan(data.count, 4_000)
+            let name = "nexly-metal-send-ios-" + (dark ? "dark" : "light")
+            try data.write(to: directory.appendingPathComponent(name + ".png"))
+            let attachment = XCTAttachment(image: image)
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+    }
+
     private static func render(size: CGSize) async throws -> UIImage? {
         let view = NexlyChatReferenceView(wire: NEXLY_REFERENCE_WIRE)
             .frame(width: size.width, height: size.height)
@@ -687,3 +712,28 @@ The most common cause of yellowing lower leaves on a Monstera is **over‑wateri
 
 By addressing watering and drainage first, you give your Monstera the best chance to bounce back and keep producing those iconic split leaves.
 """
+
+
+private struct MetalSendComposerFixture: View {
+    @FocusState private var focused: Bool
+    var body: some View {
+        ZStack {
+            NexlyChatBackdrop()
+            VStack(spacing: 16) {
+                NexlyComposerBar(
+                    text: .constant("Build anything..."),
+                    isStreaming: false, canSend: true, focused: $focused,
+                    onAttach: {}, onVoice: {}, onSearch: {},
+                    onSend: {}, onStop: {}, onSubmit: {}
+                )
+                NexlyComposerBar(
+                    text: .constant(""),
+                    isStreaming: false, canSend: false, focused: $focused,
+                    onAttach: {}, onVoice: {}, onSearch: {},
+                    onSend: {}, onStop: {}, onSubmit: {}
+                )
+            }
+            .padding(16)
+        }
+    }
+}
