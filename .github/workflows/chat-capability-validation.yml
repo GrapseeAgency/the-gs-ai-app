@@ -12,6 +12,8 @@ on:
       - 'src/app/api/v1/messages/start/route.ts'
       - 'src/lib/provider-sse*.ts'
       - 'src/lib/provider-rate-limit*.ts'
+      - 'src/lib/capacity-policy*.ts'
+      - 'prisma/schema.prisma'
       - 'src/lib/openrouter.ts'
       - 'src/lib/search/planner.ts'
       - 'src/lib/search/planner-context*.ts'
@@ -51,7 +53,7 @@ jobs:
           bun-version: latest
       - name: Focused chat regressions
         run: |
-          bun test src/lib/remote-tools.test.ts src/lib/context-crystallize.test.ts src/lib/provider-sse.test.ts src/lib/turn-resume.test.ts src/lib/calc/turn-calculator.test.ts src/lib/quality-routing.test.ts src/lib/provider-rate-limit.test.ts src/lib/search/planner-context.test.ts src/lib/instruction-integrity.test.ts
+          bun test src/lib/remote-tools.test.ts src/lib/context-crystallize.test.ts src/lib/provider-sse.test.ts src/lib/turn-resume.test.ts src/lib/calc/turn-calculator.test.ts src/lib/quality-routing.test.ts src/lib/provider-rate-limit.test.ts src/lib/search/planner-context.test.ts src/lib/instruction-integrity.test.ts src/lib/capacity-policy.test.ts
           bun scripts/test-constraint-guard.ts
   durable-store:
     runs-on: ubuntu-latest

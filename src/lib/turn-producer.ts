@@ -84,21 +84,6 @@ export async function produceRun(runId: string, prepInput?: Prep): Promise<void>
   }
   const streamId = claimed.streamId
 
-  // Worker rebuild: the prep may come from a different process's enqueue.
-  let prep = prepInput
-  if (!prep) {
-    const rebuilt = await rebuildPrepForRun(runId).catch(() => ({ error: 'Could not restore the original turn' }))
-    if ('error' in rebuilt) {
-      if (!(await finishRun(runId, 'failed', 'error', rebuilt.error, null, claimed.attempts))) return
-      await appendEvent(runId, 'RunFailed', { error: rebuilt.error.slice(0, 300) })
-      await publishChunk(streamId, { event: 'error', data: 'Could not restore the original request. Please retry.' })
-      await publishEnd(streamId, 'error')
-      console.error(`RUN-REBUILD-FAIL run=${runId}: ${rebuilt.error}`)
-      return
-    }
-    prep = rebuilt
-  }
-
   // Serialized publish chain — ordering guarantee for the fire-and-forget
   // broker writes (a retrying chunk must never overtake a later one).
   let chain: Promise<unknown> = Promise.resolve()
@@ -135,6 +120,21 @@ export async function produceRun(runId: string, prepInput?: Prep): Promise<void>
     }
   }
 
+  // Worker rebuild: the prep may come from a different process's enqueue.
+  let prep = prepInput
+  if (!prep) {
+    const rebuilt = await rebuildPrepForRun(runId).catch(() => ({ error: 'Could not restore the original turn' }))
+    if ('error' in rebuilt) {
+      if (!(await finishRun(runId, 'failed', 'error', rebuilt.error, null, claimed.attempts))) return
+      await appendEvent(runId, 'RunFailed', { error: rebuilt.error.slice(0, 300) })
+      await publishChunk(streamId, { event: 'error', data: 'Could not restore the original request. Please retry.' })
+      await publishEnd(streamId, 'error')
+      console.error(`RUN-REBUILD-FAIL run=${runId}: ${rebuilt.error}`)
+      return
+    }
+    prep = rebuilt
+  }
+
   // Lease keeper — a long research turn must not lose its lease mid-flight.
   const keeper = setInterval(() => void heartbeatRun(runId, LEASE_TTL_MS, claimed.attempts), Math.floor(LEASE_TTL_MS / 3))
   // PHASE 4 — TTL keeper: the stream's TTL is refreshed independently of the
@@ -145,9 +145,10 @@ export async function produceRun(runId: string, prepInput?: Prep): Promise<void>
     const result = await runTurn(prep, push, claimed.attempts)
     await chain // flush every data chunk before the terminal marker
     if (result.retryable) {
-      if (!(await requeueRun(runId, result.errorRaw ?? 'free provider capacity unavailable', claimed.attempts))) return
+      if (!(await requeueRun(runId, result.errorRaw ?? 'free provider capacity unavailable', claimed.attempts, result.retryAfterMs ?? 0))) return
       await appendEvent(runId, 'RunQueued', {
         reason: 'free_capacity_unavailable',
+        retryAfterMs: result.retryAfterMs ?? 0,
         error: result.errorRaw?.slice(0, 300) ?? null,
       })
       console.warn(`RUN-QUEUED run=${runId} stream=${streamId} reason=free_capacity_unavailable`)

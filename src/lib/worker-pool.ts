@@ -61,17 +61,20 @@ async function tick(): Promise<void> {
   try {
     const now = new Date()
     const candidates = await db.turnRun.findMany({
-      where: { status: 'queued' },
+      // Exclude delayed rows BEFORE the bounded batch selection, so a
+      // daily-quota backlog cannot starve a newly queued request.
+      where: {status:'queued',OR:[{retryNotBefore:null},{retryNotBefore:{lte:now}}]},
       orderBy: { createdAt: 'asc' },
       take: Math.max(4, (WORKER_CONCURRENCY - loop.active) * 4),
     })
-    const due = candidates.filter((candidate) => queuedRunIsDue(candidate.updatedAt, candidate.attempts, now.getTime()))
+    const due = candidates.filter((candidate) => queuedRunIsDue(candidate.updatedAt, candidate.attempts, now.getTime(), candidate.retryNotBefore))
     if (due.length === 0) return
-    if (!(await freeCapacityAvailable())) {
-      console.log(`GS-WORKER-PAUSED reason=free_capacity_unavailable queued=${due.length}`)
-      return
-    }
-    for (const candidate of due) {
+    const hasCapacity = await freeCapacityAvailable()
+    // A persisted answer is recovered without a model, even during a
+    // provider outage. The producer must not call prepareTurn for it.
+    const runnable = hasCapacity ? due : due.filter(candidate=>candidate.assistantMessageId !== null)
+    if (!runnable.length) return
+    for (const candidate of runnable) {
       if (loop.active >= WORKER_CONCURRENCY) break
       loop.active++
       console.log(`GS-WORKER claim run=${candidate.id} attempts=${candidate.attempts} active=${loop.active}`)
@@ -114,7 +117,7 @@ async function recoverStuckJobs(): Promise<void> {
         // atomic-ish re-queue guarded by the same stale predicate
         const res = await db.turnRun.updateMany({
           where: { id: run.id, status: 'running', attempts: run.attempts, leaseExpiresAt: { lt: new Date() } },
-          data: { status: 'queued', leaseOwner: null, leaseExpiresAt: null },
+          data: { status: 'queued', retryNotBefore: new Date(), leaseOwner: null, leaseExpiresAt: null },
         })
         if (res.count > 0) {
           await appendEvent(run.id, 'RunReconciled', { reason: 'stuck-job recovery: re-enqueued', nextAttempt: run.attempts + 1 })

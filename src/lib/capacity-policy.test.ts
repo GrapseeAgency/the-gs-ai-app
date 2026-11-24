@@ -5,6 +5,7 @@ import {
   freeRetryDelayMs,
   isFreeCapacityUnavailableError,
   queuedRunIsDue,
+  nextFreeAttemptAt,
 } from './capacity-policy'
 
 describe('capacity policy', () => {
@@ -30,6 +31,14 @@ describe('capacity policy', () => {
     expect(later).toBeLessThanOrEqual(5 * 60_000 + 999)
   })
 
+  test('provider Retry-After is never shortened by the local backoff', () => {
+    const now = 100_000
+    const deadline = nextFreeAttemptAt(1, 12 * 60 * 60_000, now)
+    expect(deadline.getTime()).toBe(now + 12 * 60 * 60_000)
+    expect(queuedRunIsDue(new Date(now), 1, now + 5 * 60_000, deadline)).toBe(false)
+    expect(queuedRunIsDue(new Date(now), 1, deadline.getTime(), deadline)).toBe(true)
+    expect(nextFreeAttemptAt(1, NaN, now).getTime()).toBeGreaterThan(now)
+  })
   test('first attempts are due and retries are deferred', () => {
     const now = 100_000
     expect(queuedRunIsDue(new Date(now), 0, now)).toBe(true)

@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test'
 import { db } from './db'
-import { claimRun, createRun, finishRun, getRun, persistRunAssistant } from './run-store'
+import { claimRun, createRun, finishRun, getRun, persistRunAssistant, requeueRun } from './run-store'
 
 if (process.env.GS_RUN_STORE_TEST !== '1') throw new Error('Run this integration test only against an isolated database')
 const conv = 'run-store-test-' + crypto.randomUUID()
@@ -26,12 +26,22 @@ test('actual SQLite: atomic admission, exclusive claims, fenced retries and answ
   expect(second?.attempts).toBe(2)
   expect(await finishRun(id,'completed','done',null,null,1)).toBe(false)
   await expect(persistRunAssistant(id,1,input)).rejects.toThrow('lease lost')
-  const saved=await persistRunAssistant(id,2,input)
+  expect(await requeueRun(id,'provider rate limited',2,3600000)).toBe(true)
+  const delayed=await getRun(id)
+  expect(delayed?.retryNotBefore?.getTime()).toBeGreaterThan(Date.now()+3590000)
+  expect(await claimRun(id)).toBeNull()
+  await db.turnRun.update({where:{id},data:{retryNotBefore:new Date(0)}})
+  const third=await claimRun(id)
+  expect(third?.attempts).toBe(3)
+  const saved=await persistRunAssistant(id,3,input,[
+    {ordinal:1,title:'Source fixture',url:'https://example.com/source',domain:'example.com',query:'fixture',used:true}
+  ])
   expect((await getRun(id))?.assistantMessageId).toBe(saved.id)
-  const recovered=await persistRunAssistant(id,2,{...input,content:'duplicate'})
+  expect(await db.messageSource.count({where:{messageId:saved.id}})).toBe(1)
+  const recovered=await persistRunAssistant(id,3,{...input,content:'duplicate'})
   expect(recovered.id).toBe(saved.id)
   expect(recovered.content).toBe(input.content)
   expect(await db.message.count({where:{conversationId:conv,role:'assistant'}})).toBe(1)
-  expect(await finishRun(id,'completed','done',null,saved.id,2)).toBe(true)
+  expect(await finishRun(id,'completed','done',null,saved.id,3)).toBe(true)
   expect(await claimRun(id)).toBeNull()
 })

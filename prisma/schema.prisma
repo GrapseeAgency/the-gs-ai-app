@@ -267,6 +267,7 @@ model TurnRun {
   finalStatus        String? // done | error | clarify — the SSE terminal contract
   error              String?
   attempts           Int       @default(0)
+  retryNotBefore     DateTime? // durable provider Retry-After + local backoff
   leaseOwner         String? // worker instance holding this run (stuck-job recovery)
   leaseExpiresAt     DateTime?
   // JSON map: sha256(runId+seq+tool+args) -> result digest. Stable across
@@ -276,6 +277,7 @@ model TurnRun {
   updatedAt          DateTime  @updatedAt
 
   @@index([status])
+  @@index([status, retryNotBefore])
   @@index([conversationId])
   @@map("turn_runs")
 }

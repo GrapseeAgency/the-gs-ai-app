@@ -18,6 +18,7 @@
 import { createHash } from 'crypto'
 import { db } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
+import { nextFreeAttemptAt } from './capacity-policy'
 
 export type RunStatus =
   | 'queued'
@@ -41,6 +42,7 @@ export type RunRecord = {
   finalStatus: string | null
   error: string | null
   attempts: number
+  retryNotBefore: Date | null
   idempotencyKeys: Record<string, string>
 }
 
@@ -54,6 +56,7 @@ const toRecord = (r: {
   finalStatus: string | null
   error: string | null
   attempts: number
+  retryNotBefore: Date | null
   idempotencyKeys: string
 }): RunRecord => ({
   id: r.id,
@@ -65,6 +68,7 @@ const toRecord = (r: {
   finalStatus: r.finalStatus,
   error: r.error,
   attempts: r.attempts,
+  retryNotBefore: r.retryNotBefore,
   idempotencyKeys: safeParse(r.idempotencyKeys),
 })
 
@@ -130,11 +134,11 @@ export async function claimRun(runId: string, ttlMs = LEASE_TTL_MS): Promise<Run
   // unconditional update. Exactly one contender acquires this attempt.
   const claimed = await db.turnRun.updateMany({
     where: { id: runId, OR: [
-      {status: 'queued'},
+      {status: 'queued', OR: [{retryNotBefore:null}, {retryNotBefore:{lte:now}}]},
       {status: 'running', OR: [{leaseExpiresAt: null}, {leaseExpiresAt: {lt: now}}]},
     ] },
     data: {
-      status: 'running', leaseOwner: instanceId,
+      status: 'running', leaseOwner: instanceId, retryNotBefore: null,
       leaseExpiresAt: new Date(now.getTime() + ttlMs), attempts: { increment: 1 },
     },
   })
@@ -167,7 +171,7 @@ export async function finishRun(
   const updated = await db.turnRun.updateMany({
     where: attempt === undefined ? {id: runId} : ownedAttempt(runId, attempt),
     data: {
-      status, finalStatus, error: error ? error.slice(0, 1000) : null,
+      status, finalStatus, retryNotBefore: null, error: error ? error.slice(0, 1000) : null,
       ...(assistantMessageId ? { assistantMessageId } : {}),
       leaseOwner: null, leaseExpiresAt: null,
     },
@@ -176,11 +180,12 @@ export async function finishRun(
 }
 
 /** A stale producer cannot put the newer attempt back in the queue. */
-export async function requeueRun(runId: string, reason: string, attempt?: number): Promise<boolean> {
+export async function requeueRun(runId: string, reason: string, attempt?: number, retryAfterMs = 0): Promise<boolean> {
   const updated = await db.turnRun.updateMany({
     where: attempt === undefined ? {id: runId} : ownedAttempt(runId, attempt),
     data: {
       status: 'queued', finalStatus: null, error: reason.slice(0, 1000),
+      retryNotBefore: nextFreeAttemptAt(attempt ?? 0, retryAfterMs),
       leaseOwner: null, leaseExpiresAt: null,
     },
   })

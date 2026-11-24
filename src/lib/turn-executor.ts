@@ -325,6 +325,7 @@ export type TurnResult = {
   errorResponse?: { status: number; code: string; message: string }
   /** True when the durable worker should requeue instead of terminal-failing. */
   retryable?: boolean
+  retryAfterMs?: number
   errorRaw?: string
 }
 
@@ -2202,7 +2203,10 @@ async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: Abor
     let constraintRejected = false
     if (constraints && constraintViolations(full, constraints).length > 0) {
       if (push) { push('status', 'checking'); push('reset', '') }
-      const retry = await synthesize(buildConstraintRetryMessages(modelMessages, constraints), streamAnswerDelta)
+      const retryMessages = useVision && !allImagesFailed
+        ? buildConstraintRetryMessages(modelMessages as VisionChatMessage[], constraints)
+        : buildConstraintRetryMessages(modelMessages as ChatMessageInput[], constraints)
+      const retry = await synthesize(retryMessages, streamAnswerDelta)
       const table = docContext.block ? parseCsvTable(docContext.block) : null
       const grounded = !detectExecutionContradiction(retry, executionStateFor(turn)) &&
         (!table || verifyCsvAggregates(retry, table).length === 0) &&
@@ -2298,6 +2302,7 @@ async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: Abor
       result.finalStatus = 'error'
       result.errorRaw = raw
       result.retryable = true
+      result.retryAfterMs = Number.isFinite(e.retryAfterMs) ? e.retryAfterMs : 0
       result.errorResponse = {
         status: 429,
         code: 'free_capacity_unavailable',

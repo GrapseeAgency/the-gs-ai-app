@@ -38,8 +38,17 @@ export function freeRetryDelayMs(attempt: number, now = Date.now()): number {
   return delay + (now % 1_000 === 0 ? jitter : 0)
 }
 
-/** Whether a queued run is old enough to claim after a capacity retry. */
-export function queuedRunIsDue(updatedAt: Date, attempts: number, now = Date.now()): boolean {
+/** Persist the provider's actual Retry-After alongside local backoff. Never
+ * shorten a daily quota window to the local five-minute retry cap. */
+export function nextFreeAttemptAt(attempt: number, retryAfterMs: number, now = Date.now()): Date {
+  const providerDelay = Number.isFinite(retryAfterMs) && retryAfterMs > 0
+    ? Math.min(retryAfterMs, 8.64e15 - now) : 0
+  return new Date(now + Math.max(freeRetryDelayMs(attempt, now), providerDelay))
+}
+
+/** Legacy queued rows still use the old backoff until their next retry. */
+export function queuedRunIsDue(updatedAt: Date, attempts: number, now = Date.now(), retryNotBefore?: Date | null): boolean {
+  if (retryNotBefore) return retryNotBefore.getTime() <= now
   if (attempts <= 0) return true
-  return updatedAt.getTime() + freeRetryDelayMs(attempts, now) <= now
+  return updatedAt.getTime() + freeRetryDelayMs(attempts, updatedAt.getTime()) <= now
 }
