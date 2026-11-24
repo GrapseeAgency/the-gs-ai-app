@@ -14,7 +14,7 @@ LOG_PID=$!
 trap 'kill "$LOG_PID" 2>/dev/null || true' EXIT
 set +e
 timeout 150 adb shell am instrument -w -r \
-  -e class com.grapsee.gsai.BotAvatarWebViewDeviceTest \
+  -e class com.grapsee.gsai.BotAvatarNativeDeviceTest \
   com.grapsee.gsai.test/androidx.test.runner.AndroidJUnitRunner \
   | tee ../native-avatar-evidence/instrumentation.txt
 instrument_status=${PIPESTATUS[0]}

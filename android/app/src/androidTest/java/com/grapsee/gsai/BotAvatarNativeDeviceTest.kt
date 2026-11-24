@@ -9,7 +9,6 @@ import android.os.SystemClock
 import android.view.PixelCopy
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.WebView
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,7 +31,9 @@ import com.grapsee.gsai.ui.chat.ComposerRow
 import com.grapsee.gsai.ui.chat.UserMessage
 import com.grapsee.gsai.ui.chat.content.nexlyPearlBackdrop
 import com.grapsee.gsai.ui.theme.TheGsAiTheme
-import org.json.JSONObject
+import com.grapsee.gsai.ui.components.OriginalBotAvatarView
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,11 +45,10 @@ import java.util.concurrent.TimeUnit
  * Real Android window compositor verification, using the production reply
  * and composer components. ActivityScenario avoids Compose idling waits
  * that can deadlock against a perpetually animated chat backdrop.
- * PixelCopy samples the hardware-composited window; View.draw(Canvas)
- * is not a valid substitute for a Chromium surface.
+ * PixelCopy samples the hardware-composited window, not a browser or an atlas preview.
  */
 @RunWith(AndroidJUnit4::class)
-class BotAvatarWebViewDeviceTest {
+class BotAvatarNativeDeviceTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private lateinit var activity: MainActivity
     private val screenshots get() = File(activity.filesDir, "native-avatar-evidence").apply { mkdirs() }
@@ -91,61 +91,41 @@ class BotAvatarWebViewDeviceTest {
         }
     }
 
-    private fun webViews(view: View): List<WebView> =
-        if (view is WebView) listOf(view)
-        else if (view is ViewGroup) (0 until view.childCount).flatMap { webViews(view.getChildAt(it)) }
+    private fun avatarViews(view: View): List<OriginalBotAvatarView> =
+        if (view is OriginalBotAvatarView) listOf(view)
+        else if (view is ViewGroup) (0 until view.childCount).flatMap { avatarViews(view.getChildAt(it)) }
         else emptyList()
 
-    private fun browser(): WebView {
-        var result: WebView? = null
+    private fun renderer(): OriginalBotAvatarView {
+        var result: OriginalBotAvatarView? = null
         instrumentation.runOnMainSync {
-            val views = webViews(activity.window.decorView)
-            check(views.size == 1) { "Expected exactly one authentic renderer, got " + views.size }
+            val views = avatarViews(activity.window.decorView)
+            check(views.size == 1) { "Expected exactly one native avatar beside reply, got " + views.size }
             result = views.single()
         }
         return result!!
     }
 
-    private fun diagnostics(view: WebView): JSONObject? {
-        val latch = CountDownLatch(1)
-        var result: String? = null
-        instrumentation.runOnMainSync {
-            view.evaluateJavascript("window.gsAvatarDiagnostics && window.gsAvatarDiagnostics()") {
-                result = it
-                latch.countDown()
-            }
-        }
-        if (!latch.await(3, TimeUnit.SECONDS)) return null
-        return runCatching { JSONObject(result ?: "") }.getOrNull()
-    }
-
-    private fun awaitState(view: WebView, state: String) {
-        val deadline = SystemClock.elapsedRealtime() + 30_000
-        var info: JSONObject? = null
+    private fun awaitState(view: OriginalBotAvatarView, state: String) {
+        val deadline = SystemClock.elapsedRealtime() + 20_000
         while (SystemClock.elapsedRealtime() < deadline) {
-            info = diagnostics(view)
-            if (info?.optString("state") == state && info.optDouble("opacity", 0.0) >= 0.99) {
-                val b = info.getJSONArray("bounds")
-                val vp = info.getJSONArray("viewport")
-                assertTrue("Vendor canvas is clipped: " + info,
-                    b.getDouble(0) >= -1 && b.getDouble(1) >= -1 &&
-                    b.getDouble(2) <= vp.getDouble(0) + 1 &&
-                    b.getDouble(3) <= vp.getDouble(1) + 1 &&
-                    b.getDouble(2) - b.getDouble(0) >= vp.getDouble(0) - 2 &&
-                    b.getDouble(3) - b.getDouble(1) >= vp.getDouble(1) - 2)
-                assertTrue("Vendor canvas resolution insufficient: " + info,
-                    info.optInt("width") >= 72 && info.optInt("height") >= 72)
-                assertTrue("Animation unexpectedly disabled: " + info,
-                    !info.optBoolean("paused") && !info.optBoolean("reducedMotion"))
-                println("GS_AVATAR_VENDOR_STATE=" + info)
-                return
+            var ready = false
+            instrumentation.runOnMainSync {
+                ready = view.animationReady && view.animationKey == "clover-" + state
             }
-            Thread.sleep(250)
+            if (ready) return
+            Thread.sleep(150)
         }
-        error("Vendor canvas never became ready for " + state + ": " + info)
+        error("Original native atlas did not load for " + state)
     }
 
-    private fun avatarRect(view: WebView): Rect {
+    private fun frameCount(view: OriginalBotAvatarView): Int {
+        var count = 0
+        instrumentation.runOnMainSync { count = view.presentedFrames }
+        return count
+    }
+
+    private fun avatarRect(view: OriginalBotAvatarView): Rect {
         var r = Rect()
         instrumentation.runOnMainSync {
             val p = IntArray(2)
@@ -206,7 +186,7 @@ class BotAvatarWebViewDeviceTest {
         image.recycle()
     }
 
-    private fun visible(view: WebView): Boolean {
+    private fun visible(view: OriginalBotAvatarView): Boolean {
         val image = pixelCopy(avatarRect(view))
         val hasGreen = foreground(image).green > 25
         image.recycle()
@@ -221,7 +201,7 @@ class BotAvatarWebViewDeviceTest {
                 it.setContent { NativeChat() }
             }
             Thread.sleep(1000)
-            val view = browser()
+            val view = renderer()
             try {
                 awaitState(view, "default")
             } catch (failure: Throwable) {
@@ -235,40 +215,39 @@ class BotAvatarWebViewDeviceTest {
 
             instrumentation.runOnMainSync { working.value = true }
             awaitState(view, "working")
-            assertTrue("The real renderer must survive the state transition", browser() === view)
+            assertTrue("The real renderer must survive the state transition", renderer() === view)
             fullScreenshot("original-avatar-working-1.png")
 
-            // Collect real compositor pixels, not JS canvas hashes or an
-            // animated background. Sample a small avatar rect to keep
-            // the Android emulator stable.
+            // Native draw cadence plus independent hardware-window pixel samples.
+            val device = UiDevice.getInstance(instrumentation)
+            assertTrue("The native stop icon must be accessible",
+                device.hasObject(By.desc("Stop generating")))
+            assertTrue("The stop action must not paint a text label",
+                !device.hasObject(By.text("Stop")))
+            assertTrue("Generation status must not be duplicated near the composer",
+                !device.hasObject(By.text("Generating answer…")))
+
             val rect = avatarRect(view)
             val signatures = mutableSetOf<Int>()
-            var changes = 0
-            var previous: Int? = null
-            var samples = 0
+            val countBefore = frameCount(view)
             val start = SystemClock.elapsedRealtime()
-            while (SystemClock.elapsedRealtime() - start < 3000) {
+            for (n in 0 until 24) {
                 val image = pixelCopy(rect)
                 val fg = foreground(image)
-                assertTrue("Visible avatar disappeared during working animation", fg.green > 25)
-                if (previous != fg.signature) changes++
-                previous = fg.signature
+                assertTrue("Original avatar disappeared on the native Android screen", fg.green > 25)
                 signatures.add(fg.signature)
-                if (samples % 5 == 0 && samples / 5 < 12) {
-                    save(image, "avatar-motion-" + (samples / 5).toString().padStart(2, '0') + ".png")
-                }
+                if (n % 2 == 0) save(image, "avatar-motion-" + (n/2).toString().padStart(2,'0') + ".png")
                 image.recycle()
-                samples++
-                Thread.sleep(20)
+                Thread.sleep(100)
             }
             val elapsed = (SystemClock.elapsedRealtime() - start).coerceAtLeast(1)
-            val visibleHz = changes * 1000.0 / elapsed
-            println("GS_AVATAR_VISIBLE_CHANGES_PER_SECOND=" + visibleHz +
-                " samples=" + samples + " unique=" + signatures.size)
+            val visibleHz = (frameCount(view)-countBefore)*1000.0/elapsed
+            println("GS_AVATAR_NATIVE_DRAW_FPS=" + visibleHz + " UNIQUE_HARDWARE_FRAMES=" + signatures.size)
             fullScreenshot("original-avatar-working-2.png")
-            assertTrue("Real compositor animation is too slow or frozen: " + visibleHz +
-                " changes/sec, " + signatures.size + " distinct frames",
-                visibleHz >= 15.0 && signatures.size >= 35)
+            assertTrue("Original native atlas playback is too slow: " + visibleHz,
+                visibleHz >= 20.0)
+            assertTrue("Actual compositor pixels froze: " + signatures.size + "/24",
+                signatures.size >= 12)
 
             instrumentation.runOnMainSync { working.value = false }
             awaitState(view, "default")

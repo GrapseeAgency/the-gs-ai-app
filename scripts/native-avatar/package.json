@@ -9,6 +9,7 @@
     "react-dom": "19.0.0"
   },
   "devDependencies": {
-    "esbuild": "0.27.3"
+    "esbuild": "0.27.3",
+    "playwright": "1.51.1"
   }
 }
