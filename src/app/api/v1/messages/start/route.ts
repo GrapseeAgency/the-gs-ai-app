@@ -11,8 +11,8 @@
  *      GET /api/v1/stream/{streamId}.
  *
  * TWO IDENTIFIERS — DELIBERATELY DISTINCT:
- *   streamId — transport identifier. FRESH on every POST (including
- *              resumption POSTs). Broker key suffix.
+ *   streamId — transport identifier. Stable for reconnects to a run.
+ *              A new turn or approved action creates a fresh window.
  *   runId    — billing/correlation identifier. Reused across HITL interrupt
  *              + resumption; passed down through the turn executor.
  *
@@ -27,11 +27,9 @@ import { clientKey, rateLimit } from '@/lib/rate-limit'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@/lib/attachments'
 import { prepareTurn } from '@/lib/turn-executor'
 import { parseThinkingMode } from '@/lib/model-capabilities'
-import { decodeStoredTurnFacts } from '@/lib/turn-resume'
 import { backgroundRunsEnabled, newRunId, newStreamId } from '@/lib/turn-producer'
 import { enqueueRun } from '@/lib/worker-pool'
-import { createRun, getRun, isTerminalStatus, rebindStream } from '@/lib/run-store'
-import { appendEvent, resume } from '@/lib/turn-events'
+import { createRun, getRun, isTerminalStatus } from '@/lib/run-store'
 
 export const dynamic = 'force-dynamic'
 
@@ -90,44 +88,18 @@ export async function POST(req: NextRequest) {
     if (!run) {
       return NextResponse.json({ code: 'not_found', message: 'Run not found' }, { status: 404 })
     }
-    // Safe to call more than once: a finished run just returns its state.
-    const folded = await resume(run.id)
-    if (isTerminalStatus(run.status) && folded.completed) {
-      return NextResponse.json({
-        runId: run.id,
-        streamId: run.streamId,
-        status: run.status,
-        finalStatus: run.finalStatus,
-        assistantMessageId: run.assistantMessageId,
-        resumed: false,
-        reconciled: false,
-      })
-    }
-    // Dangling run: reconcile happened inside resume(); re-produce on a
-    // FRESH transport window (new streamId), SAME runId.
-    const turnRequest = await turnRequestFromRun(run, req)
-    if (!turnRequest) return NextResponse.json(
-      { code: 'invalid_resume', message: 'The original turn request is unavailable.' }, { status: 400 })
-    const prepared = await prepareTurn(turnRequest, {
-      content: turnRequest.content,
-      attachments: turnRequest.attachmentIds,
-    })
-    if (prepared.kind !== 'ready') return prepared.response
-    const streamId = newStreamId()
-    await rebindStream(run.id, streamId)
-    await appendEvent(run.id, 'TurnStarted', {
-      resumed: true,
-      streamId,
-      reconciled: folded.reconciled,
-      dangling: folded.dangling?.eventType ?? null,
-    })
-    await enqueueRun(run.id)
+    // A reconnect is a subscription to the original run, not another
+    // execution request. Rebinding an active stream could orphan its producer
+    // and re-running its preparation could mutate the original user turn.
+    if (run.status === 'queued' || run.status === 'running') await enqueueRun(run.id)
     return NextResponse.json({
       runId: run.id,
-      streamId,
-      status: 'queued',
-      resumed: true,
-      reconciled: folded.reconciled,
+      streamId: run.streamId,
+      status: run.status,
+      finalStatus: run.finalStatus,
+      assistantMessageId: run.assistantMessageId,
+      resumed: !isTerminalStatus(run.status),
+      reconciled: false,
     })
   }
 
@@ -200,18 +172,10 @@ export async function POST(req: NextRequest) {
     streamId,
     conversationId,
     userMessageId: prepared.prep.userMessage.id,
-  })
-  // Event sourcing: TurnStarted carries the request facts a resume needs to
-  // reconstruct the turn from durable state alone.
-  await appendEvent(runId, 'TurnStarted', {
-    conversationId,
-    content,
-    attachmentIds,
-    timezone,
-    clientVersion,
-    mode,
-    turnContext,
-    userMessageId: prepared.prep.userMessage.id,
+    startFacts: {
+      conversationId, content, attachmentIds, timezone, clientVersion, mode, turnContext,
+      userMessageId: prepared.prep.userMessage.id,
+    },
   })
 
   // PHASE 8 — the API ENQUEUES; the worker pool runs the turn. The request
@@ -221,32 +185,3 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ streamId, runId }, { status: 200 })
 }
 
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
-/** Event-sourced request facts: TurnStarted carries the original request. */
-async function turnRequestFromRun(
-  run: { id: string; conversationId: string; userMessageId: string | null },
-  req: NextRequest
-) {
-  const events = await db.turnEvent.findMany({
-    where: { runId: run.id, eventType: 'TurnStarted' },
-    orderBy: { seq: 'asc' },
-    take: 1,
-  })
-  const facts = decodeStoredTurnFacts(events[0]?.payload)
-  if (!facts || !run.userMessageId) return null
-  return {
-    conversationId: run.conversationId,
-    content: facts.content ?? '',
-    timezone: facts.timezone ?? null,
-    clientVersion: facts.clientVersion ?? req.headers.get('x-gs-app-version') ?? 'web',
-    requestId: run.id, // correlation: the runId IS the request id on resume
-    attachmentIds: facts.attachmentIds ?? [],
-    mode: parseThinkingMode(facts.mode), // durable mode survives resume
-    turnContext: facts.turnContext ?? null,
-    runId: run.id,
-    existingUserMessageId: run.userMessageId ?? undefined,
-  }
-}

@@ -17,6 +17,7 @@
 
 import { createHash } from 'crypto'
 import { db } from '@/lib/db'
+import type { Prisma } from '@prisma/client'
 
 export type RunStatus =
   | 'queued'
@@ -81,8 +82,9 @@ export async function createRun(input: {
   streamId: string
   conversationId: string
   userMessageId?: string | null
+  startFacts?: Record<string, unknown>
 }): Promise<RunRecord> {
-  const row = await db.turnRun.create({
+  const create = db.turnRun.create({
     data: {
       id: input.runId,
       streamId: input.streamId,
@@ -91,6 +93,13 @@ export async function createRun(input: {
       status: 'queued',
     },
   })
+  // A worker must never observe a queued row before its original request
+  // exists. The transaction is the admission boundary for durable work.
+  const row = input.startFacts
+    ? (await db.$transaction([create, db.turnEvent.create({data: {
+        runId: input.runId, eventType: 'TurnStarted', payload: JSON.stringify(input.startFacts),
+      }})]))[0]
+    : await create
   return toRecord(row)
 }
 
@@ -117,32 +126,34 @@ const instanceId = `w-${process.pid}-${Math.random().toString(36).slice(2, 8)}`
  */
 export async function claimRun(runId: string, ttlMs = LEASE_TTL_MS): Promise<RunRecord | null> {
   const now = new Date()
-  const run = await db.turnRun.findUnique({ where: { id: runId } })
-  if (!run) return null
-  const claimable =
-    run.status === 'queued' ||
-    (run.status === 'running' && (!run.leaseExpiresAt || run.leaseExpiresAt < now))
-  if (!claimable) return toRecord(run)
-  const row = await db.turnRun.update({
-    where: { id: runId },
+  // Compare-and-set on the database row, not a read followed by an
+  // unconditional update. Exactly one contender acquires this attempt.
+  const claimed = await db.turnRun.updateMany({
+    where: { id: runId, OR: [
+      {status: 'queued'},
+      {status: 'running', OR: [{leaseExpiresAt: null}, {leaseExpiresAt: {lt: now}}]},
+    ] },
     data: {
-      status: 'running',
-      leaseOwner: instanceId,
-      leaseExpiresAt: new Date(Date.now() + ttlMs),
-      attempts: { increment: 1 },
+      status: 'running', leaseOwner: instanceId,
+      leaseExpiresAt: new Date(now.getTime() + ttlMs), attempts: { increment: 1 },
     },
   })
-  return toRecord(row)
+  if (claimed.count !== 1) return null
+  const row = await db.turnRun.findUnique({ where: { id: runId } })
+  return row?.leaseOwner === instanceId && row.status === 'running' ? toRecord(row) : null
 }
 
-/** Refresh the lease while a run is alive (long research turns outlive the TTL). */
-export async function heartbeatRun(runId: string, ttlMs = LEASE_TTL_MS): Promise<void> {
-  await db.turnRun
-    .updateMany({
-      where: { id: runId, leaseOwner: instanceId },
-      data: { leaseExpiresAt: new Date(Date.now() + ttlMs) },
-    })
-    .catch(() => undefined)
+const ownedAttempt = (runId: string, attempt: number) => ({
+  id: runId, status: 'running', leaseOwner: instanceId, attempts: attempt,
+  leaseExpiresAt: { gt: new Date() },
+})
+
+/** Only the current, unexpired attempt can renew its own lease. */
+export async function heartbeatRun(runId: string, ttlMs = LEASE_TTL_MS, attempt?: number): Promise<void> {
+  await db.turnRun.updateMany({
+    where: attempt === undefined ? { id: runId, leaseOwner: instanceId, status: 'running' } : ownedAttempt(runId, attempt),
+    data: { leaseExpiresAt: new Date(Date.now() + ttlMs) },
+  }).catch(() => undefined)
 }
 
 export async function finishRun(
@@ -150,38 +161,66 @@ export async function finishRun(
   status: RunStatus,
   finalStatus: string | null,
   error: string | null,
-  assistantMessageId?: string | null
-): Promise<void> {
-  await db.turnRun.update({
-    where: { id: runId },
+  assistantMessageId?: string | null,
+  attempt?: number,
+): Promise<boolean> {
+  const updated = await db.turnRun.updateMany({
+    where: attempt === undefined ? {id: runId} : ownedAttempt(runId, attempt),
     data: {
-      status,
-      finalStatus,
-      error: error ? error.slice(0, 1000) : null,
+      status, finalStatus, error: error ? error.slice(0, 1000) : null,
       ...(assistantMessageId ? { assistantMessageId } : {}),
-      leaseOwner: null,
-      leaseExpiresAt: null,
+      leaseOwner: null, leaseExpiresAt: null,
     },
   })
+  return updated.count === 1
 }
 
-/** Return a claimed run to the queue after transient free-capacity exhaustion. */
-export async function requeueRun(runId: string, reason: string): Promise<void> {
-  await db.turnRun.update({
-    where: { id: runId },
+/** A stale producer cannot put the newer attempt back in the queue. */
+export async function requeueRun(runId: string, reason: string, attempt?: number): Promise<boolean> {
+  const updated = await db.turnRun.updateMany({
+    where: attempt === undefined ? {id: runId} : ownedAttempt(runId, attempt),
     data: {
-      status: 'queued',
-      finalStatus: null,
-      error: reason.slice(0, 1000),
-      leaseOwner: null,
-      leaseExpiresAt: null,
+      status: 'queued', finalStatus: null, error: reason.slice(0, 1000),
+      leaseOwner: null, leaseExpiresAt: null,
     },
+  })
+  return updated.count === 1
+}
+
+export type AssistantData = {conversationId: string; role: string; content: string; clarifyOptions?: string}
+export type AssistantSourceData = Omit<Prisma.MessageSourceCreateManyInput, 'messageId'>
+
+export async function persistAssistant(data: AssistantData, sources: AssistantSourceData[] = []) {
+  return db.message.create({data: {...data, ...(sources.length ? {sources: {createMany: {data: sources}}} : {})}})
+}
+
+/** Commit the answer, citations and run link in ONE transaction. A crashed
+ * producer leaves either all of them or none; retries reuse the same answer.
+ * The initial conditional write fences the transaction against stale owners
+ * and obtains the SQLite write lock before reading the run's answer link. */
+export async function persistRunAssistant(runId: string, attempt: number, data: AssistantData, sources: AssistantSourceData[] = []) {
+  return db.$transaction(async tx => {
+    const locked = await tx.turnRun.updateMany({
+      where: {...ownedAttempt(runId, attempt), conversationId: data.conversationId},
+      data: {leaseExpiresAt: new Date(Date.now() + LEASE_TTL_MS)},
+    })
+    if (locked.count !== 1) throw new Error('Turn execution lease lost')
+    const run = await tx.turnRun.findUniqueOrThrow({where: {id: runId}})
+    if (run.assistantMessageId) {
+      const existing = await tx.message.findUnique({where:{id:run.assistantMessageId}})
+      if (!existing || existing.conversationId !== data.conversationId || existing.role !== 'assistant')
+        throw new Error('Durable assistant link invalid')
+      return existing
+    }
+    const saved = await tx.message.create({data:{...data,...(sources.length ? {sources:{createMany:{data:sources}}} : {})}})
+    await tx.turnRun.update({where:{id:runId},data:{assistantMessageId:saved.id}})
+    return saved
   })
 }
 
-/** Re-bind the run to a FRESH stream id (resumption window). */
+/** Re-bind a parked run's transport only after explicit approval. */
 export async function rebindStream(runId: string, streamId: string): Promise<void> {
-  await db.turnRun.update({ where: { id: runId }, data: { streamId } })
+  await db.turnRun.update({where:{id:runId},data:{streamId}})
 }
 
 // ---------------------------------------------------------------------------

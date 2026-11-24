@@ -89,7 +89,7 @@ export async function produceRun(runId: string, prepInput?: Prep): Promise<void>
   if (!prep) {
     const rebuilt = await rebuildPrepForRun(runId).catch(() => ({ error: 'Could not restore the original turn' }))
     if ('error' in rebuilt) {
-      await finishRun(runId, 'failed', 'error', rebuilt.error, null)
+      if (!(await finishRun(runId, 'failed', 'error', rebuilt.error, null, claimed.attempts))) return
       await appendEvent(runId, 'RunFailed', { error: rebuilt.error.slice(0, 300) })
       await publishChunk(streamId, { event: 'error', data: 'Could not restore the original request. Please retry.' })
       await publishEnd(streamId, 'error')
@@ -118,10 +118,12 @@ export async function produceRun(runId: string, prepInput?: Prep): Promise<void>
       include: { sources: { orderBy: { ordinal: 'asc' } } },
     })
     if (existing) {
+      const finalStatus = existing.clarifyOptions ? 'clarify' : 'done'
+      if (!(await finishRun(runId, 'completed', finalStatus, null, existing.id, claimed.attempts))) return
+      push('reset', '')
       push('delta', existing.content)
       push('done', JSON.stringify(messageToJson(existing)))
       await chain
-      await finishRun(runId, 'completed', 'done', null, existing.id)
       await appendEvent(runId, 'RunCompleted', {
         reconciled: true,
         assistant_message_id: existing.id,
@@ -134,16 +136,16 @@ export async function produceRun(runId: string, prepInput?: Prep): Promise<void>
   }
 
   // Lease keeper — a long research turn must not lose its lease mid-flight.
-  const keeper = setInterval(() => void heartbeatRun(runId), Math.floor(LEASE_TTL_MS / 3))
+  const keeper = setInterval(() => void heartbeatRun(runId, LEASE_TTL_MS, claimed.attempts), Math.floor(LEASE_TTL_MS / 3))
   // PHASE 4 — TTL keeper: the stream's TTL is refreshed independently of the
   // event rate (sparse long-idle runs), cancelled when the run goes terminal.
   const ttlKeeper = startStreamTtlKeeper(streamId)
 
   try {
-    const result = await runTurn(prep, push)
+    const result = await runTurn(prep, push, claimed.attempts)
     await chain // flush every data chunk before the terminal marker
     if (result.retryable) {
-      await requeueRun(runId, result.errorRaw ?? 'free provider capacity unavailable')
+      if (!(await requeueRun(runId, result.errorRaw ?? 'free provider capacity unavailable', claimed.attempts))) return
       await appendEvent(runId, 'RunQueued', {
         reason: 'free_capacity_unavailable',
         error: result.errorRaw?.slice(0, 300) ?? null,
@@ -152,7 +154,7 @@ export async function produceRun(runId: string, prepInput?: Prep): Promise<void>
       return
     }
     const runStatus = result.finalStatus === 'error' ? 'failed' : 'completed'
-    await finishRun(runId, runStatus, result.finalStatus, result.errorRaw ?? null, result.assistantMessageId ?? null)
+    if (!(await finishRun(runId, runStatus, result.finalStatus, result.errorRaw ?? null, result.assistantMessageId ?? null, claimed.attempts))) return
     if (result.finalStatus === 'error') {
       await appendEvent(runId, 'RunFailed', { error: (result.errorRaw ?? '').slice(0, 300) })
     } else {
@@ -167,7 +169,7 @@ export async function produceRun(runId: string, prepInput?: Prep): Promise<void>
     const raw = String(e instanceof Error ? e.message : e)
     try {
       await chain
-      await finishRun(runId, 'failed', 'error', raw, null)
+      if (!(await finishRun(runId, 'failed', 'error', raw, null, claimed.attempts))) return
       await appendEvent(runId, 'RunFailed', { error: raw.slice(0, 300) })
       await publishEnd(streamId, 'error')
     } catch (inner) {

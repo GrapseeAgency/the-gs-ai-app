@@ -171,7 +171,7 @@ import {
 } from '@/lib/search/types'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@/lib/attachments'
 import { appendEvent, tracked } from '@/lib/turn-events'
-import { getRun } from '@/lib/run-store'
+import { getRun, persistAssistant, persistRunAssistant, type AssistantSourceData } from '@/lib/run-store'
 import {
   FreeCapacityUnavailableError,
   freeOnlyEnabled,
@@ -982,7 +982,16 @@ function buildGsCapLog(prep: Prep): Prep['gsCapLog'] {
 
 const MAX_GUARD_ATTEMPTS = 3
 
-export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnResult> {
+export async function runTurn(prep: Prep, push: TurnPush | null, attempt?: number): Promise<TurnResult> {
+  const lifetime = new AbortController()
+  try {
+    return await runTurnInternal(prep, push, lifetime.signal, attempt)
+  } finally {
+    lifetime.abort()
+  }
+}
+
+async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: AbortSignal, attempt?: number): Promise<TurnResult> {
   const id = prep.conversationId
   const content = prep.content
   const presentation = presentationStream(content, push)
@@ -1061,13 +1070,15 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
   if (prep.runId) {
     const runId = prep.runId
     void (async () => {
-      for (;;) {
+      while (!lifetime.aborted) {
         await new Promise((r) => setTimeout(r, 2_000))
+        if (lifetime.aborted) return
         try {
           const run = await getRun(runId)
           if (!run) return
-          stopFlagCache.set(runId, run.status === 'cancelled')
-          if (run.status === 'cancelled') return
+          const stopped = run.status !== 'running' || (attempt !== undefined && run.attempts !== attempt)
+          stopFlagCache.set(runId, stopped)
+          if (stopped) return
         } catch {
           return
         }
@@ -1536,16 +1547,15 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     return sanitizeCitationMarkers(text, totalOrdinals, allowed)
   }
 
-  const persistTurnSources = async (
-    messageId: string,
+  const buildTurnSources = (
     answerText: string,
     turn: TurnSearch,
     historySources: WebSource[]
-  ): Promise<void> => {
+  ): AssistantSourceData[] => {
     const fresh: ResearchSource[] =
       turn.kind === 'research' && turn.outcome.ok ? turn.outcome.sources : []
     const maxOrdinal = fresh.length + historySources.length
-    if (maxOrdinal === 0) return
+    if (maxOrdinal === 0) return []
     const cited = parseCitedOrdinals(answerText, maxOrdinal)
     const citedSet = new Set(cited)
 
@@ -1553,7 +1563,6 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       ...fresh
         .filter((s) => s.status === 'retrieved' || s.status === 'snippet_only')
         .map((s) => ({
-          messageId,
           ordinal: s.ordinal,
           title: s.title.slice(0, 500),
           url: s.url,
@@ -1568,7 +1577,6 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       ...historySources
         .filter((s) => citedSet.has(s.ordinal))
         .map((s) => ({
-          messageId,
           ordinal: s.ordinal,
           title: s.title.slice(0, 500),
           url: s.url,
@@ -1581,12 +1589,10 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
           rank: null,
         })),
     ]
-    if (rows.length > 0) {
-      await db.messageSource.createMany({ data: rows })
-    }
     console.log(
-      `WEBSEARCH-CITED conv=${id} maxOrdinal=${maxOrdinal} cited=[${cited.join(',')}] persisted=${rows.length}`
+      `WEBSEARCH-CITED conv=${id} maxOrdinal=${maxOrdinal} cited=[${cited.join(',')}] prepared=${rows.length}`
     )
+    return rows
   }
 
   const visionErrorMessage = (raw: string): string => {
@@ -1910,23 +1916,14 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     role: string
     content: string
     clarifyOptions?: string
-  }) => {
-    if (!prep.runId) return db.message.create({ data })
+  }, sources: AssistantSourceData[] = []) => {
+    if (!prep.runId) return persistAssistant(data, sources)
+    if (attempt === undefined) throw new Error('Durable turn has no execution lease')
     return tracked(
       prep.runId,
-      { request: 'ToolCallRequested', completed: 'ToolCallCompleted', failed: 'ToolCallFailed' },
-      { tool: 'persist_assistant_message', userMessageId: prep.userMessage.id },
-      async () => {
-        // Idempotency across restarts: if a prior attempt already persisted
-        // this run's answer, reuse it — one answer exists, not two.
-        const run = await getRun(prep.runId!)
-        if (run?.assistantMessageId) {
-          const existing = await db.message.findUnique({ where: { id: run.assistantMessageId } })
-          if (existing) return existing
-        }
-        return db.message.create({ data })
-      },
-      { tool: 'persist_assistant_message' }
+      {request:'ToolCallRequested',completed:'ToolCallCompleted',failed:'ToolCallFailed'},
+      {tool:'persist_assistant_message',userMessageId:prep.userMessage.id},
+      () => persistRunAssistant(prep.runId!, attempt, data, sources)
     )
   }
 
@@ -2244,8 +2241,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       conversationId: id,
       role: 'assistant',
       content: finalText,
-    })
-    await persistTurnSources(saved.id, finalText, turn, historySources)
+    }, buildTurnSources(finalText, turn, historySources))
     if (turn.kind === 'research' && turn.researchId) {
       updateResearchContextCitations(
         id,

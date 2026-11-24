@@ -6,6 +6,10 @@ on:
       - '.github/workflows/chat-capability-validation.yml'
       - 'src/lib/remote-tools*.ts'
       - 'src/lib/turn-executor.ts'
+      - 'src/lib/turn-producer.ts'
+      - 'src/lib/run-store*.ts'
+      - 'src/lib/worker-pool.ts'
+      - 'src/app/api/v1/messages/start/route.ts'
       - 'src/lib/provider-sse*.ts'
       - 'src/lib/provider-rate-limit*.ts'
       - 'src/lib/openrouter.ts'
@@ -43,6 +47,25 @@ jobs:
       - name: Focused chat regressions
         run: |
           bun test src/lib/remote-tools.test.ts src/lib/context-crystallize.test.ts src/lib/provider-sse.test.ts src/lib/turn-resume.test.ts src/lib/calc/turn-calculator.test.ts src/lib/quality-routing.test.ts src/lib/provider-rate-limit.test.ts src/lib/search/planner-context.test.ts
+  durable-store:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: file:/tmp/gs-durable-regression.db
+      GS_RUN_STORE_TEST: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx prisma generate && npx prisma db push --skip-generate
+      - name: Real SQLite durable execution regression
+        run: bun test src/lib/run-store.integration.test.ts
   model-benchmark:
     # Live requests are explicit: do not spend the shared free-provider quota
     # on every source-only commit, particularly during a Retry-After window.

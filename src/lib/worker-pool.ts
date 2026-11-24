@@ -101,18 +101,19 @@ async function recoverStuckJobs(): Promise<void> {
       take: 20,
     })
     for (const run of stale) {
-      if (run.attempts >= MAX_ATTEMPTS) {
-        await db.turnRun.update({
-          where: { id: run.id },
+      if (run.attempts >= MAX_ATTEMPTS && !run.assistantMessageId) {
+        const killed = await db.turnRun.updateMany({
+          where: { id: run.id, status: 'running', attempts: run.attempts, leaseExpiresAt: { lt: new Date() } },
           data: { status: 'killed', finalStatus: 'error', error: 'stuck-job recovery: max attempts exceeded', leaseOwner: null, leaseExpiresAt: null },
         })
+        if (killed.count !== 1) continue
         await appendEvent(run.id, 'RunFailed', { reason: 'stuck-job recovery: max attempts exceeded', attempts: run.attempts })
         await publishEnd(run.streamId, 'killed')
         console.error(`GS-WORKER-RECOVERY run=${run.id} killed after ${run.attempts} attempts`)
       } else {
         // atomic-ish re-queue guarded by the same stale predicate
         const res = await db.turnRun.updateMany({
-          where: { id: run.id, status: 'running', leaseExpiresAt: { lt: new Date() } },
+          where: { id: run.id, status: 'running', attempts: run.attempts, leaseExpiresAt: { lt: new Date() } },
           data: { status: 'queued', leaseOwner: null, leaseExpiresAt: null },
         })
         if (res.count > 0) {
