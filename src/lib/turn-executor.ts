@@ -642,7 +642,10 @@ export async function prepareTurn(
   )
   const catalogFastRoutes = selectCatalogFastRoutes({
     route: routerPlan.route,
-    requiresReasoning: requestedMode === 'thinking' || thinking.config?.mode === 'thinking',
+    // Metadata-only fast candidates are for standalone simple requests.
+    requiresReasoning: requestedMode === 'thinking' || thinking.config?.mode === 'thinking' ||
+      routerPlan.registerClass || history.length > 0 || numericCheck || !!directive || !!constraints ||
+      content.length > 240,
     hasImages: useVision,
     hasDocuments: currentTurnDocs.length > 0 || historyDocTurns.length > 0,
     estimatedInputChars: Buffer.byteLength(baseSystemPrompt + content + recentDesc.map(message => message.content).join('\n'), 'utf8'),
@@ -1573,6 +1576,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     const thinkingOn = prep.thinking.config?.mode === 'thinking'
     let callStartedAt = Date.now()
     let ttftMarked = false
+    let answerForwarded = false
     // The forwarder exists only when a client is listening AND thinking is on
     // AND the call is streaming. flush() after each await: an unflushed tail
     // would leave the client's panel missing its last words at `done`.
@@ -1580,6 +1584,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       onDelta && thinkingOn && push ? makeReasoningForwarder(push) : null
     const wrappedOnDelta = onDelta
       ? (d: string) => {
+          if (d.length > 0) answerForwarded = true
           if (thinkingOn && !ttftMarked && prep.thinkingLatencyMs === null) {
             ttftMarked = true
             prep.thinkingLatencyMs = Date.now() - callStartedAt
@@ -1669,7 +1674,8 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       return primaryText
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      if (freeOnlyEnabled()) throw e
+      // Never concatenate a fallback model after an already visible answer.
+      if (answerForwarded || freeOnlyEnabled()) throw e
       if (openRouterModels) {
         if (message.startsWith('OpenRouter ')) {
           console.log(

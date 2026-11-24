@@ -108,103 +108,8 @@ function isWebReadableStream(value: unknown): value is ReadableStream<Uint8Array
   )
 }
 
-/** Extract the text delta from one upstream SSE payload (defensive, OpenAI-ish shapes). */
-function extractDelta(parsed: unknown): string {
-  const p = parsed as
-    | { choices?: { delta?: { content?: unknown }; message?: { content?: unknown } }[]; delta?: { content?: unknown } }
-    | null
-  if (!p) return ''
-  const direct =
-    p.choices?.[0]?.delta?.content ?? p.choices?.[0]?.message?.content ?? p.delta?.content ?? ''
-  return typeof direct === 'string' ? direct : ''
-}
-
-/** The provider's thinking trace (`choices[0].delta.reasoning_content`, the
- * glm/zai stream shape for enabled thinking). Empty for every non-thinking
- * response, so callers can wire it unconditionally. */
-function extractReasoningDelta(parsed: unknown): string {
-  const p = parsed as
-    | {
-        choices?: {
-          delta?: { reasoning_content?: unknown; reasoning?: unknown }
-          message?: { reasoning_content?: unknown }
-        }[]
-      }
-    | null
-  if (!p) return ''
-  const r =
-    p.choices?.[0]?.delta?.reasoning_content ??
-    p.choices?.[0]?.delta?.reasoning ??
-    p.choices?.[0]?.message?.reasoning_content ??
-    ''
-  return typeof r === 'string' ? r : ''
-}
-
-/**
- * Consume the SDK's raw SSE byte stream, forwarding each text delta to
- * `onDelta` and returning the accumulated full text.
- */
-export async function consumeSseStream(
-  body: ReadableStream<Uint8Array>,
-  onDelta: (t: string) => Promise<void> | void,
-  onModel?: (model: string) => void,
-  onReasoning?: (t: string) => void
-): Promise<string> {
-  const reader = body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let full = ''
-  let terminated = false
-
-  const handleLine = async (rawLine: string): Promise<boolean> => {
-    const line = rawLine.trim()
-    if (!line || line.startsWith(':')) return false // heartbeat / comment / empty
-    let payload = line
-    if (payload.startsWith('data:')) payload = payload.slice(5).trim()
-    if (!payload) return false
-    if (payload === '[DONE]') return true
-    let delta = ''
-    try {
-      const parsed = JSON.parse(payload) as { model?: unknown }
-      if (onModel && typeof parsed?.model === 'string' && parsed.model.length > 0) onModel(parsed.model)
-      delta = extractDelta(parsed)
-      // REASONING TRACE — thinking-enabled calls stream the model's reasoning
-      // separately from the answer; carried out when a listener is wired
-      // (turn-executor forwards it to clients as `reasoning` events).
-      if (onReasoning) {
-        const r = extractReasoningDelta(parsed)
-        if (r) await onReasoning(r)
-      }
-    } catch {
-      // Non-JSON payload (plain-text chunk) — treat the whole payload as a delta.
-      delta = payload
-    }
-    if (delta) {
-      full += delta
-      await onDelta(delta)
-    }
-    return false
-  }
-
-  while (!terminated) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() ?? '' // keep the trailing partial line in the buffer
-    for (const line of lines) {
-      if (await handleLine(line)) {
-        terminated = true
-        break
-      }
-    }
-  }
-
-  // Flush whatever is left in the buffer (upstream may omit the trailing newline).
-  if (!terminated && buffer) await handleLine(buffer)
-
-  return full
-}
+import { consumeSseStream } from './provider-sse'
+export { consumeSseStream } from './provider-sse'
 
 /**
  * Provider resilience:
@@ -329,6 +234,7 @@ export async function streamChat(
     } catch (e) {
       lastError = errMessage(e)
       if (/429|Too many requests/i.test(lastError)) markZaiThrottled()
+      if (forwarded) throw new Error(lastError)
       // PHASE 8.1 — mapped model rejected by the provider (invalid/unknown):
       // drop the model key and retry modelless immediately.
       if (activeModel && /status\s+(400|404)\b/.test(lastError)) {
