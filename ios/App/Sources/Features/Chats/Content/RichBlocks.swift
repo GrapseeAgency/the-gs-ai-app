@@ -131,6 +131,8 @@ struct NexlyAssistantBlocksView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .environment(\.fluidFreshMount, isStreaming && previousLiveBlocks != nil && previousLiveBlocks != blocks)
+        .environment(\.fluidNewBlockFloor, isStreaming && previousLiveBlocks != nil && previousLiveBlocks != blocks
+                     ? (previousLiveBlocks?.last.map { $0.sourceStart + 1 } ?? 0) : Int.max)
         .onAppear { previousLiveBlocks = isStreaming ? blocks : nil }
         .onChange(of: blocks) { next in previousLiveBlocks = isStreaming ? next : nil }
         .onChange(of: isStreaming) { active in previousLiveBlocks = active ? blocks : nil }
@@ -454,6 +456,7 @@ private struct StructuredProseSequenceView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
     @ObservedObject private var motionSettings = SettingsStore.shared
+    @Environment(\.fluidNewBlockFloor) private var newBlockFloor
     let prose: [Block]
     let isStreaming: Bool
     let citations: [Int: String]
@@ -474,10 +477,11 @@ private struct StructuredProseSequenceView: View {
         promoteStandaloneBoldHeadingsIOS(prose)
     }
 
-    private var fluidMotionEnabled: Bool {
-        isStreaming && !reduceMotion && !motionSettings.reduceMotion &&
+    private var fluidMotionAllowed: Bool {
+        !reduceMotion && !motionSettings.reduceMotion &&
             !motionSettings.reduceAnimations && !motionSettings.highContrast && contrast != .increased
     }
+    private var fluidMotionEnabled: Bool { isStreaming && fluidMotionAllowed }
 
     private var visibleDashboardTab: String {
         dashboardTabs.contains(activeDashboardTab) ? activeDashboardTab : "Dashboard"
@@ -602,7 +606,9 @@ private struct StructuredProseSequenceView: View {
     }
 
     var body: some View {
-        sequenceBody.environment(\.responseCodeActions, codeActions)
+        sequenceBody
+            .environment(\.responseCodeActions, codeActions)
+            .environment(\.fluidMotionAllowed, fluidMotionAllowed)
     }
 
     @ViewBuilder
@@ -642,11 +648,13 @@ private struct StructuredProseSequenceView: View {
                     NexlyQuickCalculatorCardView(spec: calc)
                 } else if let (callout, extraItems) = entry.coalescedCallout {
                     NexlyCalloutCardView(callout: callout, extraItems: extraItems, citations: citations)
-                        .environment(\.fluidResponseStreaming, fluidMotionEnabled && entry.index + entry.consumedCount >= normalizedProse.count - 1)
+                        .environment(\.fluidResponseStreaming, fluidMotionEnabled && (entry.index + entry.consumedCount >= normalizedProse.count - 1 ||
+                            entry.block.sourceStart >= newBlockFloor))
                 } else {
                     BlockView(block: entry.block, isLast: entry.index == prose.count - 1, citations: citations)
                         .environment(\.nexlySectionListMode, entry.sectionMode)
-                        .environment(\.fluidResponseStreaming, fluidMotionEnabled && entry.index + entry.consumedCount >= normalizedProse.count - 1)
+                        .environment(\.fluidResponseStreaming, fluidMotionEnabled && (entry.index + entry.consumedCount >= normalizedProse.count - 1 ||
+                            entry.block.sourceStart >= newBlockFloor))
                 }
             }
             if isStatusHost && showStatus && entry.index <= statusHostIndex && statusHostIndex < entry.index + entry.consumedCount {

@@ -68,27 +68,26 @@ struct FluidTextMotion {
         lastArrival = now
         let duration = min(0.265, max(0.185, 0.175 + cadence * 0.85))
         let stagger = min(0.020, max(0.008, cadence * 0.25))
-        // Bounded suffix only; avoid an O(document) character array.
-        let suffix = Array(text.suffix(72))
-        let floor = max(oldCount, count - 72)
-        bands.removeAll { $0.end <= count - 72 }
-        var start = floor
+        // Cover the entire append, including large provider bursts. Retain
+        // every unfinished band until its own deadline; no tail-size eviction.
+        let suffix = Array(text.suffix(count - oldCount))
+        let groupSize = max(32, (suffix.count + 3) / 4)
+        var start = oldCount
         var incoming = 0
-        while start < count && incoming < 6 {
-            let ideal = min(count, start + 12)
+        while start < count && incoming < 4 {
+            let ideal = min(count, start + groupSize)
             var word = ideal
-            let origin = count - suffix.count
-            while word > start + 6 && word < count &&
-                !suffix[word - 1 - origin].isWhitespace && !suffix[word - origin].isWhitespace {
+            let lower = max(start + 1, ideal - 6)
+            while word > lower && word < count &&
+                !suffix[word - 1 - oldCount].isWhitespace && !suffix[word - oldCount].isWhitespace {
                 word -= 1
             }
-            let preferred = word > start + 6 ? word : ideal
-            let end = incoming == 5 ? count : preferred
+            let preferred = word > lower ? word : ideal
+            let end = incoming == 3 ? count : preferred
             bands.append(FluidTextBand(start: start, end: end, born: now + Double(incoming) * stagger, duration: duration))
             start = end
             incoming += 1
         }
-        bands = Array(bands.suffix(12))
     }
 
     mutating func settle() { bands = [] }

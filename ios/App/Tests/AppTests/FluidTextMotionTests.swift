@@ -54,18 +54,25 @@ final class FluidTextMotionTests: XCTestCase {
         XCTAssertTrue(motion.bands.isEmpty)
     }
 
-    func testBurstAndUnicodeRangesStayBounded() {
+    func testBurstAndUnicodeRangesNeverDropUnsettledInk() {
         var motion = FluidTextMotion(initial: "")
         var text = String(repeating: "👨‍👩‍👧‍👦", count: 100)
         motion.update(text, now: 0)
-        XCTAssertEqual(motion.bands.first?.start, 28)
+        XCTAssertEqual(motion.bands.first?.start, 0)
         XCTAssertEqual(motion.bands.last?.end, 100)
-        XCTAssertLessThanOrEqual(motion.bands.count, 6)
+        XCTAssertLessThanOrEqual(motion.bands.count, 4)
+        let initial = motion.bands.first
         for tick in 0..<30 {
             text += "x"
             motion.update(text, now: Double(tick) / 1000)
-            XCTAssertLessThanOrEqual(motion.bands.count, 12)
+            XCTAssertEqual(motion.bands.first, initial)
+            XCTAssertEqual(motion.bands.last?.end, text.count)
+            for (a, b) in zip(motion.bands, motion.bands.dropFirst()) {
+                XCTAssertEqual(a.end, b.start)
+            }
         }
+        motion.update(text, now: 0.6)
+        XCTAssertTrue(motion.bands.isEmpty)
         motion.settle()
         XCTAssertTrue(motion.bands.isEmpty)
         var cluster = FluidTextMotion(initial: "")

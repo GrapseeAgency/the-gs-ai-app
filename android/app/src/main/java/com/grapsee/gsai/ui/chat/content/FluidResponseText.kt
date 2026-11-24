@@ -1,8 +1,6 @@
 package com.grapsee.gsai.ui.chat.content
 
 import android.animation.ValueAnimator
-import android.graphics.RuntimeShader
-import android.os.Build
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -11,44 +9,47 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.isActive
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.asComposeRenderEffect
-import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.ResolvedTextDirection
 import com.grapsee.gsai.data.SettingsStore
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 
 internal val LocalFluidResponseText = staticCompositionLocalOf { false }
 internal val LocalFluidFreshMount = staticCompositionLocalOf { false }
+internal val LocalFluidNewBlockFloor = staticCompositionLocalOf { Int.MAX_VALUE }
 
 private data class FluidRegion(
     val band: FluidTextBand,
     val path: Path,
     val rect: Rect,
-    val rtl: Boolean,
-    val opticalSafe: Boolean
+    val first: Float,
+    val last: Float,
+    val rtl: Boolean
 )
 
 /**
- * Native Compose text with an append-only, draw-phase feather. No second text
- * layout, invisible buffer, substring replacement, per-character composables
- * or animated paragraph size. The same Text owns links, inline glyphs and layout.
+ * One native shaped Text, including all inline content and accessibility text.
+ * The moving ink front is a draw-phase mask over the actual native glyph layout.
+ * No full-paragraph shader, per-frame RuntimeShader creation or text relayout.
+ * A mounted live node is retained until its existing optical tail settles.
  */
 @Composable
 internal fun FluidResponseText(
@@ -60,33 +61,31 @@ internal fun FluidResponseText(
     softWrap: Boolean = true,
     animate: Boolean = true
 ) {
-    val enabled = animate && LocalFluidResponseText.current &&
-        !SettingsStore.reduceMotion && !SettingsStore.reduceAnimations &&
+    val allowed = !SettingsStore.reduceMotion && !SettingsStore.reduceAnimations &&
         !SettingsStore.highContrast && ValueAnimator.areAnimatorsEnabled()
-    if (!enabled) {
+    val live = animate && LocalFluidResponseText.current && allowed
+    val retained = remember { mutableStateOf(false) }
+    if (!allowed || (!live && !retained.value)) {
+        SideEffect { if (!allowed) retained.value = false }
         Text(text = text, style = style, color = color, inlineContent = inlineContent, modifier = modifier, softWrap = softWrap)
         return
     }
 
     val fresh = LocalFluidFreshMount.current
-    val motion = remember { FluidTextMotion(if (fresh) "" else text.text) }
-    val opticalLayer = rememberGraphicsLayer()
-    // Shader creation is deferred until a real animated range is drawn.
-    val optical = remember {
-        lazy(LazyThreadSafetyMode.NONE) {
-            if (Build.VERSION.SDK_INT >= 33) runCatching { FluidOpticalEffect() }.getOrNull() else null
-        }
-    }
+    val motion = remember { FluidTextMotion(if (live && fresh) "" else text.text) }
     val bands = remember { mutableStateOf(emptyList<FluidTextBand>()) }
-    val clock = remember { mutableLongStateOf(0L) }
+    val clock = remember { mutableLongStateOf(System.nanoTime()) }
     val layout = remember { mutableStateOf<TextLayoutResult?>(null) }
+    val stillLive = rememberUpdatedState(live)
     SideEffect {
-        val now = System.nanoTime()
-        bands.value = motion.update(text.text, now, true)
-        clock.longValue = now
+        if (live) retained.value = true
+        val next = motion.update(text.text, System.nanoTime(), true)
+        bands.value = next
+        if (!live && next.isEmpty()) retained.value = false
     }
-    // The display clock survives incoming chunks. Restarting a coroutine on
-    // every token batch repeatedly lost a frame at the most visible edge.
+
+    // A single clock waits when idle and runs at the actual display cadence.
+    // New tokens cannot restart it; generation completion is not a visual cut.
     LaunchedEffect(Unit) {
         while (isActive) {
             snapshotFlow { bands.value }.first { list ->
@@ -96,6 +95,7 @@ internal fun FluidResponseText(
             do {
                 withFrameNanos { clock.longValue = System.nanoTime() }
             } while (bands.value.any { it.progress(clock.longValue) < 1f })
+            if (!stillLive.value) retained.value = false
         }
     }
 
@@ -108,74 +108,60 @@ internal fun FluidResponseText(
         onTextLayout = { layout.value = it },
         modifier = modifier.drawWithCache {
             val measured = layout.value
-            // Layout and source must describe the same frame. A Markdown
-            // rewrite or an unfinished layout is drawn normally, not masked.
-            val paths = if (measured != null && measured.layoutInput.text.text == text.text) {
-                bands.value.mapNotNull { band ->
-                    if (band.start >= 0 && band.end <= text.length && band.start < band.end)
-                        band to measured.getPathForRange(band.start, band.end)
-                    else null
-                }
-            } else emptyList()
-            // Regions are derived from the native shaped line layout. Never
-            // split a ligature to lay out independent animated letters. Mixed
-            // bidi selections use their exact path mask instead of rectangular
-            // optical filtering that could touch unrelated visual runs.
             val regions = if (measured != null && measured.layoutInput.text.text == text.text) {
-                paths.flatMap { (band, _) ->
-                    val first = measured.getLineForOffset(band.start)
-                    val last = measured.getLineForOffset(band.end - 1)
-                    (first..last).mapNotNull { line ->
-                        val start = maxOf(band.start, measured.getLineStart(line))
-                        val end = minOf(band.end, measured.getLineEnd(line))
-                        if (start >= end) return@mapNotNull null
-                        val path = measured.getPathForRange(start, end)
-                        val rect = path.getBounds()
-                        val direction = measured.getBidiRunDirection(start)
-                        val uniform = (start until end).all { measured.getBidiRunDirection(it) == direction }
-                        FluidRegion(band, path, rect, direction == ResolvedTextDirection.Rtl, uniform)
-                    }
-                }.filter { it.rect.width > 0f && it.rect.height > 0f }
-            } else emptyList()
-            val layerPaint = Paint()
-            val bounds = Rect(0f, 0f, size.width, size.height)
-            var layerRecorded = false
-            onDrawWithContent {
-                val now = clock.longValue
-                if (paths.none { it.first.progress(now) < 1f } || size.width <= 0f || size.height <= 0f ||
-                    size.width * size.height > 3_000_000f) {
-                    // Never allocate a huge transient GPU layer for a pathological
-                    // unbroken paragraph; immediate full-contrast text wins.
-                    drawContent()
-                } else {
-                    // One GPU pass, isolated to incoming glyph regions. A failed
-                    // shader or software canvas keeps the native opacity fallback.
-                    if (drawContext.canvas.nativeCanvas.isHardwareAccelerated && regions.size in 1..16 && regions.all { it.opticalSafe }) {
-                        val effect = optical.value?.effect(regions, now, density)
-                        if (effect != null) {
-                            // Re-record only when the text/layout/ranges change,
-                            // not on each display tick. Animate the existing texture.
-                            if (!layerRecorded) {
-                                opticalLayer.record { this@onDrawWithContent.drawContent() }
-                                layerRecorded = true
-                            }
-                            opticalLayer.renderEffect = effect
-                            drawLayer(opticalLayer)
-                            return@onDrawWithContent
+                bands.value.flatMap { band ->
+                    if (band.start < 0 || band.end > text.length || band.start >= band.end) emptyList()
+                    else {
+                        val firstLine = measured.getLineForOffset(band.start)
+                        val lastLine = measured.getLineForOffset(band.end - 1)
+                        (firstLine..lastLine).mapNotNull { line ->
+                            val start = maxOf(band.start, measured.getLineStart(line))
+                            val end = minOf(band.end, measured.getLineEnd(line))
+                            if (start >= end) return@mapNotNull null
+                            val path = measured.getPathForRange(start, end)
+                            val rect = path.getBounds()
+                            if (rect.width <= 0f || rect.height <= 0f) return@mapNotNull null
+                            FluidRegion(band, path, rect, band.fractionAt(start), band.fractionAt(end),
+                                measured.getBidiRunDirection(start) == ResolvedTextDirection.Rtl)
                         }
                     }
-                    // DstOut is confined to this text's own temporary layer.
-                    // The glass, neighboring words and controls are untouched.
-                    drawContext.canvas.saveLayer(bounds, layerPaint)
+                }
+            } else emptyList()
+            val layerPaint = Paint()
+            val nativeClip = android.graphics.Rect()
+            onDrawWithContent {
+                val now = clock.longValue
+                val active = regions.filter { it.band.progress(now) < 1f }
+                if (active.isEmpty()) {
+                    drawContent()
+                    return@onDrawWithContent
+                }
+                // Isolate the visible part of the arriving ink only. The
+                // settled paragraph is drawn directly outside this layer.
+                // On long answers the offscreen text never allocates a texture.
+                val hasClip = drawContext.canvas.nativeCanvas.getClipBounds(nativeClip)
+                val l = maxOf(0f, active.minOf { it.rect.left } - 1f, if (hasClip) nativeClip.left.toFloat() else 0f)
+                val t = maxOf(0f, active.minOf { it.rect.top } - 1f, if (hasClip) nativeClip.top.toFloat() else 0f)
+                val r = minOf(size.width, active.maxOf { it.rect.right } + 1f, if (hasClip) nativeClip.right.toFloat() else size.width)
+                val b = minOf(size.height, active.maxOf { it.rect.bottom } + 1f, if (hasClip) nativeClip.bottom.toFloat() else size.height)
+                if (r <= l || b <= t) {
+                    drawContent()
+                    return@onDrawWithContent
+                }
+                clipRect(l, t, r, b, clipOp = ClipOp.Difference) {
+                    this@onDrawWithContent.drawContent()
+                }
+                clipRect(l, t, r, b) {
+                    drawContext.canvas.saveLayer(Rect(l, t, r, b), layerPaint)
                     try {
-                        drawContent()
-                        for (region in regions) {
-                            val (band, path, rect, rtl, _) = region
-                            if (band.progress(now) >= 1f) continue
-                            val stops = (0..4).map { j ->
-                                val fraction = j / 4f
-                                val phase = if (rtl) 1f - fraction else fraction
-                                Color.Black.copy(alpha = 1f - band.opacity(now, phase))
+                        this@onDrawWithContent.drawContent()
+                        for (region in active) {
+                            val (band, path, rect, first, last, rtl) = region
+                            if (rect.right <= l || rect.left >= r || rect.bottom <= t || rect.top >= b) continue
+                            val stops = (0..6).map { j ->
+                                val x = j / 6f
+                                val phase = first + (last - first) * if (rtl) 1f - x else x
+                                Color.Black.copy(alpha = (1f - band.opacity(now, phase)).coerceIn(0f, 1f))
                             }
                             drawPath(path, Brush.horizontalGradient(stops, rect.left, rect.right), blendMode = BlendMode.DstOut)
                         }
@@ -186,77 +172,4 @@ internal fun FluidResponseText(
             }
         }
     )
-}
-
-/** Local optical settling, operating on premultiplied text pixels only. */
-@Suppress("NewApi")
-private class FluidOpticalEffect {
-    private val shader = RuntimeShader(
-        """
-        uniform shader source;
-        uniform float4 regions[16];
-        uniform float4 motion[16];
-        uniform float4 activeBounds;
-        half4 main(float2 p) {
-            if (p.x < activeBounds.x || p.y < activeBounds.y ||
-                p.x >= activeBounds.z || p.y >= activeBounds.w) return source.eval(p);
-            for (int i = 0; i < 16; ++i) {
-                float4 r = regions[i];
-                float4 m = motion[i];
-                if (m.w > 0.0 && p.x >= r.x && p.x < r.z && p.y >= r.y && p.y < r.w) {
-                    float along = clamp((p.x - r.x) / max(1.0, r.z - r.x), 0.0, 1.0);
-                    if (m.z < 0.0) along = 1.0 - along;
-                    float t = clamp((m.x - 0.24 * along) / 0.76, 0.0, 1.0);
-                    float ease = t*t*t*(t*(t*6.0-15.0)+10.0);
-                    float softness = (1.0 - t) * (1.0 - t);
-                    float radius = 1.35 * m.y * softness;
-                    float2 lo = r.xy + float2(0.01);
-                    float2 hi = max(lo, r.zw - float2(0.01));
-                    float2 q = p - float2(0.0, 0.65 * m.y * softness);
-                    // A soft optical front in real text space, not a glow or
-                    // simulated character. Fully settled pixels are untouched.
-                    half4 ink = source.eval(clamp(q, lo, hi)) * 0.40;
-                    ink += source.eval(clamp(q + float2(radius, 0.0), lo, hi)) * 0.15;
-                    ink += source.eval(clamp(q - float2(radius, 0.0), lo, hi)) * 0.15;
-                    ink += source.eval(clamp(q + float2(0.0, radius), lo, hi)) * 0.15;
-                    ink += source.eval(clamp(q - float2(0.0, radius), lo, hi)) * 0.15;
-                    return ink * half(0.18 + 0.82 * ease);
-                }
-            }
-            return source.eval(p);
-        }
-        """.trimIndent()
-    )
-    private val regions = FloatArray(64)
-    private val motion = FloatArray(64)
-
-    fun effect(rects: List<FluidRegion>, now: Long, density: Float): androidx.compose.ui.graphics.RenderEffect? {
-        regions.fill(0f); motion.fill(0f)
-        var left = Float.MAX_VALUE
-        var top = Float.MAX_VALUE
-        var right = -Float.MAX_VALUE
-        var bottom = -Float.MAX_VALUE
-        for ((index, item) in rects.withIndex()) {
-            val (band, _, rect, rtl, _) = item
-            val progress = band.progress(now)
-            if (progress >= 1f) continue
-            left = minOf(left, rect.left); top = minOf(top, rect.top)
-            right = maxOf(right, rect.right); bottom = maxOf(bottom, rect.bottom)
-            val at = index * 4
-            regions[at] = rect.left
-            regions[at + 1] = rect.top
-            regions[at + 2] = rect.right
-            regions[at + 3] = rect.bottom
-            motion[at] = progress
-            motion[at + 1] = density
-            motion[at + 2] = if (rtl) -1f else 1f
-            motion[at + 3] = 1f
-        }
-        return runCatching {
-            shader.setFloatUniform("activeBounds", left, top, right, bottom)
-            shader.setFloatUniform("regions", regions)
-            shader.setFloatUniform("motion", motion)
-            android.graphics.RenderEffect.createRuntimeShaderEffect(shader, "source").asComposeRenderEffect()
-        }.getOrNull()
-    }
 }

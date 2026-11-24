@@ -24,18 +24,22 @@ class FluidTextMotionTest {
         assertTrue(motion.update("old new words", 350_000_000L, true).isEmpty())
     }
 
-    @Test fun burstAndRepeatedUpdatesHaveBoundedWork() {
+    @Test fun burstAndRepeatedUpdatesNeverDropUnsettledInk() {
         val motion = FluidTextMotion("")
         val text = "a".repeat(1000)
         val bands = motion.update(text, 1, true)
-        assertEquals(928, bands.first().start)
+        assertEquals(0, bands.first().start)
         assertEquals(1000, bands.last().end)
-        assertTrue(bands.size <= 6)
+        assertTrue(bands.size <= 4)
         var current = text
         repeat(30) {
             current += "x"
-            assertTrue(motion.update(current, 2L + it * 1_000_000L, true).size <= 12)
+            val active = motion.update(current, 2L + it * 1_000_000L, true)
+            assertEquals(bands.first(), active.first())
+            assertEquals(current.length, active.last().end)
+            assertTrue(active.zipWithNext().all { (a, b) -> a.end == b.start })
         }
+        assertTrue(motion.update(current, 600_000_000L, true).isEmpty())
     }
 
     @Test fun opticalFrontMovesAcrossRealInkAndSettlesTogether() {

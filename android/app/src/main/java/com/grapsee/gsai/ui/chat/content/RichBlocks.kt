@@ -212,6 +212,7 @@ fun BlocksContent(
     val freshMount = remember(content, isStreaming) {
         isStreaming && content != prior[0] && content.startsWith(prior[0])
     }
+    val newBlockFloor = if (freshMount) prior[0].length else Int.MAX_VALUE
     SideEffect { prior[0] = content }
     // Recovery must be decided BEFORE parsing, because a successful recovery
     // also removes the model's false "I can't render" sentence from the prose.
@@ -234,7 +235,10 @@ fun BlocksContent(
     // defect. Prose blocks keep selection; every interactive block (widgets,
     // charts, code cards, mermaid, collapsibles, citation chips, tool results)
     // renders OUTSIDE the container and owns its own taps.
-    CompositionLocalProvider(LocalFluidFreshMount provides freshMount) {
+    CompositionLocalProvider(
+        LocalFluidFreshMount provides freshMount,
+        LocalFluidNewBlockFloor provides newBlockFloor
+    ) {
     if (glassAssistant) {
         NexlyAssistantBlocks(
             blocks = blocks,
@@ -655,7 +659,8 @@ private fun StructuredBlockSequenceContent(
             val (titleText, tone, icon) = calloutHeadingMatch
             val bodySpans = if (nextBlock is Block.Paragraph) nextBlock.spans else emptyList()
             key("callout:${block.sourceStart}") {
-                CompositionLocalProvider(LocalFluidResponseText provides (isStreaming && i + 1 >= normalizedBlocks.lastIndex - 1)) {
+                CompositionLocalProvider(LocalFluidResponseText provides (isStreaming && (i + 1 >= normalizedBlocks.lastIndex - 1 ||
+                    nextBlock.sourceStart >= LocalFluidNewBlockFloor.current))) {
                 NexlyCalloutCard(
                     callout = CalloutParsed(
                         tone = tone,
@@ -696,7 +701,8 @@ private fun StructuredBlockSequenceContent(
             key(streamBlockKey(block, i)) {
                 CompositionLocalProvider(
                     LocalSectionListMode provides modeForBlock,
-                    LocalFluidResponseText provides (isStreaming && i >= normalizedBlocks.lastIndex - 1)
+                    LocalFluidResponseText provides (isStreaming && (i >= normalizedBlocks.lastIndex - 1 ||
+                        block.sourceStart >= LocalFluidNewBlockFloor.current))
                 ) {
                     val blockContent: @Composable () -> Unit = {
                         BlockView(

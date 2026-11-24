@@ -20,6 +20,9 @@ internal data class FluidTextBand(
 
     fun opacity(now: Long, position: Float = 0f): Float =
         fluidInkOpacity(localProgress(now, position))
+
+    fun fractionAt(offset: Int): Float =
+        ((offset - start).toFloat() / (end - start).coerceAtLeast(1)).coerceIn(0f, 1f)
 }
 
 internal fun fluidLocalProgress(progress: Float, position: Float): Float =
@@ -84,27 +87,31 @@ internal class FluidTextMotion(initial: String) {
             return if (pos == BreakIterator.DONE) text.length else pos
         }
 
-        val floor = atOrAfter(maxOf(oldLength, text.length - 72))
-        var start = floor
+        // Every received grapheme participates. Group a large packet into
+        // a few longer waves rather than jumping over its leading characters.
+        var start = atOrAfter(oldLength)
+        val groupSize = maxOf(32, (text.length - start + 3) / 4)
         val incoming = mutableListOf<FluidTextBand>()
-        while (start < text.length && incoming.size < 6) {
-            val ideal = minOf(text.length, start + 12)
+        while (start < text.length && incoming.size < 4) {
+            val ideal = minOf(text.length, start + groupSize)
             // Prefer a word boundary near the target. Long/unspaced scripts
             // still use grapheme boundaries; never split an emoji or accent.
             var word = ideal
-            while (word > start + 6 && word < text.length &&
+            while (word > maxOf(start + 1, ideal - 6) && word < text.length &&
                 !text[word - 1].isWhitespace() && !text[word].isWhitespace()) word--
-            val preferred = if (word > start + 6) word else ideal
-            val end = if (incoming.size == 5) text.length else atOrAfter(preferred)
+            val preferred = if (word > maxOf(start + 1, ideal - 6)) word else ideal
+            val end = if (incoming.size == 3) text.length else atOrAfter(preferred)
             if (end <= start) break
             incoming += FluidTextBand(start, end, now + incoming.size * stagger, duration)
             start = end
         }
-        // Large chunks are readable immediately; only the last 72 UTF-16 units
-        // receive a bounded, overlapping feather. Earlier ranges never replay.
-        bands = (alive.filter {
-            it.end > text.length - 72 && atOrAfter(it.start) == it.start && atOrAfter(it.end) == it.end
-        } + incoming).takeLast(12)
+        // An in-flight range is never evicted just because another packet
+        // arrives. Only its own deadline (or a genuine rewrite) settles it.
+        // Cost is time-bounded by the publisher's coalescing interval, with at
+        // most four ranges per received snapshot, not by response length.
+        bands = alive.filter {
+            atOrAfter(it.start) == it.start && atOrAfter(it.end) == it.end
+        } + incoming
         return bands
     }
 }

@@ -7,8 +7,22 @@ private struct FluidResponseStreamingKey: EnvironmentKey {
 private struct FluidFreshMountKey: EnvironmentKey {
     static let defaultValue = false
 }
+private struct FluidMotionAllowedKey: EnvironmentKey {
+    static let defaultValue = true
+}
+private struct FluidNewBlockFloorKey: EnvironmentKey {
+    static let defaultValue = Int.max
+}
 
 extension EnvironmentValues {
+    var fluidMotionAllowed: Bool {
+        get { self[FluidMotionAllowedKey.self] }
+        set { self[FluidMotionAllowedKey.self] = newValue }
+    }
+    var fluidNewBlockFloor: Int {
+        get { self[FluidNewBlockFloorKey.self] }
+        set { self[FluidNewBlockFloorKey.self] = newValue }
+    }
     var fluidFreshMount: Bool {
         get { self[FluidFreshMountKey.self] }
         set { self[FluidFreshMountKey.self] = newValue }
@@ -19,11 +33,15 @@ extension EnvironmentValues {
     }
 }
 
-/// The original attributed text is always present. Only its freshly appended
-/// ranges receive paint-level motion; no artificial pacing or layout animation.
+/// Stable native text identity from arrival through completion. The view's
+/// visual tail owns its deadline; it is not removed when streaming ends.
 struct FluidResponseText: View {
     @Environment(\.fluidResponseStreaming) private var streaming
     @Environment(\.fluidFreshMount) private var freshMount
+    @Environment(\.fluidMotionAllowed) private var motionAllowed
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
+    @State private var motion: FluidTextMotion?
     let value: AttributedString
     let ink: Color
 
@@ -32,38 +50,24 @@ struct FluidResponseText: View {
         self.ink = ink
     }
 
-    var body: some View {
-        if streaming {
-            LiveFluidResponseText(value: value, ink: ink, freshMount: freshMount)
-        } else {
-            Text(value)
-        }
-    }
-}
-
-private struct LiveFluidResponseText: View {
-    let value: AttributedString
-    let ink: Color
-    @State private var motion: FluidTextMotion
-
-    init(value: AttributedString, ink: Color, freshMount: Bool) {
-        self.value = value
-        self.ink = ink
-        _motion = State(initialValue: FluidTextMotion(initial: freshMount ? "" : String(value.characters)))
+    private struct Input: Equatable {
+        let raw: String
+        let streaming: Bool
+        let allowed: Bool
     }
 
     var body: some View {
         let raw = String(value.characters)
         let now = ProcessInfo.processInfo.systemUptime
-        // Derive the next paint synchronously so an arriving chunk cannot
-        // flash at full opacity before the onChange commits its clock.
-        let preview = snapshot(raw, now: now)
+        let allowed = motionAllowed && !reduceMotion && contrast != .increased
+        let active = allowed && (streaming || motion?.bands.isEmpty == false)
+        let input = Input(raw: raw, streaming: streaming, allowed: allowed)
+        let preview = snapshot(raw, now: now, active: active)
+        let deadline = preview.bands.map { $0.born + $0.duration }.max()
         Group {
-            if preview.bands.isEmpty {
+            if !active || preview.bands.isEmpty {
                 Text(value)
             } else if #available(iOS 18.0, *) {
-                // Build the marked runs once per incoming chunk. The display
-                // clock changes only the native renderer, not the text runs.
                 let marked = markedText(bands: preview.bands)
                 TimelineView(.animation) { _ in
                     marked.textRenderer(FluidGlyphRenderer(now: ProcessInfo.processInfo.systemUptime))
@@ -74,23 +78,24 @@ private struct LiveFluidResponseText: View {
                 }
             }
         }
-        .onAppear { motion.update(raw, now: ProcessInfo.processInfo.systemUptime) }
-        .onChange(of: raw) { newValue in
-            motion.update(newValue, now: ProcessInfo.processInfo.systemUptime)
+        .onChange(of: input, initial: true) { _, _ in
+            motion = active ? preview : nil
         }
-        // This task only stops the paint clock. It does not gate text,
-        // network delivery, copying, scrolling or completion.
-        .task(id: raw) {
-            guard !preview.bands.isEmpty else { return }
-            try? await Task.sleep(nanoseconds: 390_000_000)
+        .task(id: deadline) {
+            guard let deadline else { return }
+            let remaining = max(0, deadline - ProcessInfo.processInfo.systemUptime)
+            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000) + 1_000_000)
             guard !Task.isCancelled else { return }
-            motion.settle()
+            // Never discard a later append or restart a completed range.
+            if let latest = motion?.bands.map({ $0.born + $0.duration }).max(), latest <= deadline {
+                motion?.settle()
+            }
         }
     }
 
-    private func snapshot(_ raw: String, now: TimeInterval) -> FluidTextMotion {
-        var next = motion
-        next.update(raw, now: now)
+    private func snapshot(_ raw: String, now: TimeInterval, active: Bool) -> FluidTextMotion {
+        var next = motion ?? FluidTextMotion(initial: active && streaming && freshMount ? "" : raw)
+        next.update(raw, now: now, enabled: active)
         return next
     }
 
@@ -159,35 +164,65 @@ private struct FluidGlyphRenderer: TextRenderer {
     let now: TimeInterval
 
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        // The phase is continuous across native runs and wrapped lines,
+        // including inline bold/link changes. It does not restart at each run.
+        var totals: [FluidTextBand: Int] = [:]
+        for line in layout {
+            for run in line {
+                if let attribute = run[FluidRevealAttribute.self] {
+                    totals[attribute.band, default: 0] += run.count
+                }
+            }
+        }
+        var consumed: [FluidTextBand: Int] = [:]
         for line in layout {
             for run in line {
                 guard let attribute = run[FluidRevealAttribute.self] else {
                     context.draw(run)
                     continue
                 }
-                let progress = attribute.band.progress(at: now)
-                if progress >= 1 {
+                let band = attribute.band
+                let offset = consumed[band, default: 0]
+                let count = max(1, totals[band, default: run.count])
+                consumed[band] = offset + run.count
+                if band.progress(at: now) >= 1 {
                     context.draw(run)
-                } else {
-                    // Draw real positioned glyph slices with a traveling
-                    // optical front. Text shaping, ligatures and layout stay
-                    // native; no letter-by-letter SwiftUI views are created.
-                    let bounds = run.typographicBounds.rect
+                    continue
+                }
+                let bounds = run.typographicBounds.rect
+                let startPhase = Double(offset) / Double(count)
+                let endPhase = Double(offset + run.count) / Double(count)
+                let last = band.localProgress(at: now, position: endPhase)
+                if last >= 1 {
+                    context.draw(run)
+                    continue
+                }
+                // One optical layer per active native run, not one filtered
+                // render pass per letter. The fully settled glyphs are drawn
+                // outside the filter and never move again.
+                var optical = context
+                let softness = (1 - last) * (1 - last)
+                optical.addFilter(.blur(radius: 0.85 * softness))
+                optical.drawLayer { layer in
                     for slice in run {
                         let rect = slice.typographicBounds.rect
                         let x = min(1, max(0, (rect.midX - bounds.minX) / max(1, bounds.width)))
-                        let position = run.layoutDirection == .rightToLeft ? 1 - x : x
-                        let local = attribute.band.localProgress(at: now, position: Double(position))
-                        if local >= 1 {
-                            context.draw(slice)
-                            continue
-                        }
-                        let softness = (1 - local) * (1 - local)
-                        var copy = context
+                        let directed = run.layoutDirection == .rightToLeft ? 1 - x : x
+                        let position = startPhase + (endPhase - startPhase) * Double(directed)
+                        let local = band.localProgress(at: now, position: position)
+                        if local >= 1 { continue }
+                        var copy = layer
                         copy.opacity = fluidInkOpacity(local)
-                        copy.translateBy(x: 0, y: 0.65 * softness)
-                        copy.addFilter(.blur(radius: 1.35 * softness))
                         copy.draw(slice)
+                    }
+                }
+                for slice in run {
+                    let rect = slice.typographicBounds.rect
+                    let x = min(1, max(0, (rect.midX - bounds.minX) / max(1, bounds.width)))
+                    let directed = run.layoutDirection == .rightToLeft ? 1 - x : x
+                    let position = startPhase + (endPhase - startPhase) * Double(directed)
+                    if band.localProgress(at: now, position: position) >= 1 {
+                        context.draw(slice)
                     }
                 }
             }
