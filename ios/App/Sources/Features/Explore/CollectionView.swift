@@ -113,7 +113,7 @@ struct CollectionView: View {
                         Capsule().fill(
                             LinearGradient(colors: [Aero.accentStrong, Aero.accent],
                                            startPoint: .top, endPoint: .bottom)))
-                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
+                    .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.28))
             }
             .buttonStyle(KineticPressStyle())
         }
@@ -127,11 +127,10 @@ struct CollectionView: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(tool.filledTile ? tool.bg : Color.white.opacity(0.66))
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(Color.white.opacity(0.80), lineWidth: 1)
                     NexlyGlyph(name: tool.glyph, size: 16, color: tool.fg)
                 }
                 .frame(width: 36, height: 36)
+                .gsArgentComponentBorder(RoundedRectangle(cornerRadius: 12), fallback: Color.white.opacity(0.80))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(tool.title)
                         .font(.custom(Aero.productName(.medium), size: 12, relativeTo: .footnote))

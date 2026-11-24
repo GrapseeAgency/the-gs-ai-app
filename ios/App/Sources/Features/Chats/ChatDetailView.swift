@@ -1698,12 +1698,9 @@ struct MessageBubble: View, Equatable {
                 .background(
                     Circle().fill(active ? Aero.accent.opacity(0.16) : Color.clear)
                 )
-                .overlay(
-                    Circle().strokeBorder(
-                        active ? Aero.accent.opacity(0.45) : Aero.text.opacity(0.10),
-                        lineWidth: 1
-                    )
-                )
+                .gsArgentComponentBorder(Circle(),
+                    fallback: active ? Aero.accent.opacity(0.45) : Aero.text.opacity(0.10),
+                    preserveBorder: active)
                 .accessibilityLabel(active ? "\(title), selected" : title)
         }
         .buttonStyle(KineticPressStyle())

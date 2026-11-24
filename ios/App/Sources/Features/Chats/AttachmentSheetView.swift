@@ -153,10 +153,9 @@ struct AttachmentSheetView: View {
                 .frame(width: 38, height: 38)
                 .background(
                     Circle().fill(Aero.text.opacity(colorScheme == .dark ? 0.10 : 0.055)))
-                .overlay(
-                    Circle().strokeBorder(
-                        Aero.outline.opacity(colorScheme == .dark ? 0.45 : 0.75),
-                        lineWidth: 0.7))
+                .gsArgentComponentBorder(Circle(),
+                    fallback: Aero.outline.opacity(colorScheme == .dark ? 0.45 : 0.75),
+                    preserveBorder: muted, fallbackWidth: 0.7)
             Text(title)
                 .font(.custom(Aero.productName(.medium), size: 14.5, relativeTo: .body))
                 .foregroundStyle(muted ? Aero.textTertiary : Aero.text)
@@ -256,10 +255,9 @@ struct AttachmentSheetView: View {
                         .background(
                             Capsule().fill(
                                 on ? Aero.accent.opacity(0.14) : Aero.text.opacity(0.04)))
-                        .overlay(
-                            Capsule().strokeBorder(
-                                on ? Aero.accent.opacity(0.42) : Aero.outline.opacity(0.7),
-                                lineWidth: 1))
+                        .gsArgentComponentBorder(Capsule(),
+                            fallback: on ? Aero.accent.opacity(0.42) : Aero.outline.opacity(0.7),
+                            preserveBorder: on)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(mode.label) mode")

@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.grapsee.gsai.ui.chat.content.NexlyGlyph
 import com.grapsee.gsai.ui.components.GsGlassRole
 import com.grapsee.gsai.ui.components.gsGlass
+import com.grapsee.gsai.ui.components.argentComponentBorder
 import com.grapsee.gsai.ui.components.RefCard
 import com.grapsee.gsai.ui.components.RefFootnote
 import com.grapsee.gsai.ui.components.RefGroupHeader
@@ -224,10 +225,9 @@ private fun CollectionToolCard(tool: ExploreTool, onOpen: () -> Unit) {
                 .size(36.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(if (tool.filledTile) tool.tone.bg else Color.White.copy(alpha = if (dark) 0.12f else 0.66f))
-                .border(
-                    1.dp,
-                    Color.White.copy(alpha = if (dark) 0.14f else 0.80f),
-                    RoundedCornerShape(12.dp)
+                .argentComponentBorder(
+                    RoundedCornerShape(12.dp),
+                    Color.White.copy(alpha = if (dark) 0.14f else 0.80f)
                 ),
             contentAlignment = Alignment.Center
         ) {

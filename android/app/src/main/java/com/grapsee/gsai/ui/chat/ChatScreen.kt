@@ -177,6 +177,7 @@ import com.grapsee.gsai.ui.components.GsPopoverRule
 import com.grapsee.gsai.ui.components.OverlaySectionLabel
 import com.grapsee.gsai.ui.components.gsContentWidth
 import com.grapsee.gsai.ui.components.gsGlass
+import com.grapsee.gsai.ui.components.argentComponentBorder
 import com.grapsee.gsai.ui.components.rememberDeviceOffline
 import com.grapsee.gsai.ui.theme.GsMotion
 import com.grapsee.gsai.ui.theme.GsRadius
@@ -3980,10 +3981,9 @@ private fun ModeChip(
                 if (selected) colors.accent.copy(alpha = 0.14f)
                 else colors.textPrimary.copy(alpha = 0.04f)
             )
-            .border(
-                1.dp,
-                if (selected) colors.accent.copy(alpha = 0.42f) else colors.glassBorder.copy(alpha = 0.7f),
-                RoundedCornerShape(99.dp)
+            .then(
+                if (selected) Modifier.border(1.dp, colors.accent.copy(alpha = 0.42f), RoundedCornerShape(99.dp))
+                else Modifier.argentComponentBorder(RoundedCornerShape(99.dp), colors.glassBorder.copy(alpha = 0.7f))
             )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
