@@ -127,17 +127,17 @@ private class GenerateBeamGpu {
             shader.setFloatUniform("uBorderWidth", 1f)
             shader.setFloatUniform("uKind", kind.toFloat())
             shader.setFloatUniform("uEdgeMaskPx", if (inner) 28f else 0f)
-            shader.setFloatUniform("uBlobs", *(if (isBloom) source.emptyBlobs else if (inner) source.inner else source.stroke))
+            shader.setFloatUniform("uBlobs", (if (isBloom) source.emptyBlobs else if (inner) source.inner else source.stroke))
             shader.setFloatUniform("uBlobCount", if (isBloom) 0f else source.blobCount)
             val bg = if (inner) source.emptyBg else if (isBloom) {
                 if (dark) source.darkBloom else source.lightBloom
             } else if (dark) source.darkStroke else source.lightStroke
-            shader.setFloatUniform("uBg", *bg)
+            shader.setFloatUniform("uBg", bg)
             shader.setFloatUniform("uBgCount", if (inner) 0f else if (isBloom) source.bloomCount else source.strokeCount)
             shader.setFloatUniform("uBgIsBlack", if (dark) 0f else 1f)
-            shader.setFloatUniform("uMask", *(if (isBloom) source.emptyMask else source.mask))
+            shader.setFloatUniform("uMask", (if (isBloom) source.emptyMask else source.mask))
             shader.setFloatUniform("uMaskCount", if (isBloom) 0f else source.maskCount)
-            shader.setFloatUniform("uCM", *(if (isBloom) beamMatrix(0f, saturation) else matrix))
+            shader.setFloatUniform("uCM", (if (isBloom) beamMatrix(0f, saturation) else matrix))
             val opacity = if (dark) floatArrayOf(.26f,.42f,.24f) else floatArrayOf(.12f,.26f,.34f)
             shader.setFloatUniform("uOpacity", opacity[kind] * source.strength)
             if (inner && dark) shader.setFloatUniform("uShadowColor", 1f,1f,1f,.27f)

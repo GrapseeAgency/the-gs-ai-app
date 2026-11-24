@@ -113,8 +113,8 @@ private class ArgentRimPainter(private val w:Float,private val h:Float,private v
             try {
                 shader.setFloatUniform("u_res",w,h)
                 shader.setFloatUniform("u_time",time)
-                shader.setFloatUniform("u_light",*light)
-                shader.setFloatUniform("u_dark",*shadow)
+                shader.setFloatUniform("u_light",light)
+                shader.setFloatUniform("u_dark",shadow)
                 shader.setFloatUniform("u_rep",4.5f)
                 shader.setFloatUniform("u_angle",40f*PI.toFloat()/180f)
                 shader.setFloatUniform("u_soft",.3f)

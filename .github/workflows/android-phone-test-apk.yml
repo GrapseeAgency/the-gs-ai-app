@@ -45,6 +45,7 @@ jobs:
             unzip -p "$STABLE" "lib/$ABI/libgs_ffi.so" > "$DEST"
             test -s "$DEST"
           done
+      # Retry after fixing RuntimeShader FloatArray uniform calls (no spread operator).
       - name: Assemble optimized signed phone test APK
         working-directory: android
         run: gradle :app:assembleRelease -PgsTestVersion=0.86.29-phone-test.4 --max-workers=2 --stacktrace
