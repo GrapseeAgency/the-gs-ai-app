@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { explicitCalculation, executeCalculation, calculationEvidence } from './turn-calculator'
+import { explicitCalculation, executeCalculation, calculationEvidence, standaloneCalculation } from './turn-calculator'
 describe('read-only calculation tool', () => {
   test('executes real arithmetic with precedence', () => {
     expect(executeCalculation('(1250*0.18)+37')).toEqual({expression:'(1250*0.18)+37',ok:true,value:262})
@@ -17,4 +17,11 @@ describe('read-only calculation tool', () => {
   test('failed operations are explicitly marked', () => {
     expect(calculationEvidence([executeCalculation('1/0')])).toContain('"ok":false')
   })
+})
+
+test('provider-independent arithmetic cannot bypass prior instructions or attachments',()=>{
+  const standalone={content:'Calculate 2+2',hasHistory:false,hasAttachments:false,hasAssistant:false,hasContext:false}
+  expect(standaloneCalculation(standalone)).toBe('2+2')
+  for(const key of ['hasHistory','hasAttachments','hasAssistant','hasContext'] as const)
+    expect(standaloneCalculation({...standalone,[key]:true})).toBeNull()
 })

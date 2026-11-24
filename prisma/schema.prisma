@@ -268,6 +268,7 @@ model TurnRun {
   error              String?
   attempts           Int       @default(0)
   retryNotBefore     DateTime? // durable provider Retry-After + local backoff
+  requiresProvider   Boolean   @default(true) // false only for proven local execution
   leaseOwner         String? // worker instance holding this run (stuck-job recovery)
   leaseExpiresAt     DateTime?
   // JSON map: sha256(runId+seq+tool+args) -> result digest. Stable across

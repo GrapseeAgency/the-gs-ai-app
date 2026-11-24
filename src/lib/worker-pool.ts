@@ -27,7 +27,9 @@ import { appendEvent } from '@/lib/turn-events'
 import { publishEnd } from '@/lib/stream-broker'
 import { produceRun } from '@/lib/turn-producer'
 import { loadKeyPool } from '@/lib/keypool'
-import { freeOnlyEnabled, queuedRunIsDue } from '@/lib/capacity-policy'
+import { freeOnlyEnabled } from '@/lib/capacity-policy'
+import { selectDueRuns } from '@/lib/run-store'
+import { openRouterCapacityAvailable } from '@/lib/openrouter'
 import { ensureProviderCatalogSync } from '@/lib/provider-catalog-store'
 import { hasEligibleDirectFreeCatalogRoute } from '@/lib/catalog-router'
 
@@ -48,7 +50,7 @@ async function freeCapacityAvailable(): Promise<boolean> {
     return freeCapacityCache.available
   }
   const pool = await loadKeyPool()
-  const available = pool.keys.length > 0 || hasEligibleDirectFreeCatalogRoute()
+  const available = openRouterCapacityAvailable(pool.keys) || hasEligibleDirectFreeCatalogRoute()
   freeCapacityCache = { checkedAt: now, available }
   return available
 }
@@ -59,20 +61,8 @@ async function tick(): Promise<void> {
   if (!loop) return
   if (loop.active >= WORKER_CONCURRENCY) return
   try {
-    const now = new Date()
-    const candidates = await db.turnRun.findMany({
-      // Exclude delayed rows BEFORE the bounded batch selection, so a
-      // daily-quota backlog cannot starve a newly queued request.
-      where: {status:'queued',OR:[{retryNotBefore:null},{retryNotBefore:{lte:now}}]},
-      orderBy: { createdAt: 'asc' },
-      take: Math.max(4, (WORKER_CONCURRENCY - loop.active) * 4),
-    })
-    const due = candidates.filter((candidate) => queuedRunIsDue(candidate.updatedAt, candidate.attempts, now.getTime(), candidate.retryNotBefore))
-    if (due.length === 0) return
     const hasCapacity = await freeCapacityAvailable()
-    // A persisted answer is recovered without a model, even during a
-    // provider outage. The producer must not call prepareTurn for it.
-    const runnable = hasCapacity ? due : due.filter(candidate=>candidate.assistantMessageId !== null)
+    const runnable = await selectDueRuns(hasCapacity,Math.max(4,(WORKER_CONCURRENCY-loop.active)*4))
     if (!runnable.length) return
     for (const candidate of runnable) {
       if (loop.active >= WORKER_CONCURRENCY) break

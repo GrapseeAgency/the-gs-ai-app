@@ -172,6 +172,7 @@ export async function POST(req: NextRequest) {
     streamId,
     conversationId,
     userMessageId: prepared.prep.userMessage.id,
+    requiresProvider: !prepared.prep.localExactCalculation,
     startFacts: {
       conversationId, content, attachmentIds, timezone, clientVersion, mode, turnContext,
       userMessageId: prepared.prep.userMessage.id,

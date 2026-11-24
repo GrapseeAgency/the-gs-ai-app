@@ -188,6 +188,9 @@ function keyIsCooled(key: string): boolean {
 // Shared across completion, streaming, tool requests and health checks in
 // this process. Never retry a 429 by walking keys or switching models.
 const providerRateLimit = new ProviderRateLimit()
+export function openRouterCapacityAvailable(keys: readonly string[]): boolean {
+  return providerRateLimit.remaining() === 0 && keys.some(key=>!keyIsCooled(key))
+}
 function checkProviderCooldown(): void {
   const remaining = providerRateLimit.remaining()
   if (remaining > 0) throw new FreeCapacityUnavailableError('Free provider is rate limited.', remaining)

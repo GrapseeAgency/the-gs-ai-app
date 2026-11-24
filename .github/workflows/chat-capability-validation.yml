@@ -8,6 +8,7 @@ on:
       - 'src/lib/turn-executor.ts'
       - 'src/lib/turn-producer.ts'
       - 'src/lib/run-store*.ts'
+      - 'src/lib/turn-local.integration.test.ts'
       - 'src/lib/worker-pool.ts'
       - 'src/app/api/v1/messages/start/route.ts'
       - 'src/lib/provider-sse*.ts'
@@ -61,6 +62,9 @@ jobs:
     env:
       DATABASE_URL: file:/tmp/gs-durable-regression.db
       GS_RUN_STORE_TEST: '1'
+      GS_FREE_ONLY: '1'
+      GS_CATALOG_AUTO_FAST_PATH: '0'
+      GS_REMOTE_TOOLS: '0'
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -73,7 +77,9 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npx prisma generate && npx prisma db push --skip-generate
       - name: Real SQLite durable execution regression
-        run: bun test src/lib/run-store.integration.test.ts
+        run: |
+          bun test src/lib/run-store.integration.test.ts
+          bun test src/lib/turn-local.integration.test.ts
   model-benchmark:
     # Live requests are explicit: do not spend the shared free-provider quota
     # on every source-only commit, particularly during a Retry-After window.

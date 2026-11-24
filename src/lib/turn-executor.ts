@@ -159,7 +159,7 @@ import { runBranchingResearch } from '@/lib/research/branching'
 import { crystallizeIfNeeded } from '@/lib/context-crystallize'
 import { plannerHistory } from '@/lib/search/planner-context'
 import { attachmentMatchesTurn } from '@/lib/turn-resume'
-import { explicitCalculation, executeCalculation, calculationEvidence, type CalculationResult } from '@/lib/calc/turn-calculator'
+import { explicitCalculation, executeCalculation, calculationEvidence, standaloneCalculation, type CalculationResult } from '@/lib/calc/turn-calculator'
 import { needsQualityChain } from '@/lib/quality-routing'
 import {
   NOOP_EMIT,
@@ -231,6 +231,7 @@ export type Prep = {
    */
   autoTitle: string | null
   baseSystemPrompt: string
+  localExactCalculation: string | null
   history: {
     id: string
     role: string
@@ -739,6 +740,10 @@ export async function prepareTurn(
     },
     autoTitle,
     baseSystemPrompt,
+    localExactCalculation: standaloneCalculation({
+      content, hasHistory:history.length > 0, hasAttachments:attachmentsProvided || useVision || !!docContext.block,
+      hasAssistant:!!conversation.assistantId, hasContext:!!clientContext,
+    }),
     history,
     // Prisma's history row carries the full attachment columns; the prep
     // contract deliberately exposes only the three the row text needs.
@@ -790,7 +795,7 @@ export async function prepareTurn(
 
   // CAPABILITY REGISTRY — BLOCKED guard (verbatim; unreachable while every
   // capability has a measured model, but the honest refusal is preserved).
-  if (routerPlan.route === 'BLOCKED') {
+  if (routerPlan.route === 'BLOCKED' && !prep.localExactCalculation) {
     prep.gsCapLog('blocked', null, { error: routerPlan.reason })
     console.warn(`GS-ROUTER-BLOCKED conv=${id} reason=${routerPlan.reason}`)
     return {
@@ -2039,7 +2044,7 @@ async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: Abor
     // Historical instructions or assistant customization may require a
     // particular explanation/format. Keep the result as evidence in those
     // cases rather than bypassing the user's requested presentation.
-    const exact = history.length === 0 && !prep.conversation.assistantId && directExpression && calculationResults.length === 1 &&
+    const exact = prep.localExactCalculation === directExpression && directExpression && calculationResults.length === 1 &&
       calculationResults[0].expression === directExpression && calculationResults[0].ok
       ? calculationResults[0].value : null
     if (exact !== null && !docContext.block && !useVision && turn.kind === 'none') {

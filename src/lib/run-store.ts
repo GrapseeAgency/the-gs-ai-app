@@ -18,7 +18,7 @@
 import { createHash } from 'crypto'
 import { db } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
-import { nextFreeAttemptAt } from './capacity-policy'
+import { nextFreeAttemptAt, queuedRunIsDue } from './capacity-policy'
 
 export type RunStatus =
   | 'queued'
@@ -87,6 +87,7 @@ export async function createRun(input: {
   conversationId: string
   userMessageId?: string | null
   startFacts?: Record<string, unknown>
+  requiresProvider?: boolean
 }): Promise<RunRecord> {
   const create = db.turnRun.create({
     data: {
@@ -95,6 +96,7 @@ export async function createRun(input: {
       conversationId: input.conversationId,
       userMessageId: input.userMessageId ?? null,
       status: 'queued',
+      requiresProvider: input.requiresProvider ?? true,
     },
   })
   // A worker must never observe a queued row before its original request
@@ -110,6 +112,20 @@ export async function createRun(input: {
 export async function getRun(runId: string): Promise<RunRecord | null> {
   const row = await db.turnRun.findUnique({ where: { id: runId } })
   return row ? toRecord(row) : null
+}
+
+/** Select actual due work before the bounded batch. Local-only runs and
+ * persisted-answer recovery cannot be starved by a queue of remote work. */
+export async function selectDueRuns(providerAvailable:boolean, limit:number, now = new Date()) {
+  const candidates = await db.turnRun.findMany({
+    where: {status:'queued', AND:[
+      {OR:[{retryNotBefore:null},{retryNotBefore:{lte:now}}]},
+      ...(providerAvailable ? [] : [{OR:[{requiresProvider:false},{assistantMessageId:{not:null}}]}]),
+    ]},
+    orderBy:{createdAt:'asc'},
+    take:Math.max(1,limit),
+  })
+  return candidates.filter(row=>queuedRunIsDue(row.updatedAt,row.attempts,now.getTime(),row.retryNotBefore))
 }
 
 export async function getRunByStream(streamId: string): Promise<RunRecord | null> {
@@ -186,6 +202,7 @@ export async function requeueRun(runId: string, reason: string, attempt?: number
     data: {
       status: 'queued', finalStatus: null, error: reason.slice(0, 1000),
       retryNotBefore: nextFreeAttemptAt(attempt ?? 0, retryAfterMs),
+      requiresProvider: true,
       leaseOwner: null, leaseExpiresAt: null,
     },
   })

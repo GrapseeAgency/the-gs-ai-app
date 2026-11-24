@@ -42,3 +42,12 @@ export function calculationEvidence(results: readonly CalculationResult[]): stri
   return 'CALCULATOR RESULTS — actual read-only application execution (IEEE 754 numeric arithmetic). Use a result only if its expression correctly represents the user’s request; never treat a failed calculation as a value.\n' +
     results.map(result => JSON.stringify(result)).join('\n')
 }
+
+/** Only context-free arithmetic may bypass model synthesis. Context-bearing
+ * requests still receive the exact result as evidence and honor instructions. */
+export function standaloneCalculation(input: {
+  content:string; hasHistory:boolean; hasAttachments:boolean; hasAssistant:boolean; hasContext:boolean;
+}): string | null {
+  if (input.hasHistory || input.hasAttachments || input.hasAssistant || input.hasContext) return null
+  return explicitCalculation(input.content)
+}
