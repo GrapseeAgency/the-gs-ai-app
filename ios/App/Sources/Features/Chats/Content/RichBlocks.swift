@@ -446,6 +446,9 @@ private func promoteStandaloneBoldHeadingsIOS(_ rawBlocks: [Block]) -> [Block] {
 
 private struct StructuredProseSequenceView: View {
     @Environment(\.gsWidgetAction) private var widgetAction
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
+    @ObservedObject private var motionSettings = SettingsStore.shared
     let prose: [Block]
     let isStreaming: Bool
     let citations: [Int: String]
@@ -464,6 +467,11 @@ private struct StructuredProseSequenceView: View {
 
     private var normalizedProse: [Block] {
         promoteStandaloneBoldHeadingsIOS(prose)
+    }
+
+    private var fluidMotionEnabled: Bool {
+        isStreaming && !reduceMotion && !motionSettings.reduceMotion &&
+            !motionSettings.reduceAnimations && !motionSettings.highContrast && contrast != .increased
     }
 
     private var visibleDashboardTab: String {
@@ -629,9 +637,11 @@ private struct StructuredProseSequenceView: View {
                     NexlyQuickCalculatorCardView(spec: calc)
                 } else if let (callout, extraItems) = entry.coalescedCallout {
                     NexlyCalloutCardView(callout: callout, extraItems: extraItems, citations: citations)
+                        .environment(\.fluidResponseStreaming, fluidMotionEnabled && entry.index + entry.consumedCount == normalizedProse.count)
                 } else {
                     BlockView(block: entry.block, isLast: entry.index == prose.count - 1, citations: citations)
                         .environment(\.nexlySectionListMode, entry.sectionMode)
+                        .environment(\.fluidResponseStreaming, fluidMotionEnabled && entry.index + entry.consumedCount == normalizedProse.count)
                 }
             }
             if isStatusHost && showStatus && entry.index <= statusHostIndex && statusHostIndex < entry.index + entry.consumedCount {
@@ -1335,7 +1345,7 @@ private struct NexlyCalloutCardView: View {
                     .foregroundStyle(titleColor)
                     .fixedSize(horizontal: false, vertical: true)
                 if !callout.bodySpans.isEmpty {
-                    Text(attributed(from: callout.bodySpans, theme: theme))
+                    FluidResponseText(attributed(from: callout.bodySpans, theme: theme), ink: bodyColor)
                         .font(.system(size: compact ? 13 : 14, weight: .regular))
                         .foregroundStyle(bodyColor)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2187,7 +2197,7 @@ private struct ParagraphView: View {
                 // Ordinary prose keeps a leading custom emoji/icon inline with
                 // its sentence. Glass tiles remain reserved for actual structured
                 // card/step icons, not every glyph at the start of a paragraph.
-                Text(attributed(from: spans, theme: theme))
+                FluidResponseText(attributed(from: spans, theme: theme), ink: theme.textColor)
                     .font(compact ? .system(size: 13, weight: .regular) : Aero.body())
                     .lineSpacing(compact ? 2 : 0)
                     .foregroundStyle(compact ? NexlyInk.prose : Aero.text)
@@ -2258,7 +2268,7 @@ private struct HeadingView: View {
                         glyphSize: level == 2 ? 15 : 13
                     )
                 }
-                Text(attributed(from: cleanedSpans, theme: theme))
+                FluidResponseText(attributed(from: cleanedSpans, theme: theme), ink: theme.textColor)
                     .font(font)
                     .foregroundStyle(compact ? NexlyInk.title : (level == 6 ? Aero.textSecondary : Aero.text))
                     .textSelection(.enabled)

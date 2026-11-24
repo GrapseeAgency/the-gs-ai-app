@@ -645,6 +645,7 @@ private fun StructuredBlockSequenceContent(
             val (titleText, tone, icon) = calloutHeadingMatch
             val bodySpans = if (nextBlock is Block.Paragraph) nextBlock.spans else emptyList()
             key("callout:${block.sourceStart}") {
+                CompositionLocalProvider(LocalFluidResponseText provides (isStreaming && i + 1 == normalizedBlocks.lastIndex)) {
                 NexlyCalloutCard(
                     callout = CalloutParsed(
                         tone = tone,
@@ -663,6 +664,7 @@ private fun StructuredBlockSequenceContent(
                         }
                     } else null
                 )
+                }
             }
             if (statusCard != null && (i == statusHostIndex || i + 1 == statusHostIndex)) {
                 onStatusPlaced()
@@ -682,7 +684,10 @@ private fun StructuredBlockSequenceContent(
         if (!skipForTab) {
             val modeForBlock = currentSectionMode
             key(streamBlockKey(block, i)) {
-                CompositionLocalProvider(LocalSectionListMode provides modeForBlock) {
+                CompositionLocalProvider(
+                    LocalSectionListMode provides modeForBlock,
+                    LocalFluidResponseText provides (isStreaming && i == normalizedBlocks.lastIndex)
+                ) {
                     val blockContent: @Composable () -> Unit = {
                         BlockView(
                             block = block,
@@ -1481,7 +1486,7 @@ private fun NexlyCalloutCard(
                     requestedFontSize = bodyStyle.fontSize,
                     requestedGlyphColor = bodyColor
                 )
-                Text(
+                FluidResponseText(
                     text = bodyText,
                     style = bodyStyle,
                     color = bodyColor,
@@ -1513,7 +1518,7 @@ private fun ParagraphBlock(
     val ink = compact?.color ?: MaterialTheme.colorScheme.onSurface
     val theme = rememberSpanTheme(bodyStyle.fontSize, citationUrls, ink)
     val styled = remember(block.spans, theme, showCaret) {
-        spansToAnnotatedString(block.spans, theme, showCaret)
+        spansToAnnotatedString(block.spans, theme)
     }
     val inlineContent = rememberNexlyInlineContent(
         styled = styled,
@@ -1521,7 +1526,7 @@ private fun ParagraphBlock(
         requestedGlyphColor = ink
     )
     val text = @Composable {
-        Text(
+        FluidResponseText(
             text = styled,
             style = bodyStyle,
             color = ink,
@@ -1599,7 +1604,7 @@ private fun HeadingBlock(block: Block.Heading, isFirst: Boolean, citationUrls: M
                     )
                     Spacer(Modifier.width(7.dp))
                 }
-                Text(
+                FluidResponseText(
                     text = styled,
                     style = style,
                     color = headingInk,
@@ -2692,7 +2697,7 @@ private fun InteractiveChecklistItemRow(
                 requestedFontSize = bodyStyle.fontSize,
                 requestedGlyphColor = ink
             )
-            Text(
+            FluidResponseText(
                 text = styled,
                 style = bodyStyle.copy(
                     textDecoration = if (checked) TextDecoration.LineThrough else TextDecoration.None
@@ -2972,7 +2977,7 @@ private fun StepOrderedListItemRow(
                         requestedFontSize = detailStyle.fontSize,
                         requestedGlyphColor = detailInk
                     )
-                    Text(
+                    FluidResponseText(
                         text = detailStyled,
                         style = detailStyle,
                         color = detailInk,
@@ -2985,7 +2990,7 @@ private fun StepOrderedListItemRow(
                         requestedFontSize = bodyStyle.fontSize,
                         requestedGlyphColor = ink
                     )
-                    Text(
+                    FluidResponseText(
                         text = styled,
                         style = bodyStyle.copy(
                             textDecoration = if (completed) TextDecoration.LineThrough else TextDecoration.None
@@ -3049,7 +3054,7 @@ private fun ListItemRow(
                 )
             }
             val content = @Composable {
-                Text(
+                FluidResponseText(
                     text = styled,
                     style = bodyStyle,
                     color = ink,
