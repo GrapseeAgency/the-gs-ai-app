@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.settings
 
+import com.grapsee.gsai.ui.components.argentComponentBorder
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -64,11 +66,7 @@ fun AssistantAvatarSettingsScreen(onBack: () -> Unit) {
                                         if (selected) colors.accentSoft.copy(alpha = 0.18f)
                                         else colors.raisedSurface,
                                     )
-                                    .border(
-                                        width = if (selected) 1.5.dp else 1.dp,
-                                        color = if (selected) colors.accentStrong else colors.borderStrong,
-                                        shape = RoundedCornerShape(18.dp),
-                                    )
+                                    .then(if (selected) Modifier.border(1.5.dp, colors.accentStrong, RoundedCornerShape(18.dp)) else Modifier.argentComponentBorder(RoundedCornerShape(18.dp), colors.borderStrong))
                                     .selectable(
                                         selected = selected,
                                         role = Role.RadioButton,

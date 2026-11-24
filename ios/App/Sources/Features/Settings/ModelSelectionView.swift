@@ -144,7 +144,7 @@ struct ModelSelectionView: View {
         }
         .padding(4)
         .background(RoundedRectangle(cornerRadius: 18).fill(.white.opacity(scheme == .dark ? 0.10 : 0.42)))
-        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(scheme == .dark ? 0.22 : 0.92), lineWidth: 1.2))
+        .gsArgentComponentBorder(RoundedRectangle(cornerRadius: 18), fallback: Color.white.opacity(scheme == .dark ? 0.22 : 0.92), fallbackWidth: 1.2)
     }
 
     private var availableHeader: some View {
@@ -215,13 +215,7 @@ struct ModelSelectionView: View {
                             : .white.opacity(scheme == .dark ? 0.07 : 0.40)
                     )
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .strokeBorder(
-                        isSelected ? Aero.refAccent.opacity(0.55) : .white.opacity(scheme == .dark ? 0.10 : 0.55),
-                        lineWidth: isSelected ? 1.2 : 1
-                    )
-            )
+            .gsArgentComponentBorder(RoundedRectangle(cornerRadius: 20), fallback: isSelected ? Aero.refAccent.opacity(0.55) : Color.white.opacity(scheme == .dark ? 0.10 : 0.55), preserveBorder: isSelected, fallbackWidth: isSelected ? 1.2 : 1)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(model.title), \(isSelected ? "selected" : "not selected")")
@@ -359,7 +353,7 @@ struct ModelSelectionView: View {
         }
         .padding(4)
         .background(Capsule().fill(.white.opacity(scheme == .dark ? 0.10 : 0.55)))
-        .overlay(Capsule().strokeBorder(.white.opacity(scheme == .dark ? 0.14 : 0.70), lineWidth: 1))
+        .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(scheme == .dark ? 0.14 : 0.70))
     }
 
     private var continueButton: some View {

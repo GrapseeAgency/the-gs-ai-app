@@ -1,3 +1,4 @@
+import java.io.File
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -416,17 +417,28 @@ tasks.register("bundleAuthenticBotAvatars") {
     )
     outputs.dir(originalAvatarAssets)
     doLast {
+        // Use the runner's installed browser when available, exactly as the
+        // signed phone-test workflow does. Keep the pinned Playwright install
+        // as the fallback for machines without Chrome.
+        val browser = System.getenv("GS_AVATAR_CHROMIUM_EXECUTABLE")?.takeIf { it.isNotBlank() }
+            ?: listOf("google-chrome", "google-chrome-stable", "chromium", "chromium-browser")
+                .firstNotNullOfOrNull { name ->
+                    System.getenv("PATH").orEmpty().split(File.pathSeparator)
+                        .map { File(it, name) }
+                        .firstOrNull { it.isFile && it.canExecute() }?.absolutePath
+                }
         fun invoke(vararg parts: String) {
-            val process = ProcessBuilder(*parts)
+            val builder = ProcessBuilder(*parts)
                 .directory(botAvatarDir)
                 .inheritIO()
-                .start()
+            if (browser != null) builder.environment()["GS_AVATAR_CHROMIUM_EXECUTABLE"] = browser
+            val process = builder.start()
             check(process.waitFor() == 0) {
                 "Cannot generate original bot-avatars assets: " + parts.joinToString(" ")
             }
         }
         invoke("npm", "install", "--no-audit", "--no-fund")
-        if (System.getenv("GS_AVATAR_CHROMIUM_EXECUTABLE").isNullOrBlank()) {
+        if (browser == null) {
             invoke("npm", "exec", "--", "playwright", "install", "chromium")
         }
         val output = originalAvatarAssets.get().asFile

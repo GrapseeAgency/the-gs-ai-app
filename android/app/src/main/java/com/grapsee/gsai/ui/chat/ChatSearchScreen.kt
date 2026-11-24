@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.chat
 
+import com.grapsee.gsai.ui.components.argentComponentBorder
+
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -607,11 +609,7 @@ private fun FilterButton(active: Boolean, onClick: () -> Unit) {
                 if (active) colors.accentSoft else colors.glassSurface.copy(alpha = 0.55f),
                 CircleShape,
             )
-            .border(
-                1.dp,
-                if (active) colors.accent.copy(alpha = 0.40f) else colors.glassBorder,
-                CircleShape,
-            )
+            .then(if (active) Modifier.border(1.dp, colors.accent.copy(alpha = 0.40f), CircleShape) else Modifier.argentComponentBorder(CircleShape, colors.glassBorder))
             .clickable(role = Role.Button, onClickLabel = "Search filters", onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

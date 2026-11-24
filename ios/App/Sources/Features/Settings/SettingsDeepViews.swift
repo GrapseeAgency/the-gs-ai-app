@@ -210,10 +210,7 @@ struct SpeechEngineView: View {
                         .frame(height: 32)
                         .background(
                             Capsule().fill(on ? Aero.accent.opacity(0.14) : Aero.text.opacity(0.04)))
-                        .overlay(
-                            Capsule().strokeBorder(
-                                on ? Aero.accent.opacity(0.42) : Aero.outline.opacity(0.7),
-                                lineWidth: 1))
+                        .gsArgentComponentBorder(Capsule(), fallback: on ? Aero.accent.opacity(0.42) : Aero.outline.opacity(0.7), preserveBorder: on)
                 }
                 .buttonStyle(KineticPressStyle())
                 .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)

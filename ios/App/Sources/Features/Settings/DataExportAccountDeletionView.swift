@@ -314,12 +314,7 @@ struct DataExportAccountDeletionView: View {
                             ? selectedTileFill
                             : Color.white.opacity(colorScheme == .dark ? 0.10 : 0.42))
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(
-                        selected ? Aero.refAccent.opacity(0.45) : Color.white.opacity(0.62),
-                        lineWidth: 1)
-            )
+            .gsArgentComponentBorder(RoundedRectangle(cornerRadius: 16), fallback: selected ? Aero.refAccent.opacity(0.45) : Color.white.opacity(0.62), preserveBorder: selected)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -348,7 +343,7 @@ struct DataExportAccountDeletionView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .background(Capsule().fill(Aero.refAccentSoft))
-        .overlay(Capsule().strokeBorder(.white.opacity(0.85), lineWidth: 1))
+        .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.85))
     }
 
     /// The mock draws the archive row's download as a solid spring-green

@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.attachment
 
+import com.grapsee.gsai.ui.components.argentComponentBorder
+
 import android.content.Intent
 import android.widget.Toast
 import androidx.core.content.FileProvider
@@ -139,8 +141,8 @@ private fun AttachmentChip(
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = .72f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f)),
-        modifier = Modifier.padding(end = 10.dp).width(if (visual) (edge + 16).dp else 256.dp).animateContentSize()
+        border = null,
+        modifier = Modifier.padding(end = 10.dp).width(if (visual) (edge + 16).dp else 256.dp).animateContentSize().argentComponentBorder(RoundedCornerShape(20.dp), MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
     ) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (visual) {

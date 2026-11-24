@@ -66,10 +66,7 @@ struct AssistantAvatarSettingsView: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(isSelected ? Aero.accent.opacity(0.12) : Aero.container)
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(isSelected ? Aero.accent : Aero.outline, lineWidth: isSelected ? 1.5 : 1)
-            }
+            .gsArgentComponentBorder(RoundedRectangle(cornerRadius: 18, style: .continuous), fallback: isSelected ? Aero.accent : Aero.outline, preserveBorder: isSelected, fallbackWidth: isSelected ? 1.5 : 1)
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityLabel("\(style.title) bot avatar")

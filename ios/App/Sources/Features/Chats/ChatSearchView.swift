@@ -212,7 +212,7 @@ struct ChatSearchView: View {
             .padding(.horizontal, 14)
             .frame(height: 46)
             .background(Capsule().fill(.white.opacity(0.55)))
-            .overlay(Capsule().strokeBorder(.white.opacity(0.70), lineWidth: 1))
+            .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.70))
 
             Button { showFacets = true } label: {
                 NexlyGlyph(
@@ -226,12 +226,7 @@ struct ChatSearchView: View {
                         archivedOnly || filesOnly
                             ? Aero.accentSoft
                             : Color.white.opacity(0.55)))
-                .overlay(
-                    Circle().strokeBorder(
-                        archivedOnly || filesOnly
-                            ? Aero.accent.opacity(0.40)
-                            : Color.white.opacity(0.70),
-                        lineWidth: 1))
+                .gsArgentComponentBorder(Circle(), fallback: archivedOnly || filesOnly ? Aero.accent.opacity(0.40) : Color.white.opacity(0.70), preserveBorder: archivedOnly || filesOnly)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Search filters")
@@ -279,10 +274,7 @@ struct ChatSearchView: View {
             .padding(.vertical, 7)
             .background(
                 Capsule().fill(selected ? Aero.accentSoft : Color.white.opacity(0.50)))
-            .overlay(
-                Capsule().strokeBorder(
-                    selected ? Aero.accent.opacity(0.35) : Color.white.opacity(0.65),
-                    lineWidth: 1))
+            .gsArgentComponentBorder(Capsule(), fallback: selected ? Aero.accent.opacity(0.35) : Color.white.opacity(0.65), preserveBorder: selected)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

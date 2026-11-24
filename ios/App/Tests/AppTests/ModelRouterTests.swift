@@ -1,10 +1,8 @@
 import XCTest
 @testable import GSApp
 
-/// The rule behind the Model Selection page's two controls — the iOS half of
-/// Android's `ModelRouterTest`. It is a pure function on purpose: the reference
-/// draws Auto Select ON and Medium lit at once, and this is what makes that
-/// pair mean something instead of two stored values nothing reads.
+/// The model preference catalogue and actual server-supported wire-mode contract.
+/// Auto delegates provider choice to the server, never to client-side guesses.
 ///
 /// `@MainActor` because the last test drives `SettingsStore.shared`, whose
 /// published properties are main-actor isolated — the same reason
@@ -12,30 +10,10 @@ import XCTest
 @MainActor
 final class ModelRouterTests: XCTestCase {
 
-    func testAnImageAlwaysWantsTheVisionModel() {
-        XCTAssertEqual(
-            ModelRouter.pick(text: "make this brighter", hasImage: true, preferred: .pro),
-            .vision)
-        XCTAssertEqual(
-            ModelRouter.pick(text: "compile this", hasImage: true, preferred: .code),
-            .vision)
-    }
-
-    func testACodeSignalBeatsLengthAndPreference() {
-        XCTAssertEqual(
-            ModelRouter.pick(text: "```func main() {}```", hasImage: false, preferred: .lite),
-            .code)
-        XCTAssertEqual(
-            ModelRouter.pick(text: "why does this stack trace appear", hasImage: false, preferred: .pro),
-            .code)
-    }
-
-    func testALongMessageIsComplexAndShortOnesKeepThePreference() {
-        let long = String(repeating: "word ", count: 60)
-        XCTAssertEqual(ModelRouter.pick(text: long, hasImage: false, preferred: .lite), .pro)
-        XCTAssertEqual(
-            ModelRouter.pick(text: "what's the weather", hasImage: false, preferred: .lite),
-            .lite)
+    func testAutoDelegatesModelSelectionToServerRegardlessOfStoredEffort() {
+        for effort in ["minimal", "low", "standard", "high"] {
+            XCTAssertEqual(ModelRouter.modeForMessage(effort: effort, autoSelect: true), "auto")
+        }
     }
 
     func testEffortMapsToTheThreeWireModes() {
@@ -45,17 +23,10 @@ final class ModelRouterTests: XCTestCase {
         XCTAssertEqual(ModelRouter.mode(for: "high"), "thinking")
     }
 
-    func testAutoSelectTakesTheModelsEffortAndOffTakesTheReaders() {
-        XCTAssertEqual(
-            ModelRouter.modeForMessage(
-                text: "please debug this python", hasImage: false,
-                preferred: .pro, effort: "minimal", autoSelect: true),
-            "thinking")
-        XCTAssertEqual(
-            ModelRouter.modeForMessage(
-                text: "please debug this python", hasImage: false,
-                preferred: .pro, effort: "minimal", autoSelect: false),
-            "flash")
+    func testManualModeUsesReadersEffortWithoutGuessingProvider() {
+        XCTAssertEqual(ModelRouter.modeForMessage(effort: "minimal", autoSelect: false), "flash")
+        XCTAssertEqual(ModelRouter.modeForMessage(effort: "high", autoSelect: false), "thinking")
+        XCTAssertEqual(ModelRouter.modeForMessage(effort: "standard", autoSelect: false), "auto")
     }
 
     func testAnUnknownStoredIdFallsBackToPro() {

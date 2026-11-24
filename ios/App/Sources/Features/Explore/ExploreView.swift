@@ -309,16 +309,7 @@ private struct ExploreGlass: ViewModifier {
                 RoundedRectangle(cornerRadius: corner)
                     .fill(ExplorePalette.glassFill(dark: dark))
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: corner)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [.white.opacity(0.95), .white.opacity(0.30)],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-            )
+            .gsArgentComponentBorder(RoundedRectangle(cornerRadius: corner), fallback: Color.white.opacity(dark ? 0.30 : 0.95))
             .clipShape(RoundedRectangle(cornerRadius: corner))
     }
 }
@@ -705,7 +696,7 @@ struct ExploreView: View {
                 .padding(.horizontal, 13)
                 .padding(.vertical, 7)
                 .background(Capsule().fill(ExplorePalette.ctaPink))
-                    .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                    .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.90))
                         .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 9, x: 0, y: 5)
             }
             .buttonStyle(.plain)
@@ -897,7 +888,7 @@ struct ExploreView: View {
                 )
             )
             .frame(width: 30, height: 30)
-            .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1))
+            .gsArgentComponentBorder(Circle(), fallback: Color.white.opacity(0.85))
             .overlay(NexlyGlyph(name: "chevron-right", size: 13, color: Aero.text))
             .shadow(color: ExplorePalette.peach.opacity(0.30), radius: 6, x: 0, y: 3)
     }
@@ -975,7 +966,7 @@ struct ExploreView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(Capsule().fill(LinearGradient(colors: [ExplorePalette.ctaTop, ExplorePalette.ctaBottom], startPoint: .leading, endPoint: .trailing)))
-                    .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                    .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.90))
                         .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 9, x: 0, y: 5)
             }
             .buttonStyle(.plain)
@@ -1197,7 +1188,7 @@ struct DiscoverView: View {
                 .padding(.horizontal, 13)
                 .padding(.vertical, 7)
                 .background(Capsule().fill(ExplorePalette.ctaPearl))
-                    .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                    .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.90))
                         .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 9, x: 0, y: 5)
             }
             .buttonStyle(.plain)
@@ -1259,7 +1250,7 @@ struct DiscoverView: View {
                                         // fill sits ON TOP of its own background.)
                                         Capsule()
                                             .fill(ExplorePalette.glassFill(dark: scheme == .dark))
-                                            .overlay(Capsule().strokeBorder(.white.opacity(0.60), lineWidth: 1))
+                                            .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.60))
                                             .shadow(color: Color(red: 0.886, green: 0.612, blue: 0.486).opacity(0.33), radius: 5, x: 0, y: 3)
                                     }
                                 }
@@ -1455,7 +1446,7 @@ struct DiscoverView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(Capsule().fill(LinearGradient(colors: [ExplorePalette.ctaTop, ExplorePalette.ctaBottom], startPoint: .leading, endPoint: .trailing)))
-                    .overlay(Capsule().strokeBorder(LinearGradient(colors: [.white.opacity(0.90), .white.opacity(0.35)], startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                    .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.90))
                         .shadow(color: Color(red: 0.922, green: 0.616, blue: 0.447).opacity(0.35), radius: 9, x: 0, y: 5)
             }
             .buttonStyle(.plain)

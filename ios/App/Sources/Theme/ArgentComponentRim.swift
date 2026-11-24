@@ -6,25 +6,29 @@ private struct ArgentComponentRim<S: InsettableShape>: ViewModifier {
     let shape: S
     let enabled: Bool
     var fallback: Color? = nil
+    var preserveBorder: Bool = false
+    var fallbackWidth: CGFloat = 1
     @ObservedObject private var settings = SettingsStore.shared
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityContrast) private var contrast
+    @Environment(\.colorSchemeContrast) private var contrast
 
-    init(shape: S, enabled: Bool, fallback: Color? = nil) {
+    init(shape: S, enabled: Bool, fallback: Color? = nil, preserveBorder: Bool = false, fallbackWidth: CGFloat = 1) {
         self.shape = shape
         self.enabled = enabled
         self.fallback = fallback
+        self.preserveBorder = preserveBorder
+        self.fallbackWidth = fallbackWidth
     }
 
     func body(content: Content) -> some View {
         content.overlay {
             if enabled {
                 GeometryReader { geo in
-                    if !settings.highContrast && contrast != .increased &&
+                    if !preserveBorder && !settings.highContrast && contrast != .increased &&
                         gsArgentComponentSize(geo.size) {
                         rim(size: geo.size)
                     } else if let fallback {
-                        shape.strokeBorder(fallback, lineWidth: 1)
+                        shape.strokeBorder(fallback, lineWidth: fallbackWidth)
                     }
                 }
                 .allowsHitTesting(false)
@@ -58,7 +62,7 @@ extension View {
         modifier(ArgentComponentRim(shape: shape, enabled: enabled))
     }
 
-    func gsArgentComponentBorder<S: InsettableShape>(_ shape: S, fallback: Color) -> some View {
-        modifier(ArgentComponentRim(shape: shape, enabled: true, fallback: fallback))
+    func gsArgentComponentBorder<S: InsettableShape>(_ shape: S, fallback: Color, preserveBorder: Bool = false, fallbackWidth: CGFloat = 1) -> some View {
+        modifier(ArgentComponentRim(shape: shape, enabled: true, fallback: fallback, preserveBorder: preserveBorder, fallbackWidth: fallbackWidth))
     }
 }

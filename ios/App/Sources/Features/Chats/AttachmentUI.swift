@@ -138,7 +138,7 @@ struct AttachmentThumb: View {
         }
         .frame(width: size, height: size)
         .background(RoundedRectangle(cornerRadius: Aero.Radius.sm).fill(Aero.containerHigh))
-        .overlay(RoundedRectangle(cornerRadius: Aero.Radius.sm).stroke(Aero.outline, lineWidth: 1))
+        .gsArgentComponentBorder(RoundedRectangle(cornerRadius: Aero.Radius.sm), fallback: Aero.outline)
         .clipShape(RoundedRectangle(cornerRadius: Aero.Radius.sm))
     }
 }
@@ -260,7 +260,7 @@ struct AttachmentChip: View {
         .frame(width: visual ? 160 : 224, alignment: .leading)
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 20).fill(Aero.elevatedSurface.opacity(0.72)))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Aero.outline, lineWidth: 1))
+        .gsArgentComponentBorder(RoundedRectangle(cornerRadius: 20), fallback: Aero.outline)
         .quickLookPreview($previewURL)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: draft.phase)
         .accessibilityElement(children: .contain)
@@ -379,7 +379,7 @@ private struct MessageAttachmentPreview: View {
             .frame(maxWidth: visual ? 208 : 248, alignment: .leading)
             .padding(10)
             .background(RoundedRectangle(cornerRadius: 20).fill(Aero.elevatedSurface.opacity(0.72)))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(Aero.outline, lineWidth: 1))
+            .gsArgentComponentBorder(RoundedRectangle(cornerRadius: 20), fallback: Aero.outline)
             .quickLookPreview($previewURL)
             .accessibilityLabel("Preview \(attachment.displayName), \(AttachmentRules.humanBytes(attachment.byteSize))")
             .task(id: "\(attachment.id):\(attempt)") {

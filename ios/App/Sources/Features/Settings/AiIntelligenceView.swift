@@ -480,10 +480,7 @@ struct AiIntelligenceView: View {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(selected ? Aero.accentSoft : Color.white.opacity(0.34))
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(selected ? Aero.accent.opacity(0.50) : Color.white.opacity(0.55), lineWidth: 1)
-            )
+            .gsArgentComponentBorder(RoundedRectangle(cornerRadius: 16), fallback: selected ? Aero.accent.opacity(0.50) : Color.white.opacity(0.55), preserveBorder: selected)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

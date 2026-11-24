@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.settings
 
+import com.grapsee.gsai.ui.components.argentComponentBorder
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -136,7 +138,7 @@ private fun ModelTabs(selected: String, onSelect: (String) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White.copy(alpha = 0.42f), RoundedCornerShape(18.dp))
-            .border(1.dp, Color.White.copy(alpha = 0.65f), RoundedCornerShape(18.dp))
+            .argentComponentBorder(RoundedCornerShape(18.dp), Color.White.copy(alpha = 0.65f))
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -271,7 +273,7 @@ private fun ModelCard(model: GsModel, isSelected: Boolean, onClick: () -> Unit) 
                 if (isSelected) {
                     Modifier.border(1.2.dp, colors.accent.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
                 } else {
-                    Modifier.border(1.dp, Color.White.copy(alpha = if (dark) 0.10f else 0.55f), RoundedCornerShape(20.dp))
+                    Modifier.argentComponentBorder(RoundedCornerShape(20.dp), Color.White.copy(alpha = if (dark) 0.10f else 0.55f))
                 }
             )
             .selectable(
@@ -515,12 +517,7 @@ private fun EffortSegments(selected: String, onSelect: (String) -> Unit) {
                 else Color.White.copy(alpha = 0.55f),
                 RoundedCornerShape(999.dp)
             )
-            .border(
-                1.dp,
-                if (LocalGsIsDark.current) Color.White.copy(alpha = 0.12f)
-                else Color.White.copy(alpha = 0.70f),
-                RoundedCornerShape(999.dp)
-            )
+            .argentComponentBorder(RoundedCornerShape(999.dp), if (LocalGsIsDark.current) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.70f))
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
@@ -614,7 +611,7 @@ private fun ContinueButton(onClick: () -> Unit) {
                 ),
                 RoundedCornerShape(999.dp),
             )
-            .border(1.dp, Color.White.copy(alpha = 0.40f), RoundedCornerShape(999.dp))
+            .argentComponentBorder(RoundedCornerShape(999.dp), Color.White.copy(alpha = 0.40f))
             .clickable(role = Role.Button, onClickLabel = "Continue", onClick = onClick)
             .padding(vertical = 13.dp),
         horizontalArrangement = Arrangement.Center,

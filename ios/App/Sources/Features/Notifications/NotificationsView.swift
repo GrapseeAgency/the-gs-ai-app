@@ -248,12 +248,7 @@ struct NotificationsView: View {
                             ? item.tone.wash.opacity(0.55)
                             : Color.white.opacity(0.38))
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(
-                        selected ? item.tone.ink.opacity(0.45) : Color.white.opacity(0.55),
-                        lineWidth: 1)
-            )
+            .gsArgentComponentBorder(RoundedRectangle(cornerRadius: 14), fallback: selected ? item.tone.ink.opacity(0.45) : Color.white.opacity(0.55), preserveBorder: selected)
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityLabel("\(item.label), \(count)")

@@ -59,15 +59,7 @@ struct ExploreDock: View {
                     )
                 )
             )
-            .overlay(
-                Capsule().strokeBorder(
-                    LinearGradient(
-                        colors: [.white.opacity(0.85), .white.opacity(0.35)],
-                        startPoint: .top, endPoint: .bottom
-                    ),
-                    lineWidth: 1
-                )
-            )
+            .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.85))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Explore. Scrolls to top.")

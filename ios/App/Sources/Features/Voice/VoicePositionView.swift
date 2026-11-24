@@ -53,10 +53,10 @@ struct VoicePositionView: View {
                 await startListening()
             }
         }
-        .onChange(of: position.calibrations) { _, calibrations in
+        .onChange(of: position.calibrations) { calibrations in
             persist(calibrations)
         }
-        .onChange(of: playback.isSpeaking) { _, isSpeaking in
+        .onChange(of: playback.isSpeaking) { isSpeaking in
             position.readsDistance = !isSpeaking
         }
         .onDisappear {

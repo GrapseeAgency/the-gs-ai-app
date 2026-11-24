@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -392,15 +393,7 @@ fun RefChip(
                     else -> colors.glassSurface.copy(alpha = 0.62f)
                 }
             )
-            .border(
-                1.dp,
-                when {
-                    lit -> colors.accent.copy(alpha = 0.35f)
-                    selected -> colors.accent
-                    else -> colors.glassBorder
-                },
-                RoundedCornerShape(999.dp)
-            )
+            .then(if (lit || selected) Modifier.border(1.dp, if (lit) colors.accent.copy(alpha = 0.35f) else colors.accent, RoundedCornerShape(999.dp)) else Modifier.argentComponentBorder(RoundedCornerShape(999.dp), colors.glassBorder))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -632,7 +625,7 @@ fun RefSegmented(
             .fillMaxWidth()
             .clip(RoundedCornerShape(999.dp))
             .background(colors.accentSoft)
-            .border(1.dp, colors.glassBorder, RoundedCornerShape(999.dp))
+            .argentComponentBorder(RoundedCornerShape(999.dp), colors.glassBorder)
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -775,7 +768,7 @@ fun RefOptionCard(
             .background(
                 if (selected) colors.accentSoft.copy(alpha = 0.65f) else colors.glassSurface.copy(alpha = 0.62f)
             )
-            .border(if (selected) 1.5.dp else 1.dp, border, shape)
+            .then(if (selected) Modifier.border(1.5.dp, border, shape) else Modifier.argentComponentBorder(shape, border))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -860,7 +853,7 @@ fun RefChoiceTile(
                 // the reference is a whisper of colour with an accent border.
                 if (selected) colors.accentSoft else colors.glassSurface.copy(alpha = 0.55f)
             )
-            .border(1.dp, border, shape)
+            .then(if (selected) Modifier.border(1.dp, border, shape) else Modifier.argentComponentBorder(shape, border))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -1118,7 +1111,9 @@ fun RefTextField(
 ) {
     val colors = GsTheme.colors
     var revealed by remember { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(16.dp)
+    val useMetal = enabled && error == null && !focused && !com.grapsee.gsai.data.SettingsStore.highContrast
     val border = if (error != null) colors.error else colors.glassBorder
     Column(modifier = modifier.fillMaxWidth()) {
         if (!label.isNullOrBlank()) {
@@ -1134,6 +1129,8 @@ fun RefTextField(
             onValueChange = onValueChange,
             modifier = Modifier
                 .fillMaxWidth()
+                .onFocusChanged { focused = it.isFocused }
+                .argentComponentRim(shape, enabled = useMetal, fallback = border)
                 .then(
                     if (focusRequester != null) Modifier.focusRequester(focusRequester)
                     else Modifier
@@ -1191,7 +1188,7 @@ fun RefTextField(
                 disabledTextColor = colors.textDisabled,
                 cursorColor = colors.accentStrong,
                 focusedBorderColor = colors.accent.copy(alpha = 0.75f),
-                unfocusedBorderColor = border,
+                unfocusedBorderColor = if (useMetal) Color.Transparent else border,
                 disabledBorderColor = colors.divider,
                 errorBorderColor = colors.error,
                 focusedContainerColor = colors.inputSurface,

@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.notifications
 
+import com.grapsee.gsai.ui.components.argentComponentBorder
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -329,11 +331,7 @@ private fun InboxChip(
                     Color.White.copy(alpha = 0.38f)
                 }
             )
-            .border(
-                1.dp,
-                if (selected) GsWellTone.Peach.ink.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.55f),
-                shape,
-            )
+            .then(if (selected) Modifier.border(1.dp, GsWellTone.Peach.ink.copy(alpha = 0.45f), shape) else Modifier.argentComponentBorder(shape, Color.White.copy(alpha = 0.55f)))
             .clickable(onClick = onClick)
             .padding(vertical = 9.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

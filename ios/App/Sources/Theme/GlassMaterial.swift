@@ -223,7 +223,7 @@ private struct GsGlassModifier<S: InsettableShape>: ViewModifier {
     let shape: S
     var metalEdge: Bool? = nil
     @ObservedObject private var settings = SettingsStore.shared
-    @Environment(\.accessibilityContrast) private var contrast
+    @Environment(\.colorSchemeContrast) private var contrast
 
     init(role: GsGlassRole, shape: S, metalEdge: Bool? = nil) {
         self.role = role

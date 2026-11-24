@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.explore
 
+import com.grapsee.gsai.ui.components.argentComponentBorder
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -517,14 +519,7 @@ private fun ExploreDock(
                     Brush.horizontalGradient(listOf(ExploreTones.CtaTop, ExploreTones.Peach)),
                     CircleShape,
                 )
-                .border(
-                    1.dp,
-                    Brush.verticalGradient(
-                        0f to Color.White.copy(alpha = 0.85f),
-                        1f to Color.White.copy(alpha = 0.35f),
-                    ),
-                    CircleShape,
-                )
+                .argentComponentBorder(CircleShape, Color.White.copy(alpha = 0.85f))
                 .clickable(
                     role = Role.Button,
                     onClickLabel = "Explore. Scrolls to top.",
@@ -644,14 +639,7 @@ private fun Modifier.exploreGlass(
             ),
             shape,
         )
-        .border(
-            1.dp,
-            Brush.linearGradient(
-                0f to Color.White.copy(alpha = 0.95f),
-                1f to Color.White.copy(alpha = 0.30f),
-            ),
-            shape,
-        )
+        .argentComponentBorder(shape, Color.White.copy(alpha = if (isDark) 0.30f else 0.95f))
 }
 
 /** The icon circle: tinted gradient, white rim, its own glow. */
@@ -949,14 +937,7 @@ fun ExploreScreen(
                                     ExploreTones.CtaPink,
                                     RoundedCornerShape(16.dp),
                                 )
-                                .border(
-                                    1.dp,
-                                    Brush.verticalGradient(
-                                        0f to Color.White.copy(alpha = 0.90f),
-                                        1f to Color.White.copy(alpha = 0.35f),
-                                    ),
-                                    RoundedCornerShape(16.dp),
-                                )
+                                .argentComponentBorder(RoundedCornerShape(16.dp), Color.White.copy(alpha = 0.90f))
                                 .clickable(role = Role.Button, onClickLabel = "Explore all tools") { onOpenDiscover() }
                                 .padding(horizontal = 13.dp, vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -1191,14 +1172,7 @@ private fun ExploreFeaturedCarousel(
                     ),
                     CircleShape,
                 )
-                .border(
-                    1.dp,
-                    Brush.verticalGradient(
-                        0f to Color.White.copy(alpha = 0.85f),
-                        1f to Color.White.copy(alpha = 0.35f),
-                    ),
-                    CircleShape,
-                )
+                .argentComponentBorder(CircleShape, Color.White.copy(alpha = 0.85f))
                 .clickable(role = Role.Button, onClickLabel = "Next featured journey") {
                     pagerScope.launch {
                         pager.animateScrollToPage(
@@ -1460,14 +1434,7 @@ fun DiscoverScreen(
                                     ExploreTones.CtaPearl,
                                     RoundedCornerShape(16.dp),
                                 )
-                                .border(
-                                    1.dp,
-                                    Brush.verticalGradient(
-                                        0f to Color.White.copy(alpha = 0.90f),
-                                        1f to Color.White.copy(alpha = 0.35f),
-                                    ),
-                                    RoundedCornerShape(16.dp),
-                                )
+                                .argentComponentBorder(RoundedCornerShape(16.dp), Color.White.copy(alpha = 0.90f))
                                 .clickable(role = Role.Button, onClickLabel = "Start exploring") {
                                     category = ExploreCategory.All
                                 }
@@ -1830,14 +1797,7 @@ private fun ExploreEmptySearch(
                     Brush.horizontalGradient(listOf(ExploreTones.CtaTop, ExploreTones.CtaBottom)),
                     RoundedCornerShape(14.dp),
                 )
-                .border(
-                    1.dp,
-                    Brush.verticalGradient(
-                        0f to Color.White.copy(alpha = 0.90f),
-                        1f to Color.White.copy(alpha = 0.35f),
-                    ),
-                    RoundedCornerShape(14.dp),
-                )
+                .argentComponentBorder(RoundedCornerShape(14.dp), Color.White.copy(alpha = 0.90f))
                 .clickable(role = Role.Button, onClickLabel = "Ask about ${query.trim()}") { onAsk() }
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,

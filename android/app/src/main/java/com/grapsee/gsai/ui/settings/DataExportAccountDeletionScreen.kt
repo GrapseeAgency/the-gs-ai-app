@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.settings
 
+import com.grapsee.gsai.ui.components.argentComponentBorder
+
 import android.app.Activity
 import android.content.Intent
 import android.widget.Toast
@@ -378,7 +380,7 @@ private fun RefActionPill(label: String, modifier: Modifier = Modifier) {
         modifier = modifier
             .clip(RoundedCornerShape(999.dp))
             .background(fill.copy(alpha = if (dark) 1f else 0.88f))
-            .border(1.dp, Color.White.copy(alpha = 0.85f), RoundedCornerShape(999.dp))
+            .argentComponentBorder(RoundedCornerShape(999.dp), Color.White.copy(alpha = 0.85f))
             .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -459,11 +461,7 @@ private fun ExportFormatTile(
                     Color.White.copy(alpha = if (LocalGsIsDark.current) 0.10f else 0.42f)
                 }
             )
-            .border(
-                1.dp,
-                if (selected) colors.accent.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.62f),
-                shape,
-            )
+            .then(if (selected) Modifier.border(1.dp, colors.accent.copy(alpha = 0.45f), shape) else Modifier.argentComponentBorder(shape, Color.White.copy(alpha = 0.62f)))
             .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 9.dp, vertical = 9.dp),
     ) {

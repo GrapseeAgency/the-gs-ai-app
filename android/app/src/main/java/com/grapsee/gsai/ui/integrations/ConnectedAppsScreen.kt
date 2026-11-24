@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.integrations
 
+import com.grapsee.gsai.ui.components.argentComponentBorder
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -247,7 +249,7 @@ fun ConnectedAppsScreen(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp))
                 .background(colors.glassSurface.copy(alpha = 0.55f))
-                .border(1.dp, colors.glassBorder, RoundedCornerShape(20.dp))
+                .argentComponentBorder(RoundedCornerShape(20.dp), colors.glassBorder)
                 .clickableNoIndication { onNavigate(GsRoutes.SETTINGS_PRIVACY) }
                 .padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,

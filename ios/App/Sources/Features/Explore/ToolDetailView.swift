@@ -227,7 +227,7 @@ struct ToolDetailView: View {
                         Capsule().fill(
                             LinearGradient(colors: [Aero.accentStrong, Aero.accent],
                                            startPoint: .top, endPoint: .bottom)))
-                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
+                    .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.28))
             }
             .buttonStyle(KineticPressStyle())
         }

@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.settings
 
+import com.grapsee.gsai.ui.components.argentComponentBorder
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -199,11 +201,7 @@ internal fun ThemeTile(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
             .background(if (selected) colors.accentSoft else colors.glassSurface.copy(alpha = 0.5f))
-            .border(
-                if (selected) 1.5.dp else 1.dp,
-                if (selected) colors.accent.copy(alpha = 0.55f) else colors.glassBorder,
-                RoundedCornerShape(18.dp)
-            )
+            .then(if (selected) Modifier.border(1.5.dp, colors.accent.copy(alpha = 0.55f), RoundedCornerShape(18.dp)) else Modifier.argentComponentBorder(RoundedCornerShape(18.dp), colors.glassBorder))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
