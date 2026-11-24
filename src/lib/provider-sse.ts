@@ -13,13 +13,15 @@ export async function consumeSseStream(
   onModel?: (model: string) => void,
   onReasoning?: (text: string) => void,
   idleTimeoutMs = 45_000,
+  progressTimeoutMs = 90_000,
 ): Promise<string> {
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffer = '', full = '', eventType = ''
   let terminated = false, structured = false, finished = false
+  let lastProgress = performance.now()
   async function append(text: string) {
-    if (text) { full += text; await onDelta(text) }
+    if (text) { full += text; await onDelta(text); lastProgress=performance.now() }
   }
   async function line(raw: string): Promise<boolean> {
     const input = raw.endsWith('\r') ? raw.slice(0, -1) : raw
@@ -46,24 +48,35 @@ export async function consumeSseStream(
     const choice = parsed.choices?.[0]
     if (choice) structured = true
     const reason = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning ?? choice?.message?.reasoning_content
-    if (typeof reason === 'string' && reason) onReasoning?.(reason)
+    if (typeof reason === 'string' && reason) {
+      onReasoning?.(reason)
+      lastProgress=performance.now()
+    }
     const toolCalls = choice?.delta?.tool_calls ?? choice?.message?.tool_calls
     if ((Array.isArray(toolCalls) ? toolCalls.length > 0 : toolCalls != null) || choice?.finish_reason === 'tool_calls')
       throw new Error('Provider requested a tool outside the text stream contract')
     const content = choice?.delta?.content ?? choice?.message?.content ?? parsed.delta?.content
     if (typeof content === 'string') await append(content)
     if (typeof choice?.finish_reason === 'string') {
-      if (choice.finish_reason === 'stop') finished = true
+      // An explicit successful terminal reason is authoritative; a provider
+      // that keeps its socket alive after stop must not delay completion.
+      if (choice.finish_reason === 'stop') { finished=true; return true }
       else throw new Error('Provider ended the answer before successful completion')
     }
     return false
   }
   async function read() {
     let timer: ReturnType<typeof setTimeout> | undefined
+    const remaining=progressTimeoutMs-(performance.now()-lastProgress)
+    if(remaining<=0)throw new Error('Provider stream progress timeout')
+    const progressBound=remaining<idleTimeoutMs
     try {
       return await Promise.race([
         reader.read(),
-        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Provider stream idle timeout')), idleTimeoutMs) }),
+        new Promise<never>((_, reject) => {
+          timer=setTimeout(()=>reject(new Error(progressBound?'Provider stream progress timeout':'Provider stream idle timeout')),
+            Math.min(idleTimeoutMs,remaining))
+        }),
       ])
     } finally { if (timer !== undefined) clearTimeout(timer) }
   }

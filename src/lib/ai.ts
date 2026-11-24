@@ -109,6 +109,7 @@ function isWebReadableStream(value: unknown): value is ReadableStream<Uint8Array
 }
 
 import { consumeSseStream } from './provider-sse'
+import { assertTextCompletionEnvelope } from './provider-completion'
 export { consumeSseStream } from './provider-sse'
 
 /**
@@ -228,6 +229,7 @@ export async function streamChat(
 
       // Upstream ignored `stream: true` — fall back to a single full-text delta.
       const completion = response as { choices?: { message?: { content?: unknown } }[];model?:unknown } | null
+      assertTextCompletionEnvelope(completion)
       const text = completion?.choices?.[0]?.message?.content
       const full = typeof text === 'string' ? text : ''
       if (full) {
@@ -305,6 +307,7 @@ export async function completeChatWithMeta(
           setTimeout(() => reject(new Error('Upstream completion timeout')), COMPLETION_TIMEOUT_MS)
         ),
       ])) as { choices?: { message?: { content?: unknown } }[]; model?: unknown } | null
+      assertTextCompletionEnvelope(completion)
       const text = completion?.choices?.[0]?.message?.content
       return {
         text: typeof text === 'string' ? text : '',
@@ -375,6 +378,7 @@ export async function streamVisionChat(
         choices?: { message?: { content?: unknown } }[]
         model?: unknown
       } | null
+      assertTextCompletionEnvelope(completion)
       const text = completion?.choices?.[0]?.message?.content
       const full = typeof text === 'string' ? text : ''
       if (full) {
@@ -419,6 +423,7 @@ export async function completeVisionChat(
           setTimeout(() => reject(new Error('Upstream completion timeout')), COMPLETION_TIMEOUT_MS)
         ),
       ])) as { choices?: { message?: { content?: unknown } }[]; model?: unknown } | null
+      assertTextCompletionEnvelope(completion)
       const text = completion?.choices?.[0]?.message?.content
       return {
         text: typeof text === 'string' ? text : '',

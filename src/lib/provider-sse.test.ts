@@ -54,3 +54,22 @@ test('provider-reported identity is distinct from answer text and is not invente
   expect(text).toBe('answer')
   expect(identities).toEqual(['actual/model'])
 })
+
+test('heartbeat-only streams cannot extend a response indefinitely',async()=>{
+  let ticker:ReturnType<typeof setInterval>,cancelled=false
+  const hanging=new ReadableStream<Uint8Array>({
+    start(controller){ticker=setInterval(()=>controller.enqueue(new TextEncoder().encode(': ping\n\n')),3)},
+    cancel(){clearInterval(ticker);cancelled=true}
+  })
+  await expect(consumeSseStream(hanging,()=>{},undefined,undefined,100,25)).rejects.toThrow('progress timeout')
+  expect(cancelled).toBe(true)
+})
+test('explicit stop completes and cancels a connection that remains open',async()=>{
+  let cancelled=false
+  const hanging=new ReadableStream<Uint8Array>({
+    start(controller){controller.enqueue(new TextEncoder().encode(event('complete')+'data: {"choices":[{"finish_reason":"stop"}]}\n\n'))},
+    cancel(){cancelled=true}
+  })
+  expect(await consumeSseStream(hanging,()=>{},undefined,undefined,25)).toBe('complete')
+  expect(cancelled).toBe(true)
+})

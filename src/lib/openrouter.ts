@@ -33,6 +33,7 @@ import { OPENROUTER_MODELS } from '@/lib/models'
 import { FreeCapacityUnavailableError } from '@/lib/capacity-policy'
 import { REMOTE_TOOLS, type RemoteMessage, type RemoteCompletion } from './remote-tools'
 import { ProviderRateLimit } from './provider-rate-limit'
+import { assertTextCompletionEnvelope,ProviderCompletionError } from './provider-completion'
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
 
@@ -117,11 +118,13 @@ async function postChat(
   reasoning?: OrReasoningConfig
 ): Promise<Response> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), stream ? CONNECT_TIMEOUT_MS : COMPLETION_TIMEOUT_MS)
+  const timer = stream ? setTimeout(() => controller.abort(),CONNECT_TIMEOUT_MS) : undefined
+  // The buffered deadline covers the response body, not just HTTP headers.
+  const signal = stream ? controller.signal : AbortSignal.timeout(COMPLETION_TIMEOUT_MS)
   try {
     return await fetch(`${OPENROUTER_BASE}/chat/completions`, {
       method: 'POST',
-      signal: controller.signal,
+      signal,
       headers: {
         Authorization: `Bearer ${key}`,
         'Content-Type': 'application/json',
@@ -144,7 +147,7 @@ async function postChat(
       }),
     })
   } finally {
-    clearTimeout(timer)
+    if(timer!==undefined)clearTimeout(timer)
   }
 }
 
@@ -275,6 +278,7 @@ export async function orCompleteChat(
           choices?: { message?: { content?: unknown } }[]
           model?: unknown
         }
+        assertTextCompletionEnvelope(completion)
         keyCursor = (keyCursor + i) % keys.length
         const text = completion?.choices?.[0]?.message?.content
         if (typeof text !== 'string' || text.trim().length === 0) {
@@ -294,6 +298,7 @@ export async function orCompleteChat(
       } catch (e) {
         if (e instanceof FreeCapacityUnavailableError) throw e
         lastError = e instanceof Error ? e.message : String(e)
+        if(e instanceof ProviderCompletionError)break
         if (lastError.startsWith('OpenRouter ') && isLastModel) throw e
         if (lastError.startsWith('OpenRouter ')) break // next model in chain
       }

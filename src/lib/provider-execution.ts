@@ -17,6 +17,7 @@ import {
   FreeCapacityUnavailableError,
   isFreeCapacityUnavailableError,
 } from './capacity-policy'
+import { assertTextCompletionEnvelope } from './provider-completion'
 import {
   PROVIDER_IDS,
   resolveProviderId,
@@ -999,6 +1000,10 @@ async function consumeStreamingResponse(
         throw new ProviderExecutionError('invalid-response', provider)
       }
     })()
+    try {assertTextCompletionEnvelope(payload)} catch {
+      if(payloadLooksLikeCapacityFailure(payload))throw new ProviderCapacityError(provider)
+      throw new ProviderExecutionError('invalid-response',provider)
+    }
     const completion = completionText(payload)
     if (completion.length === 0) throw new ProviderCapacityError(provider)
     await onDelta(completion)
@@ -1088,6 +1093,10 @@ async function executeNormalized(request: NormalizedRequest): Promise<ProviderEx
       parsed = JSON.parse(raw) as unknown
     } catch {
       throw new ProviderExecutionError('invalid-response', provider)
+    }
+    try {assertTextCompletionEnvelope(parsed)} catch {
+      if(payloadLooksLikeCapacityFailure(parsed))throw new ProviderCapacityError(provider)
+      throw new ProviderExecutionError('invalid-response',provider)
     }
     const text = completionText(parsed)
     if (text.length === 0) {
