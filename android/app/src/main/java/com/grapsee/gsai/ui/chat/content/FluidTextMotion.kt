@@ -8,7 +8,10 @@ internal data class FluidTextBand(
     val start: Int,
     val end: Int,
     val bornNanos: Long,
-    val durationNanos: Long
+    val durationNanos: Long,
+    val phaseFrom: Float = 0f,
+    val phaseTo: Float = 1f,
+    val travel: Float = 0.24f
 ) {
     fun progress(now: Long): Float =
         ((now - bornNanos).toDouble() / durationNanos).coerceIn(0.0, 1.0).toFloat()
@@ -16,7 +19,7 @@ internal data class FluidTextBand(
     /** The optical front travels through the shaped run, not as a chunk flash.
      * Every point starts readable and reaches full ink at the same deadline. */
     fun localProgress(now: Long, position: Float): Float =
-        fluidLocalProgress(progress(now), position)
+        fluidLocalProgress(progress(now), phaseFrom + (phaseTo - phaseFrom) * position.coerceIn(0f, 1f), travel)
 
     fun opacity(now: Long, position: Float = 0f): Float =
         fluidInkOpacity(localProgress(now, position))
@@ -25,8 +28,8 @@ internal data class FluidTextBand(
         ((offset - start).toFloat() / (end - start).coerceAtLeast(1)).coerceIn(0f, 1f)
 }
 
-internal fun fluidLocalProgress(progress: Float, position: Float): Float =
-    ((progress - 0.24f * position.coerceIn(0f, 1f)) / 0.76f).coerceIn(0f, 1f)
+internal fun fluidLocalProgress(progress: Float, position: Float, travel: Float = 0.24f): Float =
+    ((progress - travel * position.coerceIn(0f, 1f)) / (1f - travel)).coerceIn(0f, 1f)
 
 internal fun fluidInkOpacity(progress: Float): Float {
     val p = progress.coerceIn(0f, 1f)
@@ -43,20 +46,41 @@ internal class FluidTextMotion(initial: String) {
     var bands: List<FluidTextBand> = emptyList()
         private set
 
-    fun update(text: String, now: Long, enabled: Boolean): List<FluidTextBand> {
-        if (!enabled || !text.startsWith(previous)) {
+    fun update(text: String, now: Long, enabled: Boolean, sourceAppend: Boolean = false): List<FluidTextBand> {
+        if (!enabled || (!sourceAppend && !text.startsWith(previous))) {
             previous = text
             lastArrival = null
             cadenceMs = 42.0
             bands = emptyList()
             return bands
         }
-        val alive = bands.filter { it.progress(now) < 1f }
+        var alive = bands.filter { it.progress(now) < 1f }
         if (text == previous) {
             bands = alive
             return bands
         }
-        val oldLength = previous.length
+        // A Markdown close can remove displayed delimiters even though the
+        // actual provider source only grew. Preserve the existing ink ages.
+        val oldLength: Int
+        if (text.startsWith(previous)) {
+            oldLength = previous.length
+        } else {
+            val match = reconcileFluidAppend(previous, text)
+            alive = match.spans.flatMap { span ->
+                alive.mapNotNull { band ->
+                    val from = maxOf(span.oldStart, band.start)
+                    val to = minOf(span.oldEnd, band.end)
+                    if (from >= to) null else {
+                        val phaseFrom = band.phaseFrom + (band.phaseTo - band.phaseFrom) * band.fractionAt(from)
+                        val phaseTo = band.phaseFrom + (band.phaseTo - band.phaseFrom) * band.fractionAt(to)
+                        band.copy(start = span.newStart + from - span.oldStart,
+                            end = span.newStart + to - span.oldStart,
+                            phaseFrom = phaseFrom, phaseTo = phaseTo)
+                    }
+                }
+            }.sortedBy { it.start }
+            oldLength = match.newTailStart
+        }
         previous = text
         lastArrival?.let {
             val sample = ((now - it) / 1_000_000.0).coerceIn(16.0, 160.0)
@@ -102,7 +126,10 @@ internal class FluidTextMotion(initial: String) {
             val preferred = if (word > maxOf(start + 1, ideal - 6)) word else ideal
             val end = if (incoming.size == 3) text.length else atOrAfter(preferred)
             if (end <= start) break
-            incoming += FluidTextBand(start, end, now + incoming.size * stagger, duration)
+            // A long real packet has a longer spatial front, not a uniform
+            // flash. Small packets still overlap without withholding content.
+            val travel = (0.18f + (end - start).coerceAtMost(120) * 0.0025f).coerceIn(0.18f, 0.48f)
+            incoming += FluidTextBand(start, end, now + incoming.size * stagger, duration, travel = travel)
             start = end
         }
         // An in-flight range is never evicted just because another packet
@@ -114,4 +141,42 @@ internal class FluidTextMotion(initial: String) {
         } + incoming
         return bands
     }
+}
+
+/** Exact rendered-text matches only. Source append is checked by the caller.
+ * A conservative unique tail anchor bridges formatting edits without guessing
+ * at replaced words, replaying history, or treating a provider reset as growth. */
+internal data class FluidMatchSpan(val oldStart: Int, val oldEnd: Int, val newStart: Int)
+internal data class FluidAppendMatch(val spans: List<FluidMatchSpan>, val newTailStart: Int)
+internal fun reconcileFluidAppend(old: String, next: String): FluidAppendMatch {
+    val oldBoundary = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(old) }
+    val newBoundary = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(next) }
+    var prefix = 0
+    val limit = minOf(old.length, next.length)
+    while (prefix < limit && old[prefix] == next[prefix]) prefix++
+    while (prefix > 0 && (!oldBoundary.isBoundary(prefix) || !newBoundary.isBoundary(prefix))) prefix--
+    val spans = mutableListOf<FluidMatchSpan>()
+    if (prefix > 0) spans += FluidMatchSpan(0, prefix, 0)
+    // A prefix followed only by formatting punctuation is already read.
+    val syntax = "*_~`[]()"
+    var oldEnd = old.length
+    while (oldEnd > prefix && old.length - oldEnd < 4 && old[oldEnd - 1] in syntax) oldEnd--
+    if (oldEnd == prefix) return FluidAppendMatch(spans, prefix)
+    var anchor = maxOf(prefix, oldEnd - 12)
+    while (anchor < oldEnd && !oldBoundary.isBoundary(anchor)) anchor++
+    if (oldEnd - anchor < 3 || !oldBoundary.isBoundary(oldEnd)) return FluidAppendMatch(spans, next.length)
+    val needle = old.substring(anchor, oldEnd)
+    val at = next.indexOf(needle, prefix)
+    if (at < 0 || next.indexOf(needle, at + 1) >= 0 ||
+        !newBoundary.isBoundary(at) || !newBoundary.isBoundary(at + needle.length)) return FluidAppendMatch(spans, next.length)
+    var oldStart = anchor
+    var newStart = at
+    while (oldStart > prefix && newStart > prefix && old[oldStart - 1] == next[newStart - 1]) {
+        oldStart--; newStart--
+    }
+    while (oldStart < anchor && (!oldBoundary.isBoundary(oldStart) || !newBoundary.isBoundary(newStart))) {
+        oldStart++; newStart++
+    }
+    spans += FluidMatchSpan(oldStart, oldEnd, newStart)
+    return FluidAppendMatch(spans, at + needle.length)
 }

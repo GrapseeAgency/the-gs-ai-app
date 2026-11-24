@@ -6,13 +6,16 @@ struct FluidTextBand: Hashable {
     let end: Int
     let born: TimeInterval
     let duration: TimeInterval
+    var phaseFrom: Double = 0
+    var phaseTo: Double = 1
+    var travel: Double = 0.24
 
     func progress(at now: TimeInterval) -> Double {
         min(1, max(0, (now - born) / duration))
     }
 
     func localProgress(at now: TimeInterval, position: Double) -> Double {
-        fluidLocalProgress(progress(at: now), position: position)
+        fluidLocalProgress(progress(at: now), position: phaseFrom + (phaseTo - phaseFrom) * min(1, max(0, position)), travel: travel)
     }
 
     func opacity(at now: TimeInterval, position: Double = 0) -> Double {
@@ -20,8 +23,8 @@ struct FluidTextBand: Hashable {
     }
 }
 
-func fluidLocalProgress(_ progress: Double, position: Double) -> Double {
-    min(1, max(0, (progress - 0.24 * min(1, max(0, position))) / 0.76))
+func fluidLocalProgress(_ progress: Double, position: Double, travel: Double = 0.24) -> Double {
+    min(1, max(0, (progress - travel * min(1, max(0, position))) / (1 - travel)))
 }
 
 func fluidInkOpacity(_ progress: Double) -> Double {
@@ -39,10 +42,10 @@ struct FluidTextMotion {
 
     init(initial: String) { previous = initial }
 
-    mutating func update(_ text: String, now: TimeInterval, enabled: Bool = true) {
-        // Compare Characters, not canonical-equivalent UTF-8 byte prefixes.
-        // A partial grapheme or a parser rewrite settles rather than replaying.
-        guard enabled, text.hasPrefix(previous) else {
+    mutating func update(_ text: String, now: TimeInterval, enabled: Bool = true, sourceAppend: Bool = false) {
+        // An actual source append may reformat existing rendered Markdown.
+        // Arbitrary replacements/reset events still clear the motion ledger.
+        guard enabled, sourceAppend || text.hasPrefix(previous) else {
             previous = text
             lastArrival = nil
             cadence = 0.042
@@ -51,16 +54,30 @@ struct FluidTextMotion {
         }
         bands.removeAll { $0.progress(at: now) >= 1 }
         guard text != previous else { return }
-        let oldCount = previous.count
+        let oldCount: Int
         let count = text.count
-        guard count > oldCount else {
-            previous = text
-            lastArrival = nil
-            cadence = 0.042
-            bands = []
-            return
+        if text.hasPrefix(previous) {
+            oldCount = previous.count
+        } else {
+            let match = reconcileFluidAppend(previous, text)
+            let oldBands = bands
+            bands = match.spans.flatMap { span in
+                oldBands.compactMap { band -> FluidTextBand? in
+                    let from = max(span.oldStart, band.start)
+                    let to = min(span.oldEnd, band.end)
+                    guard from < to else { return nil }
+                    let length = Double(max(1, band.end - band.start))
+                    let phaseFrom = band.phaseFrom + (band.phaseTo - band.phaseFrom) * Double(from - band.start) / length
+                    let phaseTo = band.phaseFrom + (band.phaseTo - band.phaseFrom) * Double(to - band.start) / length
+                    return FluidTextBand(start: span.newStart + from - span.oldStart,
+                        end: span.newStart + to - span.oldStart, born: band.born, duration: band.duration,
+                        phaseFrom: phaseFrom, phaseTo: phaseTo, travel: band.travel)
+                }
+            }.sorted { $0.start < $1.start }
+            oldCount = match.newTailStart
         }
         previous = text
+        guard count > oldCount else { return }
         if let lastArrival {
             let sample = min(0.160, max(0.016, now - lastArrival))
             cadence = cadence * 0.78 + sample * 0.22
@@ -84,11 +101,58 @@ struct FluidTextMotion {
             }
             let preferred = word > lower ? word : ideal
             let end = incoming == 3 ? count : preferred
-            bands.append(FluidTextBand(start: start, end: end, born: now + Double(incoming) * stagger, duration: duration))
+            let travel = min(0.48, max(0.18, 0.18 + Double(min(120, end - start)) * 0.0025))
+            bands.append(FluidTextBand(start: start, end: end, born: now + Double(incoming) * stagger,
+                                       duration: duration, travel: travel))
             start = end
             incoming += 1
         }
     }
 
     mutating func settle() { bands = [] }
+}
+
+struct FluidMatchSpan {
+    let oldStart: Int
+    let oldEnd: Int
+    let newStart: Int
+}
+struct FluidAppendMatch {
+    let spans: [FluidMatchSpan]
+    let newTailStart: Int
+}
+
+/// Conservative unique anchor in the native Character stream. No guessed
+/// words or synthetic tokens; existing ages survive delimiter removal.
+func reconcileFluidAppend(_ old: String, _ next: String) -> FluidAppendMatch {
+    let a = Array(old)
+    let b = Array(next)
+    var prefix = 0
+    while prefix < min(a.count, b.count), a[prefix] == b[prefix] { prefix += 1 }
+    var spans: [FluidMatchSpan] = []
+    if prefix > 0 { spans.append(FluidMatchSpan(oldStart: 0, oldEnd: prefix, newStart: 0)) }
+    let syntax: Set<Character> = Set("*_~`[]()")
+    var oldEnd = a.count
+    while oldEnd > prefix, a.count - oldEnd < 4, syntax.contains(a[oldEnd - 1]) { oldEnd -= 1 }
+    if oldEnd == prefix { return FluidAppendMatch(spans: spans, newTailStart: prefix) }
+    let anchor = max(prefix, oldEnd - 12)
+    let length = oldEnd - anchor
+    guard length >= 3, b.count - prefix >= length else {
+        return FluidAppendMatch(spans: spans, newTailStart: b.count)
+    }
+    var location: Int?
+    for at in prefix...(b.count - length) {
+        if b[at..<(at + length)].elementsEqual(a[anchor..<oldEnd]) {
+            if location != nil { return FluidAppendMatch(spans: spans, newTailStart: b.count) }
+            location = at
+        }
+    }
+    guard let at = location else { return FluidAppendMatch(spans: spans, newTailStart: b.count) }
+    var oldStart = anchor
+    var newStart = at
+    while oldStart > prefix, newStart > prefix, a[oldStart - 1] == b[newStart - 1] {
+        oldStart -= 1; newStart -= 1
+    }
+    spans.append(FluidMatchSpan(oldStart: oldStart, oldEnd: oldEnd, newStart: newStart))
+    return FluidAppendMatch(spans: spans, newTailStart: at + length)
 }

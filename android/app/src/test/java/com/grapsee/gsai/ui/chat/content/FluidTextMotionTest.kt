@@ -57,6 +57,27 @@ class FluidTextMotionTest {
         assertEquals(1f, band.opacity(200_000_000, 1f), 0.001f)
     }
 
+    @Test fun markdownClosingDoesNotRestartPreviouslyVisibleInk() {
+        val motion = FluidTextMotion("")
+        val first = motion.update("**hello", 0, true).single()
+        val updated = motion.update("hello world", 50_000_000, true, sourceAppend = true)
+        val preserved = updated.first()
+        assertEquals(0, preserved.start)
+        assertEquals(5, preserved.end)
+        assertEquals(first.bornNanos, preserved.bornNanos)
+        assertEquals(first.opacity(50_000_000, 2f / 7f), preserved.opacity(50_000_000, 0f), 0.001f)
+        assertEquals(5, updated.last().start)
+        assertEquals(11, updated.last().end)
+        assertEquals(50_000_000L, updated.last().bornNanos)
+        assertTrue(motion.update("replacement", 55_000_000, true).isEmpty())
+    }
+
+    @Test fun ambiguousRenderedRewritesNeverReplayOldText() {
+        val motion = FluidTextMotion("**word")
+        assertTrue(motion.update("word word", 0, true, sourceAppend = true).isEmpty())
+        assertTrue(motion.update("word word!", 1, true).single().start == 9)
+    }
+
     @Test fun cadenceIsContinuousAndDoesNotRestartOldBands() {
         val motion = FluidTextMotion("")
         val first = motion.update("first word ", 0, true).first()

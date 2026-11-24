@@ -1477,6 +1477,7 @@ struct MessageBubble: View, Equatable {
             VStack(alignment: .leading, spacing: 6) {
                 NexlyAssistantBlocksView(
                     blocks: message.isStreaming ? streamingBlocks : finalizedBlocks,
+                    sourceText: message.content,
                     isStreaming: message.isStreaming,
                     showStatus: showThinkingCard,
                     thinkingPhase: thinkingPhase,

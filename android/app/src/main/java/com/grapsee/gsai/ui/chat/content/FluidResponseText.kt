@@ -79,7 +79,9 @@ internal fun FluidResponseText(
     val stillLive = rememberUpdatedState(live)
     SideEffect {
         if (live) retained.value = true
-        val next = motion.update(text.text, System.nanoTime(), true)
+        val now = System.nanoTime()
+        val next = motion.update(text.text, now, true, sourceAppend = fresh)
+        clock.longValue = now
         bands.value = next
         if (!live && next.isEmpty()) retained.value = false
     }
@@ -160,7 +162,7 @@ internal fun FluidResponseText(
                             if (rect.right <= l || rect.left >= r || rect.bottom <= t || rect.top >= b) continue
                             val stops = (0..6).map { j ->
                                 val x = j / 6f
-                                val phase = first + (last - first) * if (rtl) 1f - x else x
+                                val phase = first + (last - first) * (if (rtl) 1f - x else x)
                                 Color.Black.copy(alpha = (1f - band.opacity(now, phase)).coerceIn(0f, 1f))
                             }
                             drawPath(path, Brush.horizontalGradient(stops, rect.left, rect.right), blendMode = BlendMode.DstOut)

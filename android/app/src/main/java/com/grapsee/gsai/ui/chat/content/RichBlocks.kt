@@ -1491,8 +1491,8 @@ private fun NexlyCalloutCard(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(
-                text = NexlyIcons.cleanPlainText(callout.title),
+            FluidResponseText(
+                text = AnnotatedString(NexlyIcons.cleanPlainText(callout.title)),
                 style = bodyStyle.copy(fontWeight = FontWeight.Bold),
                 color = titleColor
             )
@@ -1549,7 +1549,9 @@ private fun ParagraphBlock(
             inlineContent = inlineContent
         )
     }
-    if (selectable) SelectionContainer { text() } else text()
+    // The outer prose selection scope is already present while streaming.
+    // Keep this local node at one identity across completion as well.
+    SelectionContainer { text() }
 }
 
 private fun stripLeadingIconFromSpans(spans: List<InlineSpan>): List<InlineSpan> {
@@ -2976,8 +2978,8 @@ private fun StepOrderedListItemRow(
                                 glyphSize = 11.dp
                             )
                         }
-                        Text(
-                            text = stepTitle,
+                        FluidResponseText(
+                            text = AnnotatedString(stepTitle),
                             style = bodyStyle.copy(
                                 fontWeight = FontWeight.Bold,
                                 textDecoration = if (completed) TextDecoration.LineThrough else TextDecoration.None
@@ -3077,7 +3079,7 @@ private fun ListItemRow(
                     inlineContent = bulletInlineContent
                 )
             }
-            if (selectable) SelectionContainer { content() } else content()
+            SelectionContainer { content() }
         }
         if (item.children.isNotEmpty()) {
             Column(

@@ -95,7 +95,7 @@ struct FluidResponseText: View {
 
     private func snapshot(_ raw: String, now: TimeInterval, active: Bool) -> FluidTextMotion {
         var next = motion ?? FluidTextMotion(initial: active && streaming && freshMount ? "" : raw)
-        next.update(raw, now: now, enabled: active)
+        next.update(raw, now: now, enabled: active, sourceAppend: freshMount)
         return next
     }
 
@@ -132,18 +132,26 @@ struct FluidResponseText: View {
             if cursor < band.start {
                 result.append(AttributedString(value[index(cursor)..<index(band.start)]))
             }
-            let range = index(band.start)..<index(band.end)
-            let alpha = band.opacity(at: now, position: 0.5)
-            if alpha >= 1 {
-                result.append(AttributedString(value[range]))
-            } else {
-                // Copy each immutable source run; do not reuse indices into
-                // storage whose attribute runs have already been mutated.
-                for run in value[range].runs {
-                    var part = AttributedString(value[run.range])
-                    part.foregroundColor = (run.foregroundColor ?? ink).opacity(alpha)
-                    result.append(part)
+            // The older native text path also travels across the arriving
+            // range instead of fading the entire packet at a single opacity.
+            let length = max(1, band.end - band.start)
+            let step = max(1, (length + 7) / 8)
+            var offset = band.start
+            while offset < band.end {
+                let end = min(band.end, offset + step)
+                let range = index(offset)..<index(end)
+                let position = Double(offset + end - 2 * band.start) / (2 * Double(length))
+                let alpha = band.opacity(at: now, position: position)
+                if alpha >= 1 {
+                    result.append(AttributedString(value[range]))
+                } else {
+                    for run in value[range].runs {
+                        var part = AttributedString(value[run.range])
+                        part.foregroundColor = (run.foregroundColor ?? ink).opacity(alpha)
+                        result.append(part)
+                    }
                 }
+                offset = end
             }
             cursor = band.end
         }

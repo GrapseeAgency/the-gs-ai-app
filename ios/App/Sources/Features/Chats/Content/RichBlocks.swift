@@ -48,7 +48,9 @@ struct BlocksView: View {
 struct NexlyAssistantBlocksView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var previousLiveBlocks: [Block]? = nil
+    @State private var previousSourceText: String? = nil
     let blocks: [Block]
+    var sourceText: String? = nil
     var isStreaming: Bool = false
     var showStatus: Bool = false
     var thinkingPhase: NexlyThinkingPhase = .done
@@ -71,6 +73,15 @@ struct NexlyAssistantBlocksView: View {
     private enum Group {
         case prose([Block])
         case plan(NexlyPlanData, Bool)
+    }
+
+    private var sourceDidAppend: Bool {
+        guard isStreaming else { return false }
+        if let sourceText, let previousSourceText {
+            return sourceText != previousSourceText && sourceText.hasPrefix(previousSourceText)
+        }
+        // Standalone native renderer fixtures may supply blocks without source.
+        return sourceText == nil && previousLiveBlocks != nil && previousLiveBlocks != blocks
     }
 
     var body: some View {
@@ -130,12 +141,19 @@ struct NexlyAssistantBlocksView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .environment(\.fluidFreshMount, isStreaming && previousLiveBlocks != nil && previousLiveBlocks != blocks)
-        .environment(\.fluidNewBlockFloor, isStreaming && previousLiveBlocks != nil && previousLiveBlocks != blocks
-                     ? (previousLiveBlocks?.last.map { $0.sourceStart + 1 } ?? 0) : Int.max)
-        .onAppear { previousLiveBlocks = isStreaming ? blocks : nil }
+        .environment(\.fluidFreshMount, sourceDidAppend)
+        .environment(\.fluidNewBlockFloor, sourceDidAppend
+                     ? (previousSourceText?.count ?? previousLiveBlocks?.last.map { $0.sourceStart + 1 } ?? 0) : Int.max)
+        .onAppear {
+            previousLiveBlocks = isStreaming ? blocks : nil
+            previousSourceText = isStreaming ? sourceText : nil
+        }
         .onChange(of: blocks) { next in previousLiveBlocks = isStreaming ? next : nil }
-        .onChange(of: isStreaming) { active in previousLiveBlocks = active ? blocks : nil }
+        .onChange(of: sourceText) { next in previousSourceText = isStreaming ? next : nil }
+        .onChange(of: isStreaming) { active in
+            previousLiveBlocks = active ? blocks : nil
+            previousSourceText = active ? sourceText : nil
+        }
     }
 
     @ViewBuilder
@@ -524,6 +542,12 @@ private struct StructuredProseSequenceView: View {
         let coalescedCallout: (CalloutParsed, [ListItem])?
         let coalescedCalculator: NexlyCalculatorSpec?
         var coalescedSources: ([CitationEntry], String)? = nil
+        var motionID: String {
+            switch block {
+            case .citations, .toolResult: return "metadata-\(index)"
+            default: return "source-\(block.sourceStart)"
+            }
+        }
     }
 
     private var entries: [SequenceEntry] {
@@ -640,7 +664,7 @@ private struct StructuredProseSequenceView: View {
             .background(RoundedRectangle(cornerRadius: 12).fill(Color(red: 0.929, green: 0.902, blue: 1.0)))
         }
 
-        ForEach(entries, id: \.index) { entry in
+        ForEach(entries, id: \.motionID) { entry in
             if shouldShowEntryForTab(entry.block, tab: visibleDashboardTab) {
                 if let (sources, title) = entry.coalescedSources {
                     CitationsBlockView(citations: sources, title: title)
@@ -2779,7 +2803,7 @@ private struct StepOrderedListItemRowView: View {
                                 if let stepIcon = split.icon {
                                     NexlyGlassGlyphTile(name: stepIcon, tone: .lavender, size: 18, glyphSize: 11)
                                 }
-                                Text(split.title)
+                                FluidResponseText(AttributedString(split.title), ink: completed ? Aero.textSecondary : (compact ? NexlyInk.prose : Aero.text))
                                     .font(.system(size: compact ? 13.5 : 15, weight: .bold))
                                     .strikethrough(completed)
                                     .foregroundStyle(completed ? Aero.textSecondary : (compact ? NexlyInk.prose : Aero.text))

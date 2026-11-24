@@ -40,6 +40,32 @@ final class FluidTextMotionTests: XCTestCase {
         XCTAssertEqual(band.opacity(at: 0.2, position: 1), 1, accuracy: 0.001)
     }
 
+    func testMarkdownClosingPreservesExistingInkPhase() throws {
+        var motion = FluidTextMotion(initial: "")
+        motion.update("**hello", now: 0)
+        let first = try XCTUnwrap(motion.bands.first)
+        motion.update("hello world", now: 0.05, sourceAppend: true)
+        let preserved = try XCTUnwrap(motion.bands.first)
+        let tail = try XCTUnwrap(motion.bands.last)
+        XCTAssertEqual(preserved.start, 0)
+        XCTAssertEqual(preserved.end, 5)
+        XCTAssertEqual(preserved.born, first.born)
+        XCTAssertEqual(preserved.opacity(at: 0.05), first.opacity(at: 0.05, position: 2.0 / 7), accuracy: 0.001)
+        XCTAssertEqual(tail.start, 5)
+        XCTAssertEqual(tail.end, 11)
+        XCTAssertEqual(tail.born, 0.05)
+        motion.update("replacement", now: 0.055)
+        XCTAssertTrue(motion.bands.isEmpty)
+    }
+
+    func testAmbiguousRenderedRewriteDoesNotReplay() {
+        var motion = FluidTextMotion(initial: "**word")
+        motion.update("word word", now: 0, sourceAppend: true)
+        XCTAssertTrue(motion.bands.isEmpty)
+        motion.update("word word!", now: 0.01)
+        XCTAssertEqual(motion.bands.first?.start, 9)
+    }
+
     func testCadenceDoesNotRestartOldBands() throws {
         var motion = FluidTextMotion(initial: "")
         motion.update("first word ", now: 0)
