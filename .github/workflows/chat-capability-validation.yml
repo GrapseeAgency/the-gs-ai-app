@@ -10,6 +10,7 @@ on:
       - 'src/lib/provider-rate-limit*.ts'
       - 'src/lib/openrouter.ts'
       - 'src/lib/search/planner.ts'
+      - 'src/lib/search/planner-context*.ts'
       - 'src/lib/context-crystallize*.ts'
       - 'src/lib/turn-resume*.ts'
       - 'src/lib/calc/**'
@@ -41,8 +42,11 @@ jobs:
           bun-version: latest
       - name: Focused chat regressions
         run: |
-          bun test src/lib/remote-tools.test.ts src/lib/context-crystallize.test.ts src/lib/provider-sse.test.ts src/lib/turn-resume.test.ts src/lib/calc/turn-calculator.test.ts src/lib/quality-routing.test.ts src/lib/provider-rate-limit.test.ts
+          bun test src/lib/remote-tools.test.ts src/lib/context-crystallize.test.ts src/lib/provider-sse.test.ts src/lib/turn-resume.test.ts src/lib/calc/turn-calculator.test.ts src/lib/quality-routing.test.ts src/lib/provider-rate-limit.test.ts src/lib/search/planner-context.test.ts
   model-benchmark:
+    # Live requests are explicit: do not spend the shared free-provider quota
+    # on every source-only commit, particularly during a Retry-After window.
+    if: github.event_name == 'workflow_dispatch'
     needs: unit
     runs-on: ubuntu-latest
     timeout-minutes: 30

@@ -195,7 +195,7 @@ function ModelScreen({ notify }: { notify: (message: string) => void }) {
           <div className="gs-model-copy">
             <div className="gs-model-heading">
               <strong>{item.title}</strong>
-              {item.recommended && <div className="gs-model-badges"><MetalBadge theme="auto" preset="silver" scale={0.68} strength={0.78} metalOpacity={0.72} glow={0.12}>PRO</MetalBadge><em>Recommended</em></div>}
+              {item.recommended && <div className="gs-model-badges"><MetalBadge theme="auto" scale={0.68} strength={0.78} metalOpacity={0.72} glow={0.12}>PRO</MetalBadge><em>Recommended</em></div>}
             </div>
             <small>{item.description}</small>
             <small>{item.detail}</small>

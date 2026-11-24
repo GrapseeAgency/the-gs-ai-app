@@ -26,6 +26,7 @@ import {
   evaluateWebSearchGate,
 } from '@/lib/websearch'
 import type { ClarifyOption, SearchIntent, SearchPlan, TimeRange } from './types'
+import { plannerLatest } from './planner-context'
 
 // 2026-09-21 live audit: the planner sits BEFORE any visible event, so a slow
 // planner is pure dead air on the client and pushes quick turns past the ~30s
@@ -277,7 +278,7 @@ function normalizePlan(raw: Record<string, unknown>, fallbackQuery: string): Sea
 }
 
 async function llmPlan(userText: string, historyText: string, fallbackQuery: string): Promise<SearchPlan | null> {
-  const userPayload = `Conversation so far (context only):\n${historyText || '(start of conversation)'}\n\nLatest user message:\n"""${userText.slice(0, 2000)}"""\n\nReturn the JSON classification now.`
+  const userPayload = `Conversation so far (context only):\n${historyText || '(start of conversation)'}\n\nLatest user message:\n${plannerLatest(userText)}\n\nReturn the JSON classification now.`
   const messages = [
     { role: 'system', content: PLANNER_SYSTEM },
     { role: 'user', content: userPayload },
@@ -395,7 +396,7 @@ export async function planSearch(input: PlanInput): Promise<SearchPlan> {
       fallbackQuery
     )
 
-  const plan = await llmPlan(text, input.historyLines.slice(-6).join('\n').slice(0, 3000), fallbackQuery)
+  const plan = await llmPlan(text, input.historyLines.slice(-6).join('\n'), fallbackQuery)
 
   if (plan) {
     // Deterministic veto still applies on top of the LLM output.

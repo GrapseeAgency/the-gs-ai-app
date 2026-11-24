@@ -67,4 +67,7 @@ for(const model of models)for(let trial=1;trial<=trials;trial++){
 }
 writeFileSync('free-model-benchmark.json',JSON.stringify({status:rateLimit.remaining()>0?'capacity_blocked':'executed',trials,retryAfterMs:rateLimit.remaining(),results},null,2))
 console.log(JSON.stringify({pass:results.filter(r=>r.status==='PASS').length,fail:results.filter(r=>r.status==='FAIL').length,error:results.filter(r=>r.status==='ERROR').length,blocked:results.filter(r=>r.status==='BLOCKED').length,total:results.length}))
+const reasonCounts: Record<string, number> = {}
+for (const r of results) if (r.reason) reasonCounts[r.reason] = (reasonCounts[r.reason] ?? 0) + 1
+console.log(JSON.stringify({reasonCounts, retryAfterMs:rateLimit.remaining()}))
 if(results.some(r=>r.status!=='PASS'))process.exitCode=1

@@ -157,6 +157,7 @@ import {
 } from '@/lib/search/research'
 import { runBranchingResearch } from '@/lib/research/branching'
 import { crystallizeIfNeeded } from '@/lib/context-crystallize'
+import { plannerHistory } from '@/lib/search/planner-context'
 import { attachmentMatchesTurn } from '@/lib/turn-resume'
 import { explicitCalculation, executeCalculation, calculationEvidence, type CalculationResult } from '@/lib/calc/turn-calculator'
 import { needsQualityChain } from '@/lib/quality-routing'
@@ -826,9 +827,7 @@ export async function prepareTurn(
   prep.historyWebSources = historyWebSources
   prep.includeHistoryEvidence = includeHistoryEvidence
 
-  prep.historyLines = history
-    .slice(-8)
-    .map((m) => `${m.role.toLowerCase() === 'assistant' ? 'assistant' : 'user'}: ${historyRowText(m).slice(0, 220)}`)
+  prep.historyLines = plannerHistory(history.slice(-6).map(m => ({role: m.role, content: historyRowText(m)})))
   console.log(
     `WEBSEARCH-GATE conv=${id} trigger=${webGate.trigger ?? 'none'} planner=${plannerRuns} clarifyFollowUp=${clarifyFollowUp} historySources=${historyWebSources.length} historyInject=${includeHistoryEvidence}`
   )
