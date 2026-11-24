@@ -38,6 +38,21 @@ class FluidTextMotionTest {
         }
     }
 
+    @Test fun opticalFrontMovesAcrossRealInkAndSettlesTogether() {
+        val band = FluidTextBand(0, 12, 0, 200_000_000)
+        for (tick in 0..200) {
+            val now = tick * 1_000_000L
+            val first = band.opacity(now, 0f)
+            val last = band.opacity(now, 1f)
+            assertTrue(first >= last)
+            assertTrue(first in 0.179f..1.001f)
+            assertTrue(last in 0.179f..1.001f)
+            if (tick > 0) assertTrue(first + 0.0001f >= band.opacity(now - 1_000_000L, 0f))
+        }
+        assertTrue(band.opacity(90_000_000, 0f) - band.opacity(90_000_000, 1f) > 0.2f)
+        assertEquals(1f, band.opacity(200_000_000, 1f), 0.001f)
+    }
+
     @Test fun cadenceIsContinuousAndDoesNotRestartOldBands() {
         val motion = FluidTextMotion("")
         val first = motion.update("first word ", 0, true).first()

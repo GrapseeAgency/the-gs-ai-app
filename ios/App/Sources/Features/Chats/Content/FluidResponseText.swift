@@ -128,7 +128,7 @@ private struct LiveFluidResponseText: View {
                 result.append(AttributedString(value[index(cursor)..<index(band.start)]))
             }
             let range = index(band.start)..<index(band.end)
-            let alpha = band.opacity(at: now)
+            let alpha = band.opacity(at: now, position: 0.5)
             if alpha >= 1 {
                 result.append(AttributedString(value[range]))
             } else {
@@ -169,12 +169,26 @@ private struct FluidGlyphRenderer: TextRenderer {
                 if progress >= 1 {
                     context.draw(run)
                 } else {
-                    var copy = context
-                    copy.opacity = attribute.band.opacity(at: now)
-                    let remaining = 1 - progress
-                    copy.translateBy(x: 0, y: 0.9 * remaining * remaining)
-                    copy.addFilter(.blur(radius: 1.8 * remaining))
-                    copy.draw(run)
+                    // Draw real positioned glyph slices with a traveling
+                    // optical front. Text shaping, ligatures and layout stay
+                    // native; no letter-by-letter SwiftUI views are created.
+                    let bounds = run.typographicBounds.rect
+                    for slice in run {
+                        let rect = slice.typographicBounds.rect
+                        let x = min(1, max(0, (rect.midX - bounds.minX) / max(1, bounds.width)))
+                        let position = run.layoutDirection == .rightToLeft ? 1 - x : x
+                        let local = attribute.band.localProgress(at: now, position: Double(position))
+                        if local >= 1 {
+                            context.draw(slice)
+                            continue
+                        }
+                        let softness = (1 - local) * (1 - local)
+                        var copy = context
+                        copy.opacity = fluidInkOpacity(local)
+                        copy.translateBy(x: 0, y: 0.65 * softness)
+                        copy.addFilter(.blur(radius: 1.35 * softness))
+                        copy.draw(slice)
+                    }
                 }
             }
         }

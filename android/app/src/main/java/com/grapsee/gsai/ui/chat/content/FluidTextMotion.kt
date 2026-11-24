@@ -13,10 +13,23 @@ internal data class FluidTextBand(
     fun progress(now: Long): Float =
         ((now - bornNanos).toDouble() / durationNanos).coerceIn(0.0, 1.0).toFloat()
 
-    fun opacity(now: Long): Float {
-        val remaining = 1f - progress(now)
-        return 1f - 0.82f * remaining * remaining
-    }
+    /** The optical front travels through the shaped run, not as a chunk flash.
+     * Every point starts readable and reaches full ink at the same deadline. */
+    fun localProgress(now: Long, position: Float): Float =
+        fluidLocalProgress(progress(now), position)
+
+    fun opacity(now: Long, position: Float = 0f): Float =
+        fluidInkOpacity(localProgress(now, position))
+}
+
+internal fun fluidLocalProgress(progress: Float, position: Float): Float =
+    ((progress - 0.24f * position.coerceIn(0f, 1f)) / 0.76f).coerceIn(0f, 1f)
+
+internal fun fluidInkOpacity(progress: Float): Float {
+    val p = progress.coerceIn(0f, 1f)
+    // Quintic smoothstep: continuous velocity and acceleration at both ends.
+    val eased = p * p * p * (p * (p * 6f - 15f) + 10f)
+    return 0.18f + 0.82f * eased
 }
 
 /** Initial/mounted text is already settled. Only a genuine append earns motion. */

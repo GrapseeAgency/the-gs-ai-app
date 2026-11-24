@@ -11,10 +11,23 @@ struct FluidTextBand: Hashable {
         min(1, max(0, (now - born) / duration))
     }
 
-    func opacity(at now: TimeInterval) -> Double {
-        let remaining = 1 - progress(at: now)
-        return 1 - 0.82 * remaining * remaining
+    func localProgress(at now: TimeInterval, position: Double) -> Double {
+        fluidLocalProgress(progress(at: now), position: position)
     }
+
+    func opacity(at now: TimeInterval, position: Double = 0) -> Double {
+        fluidInkOpacity(localProgress(at: now, position: position))
+    }
+}
+
+func fluidLocalProgress(_ progress: Double, position: Double) -> Double {
+    min(1, max(0, (progress - 0.24 * min(1, max(0, position))) / 0.76))
+}
+
+func fluidInkOpacity(_ progress: Double) -> Double {
+    let p = min(1, max(0, progress))
+    let eased = p * p * p * (p * (p * 6 - 15) + 10)
+    return 0.18 + 0.82 * eased
 }
 
 /// A bounded, monotonic visual clock independent of the response transport.

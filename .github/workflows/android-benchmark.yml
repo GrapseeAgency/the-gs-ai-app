@@ -35,7 +35,7 @@ jobs:
           python3 - <<'PYTEST'
           import subprocess
           from pathlib import Path
-          result = subprocess.run(['gradle', ':app:testDebugUnitTest', '--tests', 'com.grapsee.gsai.ui.chat.content.CalcHonestyTest', '--no-daemon', '--stacktrace'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+          result = subprocess.run(['gradle', ':app:testDebugUnitTest', '--tests', 'com.grapsee.gsai.ui.chat.content.CalcHonestyTest', '--tests', 'com.grapsee.gsai.ui.chat.content.FluidTextMotionTest', '--no-daemon', '--stacktrace'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
           print(result.stdout)
           Path('../calculator-tests.log').write_text(result.stdout)
           if result.returncode:
@@ -57,9 +57,16 @@ jobs:
           arch: x86_64
           profile: pixel_6
           ram-size: 4096M
-          disable-animations: true
+          disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
+            set -e
+            adb shell settings put global animator_duration_scale 1
+            adb shell settings put global transition_animation_scale 1
+            adb shell settings put global window_animation_scale 1
+            (cd android && gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.grapsee.gsai.ui.chat.content.FluidResponseRenderTest --no-daemon --stacktrace)
+            mkdir -p fluid-response-android
+            adb pull /sdcard/Android/data/com.grapsee.gsai/files/fluid-response-evidence/. fluid-response-android/
             cd android && bash -c 'set -o pipefail; gradle :benchmark:connectedCheck --no-daemon --stacktrace 2>&1 | tee ../benchmark-raw.log; gradle :benchmark:dependencies --configuration releaseRuntimeClasspath > ../dep-report.log 2>&1 || true; unzip -p benchmark/build/outputs/apk/release/benchmark-release.apk classes.dex > ../classes.dex 2>/dev/null || true; for dx in $(unzip -l benchmark/build/outputs/apk/release/benchmark-release.apk | grep -o 'classes[0-9]*\.dex' | sort -u); do echo "== $dx Runner:$(unzip -p benchmark/build/outputs/apk/release/benchmark-release.apk $dx | strings | grep -c MacrobenchmarkRunner) Rule:$(unzip -p benchmark/build/outputs/apk/release/benchmark-release.apk $dx | strings | grep -c MacrobenchmarkRule)" >> ../dex-scan.log; done; ls -la benchmark/build/outputs/apk/release/ > ../apk-list.log 2>&1 || true'
       - name: Upload raw benchmark evidence
         if: always()
@@ -68,6 +75,8 @@ jobs:
           name: chat-benchmark-raw
           path: |
             calculator-tests.log
+            fluid-response-android/**
+            android/app/build/outputs/androidTest-results/**
             android/app/build/test-results/testDebugUnitTest/**
             benchmark-raw.log
             dep-report.log

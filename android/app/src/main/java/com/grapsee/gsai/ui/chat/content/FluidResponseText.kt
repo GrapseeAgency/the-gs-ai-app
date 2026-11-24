@@ -20,6 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.asComposeRenderEffect
@@ -29,10 +31,19 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.ResolvedTextDirection
 import com.grapsee.gsai.data.SettingsStore
 
 internal val LocalFluidResponseText = staticCompositionLocalOf { false }
 internal val LocalFluidFreshMount = staticCompositionLocalOf { false }
+
+private data class FluidRegion(
+    val band: FluidTextBand,
+    val path: Path,
+    val rect: Rect,
+    val rtl: Boolean,
+    val opticalSafe: Boolean
+)
 
 /**
  * Native Compose text with an append-only, draw-phase feather. No second text
@@ -106,17 +117,25 @@ internal fun FluidResponseText(
                     else null
                 }
             } else emptyList()
-            // Split at actual line boundaries; never soften a whole paragraph.
-            val opticalRects = if (measured != null && measured.layoutInput.text.text == text.text) {
+            // Regions are derived from the native shaped line layout. Never
+            // split a ligature to lay out independent animated letters. Mixed
+            // bidi selections use their exact path mask instead of rectangular
+            // optical filtering that could touch unrelated visual runs.
+            val regions = if (measured != null && measured.layoutInput.text.text == text.text) {
                 paths.flatMap { (band, _) ->
                     val first = measured.getLineForOffset(band.start)
                     val last = measured.getLineForOffset(band.end - 1)
                     (first..last).mapNotNull { line ->
                         val start = maxOf(band.start, measured.getLineStart(line))
                         val end = minOf(band.end, measured.getLineEnd(line))
-                        if (start < end) band to measured.getPathForRange(start, end).getBounds() else null
+                        if (start >= end) return@mapNotNull null
+                        val path = measured.getPathForRange(start, end)
+                        val rect = path.getBounds()
+                        val direction = measured.getBidiRunDirection(start)
+                        val uniform = (start until end).all { measured.getBidiRunDirection(it) == direction }
+                        FluidRegion(band, path, rect, direction == ResolvedTextDirection.Rtl, uniform)
                     }
-                }.filter { it.second.width > 0f && it.second.height > 0f }
+                }.filter { it.rect.width > 0f && it.rect.height > 0f }
             } else emptyList()
             val layerPaint = Paint()
             val bounds = Rect(0f, 0f, size.width, size.height)
@@ -131,8 +150,8 @@ internal fun FluidResponseText(
                 } else {
                     // One GPU pass, isolated to incoming glyph regions. A failed
                     // shader or software canvas keeps the native opacity fallback.
-                    if (drawContext.canvas.nativeCanvas.isHardwareAccelerated && opticalRects.size in 1..16) {
-                        val effect = optical.value?.effect(opticalRects, now, density)
+                    if (drawContext.canvas.nativeCanvas.isHardwareAccelerated && regions.size in 1..16 && regions.all { it.opticalSafe }) {
+                        val effect = optical.value?.effect(regions, now, density)
                         if (effect != null) {
                             // Re-record only when the text/layout/ranges change,
                             // not on each display tick. Animate the existing texture.
@@ -150,9 +169,15 @@ internal fun FluidResponseText(
                     drawContext.canvas.saveLayer(bounds, layerPaint)
                     try {
                         drawContent()
-                        for ((band, path) in paths) {
-                            val removal = 1f - band.opacity(now)
-                            if (removal > 0f) drawPath(path, Color.Black.copy(alpha = removal), blendMode = BlendMode.DstOut)
+                        for (region in regions) {
+                            val (band, path, rect, rtl, _) = region
+                            if (band.progress(now) >= 1f) continue
+                            val stops = (0..4).map { j ->
+                                val fraction = j / 4f
+                                val phase = if (rtl) 1f - fraction else fraction
+                                Color.Black.copy(alpha = 1f - band.opacity(now, phase))
+                            }
+                            drawPath(path, Brush.horizontalGradient(stops, rect.left, rect.right), blendMode = BlendMode.DstOut)
                         }
                     } finally {
                         drawContext.canvas.restore()
@@ -179,15 +204,23 @@ private class FluidOpticalEffect {
                 float4 r = regions[i];
                 float4 m = motion[i];
                 if (m.w > 0.0 && p.x >= r.x && p.x < r.z && p.y >= r.y && p.y < r.w) {
+                    float along = clamp((p.x - r.x) / max(1.0, r.z - r.x), 0.0, 1.0);
+                    if (m.z < 0.0) along = 1.0 - along;
+                    float t = clamp((m.x - 0.24 * along) / 0.76, 0.0, 1.0);
+                    float ease = t*t*t*(t*(t*6.0-15.0)+10.0);
+                    float softness = (1.0 - t) * (1.0 - t);
+                    float radius = 1.35 * m.y * softness;
                     float2 lo = r.xy + float2(0.01);
                     float2 hi = max(lo, r.zw - float2(0.01));
-                    float2 q = p - float2(0.0, m.z);
+                    float2 q = p - float2(0.0, 0.65 * m.y * softness);
+                    // A soft optical front in real text space, not a glow or
+                    // simulated character. Fully settled pixels are untouched.
                     half4 ink = source.eval(clamp(q, lo, hi)) * 0.40;
-                    ink += source.eval(clamp(q + float2(m.y, 0.0), lo, hi)) * 0.15;
-                    ink += source.eval(clamp(q - float2(m.y, 0.0), lo, hi)) * 0.15;
-                    ink += source.eval(clamp(q + float2(0.0, m.y), lo, hi)) * 0.15;
-                    ink += source.eval(clamp(q - float2(0.0, m.y), lo, hi)) * 0.15;
-                    return ink * half(m.x);
+                    ink += source.eval(clamp(q + float2(radius, 0.0), lo, hi)) * 0.15;
+                    ink += source.eval(clamp(q - float2(radius, 0.0), lo, hi)) * 0.15;
+                    ink += source.eval(clamp(q + float2(0.0, radius), lo, hi)) * 0.15;
+                    ink += source.eval(clamp(q - float2(0.0, radius), lo, hi)) * 0.15;
+                    return ink * half(0.18 + 0.82 * ease);
                 }
             }
             return source.eval(p);
@@ -197,16 +230,16 @@ private class FluidOpticalEffect {
     private val regions = FloatArray(64)
     private val motion = FloatArray(64)
 
-    fun effect(rects: List<Pair<FluidTextBand, Rect>>, now: Long, density: Float): androidx.compose.ui.graphics.RenderEffect? {
+    fun effect(rects: List<FluidRegion>, now: Long, density: Float): androidx.compose.ui.graphics.RenderEffect? {
         regions.fill(0f); motion.fill(0f)
         var left = Float.MAX_VALUE
         var top = Float.MAX_VALUE
         var right = -Float.MAX_VALUE
         var bottom = -Float.MAX_VALUE
         for ((index, item) in rects.withIndex()) {
-            val (band, rect) = item
-            val remaining = 1f - band.progress(now)
-            if (remaining <= 0f) continue
+            val (band, _, rect, rtl, _) = item
+            val progress = band.progress(now)
+            if (progress >= 1f) continue
             left = minOf(left, rect.left); top = minOf(top, rect.top)
             right = maxOf(right, rect.right); bottom = maxOf(bottom, rect.bottom)
             val at = index * 4
@@ -214,9 +247,9 @@ private class FluidOpticalEffect {
             regions[at + 1] = rect.top
             regions[at + 2] = rect.right
             regions[at + 3] = rect.bottom
-            motion[at] = band.opacity(now)
-            motion[at + 1] = 1.8f * density * remaining
-            motion[at + 2] = 0.9f * density * remaining * remaining
+            motion[at] = progress
+            motion[at + 1] = density
+            motion[at + 2] = if (rtl) -1f else 1f
             motion[at + 3] = 1f
         }
         return runCatching {

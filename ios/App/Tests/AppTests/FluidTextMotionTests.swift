@@ -25,6 +25,21 @@ final class FluidTextMotionTests: XCTestCase {
         XCTAssertTrue(motion.bands.isEmpty)
     }
 
+    func testOpticalFrontMovesAcrossRealInkAndSettlesTogether() {
+        let band = FluidTextBand(start: 0, end: 12, born: 0, duration: 0.2)
+        for tick in 0...200 {
+            let now = Double(tick) / 1000
+            let first = band.opacity(at: now, position: 0)
+            let last = band.opacity(at: now, position: 1)
+            XCTAssertGreaterThanOrEqual(first + 0.000001, last)
+            XCTAssertTrue((0.179...1.001).contains(first))
+            XCTAssertTrue((0.179...1.001).contains(last))
+            if tick > 0 { XCTAssertGreaterThanOrEqual(first + 0.0001, band.opacity(at: now - 0.001)) }
+        }
+        XCTAssertGreaterThan(band.opacity(at: 0.09, position: 0) - band.opacity(at: 0.09, position: 1), 0.2)
+        XCTAssertEqual(band.opacity(at: 0.2, position: 1), 1, accuracy: 0.001)
+    }
+
     func testCadenceDoesNotRestartOldBands() throws {
         var motion = FluidTextMotion(initial: "")
         motion.update("first word ", now: 0)
