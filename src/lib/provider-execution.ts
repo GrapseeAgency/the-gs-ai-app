@@ -12,7 +12,8 @@
  * terminates the stream, and a plain-text payload is treated as a delta.
  */
 
-import { consumeSseStream, type ChatMessageInput } from './ai'
+import { consumeSseStream } from './provider-sse'
+import type { ChatMessageInput } from './ai'
 import {
   FreeCapacityUnavailableError,
   isFreeCapacityUnavailableError,
