@@ -180,3 +180,7 @@ keys.json
 
 # Generated TypeScript probe output
 /dist/
+
+# Original npm avatar capture bundle (build-time only)
+/scripts/native-avatar/.cache/
+/android/app/src/main/assets/bot-avatar/avatar.bundle.js

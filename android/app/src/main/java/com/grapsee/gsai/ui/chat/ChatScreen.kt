@@ -204,9 +204,6 @@ import com.grapsee.gsai.ui.chat.content.NexlyGlyph
 import com.grapsee.gsai.ui.chat.content.NexlyInk
 import com.grapsee.gsai.ui.chat.content.containsNexlyPlan
 import com.grapsee.gsai.ui.chat.content.nexlyPearlBackdrop
-import com.grapsee.gsai.ui.orbs.OrbState
-import com.grapsee.gsai.ui.orbs.chatActivityLabel
-import com.grapsee.gsai.ui.orbs.orbStateForChatStream
 import com.grapsee.gsai.ui.theme.GsFonts
 import com.grapsee.gsai.ui.theme.GsTheme
 import com.grapsee.gsai.ui.theme.gsHaptic
@@ -488,42 +485,6 @@ fun ChatScreen(
     val streamStateRaw = chatStream.state.collectAsStateWithLifecycle()
     val isStreaming by remember {
         derivedStateOf { streamStateRaw.value?.phase == ChatStreamController.Phase.Streaming }
-    }
-    // Phase-4 activity orb state — derived from the REAL stream state only.
-    // It changes twice per stream (no tokens yet ↔ tokens flowing), so the
-    // ~30 Hz text flushes recompute this but never recompose anything below.
-    // PHASE 6/7: the request's real hasAttachments flag drives the honest
-    // pre-first-token mapping (vision analysis / server-side document
-    // extraction are real work → WORKING before the first token).
-    val liveOrbState by remember {
-        derivedStateOf {
-            orbStateForChatStream(
-                streamStateRaw.value?.phase,
-                streamStateRaw.value?.streamText,
-                streamStateRaw.value?.hasAttachments == true,
-                // PHASE 8.1: the wire's honest search phase drives SEARCHING,
-                // WORKING, or COMPOSING before the first token. Null for plain
-                // turns until a real provider-generation status arrives.
-                streamStateRaw.value?.searchPhase,
-                streamStateRaw.value?.generationStatus
-            )
-        }
-    }
-    // The composer exposes a concise status only when its real source changes:
-    // a plain pre-token wait is Working, Thinking requires the resolved thinking
-    // mode/trace, and Answering starts only once response tokens are flowing.
-    val liveActivityLabel by remember {
-        derivedStateOf {
-            val raw = streamStateRaw.value
-            liveOrbState?.let { state ->
-                chatActivityLabel(
-                    state = state,
-                    effectiveMode = raw?.effectiveMode,
-                    hasReasoningSignal = raw?.hasReasoningSignal == true,
-                    generationStatus = raw?.generationStatus
-                )
-            }
-        }
     }
     // This screen's live-stream token (saveable): a rotation re-attach only
     // adopts a stream dispatched by this screen's own lineage — a fresh nav
@@ -1761,9 +1722,6 @@ fun ChatScreen(
                 // field. The field and send slot stay exactly where the thumb
                 // expects them.
                 isStreaming = isStreaming,
-                // Phase label is derived from real stream signals at screen
-                // scope, avoiding whole-screen recomposition for each token.
-                activityLabel = liveActivityLabel,
                 onStop = {
                     // Cancelling finalizes in the controller: the cancelled
                     // repository job persists the partial (NonCancellable)
@@ -2263,8 +2221,8 @@ internal fun UserMessage(
  * the attach/mode sheet the old plus and mic used to reach, so no capability
  * was traded for the simpler chrome. Send is the peach paper-plane with the
  * layered press (uiverse dull-ladybug-18 intent: the icon lifts as the
- * container scales). While a turn runs, the selected bot avatar and an explicit
- * Stop button own the trailing slot, with the real phase label directly above.
+ * container scales). During a turn, only the square stop glyph replaces Send.
+ * All assistant identity and generation status stay in the transcript.
  */
 @Composable
 internal fun ComposerRow(
@@ -2279,8 +2237,6 @@ internal fun ComposerRow(
     queuedText: () -> String,
     onQueue: () -> Unit,
     onUnqueue: () -> Unit,
-    // Plain-language status derived from real stream events; null when idle.
-    activityLabel: String? = null,
     // PHASE 5: the live attachment drafts — chips row above the field,
     // recomposition stays scoped to the row (the transcript never reacts).
     drafts: List<AttachmentDraft> = emptyList(),
@@ -2304,31 +2260,6 @@ internal fun ComposerRow(
         // with an X that hands the draft straight back to the composer.
         if (queuedText().isNotBlank() && isStreaming) {
             QueuedDraftRow(text = queuedText(), onCancel = onUnqueue)
-        }
-        if (isStreaming) {
-            activityLabel?.let { label ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 14.dp, end = 14.dp, bottom = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(GsTheme.colors.aiActive)
-                    )
-                    Spacer(Modifier.width(7.dp))
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = GsTheme.colors.textSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
         }
         val canSend = draftText().isNotBlank() || drafts.isNotEmpty()
         // Queue-send is streaming-only and text-only: attachments still in
@@ -2512,6 +2443,7 @@ internal fun ReferenceThinkingCard(
     isPlan: Boolean = true,
     searchSources: Int = 0,
     showStages: Boolean = true,
+    showAvatar: Boolean = true,
 ) {
     if (phase != NexlyThinkingPhase.DONE) {
         val title = when (phase) {
@@ -2542,7 +2474,8 @@ internal fun ReferenceThinkingCard(
         Row(Modifier.fillMaxWidth().widthIn(max = 460.dp)
             .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(16.dp)).padding(12.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), color = NexlyInk.label, strokeWidth = 1.5.dp)
+            // One native, original-library animated avatar IN the status card.
+            if (showAvatar) AssistantAvatar(isWorking = true)
             Column(Modifier.weight(1f)) {
                 Text(listOfNotNull(title, effortLabel).joinToString(" · "),
                     style = MaterialTheme.typography.labelMedium, color = NexlyInk.label)
@@ -2770,12 +2703,12 @@ private fun QueuedDraftRow(text: String, onCancel: () -> Unit) {
     }
 }
 
-/** Clearly labeled, touch-sized stop action for an in-flight assistant turn. */
+/** Icon-only stop action. The accessible label is not painted as text. */
 @Composable
 private fun StopGeneratingButton(onStop: () -> Unit) {
-    Row(
+    Box(
         modifier = Modifier
-            .height(36.dp)
+            .size(38.dp)
             .clip(CircleShape)
             .background(GsTheme.colors.error)
             .clickable(
@@ -2784,25 +2717,14 @@ private fun StopGeneratingButton(onStop: () -> Unit) {
                 role = Role.Button,
                 onClickLabel = "Stop generating"
             ) { onStop() }
-            .semantics { contentDescription = "Stop generating" }
-            .padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
+            .semantics { contentDescription = "Stop generating" },
+        contentAlignment = Alignment.Center
     ) {
         Box(
             Modifier
-                .size(10.dp)
+                .size(12.dp)
                 .clip(RoundedCornerShape(2.dp))
                 .background(GsTheme.colors.onError)
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = "Stop",
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
-            ),
-            color = GsTheme.colors.onError
         )
     }
 }
@@ -2833,7 +2755,7 @@ private fun JumpToLatestPill(onClick: () -> Unit) {
  * directly on the app background at the reading column (bodyLarge measure,
  * 16sp / 24sp line height, hard-capped at 640dp; the shell clamps the whole
  * surface to GsLayout.contentMaxWidth and centers it). Identity is a compact
- * avatar+name row rendered once per turn GROUP ([showIdentity] — see the
+ * avatar embedded inside the active response status card ([showIdentity] — see the
  * grouping logic at the call site), not a badge on every turn. Actions are a
  * quiet icon row BELOW the content (Copy / Regenerate / Read aloud / Share;
  * Translate / Save-to-Library / Branch stay in the long-press menu — all
@@ -2979,10 +2901,6 @@ internal fun AssistantMessage(
     val showStatus = message.isStreaming || showThinkingStages || turnSources.isNotEmpty()
     Box(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            if (showIdentity) {
-                AssistantAvatar(isWorking = message.isStreaming)
-                Spacer(Modifier.width(9.dp))
-            }
             Column(modifier = Modifier.weight(1f)) {
             // PHASE 8.1: the search trace, ABOVE the bubble — expanded while
             // the stream runs, collapsed to the one-line summary after done
@@ -3083,7 +3001,8 @@ internal fun AssistantMessage(
                                 effort = cardEffort,
                                 isPlan = planVisible,
                                 searchSources = turnSources.size,
-                                showStages = showThinkingStages
+                                showStages = showThinkingStages,
+                                showAvatar = showIdentity
                             )
                         }
                     } else {
@@ -3447,12 +3366,12 @@ private fun SheetActionRow(
     }
 }
 
-/** Selected bot identity beside assistant replies; it breathes while streaming. */
+/** Native animated identity, rendered only inside the active response status card. */
 @Composable
 private fun AssistantAvatar(isWorking: Boolean) {
     GsBotAvatar(
         style = SettingsStore.assistantAvatar,
-        size = 38.dp,
+        size = 34.dp,
         isWorking = isWorking,
     )
 }
