@@ -17,10 +17,12 @@
  *   itself ran 16.1.3 (live search had run; the answer ignored it).
  *
  * Enforcement ladder for every violation: regenerate once with the
- * constraint restated as the only system message, then repair
- * deterministically, then fail honestly. A known-violating draft is never
+ * constraint restated without discarding the original system contract, then
+ * apply whitespace-only repair or fail honestly. A known-violating draft is never
  * silently shipped.
  */
+
+import { appendSystemInstruction } from './system-instruction'
 
 export interface OutputConstraints {
   /** Output must be exactly N words. */
@@ -118,7 +120,7 @@ export function constraintViolations(draft: string, c: OutputConstraints): strin
   return v
 }
 
-/** Constraint-only system message for the one regeneration attempt. */
+/** Preserve all original messages during the bounded regeneration. */
 export function buildConstraintRetryMessages<T extends { role: string }>(
   messages: T[],
   c: OutputConstraints
@@ -137,75 +139,21 @@ export function buildConstraintRetryMessages<T extends { role: string }>(
       `The letter '${ch}' is FORBIDDEN. Not one word of your output may contain '${ch}' (any case).`
     )
   }
-  const constraint = { role: 'system', content: parts.join(' ') } as unknown as T
-  return [constraint, ...messages.slice(1)]
+  return appendSystemInstruction(messages, parts.join(' '))
 }
 
-/**
- * Deterministic repair, tried after the retry still violates:
- *   - forbidden letters: drop every offending WORD, rejoin the rest;
- *   - exactWords: truncate to the first N words;
- *   - minWords: not repairable by truncation (cannot invent words).
- * Returns null when no deterministic repair can satisfy all constraints —
- * the caller then ships the honest-failure statement instead.
- */
+/** Whitespace-only repair. Never remove negations, truncate factual claims
+ * or add filler merely to make a mechanical output grader pass. */
 export function repairConstraints(draft: string, c: OutputConstraints): string | null {
-  let out = draft.trim()
-  if (c.forbiddenChars && c.forbiddenChars.length > 0) {
-    const bad = new RegExp(
-      `[a-z0-9'\\u2019-]*[${c.forbiddenChars.join('')}][a-z0-9'\\u2019-]*`,
-      'gi'
-    )
-    out = out
-      .replace(bad, ' ')
-      .replace(/\s{2,}/g, ' ')
-      .replace(/\s+([,.;:!?])/g, '$1')
-      .trim()
-  }
-  if (c.exactWords !== undefined) {
-    let words = out.split(/\s+/).filter((w) => w.length > 0)
-    if (words.length > c.exactWords) {
-      // Directive spec: truncate to the constraint and re-emit.
-      out = words.slice(0, c.exactWords).join(' ')
-    } else if (words.length < c.exactWords) {
-      // Under-length cannot be truncated up; pad deterministically so the
-      // shipped output still satisfies the count (bar: exactly N, every time).
-      words = [...words, ...FILLER_WORDS].slice(0, c.exactWords)
-      out = words.join(' ')
-    }
-  }
-  const violations = constraintViolations(out, c)
-  if (violations.length === 0) return out
-  return null
+  const out = draft.trim()
+  return constraintViolations(out,c).length === 0 ? out : null
 }
 
-const FILLER_WORDS = [
-  'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
-  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen',
-  'eighteen', 'nineteen', 'twenty',
-]
-
-/** Honest fallback when even repair cannot comply. States the failure. */
-export function honestConstraintFailure(draft: string, c: OutputConstraints): string {
-  if (c.forbiddenChars && c.forbiddenChars.length > 0) {
-    // The whole returned message must satisfy the forbidden-char constraint
-    // (bar: the character never appears). This prefix is letter-free for the
-    // common 'e' case: N-O V-A-L-I-D O-U-T-P-U-T, d-i-d n-o-t p-a-s-s.
-    const cleaned = draft
-      .replace(
-        new RegExp(`[a-z0-9'\\u2019-]*[${c.forbiddenChars.join('')}][a-z0-9'\\u2019-]*`, 'gi'),
-        ' '
-      )
-      .replace(/\s{2,}/g, ' ')
-      .trim()
-    return `NO VALID OUTPUT (did not pass): ${cleaned}`
-  }
-  const why: string[] = []
-  if (c.exactWords !== undefined) why.push(`exactly ${c.exactWords} words`)
-  if (c.minWords !== undefined) why.push(`at least ${c.minWords} words`)
-  return `I could not produce an answer that fully satisfies the constraint (${why.join(
-    '; '
-  )}). Closest valid output: "${draft.trim()}"`
+/** Explicit failure is safer than shipping a mechanically compliant but
+ * semantically altered answer. The failure notice itself may not conform to
+ * the requested constraint; it is never presented as a successful answer. */
+export function honestConstraintFailure(_draft: string, _c: OutputConstraints): string {
+  return 'I could not satisfy the requested response constraints without compromising the answer.'
 }
 
 // ---------------------------------------------------------------------------

@@ -21,10 +21,13 @@
  * did that" (an explanation request) never matches.
  */
 
+import { appendSystemInstruction } from './system-instruction'
+import { honestConstraintFailure } from './constraint-guard'
+
 export interface OutputDirective {
   /** 'token' — output exactly this one word; 'wordCount' — output exactly N words. */
   kind: 'token' | 'wordCount'
-  /** token: the exact demanded word (lowercased, punctuation-stripped).
+  /** token: the exact demanded word, preserving case.
    *  wordCount: the demanded count as a string (kept for log compatibility). */
   target: string
   /** Set only for kind='wordCount'. */
@@ -62,8 +65,7 @@ const COUNT_PATTERNS: RegExp[] = [
 // say red."). The demanded token is the response word ("blue"). Tolerates
 // the repeated cue sentence (". I say red.") and "when/whenever I say".
 const GAME_PATTERNS: RegExp[] = [
-  new RegExp(String.raw`^\s*if\s+i\s+say\s+["']?([a-z0-9'’-]{1,24})["']?\s*[,.;:!?]*\s*(?:then\s+)?you\s+(?:say|reply|respond|answer)\s+["']?([a-z0-9'’-]{1,24})["']?\s*(?:and\s+nothing\s+else|nothing\s+else|only)?[.!?]*\s*(?:i(?:'m|\s+am)?\s+saying\s+["']?[a-z0-9'’-]{1,24}["']?\s*[.!?]*\s*|i\s+say\s+["']?[a-z0-9'’-]{1,24}["']?\s*[.!?]*\s*|now\s*[.!?]*\s*)*$`, 'i'),
-  new RegExp(String.raw`^\s*(?:when|whenever)\s+i\s+say\s+["']?([a-z0-9'’-]{1,24})["']?\s*[,.;:!?]*\s*(?:then\s+)?you\s+(?:say|reply|respond|answer)\s+["']?([a-z0-9'’-]{1,24})["']?\s*(?:and\s+nothing\s+else|nothing\s+else|only)?[.!?]*\s*(?:i(?:'m|\s+am)?\s+saying\s+["']?[a-z0-9'’-]{1,24}["']?\s*[.!?]*\s*|i\s+say\s+["']?[a-z0-9'’-]{1,24}["']?\s*[.!?]*\s*|now\s*[.!?]*\s*)*$`, 'i'),
+  /^(?:if|when|whenever)\s+i\s+say\s+["']?([a-z0-9'’-]{1,24})["']?\s*[,;:]*\s*(?:then\s+)?you\s+(?:say|reply|respond|answer)\s+["']?([a-z0-9'’-]{1,24})["']?\s*(?:and\s+nothing\s+else|nothing\s+else|only)?[.!?]+\s*i\s+say\s+["']?([a-z0-9'’-]{1,24})["']?[.!?]*$/i,
 ]
 
 function toCount(raw: string): number | null {
@@ -80,15 +82,14 @@ export function detectOutputDirective(userText: string): OutputDirective | null 
   if (text.length === 0 || text.length > 80) return null // directives are short
   for (const p of GAME_PATTERNS) {
     const m = p.exec(text)
-    if (m?.[2]) {
-      const target = m[2].toLowerCase().replace(/[.!?]+$/, '')
-      if (target.length > 0) return { kind: 'token', target }
+    if (m?.[2] && m[1].toLowerCase() === m[3]?.toLowerCase()) {
+      return {kind:'token',target:m[2]}
     }
   }
   for (const p of DIRECTIVE_PATTERNS) {
     const m = p.exec(text)
     if (m?.[1]) {
-      const target = m[1].toLowerCase().replace(/[.!?]+$/, '')
+      const target = m[1].replace(/[.!?]+$/, '')
       if (target.length > 0) return { kind: 'token', target }
     }
   }
@@ -102,43 +103,18 @@ export function detectOutputDirective(userText: string): OutputDirective | null 
   return null
 }
 
-/**
- * Approach A — deterministic enforcement. Returns null when the draft IS the
- * target (compliant — ship as-is); otherwise returns the deterministic
- * compliant replacement, which the caller ships in place of the draft.
- *
- * Token compliance is STRICT: the raw draft (trimmed) must equal the target
- * case-insensitively with NO extra punctuation. "Blue." for target "blue" is
- * NOT compliant (baseline I16: the trailing period broke the consumer regex
- * ^blue$) — the bare target ships instead. Case differences are tolerated.
- *
- * wordCount compliance: exactly N whitespace-separated tokens (the grader's
- * count). Over-length drafts are deterministically truncated to the first N
- * words. Under-length drafts cannot be truncated up to invent content, so the
- * canonical form-filler ("one two three") ships — a count-only directive has
- * no factual content to fabricate.
- */
-export function enforceDirective(
-  draft: string,
-  d: OutputDirective
-): string | null {
+/** Literal repetition can be corrected without inventing content. A bare
+ * word-count request may refer to earlier context, so never pad or truncate
+ * its answer to fake compliance. */
+export function enforceDirective(draft: string, d: OutputDirective): string | null {
   const raw = draft.trim()
   if (d.kind === 'wordCount') {
     const n = d.count ?? Number(d.target)
-    if (!Number.isFinite(n) || n < 1) return null
-    const words = raw.split(/\s+/).filter((w) => w.length > 0)
-    if (words.length === n) return null
-    if (words.length > n) return words.slice(0, n).join(' ')
-    return FILLER_WORDS.slice(0, n).join(' ')
+    if (raw.split(/\s+/).filter(Boolean).length === n) return null
+    return honestConstraintFailure(raw,{exactWords:n})
   }
-  return raw.toLowerCase() === d.target ? null : d.target
+  return raw === d.target ? null : d.target
 }
-
-const FILLER_WORDS = [
-  'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
-  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen',
-  'eighteen', 'nineteen', 'twenty',
-]
 
 /** Approach B — unambiguous pre-processing rewrite of the user turn. */
 export function buildDirectiveRewrite(d: OutputDirective): string {
@@ -148,47 +124,14 @@ export function buildDirectiveRewrite(d: OutputDirective): string {
   return `Output exactly one word and nothing else: ${d.target}`
 }
 
-/**
- * Approach B message builder — the FULL conversation with ONLY the final user
- * turn replaced by the unambiguous directive rewrite. (The first cut of the
- * route wiring truncated the array to the rewritten turn alone — a system-less
- * one-message request — which made B ramblier and C a system-only array that
- * the provider rejects with 400; this helper is the single correct builder.)
- */
-export function buildDirectiveMessages<T extends { role: string }>(
-  messages: T[],
-  d: OutputDirective
-): T[] {
-  let lastUserIdx = -1
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === 'user') {
-      lastUserIdx = i
-      break
-    }
-  }
-  if (lastUserIdx === -1) {
-    return [...messages, { role: 'user', content: buildDirectiveRewrite(d) } as unknown as T]
-  }
-  return messages.map((m, i) =>
-    i === lastUserIdx ? ({ ...m, content: buildDirectiveRewrite(d) } as unknown as T) : m
-  )
+/** Preserve the original request and all evidence, including prior context. */
+export function buildDirectiveMessages<T extends {role:string}>(messages: T[], d: OutputDirective): T[] {
+  return appendSystemInstruction(messages,buildDirectiveRewrite(d))
 }
 
-/**
- * Approach C — force-retry messages: the SAME conversation with the leading
- * system message REPLACED by a constraint-only system message, so nothing
- * dilutes the repeat instruction.
- */
-export function buildDirectiveRetryMessages<T extends { role: string }>(
-  messages: T[],
-  d: OutputDirective
-): T[] {
-  const constraint = {
-    role: 'system',
-    content:
-      d.kind === 'wordCount'
-        ? `Output exactly ${d.count} words and nothing else. Do not count out loud, do not explain.`
-        : `Repeat the following exactly and output nothing else: ${d.target}`,
-  } as unknown as T
-  return [constraint, ...messages.slice(1)]
+/** Retry without replacing any of the original system contract. */
+export function buildDirectiveRetryMessages<T extends {role:string}>(messages:T[],d:OutputDirective):T[] {
+  return appendSystemInstruction(messages, d.kind === 'wordCount'
+    ? `Output exactly ${d.count} words and nothing else. Do not count out loud.`
+    : `Repeat the following exactly and output nothing else: ${d.target}`)
 }

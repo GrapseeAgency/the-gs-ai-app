@@ -586,8 +586,14 @@ export async function prepareTurn(
 
   const historicalReligious = content.trim().length > 0 ? detectHistoricalReligious(content) : false
   const numericCheck = content.trim().length > 0 && isCountingRequest(content)
-  const directive = content.trim().length > 0 ? detectOutputDirective(content) : null
-  const constraints = content.trim().length > 0 ? detectOutputConstraints(content) : null
+  const detectedDirective = content.trim().length > 0 ? detectOutputDirective(content) : null
+  // A format-only follow-up still refers to conversation content; do not
+  // replace it with a context-free word game.
+  const directive = detectedDirective?.kind === 'token' ? detectedDirective : null
+  const detectedConstraints = content.trim().length > 0 ? detectOutputConstraints(content) : null
+  const constraints = detectedDirective?.kind === 'wordCount'
+    ? {...detectedConstraints, exactWords: detectedDirective.count}
+    : detectedConstraints
   const clientTimezone = args.timezone ?? null
   const cap = decideCapability({
     content,
@@ -2058,9 +2064,11 @@ async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: Abor
         streamAnswerDelta
       )
       if (violation) {
-        console.log(`GS-GUARD conv=${id} emitted-after-retries violation=${violation.kind}`)
+        console.log(`GS-GUARD conv=${id} rejected-after-retries violation=${violation.kind}`)
       }
-      full = text
+      full = violation
+        ? 'I could not produce a reliable answer consistent with the available evidence. Please retry.'
+        : text
       // GS-CONSTRAINT-GUARD (Failure C): verify draft arithmetic against a
       // CSV-shaped table in the document context; regenerate once, then
       // deterministically rewrite wrong totals. Raw evidence: t17 summed
@@ -2090,12 +2098,13 @@ async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: Abor
               full = retry
               console.log(`GS-CONSTRAINT-GUARD conv=${id} csv retry accepted`)
             } else {
-              const repaired = applyAggregateCorrection(full, aggv)
-              if (repaired !== null) {
+              const repaired = applyAggregateCorrection(retry, aggv)
+              if (repaired !== null && verifyCsvAggregates(repaired, table).length === 0) {
                 full = repaired
                 console.log(`GS-CONSTRAINT-GUARD conv=${id} deterministic aggregate rewrite applied`)
               } else {
-                console.log(`GS-CONSTRAINT-GUARD conv=${id} aggregate retry still wrong — emitting honest draft`)
+                full = 'I could not verify the reported totals against the attached table. Please retry.'
+                console.log(`GS-CONSTRAINT-GUARD conv=${id} aggregate retry still wrong — rejected`)
               }
             }
           }
@@ -2178,35 +2187,6 @@ async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: Abor
         }
       }
       full = draft
-    } else if (constraints) {
-      // GS-CONSTRAINT-GUARD (Failures A and B): mid-prompt word-count
-      // constraints and forbidden-character constraints. Ladder: regenerate
-      // once with the constraint as the only system message, then repair
-      // deterministically, then state the failure honestly.
-      let draft = await synthesize(modelMessages, streamAnswerDelta)
-      let viols = constraintViolations(draft, constraints)
-      if (viols.length > 0) {
-        console.log(`GS-CONSTRAINT-GUARD conv=${id} ${viols.join('; ')} — regenerating with constraint restated`)
-        if (push) { push('status', 'checking'); push('reset', '') }
-        draft = await synthesize(
-          buildConstraintRetryMessages(modelMessages as ChatMessageInput[], constraints),
-          streamAnswerDelta
-        )
-        viols = constraintViolations(draft, constraints)
-        if (viols.length > 0) {
-          const repaired = repairConstraints(draft, constraints)
-          if (repaired !== null) {
-            draft = repaired
-            console.log(`GS-CONSTRAINT-GUARD conv=${id} retry still violating — deterministic repair applied`)
-          } else {
-            draft = honestConstraintFailure(draft, constraints)
-            console.log(`GS-CONSTRAINT-GUARD conv=${id} unrepairable — honest failure statement emitted`)
-          }
-        } else {
-          console.log(`GS-CONSTRAINT-GUARD conv=${id} retry accepted`)
-        }
-      }
-      full = draft
     } else if (push) {
       // Deltas are transport, not presentation. A chunk can bisect a fence,
       // JSON escape, surrogate pair or executable string. Clients sanitize
@@ -2216,6 +2196,26 @@ async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: Abor
       full = await synthesize(modelMessages)
     }
 
+    // Format constraints apply to every synthesis route, including search,
+    // documents and calculation evidence. A retry must also preserve
+    // execution honesty and any previously verified quantitative grounding.
+    let constraintRejected = false
+    if (constraints && constraintViolations(full, constraints).length > 0) {
+      if (push) { push('status', 'checking'); push('reset', '') }
+      const retry = await synthesize(buildConstraintRetryMessages(modelMessages, constraints), streamAnswerDelta)
+      const table = docContext.block ? parseCsvTable(docContext.block) : null
+      const grounded = !detectExecutionContradiction(retry, executionStateFor(turn)) &&
+        (!table || verifyCsvAggregates(retry, table).length === 0) &&
+        (!numericCheck || !checkNumericClaims(retry,userTurnText)) &&
+        (!(turn.kind === 'research' && turn.evidenceBlock && isFreshnessRequest(content)) ||
+          freshnessViolations(retry,turn.evidenceBlock).length === 0)
+      const repaired = grounded ? repairConstraints(retry,constraints) : null
+      if (repaired !== null) full = repaired
+      else {
+        constraintRejected = true
+        full = honestConstraintFailure(retry,constraints)
+      }
+    }
     const baseText = sanitizeReplyEmojis(
       sanitizeAgainstPersisted(normalizeCitationBrackets(full), turn, historySources)
     )
@@ -2235,7 +2235,9 @@ async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: Abor
           (compiled.errors.length ? ` errors=${compiled.errors.join(' | ')}` : '')
       )
     }
-    const finalText = compiled.text
+    const finalText = constraints && !constraintRejected && constraintViolations(compiled.text,constraints).length > 0
+      ? honestConstraintFailure(compiled.text,constraints)
+      : compiled.text
     presentation.release(finalText)
     const saved = await createAssistantMessage({
       conversationId: id,

@@ -19,6 +19,11 @@ on:
       - 'src/lib/turn-resume*.ts'
       - 'src/lib/calc/**'
       - 'src/lib/quality-routing*.ts'
+      - 'src/lib/constraint-guard.ts'
+      - 'src/lib/output-directive.ts'
+      - 'src/lib/system-instruction.ts'
+      - 'src/lib/instruction-integrity.test.ts'
+      - 'scripts/test-constraint-guard.ts'
       - 'scripts/benchmark-free-models.ts'
   workflow_dispatch:
     inputs:
@@ -46,7 +51,8 @@ jobs:
           bun-version: latest
       - name: Focused chat regressions
         run: |
-          bun test src/lib/remote-tools.test.ts src/lib/context-crystallize.test.ts src/lib/provider-sse.test.ts src/lib/turn-resume.test.ts src/lib/calc/turn-calculator.test.ts src/lib/quality-routing.test.ts src/lib/provider-rate-limit.test.ts src/lib/search/planner-context.test.ts
+          bun test src/lib/remote-tools.test.ts src/lib/context-crystallize.test.ts src/lib/provider-sse.test.ts src/lib/turn-resume.test.ts src/lib/calc/turn-calculator.test.ts src/lib/quality-routing.test.ts src/lib/provider-rate-limit.test.ts src/lib/search/planner-context.test.ts src/lib/instruction-integrity.test.ts
+          bun scripts/test-constraint-guard.ts
   durable-store:
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -38,14 +38,9 @@ assert.equal(countWords(failedT04), 6)
 const violsA = constraintViolations(failedT04, cA!)
 assert.equal(violsA.length, 1, 'A: 6-word draft must violate')
 const repairedA = repairConstraints(failedT04, cA!)
-assert.notEqual(repairedA, null)
-assert.equal(countWords(repairedA!), 5, 'A: repaired output must be exactly 5 words')
-assert.equal(repairedA, 'Sunlight scatters; short blue wavelengths', 'A: truncation keeps first 5 words')
-
-// under-length draft pads to exactly N (bar: exactly N, every time)
+assert.equal(repairedA, null, 'A: do not truncate meaning to pass a word-count grader')
 const shortA = repairConstraints('Rayleigh scattering.', cA!)
-assert.notEqual(shortA, null)
-assert.equal(countWords(shortA!), 5, 'A: under-length padded to exactly 5')
+assert.equal(shortA, null, 'A: do not pad short answers with unrelated filler')
 
 // retry message keeps the conversation and restates the constraint
 const msgsA = buildConstraintRetryMessages(
@@ -57,6 +52,7 @@ const msgsA = buildConstraintRetryMessages(
 )
 assert.equal(msgsA.length, 2)
 assert.match(msgsA[0]!.content as string, /exactly 5 words/)
+assert.ok(msgsA[0]!.content.startsWith('base'), 'A: original system instructions preserved')
 
 // non-constraint prompts must NOT trip the detector
 assert.equal(detectOutputConstraints('What is the capital of France?'), null)
@@ -82,9 +78,8 @@ const repairedB = repairConstraints(failedT16, cB!)
 // output").
 assert.equal(repairedB, null, 'B: unrepairable draft must fall through to honest fallback')
 const honestB2 = honestConstraintFailure(failedT16, cB!)
-assert.ok(honestB2.startsWith('NO VALID OUTPUT'), 'B: honest fallback announces failure')
-assert.ok(!honestB2.toLowerCase().includes('e'), 'B: honest fallback itself contains no e')
-assert.ok(honestB2.includes('A quick brown fox jumps lazy dogs'), 'B: closest valid output preserved')
+assert.ok(honestB2.includes('could not satisfy'), 'B: honest fallback announces failure')
+assert.ok(!honestB2.includes('A quick brown fox'), 'B: no semantically altered answer presented as valid')
 
 // a draft that CAN be repaired: 12+ words once e-words are dropped
 const fixableT16 = 'My big cat naps on warm sunny days and also on cold nights.'
