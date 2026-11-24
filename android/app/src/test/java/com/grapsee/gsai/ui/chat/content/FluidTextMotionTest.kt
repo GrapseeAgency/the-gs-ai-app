@@ -42,6 +42,27 @@ class FluidTextMotionTest {
         assertTrue(motion.update(current, 600_000_000L, true).isEmpty())
     }
 
+    @Test fun allRealPacketPiecesDevelopImmediatelyWithContinuousPhase() {
+        val motion = FluidTextMotion("")
+        val bands = motion.update("abc ".repeat(200), 1_000_000L, true)
+        assertTrue(bands.size > 1)
+        assertTrue(bands.all { it.bornNanos == 1_000_000L })
+        assertTrue(bands.all { it.opacity(17_000_000L, 1f) > 0.18f })
+        for ((a, b) in bands.zipWithNext()) {
+            assertEquals(a.phaseTo, b.phaseFrom, 0.00001f)
+            assertEquals(a.opacity(100_000_000L, 1f), b.opacity(100_000_000L, 0f), 0.00001f)
+        }
+        for (pos in 0..100) {
+            var previous = 0f
+            for (tick in 0..1000) {
+                val p = fluidLocalProgress(tick / 1000f, pos / 100f, 0.48f)
+                assertTrue(p + 0.000001f >= previous)
+                if (tick in 1..999) assertTrue(p > 0f && p < 1f)
+                previous = p
+            }
+        }
+    }
+
     @Test fun reusableGradientPlacementMatchesNativeInkCurve() {
         for ((from, to) in listOf(0f to 1f, 1f to 0f, 0.42f to 0.43f, 0.2f to 0.2f)) {
             for (tick in 0..100) {
@@ -121,7 +142,7 @@ class FluidTextMotionTest {
             val now = tick * 5_000_000L
             text += "abcdefghij"
             val newest = motion.update(text, now, true).last()
-            assertTrue(newest.bornNanos in now..(now + 75_000_000L))
+            assertEquals(now, newest.bornNanos)
             assertTrue(newest.bornNanos >= previousBirth)
             assertEquals(text.length, newest.end)
             assertTrue(newest.opacity(now, 1f) >= 0.179f)

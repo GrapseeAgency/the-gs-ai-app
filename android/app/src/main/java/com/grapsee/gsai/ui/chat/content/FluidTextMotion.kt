@@ -28,8 +28,14 @@ internal data class FluidTextBand(
         ((offset - start).toFloat() / (end - start).coerceAtLeast(1)).coerceIn(0f, 1f)
 }
 
-internal fun fluidLocalProgress(progress: Float, position: Float, travel: Float = 0.24f): Float =
-    ((progress - travel * position.coerceIn(0f, 1f)) / (1f - travel)).coerceIn(0f, 1f)
+internal fun fluidLocalProgress(progress: Float, position: Float, travel: Float = 0.24f): Float {
+    val p = progress.coerceIn(0f, 1f)
+    // A spatially varying time warp, not a delayed start. Every point
+    // develops immediately, settles at the same deadline, and cannot
+    // reverse: dpLocal/dp >= 1 - 2*travel > 0.
+    val strength = 2f * travel.coerceIn(0f, 0.48f)
+    return (p + strength * p * (1f - p) * (1f - 2f * position.coerceIn(0f, 1f))).coerceIn(0f, 1f)
+}
 
 internal fun fluidInkOpacity(progress: Float): Float {
     val p = progress.coerceIn(0f, 1f)
@@ -46,10 +52,6 @@ internal class FluidTextMotion(initial: String) {
     private var previous = initial
     private var lastArrival: Long? = null
     private var cadenceMs = 42.0
-    // This is the optical front's arrival cursor, not a text delivery queue.
-    // A received range is present from the first frame, even while its
-    // leading contrast is low. The cursor never runs far ahead of real time.
-    private var frontUntilNanos = 0L
     var bands: List<FluidTextBand> = emptyList()
         private set
 
@@ -58,7 +60,6 @@ internal class FluidTextMotion(initial: String) {
             previous = text
             lastArrival = null
             cadenceMs = 42.0
-            frontUntilNanos = now
             bands = emptyList()
             return bands
         }
@@ -98,10 +99,6 @@ internal class FluidTextMotion(initial: String) {
         // A low-pass cadence estimator prevents packet timing from changing
         // the animation speed violently from one frame to the next.
         val duration = (175.0 + cadenceMs * 0.85).coerceIn(185.0, 265.0).toLong() * 1_000_000L
-        // Carry the front across packet boundaries. A burst may broaden the
-        // front, but cannot accumulate a fake typing backlog.
-        val horizon = now + 75_000_000L
-        var front = maxOf(now, minOf(frontUntilNanos, horizon))
         val boundary = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(text) }
 
         // Do not animate an existing grapheme if an arriving combining mark extends it.
@@ -125,7 +122,10 @@ internal class FluidTextMotion(initial: String) {
         // Every received grapheme participates. Group a large packet into
         // a few longer waves rather than jumping over its leading characters.
         var start = atOrAfter(oldLength)
-        val groupSize = maxOf(32, (text.length - start + 3) / 4)
+        val packetStart = start
+        val packetLength = (text.length - packetStart).coerceAtLeast(1)
+        val groupSize = maxOf(32, (packetLength + 3) / 4)
+        val travel = (0.22f + packetLength.coerceAtMost(120) * 0.0025f).coerceIn(0.22f, 0.48f)
         val incoming = mutableListOf<FluidTextBand>()
         while (start < text.length && incoming.size < 4) {
             val ideal = minOf(text.length, start + groupSize)
@@ -137,22 +137,18 @@ internal class FluidTextMotion(initial: String) {
             val preferred = if (word > maxOf(start + 1, ideal - 6)) word else ideal
             val end = if (incoming.size == 3) text.length else atOrAfter(preferred)
             if (end <= start) break
-            // A long real packet has a longer spatial front, not a uniform
-            // flash. Small packets still overlap without withholding content.
-            val length = end - start
-            val travel = (0.18f + length.coerceAtMost(120) * 0.0025f).coerceIn(0.18f, 0.48f)
-            incoming += FluidTextBand(start, end, front, duration, travel = travel)
-            // The next range joins while this one is still resolving. The
-            // maximum optical lead is 75ms regardless of provider speed.
-            val advance = (9_000_000L + length.coerceAtMost(60) * 1_000_000L).coerceAtMost(45_000_000L)
-            front = minOf(horizon, front + advance)
+            // All pieces share the real packet's arrival and one continuous
+            // phase coordinate; grouping never creates another wave origin.
+            incoming += FluidTextBand(start, end, now, duration,
+                phaseFrom = (start - packetStart).toFloat() / packetLength,
+                phaseTo = (end - packetStart).toFloat() / packetLength,
+                travel = travel)
             start = end
         }
         // An in-flight range is never evicted just because another packet
         // arrives. Only its own deadline (or a genuine rewrite) settles it.
         // Cost is time-bounded by the publisher's coalescing interval, with at
         // most four ranges per received snapshot, not by response length.
-        if (incoming.isNotEmpty()) frontUntilNanos = front
         bands = alive.filter {
             atOrAfter(it.start) == it.start && atOrAfter(it.end) == it.end
         } + incoming
@@ -203,8 +199,8 @@ internal fun reconcileFluidAppend(old: String, next: String): FluidAppendMatch {
  *  quantizing narrow optical fronts to glyph or packet boundaries. */
 internal data class FluidInkStop(val position: Float, val opacity: Float)
 internal fun fluidInkStops(progress: Float, phaseFrom: Float, phaseTo: Float, travel: Float): List<FluidInkStop> {
-    val start = (progress - travel * phaseFrom) / (1f - travel)
-    val end = (progress - travel * phaseTo) / (1f - travel)
+    val start = fluidLocalProgress(progress, phaseFrom, travel)
+    val end = fluidLocalProgress(progress, phaseTo, travel)
     val delta = end - start
     val stops = mutableListOf(FluidInkStop(0f, fluidInkOpacity(start)))
     if (kotlin.math.abs(delta) > 0.000001f) {
@@ -224,8 +220,8 @@ internal fun fluidInkStops(progress: Float, phaseFrom: Float, phaseTo: Float, tr
  * The shape of the curve does not change on each display tick. */
 internal data class FluidInkProjection(val origin: Float, val scale: Float, val solid: Float?)
 internal fun fluidInkProjection(progress: Float, phaseFrom: Float, phaseTo: Float, travel: Float): FluidInkProjection {
-    val p0 = (progress - travel * phaseFrom) / (1f - travel)
-    val p1 = (progress - travel * phaseTo) / (1f - travel)
+    val p0 = fluidLocalProgress(progress, phaseFrom, travel)
+    val p1 = fluidLocalProgress(progress, phaseTo, travel)
     val delta = p1 - p0
     if (maxOf(p0, p1) <= 0f || minOf(p0, p1) >= 1f || kotlin.math.abs(delta) < 0.0001f)
         return FluidInkProjection(0f, 1f, fluidInkOpacity((p0 + p1) * 0.5f))

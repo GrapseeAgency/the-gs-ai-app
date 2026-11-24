@@ -24,7 +24,11 @@ struct FluidTextBand: Hashable {
 }
 
 func fluidLocalProgress(_ progress: Double, position: Double, travel: Double = 0.24) -> Double {
-    min(1, max(0, (progress - travel * min(1, max(0, position))) / (1 - travel)))
+    let p = min(1, max(0, progress))
+    let strength = 2 * min(0.48, max(0, travel))
+    // No point waits for a delayed optical start. The warp is monotonic
+    // at every position and retains the real packet's arrival time.
+    return min(1, max(0, p + strength * p * (1 - p) * (1 - 2 * min(1, max(0, position)))))
 }
 
 func fluidInkOpacity(_ progress: Double) -> Double {
@@ -40,7 +44,6 @@ struct FluidTextMotion {
     private var previous: String
     private var lastArrival: TimeInterval?
     private var cadence: TimeInterval = 0.042
-    private var frontUntil: TimeInterval = 0
     private(set) var bands: [FluidTextBand] = []
 
     init(initial: String) { previous = initial }
@@ -52,7 +55,6 @@ struct FluidTextMotion {
             previous = text
             lastArrival = nil
             cadence = 0.042
-            frontUntil = now
             bands = []
             return
         }
@@ -88,14 +90,12 @@ struct FluidTextMotion {
         }
         lastArrival = now
         let duration = min(0.265, max(0.185, 0.175 + cadence * 0.85))
-        // An optical arrival cursor joins consecutive real packets. It
-        // never gates source text and is bounded even under burst delivery.
-        let horizon = now + 0.075
-        var front = max(now, min(frontUntil, horizon))
         // Cover the entire append, including large provider bursts. Retain
         // every unfinished band until its own deadline; no tail-size eviction.
         let suffix = Array(text.suffix(count - oldCount))
-        let groupSize = max(32, (suffix.count + 3) / 4)
+        let packetLength = max(1, suffix.count)
+        let groupSize = max(32, (packetLength + 3) / 4)
+        let travel = min(0.48, max(0.22, 0.22 + Double(min(120, packetLength)) * 0.0025))
         var start = oldCount
         var incoming = 0
         while start < count && incoming < 4 {
@@ -108,18 +108,15 @@ struct FluidTextMotion {
             }
             let preferred = word > lower ? word : ideal
             let end = incoming == 3 ? count : preferred
-            let length = end - start
-            let travel = min(0.48, max(0.18, 0.18 + Double(min(120, length)) * 0.0025))
-            bands.append(FluidTextBand(start: start, end: end, born: front,
-                                       duration: duration, travel: travel))
-            front = min(horizon, front + min(0.045, 0.009 + Double(min(60, length)) * 0.001))
+            bands.append(FluidTextBand(start: start, end: end, born: now,
+                duration: duration, phaseFrom: Double(start - oldCount) / Double(packetLength),
+                phaseTo: Double(end - oldCount) / Double(packetLength), travel: travel))
             start = end
             incoming += 1
         }
-        if incoming > 0 { frontUntil = front }
     }
 
-    mutating func settle() { bands = []; frontUntil = 0 }
+    mutating func settle() { bands = [] }
 }
 
 struct FluidMatchSpan {
@@ -175,8 +172,8 @@ struct FluidInkStop {
     let opacity: Double
 }
 func fluidInkStops(progress: Double, phaseFrom: Double, phaseTo: Double, travel: Double) -> [FluidInkStop] {
-    let start = (progress - travel * phaseFrom) / (1 - travel)
-    let end = (progress - travel * phaseTo) / (1 - travel)
+    let start = fluidLocalProgress(progress, position: phaseFrom, travel: travel)
+    let end = fluidLocalProgress(progress, position: phaseTo, travel: travel)
     let delta = end - start
     var stops = [FluidInkStop(position: 0, opacity: fluidInkOpacity(start))]
     if abs(delta) > 0.000001 {
@@ -200,8 +197,8 @@ struct FluidInkProjection {
     let solid: Double?
 }
 func fluidInkProjection(progress: Double, phaseFrom: Double, phaseTo: Double, travel: Double) -> FluidInkProjection {
-    let p0 = (progress - travel * phaseFrom) / (1 - travel)
-    let p1 = (progress - travel * phaseTo) / (1 - travel)
+    let p0 = fluidLocalProgress(progress, position: phaseFrom, travel: travel)
+    let p1 = fluidLocalProgress(progress, position: phaseTo, travel: travel)
     let delta = p1 - p0
     if max(p0, p1) <= 0 || min(p0, p1) >= 1 || abs(delta) < 0.0001 {
         return FluidInkProjection(origin: 0, scale: 1, solid: fluidInkOpacity((p0 + p1) * 0.5))

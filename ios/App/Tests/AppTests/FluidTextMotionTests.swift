@@ -25,6 +25,28 @@ final class FluidTextMotionTests: XCTestCase {
         XCTAssertTrue(motion.bands.isEmpty)
     }
 
+    func testAllRealPacketPiecesDevelopImmediatelyWithContinuousPhase() {
+        var motion = FluidTextMotion(initial: "")
+        motion.update(String(repeating: "abc ", count: 200), now: 0.001)
+        let bands = motion.bands
+        XCTAssertGreaterThan(bands.count, 1)
+        XCTAssertTrue(bands.allSatisfy { $0.born == 0.001 })
+        XCTAssertTrue(bands.allSatisfy { $0.opacity(at: 0.017, position: 1) > 0.18 })
+        for (a, b) in zip(bands, bands.dropFirst()) {
+            XCTAssertEqual(a.phaseTo, b.phaseFrom, accuracy: 0.00001)
+            XCTAssertEqual(a.opacity(at: 0.1, position: 1), b.opacity(at: 0.1), accuracy: 0.00001)
+        }
+        for pos in 0...100 {
+            var previous = 0.0
+            for tick in 0...1000 {
+                let p = fluidLocalProgress(Double(tick) / 1000, position: Double(pos) / 100, travel: 0.48)
+                XCTAssertGreaterThanOrEqual(p + 0.000001, previous)
+                if (1...999).contains(tick) { XCTAssertTrue(p > 0 && p < 1) }
+                previous = p
+            }
+        }
+    }
+
     func testReusableGradientPlacementMatchesNativeInkCurve() {
         for (from, to) in [(0.0, 1.0), (1.0, 0.0), (0.42, 0.43), (0.2, 0.2)] {
             for tick in 0...100 {
@@ -111,7 +133,7 @@ final class FluidTextMotionTests: XCTestCase {
             text += "abcdefghij"
             motion.update(text, now: now)
             let newest = try XCTUnwrap(motion.bands.last)
-            XCTAssertTrue(newest.born >= now && newest.born <= now + 0.075 + 0.000001)
+            XCTAssertEqual(newest.born, now)
             XCTAssertGreaterThanOrEqual(newest.born, previousBirth)
             XCTAssertEqual(newest.end, text.count)
             XCTAssertGreaterThanOrEqual(newest.opacity(at: now, position: 1), 0.179)
