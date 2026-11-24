@@ -1074,15 +1074,11 @@ private fun HomeDock(
     ) {
         DockCircle(FilledHouse, "Home", selected = true, onClick = onHome)
         DockCircle(FilledBook, "Chats", onClick = onChats)
-        // The reference seats the peach pill inside a white well, so the dock
-        // reads as three glass buttons and one lit action — not four siblings.
+        // The original rotating beam replaces the static white well.
         Box(
             modifier = Modifier
                 .weight(1f)
-                .height(60.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(Color.White.copy(alpha = 0.55f))
-                .padding(6.dp)
+                .height(48.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -1126,6 +1122,9 @@ private fun HomeDock(
                     softWrap = false
                 )
             }
+            com.grapsee.gsai.ui.components.GsGenerateBorderBeam(
+                modifier = Modifier.matchParentSize()
+            )
         }
         DockCircle(FilledGear, "Settings", onClick = onSettings)
     }

@@ -1,4 +1,5 @@
 import SwiftUI
+import BorderBeamKit
 
 /// Warm consumer home for the real iOS app — the SwiftUI twin of the rebuilt
 /// Android `HomeDashboardScreen`, laid out to the Nexly reference sheet: brand
@@ -28,6 +29,7 @@ enum HomeMetrics {
 }
 
 struct HomeDashboardView: View {
+    @Environment(\.accessibilityReduceMotion) private var beamReduceMotion
     let onNewChat: () -> Void
     let onOpenDrawer: () -> Void
     let onOpenChats: () -> Void
@@ -523,8 +525,7 @@ struct HomeDashboardView: View {
             // the generated set is stroke-only by contract.
             DockIcon(house: true, label: "Home", selected: true, action: scrollToTop)
             DockIcon(book: true, label: "Chats", action: onOpenChats)
-            // The reference seats the peach pill inside a white well, so the
-            // dock reads as three glass buttons and one lit action.
+            // Upstream BorderBeam replaces the former white outer well.
             Button(action: onNewChat) {
                 HStack(spacing: 6) {
                     GsIconView(GsIcons.sparkles,
@@ -543,8 +544,12 @@ struct HomeDashboardView: View {
                     colors: [Color(red: 0.98, green: 0.85, blue: 0.78),
                              Color(red: 0.96, green: 0.78, blue: 0.67)],
                     startPoint: .leading, endPoint: .trailing)))
-                .padding(6)
-                .background(Capsule().fill(Color.white.opacity(0.55)))
+                .borderBeam(
+                    .md, colorVariant: .colorful, theme: .auto,
+                    active: !SettingsStore.shared.reduceMotion &&
+                        !SettingsStore.shared.animationReduced && !beamReduceMotion,
+                    borderRadius: 24, strength: 0.7
+                )
             }
             .buttonStyle(KineticPressStyle())
             DockIcon(gear: true, label: "Settings", action: onOpenSettings)

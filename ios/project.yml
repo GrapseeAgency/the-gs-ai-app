@@ -89,6 +89,8 @@ targets:
       - package: Libraries.dev
         product: BotAvatarsKit
       - package: Libraries.dev
+        product: BorderBeamKit
+      - package: Libraries.dev
         product: DistortionWavesKit
       - package: Libraries.dev
         product: MetalFxKit

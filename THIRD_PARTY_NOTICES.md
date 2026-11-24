@@ -27,3 +27,9 @@ The iOS app links upstream `DistortionWavesKit`. The Android Compose component i
 Copyright (c) 2026 Jakub Antalik. The iOS app links the upstream `VoicePositionKit` and `VoiceRingKit` products from <https://github.com/Jakubantalik/Libraries.dev/tree/main/packages/voice-ring>, licensed under MIT; the license text is in [`third_party/licenses/MIT-Libraries.dev-voice-position.txt`](third_party/licenses/MIT-Libraries.dev-voice-position.txt).
 
 The Android code in `android/app/src/main/java/com/grapsee/gsai/ui/voice/position/` is a native Kotlin adaptation of the public MIT-licensed VoiceCore/VoicePositionKit feature extraction, MFXL model reader, inference, gates, and calibration. There is no upstream Android `VoicePositionKit` product. The separate `VoicePosition.mfxl` model and its weights are under the Libraries.dev Model License, not MIT. It is not included in this repository; see [`docs/VOICE_POSITION.md`](docs/VOICE_POSITION.md) for local app-target paths and the model-license terms.
+
+## Libraries.dev — `border-beam`
+
+Copyright (c) 2026 Jakub Antalik, MIT. License: [MIT-Libraries.dev-border-beam.txt](third_party/licenses/MIT-Libraries.dev-border-beam.txt). Source: <https://github.com/Jakubantalik/Libraries.dev/tree/14ae9d2dad18fcee251f4b06333b492a2a41d2ed/packages/border-beam>.
+
+iOS uses upstream BorderBeamKit. Android uses the upstream React Native SkSL rotate-layer shader and md/colorful preset data adapted to native Android Canvas/AGSL; the native software fallback implements the same rotating mask and colored gradient blob layers.
