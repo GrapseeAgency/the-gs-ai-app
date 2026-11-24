@@ -38,6 +38,17 @@ class FluidTextMotionTest {
         }
     }
 
+    @Test fun cadenceIsContinuousAndDoesNotRestartOldBands() {
+        val motion = FluidTextMotion("")
+        val first = motion.update("first word ", 0, true).first()
+        val later = motion.update("first word next word ", 17_000_000, true)
+        assertEquals(first, later.first())
+        assertTrue(later.last().start >= first.end)
+        val newest = motion.update("first word next word final", 117_000_000, true).last()
+        assertTrue(newest.durationNanos in 185_000_000L..265_000_000L)
+        assertTrue(motion.update("first word next word final", 600_000_000, true).isEmpty())
+    }
+
     @Test fun neverMasksHalfOfSurrogateOrExistingCombiningCluster() {
         val motion = FluidTextMotion("e")
         val result = motion.update("e\u0301 hello", 0, true)

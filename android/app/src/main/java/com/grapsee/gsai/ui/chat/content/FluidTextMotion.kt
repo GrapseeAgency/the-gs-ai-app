@@ -23,6 +23,7 @@ internal data class FluidTextBand(
 internal class FluidTextMotion(initial: String) {
     private var previous = initial
     private var lastArrival: Long? = null
+    private var cadenceMs = 42.0
     var bands: List<FluidTextBand> = emptyList()
         private set
 
@@ -30,6 +31,7 @@ internal class FluidTextMotion(initial: String) {
         if (!enabled || !text.startsWith(previous)) {
             previous = text
             lastArrival = null
+            cadenceMs = 42.0
             bands = emptyList()
             return bands
         }
@@ -40,9 +42,15 @@ internal class FluidTextMotion(initial: String) {
         }
         val oldLength = previous.length
         previous = text
-        val interval = lastArrival?.let { (now - it).coerceAtLeast(0L) / 1_000_000L }
+        lastArrival?.let {
+            val sample = ((now - it) / 1_000_000.0).coerceIn(16.0, 160.0)
+            cadenceMs = cadenceMs * 0.78 + sample * 0.22
+        }
         lastArrival = now
-        val duration = (interval?.let { 170L + it / 2 } ?: 230L).coerceIn(170L, 250L) * 1_000_000L
+        // A low-pass cadence estimator prevents packet timing from changing
+        // the animation speed violently from one frame to the next.
+        val duration = (175.0 + cadenceMs * 0.85).coerceIn(185.0, 265.0).toLong() * 1_000_000L
+        val stagger = (cadenceMs * 0.25).coerceIn(8.0, 20.0).toLong() * 1_000_000L
         val boundary = BreakIterator.getCharacterInstance(Locale.ROOT).apply { setText(text) }
 
         // Do not animate an existing grapheme if an arriving combining mark extends it.
@@ -67,10 +75,16 @@ internal class FluidTextMotion(initial: String) {
         var start = floor
         val incoming = mutableListOf<FluidTextBand>()
         while (start < text.length && incoming.size < 6) {
-            val end = if (incoming.size == 5) text.length
-                else atOrAfter(minOf(text.length, start + 12))
+            val ideal = minOf(text.length, start + 12)
+            // Prefer a word boundary near the target. Long/unspaced scripts
+            // still use grapheme boundaries; never split an emoji or accent.
+            var word = ideal
+            while (word > start + 6 && word < text.length &&
+                !text[word - 1].isWhitespace() && !text[word].isWhitespace()) word--
+            val preferred = if (word > start + 6) word else ideal
+            val end = if (incoming.size == 5) text.length else atOrAfter(preferred)
             if (end <= start) break
-            incoming += FluidTextBand(start, end, now + incoming.size * 13_000_000L, duration)
+            incoming += FluidTextBand(start, end, now + incoming.size * stagger, duration)
             start = end
         }
         // Large chunks are readable immediately; only the last 72 UTF-16 units

@@ -11,7 +11,10 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
@@ -57,7 +60,12 @@ internal fun FluidResponseText(
     val fresh = LocalFluidFreshMount.current
     val motion = remember { FluidTextMotion(if (fresh) "" else text.text) }
     val opticalLayer = rememberGraphicsLayer()
-    val optical = remember { if (Build.VERSION.SDK_INT >= 33) runCatching { FluidOpticalEffect() }.getOrNull() else null }
+    // Shader creation is deferred until a real animated range is drawn.
+    val optical = remember {
+        lazy(LazyThreadSafetyMode.NONE) {
+            if (Build.VERSION.SDK_INT >= 33) runCatching { FluidOpticalEffect() }.getOrNull() else null
+        }
+    }
     val bands = remember { mutableStateOf(emptyList<FluidTextBand>()) }
     val clock = remember { mutableLongStateOf(0L) }
     val layout = remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -66,11 +74,18 @@ internal fun FluidResponseText(
         bands.value = motion.update(text.text, now, true)
         clock.longValue = now
     }
-    LaunchedEffect(text.text) {
-        // The first frame also covers the initial effect/SideEffect ordering.
-        do {
-            withFrameNanos { clock.longValue = System.nanoTime() }
-        } while (bands.value.any { it.progress(clock.longValue) < 1f })
+    // The display clock survives incoming chunks. Restarting a coroutine on
+    // every token batch repeatedly lost a frame at the most visible edge.
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            snapshotFlow { bands.value }.first { list ->
+                val now = System.nanoTime()
+                list.any { it.progress(now) < 1f }
+            }
+            do {
+                withFrameNanos { clock.longValue = System.nanoTime() }
+            } while (bands.value.any { it.progress(clock.longValue) < 1f })
+        }
     }
 
     Text(
@@ -105,6 +120,7 @@ internal fun FluidResponseText(
             } else emptyList()
             val layerPaint = Paint()
             val bounds = Rect(0f, 0f, size.width, size.height)
+            var layerRecorded = false
             onDrawWithContent {
                 val now = clock.longValue
                 if (paths.none { it.first.progress(now) < 1f } || size.width <= 0f || size.height <= 0f ||
@@ -115,10 +131,15 @@ internal fun FluidResponseText(
                 } else {
                     // One GPU pass, isolated to incoming glyph regions. A failed
                     // shader or software canvas keeps the native opacity fallback.
-                    if (optical != null && drawContext.canvas.nativeCanvas.isHardwareAccelerated && opticalRects.size in 1..16) {
-                        val effect = optical.effect(opticalRects, now, density)
+                    if (drawContext.canvas.nativeCanvas.isHardwareAccelerated && opticalRects.size in 1..16) {
+                        val effect = optical.value?.effect(opticalRects, now, density)
                         if (effect != null) {
-                            opticalLayer.record { this@onDrawWithContent.drawContent() }
+                            // Re-record only when the text/layout/ranges change,
+                            // not on each display tick. Animate the existing texture.
+                            if (!layerRecorded) {
+                                opticalLayer.record { this@onDrawWithContent.drawContent() }
+                                layerRecorded = true
+                            }
                             opticalLayer.renderEffect = effect
                             drawLayer(opticalLayer)
                             return@onDrawWithContent
@@ -150,7 +171,10 @@ private class FluidOpticalEffect {
         uniform shader source;
         uniform float4 regions[16];
         uniform float4 motion[16];
+        uniform float4 activeBounds;
         half4 main(float2 p) {
+            if (p.x < activeBounds.x || p.y < activeBounds.y ||
+                p.x >= activeBounds.z || p.y >= activeBounds.w) return source.eval(p);
             for (int i = 0; i < 16; ++i) {
                 float4 r = regions[i];
                 float4 m = motion[i];
@@ -175,10 +199,16 @@ private class FluidOpticalEffect {
 
     fun effect(rects: List<Pair<FluidTextBand, Rect>>, now: Long, density: Float): androidx.compose.ui.graphics.RenderEffect? {
         regions.fill(0f); motion.fill(0f)
+        var left = Float.MAX_VALUE
+        var top = Float.MAX_VALUE
+        var right = -Float.MAX_VALUE
+        var bottom = -Float.MAX_VALUE
         for ((index, item) in rects.withIndex()) {
             val (band, rect) = item
             val remaining = 1f - band.progress(now)
             if (remaining <= 0f) continue
+            left = minOf(left, rect.left); top = minOf(top, rect.top)
+            right = maxOf(right, rect.right); bottom = maxOf(bottom, rect.bottom)
             val at = index * 4
             regions[at] = rect.left
             regions[at + 1] = rect.top
@@ -190,6 +220,7 @@ private class FluidOpticalEffect {
             motion[at + 3] = 1f
         }
         return runCatching {
+            shader.setFloatUniform("activeBounds", left, top, right, bottom)
             shader.setFloatUniform("regions", regions)
             shader.setFloatUniform("motion", motion)
             android.graphics.RenderEffect.createRuntimeShaderEffect(shader, "source").asComposeRenderEffect()

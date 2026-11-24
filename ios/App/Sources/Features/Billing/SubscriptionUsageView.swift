@@ -42,26 +42,32 @@ struct SubscriptionUsageView: View {
     }
 
     var body: some View {
-        DistortionWave(
-            isRevealed: isShowingBilling,
-            source: billingWaveSource,
-            focus: billingWaveFocus,
-            style: billingWaveStyle
-        ) {
-            subscriptionPage
-                .background(Aero.background.ignoresSafeArea())
-        } revealed: {
-            BillingView(
-                onBack: { closeBillingWave() },
-                onOpenSubscription: { closeBillingWave() }
-            )
-            .background(Aero.background.ignoresSafeArea())
+        Group {
+            if settings.animationReduced {
+                // SwiftUI's system Reduce Motion environment is read-only.
+                // Honor the app preference by bypassing the wave, not writing
+                // to an inaccessible environment key.
+                if isShowingBilling {
+                    BillingView(onBack: { closeBillingWave() }, onOpenSubscription: { closeBillingWave() })
+                        .background(Aero.background.ignoresSafeArea())
+                } else {
+                    subscriptionPage.background(Aero.background.ignoresSafeArea())
+                }
+            } else {
+                DistortionWave(
+                    isRevealed: isShowingBilling,
+                    source: billingWaveSource,
+                    focus: billingWaveFocus,
+                    style: billingWaveStyle
+                ) {
+                    subscriptionPage.background(Aero.background.ignoresSafeArea())
+                } revealed: {
+                    BillingView(onBack: { closeBillingWave() }, onOpenSubscription: { closeBillingWave() })
+                        .background(Aero.background.ignoresSafeArea())
+                }
+            }
         }
         .coordinateSpace(name: Self.billingWaveCoordinateSpace)
-        // The upstream kit reads the system accessibility value; forward the
-        // app's own Reduce Animations / Reduce Motion choices through the same
-        // environment so both platforms stop the wave consistently.
-        .environment(\.accessibilityReduceMotion, settings.animationReduced)
     }
 
     private var subscriptionPage: some View {

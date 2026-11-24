@@ -210,12 +210,10 @@ class ChatStreamController(private val chat: ChatRepository) {
                 val (visibleText, paintedEpoch) = synchronized(buffer) {
                     val fullText = buffer.toString()
                     if (visibleChars >= fullText.length) return
-                    val remaining = fullText.length - visibleChars
-                    var end = minOf(fullText.length, visibleChars + maxOf(32, remaining / 12))
-                    // Never split a UTF-16 surrogate pair at the reveal boundary.
-                    if (end < fullText.length && Character.isHighSurrogate(fullText[end - 1])) end++
-                    visibleChars = end
-                    fullText.substring(0, end) to resetEpoch
+                    // Publish every received character at the next paint tick.
+                    // The renderer owns motion; no second artificial token queue.
+                    visibleChars = fullText.length
+                    fullText to resetEpoch
                 }
                 if (!firstCharLogged && visibleText.isNotEmpty()) {
                     firstCharLogged = true
@@ -352,7 +350,6 @@ class ChatStreamController(private val chat: ChatRepository) {
                     val paintedChars = synchronized(buffer) { visibleChars }
                     if (paintedChars >= completeText.length) break
                     paintReceivedText()
-                    delay(STREAM_PAINT_MS)
                 }
                 val finalText = snapshotBuffer()
                 publishIfMine(token) { it.copy(streamText = finalText, phase = Phase.Finalizing) }
@@ -406,16 +403,9 @@ class ChatStreamController(private val chat: ChatRepository) {
     }
 
     companion object {
-        /** Streaming repaint coalescing: network deltas arrive far faster than the
-         *  eye; repainting markdown at delta cadence re-parses and re-lays-out the
-         *  growing bubble for zero visible benefit. ~30 Hz is visually identical
-         *  to per-delta and caps the streaming cost per second. */
-        // perf-smooth-3 (emulator 06 -- streaming): 33 Hz paints rebuilt the
-        // growing last block's spans + AnnotatedString and re-laid-out the whole
-        // paragraph twice as often as the eye can distinguish. 20 Hz keeps the
-        // stream visually continuous and halves the main-thread flush tax that
-        // competes with the scrolling transcript.
-        const val STREAM_PAINT_MS = 50L
+        /** Coalesce provider events, not characters. The independent display
+         *  clock animates at the device refresh rate; empty ticks do no work. */
+        const val STREAM_PAINT_MS = 17L
     }
 }
 

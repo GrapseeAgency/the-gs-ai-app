@@ -996,7 +996,7 @@ final class ChatViewModel: ObservableObject {
     // MARK: - Coalesced streaming publish (deep-perf pass 80-b)
 
     /**
-     * Publish loop: reads the accumulator every ~33ms and writes the growing
+     * Publish loop: reads the accumulator every ~17ms and writes the growing
      * text into the live bubble ONLY when it changed. During a stream this is
      * the single published mutation — the transcript re-evaluates at display
      * cadence instead of once per SSE chunk, and untouched rows skip their
@@ -1006,7 +1006,7 @@ final class ChatViewModel: ObservableObject {
         flushTask?.cancel()
         flushTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 33_000_000)
+                try? await Task.sleep(nanoseconds: 17_000_000)
                 guard let self, self.isStreaming else { break }
                 self.drainSearchEvents()
                 self.flushStreamingText()
@@ -1019,7 +1019,7 @@ final class ChatViewModel: ObservableObject {
         flushTask = nil
     }
 
-    private func flushStreamingText(drainAll: Bool = false) {
+    private func flushStreamingText() {
         guard let index = messages.indices.last, messages[index].isStreaming else { return }
         let snapshot = streamBuffer.snapshotWithVersion()
         let text = snapshot.text
@@ -1033,15 +1033,9 @@ final class ChatViewModel: ObservableObject {
                 // The first answer paint freezes the measured thinking span.
                 if reasoningStart != nil, reasoningEnd == nil { reasoningEnd = Date() }
             }
-            let visible = messages[index].content
-            let remaining = max(0, text.count - visible.count)
-            // Normal provider tokens paint immediately; bursts catch up adaptively.
-            // String prefixes are grapheme-safe (including custom-icon tokens' text).
-            if !drainAll, text.hasPrefix(visible), remaining > 32 {
-                messages[index].content = String(text.prefix(visible.count + max(32, remaining / 12)))
-            } else {
-                messages[index].content = text
-            }
+            // The complete received snapshot is authoritative. Do not impose
+            // a second token queue or artificially slow a fast provider.
+            messages[index].content = text
             didPublish = true
         }
         guard current, didPublish, shouldLogFirstCharacter, let tappedAt = sendTappedAt else { return }

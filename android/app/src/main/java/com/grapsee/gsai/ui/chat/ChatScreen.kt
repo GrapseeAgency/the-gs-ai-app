@@ -36,6 +36,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
@@ -617,10 +618,17 @@ fun ChatScreen(
     // the beginning of the answer and hide the newest tokens. scrollBy clamps
     // at the content end, so the overshoot is harmless.
     suspend fun stickToBottom() {
-        val last = listState.layoutInfo.totalItemsCount - 1
+        val info = listState.layoutInfo
+        val last = info.totalItemsCount - 1
         if (last < 0) return
-        listState.scrollToItem(last)
-        listState.scrollBy(4_000f)
+        val visible = info.visibleItemsInfo.firstOrNull { it.index == last }
+        if (visible == null) {
+            listState.scrollToItem(last)
+            listState.scrollBy(Float.MAX_VALUE.coerceAtMost(100_000f))
+        } else {
+            val overflow = (visible.offset + visible.size - info.viewportEndOffset).coerceAtLeast(0)
+            if (overflow > 0) listState.scrollBy(overflow.toFloat())
+        }
     }
 
     // The keyboard shrinks the viewport without moving the list, which strands
@@ -863,25 +871,44 @@ fun ChatScreen(
         if (!prefillPrompt.isNullOrBlank()) draft = prefillPrompt
     }
 
-    // Follow the stream only while the reader stays at the live edge —
-    // scrolling up to reread is never yanked back down mid-generation. One
-    // long-lived snapshotFlow (reading the controller-backed live text length
-    // and the transcript size) replaces per-chunk-keyed effects; scrollToItem
-    // is instantaneous by design — an animated follow gets cancelled and
-    // relaunched on every chunk anyway.
-    LaunchedEffect(Unit) {
+    // Follow measured geometry, not token count. Text that fits the existing
+    // line must never trigger a scroll, and a wrap must never teleport to the
+    // top of a long assistant message before returning to its bottom.
+    LaunchedEffect(listState) {
         snapshotFlow {
-            Triple(
-                streamStateRaw.value?.phase,
-                streamStateRaw.value?.streamText?.length ?: 0,
-                messages.size
-            )
-        }.collect { (_, _, count) ->
-            // Every phase change counts, not just Streaming: the first token
-            // arrives with the bubble already taller than the viewport, and the
-            // commit at Done changes the height again. If the reader is pinned,
-            // all three land at the live edge.
-            if (pinnedToLiveEdge && count > 0) stickToBottom()
+            val info = listState.layoutInfo
+            val last = info.totalItemsCount - 1
+            val tail = info.visibleItemsInfo.firstOrNull { it.index == last }
+            listOf(last, tail?.size ?: -1, info.viewportEndOffset - info.viewportStartOffset)
+        }.collectLatest {
+            if (!pinnedToLiveEdge || messages.isEmpty()) return@collectLatest
+            withFrameNanos { }
+            if (!pinnedToLiveEdge) return@collectLatest
+            var lastFrame = 0L
+            // A single frame-paced follower converges on the measured edge.
+            // It is cancellable by a new layout or the reader's drag.
+            while (pinnedToLiveEdge) {
+                val info = listState.layoutInfo
+                val last = info.totalItemsCount - 1
+                if (last < 0) break
+                val tail = info.visibleItemsInfo.firstOrNull { it.index == last }
+                if (tail == null) {
+                    stickToBottom()
+                    break
+                }
+                val overflow = (tail.offset + tail.size - info.viewportEndOffset).toFloat()
+                if (overflow <= 0f) break
+                val frame = withFrameNanos { it }
+                val dt = if (lastFrame == 0L) 1f / 60f else ((frame - lastFrame) / 1_000_000_000f).coerceIn(0.001f, 0.05f)
+                lastFrame = frame
+                if (!pinnedToLiveEdge) break
+                val reduced = SettingsStore.reduceMotion || SettingsStore.reduceAnimations
+                val live = streamStateRaw.value?.phase == ChatStreamController.Phase.Streaming
+                val fraction = (1.0 - kotlin.math.exp((-dt / 0.038f).toDouble())).toFloat()
+                val step = if (!live || reduced || overflow > info.viewportSize.height * 0.75f || overflow <= 1f) overflow
+                    else (overflow * fraction).coerceAtLeast(1f).coerceAtMost(overflow)
+                if (listState.scrollBy(step) <= 0f) break
+            }
         }
     }
 

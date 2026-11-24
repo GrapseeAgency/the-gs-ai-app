@@ -21,6 +21,7 @@ struct FluidTextBand: Hashable {
 struct FluidTextMotion {
     private var previous: String
     private var lastArrival: TimeInterval?
+    private var cadence: TimeInterval = 0.042
     private(set) var bands: [FluidTextBand] = []
 
     init(initial: String) { previous = initial }
@@ -31,6 +32,7 @@ struct FluidTextMotion {
         guard enabled, text.hasPrefix(previous) else {
             previous = text
             lastArrival = nil
+            cadence = 0.042
             bands = []
             return
         }
@@ -41,19 +43,35 @@ struct FluidTextMotion {
         guard count > oldCount else {
             previous = text
             lastArrival = nil
+            cadence = 0.042
             bands = []
             return
         }
         previous = text
-        let duration = lastArrival.map { min(0.250, max(0.170, 0.170 + (now - $0) * 0.5)) } ?? 0.230
+        if let lastArrival {
+            let sample = min(0.160, max(0.016, now - lastArrival))
+            cadence = cadence * 0.78 + sample * 0.22
+        }
         lastArrival = now
+        let duration = min(0.265, max(0.185, 0.175 + cadence * 0.85))
+        let stagger = min(0.020, max(0.008, cadence * 0.25))
+        // Bounded suffix only; avoid an O(document) character array.
+        let suffix = Array(text.suffix(72))
         let floor = max(oldCount, count - 72)
         bands.removeAll { $0.end <= count - 72 }
         var start = floor
         var incoming = 0
         while start < count && incoming < 6 {
-            let end = incoming == 5 ? count : min(count, start + 12)
-            bands.append(FluidTextBand(start: start, end: end, born: now + Double(incoming) * 0.013, duration: duration))
+            let ideal = min(count, start + 12)
+            var word = ideal
+            let origin = count - suffix.count
+            while word > start + 6 && word < count &&
+                !suffix[word - 1 - origin].isWhitespace && !suffix[word - origin].isWhitespace {
+                word -= 1
+            }
+            let preferred = word > start + 6 ? word : ideal
+            let end = incoming == 5 ? count : preferred
+            bands.append(FluidTextBand(start: start, end: end, born: now + Double(incoming) * stagger, duration: duration))
             start = end
             incoming += 1
         }

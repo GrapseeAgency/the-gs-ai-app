@@ -82,7 +82,7 @@ private struct LiveFluidResponseText: View {
         // network delivery, copying, scrolling or completion.
         .task(id: raw) {
             guard !preview.bands.isEmpty else { return }
-            try? await Task.sleep(nanoseconds: 340_000_000)
+            try? await Task.sleep(nanoseconds: 390_000_000)
             guard !Task.isCancelled else { return }
             motion.settle()
         }

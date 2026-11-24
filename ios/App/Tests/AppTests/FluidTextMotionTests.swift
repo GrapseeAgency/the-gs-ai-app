@@ -25,6 +25,20 @@ final class FluidTextMotionTests: XCTestCase {
         XCTAssertTrue(motion.bands.isEmpty)
     }
 
+    func testCadenceDoesNotRestartOldBands() throws {
+        var motion = FluidTextMotion(initial: "")
+        motion.update("first word ", now: 0)
+        let first = try XCTUnwrap(motion.bands.first)
+        motion.update("first word next word ", now: 0.017)
+        XCTAssertEqual(motion.bands.first, first)
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(motion.bands.last).start, first.end)
+        motion.update("first word next word final", now: 0.117)
+        let latest = try XCTUnwrap(motion.bands.last)
+        XCTAssertTrue((0.185...0.265).contains(latest.duration))
+        motion.update("first word next word final", now: 0.6)
+        XCTAssertTrue(motion.bands.isEmpty)
+    }
+
     func testBurstAndUnicodeRangesStayBounded() {
         var motion = FluidTextMotion(initial: "")
         var text = String(repeating: "👨‍👩‍👧‍👦", count: 100)

@@ -38,6 +38,8 @@ struct ChatDetailView: View {
     @State private var userIsReading = false
     @State private var atBottom = true
     @State private var disengageWork: DispatchWorkItem?
+    @State private var lastFollowHeight: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     private let liveEdgeID = "gs-live-edge"
     @State private var editingIndex: Int?
     @State private var editDraft = ""
@@ -447,6 +449,26 @@ struct ChatDetailView: View {
                 .padding(.horizontal, Aero.Spacing.m)
                 .padding(.vertical, Aero.Spacing.m)
                 .frame(maxWidth: columnMaxWidth)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    let growth = height - lastFollowHeight
+                    let wasMeasured = lastFollowHeight > 0
+                    lastFollowHeight = height
+                    guard !userIsReading, abs(growth) > 0.5 else { return }
+                    // Follow real line/block growth, not every provider chunk.
+                    // Short, linear motion does not restart the old long spring
+                    // for every new word. Large jumps/initial layout snap once.
+                    let gentle = vm.isStreaming && wasMeasured && growth > 0 &&
+                        growth < 100 && !systemReduceMotion && !SettingsStore.shared.animationReduced
+                    if gentle {
+                        withAnimation(.linear(duration: 0.12)) {
+                            proxy.scrollTo(liveEdgeID, anchor: .bottom)
+                        }
+                    } else {
+                        var transaction = Transaction(animation: nil)
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) { proxy.scrollTo(liveEdgeID, anchor: .bottom) }
+                    }
+                }
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 3).onChanged { _ in
@@ -465,16 +487,7 @@ struct ChatDetailView: View {
                 olderAnchor = nil
                 proxy.scrollTo(anchor, anchor: .top)
             }
-            .onChange(of: vm.messages.last?.content) { _ in
-                guard !userIsReading else { return }
-                withAnimation(Aero.chatCurve) {
-                    // Pin the sentinel, not the bubble: the 1pt row stays
-                    // materialized at the viewport bottom, so atBottom holds
-                    // steady and the jump button never flickers mid-stream.
-                    proxy.scrollTo(liveEdgeID, anchor: .bottom)
-                }
-            }
-            .onDisappear { disengageWork?.cancel() }
+             .onDisappear { disengageWork?.cancel() }
             .overlay(alignment: .bottomTrailing) {
                 jumpToLive(proxy)
             }
