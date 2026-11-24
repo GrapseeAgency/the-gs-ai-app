@@ -37,6 +37,15 @@ function Avatar() {
   // Keep the original 144px backing canvas. The Android host CSS maps the
   // entire square canvas to the native slot, independent of the vendor's
   // negative margins and inline positioning for ordinary web chat layouts.
+  // Fixed vendor layout preserves the high resolution backing store.
+  const fit = () => Math.max(0.01, Math.min(innerWidth, innerHeight) / 72)
+  const [scale, setScale] = useState(fit)
+  React.useEffect(() => {
+    const resize = () => setScale(fit())
+    window.addEventListener('resize', resize)
+    resize()
+    return () => window.removeEventListener('resize', resize)
+  }, [])
   return <BotAvatar
     type={config.type}
     state={config.state}
@@ -48,6 +57,7 @@ function Avatar() {
     theme="light"
     interactive={false}
     speed={1}
+    style={{ transform: 'scale(' + scale + ')', transformOrigin: '0 0' }}
   />
 }
 createRoot(document.getElementById('root')!).render(<Avatar />)

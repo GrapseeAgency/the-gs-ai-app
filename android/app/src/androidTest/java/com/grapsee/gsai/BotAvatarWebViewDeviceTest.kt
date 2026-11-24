@@ -130,7 +130,9 @@ class BotAvatarWebViewDeviceTest {
                 assertTrue("Vendor canvas is clipped: " + info,
                     b.getDouble(0) >= -1 && b.getDouble(1) >= -1 &&
                     b.getDouble(2) <= vp.getDouble(0) + 1 &&
-                    b.getDouble(3) <= vp.getDouble(1) + 1)
+                    b.getDouble(3) <= vp.getDouble(1) + 1 &&
+                    b.getDouble(2) - b.getDouble(0) >= vp.getDouble(0) - 2 &&
+                    b.getDouble(3) - b.getDouble(1) >= vp.getDouble(1) - 2)
                 assertTrue("Vendor canvas resolution insufficient: " + info,
                     info.optInt("width") >= 72 && info.optInt("height") >= 72)
                 assertTrue("Animation unexpectedly disabled: " + info,
