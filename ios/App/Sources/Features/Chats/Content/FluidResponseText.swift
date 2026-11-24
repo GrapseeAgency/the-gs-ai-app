@@ -173,6 +173,12 @@ private struct FluidRevealAttribute: TextAttribute {
 @available(iOS 18.0, *)
 private struct FluidGlyphRenderer: TextRenderer {
     let now: TimeInterval
+    // Construct the contrast curve once. Each run only moves/scales its
+    // native coordinate space. Extended ends supply the clamped ink values.
+    private static let inkGradient = Gradient(stops: (0...32).map { index in
+        let p = Double(index) / 32
+        return Gradient.Stop(color: .white.opacity(fluidInkOpacity(p)), location: CGFloat(p))
+    })
 
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
         // The phase is continuous across native runs and wrapped lines,
@@ -216,34 +222,26 @@ private struct FluidGlyphRenderer: TextRenderer {
                 let lastPhase = reversed ? startPhase : endPhase
                 let phaseFrom = band.phaseFrom + (band.phaseTo - band.phaseFrom) * first
                 let phaseTo = band.phaseFrom + (band.phaseTo - band.phaseFrom) * lastPhase
-                let stops = fluidInkStops(progress: band.progress(at: now),
-                                          phaseFrom: phaseFrom, phaseTo: phaseTo, travel: band.travel)
-                if bounds.width < 0.5 || (stops.count == 2 && abs(stops[0].opacity - stops[1].opacity) < 0.0001) {
+                let projection = fluidInkProjection(progress: band.progress(at: now),
+                    phaseFrom: phaseFrom, phaseTo: phaseTo, travel: band.travel)
+                if bounds.width < 0.5 || projection.solid != nil {
                     var ink = context
-                    ink.opacity = stops[0].opacity
+                    ink.opacity = projection.solid ?? band.opacity(at: now, position: (startPhase + endPhase) * 0.5)
                     ink.draw(run)
                     continue
                 }
-                // Extend the endpoint alpha beyond typographic bounds so
-                // italic overhangs and tall accents are not clipped.
+                // The native gradient has clamped endpoints, even beyond the
+                // run. A single fill replaces three fills and a new stop array.
                 let padding = max(8, bounds.height)
                 let maskBounds = bounds.insetBy(dx: -padding, dy: -padding)
-                let gradient = Gradient(stops: stops.map {
-                    Gradient.Stop(color: .white.opacity($0.opacity), location: CGFloat($0.position))
-                })
+                let x0 = bounds.minX + bounds.width * CGFloat(projection.origin)
+                let x1 = x0 + bounds.width * CGFloat(projection.scale)
                 var ink = context
                 ink.clipToLayer { mask in
-                    let left = CGRect(x: maskBounds.minX, y: maskBounds.minY,
-                                      width: padding, height: maskBounds.height)
-                    let right = CGRect(x: bounds.maxX, y: maskBounds.minY,
-                                       width: padding, height: maskBounds.height)
-                    mask.fill(Path(left), with: .color(.white.opacity(stops[0].opacity)))
-                    mask.fill(Path(right), with: .color(.white.opacity(stops[stops.count - 1].opacity)))
-                    let middle = CGRect(x: bounds.minX, y: maskBounds.minY,
-                                        width: bounds.width, height: maskBounds.height)
-                    mask.fill(Path(middle), with: .linearGradient(gradient,
-                        startPoint: CGPoint(x: bounds.minX, y: bounds.midY),
-                        endPoint: CGPoint(x: bounds.maxX, y: bounds.midY)))
+                    mask.fill(Path(maskBounds), with: .linearGradient(Self.inkGradient,
+                        startPoint: CGPoint(x: x0, y: bounds.midY),
+                        endPoint: CGPoint(x: x1, y: bounds.midY),
+                        options: [.extendsStart, .extendsEnd]))
                 }
                 ink.draw(run)
             }

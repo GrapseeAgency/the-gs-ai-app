@@ -218,3 +218,16 @@ internal fun fluidInkStops(progress: Float, phaseFrom: Float, phaseTo: Float, tr
     stops.add(FluidInkStop(1f, fluidInkOpacity(end)))
     return stops
 }
+
+/** Affine placement of a single reusable clamped ink gradient. Coordinates
+ * are fractions of the native run width; RTL can have negative scale.
+ * The shape of the curve does not change on each display tick. */
+internal data class FluidInkProjection(val origin: Float, val scale: Float, val solid: Float?)
+internal fun fluidInkProjection(progress: Float, phaseFrom: Float, phaseTo: Float, travel: Float): FluidInkProjection {
+    val p0 = (progress - travel * phaseFrom) / (1f - travel)
+    val p1 = (progress - travel * phaseTo) / (1f - travel)
+    val delta = p1 - p0
+    if (maxOf(p0, p1) <= 0f || minOf(p0, p1) >= 1f || kotlin.math.abs(delta) < 0.0001f)
+        return FluidInkProjection(0f, 1f, fluidInkOpacity((p0 + p1) * 0.5f))
+    return FluidInkProjection(-p0 / delta, 1f / delta, null)
+}

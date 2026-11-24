@@ -17,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
@@ -172,6 +172,22 @@ internal fun FluidResponseText(
             } else emptyList()
             val layerPaint = Paint()
             val nativeClip = android.graphics.Rect()
+            // One immutable 33-stop curve per drawing cache. Only its local
+            // affine transform changes during a frame; no per-range stop
+            // arrays, sorting, Color objects or Brush allocation.
+            val maskShader = android.graphics.LinearGradient(
+                0f, 0f, 1f, 0f,
+                IntArray(33) { index ->
+                    val alpha = ((1f - fluidInkOpacity(index / 32f)) * 255f + 0.5f).toInt().coerceIn(0, 255)
+                    android.graphics.Color.argb(alpha, 0, 0, 0)
+                },
+                null,
+                android.graphics.Shader.TileMode.CLAMP
+            )
+            val maskMatrix = android.graphics.Matrix()
+            val nativeMask = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_OUT)
+            }
             onDrawWithContent {
                 // A settled node must not subscribe to other paragraphs'
                 // display pulses. Check its cached geometry before reading
@@ -212,15 +228,17 @@ internal fun FluidResponseText(
                             val logicalLast = if (rtl) first else last
                             val phaseFirst = band.phaseFrom + (band.phaseTo - band.phaseFrom) * logicalFirst
                             val phaseLast = band.phaseFrom + (band.phaseTo - band.phaseFrom) * logicalLast
-                            val stops = fluidInkStops(band.progress(now), phaseFirst, phaseLast, band.travel)
-                            // Exact-position stops in native coordinates. Flat
-                            // regions use a solid paint, not a gradient.
-                            if (stops.size == 2 && kotlin.math.abs(stops[0].opacity - stops[1].opacity) < 0.0001f) {
-                                val removal = 1f - stops[0].opacity
+                            val projection = fluidInkProjection(band.progress(now), phaseFirst, phaseLast, band.travel)
+                            val solid = projection.solid
+                            if (solid != null) {
+                                val removal = 1f - solid
                                 if (removal > 0f) drawPath(path, Color.Black.copy(alpha = removal), blendMode = BlendMode.DstOut)
                             } else {
-                                val colors = stops.map { it.position to Color.Black.copy(alpha = (1f - it.opacity).coerceIn(0f, 1f)) }.toTypedArray()
-                                drawPath(path, Brush.horizontalGradient(*colors, startX = rect.left, endX = rect.right), blendMode = BlendMode.DstOut)
+                                maskMatrix.setScale(rect.width * projection.scale, 1f)
+                                maskMatrix.postTranslate(rect.left + rect.width * projection.origin, 0f)
+                                maskShader.setLocalMatrix(maskMatrix)
+                                nativeMask.shader = maskShader
+                                drawContext.canvas.nativeCanvas.drawPath(path.asAndroidPath(), nativeMask)
                             }
                         }
                     } finally {

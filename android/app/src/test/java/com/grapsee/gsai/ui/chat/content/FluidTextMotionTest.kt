@@ -42,6 +42,21 @@ class FluidTextMotionTest {
         assertTrue(motion.update(current, 600_000_000L, true).isEmpty())
     }
 
+    @Test fun reusableGradientPlacementMatchesNativeInkCurve() {
+        for ((from, to) in listOf(0f to 1f, 1f to 0f, 0.42f to 0.43f, 0.2f to 0.2f)) {
+            for (tick in 0..100) {
+                val progress = tick / 100f
+                val projection = fluidInkProjection(progress, from, to, 0.48f)
+                for (step in 0..100) {
+                    val x = step / 100f
+                    val actual = projection.solid ?: fluidInkOpacity((x - projection.origin) / projection.scale)
+                    val expected = fluidInkOpacity(fluidLocalProgress(progress, from + (to - from) * x, 0.48f))
+                    assertEquals(expected, actual, 0.0002f)
+                }
+            }
+        }
+    }
+
     @Test fun continuousInkProjectionMatchesCurveInBothDirections() {
         for (direction in listOf(0f to 1f, 1f to 0f, 0.3f to 0.42f)) {
             for (tick in 0..100) {

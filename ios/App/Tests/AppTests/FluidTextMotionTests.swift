@@ -25,6 +25,21 @@ final class FluidTextMotionTests: XCTestCase {
         XCTAssertTrue(motion.bands.isEmpty)
     }
 
+    func testReusableGradientPlacementMatchesNativeInkCurve() {
+        for (from, to) in [(0.0, 1.0), (1.0, 0.0), (0.42, 0.43), (0.2, 0.2)] {
+            for tick in 0...100 {
+                let progress = Double(tick) / 100
+                let projection = fluidInkProjection(progress: progress, phaseFrom: from, phaseTo: to, travel: 0.48)
+                for step in 0...100 {
+                    let x = Double(step) / 100
+                    let actual = projection.solid ?? fluidInkOpacity((x - projection.origin) / projection.scale)
+                    let expected = fluidInkOpacity(fluidLocalProgress(progress, position: from + (to - from) * x, travel: 0.48))
+                    XCTAssertEqual(actual, expected, accuracy: 0.0002)
+                }
+            }
+        }
+    }
+
     func testContinuousInkProjectionMatchesCurveInBothDirections() throws {
         for (first, last) in [(0.0, 1.0), (1.0, 0.0), (0.3, 0.42)] {
             for tick in 0...100 {

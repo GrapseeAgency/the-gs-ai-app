@@ -191,3 +191,20 @@ func fluidInkStops(progress: Double, phaseFrom: Double, phaseTo: Double, travel:
     stops.append(FluidInkStop(position: 1, opacity: fluidInkOpacity(end)))
     return stops
 }
+
+/// Affine placement of a reusable clamped curve in native run coordinates.
+/// A negative scale represents right-to-left optical motion.
+struct FluidInkProjection {
+    let origin: Double
+    let scale: Double
+    let solid: Double?
+}
+func fluidInkProjection(progress: Double, phaseFrom: Double, phaseTo: Double, travel: Double) -> FluidInkProjection {
+    let p0 = (progress - travel * phaseFrom) / (1 - travel)
+    let p1 = (progress - travel * phaseTo) / (1 - travel)
+    let delta = p1 - p0
+    if max(p0, p1) <= 0 || min(p0, p1) >= 1 || abs(delta) < 0.0001 {
+        return FluidInkProjection(origin: 0, scale: 1, solid: fluidInkOpacity((p0 + p1) * 0.5))
+    }
+    return FluidInkProjection(origin: -p0 / delta, scale: 1 / delta, solid: nil)
+}
