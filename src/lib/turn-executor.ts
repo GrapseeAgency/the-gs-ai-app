@@ -156,6 +156,7 @@ import {
 } from '@/lib/search/research'
 import { runBranchingResearch } from '@/lib/research/branching'
 import { crystallizeIfNeeded } from '@/lib/context-crystallize'
+import { attachmentMatchesTurn } from '@/lib/turn-resume'
 import {
   NOOP_EMIT,
   type ClarifyOption,
@@ -373,10 +374,20 @@ export async function prepareTurn(
   rawBody: { content?: unknown; attachments?: unknown }
 ): Promise<Prepared> {
   const id = args.conversationId
-  const content = args.content
+  // A replay must reuse the exact durable user message, never silently
+  // create another one or attach files from a different conversation.
+  const existingUser = args.existingUserMessageId
+    ? await db.message.findUnique({ where: { id: args.existingUserMessageId } })
+    : null
+  if (args.existingUserMessageId &&
+      (!existingUser || existingUser.conversationId !== id || existingUser.role.toLowerCase() !== 'user')) {
+    return { kind: 'invalid', response: NextResponse.json(
+      { code: 'invalid_resume', message: 'The original user message is unavailable.' }, { status: 400 }) }
+  }
+  const content = existingUser?.content ?? args.content
 
-  // Validate every attachment up-front: must exist, belong to this
-  // conversation (or be unbound), and not already be attached to a message.
+  // A fresh turn claims unbound files; a replay may read only files
+  // already owned by its exact persisted user message.
   const attachmentsProvided = args.attachmentIds.length > 0
   let claimedAttachments: Awaited<ReturnType<typeof db.attachment.findMany>> = []
   if (attachmentsProvided) {
@@ -391,7 +402,7 @@ export async function prepareTurn(
       }
     }
     const foreign = claimedAttachments.find(
-      (a) => (a.conversationId !== null && a.conversationId !== id) || a.messageId !== null
+      (a) => !attachmentMatchesTurn(a, id, existingUser?.id)
     )
     if (foreign) {
       return {
@@ -425,10 +436,7 @@ export async function prepareTurn(
   // RESUME SEMANTICS: a resumed run reuses the user message persisted by the
   // original start — the side effect already happened, it must not happen
   // twice (the idempotency guarantee, at the persistence layer).
-  const userMessage = args.existingUserMessageId
-    ? (await db.message.findUnique({ where: { id: args.existingUserMessageId } })) ??
-      (await db.message.create({ data: { conversationId: id, role: 'user', content } }))
-    : await db.message.create({ data: { conversationId: id, role: 'user', content } })
+  const userMessage = existingUser ?? await db.message.create({ data: { conversationId: id, role: 'user', content } })
   if (attachmentsProvided && !args.existingUserMessageId) {
     await db.attachment.updateMany({
       where: { id: { in: args.attachmentIds } },

@@ -15,6 +15,8 @@ import { appendEvent } from '@/lib/turn-events'
 import { messageToJson } from '@/lib/serializers'
 import { db } from '@/lib/db'
 import { runTurn, type Prep } from '@/lib/turn-executor'
+import { decodeStoredTurnFacts } from '@/lib/turn-resume'
+import { parseThinkingMode } from '@/lib/model-capabilities'
 
 // Free-only routing needs the durable queue by default. Set
 // BACKGROUND_RUNS_ENABLED=0 to opt back into the legacy inline transport.
@@ -41,12 +43,8 @@ export async function rebuildPrepForRun(runId: string): Promise<Prep | { error: 
     where: { runId, eventType: 'TurnStarted' },
     orderBy: { seq: 'asc' },
   })
-  let facts: { content?: string; attachmentIds?: string[]; timezone?: string | null; clientVersion?: string } = {}
-  try {
-    facts = JSON.parse(turnEvents?.payload ?? '{}') as typeof facts
-  } catch {
-    facts = {}
-  }
+  const facts = decodeStoredTurnFacts(turnEvents?.payload)
+  if (!facts || !run.userMessageId) return { error: 'Original turn request is unavailable' }
   const { prepareTurn } = await import('@/lib/turn-executor')
   const prepared = await prepareTurn(
     {
@@ -55,7 +53,9 @@ export async function rebuildPrepForRun(runId: string): Promise<Prep | { error: 
       timezone: facts.timezone ?? null,
       clientVersion: facts.clientVersion ?? 'web',
       requestId: runId,
-      attachmentIds: facts.attachmentIds ?? [],
+      attachmentIds: facts.attachmentIds,
+      mode: parseThinkingMode(facts.mode),
+      turnContext: facts.turnContext,
       runId,
       existingUserMessageId: run.userMessageId ?? undefined,
     },
@@ -87,10 +87,11 @@ export async function produceRun(runId: string, prepInput?: Prep): Promise<void>
   // Worker rebuild: the prep may come from a different process's enqueue.
   let prep = prepInput
   if (!prep) {
-    const rebuilt = await rebuildPrepForRun(runId)
+    const rebuilt = await rebuildPrepForRun(runId).catch(() => ({ error: 'Could not restore the original turn' }))
     if ('error' in rebuilt) {
       await finishRun(runId, 'failed', 'error', rebuilt.error, null)
       await appendEvent(runId, 'RunFailed', { error: rebuilt.error.slice(0, 300) })
+      await publishChunk(streamId, { event: 'error', data: 'Could not restore the original request. Please retry.' })
       await publishEnd(streamId, 'error')
       console.error(`RUN-REBUILD-FAIL run=${runId}: ${rebuilt.error}`)
       return

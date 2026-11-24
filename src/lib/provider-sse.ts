@@ -47,7 +47,8 @@ export async function consumeSseStream(
     if (choice) structured = true
     const reason = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning ?? choice?.message?.reasoning_content
     if (typeof reason === 'string' && reason) onReasoning?.(reason)
-    if (choice?.delta?.tool_calls || choice?.message?.tool_calls || choice?.finish_reason === 'tool_calls')
+    const toolCalls = choice?.delta?.tool_calls ?? choice?.message?.tool_calls
+    if ((Array.isArray(toolCalls) ? toolCalls.length > 0 : toolCalls != null) || choice?.finish_reason === 'tool_calls')
       throw new Error('Provider requested a tool outside the text stream contract')
     const content = choice?.delta?.content ?? choice?.message?.content ?? parsed.delta?.content
     if (typeof content === 'string') await append(content)

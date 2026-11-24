@@ -1,25 +1,6 @@
-/**
- * PHASE 7 — CONTEXT-NOISE MITIGATION (Cognitive Scaffold, ACL 2026).
- *
- * Linear history accumulation degrades reasoning and dilutes fine-grained
- * evidence — the "context-noise trade-off". Factorized memory:
- *
- *   - Fluid Working Context  — the immediate reasoning window (recent turns
- *                              + evidence, untouched).
- *   - Persistent Knowledge   — KnowledgeNodes: event snapshots crystallized
- *     Graph                    from saturated history. NUMBERS AND ENTITIES
- *                              ARE PRESERVED BYTE-EXACT — never summarized,
- *                              never paraphrased.
- *
- * CRYSTALLIZATION: when the working context saturates, the OLDEST history
- * is crystallized into exact event snapshots and collapses into one compact
- * block; the model messages keep only recent turns verbatim.
- *
- * DUAL-PATH RETRIEVAL: during reasoning the agent proactively recovers
- * precise evidence from the graph — nodes matching the current question's
- * terms ride back into the context as an explicit RECOVERED block.
- */
-
+/** Remote request context projection. Original conversation rows are
+ * authoritative; preserve attributable earlier passages and recent turns
+ * without detached values or critical-path knowledge graph writes. */
 import { tokensOf } from '@/lib/search/tokens'
 
 /** Working-context saturation threshold (history chars) before crystallizing. */

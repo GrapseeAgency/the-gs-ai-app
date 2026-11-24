@@ -27,6 +27,7 @@ import { clientKey, rateLimit } from '@/lib/rate-limit'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@/lib/attachments'
 import { prepareTurn } from '@/lib/turn-executor'
 import { parseThinkingMode } from '@/lib/model-capabilities'
+import { decodeStoredTurnFacts } from '@/lib/turn-resume'
 import { backgroundRunsEnabled, newRunId, newStreamId } from '@/lib/turn-producer'
 import { enqueueRun } from '@/lib/worker-pool'
 import { createRun, getRun, isTerminalStatus, rebindStream } from '@/lib/run-store'
@@ -105,6 +106,8 @@ export async function POST(req: NextRequest) {
     // Dangling run: reconcile happened inside resume(); re-produce on a
     // FRESH transport window (new streamId), SAME runId.
     const turnRequest = await turnRequestFromRun(run, req)
+    if (!turnRequest) return NextResponse.json(
+      { code: 'invalid_resume', message: 'The original turn request is unavailable.' }, { status: 400 })
     const prepared = await prepareTurn(turnRequest, {
       content: turnRequest.content,
       attachments: turnRequest.attachmentIds,
@@ -232,19 +235,8 @@ async function turnRequestFromRun(
     orderBy: { seq: 'asc' },
     take: 1,
   })
-  let facts: {
-    content?: string
-    attachmentIds?: string[]
-    timezone?: string | null
-    clientVersion?: string
-    mode?: unknown
-    turnContext?: string | null
-  } = {}
-  try {
-    facts = JSON.parse(events[0]?.payload ?? '{}') as typeof facts
-  } catch {
-    facts = {}
-  }
+  const facts = decodeStoredTurnFacts(events[0]?.payload)
+  if (!facts || !run.userMessageId) return null
   return {
     conversationId: run.conversationId,
     content: facts.content ?? '',
