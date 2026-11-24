@@ -157,6 +157,7 @@ import {
 } from '@/lib/search/research'
 import { runBranchingResearch } from '@/lib/research/branching'
 import { crystallizeIfNeeded } from '@/lib/context-crystallize'
+import { loadConversationArchive } from '@/lib/conversation-archive'
 import { plannerHistory } from '@/lib/search/planner-context'
 import { attachmentMatchesTurn } from '@/lib/turn-resume'
 import { explicitCalculation, executeCalculation, calculationEvidence, standaloneCalculation, type CalculationResult } from '@/lib/calc/turn-calculator'
@@ -223,7 +224,7 @@ export type Prepared =
 export type Prep = {
   conversationId: string
   content: string
-  userMessage: { id: string }
+  userMessage: { id: string; createdAt: Date }
   conversation: { id: string; assistantId: string | null; title: string }
   /**
    * Set when THIS turn named the conversation. `prepareTurn` has no transport,
@@ -1390,7 +1391,12 @@ async function runTurnInternal(prep: Prep, push: TurnPush | null, lifetime: Abor
     // byte-exact) + dual-path retrieval recovers matching nodes for this
     // question. Short conversations are untouched (no-op).
     const requiredImageTurns = useVision && !allImagesFailed ? prep.recentImageTurnIds : []
-    const crystallization = await crystallizeIfNeeded(id, history, content, requiredImageTurns)
+    const archive = history.length >= HISTORY_LIMIT
+      ? await loadConversationArchive({conversationId:id,before:userMessage.createdAt,
+          currentMessageId:userMessage.id,recentIds:history.map(row=>row.id),question:content})
+          .catch(()=>({rows:[],omitted:0}))
+      : undefined
+    const crystallization = await crystallizeIfNeeded(id, history, content, requiredImageTurns, archive)
     const requiredIds = new Set(requiredImageTurns)
     const effectiveHistory = history.filter((row, index) =>
       index >= crystallization.keepFromIndex || requiredIds.has(row.id))

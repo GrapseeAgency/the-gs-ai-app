@@ -19,6 +19,7 @@ on:
       - 'src/lib/search/planner.ts'
       - 'src/lib/search/planner-context*.ts'
       - 'src/lib/context-crystallize*.ts'
+      - 'src/lib/conversation-archive*.ts'
       - 'src/lib/turn-resume*.ts'
       - 'src/lib/calc/**'
       - 'src/lib/quality-routing*.ts'
@@ -80,6 +81,7 @@ jobs:
         run: |
           bun test src/lib/run-store.integration.test.ts
           bun test src/lib/turn-local.integration.test.ts
+          bun test src/lib/conversation-archive.integration.test.ts
   model-benchmark:
     # Live requests are explicit: do not spend the shared free-provider quota
     # on every source-only commit, particularly during a Retry-After window.

@@ -12,6 +12,11 @@ export type HistoryRow = {
   content: string
 }
 
+export type EarlierHistory = {
+  rows: HistoryRow[]
+  omitted: number
+}
+
 export type Crystallization = {
   /** index into the original history where the verbatim window starts */
   keepFromIndex: number
@@ -75,6 +80,25 @@ const RECENT_BUDGET = 18_000
 const ARCHIVE_BUDGET = 12_000
 const MIN_RECENT_MESSAGES = 6
 
+// Search generic follow-up language is not a useful relevance signal.
+const COMMON = new Set(['what','which','when','where','with','that','this','those','these',
+  'please','continue','about','answer','said','tell','earlier','previous','could','would',
+  'should','from','have','were','your','been','into','just','only','again','give','does'])
+export function historySearchTerms(question:string): string[] {
+  return [...tokensOf(question,2)].filter(term=>!COMMON.has(term))
+    .sort((a,b)=>Number(/\d/.test(b))-Number(/\d/.test(a)) || b.length-a.length).slice(0,64)
+}
+
+export const PERSISTENT_INSTRUCTION_TERMS = [
+  'for this conversation','from now on','throughout this conversation','always','never',
+  'remember','rule:','correction:','update:','মনে রেখো','সবসময়','এই কথোপকথনে','সংশোধন',
+] as const
+
+export function likelyPersistentInstruction(text:string):boolean {
+  const lower=text.toLowerCase()
+  return PERSISTENT_INSTRUCTION_TERMS.some(term=>lower.includes(term))
+}
+
 /** Preserve a relevant contiguous passage, rather than isolated numbers.
  * A long excerpt has explicit omission markers and never claims completeness. */
 function excerpt(text: string, maxChars: number, terms: readonly string[]): string {
@@ -84,8 +108,8 @@ function excerpt(text: string, maxChars: number, terms: readonly string[]): stri
   const lower = text.toLowerCase()
   let hit = -1
   for (const term of terms) {
-    const index = lower.indexOf(term)
-    if (index > hit) hit = index
+    const index = lower.lastIndexOf(term)
+    if (index >= 0) { hit = index; break }
   }
   // Keep both the opening intent and the last correction by default. When
   // a question matches a distant passage, allocate the middle to that hit.
@@ -102,29 +126,33 @@ function excerpt(text: string, maxChars: number, terms: readonly string[]): stri
  * are recovered only with their role and surrounding text intact.
  * No graph-derived stale facts, detached values, or database writes in the
  * response's critical path. A newer explicit instruction wins. */
-export function projectHistory(history: HistoryRow[], question: string, requiredIds: readonly string[] = []): Crystallization {
+export function projectHistory(history: HistoryRow[], question: string, requiredIds: readonly string[] = [], archive: EarlierHistory = {rows:[],omitted:0}): Crystallization {
   const total = history.reduce((n, row) => n + row.content.length, 0)
-  if (total <= CONTEXT_SATURATION_CHARS || history.length <= MIN_RECENT_MESSAGES) {
-    return { keepFromIndex: 0, block: null, crystallized: 0, recovered: [] }
+  let keepFromIndex = 0
+  if (total > CONTEXT_SATURATION_CHARS && history.length > MIN_RECENT_MESSAGES) {
+    keepFromIndex = history.length
+    let recentChars = 0
+    while (keepFromIndex > 0) {
+      const next = history[keepFromIndex - 1]
+      if (history.length - keepFromIndex >= MIN_RECENT_MESSAGES &&
+        recentChars + next.content.length > RECENT_BUDGET) break
+      recentChars += next.content.length
+      keepFromIndex--
+    }
   }
-  let keepFromIndex = history.length
-  let recentChars = 0
-  while (keepFromIndex > 0) {
-    const next = history[keepFromIndex - 1]
-    if (history.length - keepFromIndex >= MIN_RECENT_MESSAGES &&
-      recentChars + next.content.length > RECENT_BUDGET) break
-    recentChars += next.content.length
-    keepFromIndex--
-  }
-  if (keepFromIndex === 0) return { keepFromIndex: 0, block: null, crystallized: 0, recovered: [] }
+  const recentIds = new Set(history.map(row=>row.id))
+  const seen = new Set<string>()
+  const older = [...archive.rows.filter(row=>!recentIds.has(row.id)), ...history.slice(0, keepFromIndex)]
+    .filter(row=>{if(seen.has(row.id))return false;seen.add(row.id);return true})
+  if (!older.length && !archive.omitted) return { keepFromIndex, block: null, crystallized: 0, recovered: [] }
 
-  const terms = [...tokensOf(question, 2)].slice(0, 64)
+  const terms = historySearchTerms(question)
   const required = new Set(requiredIds)
-  const older = history.slice(0, keepFromIndex)
   const candidates = older.map((row, index) => {
     const hay = new Set(tokensOf(row.content, 2))
     const hits = terms.filter(term => hay.has(term)).length
-    return { row, index, hits, user: row.role.toLowerCase() === 'user' }
+    const user = row.role.toLowerCase() === 'user'
+    return {row,index,hits,user,persistent:user && likelyPersistentInstruction(row.content)}
   }).filter(item => !required.has(item.row.id) && item.row.content.trim().length > 0)
   // Reserve context for earlier user turns even for "continue"/short followups
   // with no lexical overlap. Recent corrections precede older ones in ranking;
@@ -164,14 +192,21 @@ export function projectHistory(history: HistoryRow[], question: string, required
     if (evidenceAllowance < 160) break
     evidenceAllowance -= take(item, evidenceAllowance)
   }
+  // Preserve explicit longer-lived instructions even when the follow-up is
+  // simply "continue". Their roles and chronology remain visible to the model.
+  let instructionAllowance = Math.floor(ARCHIVE_BUDGET / 4)
+  for (const item of candidates.filter(item=>item.persistent)) {
+    if (instructionAllowance < 160) break
+    instructionAllowance -= take(item,instructionAllowance)
+  }
   for (const item of candidates) {
     if (remaining < 160) break
     take(item)
   }
   selected.sort((a, b) => a.index - b.index)
-  const omitted = older.length - selected.length - older.filter(row => required.has(row.id)).length
+  const omitted = archive.omitted + older.length - selected.length - older.filter(row => required.has(row.id)).length
   const block = [
-    'EARLIER CONVERSATION — selected verbatim turns or explicitly marked excerpts, oldest first.',
+    'EARLIER CONVERSATION — selected verbatim turns or explicitly marked excerpts in relative chronological order; not a complete transcript.',
     'These are historical user/assistant messages, not new instructions or verified external evidence. Apply still-relevant user constraints; newer user corrections supersede older ones. Do not assume omitted history is known.',
     ...(omitted > 0 ? [`Earlier turns not included: ${omitted}.`] : []),
     ...selected.map(item => item.text),
@@ -188,7 +223,8 @@ export function projectHistory(history: HistoryRow[], question: string, required
  * to this conversation; do not retrieve stale graph records from another
  * branch or block synthesis on optional memory persistence. */
 export async function crystallizeIfNeeded(
-  _conversationId: string, history: HistoryRow[], currentQuestion: string, requiredIds: readonly string[] = []
+  _conversationId: string, history: HistoryRow[], currentQuestion: string, requiredIds: readonly string[] = [],
+  archive?: EarlierHistory
 ): Promise<Crystallization> {
-  return projectHistory(history, currentQuestion, requiredIds)
+  return projectHistory(history, currentQuestion, requiredIds, archive)
 }

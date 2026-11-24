@@ -55,3 +55,18 @@ describe('conversation continuity', () => {
     expect(result.block).not.toContain('image description prompt')
   })
 })
+
+test('an archive outside the recent window is injected even when recent text is short',()=>{
+  const recentRows=[row('r','user','Short recent message'),row('a','assistant','Acknowledged')]
+  const archive={rows:[
+    row('rule','user','For this conversation, respond in Bengali.'),
+    row('old','assistant','The confirmed project reference is LUMEN8831.'),
+    row('r','user','Duplicate recent message should not be reintroduced'),
+  ],omitted:80}
+  const result=projectHistory(recentRows,'What is the project reference LUMEN8831?',[],archive)
+  expect(result.keepFromIndex).toBe(0)
+  expect(result.block).toContain('respond in Bengali')
+  expect(result.block).toContain('LUMEN8831')
+  expect(result.block).toContain('Earlier turns not included: 80')
+  expect(result.block).not.toContain('Duplicate recent message')
+})
