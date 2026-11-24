@@ -173,7 +173,8 @@ import {
   isFreeCapacityUnavailableError,
 } from '@/lib/capacity-policy'
 
-const HISTORY_LIMIT = 20
+const HISTORY_LIMIT = 60
+const ATTACHMENT_HISTORY_LIMIT = 20
 const MAX_CONTENT_LENGTH = 32000
 const DEFAULT_TITLE = DEFAULT_CHAT_TITLE
 const CURRENT_APP_VERSION = '0.73.0'
@@ -476,7 +477,7 @@ export async function prepareTurn(
   // reader said about the last one. No training, no hidden profile: one line
   // of real, user-authored context, discarded with the next turn.
   const lastVerdict = await db.message.findFirst({
-    where: { conversationId: id, role: 'assistant' },
+    where: { conversationId: id, role: 'assistant', createdAt: { lte: userMessage.createdAt } },
     orderBy: { createdAt: 'desc' },
     select: { feedback: true },
   })
@@ -494,12 +495,13 @@ export async function prepareTurn(
     : `${SYSTEM_PROMPT}\n\n${PROSE_PROMPT}\n${WIDGET_PROMPT}${runtimeContext}`
 
   const recentDesc = await db.message.findMany({
-    where: { conversationId: id, id: { not: userMessage.id } },
+    where: { conversationId: id, id: { not: userMessage.id }, createdAt: { lte: userMessage.createdAt } },
     orderBy: { createdAt: 'desc' },
     take: HISTORY_LIMIT,
     include: { attachments: { orderBy: { createdAt: 'asc' } } },
   })
-  const history = recentDesc.reverse()
+  const history = [...recentDesc].reverse()
+  const recentAttachmentTurns = recentDesc.slice(0, ATTACHMENT_HISTORY_LIMIT)
 
   const historyRowText = (m: (typeof history)[number]): string => {
     if (m.role.toLowerCase() !== 'user' || m.content.trim().length > 0) return m.content
@@ -508,7 +510,7 @@ export async function prepareTurn(
     return m.content
   }
 
-  const recentImageTurnIds = recentDesc
+  const recentImageTurnIds = recentAttachmentTurns
     .filter(
       (m) => m.role.toLowerCase() === 'user' && m.attachments.some((a) => a.kind === 'image')
     )
@@ -530,7 +532,7 @@ export async function prepareTurn(
       .join('\n\n') || null
 
   const currentTurnDocs = claimedAttachments.filter(isDocumentAttachment)
-  const historyDocTurns = recentDesc
+  const historyDocTurns = recentAttachmentTurns
     .filter((m) => m.role.toLowerCase() === 'user' && m.attachments.some(isDocumentAttachment))
     .slice(0, DOC_HISTORY_TURNS)
     .map((m) => ({ attachments: m.attachments.filter(isDocumentAttachment) }))
@@ -547,7 +549,7 @@ export async function prepareTurn(
   let previousClarifyOptions: ClarifyOption[] | null = null
   if (content.trim().length > 0) {
     const lastClarify = await db.message.findFirst({
-      where: { conversationId: id, role: 'assistant', clarifyOptions: { not: null } },
+      where: { conversationId: id, role: 'assistant', createdAt: { lte: userMessage.createdAt } },
       orderBy: { createdAt: 'desc' },
       select: { clarifyOptions: true },
     })
@@ -784,7 +786,7 @@ export async function prepareTurn(
   let includeHistoryEvidence = false
   if (content.trim().length > 0) {
     const recentSourceMessages = await db.message.findMany({
-      where: { conversationId: id, role: 'assistant', sources: { some: {} } },
+      where: { conversationId: id, role: 'assistant', sources: { some: {} }, createdAt: { lte: userMessage.createdAt } },
       orderBy: { createdAt: 'desc' },
       take: SEARCH_HISTORY_TURNS,
       include: { sources: { orderBy: { ordinal: 'asc' } } },
@@ -1300,9 +1302,11 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     // the oldest history is crystallized into exact event snapshots (numbers
     // byte-exact) + dual-path retrieval recovers matching nodes for this
     // question. Short conversations are untouched (no-op).
-    const crystallization = await crystallizeIfNeeded(id, history, content)
-    const effectiveHistory =
-      crystallization.keepFromIndex > 0 ? history.slice(crystallization.keepFromIndex) : history
+    const requiredImageTurns = useVision && !allImagesFailed ? prep.recentImageTurnIds : []
+    const crystallization = await crystallizeIfNeeded(id, history, content, requiredImageTurns)
+    const requiredIds = new Set(requiredImageTurns)
+    const effectiveHistory = history.filter((row, index) =>
+      index >= crystallization.keepFromIndex || requiredIds.has(row.id))
 
     const researchOk = turn.kind === 'research' && turn.outcome.ok && turn.evidenceBlock !== null
     const freshCount = researchOk ? turn.maxOrdinal : 0
@@ -1348,7 +1352,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       // could not be sent (allImagesFailed); the prefix is the operator's
       // exact contract wording, so the model reads it as text, not a
       // description, and never as an invitation to guess.
-      prep.ocrFallbackText
+      allImagesFailed && prep.ocrFallbackText
         ? `${VISION_OCR_FALLBACK_PREFIX}\n\n${prep.ocrFallbackText}`
         : null,
     ]
@@ -1363,6 +1367,9 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         notes.length > 0 ? `${textPayload}\n\n(${notes.join(' ')})` : textPayload
 
       const selectedTurnIds = new Set(prep.recentImageTurnIds)
+      // Allocate scarce historical image slots newest-first, then emit the
+      // original chronological history. Old images must not consume the
+      // budget before the most recent visual follow-up.
       // Clamped: with detail crops the prepared list can reach the cap, and a
       // negative budget is meaningless (it made the history branch below look
       // like it had room in logs while it silently skipped every image).
@@ -1374,20 +1381,26 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
       const visionContext: VisionChatMessage[] = [
         { role: 'system', content: `${systemPrompt}\n\n${VISION_GROUNDING_PROMPT}` },
       ]
-      for (const m of effectiveHistory) {
-        if (m.role.toLowerCase() === 'user' && selectedTurnIds.has(m.id) && imageBudget > 0) {
-          const turnImages = m.attachments.filter((a) => a.kind === 'image')
-          const parts: VisionContentPart[] = [
-            { type: 'text', text: m.content.trim().length > 0 ? m.content : 'Describe this image.' },
-          ]
-          for (const a of turnImages) {
-            if (imageBudget <= 0) break
-            const result = await prepareVisionImage(a as never)
-            if (result.ok) {
-              parts.push({ type: 'image_url', image_url: { url: result.image.dataUrl } })
-              imageBudget -= 1
-            }
+      const historicalImages = new Map<string, VisionContentPart[]>()
+      for (const m of [...effectiveHistory].reverse()) {
+        if (imageBudget <= 0) break
+        if (m.role.toLowerCase() !== 'user' || !selectedTurnIds.has(m.id)) continue
+        const parts: VisionContentPart[] = [
+          { type: 'text', text: m.content.trim().length > 0 ? m.content : 'Describe this image.' },
+        ]
+        for (const a of m.attachments.filter(a => a.kind === 'image')) {
+          if (imageBudget <= 0) break
+          const result = await prepareVisionImage(a as never)
+          if (result.ok) {
+            parts.push({ type: 'image_url', image_url: { url: result.image.dataUrl } })
+            imageBudget -= 1
           }
+        }
+        if (parts.length > 1) historicalImages.set(m.id, parts)
+      }
+      for (const m of effectiveHistory) {
+        const parts = historicalImages.get(m.id)
+        if (parts) {
           visionContext.push({ role: 'user', content: parts })
         } else {
           visionContext.push({

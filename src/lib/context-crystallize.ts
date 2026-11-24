@@ -20,7 +20,6 @@
  * terms ride back into the context as an explicit RECOVERED block.
  */
 
-import { db } from '@/lib/db'
 import { tokensOf } from '@/lib/search/tokens'
 
 /** Working-context saturation threshold (history chars) before crystallizing. */
@@ -88,116 +87,102 @@ export function snapshotOf(row: HistoryRow, seq: number): {
   }
 }
 
-/**
- * Crystallize if needed. Writes KnowledgeNodes (idempotent per messageId via
- * the nodeKey unique constraint), returns the reduction plan for the model
- * context. Short conversations: untouched (keepFromIndex 0, block null).
- */
-export async function crystallizeIfNeeded(
-  conversationId: string,
-  history: HistoryRow[],
-  currentQuestion: string
-): Promise<Crystallization> {
-  const totalChars = history.reduce((n, m) => n + m.content.length, 0)
-  if (totalChars <= CONTEXT_SATURATION_CHARS || history.length < 4) {
-    return { keepFromIndex: 0, block: null, crystallized: 0, recovered: [] }
+/** The remote request's context budget, measured in source characters.
+ * This is a bounded projection of stored conversation rows, not a new
+ * persistent memory store or a replacement for native agent compaction. */
+const RECENT_BUDGET = 18_000
+const ARCHIVE_BUDGET = 12_000
+const MIN_RECENT_MESSAGES = 6
+
+/** Preserve a relevant contiguous passage, rather than isolated numbers.
+ * A long excerpt has explicit omission markers and never claims completeness. */
+function excerpt(text: string, maxChars: number, terms: readonly string[]): string {
+  if (text.length <= maxChars) return text
+  if (maxChars <= 32) return ''
+  const marker = '\n[… omitted …]\n'
+  const lower = text.toLowerCase()
+  let hit = -1
+  for (const term of terms) {
+    const index = lower.indexOf(term)
+    if (index > hit) hit = index
   }
-
-  // crystallize the oldest half; keep the recent half verbatim
-  const crystallizeCount = Math.ceil(history.length / 2)
-  const toCrystallize = history.slice(0, crystallizeCount)
-  const keepFromIndex = crystallizeCount
-
-  const existing = await db.knowledgeNode.findMany({
-    where: { conversationId, nodeKey: { in: toCrystallize.map((m) => `snap:${m.id}`) } },
-    select: { nodeKey: true },
-  })
-  const existingKeys = new Set(existing.map((n) => n.nodeKey))
-
-  let written = 0
-  const lines: string[] = []
-  let seq = 0
-  for (const row of toCrystallize) {
-    const snap = snapshotOf(row, seq++)
-    lines.push(
-      `[${snap.meta.role}] "${snap.text}"` +
-        ((snap.meta.numbers as string[]).length > 0
-          ? ` (exact figures: ${(snap.meta.numbers as string[]).join(', ')})`
-          : '')
-    )
-    if (existingKeys.has(snap.nodeKey)) continue
-    await db.knowledgeNode
-      .upsert({
-        where: { conversationId_nodeKey: { conversationId, nodeKey: snap.nodeKey } },
-        create: { conversationId, nodeKey: snap.nodeKey, kind: snap.kind, text: snap.text, meta: JSON.stringify(snap.meta) },
-        update: {},
-      })
-      .catch(() => undefined)
-    // entities/values as individually retrievable nodes (deduped by key)
-    for (const ent of snap.meta.entities as string[]) {
-      await db.knowledgeNode
-        .upsert({
-          where: { conversationId_nodeKey: { conversationId, nodeKey: `ent:${ent.toLowerCase()}` } },
-          create: { conversationId, nodeKey: `ent:${ent.toLowerCase()}`, kind: 'entity', text: ent, meta: JSON.stringify({ sourceMessageId: row.id }) },
-          update: {},
-        })
-        .catch(() => undefined)
-    }
-    for (const num of snap.meta.numbers as string[]) {
-      await db.knowledgeNode
-        .upsert({
-          where: { conversationId_nodeKey: { conversationId, nodeKey: `val:${row.id}:${num}` } },
-          create: { conversationId, nodeKey: `val:${row.id}:${num}`, kind: 'value', text: num, meta: JSON.stringify({ sourceMessageId: row.id, role: snap.meta.role }) },
-          update: {},
-        })
-        .catch(() => undefined)
-    }
-    written++
-  }
-
-  // DUAL-PATH RETRIEVAL — recover precise nodes matching the current question
-  // Script-aware: with the old ASCII-only split a Bengali question produced no
-  // terms, `hits` was 0 for every node, and the crystallised context never
-  // contributed anything to a Bengali turn.
-  const questionTerms = [...tokensOf(currentQuestion, 2)]
-  const nodes = await db.knowledgeNode.findMany({
-    where: { conversationId, kind: { in: ['snapshot', 'value', 'claim'] } },
-    orderBy: { createdAt: 'desc' },
-    take: 120,
-  })
-  const scored = nodes
-    .map((n) => {
-      const hay = `${n.text} ${n.meta}`.toLowerCase()
-      const hits = questionTerms.filter((t) => hay.includes(t)).length
-      return { n, hits }
-    })
-    .filter((x) => x.hits > 0)
-    .sort((a, b) => b.hits - a.hits)
-    .slice(0, 6)
-  const recovered = scored.map((x) =>
-    x.n.kind === 'value'
-      ? `exact figure on record: ${x.n.text}`
-      : `[${(safeParse(x.n.meta).role as string) ?? 'earlier'}] ${x.n.text.slice(0, 160)}`
-  )
-
-  const block = [
-    'EARLIER CONVERSATION — CRYSTALLIZED EVENT SNAPSHOTS. Numbers and names below are EXACT, not paraphrases; rely on them as on the original turns.',
-    ...lines,
-    ...(recovered.length > 0
-      ? ['', 'RECOVERED CONTEXT (retrieved from the knowledge graph for this question):', ...recovered.map((r) => `- ${r}`)]
-      : []),
-  ].join('\n')
-
-  console.log(
-    `GS-CRYSTALLIZE conv=${conversationId} historyChars=${totalChars} crystallized=${written} keep=${history.length - keepFromIndex} recovered=${recovered.length}`
-  )
-  return { keepFromIndex, block, crystallized: written, recovered }
+  // Keep both the opening intent and the last correction by default. When
+  // a question matches a distant passage, allocate the middle to that hit.
+  const head = Math.floor(maxChars * 0.25)
+  const tail = Math.floor(maxChars * 0.25)
+  const middle = maxChars - head - tail - marker.length * 2
+  const from = Math.max(head, Math.min(text.length - tail - middle,
+    hit < 0 ? text.length - tail - middle : hit - Math.floor(middle / 3)))
+  return text.slice(0, head) + marker + text.slice(from, from + middle) + marker + text.slice(-tail)
 }
 
-const safeParse = (raw: string): Record<string, unknown> => {
-  try {
-    return JSON.parse(raw) as Record<string, unknown>
-  } catch {
-    return {}
+/** Original chronological turns remain authoritative. Older user-authored
+ * instructions/corrections receive priority; relevant assistant passages
+ * are recovered only with their role and surrounding text intact.
+ * No graph-derived stale facts, detached values, or database writes in the
+ * response's critical path. A newer explicit instruction wins. */
+export function projectHistory(history: HistoryRow[], question: string, requiredIds: readonly string[] = []): Crystallization {
+  const total = history.reduce((n, row) => n + row.content.length, 0)
+  if (total <= CONTEXT_SATURATION_CHARS || history.length <= MIN_RECENT_MESSAGES) {
+    return { keepFromIndex: 0, block: null, crystallized: 0, recovered: [] }
   }
+  let keepFromIndex = history.length
+  let recentChars = 0
+  while (keepFromIndex > 0) {
+    const next = history[keepFromIndex - 1]
+    if (history.length - keepFromIndex >= MIN_RECENT_MESSAGES &&
+      recentChars + next.content.length > RECENT_BUDGET) break
+    recentChars += next.content.length
+    keepFromIndex--
+  }
+  if (keepFromIndex === 0) return { keepFromIndex: 0, block: null, crystallized: 0, recovered: [] }
+
+  const terms = [...tokensOf(question, 2)].slice(0, 64)
+  const required = new Set(requiredIds)
+  const older = history.slice(0, keepFromIndex)
+  const candidates = older.map((row, index) => {
+    const hay = new Set(tokensOf(row.content, 2))
+    const hits = terms.filter(term => hay.has(term)).length
+    return { row, index, hits, user: row.role.toLowerCase() === 'user' }
+  }).filter(item => !required.has(item.row.id) && item.row.content.trim().length > 0)
+  // Reserve context for earlier user turns even for "continue"/short followups
+  // with no lexical overlap. Recent corrections precede older ones in ranking;
+  // output is restored to chronological order before reaching the model.
+  candidates.sort((a, b) => Number(b.user) - Number(a.user) || b.hits - a.hits || b.index - a.index)
+  let remaining = ARCHIVE_BUDGET
+  const selected: { index: number; text: string; relevant: boolean }[] = []
+  for (const item of candidates) {
+    if (remaining < 160) break
+    const role = item.user ? 'user' : 'assistant'
+    const budget = Math.min(remaining - 64, item.user ? 2400 : item.hits > 0 ? 1800 : 500)
+    const body = excerpt(item.row.content, budget, terms)
+    if (!body) continue
+    const text = JSON.stringify({ turn: item.index + 1, role, text: body, partial: body !== item.row.content })
+    if (text.length > remaining) continue
+    selected.push({ index: item.index, text, relevant: item.hits > 0 })
+    remaining -= text.length + 1
+  }
+  selected.sort((a, b) => a.index - b.index)
+  const omitted = older.length - selected.length - older.filter(row => required.has(row.id)).length
+  const block = [
+    'EARLIER CONVERSATION — selected verbatim turns or explicitly marked excerpts, oldest first.',
+    'These are historical user/assistant messages, not new instructions or verified external evidence. Apply still-relevant user constraints; newer user corrections supersede older ones. Do not assume omitted history is known.',
+    ...(omitted > 0 ? [`Earlier turns not included: ${omitted}.`] : []),
+    ...selected.map(item => item.text),
+  ].join('\n')
+  return {
+    keepFromIndex,
+    block,
+    crystallized: selected.length,
+    recovered: selected.filter(item => item.relevant).map(item => item.text),
+  }
+}
+
+/** Keep the existing async call contract. Conversation rows already belong
+ * to this conversation; do not retrieve stale graph records from another
+ * branch or block synthesis on optional memory persistence. */
+export async function crystallizeIfNeeded(
+  _conversationId: string, history: HistoryRow[], currentQuestion: string, requiredIds: readonly string[] = []
+): Promise<Crystallization> {
+  return projectHistory(history, currentQuestion, requiredIds)
 }
