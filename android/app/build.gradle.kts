@@ -181,7 +181,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 152
-        versionName = "0.86.29"
+        versionName = providers.gradleProperty("gsTestVersion").getOrElse("0.86.29")
 
 
         // REAL transport origin — applies to EVERY build type (v0.66.0 fix).
