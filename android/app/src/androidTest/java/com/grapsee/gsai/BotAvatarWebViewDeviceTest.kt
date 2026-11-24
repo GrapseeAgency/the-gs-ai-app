@@ -155,8 +155,8 @@ class BotAvatarWebViewDeviceTest {
             val root = compose.activity.window.decorView
             val browser = findView(root) { it is WebView }!!
             val image = findView(root) { it.tag == "gs-original-avatar-image" }!!
-            assertEquals("There must not be two superimposed avatar layers",
-                0f, browser.alpha, 0f)
+            assertEquals("Chromium must remain visible to its scheduler",
+                1f, browser.alpha, 0f)
             assertTrue("Native avatar must keep its square aspect ratio", image.width == image.height)
         }
     }
@@ -185,13 +185,19 @@ class BotAvatarWebViewDeviceTest {
         val pixels = IntArray(visible.width * visible.height)
         visible.getPixels(pixels, 0, visible.width, 0, 0, visible.width, visible.height)
         var green = 0
+        // Hash only the strongly green clover pixels, not the moving chat
+        // backdrop. Quantize color to ignore tiny antialiasing differences.
+        var foregroundSignature = 1
         for (pixel in pixels) {
             val r = android.graphics.Color.red(pixel)
             val g = android.graphics.Color.green(pixel)
             val b = android.graphics.Color.blue(pixel)
-            if (g > r + 20 && g > b + 10 && g > 70) green++
+            val foreground = g > r + 20 && g > b + 10 && g > 70
+            if (foreground) green++
+            foregroundSignature = 31 * foregroundSignature +
+                if (foreground) ((r / 16) shl 8) or ((g / 16) shl 4) or (b / 16) else 0
         }
-        return Frame(full!!, visible, pixels.contentHashCode(), green)
+        return Frame(full!!, visible, foregroundSignature, green)
     }
 
     private fun save(bitmap: Bitmap, name: String) {
@@ -212,6 +218,10 @@ class BotAvatarWebViewDeviceTest {
         }
         assertPlacement(false)
         awaitPaint()
+        assertTrue("Only the native ImageView may be visually composited",
+            javascript("getComputedStyle(document.getElementById('root')).opacity") == "\"0\"")
+        assertTrue("Original renderer must have a full-sized, non-throttled viewport",
+            javascript("String(innerWidth >= 90 && innerHeight >= 90)").contains("true"))
         val idle = captureFrame()
         save(idle.full, "original-avatar-idle.png")
         assertVisible(idle)

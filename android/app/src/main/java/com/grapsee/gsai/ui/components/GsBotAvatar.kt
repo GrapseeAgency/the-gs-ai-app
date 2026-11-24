@@ -116,7 +116,7 @@ private data class AvatarViewHolder(
 
 /**
  * Original React bot-avatars engine, with its own eyes, lighting, rig and
- * working/default transitions. The 72dp source viewport fits the library's
+ * working/default transitions. The 96dp source viewport comfortably fits the library's
  * complete overscan canvas (48 CSS px body * 1.5); it is not the visual size
  * of the chat avatar. Only the native ImageView is visible. Rendering the
  * WebView beneath its bitmap used to superimpose two differently scaled,
@@ -156,9 +156,11 @@ fun GsBotAvatar(
             }
             val bridge = AuthenticCanvasBridge(image)
             val browser = WebView(ctx).apply {
-                // Keep Chromium attached and laid out for its animation engine,
-                // but NEVER composite the browser as a second visible avatar.
-                alpha = 0f
+                // The bundled page hides its source canvas via CSS opacity.
+                // Keep the Android WebView itself VISIBLE: alpha=0 at the
+                // native view level can cause Chromium to throttle its rAF.
+                // The source pixels are never composited under the ImageView.
+                alpha = 1f
                 setBackgroundColor(Color.TRANSPARENT)
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
@@ -199,11 +201,12 @@ fun GsBotAvatar(
                 setBackgroundColor(Color.TRANSPARENT)
                 clipChildren = true
                 clipToPadding = true
-                // A fixed source viewport prevents the original canvas's
-                // negative margins and overscan from being cut by a small
-                // native avatar slot. The visible output keeps aspect ratio.
+                // A small Chromium viewport (72 CSS px or below in a direct
+                // browser probe) can throttle rAF to ~1 FPS. Keep this source
+                // at 96dp, with transparent padding around the 72px canvas.
+                // The 34dp native output is independent of the source view.
                 val sourcePx = kotlin.math.ceil(
-                    72f * ctx.resources.displayMetrics.density
+                    96f * ctx.resources.displayMetrics.density
                 ).toInt()
                 addView(browser, FrameLayout.LayoutParams(sourcePx, sourcePx))
                 addView(image, FrameLayout.LayoutParams(
