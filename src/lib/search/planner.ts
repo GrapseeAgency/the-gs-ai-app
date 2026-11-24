@@ -296,7 +296,7 @@ async function llmPlan(userText: string, historyText: string, fallbackQuery: str
   // 2) OpenRouter free chain (§2 — planner must not depend on one provider).
   try {
     const raw = await Promise.race([
-      orCompleteChat(messages, OPENROUTER_MODELS['gs-free']),
+      orCompleteChat(messages, OPENROUTER_MODELS['gs-planner']),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('planner timeout')), PLANNER_TIMEOUT_MS + 4_000)
       ),

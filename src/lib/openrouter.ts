@@ -43,7 +43,17 @@ const IDENTITY_PIN_SUFFIX =
   '\n\nIdentity: you are GS, the assistant built for Grapsee Agency. When asked who you are, answer as GS. Never claim to be built by, named after, or representing any other company, product, or model brand.'
 
 const CONNECT_TIMEOUT_MS = 15_000
-const COMPLETION_TIMEOUT_MS = 90_000
+// 2026-11-24 — native clients (OkHttp) time out around 30s; a hung non-stream
+// attempt burning the full 90s pushes whole turns past any client timeout.
+// 45s still fits legitimate long generations (4096-token outputs on the
+// free tier complete well under this), while failed/hung attempts move the
+// chain on quickly.
+const COMPLETION_TIMEOUT_MS = 45_000
+// 200-with-empty-content retries per model before moving to the next model.
+// Reasoning models legitimately return empty content when the token budget is
+// consumed by reasoning — but unlimited key-walking on empties produced
+// 60-75s turns (each attempt 1-11s on the auto free router).
+const MAX_EMPTY_ATTEMPTS_PER_MODEL = 3
 
 /**
  * Durable key storage — FOUR redundant layers with a self-healing loader.
@@ -209,6 +219,8 @@ export async function orCompleteChat(
   for (let mi = 0; mi < models.length; mi++) {
     const model = models[mi]
     const isLastModel = mi === models.length - 1
+    let emptyAttempts = 0
+    let consecutive429 = 0
     for (let i = 0; i < keys.length; i++) {
       const key = keys[(keyCursor + i) % keys.length]
       if (keyIsCooled(key) && someLiveKey(keys)) {
@@ -235,6 +247,20 @@ export async function orCompleteChat(
             if (response.status === 401 || response.status === 402 || response.status === 429) coolKey(key, lastError)
             if (response.status !== 401) sawCapacityFailure = true
             console.log(`OR-ROTATE model=${model} status=${response.status} key=***${key.slice(-4)}`)
+            // 2026-11-24 — model-level circuit breaker: a model 429ing on 4
+            // straight keys is exhausted GLOBALLY (free pools are per-model
+            // daily caps), not per-key. Skip the remaining 30+ keys and move
+            // to the next model — the full-key walk cost ~5-10s per dead
+            // model and produced multi-minute turns.
+            if (response.status === 429) {
+              consecutive429 += 1
+              if (consecutive429 >= 4 && !isLastModel) {
+                console.log(`OR-MODEL-EXHAUSTED model=${model} after ${consecutive429} straight 429s — next model`)
+                break
+              }
+            } else {
+              consecutive429 = 0
+            }
             continue
           } else {
             // Permanent for THIS model (400/404): fall through to the next
@@ -253,7 +279,11 @@ export async function orCompleteChat(
         if (typeof text !== 'string' || text.trim().length === 0) {
           // PHASE 8.1b — 200-with-empty-content is a capacity hiccup: rotate.
           // (Otherwise a blank bubble gets persisted as a real answer.)
+          // 2026-11-24 — bounded: after MAX_EMPTY_ATTEMPTS_PER_MODEL the model
+          // is exhausted; fall to the next model instead of walking all 36 keys.
           lastError = 'empty completion from upstream'
+          emptyAttempts += 1
+          if (emptyAttempts >= MAX_EMPTY_ATTEMPTS_PER_MODEL && !isLastModel) break
           continue
         }
         return {
@@ -297,6 +327,8 @@ export async function orStreamChat(
   for (let mi = 0; mi < models.length; mi++) {
     const model = models[mi]
     const isLastModel = mi === models.length - 1
+    let emptyAttempts = 0
+    let consecutive429 = 0
     for (let i = 0; i < keys.length; i++) {
       const key = keys[(keyCursor + i) % keys.length]
       if (keyIsCooled(key) && someLiveKey(keys)) {
@@ -320,6 +352,16 @@ export async function orStreamChat(
             if (response.status === 401 || response.status === 402 || response.status === 429) coolKey(key, lastError)
             if (response.status !== 401) sawCapacityFailure = true
             console.log(`OR-ROTATE model=${model} status=${response.status} key=***${key.slice(-4)}`)
+            // 2026-11-24 — model-level circuit breaker (see orCompleteChat).
+            if (response.status === 429) {
+              consecutive429 += 1
+              if (consecutive429 >= 4 && !isLastModel) {
+                console.log(`OR-MODEL-EXHAUSTED model=${model} after ${consecutive429} straight 429s — next model`)
+                break
+              }
+            } else {
+              consecutive429 = 0
+            }
             continue
           } else {
             lastError = `OpenRouter ${model}: ${lastError}`
@@ -339,7 +381,10 @@ export async function orStreamChat(
         const full = await consumeSseStream(response.body, guardedOnDelta, undefined, onReasoning)
         if (full.trim().length === 0 && !forwarded) {
           // PHASE 8.1b — nothing reached the client yet: safe to rotate.
+          // 2026-11-24 — bounded like the non-stream walker below/above.
           lastError = 'empty completion from upstream'
+          emptyAttempts += 1
+          if (emptyAttempts >= MAX_EMPTY_ATTEMPTS_PER_MODEL && !isLastModel) break
           continue
         }
         return full

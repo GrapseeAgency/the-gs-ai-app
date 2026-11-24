@@ -56,12 +56,25 @@ export function resolveProviderModel(gsModelId: string | null | undefined): stri
 // ---------------------------------------------------------------------------
 
 const OPENROUTER_MODELS: Record<string, string[]> = {
+  // 2026-11-24 live probe (key-pool key 1): nemotron-3-super-120b-a12b:free and
+  // nex-agi/nex-n2.5-pro:free now answer 404 "unavailable for free" (retired to
+  // paid). Verified serving with real content: openrouter/free (auto free
+  // router, 200 ~0.6s) and nvidia/nemotron-3-ultra-550b-a55b:free (200 ~0.8s).
   'gs-free': [
-    'nvidia/nemotron-3-super-120b-a12b:free', // persona-faithful in live probes
-    'nex-agi/nex-n2.5-pro:free', // proven quality; leaks its own brand on identity questions
-    'openrouter/free', // last-resort capacity net
+    'openrouter/free', // auto free router — spreads load across the whole free pool
+    'nvidia/nemotron-3-ultra-550b-a55b:free', // verified live fallback
   ],
   'gs-free-big': ['nvidia/nemotron-3-ultra-550b-a55b:free', 'openrouter/free'],
+  // 2026-11-24 — dedicated PLANNER chain. The search planner runs on EVERY
+  // chat turn (clarify/answer/search classification) and was riding gs-free,
+  // whose heads are reasoning models: plannerMs 5.7-6.5s observed, and it
+  // walked keys for 10s+ whenever the auto router 429'd. Classification needs
+  // speed, not depth — tiny fast models first, auto router as safety net.
+  'gs-planner': [
+    'inclusionai/ling-3.2-flash:free',
+    'liquid/lfm-3-1.7b:free',
+    'openrouter/free',
+  ],
 }
 
 // Exported for the PHASE 8.1 search planner (planner reuses the free chain
