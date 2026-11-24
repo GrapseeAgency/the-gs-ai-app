@@ -221,6 +221,7 @@ private let gsGlassTokenAlpha = 0.80
 private struct GsGlassModifier<S: InsettableShape>: ViewModifier {
     let role: GsGlassRole
     let shape: S
+    var metalEdge: Bool = true
 
     func body(content: Content) -> some View {
         content
@@ -237,6 +238,7 @@ private struct GsGlassModifier<S: InsettableShape>: ViewModifier {
                     rim(in: geometry.size)
                 }
             }
+            .gsArgentComponentRim(shape, enabled: metalEdge && role != .modal && role != .elevated)
             // Cue: warm, non-grey shadow — this is depth, not darkness. Cast
             // from outside the glass rather than through it; see `castShadow`.
             .background {
@@ -342,10 +344,10 @@ private struct GsGlassModifier<S: InsettableShape>: ViewModifier {
 extension View {
     /// Apply the shared glass material as a rounded-rect background. The iOS
     /// twin of Android `Modifier.gsGlass(role, shape)`.
-    func gsGlass(_ role: GsGlassRole = .card, corner: CGFloat = Aero.Radius.card) -> some View {
+    func gsGlass(_ role: GsGlassRole = .card, corner: CGFloat = Aero.Radius.card, metalEdge: Bool = true) -> some View {
         modifier(GsGlassModifier(
             role: role,
-            shape: RoundedRectangle(cornerRadius: corner, style: .continuous)))
+            shape: RoundedRectangle(cornerRadius: corner, style: .continuous), metalEdge: metalEdge))
     }
 
     /// The pill and composer controls: the same material, cut as a capsule.
@@ -357,7 +359,7 @@ extension View {
     /// came back through a translucent fill and took 5.1 L out of the pill. The
     /// gate measures that (A2 material law on the `pill` probe), and Android's
     /// pills — which always went through the single path — did not have it.
-    func gsCapsuleGlass(_ role: GsGlassRole = .floatingControl) -> some View {
-        modifier(GsGlassModifier(role: role, shape: Capsule()))
+    func gsCapsuleGlass(_ role: GsGlassRole = .floatingControl, metalEdge: Bool = true) -> some View {
+        modifier(GsGlassModifier(role: role, shape: Capsule(), metalEdge: metalEdge))
     }
 }

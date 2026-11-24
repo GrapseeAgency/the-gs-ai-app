@@ -30,7 +30,7 @@ struct ExploreDock: View {
             dockCircle(glyph: "settings", label: "Settings", action: onOpenSettings)
         }
         .padding(10)
-        .gsCapsuleGlass(.floatingControl)
+        .gsCapsuleGlass(.floatingControl, metalEdge: false)
     }
 
     /// The mock's lit action: a peach capsule with the compass seated in

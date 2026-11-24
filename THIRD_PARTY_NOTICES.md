@@ -35,3 +35,9 @@ Copyright (c) 2026 Jakub Antalik, MIT. License: [MIT-Libraries.dev-border-beam.t
 iOS uses upstream BorderBeamKit. Android uses the upstream React Native SkSL rotate-layer shader and md/colorful preset data adapted to native Android Canvas/AGSL; the native software fallback implements the same rotating mask and colored gradient blob layers.
 
 The Android neutral mono Voice Ring renderer in `GsVoiceRing.kt` translates the upstream Voice Ring level follower, two-loop geometry, depth-sorted tube painter and direction lean field (revision `14ae9d2dad18fcee251f4b06333b492a2a41d2ed`). It is a native port, not an official Android package. iOS Talk and Voice Position use upstream VoiceRingKit directly.
+
+## ArgentUI — component rims
+
+Copyright (c) 2026 Sean Geng. MIT, see [MIT-ArgentUI.txt](third_party/licenses/MIT-ArgentUI.txt). Source: <https://github.com/seangeng/argent/tree/6d5d4f4dbcfbd6fe6d7a04762d7bb2da47856f7e> (v0.4.1). The native apps port ArgentUI's own optional `engine="native"` shader in `src/engine.ts`, not the separately licensed default Paper engine or React component. Android uses AGSL with a static scalar implementation of the same field for older/software devices; iOS uses a SwiftUI Metal color effect. The v0.4.1 rim finish (40°, 4.5 repetitions, softness 0.3, distortion 0.24, scale 0.85, half dispersion) is restricted to a 0.75dp/pt stroke at 24% light/32% dark opacity and a deliberately slow 0.12 time rate. Existing glass interiors, layouts, hit targets and special CTA/send effects are unchanged. Modal, elevated, frost panels, outer home/explore docks and oversized panels are excluded. High contrast preserves existing borders. No halo, reveal, or new fill is applied.
+
+The shader's simplex noise is MIT licensed by Ashima Arts and Stefan Gustavson; see [MIT-Ashima-WebGL-Noise.txt](third_party/licenses/MIT-Ashima-WebGL-Noise.txt).

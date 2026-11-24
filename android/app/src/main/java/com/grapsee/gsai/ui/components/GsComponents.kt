@@ -167,6 +167,7 @@ fun GsCard(
     }
     val base = modifier
         .fillMaxWidth()
+        .argentComponentRim(RoundedCornerShape(GsMotion.radiusCard))
         .let { if (onClick != null || onLongClick != null) it.kineticPress(interaction) else it }
     if (onLongClick != null) {
         // Long-pressable card: one gesture pipeline handles tap AND hold

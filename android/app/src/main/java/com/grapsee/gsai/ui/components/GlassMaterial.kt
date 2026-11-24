@@ -140,6 +140,7 @@ private const val RIM_FALL = 0.27f
 fun Modifier.gsGlass(
     role: GsGlassRole = GsGlassRole.Card,
     shape: Shape = RoundedCornerShape(22.dp),
+    metalEdge: Boolean = true,
 ): Modifier {
     val colors = GsTheme.colors
     val shadowMod = if (role.elevation > 0.dp) {
@@ -205,6 +206,10 @@ fun Modifier.gsGlass(
                 drawPath(rimPath, brush = rimBrush, style = Stroke(width = rimWidth))
             }
         }
+        .argentComponentRim(
+            shape,
+            enabled = metalEdge && role != GsGlassRole.Modal && role != GsGlassRole.Elevated,
+        )
 }
 
 /** Warm shadow alone, for surfaces that draw their own fill. */
@@ -353,7 +358,7 @@ fun GlassFrostedPanel(
         }
         // Top: the real material — a translucent fill over the frost, the veil,
         // the directional rim and the warm shadow — then the panel content.
-        Box(modifier = Modifier.gsGlass(role, shape)) {
+        Box(modifier = Modifier.gsGlass(role, shape, metalEdge = false)) {
             content()
         }
     }

@@ -1067,7 +1067,7 @@ private fun HomeDock(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .gsGlass(GsGlassRole.FloatingControl, GsRadius.pill)
+            .gsGlass(GsGlassRole.FloatingControl, GsRadius.pill, metalEdge = false)
             .padding(horizontal = 14.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp)

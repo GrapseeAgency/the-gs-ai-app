@@ -555,7 +555,7 @@ struct HomeDashboardView: View {
             DockIcon(gear: true, label: "Settings", action: onOpenSettings)
         }
         .padding(14)
-        .gsCapsuleGlass(.floatingControl)
+        .gsCapsuleGlass(.floatingControl, metalEdge: false)
     }
 }
 
