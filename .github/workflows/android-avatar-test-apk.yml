@@ -1,0 +1,88 @@
+name: Android avatar test APK pre-release
+on:
+  push:
+    branches: ['test/android-avatar-apk-20261124-1']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  phone-test-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Reuse verified unchanged native runtime from stable v0.86.29
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/stable-native
+          gh release download v0.86.29 --repo "$GITHUB_REPOSITORY" --pattern 'GS-AI-App-v0.86.29.apk' --dir /tmp/stable-native
+          STABLE=/tmp/stable-native/GS-AI-App-v0.86.29.apk
+          echo '12db2b5f6f25054f5740c450786a7f01f7a285b5985b3aefe5b322615a7d7b3c  /tmp/stable-native/GS-AI-App-v0.86.29.apk' | sha256sum -c -
+          for ABI in arm64-v8a armeabi-v7a x86 x86_64; do
+            DEST=android/app/src/main/jniLibs/$ABI/libgs_ffi.so
+            mkdir -p "$(dirname "$DEST")"
+            unzip -p "$STABLE" "lib/$ABI/libgs_ffi.so" > "$DEST"
+            test -s "$DEST"
+          done
+      - name: Assemble optimized signed phone test APK
+        working-directory: android
+        run: gradle :app:assembleRelease --max-workers=2 --stacktrace
+      - name: Verify APK signing, identity, native libraries and original JS assets
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          test -s "$APK"
+          TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          mkdir -p dist
+          "$TOOLS/aapt2" dump badging "$APK" > dist/android-verification.txt
+          "$TOOLS/apksigner" verify --verbose --print-certs "$APK" >> dist/android-verification.txt
+          grep -q "package: name='com.grapsee.gsai'" dist/android-verification.txt
+          grep -q "versionName='0.86.29-avatar-test.1'" dist/android-verification.txt
+          grep -qi 'b1ffd75dd410c84bd9467e418c419cd377d57569ae7ac5e26b778e6418b1a483' dist/android-verification.txt
+          if grep -q application-debuggable dist/android-verification.txt; then exit 1; fi
+          for ABI in arm64-v8a armeabi-v7a x86 x86_64; do
+            unzip -p "$APK" "lib/$ABI/libgs_ffi.so" > /tmp/test-ffi.so
+            cmp /tmp/test-ffi.so "android/app/src/main/jniLibs/$ABI/libgs_ffi.so"
+          done
+          unzip -p "$APK" assets/bot-avatar/avatar.bundle.js > /tmp/vendor-avatar.js
+          test "$(wc -c < /tmp/vendor-avatar.js)" -gt 20000
+          unzip -p "$APK" assets/bot-avatar/index.html > /tmp/vendor-avatar.html
+          grep -q 'width:72px' /tmp/vendor-avatar.html
+          cp "$APK" dist/GS-AI-App-avatar-test-1.apk
+          (cd dist && sha256sum GS-AI-App-avatar-test-1.apk > SHA256SUMS.txt)
+          printf 'Source commit: %s\nNative libraries: unchanged v0.86.29 release, verified SHA256 and ABI payloads\nVisual animation verification: pending, test build only\n' "$GITHUB_SHA" > dist/build-provenance.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gs-ai-avatar-phone-test-apk
+          path: dist/
+          if-no-files-found: error
+      - name: Publish separate test pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=avatar-test-20261124-1
+          cat > /tmp/avatar-release-notes.md <<'NOTES'
+          Experimental Android APK for physical-phone testing of the original bot-avatars animation. **Not a stable release; visual/animation verification is still pending.**
+
+          - Original bot-avatars npm renderer embedded offline in Android WebView.
+          - Canvas layout correction: fixed-size original backing canvas fitted to the avatar slot.
+          - Optimized release variant, existing application ID and signing certificate.
+          - Unchanged native runtime libraries reused from verified v0.86.29.
+          - Same versionCode as stable v0.86.29. Back up important data before testing.
+
+          Stable v0.86.29 remains the latest stable release. No iOS artifact included.
+          NOTES
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Android avatar test 1 (experimental)" --notes-file /tmp/avatar-release-notes.md --prerelease --latest=false
