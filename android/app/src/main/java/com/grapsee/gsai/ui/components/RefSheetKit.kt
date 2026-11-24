@@ -257,7 +257,7 @@ fun RefSheetTile(
                     Color.White.copy(alpha = 0.42f)
                 }
             )
-            .border(1.dp, Color.White.copy(alpha = 0.62f), shape)
+            .argentComponentBorder(shape, Color.White.copy(alpha = 0.62f))
             .then(
                 if (onClick != null) {
                     Modifier.clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
@@ -578,7 +578,7 @@ fun RefSheetPillButton(
         modifier = modifier
             .clip(RoundedCornerShape(999.dp))
             .background(Color.White.copy(alpha = 0.78f))
-            .border(1.dp, Color.White.copy(alpha = 0.90f), RoundedCornerShape(999.dp))
+            .argentComponentBorder(RoundedCornerShape(999.dp), Color.White.copy(alpha = 0.90f))
             .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,

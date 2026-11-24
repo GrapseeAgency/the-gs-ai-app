@@ -551,11 +551,7 @@ struct AeroButton: View {
                 RoundedRectangle(cornerRadius: Aero.Radius.md)
                     .fill(backgroundFill)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: Aero.Radius.md)
-                    .stroke(borderColor ?? .clear, lineWidth: borderColor == nil ? 0 : 1)
-            )
-            .gsArgentComponentRim(RoundedRectangle(cornerRadius: Aero.Radius.md), enabled: borderColor != nil && enabled)
+            .modifier(AeroOptionalBorder(shape: RoundedRectangle(cornerRadius: Aero.Radius.md), border: borderColor, enabled: enabled))
             .foregroundStyle(foreground)
             .opacity(enabled ? 1 : 0.45)
         }
@@ -602,8 +598,7 @@ struct AeroIconButton: View {
                 .font(.system(size: 17, weight: .medium))
                 .frame(width: 44, height: 44)
                 .background(Circle().fill(variant == .primary ? AnyShapeStyle(Aero.accent) : AnyShapeStyle(Aero.raisedSurface)))
-                .overlay(Circle().stroke(variant == .secondary ? Aero.outline : .clear, lineWidth: 1))
-                .gsArgentComponentRim(Circle(), enabled: variant == .secondary && enabled)
+                .modifier(AeroOptionalBorder(shape: Circle(), border: variant == .secondary ? Aero.outline : nil, enabled: enabled))
                 .foregroundStyle(variant == .primary ? Aero.onAccent : Aero.text)
                 .opacity(enabled ? 1 : 0.45)
         }
@@ -716,5 +711,18 @@ struct GsChoiceTile: View {
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+}
+
+// A single component rim. Disabled controls retain their original outline.
+private struct AeroOptionalBorder<S: InsettableShape>: ViewModifier {
+    let shape: S
+    let border: Color?
+    let enabled: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if let border {
+            if enabled { content.gsArgentComponentBorder(shape, fallback: border) }
+            else { content.overlay(shape.strokeBorder(border, lineWidth: 1)) }
+        } else { content }
     }
 }

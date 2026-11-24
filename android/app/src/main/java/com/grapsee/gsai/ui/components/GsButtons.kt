@@ -61,12 +61,12 @@ fun GsButton(
         modifier = modifier
             .then(press)
             .alpha(if (enabled) 1f else 0.45f)
-            .argentComponentRim(GsRadius.mdShape(), enabled = borderStroke != null && enabled)
+            .let { if (borderStroke != null && enabled) it.argentComponentBorder(GsRadius.mdShape(), colors.border) else it }
             .semantics { contentDescription = label },
         shape = GsRadius.mdShape(),
         color = container,
         contentColor = content,
-        border = borderStroke,
+        border = if (enabled) null else borderStroke,
         onClick = onClick,
         enabled = enabled,
     ) {
@@ -121,10 +121,10 @@ fun GsIconButton(
             .size(44.dp)
             .then(if (GsMotion.reduced || !enabled) Modifier else Modifier.kineticPress())
             .alpha(if (enabled) 1f else 0.45f)
-            .argentComponentRim(CircleShape, enabled = borderStroke != null && enabled),
+            .let { if (borderStroke != null && enabled) it.argentComponentBorder(CircleShape, colors.border) else it },
         shape = CircleShape,
         color = container,
-        border = borderStroke,
+        border = if (enabled) null else borderStroke,
         onClick = onClick,
         enabled = enabled,
     ) {

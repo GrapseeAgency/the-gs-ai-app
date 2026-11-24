@@ -459,7 +459,7 @@ fun RefInfoCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
             .background(colors.glassSurface.copy(alpha = if (LocalGsIsDark.current) 0.50f else 0.55f))
-            .border(1.dp, colors.glassBorder, RoundedCornerShape(20.dp))
+            .argentComponentBorder(RoundedCornerShape(20.dp), colors.glassBorder)
             .padding(horizontal = 14.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

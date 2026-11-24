@@ -524,10 +524,7 @@ struct GsSheetTile: View {
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.white.opacity(0.42))
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(.white.opacity(0.62), lineWidth: 1)
-        )
+        .gsArgentComponentBorder(RoundedRectangle(cornerRadius: 16), fallback: Color.white.opacity(0.62))
     }
 }
 
@@ -588,7 +585,7 @@ struct GsSheetPillButton: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .background(Capsule().fill(.white.opacity(0.80)))
-            .overlay(Capsule().strokeBorder(.white.opacity(0.90), lineWidth: 1))
+            .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.90))
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityLabel(label)

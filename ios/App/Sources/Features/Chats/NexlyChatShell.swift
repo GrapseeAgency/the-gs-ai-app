@@ -44,8 +44,7 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
                 Button(action: onBack) {
                     NexlyGlyph(name: "arrow-left", size: 19, color: NexlyInk.header)
                         .frame(width: 44, height: 44)
-                        .gsGlass(.elevated, corner: 22)
-                        .overlay(Circle().strokeBorder(rimColor, lineWidth: 1))
+                        .gsGlass(.elevated, corner: 22, metalEdge: true)
                         .contentShape(Circle())
                 }
                 .buttonStyle(KineticPressStyle())
@@ -104,8 +103,7 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
         Button(action: action) {
             NexlyGlyph(name: glyph, size: 19, color: NexlyInk.header)
                 .frame(width: 44, height: 44)
-                .gsGlass(.elevated, corner: 22)
-                .overlay(Circle().strokeBorder(rimColor, lineWidth: 1))
+                .gsGlass(.elevated, corner: 22, metalEdge: true)
                 .contentShape(Circle())
         }
         .buttonStyle(KineticPressStyle())
@@ -208,7 +206,7 @@ struct NexlyComposerBar: View {
                         NexlyGlyph(name: "player-stop", size: 17, color: Aero.text)
                             .frame(width: 36, height: 36)
                             .background(Circle().fill(Aero.surface.opacity(0.55)))
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
+                            .gsArgentComponentBorder(Circle(), fallback: Color.white.opacity(0.7))
                     }
                     .buttonStyle(KineticPressStyle())
                     .accessibilityLabel("Stop generating")
@@ -228,7 +226,7 @@ struct NexlyComposerBar: View {
                                 NexlyGlyph(name: "microphone", size: 17, color: Aero.text.opacity(0.75))
                                     .frame(width: 36, height: 36)
                                     .background(Circle().fill(Aero.surface.opacity(0.55)))
-                                    .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
+                                    .gsArgentComponentBorder(Circle(), fallback: Color.white.opacity(0.7))
                                     .transition(.opacity.combined(with: .scale(scale: 0.85)))
                             }
                         }

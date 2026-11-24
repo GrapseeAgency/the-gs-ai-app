@@ -140,9 +140,11 @@ private const val RIM_FALL = 0.27f
 fun Modifier.gsGlass(
     role: GsGlassRole = GsGlassRole.Card,
     shape: Shape = RoundedCornerShape(22.dp),
-    metalEdge: Boolean = true,
+    metalEdge: Boolean? = null,
 ): Modifier {
     val colors = GsTheme.colors
+    val argentEnabled = metalEdge ?: (role != GsGlassRole.Modal && role != GsGlassRole.Elevated)
+    val highContrast = com.grapsee.gsai.data.SettingsStore.highContrast
     val shadowMod = if (role.elevation > 0.dp) {
         this.shadow(
             elevation = role.elevation,
@@ -203,12 +205,16 @@ fun Modifier.gsGlass(
             onDrawBehind {
                 drawRect(body, alpha = fillAlpha)
                 veil?.let { drawRect(it) }
-                drawPath(rimPath, brush = rimBrush, style = Stroke(width = rimWidth))
+                // Preserve the original rim for containers, high contrast, and large panels.
+                // Eligible controls have one metal rim, not two stacked borders.
+                if (!argentEnabled || highContrast || !argentComponentSize(size.width / density, size.height / density)) {
+                    drawPath(rimPath, brush = rimBrush, style = Stroke(width = rimWidth))
+                }
             }
         }
         .argentComponentRim(
             shape,
-            enabled = metalEdge && role != GsGlassRole.Modal && role != GsGlassRole.Elevated,
+            enabled = argentEnabled,
         )
 }
 

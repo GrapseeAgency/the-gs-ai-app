@@ -167,7 +167,7 @@ fun GsCard(
     }
     val base = modifier
         .fillMaxWidth()
-        .argentComponentRim(RoundedCornerShape(GsMotion.radiusCard))
+        .argentComponentBorder(RoundedCornerShape(GsMotion.radiusCard), hcColor(MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.onSurface))
         .let { if (onClick != null || onLongClick != null) it.kineticPress(interaction) else it }
     if (onLongClick != null) {
         // Long-pressable card: one gesture pipeline handles tap AND hold
@@ -184,7 +184,7 @@ fun GsCard(
             ),
             shape = RoundedCornerShape(GsMotion.radiusCard),
             color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, hcColor(MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.onSurface))
+            border = null
         ) {
             // The label rides the content node (a non-mergeable descendant) so the
             // action-key merge policy applies it over the Surface's unlabeled click.
@@ -195,7 +195,7 @@ fun GsCard(
             modifier = base,
             shape = RoundedCornerShape(GsMotion.radiusCard),
             color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, hcColor(MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.onSurface)),
+            border = null,
             onClick = onClick ?: {},
             enabled = onClick != null,
             interactionSource = interaction

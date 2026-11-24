@@ -1940,8 +1940,7 @@ private fun ChatTopIconButton(
             // Elevated, not FloatingControl: these sit on the page, not over a
             // sheet, and at 44dp FloatingControl's fill is within a couple of
             // luminance points of the bloom — the disc was there and invisible.
-            .gsGlass(GsGlassRole.Elevated, CircleShape)
-            .border(1.dp, GsTheme.colors.glassHighlight.copy(alpha = 0.55f), CircleShape)
+            .gsGlass(GsGlassRole.Elevated, CircleShape, metalEdge = true)
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

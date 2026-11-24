@@ -38,12 +38,12 @@ float argentStripe(float coord, float u_soft) {
 }
 
 
-[[ stitchable ]] half4 gsArgentRim(float2 position, half4 color, float2 u_res, float u_time, float3 u_light, float3 u_dark, float u_disp) {
+[[ stitchable ]] half4 gsArgentRim(float2 position, half4 color, float2 u_res, float u_time, float3 u_light, float3 u_dark, float u_disp, float2 u_alpha) {
   if (color.a <= 0.0h) return half4(0.0h);
-  const float u_rep = 4.5, u_angle = 0.6981317008, u_soft = 0.3, u_dist = 0.24, u_scale = 0.85;
+  const float u_rep = 1.2, u_angle = 0.6981317008, u_soft = 0.48, u_dist = 0.05, u_scale = 1.6;
 
   float2 uv = (float2(position.x, u_res.y - position.y) / u_res - 0.5);
-  uv.x *= u_res.x / u_res.y;
+  uv.x *= min(u_res.x / u_res.y, 2.5);
   uv /= max(u_scale, 0.001);
 
   float t = u_time;
@@ -76,5 +76,8 @@ float argentStripe(float coord, float u_soft) {
   // rim lift toward the edges
   col *= 0.94 + 0.14 * smoothstep(0.25, 0.85, d);
 
-  return half4(half3(clamp(col, float3(0.0), float3(1.0))) * color.a, color.a);
+  float2 unit = position / u_res;
+  float directional = smoothstep(0.10, 0.68, abs(dot(unit - 0.5, float2(0.85, 0.65))));
+  half alpha = half(mix(u_alpha.x, u_alpha.y, directional)) * color.a;
+  return half4(half3(clamp(col, float3(0.0), float3(1.0))) * alpha, alpha);
 }

@@ -1,32 +1,30 @@
 import SwiftUI
 
-/// Actual ArgentUI v0.4.1 optional native shader in ArgentRim.metal.
-/// Only the alpha of an inset 0.75pt shape stroke is fed to the shader;
-/// there is no interior paint, bloom, or change to hit testing.
+/// ArgentUI v0.4.1 original reflection field, muted and fixed in place.
+/// Component outline only: no halo, fill, idle animation or layout change.
 private struct ArgentComponentRim<S: InsettableShape>: ViewModifier {
     let shape: S
     let enabled: Bool
+    var fallback: Color? = nil
     @ObservedObject private var settings = SettingsStore.shared
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityContrast) private var contrast
-    @Environment(\.scenePhase) private var scenePhase
-    private static var epoch: Date { ArgentRimClock.epoch }
+
+    init(shape: S, enabled: Bool, fallback: Color? = nil) {
+        self.shape = shape
+        self.enabled = enabled
+        self.fallback = fallback
+    }
 
     func body(content: Content) -> some View {
         content.overlay {
-            if enabled && !settings.highContrast && contrast != .increased {
+            if enabled {
                 GeometryReader { geo in
-                    let size = geo.size
-                    if size.width >= 16 && size.height >= 16 &&
-                        size.width <= 720 && size.height <= 320 {
-                        let paused = reduceMotion || settings.reduceMotion ||
-                            settings.animationReduced || scenePhase != .active
-                        TimelineView(.animation(minimumInterval: 0.05, paused: paused)) { timeline in
-                            let time = paused ? Float(3.4) :
-                                Float(timeline.date.timeIntervalSince(Self.epoch) * 0.12 + 3.4)
-                            rim(size: size, time: time)
-                        }
+                    if !settings.highContrast && contrast != .increased &&
+                        gsArgentComponentSize(geo.size) {
+                        rim(size: geo.size)
+                    } else if let fallback {
+                        shape.strokeBorder(fallback, lineWidth: 1)
                     }
                 }
                 .allowsHitTesting(false)
@@ -35,26 +33,32 @@ private struct ArgentComponentRim<S: InsettableShape>: ViewModifier {
         }
     }
 
-    private func rim(size: CGSize, time: Float) -> some View {
+    private func rim(size: CGSize) -> some View {
         let dark = scheme == .dark
+        let light: Float = dark ? 0.86 : 0.60
+        let shadow: Float = dark ? 0.58 : 0.35
         return shape.strokeBorder(Color.white, lineWidth: 0.75)
             .colorEffect(ShaderLibrary.gsArgentRim(
                 .float2(Float(size.width), Float(size.height)),
-                .float(time),
-                .float3(dark ? 182/255 : 248/255, dark ? 190/255 : 250/255, dark ? 201/255 : 252/255),
-                .float3(dark ? 20/255 : 35/255, dark ? 22/255 : 38/255, dark ? 26/255 : 43/255),
-                .float(dark ? 0.0125 : 0.015)
+                .float(3.4),
+                .float3(light, light, light),
+                .float3(shadow, shadow, shadow),
+                .float(0),
+                .float2(dark ? 0.07 : 0.045, dark ? 0.38 : 0.24)
             ))
-            .opacity(dark ? 0.32 : 0.24)
     }
 }
 
-private enum ArgentRimClock {
-    static let epoch = Date()
+func gsArgentComponentSize(_ size: CGSize) -> Bool {
+    size.width >= 16 && size.height >= 16 && size.width <= 720 && size.height <= 320
 }
 
 extension View {
     func gsArgentComponentRim<S: InsettableShape>(_ shape: S, enabled: Bool = true) -> some View {
         modifier(ArgentComponentRim(shape: shape, enabled: enabled))
+    }
+
+    func gsArgentComponentBorder<S: InsettableShape>(_ shape: S, fallback: Color) -> some View {
+        modifier(ArgentComponentRim(shape: shape, enabled: true, fallback: fallback))
     }
 }

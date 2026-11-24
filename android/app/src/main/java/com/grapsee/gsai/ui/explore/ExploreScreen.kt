@@ -488,7 +488,7 @@ private fun ExploreDock(
     Row(
         Modifier
             .fillMaxWidth()
-            .gsGlass(GsGlassRole.FloatingControl, CircleShape)
+            .gsGlass(GsGlassRole.FloatingControl, CircleShape, metalEdge = false)
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

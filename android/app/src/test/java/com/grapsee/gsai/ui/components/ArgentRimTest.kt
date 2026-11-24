@@ -13,6 +13,16 @@ class ArgentRimTest {
         assertFalse(argentComponentSize(5f,5f))
     }
 
+    @Test fun directionalRimHasMutedFixedCornerHighlights() {
+        val dark = floatArrayOf(.07f,.38f)
+        val topLeft = ArgentRimSample.alpha(0.0,0.0,dark)
+        val topRight = ArgentRimSample.alpha(1.0,0.0,dark)
+        val bottomRight = ArgentRimSample.alpha(1.0,1.0,dark)
+        assertTrue(topLeft > topRight + 50)
+        assertTrue(topLeft == bottomRight)
+        assertTrue(topLeft <= 97)
+    }
+
     @Test fun upstreamFieldHasSpatialReflectionBandsAndTimeEvolution() {
         val light = floatArrayOf(248/255f,250/255f,252/255f)
         val dark = floatArrayOf(35/255f,38/255f,43/255f)

@@ -52,6 +52,7 @@ import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.local.ConversationPreviewRow
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsGlassRole
+import com.grapsee.gsai.ui.components.argentComponentBorder
 import com.grapsee.gsai.ui.components.gsGlass
 import com.grapsee.gsai.ui.components.GsWellTone
 import com.grapsee.gsai.ui.components.RefArt
@@ -612,11 +613,7 @@ private fun ExploreModelsCard(onClick: () -> Unit) {
                 if (dark) colors.accent.copy(alpha = 0.10f) else GsWellTone.Lilac.wash.copy(alpha = 0.55f),
                 RoundedCornerShape(18.dp),
             )
-            .border(
-                1.dp,
-                if (dark) colors.accent.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.62f),
-                RoundedCornerShape(18.dp),
-            )
+            .argentComponentBorder(RoundedCornerShape(18.dp), if (dark) colors.accent.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.62f))
             .clickable(role = Role.Button, onClickLabel = "Explore AI Models", onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -61,6 +61,7 @@ import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.data.local.ConversationPreviewRow
 import com.grapsee.gsai.di.ServiceLocator
 import com.grapsee.gsai.ui.components.GsGlassRole
+import com.grapsee.gsai.ui.components.argentComponentBorder
 import com.grapsee.gsai.ui.components.RefArt
 import com.grapsee.gsai.ui.components.ReferenceBackdrop
 import com.grapsee.gsai.ui.components.RefArtwork
@@ -1289,7 +1290,7 @@ private fun DockCircle(
             .size(46.dp)
             .clip(CircleShape)
             .background(Color.White.copy(alpha = if (selected) 0.62f else 0.44f))
-            .border(1.dp, Color.White.copy(alpha = 0.55f), CircleShape)
+            .argentComponentBorder(CircleShape, Color.White.copy(alpha = 0.55f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

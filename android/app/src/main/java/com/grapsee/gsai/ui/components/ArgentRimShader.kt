@@ -14,6 +14,7 @@ uniform float u_soft;
 uniform float u_disp;
 uniform float u_dist;
 uniform float u_scale;
+uniform float2 u_alpha;
 // 2D simplex noise — Ashima Arts / Stefan Gustavson (webgl-noise, MIT).
 float3 mod289(float3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 float2 mod289(float2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -50,7 +51,7 @@ float stripe(float coord) {
 
 half4 main(float2 position) {
   float2 uv = (float2(position.x, u_res.y - position.y) / u_res - 0.5);
-  uv.x *= u_res.x / u_res.y;
+  uv.x *= min(u_res.x / u_res.y, 2.5);
   uv /= max(u_scale, 0.001);
 
   float t = u_time;
@@ -83,5 +84,9 @@ half4 main(float2 position) {
   // rim lift toward the edges
   col *= 0.94 + 0.14 * smoothstep(0.25, 0.85, d);
 
-  return half4(half3(clamp(col, 0.0, 1.0)), 1.0);
+  // Fixed, broad diagonal lighting over the original Argent reflection.
+  float2 unit = position / u_res;
+  float directional = smoothstep(0.10, 0.68, abs(dot(unit - 0.5, float2(0.85, 0.65))));
+  float alpha = mix(u_alpha.x, u_alpha.y, directional);
+  return half4(half3(clamp(col, 0.0, 1.0) * alpha), half(alpha));
 }"""

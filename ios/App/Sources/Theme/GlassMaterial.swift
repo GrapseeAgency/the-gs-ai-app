@@ -221,7 +221,17 @@ private let gsGlassTokenAlpha = 0.80
 private struct GsGlassModifier<S: InsettableShape>: ViewModifier {
     let role: GsGlassRole
     let shape: S
-    var metalEdge: Bool = true
+    var metalEdge: Bool? = nil
+    @ObservedObject private var settings = SettingsStore.shared
+    @Environment(\.accessibilityContrast) private var contrast
+
+    init(role: GsGlassRole, shape: S, metalEdge: Bool? = nil) {
+        self.role = role
+        self.shape = shape
+        self.metalEdge = metalEdge
+    }
+
+    private var argentEnabled: Bool { metalEdge ?? (role != .modal && role != .elevated) }
 
     func body(content: Content) -> some View {
         content
@@ -235,10 +245,12 @@ private struct GsGlassModifier<S: InsettableShape>: ViewModifier {
             // card's height, and only the drawn card knows its height.
             .overlay {
                 GeometryReader { geometry in
-                    rim(in: geometry.size)
+                    if !argentEnabled || settings.highContrast || contrast == .increased || !gsArgentComponentSize(geometry.size) {
+                        rim(in: geometry.size)
+                    }
                 }
             }
-            .gsArgentComponentRim(shape, enabled: metalEdge && role != .modal && role != .elevated)
+            .gsArgentComponentRim(shape, enabled: argentEnabled)
             // Cue: warm, non-grey shadow — this is depth, not darkness. Cast
             // from outside the glass rather than through it; see `castShadow`.
             .background {
@@ -344,7 +356,7 @@ private struct GsGlassModifier<S: InsettableShape>: ViewModifier {
 extension View {
     /// Apply the shared glass material as a rounded-rect background. The iOS
     /// twin of Android `Modifier.gsGlass(role, shape)`.
-    func gsGlass(_ role: GsGlassRole = .card, corner: CGFloat = Aero.Radius.card, metalEdge: Bool = true) -> some View {
+    func gsGlass(_ role: GsGlassRole = .card, corner: CGFloat = Aero.Radius.card, metalEdge: Bool? = nil) -> some View {
         modifier(GsGlassModifier(
             role: role,
             shape: RoundedRectangle(cornerRadius: corner, style: .continuous), metalEdge: metalEdge))
@@ -359,7 +371,7 @@ extension View {
     /// came back through a translucent fill and took 5.1 L out of the pill. The
     /// gate measures that (A2 material law on the `pill` probe), and Android's
     /// pills — which always went through the single path — did not have it.
-    func gsCapsuleGlass(_ role: GsGlassRole = .floatingControl, metalEdge: Bool = true) -> some View {
+    func gsCapsuleGlass(_ role: GsGlassRole = .floatingControl, metalEdge: Bool? = nil) -> some View {
         modifier(GsGlassModifier(role: role, shape: Capsule(), metalEdge: metalEdge))
     }
 }

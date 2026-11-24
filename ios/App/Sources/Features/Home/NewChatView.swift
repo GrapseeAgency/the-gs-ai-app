@@ -116,10 +116,10 @@ struct NewChatView: View {
             Button(action: onOpenMenu) {
                 ZStack {
                     Circle().fill(.white.opacity(scheme == .dark ? 0.10 : 0.50))
-                    Circle().strokeBorder(.white.opacity(scheme == .dark ? 0.14 : 0.75), lineWidth: 1)
                     NexlyGlyph(name: "user", size: 16, color: Aero.textSecondary)
                 }
                 .frame(width: 36, height: 36)
+                .gsArgentComponentBorder(Circle(), fallback: Color.white.opacity(scheme == .dark ? 0.14 : 0.75))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open menu")
@@ -177,10 +177,10 @@ struct NewChatView: View {
         Button(action: action) {
             ZStack {
                 Circle().fill(.white.opacity(scheme == .dark ? 0.10 : 0.50))
-                Circle().strokeBorder(.white.opacity(scheme == .dark ? 0.14 : 0.75), lineWidth: 1)
                 NexlyGlyph(name: glyph, size: 14, color: Aero.textSecondary)
             }
             .frame(width: 32, height: 32)
+            .gsArgentComponentBorder(Circle(), fallback: Color.white.opacity(scheme == .dark ? 0.14 : 0.75))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
@@ -335,8 +335,7 @@ struct NewChatView: View {
             .padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 18)
                 .fill((scheme == .dark ? Aero.refAccentSoft.opacity(0.55) : GsWellTone.lilac.wash.opacity(0.55))))
-            .overlay(RoundedRectangle(cornerRadius: 18)
-                .strokeBorder(.white.opacity(scheme == .dark ? 0.12 : 0.62), lineWidth: 1))
+            .gsArgentComponentBorder(RoundedRectangle(cornerRadius: 18), fallback: Color.white.opacity(scheme == .dark ? 0.12 : 0.62))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Explore AI Models")

@@ -397,10 +397,7 @@ struct GsInfoCard: View {
             RoundedRectangle(cornerRadius: 20)
                 .fill(Aero.glassSurface.opacity(0.55))
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .strokeBorder(.white.opacity(0.55), lineWidth: 1)
-        )
+        .gsArgentComponentBorder(RoundedRectangle(cornerRadius: 20), fallback: Color.white.opacity(0.55))
     }
 }
 
