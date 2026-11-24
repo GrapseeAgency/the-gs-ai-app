@@ -32,6 +32,7 @@ import { loadKeyPool } from '@/lib/keypool'
 import { OPENROUTER_MODELS } from '@/lib/models'
 import { FreeCapacityUnavailableError } from '@/lib/capacity-policy'
 import { REMOTE_TOOLS, type RemoteMessage, type RemoteCompletion } from './remote-tools'
+import { ProviderRateLimit } from './provider-rate-limit'
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
 
@@ -184,8 +185,16 @@ function coolKey(key: string, reason = ''): void {
 function keyIsCooled(key: string): boolean {
   return (keyCooldownUntil.get(key) ?? 0) > Date.now()
 }
-function someLiveKey(keys: string[]): boolean {
-  return keys.some((k) => !keyIsCooled(k))
+// Shared across completion, streaming, tool requests and health checks in
+// this process. Never retry a 429 by walking keys or switching models.
+const providerRateLimit = new ProviderRateLimit()
+function checkProviderCooldown(): void {
+  const remaining = providerRateLimit.remaining()
+  if (remaining > 0) throw new FreeCapacityUnavailableError('Free provider is rate limited.', remaining)
+}
+function observeProvider429(response: Response, reason: string): never {
+  providerRateLimit.observe(response.headers.get('retry-after'), reason)
+  throw new FreeCapacityUnavailableError('Free provider is rate limited.', providerRateLimit.remaining())
 }
 
 async function extractError(response: Response): Promise<string> {
@@ -214,6 +223,8 @@ export async function orCompleteChat(
       'GS Free is waiting: the OpenRouter key pool is empty. Re-provision keys to restore free-tier models.'
     )
   }
+  checkProviderCooldown()
+  if (keys.every(keyIsCooled)) throw new FreeCapacityUnavailableError('Free credentials are cooling down.')
   let lastError = 'OpenRouter unavailable'
   let sawCapacityFailure = false
 
@@ -221,10 +232,9 @@ export async function orCompleteChat(
     const model = models[mi]
     const isLastModel = mi === models.length - 1
     let emptyAttempts = 0
-    let consecutive429 = 0
     for (let i = 0; i < keys.length; i++) {
       const key = keys[(keyCursor + i) % keys.length]
-      if (keyIsCooled(key) && someLiveKey(keys)) {
+      if (keyIsCooled(key)) {
         console.log(`OR-COOLDOWN model=${model} key=***${key.slice(-4)} skip (quota cooldown)`)
         continue
       }
@@ -245,23 +255,10 @@ export async function orCompleteChat(
             // exact bug surfaced as "OpenRouter openrouter/free: " with an
             // empty message and a 502 to the client).
           } else if (shouldRotate(response.status)) {
-            if (response.status === 401 || response.status === 402 || response.status === 429) coolKey(key, lastError)
+            if (response.status === 429) observeProvider429(response, lastError)
+            if (response.status === 401 || response.status === 402) coolKey(key, lastError)
             if (response.status !== 401) sawCapacityFailure = true
             console.log(`OR-ROTATE model=${model} status=${response.status} key=***${key.slice(-4)}`)
-            // 2026-11-24 — model-level circuit breaker: a model 429ing on 4
-            // straight keys is exhausted GLOBALLY (free pools are per-model
-            // daily caps), not per-key. Skip the remaining 30+ keys and move
-            // to the next model — the full-key walk cost ~5-10s per dead
-            // model and produced multi-minute turns.
-            if (response.status === 429) {
-              consecutive429 += 1
-              if (consecutive429 >= 4 && !isLastModel) {
-                console.log(`OR-MODEL-EXHAUSTED model=${model} after ${consecutive429} straight 429s — next model`)
-                break
-              }
-            } else {
-              consecutive429 = 0
-            }
             continue
           } else {
             // Permanent for THIS model (400/404): fall through to the next
@@ -292,6 +289,7 @@ export async function orCompleteChat(
           model: typeof completion?.model === 'string' ? completion.model : null,
         }
       } catch (e) {
+        if (e instanceof FreeCapacityUnavailableError) throw e
         lastError = e instanceof Error ? e.message : String(e)
         if (lastError.startsWith('OpenRouter ') && isLastModel) throw e
         if (lastError.startsWith('OpenRouter ')) break // next model in chain
@@ -322,6 +320,8 @@ export async function orStreamChat(
       'GS Free is waiting: the OpenRouter key pool is empty. Re-provision keys to restore free-tier models.'
     )
   }
+  checkProviderCooldown()
+  if (keys.every(keyIsCooled)) throw new FreeCapacityUnavailableError('Free credentials are cooling down.')
   let lastError = 'OpenRouter unavailable'
   let sawCapacityFailure = false
 
@@ -329,10 +329,9 @@ export async function orStreamChat(
     const model = models[mi]
     const isLastModel = mi === models.length - 1
     let emptyAttempts = 0
-    let consecutive429 = 0
     for (let i = 0; i < keys.length; i++) {
       const key = keys[(keyCursor + i) % keys.length]
-      if (keyIsCooled(key) && someLiveKey(keys)) {
+      if (keyIsCooled(key)) {
         console.log(`OR-COOLDOWN model=${model} key=***${key.slice(-4)} skip (quota cooldown)`)
         continue
       }
@@ -350,19 +349,10 @@ export async function orStreamChat(
             // below (falling through to the failure branch here produced the
             // bogus "OpenRouter <model>: " 502).
           } else if (shouldRotate(response.status)) {
-            if (response.status === 401 || response.status === 402 || response.status === 429) coolKey(key, lastError)
+            if (response.status === 429) observeProvider429(response, lastError)
+            if (response.status === 401 || response.status === 402) coolKey(key, lastError)
             if (response.status !== 401) sawCapacityFailure = true
             console.log(`OR-ROTATE model=${model} status=${response.status} key=***${key.slice(-4)}`)
-            // 2026-11-24 — model-level circuit breaker (see orCompleteChat).
-            if (response.status === 429) {
-              consecutive429 += 1
-              if (consecutive429 >= 4 && !isLastModel) {
-                console.log(`OR-MODEL-EXHAUSTED model=${model} after ${consecutive429} straight 429s — next model`)
-                break
-              }
-            } else {
-              consecutive429 = 0
-            }
             continue
           } else {
             lastError = `OpenRouter ${model}: ${lastError}`
@@ -390,6 +380,7 @@ export async function orStreamChat(
         }
         return full
       } catch (e) {
+        if (e instanceof FreeCapacityUnavailableError) throw e
         lastError = e instanceof Error ? e.message : String(e)
         if (forwarded) throw new Error(lastError)
         if (lastError.startsWith('OpenRouter ') && isLastModel) throw e
@@ -441,11 +432,14 @@ export async function orHealthProbe(): Promise<OrProbeResult> {
   if (keys.length === 0) {
     return { probed: false, ok: false, status: null, error: 'keypool empty', latencyMs: 0 }
   }
+  if (providerRateLimit.remaining() > 0 || keys.every(keyIsCooled))
+    return { probed:false, ok:false, status:429, error:'Free provider cooling down', latencyMs:0 }
   const model = OPENROUTER_MODELS['gs-free'][0]
   let lastError = 'OpenRouter unavailable'
   let lastStatus: number | null = null
   for (let i = 0; i < Math.min(HEALTH_PROBE_MAX_KEYS, keys.length); i++) {
     const key = keys[(keyCursor + i) % keys.length]
+    if (keyIsCooled(key)) continue
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), HEALTH_PROBE_TIMEOUT_MS)
     try {
@@ -469,6 +463,10 @@ export async function orHealthProbe(): Promise<OrProbeResult> {
         return { probed: true, ok: true, status: 200, error: null, latencyMs: Date.now() - t0 }
       }
       lastError = await extractError(response)
+      if (response.status === 429) {
+        providerRateLimit.observe(response.headers.get('retry-after'), lastError)
+        break
+      }
       // 400/404 are permanent for this request shape — rotating keys cannot
       // fix them; report the failure as the layer's real state.
       if (!shouldRotate(response.status)) break
@@ -497,6 +495,7 @@ export async function orRequestTools(
   if (!model.endsWith(':free') || !OPENROUTER_MODELS['gs-free-big'].includes(model))
     throw new Error('No eligible free tool route')
   const keys = (await loadKeyPool()).keys
+  checkProviderCooldown()
   const key = keys.find(k => !keyIsCooled(k))
   if (!key) throw new Error('No free tool capacity')
   const response = await fetch(`${OPENROUTER_BASE}/chat/completions`,{
@@ -505,8 +504,9 @@ export async function orRequestTools(
       tools:REMOTE_TOOLS,tool_choice:'auto',provider:{require_parameters:true}})
   })
   if (!response.ok) {
-    if (response.status===429 || response.status===402 || response.status===401) coolKey(key,'tool request capacity')
-    void response.body?.cancel().catch(()=>undefined)
+    const reason = await extractError(response)
+    if (response.status===429) observeProvider429(response,reason)
+    if (response.status===402 || response.status===401) coolKey(key,reason)
     throw new Error('Free tool request unavailable')
   }
   const result = await response.json() as RemoteCompletion

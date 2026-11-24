@@ -7,6 +7,9 @@ on:
       - 'src/lib/remote-tools*.ts'
       - 'src/lib/turn-executor.ts'
       - 'src/lib/provider-sse*.ts'
+      - 'src/lib/provider-rate-limit*.ts'
+      - 'src/lib/openrouter.ts'
+      - 'src/lib/search/planner.ts'
       - 'src/lib/context-crystallize*.ts'
       - 'src/lib/turn-resume*.ts'
       - 'src/lib/calc/**'
@@ -38,7 +41,7 @@ jobs:
           bun-version: latest
       - name: Focused chat regressions
         run: |
-          bun test src/lib/remote-tools.test.ts src/lib/context-crystallize.test.ts src/lib/provider-sse.test.ts src/lib/turn-resume.test.ts src/lib/calc/turn-calculator.test.ts src/lib/quality-routing.test.ts
+          bun test src/lib/remote-tools.test.ts src/lib/context-crystallize.test.ts src/lib/provider-sse.test.ts src/lib/turn-resume.test.ts src/lib/calc/turn-calculator.test.ts src/lib/quality-routing.test.ts src/lib/provider-rate-limit.test.ts
   model-benchmark:
     needs: unit
     runs-on: ubuntu-latest

@@ -2,6 +2,8 @@
  * no paid fallback, no credentials or prompt transcripts in artifacts. */
 import { writeFileSync } from 'node:fs'
 import { REMOTE_TOOLS, collectRemoteToolEvidence, type RemoteCompletion, type RemoteMessage } from '../src/lib/remote-tools'
+import { ProviderRateLimit } from '../src/lib/provider-rate-limit'
+const rateLimit = new ProviderRateLimit()
 const key = process.env.OPENROUTER_API_KEY
 const candidates = (process.env.GS_BENCH_MODELS || 'nvidia/nemotron-3-ultra-550b-a55b:free').split(',').map(s=>s.trim()).filter(Boolean)
 const models = [...new Set(candidates)].slice(0,3)
@@ -22,7 +24,13 @@ async function request(model:string,messages:RemoteMessage[],signal:AbortSignal,
     body:JSON.stringify({model,messages,temperature:0.2,stream:false,max_tokens:1024,
       ...(toolMode?{tools:REMOTE_TOOLS,tool_choice:'auto',provider:{require_parameters:true}}:{})})
   })
-  if(!response.ok){void response.body?.cancel();throw Error('http_'+response.status)}
+  if(!response.ok){
+    if(response.status===429){
+      const reason = await response.json().catch(()=>null) as {error?:{message?:string}}|null
+      rateLimit.observe(response.headers.get('retry-after'),reason?.error?.message ?? '')
+    } else void response.body?.cancel()
+    throw Error('http_'+response.status)
+  }
   const data=await response.json() as RemoteCompletion
   if(data.model!==model)throw Error('model_identity_mismatch')
   return data
@@ -34,6 +42,10 @@ if(!key){
 }
 for(const model of models)for(let trial=1;trial<=trials;trial++){
   for(const c of cases){
+    if(rateLimit.remaining()>0){
+      results.push({model,caseId:c.id,trial,status:'BLOCKED',latencyMs:0,reason:'provider_retry_after'})
+      continue
+    }
     const start=Date.now()
     try{
       const data=await request(model,[{role:'user',content:c.prompt}],AbortSignal.timeout(35000))
@@ -42,6 +54,10 @@ for(const model of models)for(let trial=1;trial<=trials;trial++){
       results.push({model,caseId:c.id,trial,status:choice?.finish_reason==='stop'&&text&&c.expected.test(text)?'PASS':'FAIL',latencyMs:Date.now()-start})
     }catch(e){results.push({model,caseId:c.id,trial,status:'ERROR',latencyMs:Date.now()-start,reason:e instanceof Error&&/^(http_\d+|model_identity_mismatch)$/.test(e.message)?e.message:'transport_error'})}
   }
+  if(rateLimit.remaining()>0){
+    results.push({model,caseId:'native_tool',trial,status:'BLOCKED',latencyMs:0,reason:'provider_retry_after'})
+    continue
+  }
   const start=Date.now()
   const outcome=await collectRemoteToolEvidence([{role:'user',content:'Use the calculator tool to compute 173*29+11; do not estimate.'}],{
     request:(messages,signal)=>request(model,messages,signal,true),clock:()=>null
@@ -49,6 +65,6 @@ for(const model of models)for(let trial=1;trial<=trials;trial++){
   const verified=outcome.results.some(r=>r.tool==='calculator'&&r.ok&&(r.value as {result?:number})?.result===5028)
   results.push({model,caseId:'native_tool',trial,status:verified?'PASS':outcome.status==='unavailable'?'ERROR':'FAIL',latencyMs:Date.now()-start})
 }
-writeFileSync('free-model-benchmark.json',JSON.stringify({status:'executed',trials,results},null,2))
-console.log(JSON.stringify({pass:results.filter(r=>r.status==='PASS').length,fail:results.filter(r=>r.status==='FAIL').length,error:results.filter(r=>r.status==='ERROR').length,total:results.length}))
+writeFileSync('free-model-benchmark.json',JSON.stringify({status:rateLimit.remaining()>0?'capacity_blocked':'executed',trials,retryAfterMs:rateLimit.remaining(),results},null,2))
+console.log(JSON.stringify({pass:results.filter(r=>r.status==='PASS').length,fail:results.filter(r=>r.status==='FAIL').length,error:results.filter(r=>r.status==='ERROR').length,blocked:results.filter(r=>r.status==='BLOCKED').length,total:results.length}))
 if(results.some(r=>r.status!=='PASS'))process.exitCode=1

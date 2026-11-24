@@ -125,10 +125,15 @@ const CATEGORY_WORDS: Record<string, string> = {
 export function resolveClarifiedCategory(userText: string, clarifyOptions: ClarifyOption[] | null): string | null {
   const text = userText.trim().toLowerCase()
   if (!text || text.length > 60) return null
-  const options = clarifyOptions ?? NEWS_CATEGORY_OPTIONS
+  // A bare word in a normal conversation is not a news selection.
+  // Require a real previous news clarification, not default categories.
+  if (!clarifyOptions?.length || !clarifyOptions.every(o =>
+    NEWS_CATEGORY_OPTIONS.some(n => n.id === o.id && n.label === o.label))) return null
+  const options = clarifyOptions
   // Direct label match ("Technology", "tech news", "bangladesh news today").
   for (const opt of options) {
     const words = CATEGORY_WORDS[opt.id]
+    if (!words) continue
     const re = new RegExp(`^(?:the\\s+)?(?:latest\\s+|today'?s?\\s+|todays\\s+|some\\s+|more\\s+)?(${words})\\s*(?:news|updates?|headlines?)?\\s*[?.!]*$`, 'i')
     if (re.test(text)) return opt.label
   }
@@ -358,6 +363,12 @@ export async function planSearch(input: PlanInput): Promise<SearchPlan> {
   }
 
   const gate = evaluateWebSearchGate(text)
+  // Non-news selections resolve the preceding question, not a fabricated
+  // news search or another unnecessary clarification. Explicit search wins.
+  if (gate.trigger === null && input.previousClarifyOptions?.some(o =>
+    o.label.trim().toLowerCase() === text.toLowerCase() || o.id.toLowerCase() === text.toLowerCase())) {
+    return {needsSearch:false,intent:'none',ambiguity:{isAmbiguous:false,prompt:null},queries:[],timeRange:'none',depth:'quick'}
+  }
   const fallbackQuery = gate.trigger ? extractSearchQuery(text, gate.trigger) : ''
 
   // Baseline C26 (audit [9]) — deterministic BARE-WEATHER veto, BEFORE the LLM

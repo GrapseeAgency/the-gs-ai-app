@@ -2292,8 +2292,7 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
     return result
   } catch (e) {
     const raw = String(e instanceof Error ? e.message : e)
-    gsCapLog('error', null, { error: raw })
-    if (isFreeCapacityUnavailableError(e)) {
+    if (isFreeCapacityUnavailableError(e) && prep.runId) {
       // Capacity exhaustion is a QUEUE condition, not a terminal failure. The
       // document contract says "the durable queue waits for capacity", and
       // turn-producer only calls requeueRun + emits RunQueued when this flag is
@@ -2308,9 +2307,12 @@ export async function runTurn(prep: Prep, push: TurnPush | null): Promise<TurnRe
         message:
           'GS AI is at free capacity right now — this answer is queued and will resume automatically.',
       }
-      if (push) push('error', result.errorResponse.message)
+      // Queued is not terminal. A client error event ends its stream and
+      // a terminal trace row would poison the eventual retry's evaluation.
+      if (push) { push('reset', ''); push('status', 'queued') }
       return result
     }
+    gsCapLog('error', null, { error: raw })
     const message = useVision ? visionErrorMessage(raw) : userFacingTurnError(raw)
     if (push) push('error', message)
     result.finalStatus = 'error'
