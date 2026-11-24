@@ -47,7 +47,7 @@ jobs:
           done
       - name: Assemble optimized signed phone test APK
         working-directory: android
-        run: gradle :app:assembleRelease -PgsTestVersion=0.86.29-phone-test.3 --max-workers=2 --stacktrace
+        run: gradle :app:assembleRelease -PgsTestVersion=0.86.29-phone-test.4 --max-workers=2 --stacktrace
       - name: Verify APK signing, identity, native libraries and original native animation assets
         run: |
           set -euo pipefail
@@ -58,7 +58,7 @@ jobs:
           "$TOOLS/aapt2" dump badging "$APK" > dist/android-verification.txt
           "$TOOLS/apksigner" verify --verbose --print-certs "$APK" >> dist/android-verification.txt
           grep -q "package: name='com.grapsee.gsai'" dist/android-verification.txt
-          grep -q "versionName='0.86.29-phone-test.3'" dist/android-verification.txt
+          grep -q "versionName='0.86.29-phone-test.4'" dist/android-verification.txt
           grep -qi 'b1ffd75dd410c84bd9467e418c419cd377d57569ae7ac5e26b778e6418b1a483' dist/android-verification.txt
           if grep -q application-debuggable dist/android-verification.txt; then exit 1; fi
           for ABI in arm64-v8a armeabi-v7a x86 x86_64; do
@@ -86,12 +86,12 @@ jobs:
               assert "assets/bot-avatar/avatar.bundle.js" not in z.namelist()
           open("dist/avatar-provenance.json","w").write(json.dumps(meta,indent=2)+"\n")
           PY
-          cp "$APK" dist/GS-AI-App-phone-test-3.apk
-          (cd dist && sha256sum GS-AI-App-phone-test-3.apk > SHA256SUMS.txt)
+          cp "$APK" dist/GS-AI-App-phone-test-4.apk
+          (cd dist && sha256sum GS-AI-App-phone-test-4.apk > SHA256SUMS.txt)
           printf 'Source commit: %s\nNative libraries: unchanged v0.86.29 release, verified SHA256 and ABI payloads\nVisual animation verification: pending, test build only\n' "$GITHUB_SHA" > dist/build-provenance.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: gs-ai-phone-test-3-apk
+          name: gs-ai-phone-test-4-apk
           path: dist/
           if-no-files-found: error
       - name: Publish separate test pre-release
@@ -99,19 +99,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG=phone-test-20261124-3
+          TAG=phone-test-20261124-4
           cat > /tmp/avatar-release-notes.md <<'NOTES'
-          Experimental Android APK from main for physical-phone testing of the native avatar placement and chromatic metal send ring. **Not a stable release; visual/animation verification is still pending.**
+          Experimental Android APK from main for physical-phone testing of all current native UI changes. **Not a stable release; visual/animation verification is still pending.**
 
           - Native Android playback of lossless frames captured directly from bot-avatars@0.2.2, targeting 30 FPS. No avatar WebView or manually redrawn shapes.
           - Native avatar now replaces the spinner inside the active response status card, with no duplicate exterior avatar.
           - Native Android chromatic metal-fx shader port with gravity-driven ring deformation. The upstream separate halo and reflections are not implemented; visual fidelity is pending phone verification.
           - Removed response status from composer and changed Stop to an icon-only control.
-          - Original procedural engine is used at build time; native playback on the phone.
+          - Two-row chat composer with Agent shortcuts and real response-mode selector.
+          - Native colorful Border Beam port on the home Generate button.
+          - Native mono Voice Ring and existing experimental Voice Position support (licensed distance model not bundled).
+          - ArgentUI v0.4.1 original native shader port: thin, restrained component rims; not all custom borders covered yet. Performance and visual fidelity unverified. API 26–32 static same-field fallback.
+          - Original procedural avatar engine is used at build time; native playback on the phone.
           - Optimized release variant, existing application ID and signing certificate.
           - Unchanged native runtime libraries reused from verified v0.86.29.
           - Same versionCode as stable v0.86.29. Back up important data before testing.
 
           Stable v0.86.29 remains the latest stable release. No iOS artifact included.
           NOTES
-          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Android phone test 3 (experimental)" --notes-file /tmp/avatar-release-notes.md --prerelease --latest=false
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Android phone test 4 (experimental)" --notes-file /tmp/avatar-release-notes.md --prerelease --latest=false
