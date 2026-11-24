@@ -54,6 +54,7 @@ struct FluidResponseText: View {
         let raw: String
         let streaming: Bool
         let allowed: Bool
+        let fresh: Bool
     }
 
     var body: some View {
@@ -63,7 +64,7 @@ struct FluidResponseText: View {
         // A provider can finish with a final append after a short quiet
         // period. A previously live node must still reveal that real suffix.
         let active = allowed && (streaming || motion?.bands.isEmpty == false || (freshMount && motion != nil))
-        let input = Input(raw: raw, streaming: streaming, allowed: allowed)
+        let input = Input(raw: raw, streaming: streaming, allowed: allowed, fresh: freshMount)
         let preview = snapshot(raw, now: now, active: active)
         let deadline = preview.bands.map { $0.born + $0.duration }.max()
         // Keep the same native rendering branch throughout the reply.

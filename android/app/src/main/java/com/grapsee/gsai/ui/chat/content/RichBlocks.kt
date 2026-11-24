@@ -208,8 +208,14 @@ fun BlocksContent(
     val cache = remember { StreamBlockCache() }
     // Only a genuine live append may reveal freshly mounted paragraphs/rows.
     // Entering an existing conversation leaves its existing text settled.
-    val prior = remember { arrayOf(content) }
-    val wasStreaming = remember { booleanArrayOf(isStreaming) }
+    val turnScope = LocalReactPreviewScope.current
+    val firstLiveAttach = remember(turnScope) {
+        isStreaming && turnScope != null && !FluidFirstAttach.seen(turnScope)
+    }
+    val prior = remember(turnScope) {
+        arrayOf(if (firstLiveAttach && content.length <= 256) "" else content)
+    }
+    val wasStreaming = remember(turnScope) { booleanArrayOf(isStreaming) }
     val freshMount = remember(content, isStreaming) {
         (isStreaming || wasStreaming[0]) && content != prior[0] && content.startsWith(prior[0])
     }
@@ -217,6 +223,7 @@ fun BlocksContent(
     SideEffect {
         prior[0] = content
         wasStreaming[0] = isStreaming
+        if (isStreaming && turnScope != null) FluidFirstAttach.mark(turnScope)
     }
     val fluidPulse = rememberFluidFramePulse()
     // Recovery must be decided BEFORE parsing, because a successful recovery
@@ -4066,4 +4073,15 @@ private fun FenceTab(label: String, selected: Boolean, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 5.dp)
     )
+}
+
+/** Process-local presentation lease. Scrolling an active reply offscreen
+ * and remounting it must not replay already displayed response history. */
+private object FluidFirstAttach {
+    private val ids = LinkedHashSet<String>()
+    @Synchronized fun seen(id: String): Boolean = id in ids
+    @Synchronized fun mark(id: String) {
+        ids.add(id)
+        while (ids.size > 128) ids.remove(ids.first())
+    }
 }

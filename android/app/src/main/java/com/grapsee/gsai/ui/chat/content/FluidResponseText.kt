@@ -4,6 +4,7 @@ import android.animation.ValueAnimator
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableLongStateOf
@@ -32,9 +33,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlin.coroutines.coroutineContext
 
-internal val LocalFluidResponseText = staticCompositionLocalOf { false }
-internal val LocalFluidFreshMount = staticCompositionLocalOf { false }
-internal val LocalFluidNewBlockFloor = staticCompositionLocalOf { Int.MAX_VALUE }
+// Frequently changing values use tracked locals; a token must not
+// invalidate every non-consuming descendant of the response card.
+internal val LocalFluidResponseText = compositionLocalOf { false }
+internal val LocalFluidFreshMount = compositionLocalOf { false }
+internal val LocalFluidNewBlockFloor = compositionLocalOf { Int.MAX_VALUE }
 internal val LocalFluidFramePulse = staticCompositionLocalOf<FluidFramePulse?> { null }
 
 /** One display-clock lease per mounted response, not one per paragraph.
@@ -140,11 +143,29 @@ internal fun FluidResponseText(
                             val start = maxOf(band.start, measured.getLineStart(line))
                             val end = minOf(band.end, measured.getLineEnd(line))
                             if (start >= end) return@mapNotNull null
-                            val path = measured.getPathForRange(start, end)
-                            val rect = path.getBounds()
-                            if (rect.width <= 0f || rect.height <= 0f) return@mapNotNull null
-                            FluidRegion(band, path, rect, band.fractionAt(start), band.fractionAt(end),
-                                measured.getBidiRunDirection(start) == ResolvedTextDirection.Rtl)
+                            // Preserve native line geometry here; a mixed
+                            // bidi line is subdivided below at actual run
+                            // direction changes, never by visual guesses.
+                            start to end
+                        }.flatMap { (start, end) ->
+                            val pieces = mutableListOf<FluidRegion>()
+                            var at = start
+                            while (at < end) {
+                                val direction = measured.getBidiRunDirection(at)
+                                var until = at + Character.charCount(text.text.codePointAt(at))
+                                while (until < end && measured.getBidiRunDirection(until) == direction) {
+                                    until += Character.charCount(text.text.codePointAt(until))
+                                }
+                                until = minOf(until, end)
+                                val path = measured.getPathForRange(at, until)
+                                val rect = path.getBounds()
+                                if (rect.width > 0f && rect.height > 0f) {
+                                    pieces += FluidRegion(band, path, rect, band.fractionAt(at), band.fractionAt(until),
+                                        direction == ResolvedTextDirection.Rtl)
+                                }
+                                at = until
+                            }
+                            pieces
                         }
                     }
                 }

@@ -47,6 +47,7 @@ struct BlocksView: View {
 /// that planning happened), exactly like the reference.
 struct NexlyAssistantBlocksView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.reactPreviewScope) private var fluidTurnScope
     // A reference cursor is deliberately not an ObservableObject: updating
     // the previous source must not invalidate the whole response a second
     // time after every actual token publication.
@@ -56,6 +57,19 @@ struct NexlyAssistantBlocksView: View {
         var wasStreaming = false
     }
     @State private var sourceCursor = SourceCursor()
+    private struct SourceUpdate: Equatable {
+        let text: String?
+        let fixtureBlocks: [Block]?
+        let streaming: Bool
+    }
+    private var sourceUpdate: SourceUpdate {
+        SourceUpdate(text: sourceText, fixtureBlocks: sourceText == nil ? blocks : nil, streaming: isStreaming)
+    }
+    private var firstLiveAttach: Bool {
+        guard isStreaming, let scope = fluidTurnScope, let sourceText, !sourceText.isEmpty,
+              sourceText.count <= 256, !sourceCursor.wasStreaming, sourceCursor.text == nil else { return false }
+        return !FluidFirstAttachIOS.shared.seen(scope)
+    }
     let blocks: [Block]
     var sourceText: String? = nil
     var isStreaming: Bool = false
@@ -84,6 +98,7 @@ struct NexlyAssistantBlocksView: View {
 
     private var sourceDidAppend: Bool {
         guard isStreaming || sourceCursor.wasStreaming else { return false }
+        if firstLiveAttach { return true }
         if let sourceText, let previous = sourceCursor.text {
             return sourceText != previous && sourceText.hasPrefix(previous)
         }
@@ -151,17 +166,15 @@ struct NexlyAssistantBlocksView: View {
         .environment(\.fluidFreshMount, sourceDidAppend)
         .environment(\.fluidNewBlockFloor, sourceDidAppend
                      ? (sourceCursor.text?.count ?? sourceCursor.blocks?.last.map { $0.sourceStart + 1 } ?? 0) : Int.max)
-        .onAppear {
-            sourceCursor.blocks = isStreaming ? blocks : nil
-            sourceCursor.text = isStreaming ? sourceText : nil
-            sourceCursor.wasStreaming = isStreaming
-        }
-        .onChange(of: blocks) { next in sourceCursor.blocks = isStreaming ? next : nil }
-        .onChange(of: sourceText) { next in sourceCursor.text = isStreaming ? next : nil }
-        .onChange(of: isStreaming) { active in
-            sourceCursor.blocks = active ? blocks : nil
-            sourceCursor.text = active ? sourceText : nil
-            sourceCursor.wasStreaming = active
+        .onChange(of: sourceUpdate, initial: true) { _, next in
+            // One atomic source snapshot, not three racing callbacks.
+            // Production does not compare the entire parsed block tree.
+            sourceCursor.blocks = next.streaming ? next.fixtureBlocks : nil
+            sourceCursor.text = next.streaming ? next.text : nil
+            sourceCursor.wasStreaming = next.streaming
+            if next.streaming, let scope = fluidTurnScope {
+                FluidFirstAttachIOS.shared.mark(scope)
+            }
         }
     }
 
@@ -4194,5 +4207,22 @@ private struct ToolResultBlockView: View {
             }
         }
         .background(RoundedRectangle(cornerRadius: 12).fill(Aero.raisedSurface))
+    }
+}
+
+/// A bounded presentation lease for an actual turn. The app does not
+/// replay previously displayed text when a live row is remounted.
+private final class FluidFirstAttachIOS: @unchecked Sendable {
+    static let shared = FluidFirstAttachIOS()
+    private let lock = NSLock()
+    private var ids: [String] = []
+    func seen(_ id: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return ids.contains(id)
+    }
+    func mark(_ id: String) {
+        lock.lock(); defer { lock.unlock() }
+        if !ids.contains(id) { ids.append(id) }
+        if ids.count > 128 { ids.removeFirst(ids.count - 128) }
     }
 }
