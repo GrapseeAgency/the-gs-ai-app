@@ -2,6 +2,8 @@ package com.grapsee.gsai.ui.components
 
 import android.animation.ValueAnimator
 import android.graphics.Bitmap
+import android.graphics.BitmapShader
+import android.graphics.Matrix
 import android.graphics.Canvas as PlatformCanvas
 import android.graphics.Paint
 import android.graphics.Path as PlatformPath
@@ -64,7 +66,7 @@ private val GsMetalCapsule = RoundedCornerShape(percent = 50)
  * Adapted sources and required notices are in THIRD_PARTY_NOTICES.md.
  */
 @Suppress("NewApi")
-private class GsLiquidMetalRenderer {
+internal class GsLiquidMetalRenderer(private val chromatic: Boolean = false) {
     private var runtimeShader: Shader? = createRuntimeShader()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val bounds = RectF()
@@ -83,10 +85,11 @@ private class GsLiquidMetalRenderer {
         time: Float,
         density: Float,
         darkTheme: Boolean,
+        band: PlatformPath? = null,
     ) {
         if (width <= 0f || height <= 0f) return
         bounds.set(0f, 0f, width, height)
-        val material = silverMaterial(darkTheme)
+        val material = materialFor(darkTheme)
         val mapping = sheetMapping(width, height, density)
         val shader = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             runtimeShader as? RuntimeShader
@@ -112,7 +115,8 @@ private class GsLiquidMetalRenderer {
                 shader.setFloatUniform("opacityMul", material.opacity)
                 shader.setFloatUniform("ditherScale", density)
                 paint.shader = shader
-                canvas.drawRoundRect(bounds, radius, radius, paint)
+                if (band != null) canvas.drawPath(band, paint)
+                else canvas.drawRoundRect(bounds, radius, radius, paint)
                 paint.shader = null
                 return
             } catch (_: RuntimeException) {
@@ -122,7 +126,7 @@ private class GsLiquidMetalRenderer {
                 paint.shader = null
             }
         }
-        drawCpuMaterial(canvas, width, height, radius, time, density, darkTheme, mapping)
+        drawCpuMaterial(canvas, width, height, radius, time, density, darkTheme, mapping, band)
     }
 
     private fun drawCpuMaterial(
@@ -134,6 +138,7 @@ private class GsLiquidMetalRenderer {
         density: Float,
         darkTheme: Boolean,
         mapping: SheetMapping,
+        band: PlatformPath?,
     ) {
         val bitmap = fallbackBitmap ?: Bitmap.createBitmap(
             FALLBACK_WIDTH,
@@ -153,6 +158,17 @@ private class GsLiquidMetalRenderer {
             lastFallbackMapping = mapping
         }
 
+        if (band != null) {
+            // Match the GPU path's even-odd band, including displaced edges.
+            val texture = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+            texture.setLocalMatrix(Matrix().apply {
+                setScale(width / FALLBACK_WIDTH, height / FALLBACK_HEIGHT)
+            })
+            paint.shader = texture
+            canvas.drawPath(band, paint)
+            paint.shader = null
+            return
+        }
         val clip = PlatformPath().apply {
             addRoundRect(bounds, radius, radius, PlatformPath.Direction.CW)
         }
@@ -164,7 +180,7 @@ private class GsLiquidMetalRenderer {
     }
 
     private fun fillCpuPixels(time: Float, density: Float, darkTheme: Boolean, mapping: SheetMapping) {
-        val material = silverMaterial(darkTheme)
+        val material = materialFor(darkTheme)
         val texel = 1f / 192f
         var index = 0
         for (y in 0 until FALLBACK_HEIGHT) {
@@ -214,6 +230,19 @@ private class GsLiquidMetalRenderer {
         val scaleY: Float,
     )
 
+    // Exact chromatic preset values from upstream material.ts, revision
+    // 14ae9d2dad18fcee251f4b06333b492a2a41d2ed; opacity includes strength 0.9.
+    private fun materialFor(darkTheme: Boolean): Material =
+        if (!chromatic) silverMaterial(darkTheme)
+        else if (darkTheme) Material(
+            136f / 255f, 204f / 255f, 1f, 46f / 255f,
+            repetition = 2f, softness = 0.09f,
+            shiftRed = 0.75f, shiftBlue = 0.75f, opacity = 0.9f,
+        ) else Material(
+            102f / 255f, 176f / 255f, 1f, 153f / 255f,
+            shiftRed = 0.6f, shiftBlue = 0.6f, opacity = 0.9f,
+        )
+
     private fun silverMaterial(darkTheme: Boolean) = if (darkTheme) {
         Material(1f, 1f, 1f, 0.4f, opacity = 0.88f)
     } else {
@@ -224,7 +253,7 @@ private class GsLiquidMetalRenderer {
         // Compose's native canvas is measured in physical pixels; the upstream
         // canonical sheet is 140×40 dp (SwiftUI points). Convert its crop window
         // to pixels before calculating the normalized UV span.
-        val canonicalScale = 1.6f * density.coerceAtLeast(0.1f)
+        val canonicalScale = (if (chromatic) 1.3f else 1.6f) * density.coerceAtLeast(0.1f)
         val fx = min(1f, width / (140f * canonicalScale))
         val fy = min(1f, height / (40f * canonicalScale))
         return SheetMapping(

@@ -5,8 +5,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -20,8 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -44,7 +40,7 @@ import com.grapsee.gsai.ui.theme.GsTheme
  * of the live one. Here the glyphs trade places: the mic rolls out (‑90°,
  * scales to 0.6, fades) while the arrow rolls in (+90° → 0°, 0.55 → 1, fades
  * up) on a single [GsMotion.snappy] spring, and the container crossfades from
- * rim-lit glass to the accent gradient underneath them. Because both glyphs
+ * rim-lit glass to the original chromatic shader ring underneath them. Because both glyphs
  * ride the SAME 0..1 progress value the exchange can never desynchronise, and
  * because the container is one size the pill never reflows while typing.
  *
@@ -103,7 +99,6 @@ fun GsComposerAction(
                 scaleY = scale
                 translationY = press * 1.dp.toPx()
             }
-            .clip(CircleShape)
             .clickable(
                 interactionSource = interaction,
                 indication = null,
@@ -114,24 +109,17 @@ fun GsComposerAction(
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        // --- the send disc: accent gradient, lit rim -------------------------
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .alpha(morph)
-                .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            Color(0xFFFFFFFF),
-                            Color(0xFFBAC3CD),
-                            Color(0xFFFCFDFE),
-                            Color(0xFF99A5B1),
-                        )
-                    )
-                )
-                .border(1.dp, Brush.linearGradient(listOf(Color.White, Color(0xFF8994A0), Color.White)), CircleShape)
-        )
+        // Native GPU/CPU material port of the original metal-fx ring.
+        // Mount only while send is visible, so an idle voice control never
+        // keeps the sensor or material animation alive.
+        if (showSend || morph > 0f) {
+            GsMetalSendRing(
+                enabled = showSend && hasContent,
+                modifier = Modifier.matchParentSize().alpha(
+                    morph * if (hasContent) 1f else 0.55f
+                ),
+            )
+        }
         // --- the voice disc: floating-control glass --------------------------
         if (onVoice != null) {
             Box(
@@ -161,8 +149,7 @@ fun GsComposerAction(
         NexlyGlyph(
             name = "arrow-up",
             size = 17.dp,
-            color = if (hasContent || onVoice == null) Color(0xFF35414D)
-            else Color(0xFF35414D).copy(alpha = 0.88f),
+            color = colors.textPrimary,
             modifier = Modifier.graphicsLayer {
                 alpha = morph
                 val s = 0.55f + 0.45f * morph

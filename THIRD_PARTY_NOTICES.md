@@ -6,7 +6,7 @@ Copyright (c) 2026 Jakub Antalik. Licensed under the MIT License; the full text 
 
 Source: <https://github.com/Jakubantalik/Libraries.dev/tree/main/packages/metal-fx>
 
-The iOS app links the upstream `MetalFxKit` Swift package. The Android Compose renderer in `GsMetallicControls.kt` adapts the upstream React Native Skia `LIQUID_METAL_SKSL` and the Swift `MetalMaterial.sample` equations to AGSL and a CPU bitmap fallback; it is not an upstream Compose package.
+The iOS app links the upstream `MetalFxKit` Swift package. The Android Compose renderer in `GsMetallicControls.kt` adapts the upstream React Native Skia `LIQUID_METAL_SKSL` and the Swift `MetalMaterial.sample` equations to AGSL and a CPU bitmap fallback; it is not an upstream Compose package. `GsMetalSendRing.kt` also translates the original circular band geometry, chromatic material preset and gravity-driven bend simulation from the React Native port (`material.ts`, `geometry.ts`, `bend.ts`, upstream revision `14ae9d2dad18fcee251f4b06333b492a2a41d2ed`). It does not implement the separate halo or reflection effects.
 
 ### Paper Shaders
 
