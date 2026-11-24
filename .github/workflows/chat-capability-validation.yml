@@ -65,7 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
-      DATABASE_URL: file:${{ runner.temp }}/chat-capability.db
+      DATABASE_URL: file:/tmp/chat-capability.db
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       GS_REMOTE_TOOLS: '1'
       BACKGROUND_RUNS_ENABLED: '1'
@@ -88,7 +88,7 @@ jobs:
             sleep 2
           done
           curl -fsS http://localhost:3000/api/v1/conversations >/dev/null
-          bun scripts/run-eval-suite.ts --suite tests/eval-suite-chat-capability-v1.json --durable --strict --db-path "${{ runner.temp }}/chat-capability.db" --delay 1000 --baseline capability-results.json
+          bun scripts/run-eval-suite.ts --suite tests/eval-suite-chat-capability-v1.json --durable --strict --db-path "/tmp/chat-capability.db" --delay 1000 --baseline capability-results.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
