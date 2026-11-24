@@ -41,7 +41,14 @@ struct FluidResponseText: View {
     @Environment(\.fluidMotionAllowed) private var motionAllowed
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
-    @State private var motion: FluidTextMotion?
+    // Committing the exact preview is bookkeeping, not a second rendering
+    // event. A reference ledger avoids invalidating the native Text for every
+    // provider publication. Only its terminal cleanup changes view state.
+    private final class MotionLedger {
+        var motion: FluidTextMotion?
+    }
+    @State private var ledger = MotionLedger()
+    @State private var settledRevision: UInt64 = 0
     let value: AttributedString
     let ink: Color
 
@@ -58,6 +65,8 @@ struct FluidResponseText: View {
     }
 
     var body: some View {
+        let _ = settledRevision
+        let motion = ledger.motion
         let raw = String(value.characters)
         let now = ProcessInfo.processInfo.systemUptime
         let allowed = motionAllowed && !reduceMotion && contrast != .increased
@@ -83,7 +92,7 @@ struct FluidResponseText: View {
             }
         }
         .onChange(of: input, initial: true) { _, _ in
-            motion = active ? preview : nil
+            ledger.motion = active ? preview : nil
         }
         .task(id: deadline) {
             guard let deadline else { return }
@@ -91,14 +100,15 @@ struct FluidResponseText: View {
             try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000) + 1_000_000)
             guard !Task.isCancelled else { return }
             // Never discard a later append or restart a completed range.
-            if let latest = motion?.bands.map({ $0.born + $0.duration }).max(), latest <= deadline {
-                motion?.settle()
+            if let latest = ledger.motion?.bands.map({ $0.born + $0.duration }).max(), latest <= deadline {
+                ledger.motion?.settle()
+                settledRevision &+= 1
             }
         }
     }
 
     private func snapshot(_ raw: String, now: TimeInterval, active: Bool) -> FluidTextMotion {
-        var next = motion ?? FluidTextMotion(initial: active && streaming && freshMount ? "" : raw)
+        var next = ledger.motion ?? FluidTextMotion(initial: active && streaming && freshMount ? "" : raw)
         next.update(raw, now: now, enabled: active, sourceAppend: freshMount)
         return next
     }

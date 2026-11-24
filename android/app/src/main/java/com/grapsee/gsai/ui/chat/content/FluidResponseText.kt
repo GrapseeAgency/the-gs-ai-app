@@ -70,6 +70,29 @@ internal fun rememberFluidFramePulse(): FluidFramePulse {
     return pulse
 }
 
+/**
+ * The native mask objects belong to the mounted text node, not its changing
+ * layout snapshot. They are allocated lazily only for actual animated ink.
+ * All accesses are on the native UI drawing thread.
+ */
+private class FluidMaskResources {
+    val layerPaint = Paint()
+    val nativeClip = android.graphics.Rect()
+    val shader = android.graphics.LinearGradient(
+        0f, 0f, 1f, 0f,
+        IntArray(33) { index ->
+            val alpha = ((1f - fluidInkOpacity(index / 32f)) * 255f + 0.5f).toInt().coerceIn(0, 255)
+            android.graphics.Color.argb(alpha, 0, 0, 0)
+        },
+        null,
+        android.graphics.Shader.TileMode.CLAMP
+    )
+    val matrix = android.graphics.Matrix()
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_OUT)
+    }
+}
+
 private data class FluidRegion(
     val band: FluidTextBand,
     val path: Path,
@@ -106,6 +129,7 @@ internal fun FluidResponseText(
     val wasLive = remember { booleanArrayOf(live) }
     val pulse = LocalFluidFramePulse.current ?: rememberFluidFramePulse()
     val layout = remember { mutableStateOf<TextLayoutResult?>(null) }
+    val maskResources = remember { lazy(LazyThreadSafetyMode.NONE) { FluidMaskResources() } }
     val active = allowed && (live || bands.value.isNotEmpty() || (fresh && wasLive[0]))
     SideEffect {
         val now = System.nanoTime()
@@ -170,24 +194,6 @@ internal fun FluidResponseText(
                     }
                 }
             } else emptyList()
-            val layerPaint = Paint()
-            val nativeClip = android.graphics.Rect()
-            // One immutable 33-stop curve per drawing cache. Only its local
-            // affine transform changes during a frame; no per-range stop
-            // arrays, sorting, Color objects or Brush allocation.
-            val maskShader = android.graphics.LinearGradient(
-                0f, 0f, 1f, 0f,
-                IntArray(33) { index ->
-                    val alpha = ((1f - fluidInkOpacity(index / 32f)) * 255f + 0.5f).toInt().coerceIn(0, 255)
-                    android.graphics.Color.argb(alpha, 0, 0, 0)
-                },
-                null,
-                android.graphics.Shader.TileMode.CLAMP
-            )
-            val maskMatrix = android.graphics.Matrix()
-            val nativeMask = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_OUT)
-            }
             onDrawWithContent {
                 // A settled node must not subscribe to other paragraphs'
                 // display pulses. Check its cached geometry before reading
@@ -197,6 +203,12 @@ internal fun FluidResponseText(
                     return@onDrawWithContent
                 }
                 val now = pulse.now
+                if (regions.none { it.band.progress(now) < 1f }) {
+                    drawContent()
+                    return@onDrawWithContent
+                }
+                val resources = maskResources.value
+                val nativeClip = resources.nativeClip
                 // Compute only the intersection of the animated ink and
                 // native viewport. No intermediate active-list allocation,
                 // and offscreen lines cannot enlarge the offscreen layer.
@@ -226,7 +238,7 @@ internal fun FluidResponseText(
                     this@onDrawWithContent.drawContent()
                 }
                 clipRect(l, t, r, b) {
-                    drawContext.canvas.saveLayer(Rect(l, t, r, b), layerPaint)
+                    drawContext.canvas.saveLayer(Rect(l, t, r, b), resources.layerPaint)
                     try {
                         this@onDrawWithContent.drawContent()
                         for (region in regions) {
@@ -243,11 +255,11 @@ internal fun FluidResponseText(
                                 val removal = 1f - solid
                                 if (removal > 0f) drawPath(path, Color.Black.copy(alpha = removal), blendMode = BlendMode.DstOut)
                             } else {
-                                maskMatrix.setScale(rect.width * projection.scale, 1f)
-                                maskMatrix.postTranslate(rect.left + rect.width * projection.origin, 0f)
-                                maskShader.setLocalMatrix(maskMatrix)
-                                nativeMask.shader = maskShader
-                                drawContext.canvas.nativeCanvas.drawPath(path.asAndroidPath(), nativeMask)
+                                resources.matrix.setScale(rect.width * projection.scale, 1f)
+                                resources.matrix.postTranslate(rect.left + rect.width * projection.origin, 0f)
+                                resources.shader.setLocalMatrix(resources.matrix)
+                                resources.paint.shader = resources.shader
+                                drawContext.canvas.nativeCanvas.drawPath(path.asAndroidPath(), resources.paint)
                             }
                         }
                     } finally {
