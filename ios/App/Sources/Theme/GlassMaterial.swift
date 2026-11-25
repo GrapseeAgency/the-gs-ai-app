@@ -250,6 +250,8 @@ private struct GsGlassModifier<S: InsettableShape>: ViewModifier {
                         rim(in: geometry.size)
                     }
                 }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
             }
             .gsArgentComponentRim(shape, enabled: argentEnabled, overlayPanel: overlayRim)
             // Cue: warm, non-grey shadow — this is depth, not darkness. Cast
@@ -389,11 +391,17 @@ extension View {
     /// drawable surface, including the top corners, uses our glass.
     func gsPresentedSheetGlass() -> some View {
         frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .modifier(GsGlassModifier(role: .modal,
-                shape: UnevenRoundedRectangle(
-                    topLeadingRadius: Aero.Radius.sheet,
-                    topTrailingRadius: Aero.Radius.sheet),
-                metalEdge: true))
+            .background {
+                Color.clear
+                    .modifier(GsGlassModifier(role: .modal,
+                        shape: UnevenRoundedRectangle(
+                            topLeadingRadius: Aero.Radius.sheet,
+                            topTrailingRadius: Aero.Radius.sheet),
+                        metalEdge: true))
+                    .ignoresSafeArea(edges: .bottom)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
             .presentationBackground(.clear)
             .presentationCornerRadius(Aero.Radius.sheet)
     }

@@ -271,18 +271,40 @@ private struct FluidGlyphRenderer: TextRenderer {
                     ink.draw(run)
                     continue
                 }
-                // The native gradient has clamped endpoints, even beyond the
-                // run. A single fill replaces three fills and a new stop array.
+                // The native gradient uses the cached stop array. GraphicsContext
+                // has no extendsStart/extendsEnd options; paint only any
+                // overhang outside the axis with its exact endpoint opacity.
                 let padding = max(8, bounds.height)
                 let maskBounds = bounds.insetBy(dx: -padding, dy: -padding)
                 let x0 = bounds.minX + bounds.width * CGFloat(projection.origin)
                 let x1 = x0 + bounds.width * CGFloat(projection.scale)
                 var ink = context
                 ink.clipToLayer { mask in
-                    mask.fill(Path(maskBounds), with: .linearGradient(Self.inkGradient,
-                        startPoint: CGPoint(x: x0, y: bounds.midY),
-                        endPoint: CGPoint(x: x1, y: bounds.midY),
-                        options: [.extendsStart, .extendsEnd]))
+                    let left = min(x0, x1)
+                    let right = max(x0, x1)
+                    let firstOpacity = fluidInkOpacity(x0 < x1 ? 0 : 1)
+                    let lastOpacity = fluidInkOpacity(x0 < x1 ? 1 : 0)
+                    if maskBounds.minX < left {
+                        let edge = min(left, maskBounds.maxX)
+                        mask.fill(Path(CGRect(x: maskBounds.minX, y: maskBounds.minY,
+                            width: edge - maskBounds.minX, height: maskBounds.height)),
+                            with: .color(.white.opacity(firstOpacity)))
+                    }
+                    let innerLeft = max(maskBounds.minX, left)
+                    let innerRight = min(maskBounds.maxX, right)
+                    if innerRight > innerLeft {
+                        mask.fill(Path(CGRect(x: innerLeft, y: maskBounds.minY,
+                            width: innerRight - innerLeft, height: maskBounds.height)),
+                            with: .linearGradient(Self.inkGradient,
+                                startPoint: CGPoint(x: x0, y: bounds.midY),
+                                endPoint: CGPoint(x: x1, y: bounds.midY)))
+                    }
+                    if maskBounds.maxX > right {
+                        let edge = max(right, maskBounds.minX)
+                        mask.fill(Path(CGRect(x: edge, y: maskBounds.minY,
+                            width: maskBounds.maxX - edge, height: maskBounds.height)),
+                            with: .color(.white.opacity(lastOpacity)))
+                    }
                 }
                 ink.draw(run)
             }
