@@ -219,5 +219,5 @@ export function SettingsExperience({ screen }: { screen: SettingsScreen }) {
     return () => window.clearTimeout(timeout)
   }, [toast])
   const notify = (message: string) => setToast(message)
-  return <>{screen === 'privacy' && <PrivacyScreen notify={notify} />}{screen === 'history' && <HistoryScreen notify={notify} />}{screen === 'model' && <ModelScreen notify={notify} />}{toast && <div className="gs-toast" role="status"><Check size={17} />{toast}<button type="button" onClick={() => setToast('')} aria-label="Dismiss notification"><X size={15} /></button></div>}</>
+  return <>{screen === 'privacy' && <PrivacyScreen notify={notify} />}{screen === 'history' && <HistoryScreen notify={notify} />}{screen === 'model' && <ModelScreen notify={notify} />}{toast && <div className="gs-toast gs-reflective-overlay" role="status"><Check size={17} />{toast}<button type="button" className="gs-reflective-control" onClick={() => setToast('')} aria-label="Dismiss notification"><X size={15} /></button></div>}</>
 }

@@ -18,7 +18,7 @@ import { downloadResponseFile, responseSourceArchive, responseSourceFile } from 
  * glass glyphs.
  */
 
-import { Fragment, useMemo, useRef, useState, useId, type ReactNode } from 'react'
+import { Fragment, useMemo, useRef, useState, useId, type ReactNode, type CSSProperties } from 'react'
 import { parseStream, type Segment } from './stream'
 import { WidgetRenderer } from './WidgetRenderer'
 import { SpontaneousConceptDeck } from './SpontaneousConceptDeck'
@@ -1880,10 +1880,10 @@ export function MessageContent({
         </div>}
       </section>}
       {citations && citations.length > 0 && <CitationsSourceCards citations={citations} theme={theme} />}
-      {actionNotice?.response === text && <div role={actionNotice.error ? 'alert' : 'status'}>{actionNotice.text}</div>}
+      {actionNotice?.response === text && <div className="gs-reflective-overlay" role={actionNotice.error ? 'alert' : 'status'} style={{ padding: '8px 12px', borderRadius: 14, '--gs-overlay-base': theme.card } as CSSProperties}>{actionNotice.text}</div>}
       {detailView && (
-        <section role="region" aria-label={detailView === 'sources' ? 'All sources' : 'Response report'} style={{ padding: 16, border: `1px solid ${theme.border}`, borderRadius: 16 }}>
-          <button type="button" onClick={() => setDetailView(null)}>Close details</button>
+        <section className="gs-reflective-overlay" role="region" aria-label={detailView === 'sources' ? 'All sources' : 'Response report'} style={{ padding: 16, borderRadius: 16, '--gs-overlay-base': theme.card } as CSSProperties}>
+          <button type="button" className="gs-reflective-control" style={{ padding: '8px 12px', '--gs-overlay-base': theme.raised } as CSSProperties} onClick={() => setDetailView(null)}>Close details</button>
           <h3>{detailView === 'sources' ? 'All sources' : 'Response report — original source and data'}</h3>
           {detailView === 'sources' && citations?.length
             ? <CitationsSourceCards citations={citations} theme={theme} />

@@ -1653,10 +1653,10 @@ export default function Home() {
                         <button
                           onClick={() => setPendingAttachments((prev) => prev.filter((x) => x.id !== a.id))}
                           aria-label={`Remove ${a.displayName}`}
-                          className="ml-0.5 transition-transform active:scale-90"
-                          style={{ color: C.muted }}
+                          className="gs-reflective-control ml-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center transition-transform active:scale-90"
+                          style={{ color: C.muted, '--gs-overlay-base': C.raised } as CSSProperties}
                         >
-                          <GlassIcon name="x" size={12} tile={18} />
+                          <GlassIcon name="x" size={12} bare />
                         </button>
                       )}
                     </span>
@@ -1687,12 +1687,11 @@ export default function Home() {
                   <button
                     onClick={() => setSheetOpen(true)}
                     aria-label={`Mode: ${mode}. Open options sheet`}
-                    className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium transition-all active:scale-95"
+                    className="gs-reflective-control inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11px] font-medium transition-all active:scale-95"
                     style={{
-                      borderColor: mode === 'thinking' ? C.accent : C.outline,
                       color: mode === 'thinking' ? C.accent : C.muted,
-                      background: mode === 'thinking' ? 'rgba(255,145,66,0.10)' : 'transparent',
-                    }}
+                      '--gs-overlay-base': C.raised,
+                    } as CSSProperties}
                   >
                     {mode === 'thinking' ? 'Thinking' : 'Auto'} ▾
                   </button>
@@ -1743,21 +1742,21 @@ export default function Home() {
                     <div className="flex flex-wrap gap-2">
                       <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="rounded-full border px-3 py-1.5 text-xs font-medium transition-all active:scale-95"
-                        style={{ borderColor: C.outline, color: C.text }}
+                        className="gs-reflective-control rounded-full px-3 py-1.5 text-xs font-medium transition-all active:scale-95"
+                        style={{ color: C.text, '--gs-overlay-base': C.raised } as CSSProperties}
                       >
                         File
                       </button>
                       <button
                         onClick={() => imageInputRef.current?.click()}
-                        className="rounded-full border px-3 py-1.5 text-xs font-medium transition-all active:scale-95"
-                        style={{ borderColor: C.outline, color: C.text }}
+                        className="gs-reflective-control rounded-full px-3 py-1.5 text-xs font-medium transition-all active:scale-95"
+                        style={{ color: C.text, '--gs-overlay-base': C.raised } as CSSProperties}
                       >
                         Image
                       </button>
                       <label
-                        className="cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium transition-all active:scale-95 sm:hidden"
-                        style={{ borderColor: C.outline, color: C.text }}
+                        className="gs-reflective-control cursor-pointer rounded-full px-3 py-1.5 text-xs font-medium transition-all active:scale-95 sm:hidden"
+                        style={{ color: C.text, '--gs-overlay-base': C.raised } as CSSProperties}
                       >
                         <GlassIcon name="camera" size={13} tile={20} /> Camera
                         <input
