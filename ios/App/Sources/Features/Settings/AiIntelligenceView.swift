@@ -591,6 +591,6 @@ private struct ModelDetailsSheet: View {
             }
             .padding(Aero.Spacing.m)
         }
-        .background(Aero.background.ignoresSafeArea())
+        .gsPresentedSheetGlass()
     }
 }

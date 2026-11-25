@@ -28,7 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import com.grapsee.gsai.ui.components.GsModalSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -398,7 +398,7 @@ private fun DrawerNavSheet(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    GsModalSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

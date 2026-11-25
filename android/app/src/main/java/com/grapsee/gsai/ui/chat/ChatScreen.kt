@@ -76,13 +76,13 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
+import com.grapsee.gsai.ui.components.GsDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
+import com.grapsee.gsai.ui.components.GsModalSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHost
@@ -2205,15 +2205,9 @@ internal fun UserMessage(
                                     }
                                 }
                             }
-                            DropdownMenu(
+                            GsDropdownMenu(
                                 expanded = userMenu,
                                 onDismissRequest = { userMenu = false },
-                                // The same glass as everything else: a menu is
-                                // an overlay, and a menu was the one surface
-                                // still painted in stock Material grey.
-                                shape = RoundedCornerShape(18.dp),
-                                containerColor = GsTheme.colors.glassSurface,
-                                tonalElevation = 0.dp
                             ) {
                                 DropdownMenuItem(
                                     text = { Text("Copy") },
@@ -2434,7 +2428,7 @@ private fun ComposerChoiceMenu(
             Icon(GsIcons.ChevronDown, contentDescription = null,
                 tint = colors.textSecondary, modifier = Modifier.size(12.dp))
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        GsDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             choices.forEach { (title, value) ->
                 DropdownMenuItem(
                     text = { Text(title) },
@@ -3174,12 +3168,9 @@ internal fun AssistantMessage(
             }
             }
         }
-        DropdownMenu(
+        GsDropdownMenu(
             expanded = menuExpanded,
             onDismissRequest = { menuExpanded = false },
-            shape = RoundedCornerShape(18.dp),
-            containerColor = GsTheme.colors.glassSurface,
-            tonalElevation = 0.dp
         ) {
             DropdownMenuItem(
                 text = { Text("Copy") },
@@ -3795,13 +3786,8 @@ private fun TranslationSheet(
     onDismiss: () -> Unit,
     onCopy: (String) -> Unit
 ) {
-    ModalBottomSheet(
+    GsModalSheet(
         onDismissRequest = onDismiss,
-        // A sheet is a SURFACE, not a tint. glassSurface is 80% opaque, and a
-        // transcript of tables and code read straight through it — the sheet
-        // looked broken rather than translucent. The reference's sheets are
-        // solid cream; the glass language lives in the cards behind them.
-        containerColor = GsTheme.colors.sheetSurface,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     ) {
         Column(

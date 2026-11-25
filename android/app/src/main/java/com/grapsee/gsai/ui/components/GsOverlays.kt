@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -41,14 +45,10 @@ fun GsSheet(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = GsTheme.colors
-    ModalBottomSheet(
+    GsModalSheet(
         onDismissRequest = onDismiss,
         modifier = modifier,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = GsRadius.sheet, topEnd = GsRadius.sheet),
-        containerColor = colors.sheetSurface,
-        contentColor = colors.textPrimary,
-        tonalElevation = 0.dp,
         dragHandle = {
             Surface(
                 color = colors.borderStrong,
@@ -80,3 +80,49 @@ fun GsSheet(
 }
 
 
+
+/** Native popup positioning, keyboard dismissal, focus and scroll behavior
+ * remain Material-owned; the surface itself is our shared glass. */
+@Composable
+fun GsDropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(18.dp)
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        modifier = Modifier.gsOverlayGlass(shape),
+        shape = shape,
+        containerColor = Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        content = content,
+    )
+}
+
+/** Keep native drag, detents, system insets and dismissal. Only replace the
+ * opaque Material paint, not the sheet's window or interaction machinery. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GsModalSheet(
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    sheetState: SheetState = rememberModalBottomSheetState(),
+    shape: Shape = RoundedCornerShape(topStart = GsRadius.sheet, topEnd = GsRadius.sheet),
+    dragHandle: @Composable (() -> Unit)? = { BottomSheetDefaults.DragHandle() },
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        modifier = modifier.gsOverlayGlass(shape),
+        sheetState = sheetState,
+        shape = shape,
+        containerColor = Color.Transparent,
+        contentColor = GsTheme.colors.textPrimary,
+        tonalElevation = 0.dp,
+        dragHandle = dragHandle,
+        content = content,
+    )
+}

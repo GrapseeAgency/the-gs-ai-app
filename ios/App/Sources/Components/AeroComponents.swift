@@ -635,19 +635,7 @@ struct AeroSheetShell<Content: View>: View {
         .padding(.bottom, Aero.Spacing.l)
         .padding(.top, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Aero.sheetSurface.ignoresSafeArea(edges: .bottom))
-        // Modal glass — the slab over the transcript: the heaviest veil and
-        // the brightest lift, iOS twin of Android's ModalBottomSheets, which
-        // take glassSurface + a top-rounded shape. The mask keeps the square
-        // bottom safe-area fill but rounds (and shadows) only the top edge.
-        .gsGlass(.modal, corner: Aero.Radius.sheet)
-        .mask(
-            UnevenRoundedRectangle(
-                topLeadingRadius: Aero.Radius.sheet,
-                topTrailingRadius: Aero.Radius.sheet
-            )
-            .ignoresSafeArea(edges: .bottom)
-        )
+        .gsPresentedSheetGlass()
     }
 }
 

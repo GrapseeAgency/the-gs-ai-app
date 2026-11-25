@@ -383,3 +383,18 @@ extension View {
         gsGlass(.modal, corner: corner, metalEdge: true)
     }
 }
+
+extension View {
+    /// A system-presented sheet retains detents and dismissal. Its full
+    /// drawable surface, including the top corners, uses our glass.
+    func gsPresentedSheetGlass() -> some View {
+        frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .modifier(GsGlassModifier(role: .modal,
+                shape: UnevenRoundedRectangle(
+                    topLeadingRadius: Aero.Radius.sheet,
+                    topTrailingRadius: Aero.Radius.sheet),
+                metalEdge: true))
+            .presentationBackground(.clear)
+            .presentationCornerRadius(Aero.Radius.sheet)
+    }
+}
