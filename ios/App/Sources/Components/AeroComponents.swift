@@ -635,7 +635,9 @@ struct AeroSheetShell<Content: View>: View {
         .padding(.bottom, Aero.Spacing.l)
         .padding(.top, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .gsPresentedSheetGlass()
+        // AccountSheetView is an in-app overlay, not a native sheet. Keep
+        // the compact content height and paint the actual floating panel.
+        .gsOverlayGlass(corner: Aero.Radius.sheet)
     }
 }
 

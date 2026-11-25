@@ -252,6 +252,7 @@ private struct QuietHoursSheet: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .background(Capsule().fill(ExplorePalette.peachDeep))
+                        .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.30))
                 }
                 .buttonStyle(KineticPressStyle())
                 .padding(.top, 2)
@@ -275,7 +276,7 @@ private struct QuietHoursSheet: View {
             Button(action: onMinus) {
                 NexlyGlyph(name: "minus", size: 13, color: Aero.text)
                     .frame(width: 30, height: 30)
-                    .background(Circle().fill(Aero.raisedSurface))
+                    .gsGlass(.floatingControl, corner: 15)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Earlier")
@@ -286,7 +287,7 @@ private struct QuietHoursSheet: View {
             Button(action: onPlus) {
                 NexlyGlyph(name: "plus", size: 13, color: Aero.text)
                     .frame(width: 30, height: 30)
-                    .background(Circle().fill(Aero.raisedSurface))
+                    .gsGlass(.floatingControl, corner: 15)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Later")

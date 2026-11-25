@@ -1,5 +1,9 @@
 package com.grapsee.gsai.ui.settings
 
+import com.grapsee.gsai.ui.components.argentComponentBorder
+
+import com.grapsee.gsai.ui.components.gsGlass
+
 import android.Manifest
 import android.content.Intent
 import android.os.Build
@@ -422,6 +426,7 @@ private fun QuietHoursDialog(
                     .fillMaxWidth()
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(999.dp))
                     .background(colors.accent)
+                    .argentComponentBorder(androidx.compose.foundation.shape.RoundedCornerShape(999.dp), Color.White.copy(alpha = 0.30f))
                     .clickable(
                         role = androidx.compose.ui.semantics.Role.Button,
                         onClick = { onApply(enabled, start, end) }
@@ -495,8 +500,8 @@ private fun StepChip(glyph: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(28.dp)
-            .clip(CircleShape)
-            .background(colors.textPrimary.copy(alpha = if (enabled) 0.07f else 0.03f))
+            .then(if (enabled) Modifier.gsGlass(GsGlassRole.FloatingControl, CircleShape)
+                else Modifier.clip(CircleShape).background(colors.textPrimary.copy(alpha = 0.03f)))
             .clickable(
                 enabled = enabled,
                 role = androidx.compose.ui.semantics.Role.Button,

@@ -222,13 +222,18 @@ private struct GsGlassModifier<S: InsettableShape>: ViewModifier {
     let role: GsGlassRole
     let shape: S
     var metalEdge: Bool? = nil
+    let drawsBody: Bool
+    let drawsRim: Bool
     @ObservedObject private var settings = SettingsStore.shared
     @Environment(\.colorSchemeContrast) private var contrast
 
-    init(role: GsGlassRole, shape: S, metalEdge: Bool? = nil) {
+    init(role: GsGlassRole, shape: S, metalEdge: Bool? = nil,
+         drawsBody: Bool = true, drawsRim: Bool = true) {
         self.role = role
         self.shape = shape
         self.metalEdge = metalEdge
+        self.drawsBody = drawsBody
+        self.drawsRim = drawsRim
     }
 
     private var argentEnabled: Bool { metalEdge ?? (role != .modal && role != .elevated) }
@@ -236,7 +241,9 @@ private struct GsGlassModifier<S: InsettableShape>: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background(glassShape)
+            .background {
+                if drawsBody { glassShape }
+            }
             // A GeometryReader in the overlay, not `overlay { proxy in … }`:
             // `overlay(content:)` has BOTH a zero-parameter and a
             // GeometryProxy-parameter overload, and the labelled closure picks
@@ -246,18 +253,18 @@ private struct GsGlassModifier<S: InsettableShape>: ViewModifier {
             // card's height, and only the drawn card knows its height.
             .overlay {
                 GeometryReader { geometry in
-                    if !argentEnabled || settings.highContrast || contrast == .increased || !gsArgentComponentSize(geometry.size, overlayPanel: overlayRim) {
+                    if drawsRim && (!argentEnabled || settings.highContrast || contrast == .increased || !gsArgentComponentSize(geometry.size, overlayPanel: overlayRim)) {
                         rim(in: geometry.size)
                     }
                 }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
-            .gsArgentComponentRim(shape, enabled: argentEnabled, overlayPanel: overlayRim)
+            .gsArgentComponentRim(shape, enabled: drawsRim && argentEnabled, overlayPanel: overlayRim)
             // Cue: warm, non-grey shadow — this is depth, not darkness. Cast
             // from outside the glass rather than through it; see `castShadow`.
             .background {
-                if role.elevation > 0 {
+                if drawsBody && role.elevation > 0 {
                     castShadow
                 }
             }
@@ -390,19 +397,29 @@ extension View {
     /// A system-presented sheet retains detents and dismissal. Its full
     /// drawable surface, including the top corners, uses our glass.
     func gsPresentedSheetGlass() -> some View {
-        frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background {
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: Aero.Radius.sheet,
+            topTrailingRadius: Aero.Radius.sheet)
+        return frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            // The actual presentation background owns the body. The rim
+            // belongs ABOVE the content, not inside a background which an
+            // opaque scroll or navigation container can cover.
+            .presentationBackground {
                 Color.clear
-                    .modifier(GsGlassModifier(role: .modal,
-                        shape: UnevenRoundedRectangle(
-                            topLeadingRadius: Aero.Radius.sheet,
-                            topTrailingRadius: Aero.Radius.sheet),
-                        metalEdge: true))
-                    .ignoresSafeArea(edges: .bottom)
+                    .modifier(GsGlassModifier(role: .modal, shape: shape,
+                        metalEdge: true, drawsRim: false))
+                    .ignoresSafeArea(.container)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
-            .presentationBackground(.clear)
+            .overlay {
+                Color.clear
+                    .modifier(GsGlassModifier(role: .modal, shape: shape,
+                        metalEdge: true, drawsBody: false))
+                    .ignoresSafeArea(.container)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
             .presentationCornerRadius(Aero.Radius.sheet)
     }
 }

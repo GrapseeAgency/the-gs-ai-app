@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.settings
 
+import com.grapsee.gsai.ui.components.argentComponentBorder
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -396,6 +398,7 @@ private fun ConsentFrame(
                     .background(
                         Brush.verticalGradient(listOf(colors.accentStrong, colors.accent))
                     )
+                    .argentComponentBorder(pill, Color.White.copy(alpha = 0.30f))
                     .clickable(role = Role.Button, onClick = onPrimary)
                     .testTag(primaryTag)
                     .padding(vertical = 13.dp),

@@ -3817,7 +3817,10 @@ private fun TranslationSheet(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                 }
-                TextButton(onClick = onDismiss, enabled = !busy) { Text("Close") }
+                TextButton(
+                    onClick = onDismiss, enabled = !busy,
+                    modifier = if (busy) Modifier else Modifier.gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp)),
+                ) { Text("Close") }
             }
             Text(
                 text = source,
@@ -3837,7 +3840,8 @@ private fun TranslationSheet(
                 TextButton(
                     onClick = { onCopy(translated) },
                     enabled = !busy,
-                    contentPadding = PaddingValues(horizontal = 8.dp)
+                    modifier = if (busy) Modifier else Modifier.gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp)),
+                    contentPadding = PaddingValues(horizontal = 12.dp)
                 ) {
                     Icon(GsIcons.Copy, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))

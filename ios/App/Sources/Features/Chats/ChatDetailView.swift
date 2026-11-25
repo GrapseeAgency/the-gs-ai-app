@@ -1193,10 +1193,18 @@ private struct TranslationSheet: View {
                     .font(Aero.responsive(17, .semibold, relativeTo: .body))
                     .foregroundStyle(Aero.text)
                 Spacer()
-                Button("Close") { dismiss() }
-                    .font(Aero.responsive(15, relativeTo: .subheadline))
-                    .foregroundStyle(Aero.textMuted)
-                    .disabled(busy)
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Close")
+                        .font(Aero.responsive(15, relativeTo: .subheadline))
+                        .foregroundStyle(Aero.textMuted)
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 36)
+                        .gsCapsuleGlass(.floatingControl, metalEdge: !busy)
+                }
+                .buttonStyle(KineticPressStyle())
+                .disabled(busy)
             }
             Text(source)
                 .font(Aero.responsive(13, relativeTo: .footnote))
@@ -1230,7 +1238,11 @@ private struct TranslationSheet: View {
                     )
                     .font(Aero.responsive(14, relativeTo: .subheadline))
                     .foregroundStyle(copied ? Aero.accent : Aero.textMuted)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 36)
+                    .gsCapsuleGlass(.floatingControl)
                 }
+                .buttonStyle(KineticPressStyle())
             }
             Spacer(minLength: 0)
         }

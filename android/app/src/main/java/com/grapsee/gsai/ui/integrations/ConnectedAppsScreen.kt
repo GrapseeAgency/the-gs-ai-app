@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.integrations
 
+import com.grapsee.gsai.ui.components.gsGlass
+
 import com.grapsee.gsai.ui.components.argentComponentBorder
 
 import androidx.compose.foundation.background
@@ -391,8 +393,7 @@ private fun RefConnectPill(onClick: () -> Unit) {
     val colors = GsTheme.colors
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(Color.White.copy(alpha = 0.55f))
+            .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 9.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,

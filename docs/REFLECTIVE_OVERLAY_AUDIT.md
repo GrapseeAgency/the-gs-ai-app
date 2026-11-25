@@ -30,3 +30,7 @@ The overlay shells were correctly routed but their internal controls still had i
 ## Custom transient controls and notices
 
 The follow-up source pass covered non-modal implementations as well as platform presentation calls. Attachment removal/retry/open discs, archived chat action discs, the expandable source selector, billing close and chat confirmation notices now share the native Argent glass paths. Android auth/chat snackbar hosts keep Material lifecycle and action handling with the shared reflective surface; the offline banner uses the same surface. Inline transcript content, media artwork, status badges and system-owned previews are not converted into overlay chrome.
+
+## Custom settings dialogs and sheet layering
+
+The source pass found independent paint on model-consent, Quiet Hours, memory-list, integration connect, and translation controls. Those now use the shared native Argent paths, retaining existing action state, disabled behavior, and accent fills. The iOS AccountSheetView is an in-app floating panel, not a system sheet: its AeroSheetShell now uses content-sized overlay glass rather than the full-height presented-sheet modifier. Native iOS sheets now put their glass body in the actual presentation background and draw a separate noninteractive Argent perimeter above the content, so scrolling/navigation content cannot obscure the rim. The same shader, fallback and size policy are used, with no double rim or second metal body.

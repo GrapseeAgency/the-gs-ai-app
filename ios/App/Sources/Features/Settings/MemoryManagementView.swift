@@ -322,7 +322,8 @@ private struct MemoryItemsDialog: View {
                                         GSHaptics.warning()
                                     } label: {
                                         NexlyGlyph(name: "trash", size: 14, color: Aero.textTertiary)
-                                            .frame(width: 26, height: 26)
+                                            .frame(width: 30, height: 30)
+                                            .gsGlass(.floatingControl, corner: 15)
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("Delete memory")
@@ -341,7 +342,7 @@ private struct MemoryItemsDialog: View {
                         .foregroundStyle(Aero.text)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 13)
-                        .background(Capsule().fill(Aero.text.opacity(0.06)))
+                        .gsCapsuleGlass(.floatingControl)
                 }
                 .buttonStyle(.plain)
             }

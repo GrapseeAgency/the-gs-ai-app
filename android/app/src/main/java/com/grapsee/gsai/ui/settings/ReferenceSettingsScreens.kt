@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.settings
 
+import com.grapsee.gsai.ui.components.gsGlass
+
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -1257,17 +1259,18 @@ fun MemorySettingsScreen(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 }
-                                Icon(
-                                    GsIcons.Trash2,
-                                    contentDescription = "Delete memory",
-                                    tint = colors.textTertiary,
+                                Box(
                                     modifier = Modifier
-                                        .size(18.dp)
-                                        .clip(CircleShape)
+                                        .size(30.dp)
+                                        .gsGlass(GsGlassRole.FloatingControl, CircleShape)
                                         .clickable(role = Role.Button, onClickLabel = "Delete memory") {
                                             scope.launch { dao.delete(item.id) }
                                         },
-                                )
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(GsIcons.Trash2, contentDescription = "Delete memory",
+                                        tint = colors.textTertiary, modifier = Modifier.size(16.dp))
+                                }
                             }
                         }
                     }
@@ -1278,8 +1281,7 @@ fun MemorySettingsScreen(
                     text = "Done",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(colors.textPrimary.copy(alpha = 0.06f))
+                        .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp))
                         .clickable(role = Role.Button, onClick = { showItems = false })
                         .padding(vertical = 13.dp),
                     fontSize = 12.5.sp,
