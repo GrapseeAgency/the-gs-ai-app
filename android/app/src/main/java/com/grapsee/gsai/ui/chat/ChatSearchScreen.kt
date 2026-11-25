@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.chat
 
+import com.grapsee.gsai.ui.components.gsGlass
+
 import com.grapsee.gsai.ui.components.argentComponentBorder
 
 import android.widget.Toast
@@ -850,6 +852,7 @@ private fun RecentChatRow(
         Box(
             Modifier
                 .size(34.dp)
+                .gsGlass(GsGlassRole.FloatingControl, CircleShape)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,

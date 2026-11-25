@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.navigation
 
+import com.grapsee.gsai.ui.components.gsGlass
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -194,6 +196,7 @@ fun GsDrawerContent(
             shape = RoundedCornerShape(bottomEnd = DrawerMetrics.cornerRadius),
             role = GsGlassRole.Modal,
             modifier = Modifier.fillMaxSize(),
+            metalEdge = true,
         ) {
             Column(Modifier.fillMaxSize()) {
                 DrawerHeader(onClose = onClose)
@@ -372,7 +375,7 @@ private fun DrawerHeader(onClose: () -> Unit) {
             modifier = Modifier
                 .size(DrawerMetrics.closeHit + 10.dp)
                 .testTag("drawer-close")
-                .clip(CircleShape)
+                .gsGlass(GsGlassRole.FloatingControl, CircleShape)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,

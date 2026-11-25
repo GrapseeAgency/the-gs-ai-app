@@ -188,9 +188,24 @@ final class MenuChromeTests: XCTestCase {
             record("assistant-bubble-context: the bubble menu did not open")
         }
 
-        // 7. Header menus, last: a press on these buttons can fire their ACTION
-        //    (run 40129349764 landed in a new chat), so nothing that must be
-        //    measured afterwards sits behind them.
+        // Check the tap overlays first, then the exclusive long-press
+        // header actions. A long press must not also execute the button tap.
+        composerMarker.tap()
+        let glassPopover = app.descendants(matching: .any).matching(identifier: "gs.reflective-popover").firstMatch
+        XCTAssertTrue(glassPopover.waitForExistence(timeout: 8), "Attachment tap did not open the reflective panel")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.35)).tap()
+        XCTAssertTrue(composerMarker.waitForExistence(timeout: 8))
+        let modeButton = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Response mode,")).firstMatch
+        if modeButton.waitForExistence(timeout: 8) {
+            modeButton.tap()
+            let modePanel = app.descendants(matching: .any).matching(identifier: "gs.reflective-action-menu").firstMatch
+            XCTAssertTrue(modePanel.waitForExistence(timeout: 8), "Response mode used a stock menu")
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.35)).tap()
+        } else {
+            record("response-mode trigger missing")
+        }
+
+        // 7. Header menus: their gesture path is now explicitly exclusive.
         let sparkle = app.buttons["New chat"].firstMatch.exists
             ? app.buttons["New chat"].firstMatch
             : app.buttons["Search in chat"].firstMatch
@@ -206,7 +221,7 @@ final class MenuChromeTests: XCTestCase {
             capture(name: "chat-header-sparkle", app: app, items: items)
             dismissMenu(app: app, item: "Voice input")
         } else {
-            recordSkip("chat-header-sparkle", because: "the sparkle button consumes the long press as its action")
+            record("chat-header-sparkle: reflective menu did not open")
         }
 
         // The options control answers to "Open menu" at the workspace root and
@@ -224,7 +239,7 @@ final class MenuChromeTests: XCTestCase {
                     items: [("Chat options", .leading), ("Search in chat", .leading)])
             dismissMenu(app: app, item: "Chat options")
         } else {
-            recordSkip("chat-header-menu", because: "the header menu button consumes the long press as its action")
+            record("chat-header-menu: reflective menu did not open")
         }
 
         try finish(app: app)
@@ -265,6 +280,8 @@ final class MenuChromeTests: XCTestCase {
                 .press(forDuration: 1.4)
         }
         if app.buttons[label].waitForExistence(timeout: 12) {
+            let panel = app.descendants(matching: .any).matching(identifier: "gs.reflective-action-menu").firstMatch
+            if !panel.exists { record("menu '\(label)' is not the reflective application panel"); return false }
             print("MENU-OPEN \(label)")
             return true
         }

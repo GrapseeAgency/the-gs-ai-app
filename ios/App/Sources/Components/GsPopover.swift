@@ -59,6 +59,8 @@ struct GsAnchoredPopover<Content: View>: View {
                 .frame(maxHeight: cap)
                 .padding(.vertical, 6)
                 .gsOverlayGlass(corner: 22)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("gs.reflective-popover")
                 .accessibilityAddTraits(.isModal)
                 .accessibilityAction(.escape) { onDismiss() }
                 .padding(.horizontal, horizontalInset)
@@ -212,6 +214,8 @@ private struct GsReflectiveMenuHost: ViewModifier {
             .frame(width: width)
             .frame(maxHeight: capacity)
             .gsOverlayGlass(corner: 22)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("gs.reflective-action-menu")
             .accessibilityAddTraits(.isModal)
             .accessibilityAction(.escape) { close() }
             .padding(.leading, centered ? 0 : x)
@@ -251,11 +255,34 @@ private struct GsReflectiveMenuButtonStyle: PrimitiveButtonStyle {
     }
 }
 
+/// A Button with two exclusive gestures: a long press cannot also perform
+/// its short-tap navigation/send action when the finger lifts.
+private struct GsMenuTriggerButtonStyle: PrimitiveButtonStyle {
+    let open: () -> Void
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(Rectangle())
+            .gesture(
+                LongPressGesture(minimumDuration: 0.5, maximumDistance: 12)
+                    .exclusively(before: TapGesture())
+                    .onEnded { value in
+                        switch value {
+                        case .first: open()
+                        case .second: configuration.trigger()
+                        }
+                    }
+            )
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { configuration.trigger() }
+    }
+}
+
 private struct GsReflectiveMenuTrigger<MenuContent: View>: ViewModifier {
     @Environment(\.gsPresentMenu) private var present
     @State private var anchor = GsMenuAnchor()
     let menu: () -> MenuContent
     var tapToOpen: Bool = false
+    var button: Bool = false
     @State private var fallbackVisible = false
 
     private func open() {
@@ -272,6 +299,10 @@ private struct GsReflectiveMenuTrigger<MenuContent: View>: ViewModifier {
         if tapToOpen {
             Button(action: open) { content }
                 .buttonStyle(KineticPressStyle())
+        } else if button {
+            content
+                .buttonStyle(GsMenuTriggerButtonStyle(open: open))
+                .accessibilityAction(named: Text("Actions")) { open() }
         } else {
             content
                 .simultaneousGesture(LongPressGesture(minimumDuration: 0.5, maximumDistance: 12)
@@ -312,9 +343,10 @@ extension View {
     }
 
     func gsReflectiveContextMenu<MenuContent: View>(
+        button: Bool = false,
         @ViewBuilder _ menu: @escaping () -> MenuContent
     ) -> some View {
-        modifier(GsReflectiveMenuTrigger(menu: menu))
+        modifier(GsReflectiveMenuTrigger(menu: menu, button: button))
     }
 
     func gsReflectiveTapMenu<MenuContent: View>(

@@ -353,7 +353,7 @@ struct ChatsListView: View {
             }
             .tint(Aero.accent)
         }
-        .gsReflectiveContextMenu {
+        .gsReflectiveContextMenu(button: true) {
             Button {
                 selection.insert(row.id)
                 GSHaptics.select()

@@ -57,7 +57,11 @@ settings:
 packages:
   Libraries.dev:
     url: https://github.com/Jakubantalik/Libraries.dev
-    branch: main
+    # Last public revision containing all six products used by this app.
+    # The 2026-11-24 upstream main removed VoicePositionKit; a moving branch
+    # made clean iOS builds fail before our Swift sources could compile.
+    # The already-integrated MIT-licensed source is pinned; no model download.
+    revision: aa08b7f13143055204284f53ae75bbbe089e0860
 
 targets:
   App:

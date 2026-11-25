@@ -337,6 +337,7 @@ fun GlassFrostedPanel(
     shape: Shape,
     role: GsGlassRole = GsGlassRole.Modal,
     modifier: Modifier = Modifier,
+    metalEdge: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val realBlur = GsBlurTier.realBlur
@@ -366,7 +367,7 @@ fun GlassFrostedPanel(
         }
         // Top: the real material — a translucent fill over the frost, the veil,
         // the directional rim and the warm shadow — then the panel content.
-        Box(modifier = Modifier.gsGlass(role, shape, metalEdge = false)) {
+        Box(modifier = Modifier.gsGlass(role, shape, metalEdge = metalEdge)) {
             content()
         }
     }

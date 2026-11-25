@@ -2814,6 +2814,7 @@ private fun JumpToLatestPill(onClick: () -> Unit) {
         modifier = Modifier
             .size(40.dp)
             .gsGlass(GsGlassRole.FloatingControl, CircleShape)
+            .semantics { contentDescription = "Jump to latest" }
             .clickable(role = Role.Button, onClickLabel = "Jump to latest", onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

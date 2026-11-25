@@ -149,6 +149,8 @@ struct AeroDrawer: View {
             leadingRim
         }
         .clipShape(UnevenRoundedRectangle(bottomTrailingRadius: DrawerMetrics.cornerRadius))
+        .gsArgentComponentRim(UnevenRoundedRectangle(bottomTrailingRadius: DrawerMetrics.cornerRadius),
+                              overlayPanel: true)
         .offset(x: entryOffset + closeOffset)
         .gesture(closeDragGesture)
         .transition(.move(edge: .leading).combined(with: .opacity))
@@ -242,6 +244,7 @@ struct AeroDrawer: View {
                 GsIconView(GsIcons.x, size: DrawerMetrics.closeGlyph, color: Aero.text)
                     .frame(width: DrawerMetrics.closeHit + 10,
                            height: DrawerMetrics.closeHit + 10)
+                    .gsCapsuleGlass(.floatingControl)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -404,7 +407,7 @@ struct AeroDrawer: View {
         // able to pin/rename/archive/delete from the drawer and iOS unable to —
         // a behavioural regression that the pixel gate could not see. Restored
         // against the same store and API calls the old code used.
-        .gsReflectiveContextMenu {
+        .gsReflectiveContextMenu(button: true) {
             Button {
                 let next = !recent.pinned
                 GSHaptics.success()

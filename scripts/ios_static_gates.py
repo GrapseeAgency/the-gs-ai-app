@@ -27,10 +27,24 @@ if not FILES:
 
 BANNED = [
     r"\.fontDesign", r"SwiftData", r"@Observable", r"ContentUnavailableView",
-    r"\.symbolEffect", r"\.onChange\(of:[^)]*\)\s*\{\s*\w+\s*,\s*\w+",
-    r"AVAudioApplication", r"\.onChange\(of:\s*.+\s*\)\s*\{\s*oldValue",
+    r"\.symbolEffect",
+    r"AVAudioApplication",
     r"#Predicate<", r"\.searchable\(.+\bpresentationBackground", r"\.sensoryFeedback",
 ]
+
+# SwiftUI's two-argument onChange and its initial: form are iOS 17 APIs.
+# Keep the availability guard when compiling for an older deployment target;
+# do not reject valid source at the app's explicitly configured iOS 17 floor.
+project = open(os.path.join(_REPO_ROOT, "ios", "project.yml")).read()
+floor = re.search(r'^\s*IPHONEOS_DEPLOYMENT_TARGET:\s*"?(\d+)\.(\d+)', project, re.M)
+if not floor:
+    print("FATAL: cannot resolve the iOS deployment target", file=sys.stderr)
+    sys.exit(2)
+if tuple(map(int, floor.groups())) < (17, 0):
+    BANNED.extend([
+        r"\.onChange\(of:[^)]*\)\s*\{\s*\w+\s*,\s*\w+",
+        r"\.onChange\(of:\s*.+\s*\)\s*\{\s*oldValue",
+    ])
 
 ok = True
 for path in FILES:
