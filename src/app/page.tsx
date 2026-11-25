@@ -5,7 +5,7 @@ import { MetalFx } from 'metal-fx'
 import { BotAvatar } from 'bot-avatars'
 import { isRequestMode, readModelPreferences, requestModeForPreferences, type RequestMode } from '@/lib/model-preferences'
 
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type CSSProperties } from 'react'
 import { MessageContent, type Citation } from '@/components/genui'
 
 /**
@@ -1673,11 +1673,9 @@ export default function Home() {
                   onClick={() => setSheetOpen((v) => !v)}
                   aria-expanded={sheetOpen}
                   aria-label="Open options sheet — mode, attachments and web"
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-base leading-none transition-all active:scale-90"
+                  className="gs-reflective-control flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base leading-none transition-all active:scale-90"
                   style={{
-                    borderColor: sheetOpen || mode !== 'flash' ? C.accent : C.outline,
                     color: sheetOpen || mode !== 'flash' ? C.accent : C.muted,
-                    background: sheetOpen ? 'rgba(255,145,66,0.10)' : 'transparent',
                   }}
                 >
                   +
@@ -1732,8 +1730,8 @@ export default function Home() {
               {sheetOpen && (
                 <div className="relative z-20">
                   <div
-                    className="mt-2 rounded-2xl border p-4 shadow-[0_18px_50px_rgba(0,0,0,0.45)]"
-                    style={{ background: C.surface, borderColor: C.outline }}
+                    className="gs-reflective-overlay mt-2 rounded-2xl p-4"
+                    style={{ '--gs-overlay-base': C.surface } as CSSProperties}
                     role="dialog"
                     aria-label="Composer options"
                   >

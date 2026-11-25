@@ -94,7 +94,7 @@
 .gs-chips > button, .gs-more-wrap > button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 15px; border: 1px solid rgba(255,255,255,.42); border-radius: 999px; background: rgba(255,255,255,.25); color: var(--gs-muted); font-size: 12px; white-space: nowrap; transition: background 150ms ease, color 150ms ease; }
 .gs-chips > button.is-active { color: #a95e32; border-color: rgba(244,179,132,.45); background: linear-gradient(145deg, #ffdec0, #f7c49c); box-shadow: inset 0 1px 0 rgba(255,255,255,.7); }
 .gs-more-wrap { position: relative; margin-left: auto; }
-.gs-popover { position: absolute; z-index: 20; top: calc(100% + 7px); right: 0; min-width: 190px; padding: 6px; border: 1px solid rgba(255,255,255,.85); border-radius: 17px; background: rgba(255,249,245,.94); box-shadow: 0 18px 45px rgba(76,43,32,.18); backdrop-filter: blur(24px); }
+.gs-popover { position: absolute; z-index: 20; top: calc(100% + 7px); right: 0; min-width: 190px; padding: 6px; border-radius: 17px; --gs-overlay-base: #fff9f5; }
 .gs-popover button { width: 100%; min-height: 44px; padding: 8px 11px; border: 0; border-radius: 11px; background: transparent; text-align: left; font-size: 13px; }
 .gs-popover button:hover { background: rgba(240,190,160,.2); }
 .gs-stats { display: grid; grid-template-columns: 1fr 1fr; margin-top: -10px; overflow: hidden; border: 1px solid rgba(255,255,255,.67); border-radius: 26px; background: rgba(255,255,255,.31); box-shadow: inset 0 1px 0 rgba(255,255,255,.9); }
@@ -116,7 +116,7 @@
 .gs-chat-open small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gs-muted); font-size: 11px; }
 .gs-chat-row > time { align-self: flex-start; flex: 0 0 auto; margin: 15px 3px 0 8px; color: var(--gs-muted); font-size: 10px; white-space: nowrap; }
 .gs-chat-menu-wrap { position: relative; align-self: flex-start; }
-.gs-kebab { width: 44px; height: 44px; margin-left: -10px; display: grid; place-items: center; border: 0; background: transparent; color: var(--gs-muted); }
+.gs-kebab { width: 44px; height: 44px; margin-left: -10px; display: grid; place-items: center; color: var(--gs-muted); --gs-overlay-base: #fff9f5; }
 .gs-chat-popover { top: 38px; }
 .gs-manage-note { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 10px 13px; border-radius: 15px; background: rgba(255,239,224,.75); color: var(--gs-muted); font-size: 12px; line-height: 1.4; }
 .gs-manage-note button { flex: 0 0 auto; min-height: 36px; margin-left: auto; border: 0; background: transparent; color: #a55a31; font-weight: 600; }
@@ -171,7 +171,7 @@
 .gs-reset-row > svg { color: var(--gs-faint); }
 .gs-model-footer { min-height: 85px; padding: 15px 18px; border-radius: 25px; }.gs-model-footer > svg { flex: 0 0 auto; color: #e8a16b; }.gs-model-footer > div { padding-right: 50px; }.gs-model-footer .gs-flower { position: absolute; right: -3px; width: 90px; height: 80px; object-fit: contain; }
 .gs-modal-layer { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; padding: 20px; background: rgba(67,42,32,.2); backdrop-filter: blur(8px); animation: gs-fade-in 160ms ease-out; }
-.gs-modal { width: min(100%, 490px); max-height: min(80dvh, 680px); overflow-y: auto; padding: 20px; border: 1px solid rgba(255,255,255,.88); border-radius: 30px; background: linear-gradient(145deg, rgba(255,251,248,.97), rgba(250,235,226,.95)); box-shadow: 0 30px 90px rgba(67,39,29,.3), inset 0 1px 0 #fff; animation: gs-sheet-in 220ms ease-out; }
+.gs-modal { width: min(100%, 490px); max-height: min(80dvh, 680px); overflow-y: auto; padding: 20px; border-radius: 30px; --gs-overlay-base: #fffbf8; animation: gs-sheet-in 220ms ease-out; }
 .gs-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 14px; }.gs-modal-head h2 { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.25; }.gs-circle-button { width: 44px; height: 44px; }
 .gs-modal-copy { margin: 0 0 18px; color: var(--gs-muted); font-size: 14px; line-height: 1.6; }
 .gs-modal-list { display: flex; flex-direction: column; gap: 4px; }.gs-preference { min-height: 57px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid rgba(114,75,58,.09); font-size: 14px; }
