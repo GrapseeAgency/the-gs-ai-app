@@ -1,5 +1,11 @@
 package com.grapsee.gsai.ui.chat
 
+import com.grapsee.gsai.ui.components.gsGlass
+
+import com.grapsee.gsai.ui.components.GsGlassRole
+
+import androidx.compose.foundation.shape.CircleShape
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -173,7 +179,8 @@ private fun ArchivedRow(
                 color = GsTheme.colors.textSecondary
             )
         }
-        IconButton(onClick = onRestore, modifier = Modifier.size(36.dp)) {
+        IconButton(onClick = onRestore, modifier = Modifier.size(36.dp)
+            .gsGlass(GsGlassRole.FloatingControl, CircleShape)) {
             Icon(
                 GsIcons.ArchiveRestore,
                 contentDescription = "Unarchive",
@@ -181,7 +188,8 @@ private fun ArchivedRow(
                 modifier = Modifier.size(18.dp)
             )
         }
-        IconButton(onClick = onMore, modifier = Modifier.size(36.dp)) {
+        IconButton(onClick = onMore, modifier = Modifier.size(36.dp)
+            .gsGlass(GsGlassRole.FloatingControl, CircleShape)) {
             Icon(
                 GsIcons.EllipsisVertical,
                 contentDescription = "More actions",

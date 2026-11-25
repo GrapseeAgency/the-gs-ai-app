@@ -1,5 +1,11 @@
 package com.grapsee.gsai.ui.attachment
 
+import com.grapsee.gsai.ui.components.gsGlass
+
+import com.grapsee.gsai.ui.components.GsGlassRole
+
+import androidx.compose.foundation.shape.CircleShape
+
 import com.grapsee.gsai.ui.components.argentComponentBorder
 
 import android.content.Intent
@@ -155,8 +161,7 @@ private fun AttachmentChip(
                             modifier = Modifier.align(Alignment.Center).size(36.dp))
                     }
                     if (editable) {
-                        Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surface.copy(alpha = .85f),
-                            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)) {
+                        Box(modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)) {
                             ChipButton(GsIcons.X, "Remove ${draft.displayName}", MaterialTheme.colorScheme.onSurface, onRemove)
                         }
                     }
@@ -268,7 +273,10 @@ private fun ChipButton(
     tint: Color,
     onClick: () -> Unit
 ) {
-    IconButton(onClick = onClick, modifier = Modifier.size(44.dp)) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(44.dp).gsGlass(GsGlassRole.FloatingControl, CircleShape),
+    ) {
         Icon(
             icon,
             contentDescription = label,

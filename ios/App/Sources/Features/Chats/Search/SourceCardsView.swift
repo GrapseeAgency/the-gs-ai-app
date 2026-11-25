@@ -36,8 +36,7 @@ struct SourceCardsView: View {
                             .font(.system(size: 10, weight: .semibold)).foregroundStyle(Aero.textMuted)
                     }
                     .padding(.horizontal, 12).frame(minHeight: 44)
-                    .background(Capsule().fill(Aero.raisedSurface))
-                    .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+                    .gsCapsuleGlass(.floatingControl)
                     .contentShape(Capsule())
                 }
                 .buttonStyle(KineticPressStyle())

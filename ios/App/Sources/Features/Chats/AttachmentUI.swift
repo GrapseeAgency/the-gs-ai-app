@@ -231,7 +231,7 @@ struct AttachmentChip: View {
                     Button(action: onRemove) {
                         Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
                             .frame(width: 44, height: 44)
-                            .background(.ultraThinMaterial, in: Circle())
+                            .gsGlass(.floatingControl, corner: 22)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Remove attachment \(draft.displayName)")
@@ -325,6 +325,7 @@ struct AttachmentChip: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Aero.text)
                         .frame(width: 44, height: 44)
+                        .gsGlass(.floatingControl, corner: 22)
                 }
                 .buttonStyle(KineticPressStyle())
                 .accessibilityLabel("Retry attachment upload")
@@ -334,6 +335,7 @@ struct AttachmentChip: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Aero.textMuted)
                     .frame(width: 44, height: 44)
+                    .gsGlass(.floatingControl, corner: 22)
             }
             .buttonStyle(KineticPressStyle())
             .accessibilityLabel("Remove attachment \(draft.displayName)")

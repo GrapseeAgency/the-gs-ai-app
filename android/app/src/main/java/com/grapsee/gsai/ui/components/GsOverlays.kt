@@ -1,5 +1,11 @@
 package com.grapsee.gsai.ui.components
 
+import androidx.compose.material3.SnackbarHostState
+
+import androidx.compose.material3.SnackbarHost
+
+import androidx.compose.material3.Snackbar
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -125,4 +131,23 @@ fun GsModalSheet(
         dragHandle = dragHandle,
         content = content,
     )
+}
+
+/** Retain the native snackbar lifecycle, accessibility announcement, action
+ * and dismissal; substitute only the transient surface's paint. */
+@Composable
+fun GsSnackbarHost(hostState: SnackbarHostState, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(18.dp)
+    val colors = GsTheme.colors
+    SnackbarHost(hostState = hostState, modifier = modifier) { data ->
+        Snackbar(
+            snackbarData = data,
+            modifier = Modifier.gsOverlayGlass(shape),
+            shape = shape,
+            containerColor = Color.Transparent,
+            contentColor = colors.textPrimary,
+            actionColor = colors.accentStrong,
+            dismissActionContentColor = colors.textSecondary,
+        )
+    }
 }

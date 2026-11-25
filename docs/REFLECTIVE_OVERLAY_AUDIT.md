@@ -26,3 +26,7 @@ Reviewed the native chat, history, attachment, drawer, settings, home, explore, 
 ## Additional source review — overlay controls
 
 The overlay shells were correctly routed but their internal controls still had independent paint paths. Reviewed the confirm/prompt/fact/choice dialogs, media preview and report dismissals, integration connect/close, model-details Done, and help/report navigation toolbar close buttons. Replaced fixed white outlines with the existing Argent border renderer, preserving accent/destructive fills, and routed neutral dismiss pills through the shared floating-control glass. The unused legacy Android menu shell now delegates to the overlay glass rather than stock Surface paint. Bare text actions and selected-row accents remain intentionally unplated. This follow-up is source-only; no device visual or CI result is claimed.
+
+## Custom transient controls and notices
+
+The follow-up source pass covered non-modal implementations as well as platform presentation calls. Attachment removal/retry/open discs, archived chat action discs, the expandable source selector, billing close and chat confirmation notices now share the native Argent glass paths. Android auth/chat snackbar hosts keep Material lifecycle and action handling with the shared reflective surface; the offline banner uses the same surface. Inline transcript content, media artwork, status badges and system-owned previews are not converted into overlay chrome.

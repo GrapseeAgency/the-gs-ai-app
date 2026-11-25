@@ -681,6 +681,9 @@ struct ChatDetailView: View {
                         .lineLimit(1)
                     Spacer()
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .gsOverlayGlass(corner: 16)
                 .accessibilityElement(children: .combine)
             }
             if !attachments.drafts.isEmpty {

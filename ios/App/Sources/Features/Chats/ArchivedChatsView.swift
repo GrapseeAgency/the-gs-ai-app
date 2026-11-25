@@ -98,6 +98,8 @@ struct ArchivedChatsView: View {
                         Image(systemName: "arrow.up.circle")
                             .font(.system(size: 18))
                             .foregroundStyle(Aero.accent)
+                            .frame(width: 36, height: 36)
+                            .gsGlass(.floatingControl, corner: 18)
                     }
                     .buttonStyle(KineticPressStyle())
                     .accessibilityLabel("Unarchive chat")
@@ -107,6 +109,8 @@ struct ArchivedChatsView: View {
                         Image(systemName: "trash")
                             .font(.system(size: 16))
                             .foregroundStyle(Aero.textMuted)
+                            .frame(width: 36, height: 36)
+                            .gsGlass(.floatingControl, corner: 18)
                     }
                     .buttonStyle(KineticPressStyle())
                     .accessibilityLabel("Delete chat")

@@ -85,7 +85,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import com.grapsee.gsai.ui.components.GsModalSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.SnackbarHost
+import com.grapsee.gsai.ui.components.GsSnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -1782,7 +1782,7 @@ fun ChatScreen(
                 onVoice = onNavigateVoice,
             )
 
-            SnackbarHost(hostState = snackbarHostState)
+            GsSnackbarHost(hostState = snackbarHostState)
         }
     }
 

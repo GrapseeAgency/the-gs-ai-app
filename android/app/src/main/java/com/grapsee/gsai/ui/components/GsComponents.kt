@@ -519,11 +519,7 @@ fun GsOfflineBanner(visible: Boolean, modifier: Modifier = Modifier) {
             shrinkVertically(animationSpec = tween(150)),
         modifier = modifier
     ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = GsRadius.smShape()
-        ) {
+        Box(Modifier.fillMaxWidth().gsOverlayGlass(GsRadius.smShape())) {
             Row(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,

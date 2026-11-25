@@ -80,7 +80,7 @@ struct BillingView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Aero.text)
                     .frame(width: 34, height: 34)
-                    .background(Circle().fill(Aero.container))
+                    .gsGlass(.floatingControl, corner: 17)
             }
             .buttonStyle(KineticPressStyle())
             .accessibilityLabel("Close")

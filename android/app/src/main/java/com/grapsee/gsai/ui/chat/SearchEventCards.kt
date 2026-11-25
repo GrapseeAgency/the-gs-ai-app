@@ -1,5 +1,9 @@
 package com.grapsee.gsai.ui.chat
 
+import com.grapsee.gsai.ui.components.gsGlass
+
+import com.grapsee.gsai.ui.components.GsGlassRole
+
 import com.grapsee.gsai.ui.chat.content.NexlyGlassGlyphTile
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -542,9 +546,10 @@ fun SourceCardsRow(sources: List<SourceCard>, onOpenUrl: (String) -> Unit) {
     if (sources.isEmpty()) return
     var expanded by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceContainerLow,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            modifier = Modifier.clickable(onClickLabel = if (expanded) "Hide sources" else "Show sources") { expanded = !expanded }) {
+        Box(
+            modifier = Modifier.gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(50))
+                .clickable(onClickLabel = if (expanded) "Hide sources" else "Show sources") { expanded = !expanded }
+        ) {
             Row(Modifier.padding(horizontal = 12.dp).height(44.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 com.grapsee.gsai.ui.chat.content.NexlyGlyph("world-search", 16.dp, MaterialTheme.colorScheme.onSurfaceVariant)
