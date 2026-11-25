@@ -46,7 +46,7 @@
 .gs-header h1 { margin: 0; font-size: clamp(20px, 4vw, 26px); font-weight: 580; line-height: 1.17; letter-spacing: -.025em; }
 .gs-header p { margin: 5px 0 0; color: var(--gs-muted); font-size: 13px; line-height: 1.4; }
 .gs-back, .gs-circle-button { flex: 0 0 auto; width: 54px; height: 54px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.74); border-radius: 50%; background: linear-gradient(145deg, rgba(255,255,255,.64), rgba(255,255,255,.2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 8px 20px -14px rgba(74,40,29,.5); backdrop-filter: blur(15px); transition: transform 160ms ease, background 160ms ease; }
-.gs-back:hover, .gs-circle-button:hover { transform: translateY(-1px); background: rgba(255,255,255,.65); }
+.gs-back:hover, .gs-circle-button:not(.gs-reflective-control):hover { transform: translateY(-1px); background: rgba(255,255,255,.65); }
 .gs-back:active, .gs-circle-button:active { transform: scale(.96); }
 .gs-content { display: flex; flex-direction: column; gap: 26px; }
 .gs-section { min-width: 0; }

@@ -332,27 +332,6 @@ struct ChatsListView: View {
                 }
             )
         }
-        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            Button {
-                togglePin(row)
-            } label: {
-                GsMenuLabel(row.pinned ? "Unpin" : "Pin", icon: GsIcons.pin)
-            }
-            .tint(Aero.accent)
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(role: .destructive) {
-                deleteRow(row)
-            } label: {
-                GsMenuLabel("Delete", icon: GsIcons.trash2)
-            }
-            Button {
-                archiveRow(row)
-            } label: {
-                GsMenuLabel("Archive", icon: GsIcons.archive)
-            }
-            .tint(Aero.accent)
-        }
         .gsReflectiveContextMenu(button: true) {
             Button {
                 selection.insert(row.id)
@@ -380,6 +359,27 @@ struct ChatsListView: View {
             } label: {
                 GsMenuLabel("Delete", icon: GsIcons.trash2)
             }
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button {
+                togglePin(row)
+            } label: {
+                GsMenuLabel(row.pinned ? "Unpin" : "Pin", icon: GsIcons.pin)
+            }
+            .tint(Aero.accent)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                deleteRow(row)
+            } label: {
+                GsMenuLabel("Delete", icon: GsIcons.trash2)
+            }
+            Button {
+                archiveRow(row)
+            } label: {
+                GsMenuLabel("Archive", icon: GsIcons.archive)
+            }
+            .tint(Aero.accent)
         }
         .gsListRowChrome(rowInsets)
     }

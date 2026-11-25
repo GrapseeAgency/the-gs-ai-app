@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 
-const selector = '.gs-reflective-overlay, .gs-reflective-control'
+const selector = '.gs-reflective-overlay, .gs-reflective-control, [data-slot="navigation-menu"][data-viewport="false"] [data-slot="navigation-menu-content"]'
 
 /** A static, rim-only raster of the installed ArgentUI native shader.
  * The original element owns the frosted body, focus, layout and scrolling.

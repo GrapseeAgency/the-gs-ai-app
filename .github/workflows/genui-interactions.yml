@@ -1,10 +1,10 @@
 name: GenUI interaction contracts
 on:
   pull_request:
-    paths: ['shared-contracts/**', 'src/**', 'scripts/test-interaction-honesty.cjs', 'scripts/test-widget-compiler.ts', 'scripts/test-code-browser.cjs', 'scripts/test-react-preview-browser.cjs', 'scripts/build-react-runtime.cjs', 'scripts/react-runtime/**', 'scripts/browser-code-entry.tsx', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
+    paths: ['shared-contracts/**', 'src/**', 'scripts/test-interaction-honesty.cjs', 'scripts/test-widget-compiler.ts', 'scripts/test-code-browser.cjs', 'scripts/test-reflective-overlay-browser.cjs', 'scripts/test-react-preview-browser.cjs', 'scripts/build-react-runtime.cjs', 'scripts/react-runtime/**', 'scripts/browser-code-entry.tsx', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
   push:
     branches: [main]
-    paths: ['shared-contracts/**', 'src/**', 'scripts/test-interaction-honesty.cjs', 'scripts/test-widget-compiler.ts', 'scripts/test-code-browser.cjs', 'scripts/test-react-preview-browser.cjs', 'scripts/build-react-runtime.cjs', 'scripts/react-runtime/**', 'scripts/browser-code-entry.tsx', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
+    paths: ['shared-contracts/**', 'src/**', 'scripts/test-interaction-honesty.cjs', 'scripts/test-widget-compiler.ts', 'scripts/test-code-browser.cjs', 'scripts/test-reflective-overlay-browser.cjs', 'scripts/test-react-preview-browser.cjs', 'scripts/build-react-runtime.cjs', 'scripts/react-runtime/**', 'scripts/browser-code-entry.tsx', 'package*.json', 'tsconfig*.json', '.github/workflows/genui-interactions.yml']
 permissions:
   contents: read
 jobs:
@@ -38,6 +38,7 @@ jobs:
           set -o pipefail
           node scripts/test-code-browser.cjs 2>&1 | tee /tmp/gs-code-browser-runtime.log
           node scripts/test-react-preview-browser.cjs 2>&1 | tee /tmp/gs-react-preview-runtime.log
+          node scripts/test-reflective-overlay-browser.cjs 2>&1 | tee /tmp/gs-reflective-overlay-runtime.log
       - name: Publish browser failure diagnostics
         if: failure()
         run: |
@@ -63,6 +64,8 @@ jobs:
             /tmp/gs-react-preview-runtime.log
             /tmp/gs-react-preview-browser.png
             /tmp/gs-ordinary-task-browser.png
+            /tmp/gs-reflective-overlay-runtime.log
+            /tmp/gs-reflective-overlay.png
           if-no-files-found: error
       - run: node dist/probe/scripts/test-widget-render.js
       - run: node dist/probe/scripts/test-widget-catalogue.js

@@ -64,7 +64,7 @@ function Modal({ title, children, onClose }: { title: string; children: ReactNod
     document.addEventListener('keydown', onKey)
     return () => { document.removeEventListener('keydown', onKey); previous?.focus() }
   }, [onClose])
-  return <div className="gs-modal-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="gs-modal gs-reflective-overlay" role="dialog" aria-modal="true" aria-labelledby="gs-modal-title"><div className="gs-modal-head"><h2 id="gs-modal-title">{title}</h2><button ref={closeRef} type="button" className="gs-circle-button" onClick={onClose} aria-label="Close dialog"><X size={20} /></button></div>{children}</section></div>
+  return <div className="gs-modal-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="gs-modal gs-reflective-overlay" role="dialog" aria-modal="true" aria-labelledby="gs-modal-title"><div className="gs-modal-head"><h2 id="gs-modal-title">{title}</h2><button ref={closeRef} type="button" className="gs-circle-button gs-reflective-control" onClick={onClose} aria-label="Close dialog"><X size={20} /></button></div>{children}</section></div>
 }
 
 function ScreenShell({ screen, title, subtitle, children, onBack }: { screen: SettingsScreen; title: string; subtitle: string; children: ReactNode; onBack?: () => void }) {

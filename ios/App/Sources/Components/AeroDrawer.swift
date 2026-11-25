@@ -401,7 +401,6 @@ struct AeroDrawer: View {
             .frame(minHeight: DrawerMetrics.recentPitch)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .accessibilityLabel("\(recent.title), \(recent.timestamp)")
         // The rebuild dropped the old drawer's per-row actions, which left Android
         // able to pin/rename/archive/delete from the drawer and iOS unable to —

@@ -106,7 +106,6 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
                 .gsGlass(.elevated, corner: 22, metalEdge: true)
                 .contentShape(Circle())
         }
-        .buttonStyle(KineticPressStyle())
         .accessibilityLabel(label)
         .gsReflectiveContextMenu(button: true) { menu() }
     }
@@ -160,7 +159,6 @@ struct NexlyComposerBar: View {
                     .frame(width: 38, height: 38)
                     .gsGlass(.floatingControl, corner: 19)
                 }
-                .buttonStyle(KineticPressStyle())
                 .accessibilityLabel("Nexly tools, attachments and modes")
                 .gsReflectiveContextMenu(button: true) {
                     Button(action: onAttach) {
