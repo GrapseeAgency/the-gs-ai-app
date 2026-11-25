@@ -142,7 +142,13 @@ func reconcileFluidAppend(_ old: String, _ next: String) -> FluidAppendMatch {
     var oldEnd = a.count
     while oldEnd > prefix, a.count - oldEnd < 4, syntax.contains(a[oldEnd - 1]) { oldEnd -= 1 }
     if oldEnd == prefix { return FluidAppendMatch(spans: spans, newTailStart: prefix) }
-    let anchor = max(prefix, oldEnd - 12)
+    // A closing delimiter can also remove the opening Markdown syntax.
+    // Preserve only a unique exact match of the previously visible text.
+    var oldStartLimit = prefix
+    while oldStartLimit < oldEnd, oldStartLimit - prefix < 4, syntax.contains(a[oldStartLimit]) {
+        oldStartLimit += 1
+    }
+    let anchor = max(oldStartLimit, oldEnd - 12)
     let length = oldEnd - anchor
     guard length >= 3, b.count - prefix >= length else {
         return FluidAppendMatch(spans: spans, newTailStart: b.count)

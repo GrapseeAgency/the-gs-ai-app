@@ -175,7 +175,13 @@ internal fun reconcileFluidAppend(old: String, next: String): FluidAppendMatch {
     var oldEnd = old.length
     while (oldEnd > prefix && old.length - oldEnd < 4 && old[oldEnd - 1] in syntax) oldEnd--
     if (oldEnd == prefix) return FluidAppendMatch(spans, prefix)
-    var anchor = maxOf(prefix, oldEnd - 12)
+    // A newly closed Markdown span may lose its opening delimiter as well
+    // as its closing one. Search for the visible text, never for the removed
+    // syntax. Still require a unique exact match before preserving its ink.
+    var oldStartLimit = prefix
+    while (oldStartLimit < oldEnd && oldStartLimit - prefix < 4 &&
+        old[oldStartLimit] in syntax) oldStartLimit++
+    var anchor = maxOf(oldStartLimit, oldEnd - 12)
     while (anchor < oldEnd && !oldBoundary.isBoundary(anchor)) anchor++
     if (oldEnd - anchor < 3 || !oldBoundary.isBoundary(oldEnd)) return FluidAppendMatch(spans, next.length)
     val needle = old.substring(anchor, oldEnd)

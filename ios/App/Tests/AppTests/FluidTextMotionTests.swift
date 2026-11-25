@@ -116,6 +116,22 @@ final class FluidTextMotionTests: XCTestCase {
         XCTAssertTrue(motion.bands.isEmpty)
     }
 
+    func testMarkdownDelimiterRemovalPreservesOnlyUnambiguousVisibleText() {
+        for (old, next, start, end, mapped) in [
+            ("**hello**", "hello world", 2, 7, 0),
+            ("Prefix **hello", "Prefix hello world", 9, 14, 7),
+            ("`hello", "hello world", 1, 6, 0)
+        ] {
+            let match = reconcileFluidAppend(old, next)
+            XCTAssertEqual(match.spans.last?.oldStart, start)
+            XCTAssertEqual(match.spans.last?.oldEnd, end)
+            XCTAssertEqual(match.spans.last?.newStart, mapped)
+            XCTAssertEqual(match.newTailStart, mapped + end - start)
+        }
+        XCTAssertEqual(reconcileFluidAppend("**word", "word word").newTailStart, 9)
+        XCTAssertEqual(reconcileFluidAppend("**ab", "ab cd").newTailStart, 5)
+    }
+
     func testAmbiguousRenderedRewriteDoesNotReplay() {
         var motion = FluidTextMotion(initial: "**word")
         motion.update("word word", now: 0, sourceAppend: true)

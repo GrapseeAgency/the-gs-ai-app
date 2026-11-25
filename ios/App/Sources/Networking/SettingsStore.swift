@@ -215,16 +215,6 @@ final class SettingsStore: ObservableObject {
         // true, like Android: the tile the reader taps and the default the next
         // new chat picks are the same choice until they say otherwise.
         rememberChoices = defaults.object(forKey: K.rememberChoices) as? Bool ?? true
-        if rememberChoices {
-            let savedMode = defaults.string(forKey: "gs.mode.new")
-            if !["flash", "thinking", "auto"].contains(savedMode ?? "") {
-                defaults.set(
-                    ModelRouter.modeForMessage(effort: reasoningEffort, autoSelect: autoSelectModel),
-                    forKey: "gs.mode.new")
-            }
-        } else {
-            defaults.removeObject(forKey: "gs.mode.new")
-        }
         dataRetentionMonths = defaults.object(forKey: K.dataRetentionMonths) as? Int ?? 12
         autoDeleteInactive = defaults.object(forKey: K.autoDeleteInactive) as? Bool ?? false
         // false, not true: a lock is opt-in. Android's store has always
@@ -248,6 +238,16 @@ final class SettingsStore: ObservableObject {
         reduceMotion = defaults.object(forKey: K.reduceMotion) as? Bool ?? false
         screenReaderHints = defaults.object(forKey: K.screenReaderHints) as? Bool ?? false
         haptics = defaults.object(forKey: K.haptics) as? Bool ?? true
+        if rememberChoices {
+            let savedMode = defaults.string(forKey: "gs.mode.new")
+            if !["flash", "thinking", "auto"].contains(savedMode ?? "") {
+                defaults.set(
+                    ModelRouter.modeForMessage(effort: reasoningEffort, autoSelect: autoSelectModel),
+                    forKey: "gs.mode.new")
+            }
+        } else {
+            defaults.removeObject(forKey: "gs.mode.new")
+        }
         propagateFlags()
     }
 

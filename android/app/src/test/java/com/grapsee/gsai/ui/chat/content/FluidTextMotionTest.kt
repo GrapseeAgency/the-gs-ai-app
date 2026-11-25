@@ -128,6 +128,21 @@ class FluidTextMotionTest {
         assertTrue(motion.update("replacement", 55_000_000, true).isEmpty())
     }
 
+    @Test fun markdownDelimiterRemovalPreservesOnlyUnambiguousVisibleText() {
+        val cases = listOf(
+            Triple("**hello**", "hello world", FluidMatchSpan(2, 7, 0)),
+            Triple("Prefix **hello", "Prefix hello world", FluidMatchSpan(9, 14, 7)),
+            Triple("`hello", "hello world", FluidMatchSpan(1, 6, 0))
+        )
+        for ((old, next, expected) in cases) {
+            val match = reconcileFluidAppend(old, next)
+            assertEquals(expected, match.spans.last())
+            assertEquals(expected.newStart + expected.oldEnd - expected.oldStart, match.newTailStart)
+        }
+        assertEquals(9, reconcileFluidAppend("**word", "word word").newTailStart)
+        assertEquals(5, reconcileFluidAppend("**ab", "ab cd").newTailStart)
+    }
+
     @Test fun ambiguousRenderedRewritesNeverReplayOldText() {
         val motion = FluidTextMotion("**word")
         assertTrue(motion.update("word word", 0, true, sourceAppend = true).isEmpty())
