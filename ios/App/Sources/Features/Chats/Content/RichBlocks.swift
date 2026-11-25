@@ -1039,8 +1039,10 @@ private struct NexlyContextualActionPillsRowView: View {
                         .frame(maxWidth: .infinity, alignment: .leading).padding()
                     }
                     .navigationTitle(sourcesOnly ? "All sources" : "Response source and data")
+                    .toolbarBackground(.hidden, for: .navigationBar)
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Close details") { presentedSheet = nil } } }
                 }
+                .gsPresentedSheetGlass()
                 }
             }
         }

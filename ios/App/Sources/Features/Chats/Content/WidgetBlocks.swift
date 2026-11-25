@@ -1283,16 +1283,29 @@ private struct ChartBodyView: View {
         VStack(alignment: .leading, spacing: 10) {
             chartHeaderBar(rangeLabel: rangeLabel)
             if let series = obj["series"] as? [[String: Any]], series.count > 1, !isSliceSeries {
-                Menu {
+                HStack(spacing: 6) {
+                    Text("Series: \(str(series[min(selectedSeriesIndex, series.count - 1)], "name", "label").ifEmptyIOS("Series \(selectedSeriesIndex + 1)"))")
+                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+                }
+                .font(Aero.caption())
+                .foregroundStyle(Aero.text)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 36)
+                .gsCapsuleGlass(.floatingControl)
+                .gsReflectiveTapMenu {
                     ForEach(series.indices, id: \.self) { index in
-                        Button(str(series[index], "name", "label").ifEmptyIOS("Series \(index + 1)")) {
+                        Button {
                             selectedSeriesIndex = index
                             selectedIdx = nil
                             rangeIdx = 0
+                        } label: {
+                            HStack {
+                                Text(str(series[index], "name", "label").ifEmptyIOS("Series \(index + 1)"))
+                                Spacer()
+                                if index == selectedSeriesIndex { Image(systemName: "checkmark") }
+                            }
                         }
                     }
-                } label: {
-                    Text("Series: \(str(series[min(selectedSeriesIndex, series.count - 1)], "name", "label").ifEmptyIOS("Series \(selectedSeriesIndex + 1)"))")
                 }
             }
             if !subtitle.isEmpty {

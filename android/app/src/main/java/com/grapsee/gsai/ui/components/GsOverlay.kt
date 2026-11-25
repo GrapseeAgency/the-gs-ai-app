@@ -251,7 +251,7 @@ fun GsAnchoredPopover(
             Alignment.BottomStart, Alignment.BottomCenter, Alignment.BottomEnd -> 1f
             else -> 0.5f
         }
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.12f * progress))
@@ -265,10 +265,12 @@ fun GsAnchoredPopover(
             contentAlignment = alignment
         ) {
             val shape = RoundedCornerShape(22.dp)
+            val panelHeight = (maxHeight - verticalInset * 2).coerceAtLeast(64.dp)
             Column(
                 modifier = modifier
                     .padding(horizontal = horizontalInset, vertical = verticalInset)
                     .width(width)
+                    .heightIn(max = panelHeight)
                     .graphicsLayer {
                         alpha = progress
                         scaleX = 0.94f + 0.06f * progress
@@ -283,7 +285,8 @@ fun GsAnchoredPopover(
                         indication = null,
                         onClick = {}
                     )
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 6.dp)
+                    .verticalScroll(rememberScrollState()),
                 content = content
             )
         }

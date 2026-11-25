@@ -245,15 +245,33 @@ private struct GsReflectiveMenuTrigger<MenuContent: View>: ViewModifier {
     @Environment(\.gsPresentMenu) private var present
     @State private var anchor = GsMenuAnchor()
     let menu: () -> MenuContent
+    var tapToOpen: Bool = false
+    @State private var fallbackVisible = false
 
     private func open() {
-        guard let present else { return }
         GSHaptics.select()
-        present(anchor.rect, AnyView(menu()))
+        if let present {
+            present(anchor.rect, AnyView(menu()))
+        } else {
+            fallbackVisible = true
+        }
+    }
+
+    @ViewBuilder
+    private func trigger(_ content: Content) -> some View {
+        if tapToOpen {
+            Button(action: open) { content }
+                .buttonStyle(KineticPressStyle())
+        } else {
+            content
+                .simultaneousGesture(LongPressGesture(minimumDuration: 0.5, maximumDistance: 12)
+                    .onEnded { _ in open() })
+                .accessibilityAction(named: Text("Actions")) { open() }
+        }
     }
 
     func body(content: Content) -> some View {
-        content
+        trigger(content)
             .background {
                 GeometryReader { geo in
                     Color.clear
@@ -263,9 +281,18 @@ private struct GsReflectiveMenuTrigger<MenuContent: View>: ViewModifier {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
-            .simultaneousGesture(LongPressGesture(minimumDuration: 0.5, maximumDistance: 12)
-                .onEnded { _ in open() })
-            .accessibilityAction(named: Text("Actions")) { open() }
+            .popover(isPresented: $fallbackVisible) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) { menu() }
+                        .labelStyle(.titleAndIcon)
+                        .buttonStyle(GsReflectiveMenuButtonStyle(close: { fallbackVisible = false }))
+                        .padding(6)
+                }
+                .frame(width: 248, height: 280)
+                .gsOverlayGlass(corner: 22)
+                .presentationBackground(.clear)
+                .presentationCompactAdaptation(.popover)
+            }
     }
 }
 
@@ -278,5 +305,11 @@ extension View {
         @ViewBuilder _ menu: @escaping () -> MenuContent
     ) -> some View {
         modifier(GsReflectiveMenuTrigger(menu: menu))
+    }
+
+    func gsReflectiveTapMenu<MenuContent: View>(
+        @ViewBuilder _ menu: @escaping () -> MenuContent
+    ) -> some View {
+        modifier(GsReflectiveMenuTrigger(menu: menu, tapToOpen: true))
     }
 }

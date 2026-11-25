@@ -290,6 +290,7 @@ private struct IdentityEditSheet: View {
             Spacer()
         }
         .padding(Aero.Spacing.l)
+        .gsPresentedSheetGlass()
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .onAppear {

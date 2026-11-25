@@ -1324,6 +1324,7 @@ struct MessageBubble: View, Equatable {
     var onFeedback: (String?) -> Void = { _ in }
 
     @State private var copied = false
+    @State private var menuShareItems: [Any]? = nil
     @State private var sawThinking = false
     @State private var lastEffort: String? = nil
     @State private var lastReasoningHint: String? = nil
@@ -1372,6 +1373,12 @@ struct MessageBubble: View, Equatable {
                 userBubble
             } else {
                 assistantBubble
+            }
+        }
+        .background {
+            if let menuShareItems {
+                ResponseActivityPresenterIOS(items: menuShareItems) { self.menuShareItems = nil }
+                    .frame(width: 0, height: 0)
             }
         }
         .onChange(of: effectiveMode) { value in
@@ -1685,17 +1692,11 @@ struct MessageBubble: View, Equatable {
             Button(action: onBranch) {
                 GsMenuLabel("Branch new chat", icon: GsIcons.split)
             }
-            // Keep the actual system share presenter mounted while sharing.
-            ShareLink(item: message.content) {
+            Button {
+                menuShareItems = [message.content]
+            } label: {
                 GsMenuLabel("Share", icon: GsIcons.share)
-                    .font(.system(size: 14.5, weight: .medium))
-                    .foregroundStyle(Aero.text)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .frame(minHeight: 46)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(KineticPressStyle())
         }
     }
 

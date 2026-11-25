@@ -28,7 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
+import com.grapsee.gsai.ui.components.GsDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -336,7 +336,7 @@ internal fun FormWidgetView(w: FormWidget, onSendPrompt: ((String) -> Unit)?) {
                                     )
                                     Text("▾", color = c.textTertiary)
                                 }
-                                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                GsDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                                     f.options.take(12).forEach { opt ->
                                         DropdownMenuItem(
                                             text = { Text(opt) },

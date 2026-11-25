@@ -864,25 +864,28 @@ private fun NexlyContextualActionPillsRow(
             })
         }.onFailure { pendingSave = null; notify("No file picker is available: ${it.message}") }
     }
-    if (detailView != null) AlertDialog(
-        onDismissRequest = { detailView = null },
-        title = { Text(if (detailView == "sources") "All sources" else "Response report — original source and data") },
-        text = {
-            SelectionContainer {
-                Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
-                    Text(CodeDisplay.escape(if (detailView == "sources") citationText.ifBlank { "No source URLs were supplied." } else sourceText))
-                    if (detailView == "sources") sourceUrls.forEach { url ->
-                        TextButton(onClick = { com.grapsee.gsai.ui.components.GsLinks.openInApp(context, url) }) {
-                            NexlyGlassGlyphTile(name = "external-link", size = 20.dp, glyphSize = 12.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Text(CodeDisplay.escape(url))
-                        }
+    if (detailView != null) com.grapsee.gsai.ui.components.GsFloatingOverlay(
+        onDismiss = { detailView = null }
+    ) {
+        Text(
+            if (detailView == "sources") "All sources" else "Response report — original source and data",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+        SelectionContainer {
+            Column {
+                Text(CodeDisplay.escape(if (detailView == "sources") citationText.ifBlank { "No source URLs were supplied." } else sourceText))
+                if (detailView == "sources") sourceUrls.forEach { url ->
+                    TextButton(onClick = { com.grapsee.gsai.ui.components.GsLinks.openInApp(context, url) }) {
+                        NexlyGlassGlyphTile(name = "external-link", size = 20.dp, glyphSize = 12.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(CodeDisplay.escape(url))
                     }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = { detailView = null }) { Text("Close details") } }
-    )
+        }
+        TextButton(onClick = { detailView = null }) { Text("Close details") }
+    }
     val actions = remember(blocks, citationUrls) {
         val hasChart = blocks.any { it is Block.WidgetBlock && it.kind == "chart" }
         val hasTable = blocks.any { it is Block.TableBlock || (it is Block.WidgetBlock && it.kind == "table") }
@@ -3791,7 +3794,11 @@ private fun ImageViewerDialog(bitmap: ImageBitmap?, alt: String, onDismiss: () -
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopEnd)) {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopEnd).padding(10.dp)
+                    .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(99.dp))
+            ) {
                 Text("Close", color = MaterialTheme.colorScheme.onSurface)
             }
         }
