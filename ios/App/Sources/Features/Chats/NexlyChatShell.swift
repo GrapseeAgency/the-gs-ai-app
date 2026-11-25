@@ -98,7 +98,7 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
         glyph: String,
         label: String,
         action: @escaping () -> Void,
-        @ViewBuilder menu: () -> Menu
+        @ViewBuilder menu: @escaping () -> Menu
     ) -> some View {
         Button(action: action) {
             NexlyGlyph(name: glyph, size: 19, color: NexlyInk.header)
@@ -108,7 +108,7 @@ struct NexlyBrandHeader<SparkleMenu: View, MenuMenu: View>: View {
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityLabel(label)
-        .contextMenu { menu() }
+        .gsReflectiveContextMenu { menu() }
     }
 }
 
@@ -164,7 +164,7 @@ struct NexlyComposerBar: View {
                 }
                 .buttonStyle(KineticPressStyle())
                 .accessibilityLabel("Nexly tools, attachments and modes")
-                .contextMenu {
+                .gsReflectiveContextMenu {
                     Button(action: onAttach) {
                         Label("Attachments & modes", systemImage: "paperclip")
                     }

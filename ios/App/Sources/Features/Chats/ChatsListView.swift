@@ -127,6 +127,7 @@ struct ChatsListView: View {
                 onDismiss: { renameTarget = nil }
             )
         }
+        .gsReflectiveMenuHost()
     }
 
     // MARK: Live data
@@ -352,7 +353,7 @@ struct ChatsListView: View {
             }
             .tint(Aero.accent)
         }
-        .contextMenu {
+        .gsReflectiveContextMenu {
             Button {
                 selection.insert(row.id)
                 GSHaptics.select()

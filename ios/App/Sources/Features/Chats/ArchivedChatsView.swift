@@ -73,6 +73,7 @@ struct ArchivedChatsView: View {
                 onDismiss: { renameTarget = nil }
             )
         }
+        .gsReflectiveMenuHost()
     }
 
     /// One archived card as a native List row (Task 86-e): leading swipe
@@ -127,7 +128,7 @@ struct ArchivedChatsView: View {
                 Label("Delete", systemImage: "trash")
             }
         }
-        .contextMenu {
+        .gsReflectiveContextMenu {
             Button {
                 restore(conversation)
             } label: {

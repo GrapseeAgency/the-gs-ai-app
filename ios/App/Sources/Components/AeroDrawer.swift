@@ -121,6 +121,7 @@ struct AeroDrawer: View {
                 onDismiss: { renameId = nil }
             )
         }
+        .gsReflectiveMenuHost()
     }
 
     // MARK: Body building blocks (type-check split — the previous single
@@ -403,7 +404,7 @@ struct AeroDrawer: View {
         // able to pin/rename/archive/delete from the drawer and iOS unable to —
         // a behavioural regression that the pixel gate could not see. Restored
         // against the same store and API calls the old code used.
-        .contextMenu {
+        .gsReflectiveContextMenu {
             Button {
                 let next = !recent.pinned
                 GSHaptics.success()

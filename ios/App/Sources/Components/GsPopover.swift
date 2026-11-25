@@ -124,3 +124,159 @@ struct GsPopoverRule: View {
             .padding(.vertical, 5)
     }
 }
+
+// MARK: - App-owned long-press menus
+
+/// An anchor snapshot is not observable: scrolling a transcript updates
+/// the coordinate without invalidating message bodies or streaming text.
+private final class GsMenuAnchor {
+    var rect: CGRect = .zero
+}
+
+private struct GsMenuPresentation {
+    let anchor: CGRect
+    let content: AnyView
+}
+
+private struct GsPresentMenuKey: EnvironmentKey {
+    static let defaultValue: ((CGRect, AnyView) -> Void)? = nil
+}
+
+private extension EnvironmentValues {
+    var gsPresentMenu: ((CGRect, AnyView) -> Void)? {
+        get { self[GsPresentMenuKey.self] }
+        set { self[GsPresentMenuKey.self] = newValue }
+    }
+}
+
+/// One screen-level menu, never clipped by a scrolling row or composer.
+/// Native share sheets, text selection and swipe actions remain system-owned.
+private struct GsReflectiveMenuHost: ViewModifier {
+    @State private var active: GsMenuPresentation?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private func close() { active = nil }
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.gsPresentMenu, { anchor, menu in
+                active = GsMenuPresentation(anchor: anchor, content: menu)
+            })
+            .accessibilityHidden(active != nil)
+            .overlay {
+                if let active {
+                    GeometryReader { geometry in
+                        panel(active, geometry: geometry)
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: active != nil)
+    }
+
+    private func panel(_ menu: GsMenuPresentation, geometry: GeometryProxy) -> some View {
+        let root = geometry.frame(in: .global)
+        let width = min(CGFloat(248), max(1, geometry.size.width - 28))
+        let x = min(max(menu.anchor.midX - root.minX - width / 2, 14),
+                    max(14, geometry.size.width - width - 14))
+        let top = min(max(menu.anchor.minY - root.minY, 14), max(14, geometry.size.height - 14))
+        let bottom = min(max(menu.anchor.maxY - root.minY, top), max(top, geometry.size.height - 14))
+        let above = max(0, top - 20)
+        let below = max(0, geometry.size.height - bottom - 20)
+        let opensBelow = below >= min(above, 350)
+        // Tall message anchors may fill the viewport. In that case float
+        // the menu in the available screen instead of crushing the rows.
+        let centered = max(above, below) < 138
+        let capacity = max(44, min(420, centered ? geometry.size.height - 28 : (opensBelow ? below : above)))
+        let alignment: Alignment = centered ? .center : (opensBelow ? .topLeading : .bottomLeading)
+        return ZStack(alignment: alignment) {
+            Color.black.opacity(0.12)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { close() }
+                .accessibilityHidden(true)
+            ViewThatFits(in: .vertical) {
+                menuRows(menu.content).fixedSize(horizontal: false, vertical: true)
+                ScrollView(showsIndicators: false) { menuRows(menu.content) }
+            }
+            .frame(width: width)
+            .frame(maxHeight: capacity)
+            .gsOverlayGlass(corner: 22)
+            .accessibilityAddTraits(.isModal)
+            .accessibilityAction(.escape) { close() }
+            .padding(.leading, centered ? 0 : x)
+            .padding(.top, centered || !opensBelow ? 0 : bottom + 6)
+            .padding(.bottom, centered || opensBelow ? 0 : geometry.size.height - top + 6)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func menuRows(_ content: AnyView) -> some View {
+        VStack(alignment: .leading, spacing: 0) { content }
+            .labelStyle(.titleAndIcon)
+            .buttonStyle(GsReflectiveMenuButtonStyle(close: close))
+            .padding(6)
+    }
+}
+
+/// A real Button remains the touch/keyboard/accessibility target. Only
+/// menu-row styling and dismissal are added, not a second tap handler.
+private struct GsReflectiveMenuButtonStyle: PrimitiveButtonStyle {
+    let close: () -> Void
+
+    func makeBody(configuration: Configuration) -> some View {
+        Button(role: configuration.role) {
+            close()
+            configuration.trigger()
+        } label: {
+            configuration.label
+                .font(.system(size: 14.5, weight: .medium))
+                .foregroundStyle(configuration.role == .destructive ? Aero.danger : Aero.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 46)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(KineticPressStyle())
+    }
+}
+
+private struct GsReflectiveMenuTrigger<MenuContent: View>: ViewModifier {
+    @Environment(\.gsPresentMenu) private var present
+    @State private var anchor = GsMenuAnchor()
+    let menu: () -> MenuContent
+
+    private func open() {
+        guard let present else { return }
+        GSHaptics.select()
+        present(anchor.rect, AnyView(menu()))
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear { anchor.rect = geo.frame(in: .global) }
+                        .onChange(of: geo.frame(in: .global)) { rect in anchor.rect = rect }
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+            .simultaneousGesture(LongPressGesture(minimumDuration: 0.5, maximumDistance: 12)
+                .onEnded { _ in open() })
+            .accessibilityAction(named: Text("Actions")) { open() }
+    }
+}
+
+extension View {
+    func gsReflectiveMenuHost() -> some View {
+        modifier(GsReflectiveMenuHost())
+    }
+
+    func gsReflectiveContextMenu<MenuContent: View>(
+        @ViewBuilder _ menu: @escaping () -> MenuContent
+    ) -> some View {
+        modifier(GsReflectiveMenuTrigger(menu: menu))
+    }
+}

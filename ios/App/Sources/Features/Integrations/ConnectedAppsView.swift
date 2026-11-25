@@ -193,6 +193,7 @@ struct ConnectedAppsView: View {
         }
         .sheet(item: $sheet) { which in
             GsIntegrationSheetView(sheet: which)
+                .gsPresentedSheetGlass()
                 .presentationDetents([.medium])
         }
     }

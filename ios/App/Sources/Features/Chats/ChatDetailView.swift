@@ -329,6 +329,7 @@ struct ChatDetailView: View {
         // TASK 1c: one in-app browser host for the whole chat surface —
         // reply text links, citation chips and source cards all resolve here.
         .gsInAppBrowserHost()
+        .gsReflectiveMenuHost()
     }
 
     /// The reference brand header: the companion orb, the product identity,
@@ -1446,7 +1447,7 @@ struct MessageBubble: View, Equatable {
                 .textSelection(.enabled)
             }
         }
-        .contextMenu {
+        .gsReflectiveContextMenu {
             // Same idiom as the assistant bubble's long-press menu.
             Button {
                 copyAndConfirm(message.content)
@@ -1550,7 +1551,7 @@ struct MessageBubble: View, Equatable {
                             .strokeBorder(Aero.accent, lineWidth: 2)
                     }
                 }
-                .contextMenu { bubbleMenu }
+                .gsReflectiveContextMenu { bubbleMenu }
 
                 // The reference footer: a timestamp, then a quiet action-chip row.
                 // Each chip calls the same real handler the long-press menu carries.
@@ -1684,9 +1685,17 @@ struct MessageBubble: View, Equatable {
             Button(action: onBranch) {
                 GsMenuLabel("Branch new chat", icon: GsIcons.split)
             }
+            // Keep the actual system share presenter mounted while sharing.
             ShareLink(item: message.content) {
                 GsMenuLabel("Share", icon: GsIcons.share)
+                    .font(.system(size: 14.5, weight: .medium))
+                    .foregroundStyle(Aero.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 46)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(KineticPressStyle())
         }
     }
 

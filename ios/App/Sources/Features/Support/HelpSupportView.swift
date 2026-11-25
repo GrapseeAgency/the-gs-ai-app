@@ -135,6 +135,7 @@ struct HelpSupportView: View {
                     library = nil
                     router.path.append(.helpArticle(slug))
                 })
+                .gsPresentedSheetGlass()
                 .presentationDetents([.large])
         }
         .sheet(isPresented: $showAllTopics) {
@@ -151,6 +152,7 @@ struct HelpSupportView: View {
                     showAllTopics = false
                     router.path.append(.helpArticle(slug))
                 })
+                .gsPresentedSheetGlass()
                 .presentationDetents([.large])
         }
         // A topic used to open a `.medium` sheet: a paragraph in a box. The
@@ -387,7 +389,8 @@ struct GsHelpLibrarySheet: View {
                 }
                 .padding(20)
             }
-            .background(Aero.background.ignoresSafeArea())
+            .background(Color.clear)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -435,7 +438,8 @@ struct GsHelpLibrarySheet: View {
                         }
                         .padding(20)
                     }
-                    .background(Aero.background.ignoresSafeArea())
+                    .background(Color.clear)
+            .toolbarBackground(.hidden, for: .navigationBar)
                     .navigationTitle(category.label)
                     .navigationBarTitleDisplayMode(.inline)
                 case .topic(let topic):
