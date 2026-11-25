@@ -924,9 +924,17 @@ private struct MermaidViewerView<Content: View>: View {
                     .foregroundStyle(Aero.text)
                     .accessibilityLabel(description)
                 Spacer()
-                Button("Close") { dismiss() }
-                    .font(Aero.responsive(15, relativeTo: .subheadline))
-                    .foregroundStyle(Aero.textMuted)
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Close")
+                        .font(Aero.responsive(15, relativeTo: .subheadline))
+                        .foregroundStyle(Aero.text)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 40)
+                        .gsCapsuleGlass(.floatingControl)
+                }
+                .buttonStyle(KineticPressStyle())
             }
             .padding(16)
         }

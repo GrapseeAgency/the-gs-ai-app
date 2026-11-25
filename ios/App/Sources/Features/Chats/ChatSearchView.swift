@@ -154,6 +154,7 @@ struct ChatSearchView: View {
         }
         .sheet(isPresented: $showFacets) {
             facetSheet
+                .gsPresentedSheetGlass()
                 .presentationDetents([.medium])
         }
         .sheet(isPresented: $showExport) {
@@ -178,6 +179,7 @@ struct ChatSearchView: View {
                 onDismiss: { renameTarget = nil }
             )
         }
+        .gsReflectiveMenuHost()
     }
 
     // MARK: Search field + chips
@@ -425,25 +427,33 @@ struct ChatSearchView: View {
     /// The real ⋮ menu: the same four mutations the Chats list exposes, against
     /// this store. No invented actions.
     private func actionsMenu(_ conversation: StoredConversation) -> some View {
-        Menu {
-            Button(conversation.pinned ? "Unpin" : "Pin to top") {
-                store.setPinned(id: conversation.id, !conversation.pinned)
+        NexlyGlyph(name: "dots-vertical", size: 16, color: Aero.textTertiary)
+            .frame(width: 34, height: 34)
+            .gsGlass(.floatingControl, corner: 17)
+            .contentShape(Rectangle())
+            .gsReflectiveTapMenu {
+                Button {
+                    store.setPinned(id: conversation.id, !conversation.pinned)
+                } label: {
+                    GsMenuLabel(conversation.pinned ? "Unpin" : "Pin to top", icon: GsIcons.pin)
+                }
+                Button {
+                    renameDraft = gsConversationTitle(conversation.title)
+                    renameTarget = conversation
+                } label: {
+                    GsMenuLabel("Rename", icon: GsIcons.squarePen)
+                }
+                Button {
+                    store.setArchived(id: conversation.id, !conversation.archived)
+                } label: {
+                    GsMenuLabel(conversation.archived ? "Restore" : "Archive", icon: GsIcons.archive)
+                }
+                Button(role: .destructive) {
+                    store.delete(id: conversation.id)
+                } label: {
+                    GsMenuLabel("Delete", icon: GsIcons.trash2)
+                }
             }
-            Button("Rename") {
-                renameDraft = gsConversationTitle(conversation.title)
-                renameTarget = conversation
-            }
-            Button(conversation.archived ? "Restore" : "Archive") {
-                store.setArchived(id: conversation.id, !conversation.archived)
-            }
-            Button("Delete", role: .destructive) {
-                store.delete(id: conversation.id)
-            }
-        } label: {
-            NexlyGlyph(name: "dots-vertical", size: 16, color: Aero.textTertiary)
-                .frame(width: 34, height: 34)
-                .contentShape(Rectangle())
-        }
         .accessibilityLabel("Chat actions")
     }
 
@@ -671,7 +681,6 @@ struct ChatSearchView: View {
         .padding(.horizontal, 20)
         .padding(.top, 18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(GsSettingsBackdrop().ignoresSafeArea())
     }
 
     // MARK: Helpers

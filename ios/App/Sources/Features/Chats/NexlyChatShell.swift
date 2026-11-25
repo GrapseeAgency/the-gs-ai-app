@@ -130,8 +130,6 @@ struct NexlyComposerBar: View {
 
     var selectedMode: String = "auto"
     var onModeSelected: (String) -> Void = { _ in }
-    var onAgentMenu: (() -> Void)? = nil
-    var onModeMenu: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -177,43 +175,31 @@ struct NexlyComposerBar: View {
                 }
 
                 Spacer(minLength: 0)
-                if let onAgentMenu, let onModeMenu {
-                    Button(action: onAgentMenu) { choiceLabel("Agent") }
-                        .buttonStyle(KineticPressStyle())
-                        .accessibilityLabel("Agent tasks")
-                    Button(action: onModeMenu) { choiceLabel(selectedMode.capitalized) }
-                        .buttonStyle(KineticPressStyle())
-                        .accessibilityLabel("Response mode, \(selectedMode.capitalized)")
-                } else {
-                    // Standalone previews retain native menus; the actual chat
-                    // supplies its full-screen glass menu host.
-                    Menu {
+                choiceLabel("Agent")
+                    .gsReflectiveTapMenu {
                         Button("Web Search") { seed("Search the web for ") }
                         Button("Code") { seed("Help me code ") }
                         Button("Write") { seed("Help me write ") }
                         Button("Analyze") { seed("Analyze ") }
-                    } label: {
-                        choiceLabel("Agent")
                     }
                     .accessibilityLabel("Agent tasks")
-    
-                    Menu {
+
+                choiceLabel(selectedMode.capitalized)
+                    .gsReflectiveTapMenu {
                         ForEach(["auto", "flash", "thinking"], id: \.self) { mode in
                             Button {
                                 onModeSelected(mode)
                             } label: {
-                                if selectedMode == mode {
-                                    Label(mode.capitalized, systemImage: "checkmark")
-                                } else {
+                                HStack {
                                     Text(mode.capitalized)
+                                    Spacer()
+                                    if selectedMode == mode { Image(systemName: "checkmark") }
                                 }
                             }
+                            .accessibilityAddTraits(selectedMode == mode ? .isSelected : [])
                         }
-                    } label: {
-                        choiceLabel(selectedMode.capitalized)
                     }
                     .accessibilityLabel("Response mode, \(selectedMode.capitalized)")
-                    }
                 if isStreaming {
                     Button(action: onStop) {
                         NexlyGlyph(name: "player-stop", size: 17, color: Aero.text)

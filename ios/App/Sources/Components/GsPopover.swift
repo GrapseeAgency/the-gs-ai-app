@@ -40,22 +40,32 @@ struct GsAnchoredPopover<Content: View>: View {
     }
 
     var body: some View {
-        ZStack(alignment: alignment) {
-            // A menu does not black out the page it points at. 12% is enough to
-            // say "tap elsewhere to close".
-            Color.black.opacity(0.12)
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture { onDismiss() }
+        GeometryReader { geometry in
+            let clearance = min(verticalInset, max(8, (geometry.size.height - 120) / 2))
+            let panelWidth = min(width, max(1, geometry.size.width - 2 * horizontalInset))
+            let cap = max(44, geometry.size.height - 2 * clearance)
+            ZStack(alignment: alignment) {
+                Color.black.opacity(0.12)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { onDismiss() }
+                    .accessibilityHidden(true)
 
-            content()
-                .frame(width: width)
+                ViewThatFits(in: .vertical) {
+                    content().fixedSize(horizontal: false, vertical: true)
+                    ScrollView(showsIndicators: false) { content() }
+                }
+                .frame(width: panelWidth)
+                .frame(maxHeight: cap)
                 .padding(.vertical, 6)
                 .gsOverlayGlass(corner: 22)
+                .accessibilityAddTraits(.isModal)
+                .accessibilityAction(.escape) { onDismiss() }
                 .padding(.horizontal, horizontalInset)
-                .padding(.vertical, verticalInset)
-                .transition(
-                    .scale(scale: 0.94, anchor: unitAnchor).combined(with: .opacity))
+                .padding(.vertical, clearance)
+                .transition(.scale(scale: 0.94, anchor: unitAnchor).combined(with: .opacity))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
     }

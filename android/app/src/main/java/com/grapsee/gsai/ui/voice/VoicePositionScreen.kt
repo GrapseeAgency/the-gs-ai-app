@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.voice
 
+import com.grapsee.gsai.ui.components.GsConfirmDialog
+
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
@@ -21,7 +23,6 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -243,21 +244,19 @@ fun VoicePositionScreen(
     }
 
     if (confirmReset) {
-        AlertDialog(
-            onDismissRequest = { confirmReset = false },
-            title = { Text("Reset Voice Position calibration?") },
-            text = { Text("This removes the saved left, ahead and right references for both phone poses.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    monitor.resetCalibration()
-                    calibrationNotice = "Calibration cleared for this device."
-                    confirmReset = false
-                    view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-                }) { Text("Reset") }
+        GsConfirmDialog(
+            title = "Reset Voice Position calibration?",
+            message = "This removes the saved left, ahead and right references for both phone poses.",
+            confirmLabel = "Reset",
+            dismissLabel = "Cancel",
+            destructive = true,
+            onConfirm = {
+                monitor.resetCalibration()
+                calibrationNotice = "Calibration cleared for this device."
+                confirmReset = false
+                view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
             },
-            dismissButton = {
-                TextButton(onClick = { confirmReset = false }) { Text("Cancel") }
-            }
+            onDismiss = { confirmReset = false },
         )
     }
 }

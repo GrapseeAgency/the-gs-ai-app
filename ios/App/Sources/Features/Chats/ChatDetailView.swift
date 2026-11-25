@@ -19,7 +19,6 @@ struct ChatDetailView: View {
 
     // Attach + local toasts (added 8-d; streaming/VM logic untouched)
     @State private var showingAttachments = false
-    @State private var composerMenu: String? = nil
     @State private var toast: String?
 
     // Translate — the tapped turn streams its translation in a bottom sheet.
@@ -273,51 +272,6 @@ struct ChatDetailView: View {
             }
         }
         .animation(.spring(response: 0.28, dampingFraction: 0.86), value: showingAttachments)
-        .overlay(alignment: .bottomTrailing) {
-            if let menu = composerMenu {
-                GsAnchoredPopover(alignment: .bottomTrailing, width: 208,
-                                  verticalInset: 84, onDismiss: { composerMenu = nil }) {
-                    VStack(spacing: 0) {
-                        if menu == "agent" {
-                            ForEach(["Web Search", "Code", "Write", "Analyze"], id: \.self) { title in
-                                Button {
-                                    composerMenu = nil
-                                    let prefix = ["Web Search": "Search the web for ", "Code": "Help me code ",
-                                                  "Write": "Help me write ", "Analyze": "Analyze "][title] ?? ""
-                                    if !vm.draft.hasPrefix(prefix) { vm.draft = prefix + vm.draft }
-                                    composerFocused = true
-                                } label: {
-                                    Text(title).foregroundStyle(Aero.text)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(.horizontal, 16).frame(minHeight: 46)
-                                        .contentShape(Rectangle())
-                                }
-                            }
-                        } else {
-                            ForEach(["auto", "flash", "thinking"], id: \.self) { mode in
-                                Button {
-                                    vm.setChatMode(mode)
-                                    composerMenu = nil
-                                } label: {
-                                    HStack {
-                                        Text(mode.capitalized)
-                                        Spacer()
-                                        if vm.chatMode == mode { GsIconView(GsIcons.check, size: 16, color: Aero.accent) }
-                                    }
-                                    .foregroundStyle(Aero.text)
-                                    .padding(.horizontal, 16).frame(minHeight: 46)
-                                    .contentShape(Rectangle())
-                                }
-                                .accessibilityAddTraits(vm.chatMode == mode ? .isSelected : [])
-                            }
-                        }
-                    }
-                    .font(.system(size: 14.5, weight: .medium))
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: composerMenu)
         .sheet(item: $translationCard) { card in
             TranslationSheet(
                 source: card.source,
@@ -762,9 +716,7 @@ struct ChatDetailView: View {
                 onStop: { vm.stop() },
                 onSubmit: submitComposer,
                 selectedMode: vm.chatMode,
-                onModeSelected: { vm.setChatMode($0) },
-                onAgentMenu: { composerMenu = "agent" },
-                onModeMenu: { composerMenu = "mode" }
+                onModeSelected: { vm.setChatMode($0) }
             )
         }
         .padding(.horizontal, Aero.Spacing.m)

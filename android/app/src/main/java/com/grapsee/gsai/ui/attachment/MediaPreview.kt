@@ -1,5 +1,7 @@
 package com.grapsee.gsai.ui.attachment
 
+import com.grapsee.gsai.ui.components.gsOverlayGlass
+
 import androidx.compose.ui.graphics.asImageBitmap
 import android.media.MediaPlayer
 import android.widget.MediaController
@@ -26,7 +28,7 @@ import com.grapsee.gsai.ui.icons.GsIcons
 @Composable
 internal fun MediaPreview(file: File, video: Boolean, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(24.dp), tonalElevation = 4.dp) {
+        Box(Modifier.gsOverlayGlass(RoundedCornerShape(24.dp))) {
             Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(file.name, style = MaterialTheme.typography.titleMedium, maxLines = 2)
                 if (video) NativeVideoPreview(file) else NativeAudioPreview(file)
@@ -166,7 +168,7 @@ internal fun ImagePreview(file: File, title: String, onDismiss: () -> Unit) {
         loaded = true
     }
     Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(24.dp), tonalElevation = 4.dp) {
+        Box(Modifier.gsOverlayGlass(RoundedCornerShape(24.dp))) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 2,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)

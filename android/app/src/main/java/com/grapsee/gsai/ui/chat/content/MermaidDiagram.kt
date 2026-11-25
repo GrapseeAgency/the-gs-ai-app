@@ -1,5 +1,9 @@
 package com.grapsee.gsai.ui.chat.content
 
+import com.grapsee.gsai.ui.components.GsGlassRole
+
+import com.grapsee.gsai.ui.components.gsGlass
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -929,7 +933,8 @@ private fun MermaidViewerDialog(title: String, description: String, onDismiss: (
             )
             TextButton(
                 onClick = onDismiss,
-                modifier = Modifier.align(Alignment.TopEnd)
+                modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
+                    .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(99.dp))
             ) {
                 Text("Close", color = MaterialTheme.colorScheme.onSurface)
             }

@@ -151,11 +151,7 @@ struct AttachmentSheetView: View {
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(muted ? Aero.textTertiary : Aero.text)
                 .frame(width: 38, height: 38)
-                .background(
-                    Circle().fill(Aero.text.opacity(colorScheme == .dark ? 0.10 : 0.055)))
-                .gsArgentComponentBorder(Circle(),
-                    fallback: Aero.outline.opacity(colorScheme == .dark ? 0.45 : 0.75),
-                    preserveBorder: muted, fallbackWidth: 0.7)
+                .gsGlass(.floatingControl, corner: 19, metalEdge: !muted)
             Text(title)
                 .font(.custom(Aero.productName(.medium), size: 14.5, relativeTo: .body))
                 .foregroundStyle(muted ? Aero.textTertiary : Aero.text)
