@@ -151,7 +151,7 @@ struct AttachmentSheetView: View {
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(muted ? Aero.textTertiary : Aero.text)
                 .frame(width: 38, height: 38)
-                .gsGlass(.floatingControl, corner: 19, metalEdge: !muted)
+                .gsGlass(.floatingControl, corner: 19)
             Text(title)
                 .font(.custom(Aero.productName(.medium), size: 14.5, relativeTo: .body))
                 .foregroundStyle(muted ? Aero.textTertiary : Aero.text)

@@ -22,8 +22,15 @@ export function ReflectiveOverlayRuntime() {
       el.removeAttribute('data-gs-argent-ready')
     }
     function schedule(el: HTMLElement) {
+      if (!alive || !elements.has(el)) return
       pending.add(el)
       if (!frame && !working) frame = requestAnimationFrame(flush)
+    }
+    function detach(el: HTMLElement) {
+      reset(el)
+      elements.delete(el)
+      pending.delete(el)
+      resize.unobserve(el)
     }
     function visit(node: Node, add: boolean) {
       if (!(node instanceof Element)) return
@@ -34,11 +41,18 @@ export function ReflectiveOverlayRuntime() {
           resize.observe(el)
           schedule(el)
         } else if (!add && !el.isConnected) {
-          reset(el); elements.delete(el); pending.delete(el); resize.unobserve(el)
+          detach(el)
         }
       }
-      if (node.matches(selector)) apply(node)
-      node.querySelectorAll(selector).forEach(apply)
+      if (add) {
+        if (node.matches(selector)) apply(node)
+        node.querySelectorAll(selector).forEach(apply)
+      } else {
+        // A removed node may also have lost its matching class. Dispose by
+        // identity rather than querying its current selector.
+        for (const el of elements.keys())
+          if (!el.isConnected && (el === node || node.contains(el))) detach(el)
+      }
     }
     function corners(style: CSSStyleDeclaration,w:number,h:number) {
       return [style.borderTopLeftRadius,style.borderTopRightRadius,
@@ -55,12 +69,16 @@ export function ReflectiveOverlayRuntime() {
     }
     async function paint(el:HTMLElement) {
       if (!alive||!el.isConnected||!elements.has(el)) return
+      if (!el.matches(selector)) {detach(el);return}
       if (contrast.matches) {reset(el);elements.set(el,'');return}
       const w=el.offsetWidth,h=el.offsetHeight
       if(w<16||h<16||w>1600||h>1600){reset(el);elements.set(el,'');return}
-      const dark=Boolean(el.closest('.dark, [data-theme="dark"]'))
-      const radius=corners(getComputedStyle(el),w,h)
-      const key=JSON.stringify([w,h,dark,radius])
+      const themeRoot=el.closest('.dark, .light, [data-theme="dark"], [data-theme="light"]')
+      const style=getComputedStyle(el)
+      const dark=themeRoot ? themeRoot.matches('.dark, [data-theme="dark"]')
+        : style.colorScheme.split(/\s+/)[0]==='dark'
+      const radius=corners(style,w,h)
+      const key=JSON.stringify([w,h,dark,radius,window.devicePixelRatio])
       if(elements.get(el)===key)return
       elements.set(el,key)
       reset(el)
@@ -70,7 +88,7 @@ export function ReflectiveOverlayRuntime() {
       let mount:{destroy():void}|null=null
       let gl:WebGL2RenderingContext|null=null
       try {
-        const {mountMetal}=await (engine??=import('argentui'))
+        const {mountMetal}=await (engine??=import('argentui').catch(error=>{engine=undefined;throw error}))
         if(!alive||!el.isConnected||elements.get(el)!==key||contrast.matches)return
         canvas=document.createElement('canvas')
         canvas.setAttribute('aria-hidden','true')
@@ -113,36 +131,50 @@ export function ReflectiveOverlayRuntime() {
         install(el,value)
       } catch { /* Retain the CSS glass and neutral border without WebGL. */ }
       finally {
-        if(mount)mount.destroy()
-        else gl?.getExtension('WEBGL_lose_context')?.loseContext()
-        canvas?.remove()
+        try { mount?.destroy() } finally {
+          gl?.getExtension('WEBGL_lose_context')?.loseContext()
+          canvas?.remove()
+        }
       }
     }
     async function flush() {
       frame=0;working=true
       const el=pending.values().next().value
-      if(el){pending.delete(el);await paint(el)}
-      working=false
-      if(alive&&pending.size)frame=requestAnimationFrame(flush)
+      try {
+        if(el){pending.delete(el);await paint(el)}
+      } finally {
+        working=false
+        if(alive&&pending.size)frame=requestAnimationFrame(flush)
+      }
     }
     const resize=new ResizeObserver(entries=>entries.forEach(e=>schedule(e.target as HTMLElement)))
     const observer=new MutationObserver(records=>{
       for(const r of records){
-        r.addedNodes.forEach(n=>visit(n,true))
-        r.removedNodes.forEach(n=>visit(n,false))
+        if(r.type==='attributes'&&r.target instanceof Element){
+          const target=r.target
+          visit(target,true)
+          for(const el of elements.keys()) {
+            if(!el.matches(selector)){detach(el);continue}
+            if(target===el||target.contains(el))schedule(el)
+          }
+        }else{
+          r.addedNodes.forEach(n=>visit(n,true))
+          r.removedNodes.forEach(n=>visit(n,false))
+        }
       }
     })
     const refresh=()=>elements.forEach((_,el)=>{elements.set(el,'');schedule(el)})
-    const theme=new MutationObserver(refresh)
-    observer.observe(document.body,{childList:true,subtree:true})
-    theme.observe(document.documentElement,{attributes:true,attributeFilter:['class','data-theme']})
+    observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,
+      attributeFilter:['class','data-theme','data-viewport','data-slot']})
     contrast.addEventListener('change',refresh)
+    window.addEventListener('resize',refresh)
     visit(document.body,true)
     return ()=>{
       alive=false
       if(frame)cancelAnimationFrame(frame)
-      observer.disconnect();resize.disconnect();theme.disconnect()
+      observer.disconnect();resize.disconnect()
       contrast.removeEventListener('change',refresh)
+      window.removeEventListener('resize',refresh)
       elements.forEach((_,el)=>reset(el))
       elements.clear();pending.clear();cache.clear()
     }

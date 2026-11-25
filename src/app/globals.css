@@ -131,10 +131,9 @@ button, a, input, textarea { -webkit-tap-highlight-color: transparent; }
 /* App-owned transient glass. The shader texture is transparent everywhere
    except its perimeter, and therefore never paints over the frosted body. */
 .gs-reflective-overlay, .gs-reflective-control, [data-slot="navigation-menu"][data-viewport="false"] [data-slot="navigation-menu-content"], .gs-reflective-control.gs-circle-button {
-  --gs-overlay-base: var(--popover);
   background: var(--gs-argent-edge-image, none) center / 100% 100% no-repeat border-box,
-    linear-gradient(155deg, color-mix(in srgb, var(--gs-overlay-base) 88%, transparent),
-      color-mix(in srgb, var(--gs-overlay-base) 74%, transparent)) padding-box;
+    linear-gradient(155deg, color-mix(in srgb, var(--gs-overlay-base, var(--popover)) 88%, transparent),
+      color-mix(in srgb, var(--gs-overlay-base, var(--popover)) 74%, transparent)) padding-box;
   background-origin: border-box, padding-box;
   border: 1px solid color-mix(in srgb, #93979c 46%, transparent);
   box-shadow: 0 12px 32px rgb(0 0 0 / 16%), inset 0 1px 0 rgb(255 255 255 / 20%);
@@ -148,7 +147,7 @@ button, a, input, textarea { -webkit-tap-highlight-color: transparent; }
   .gs-reflective-control.gs-circle-button,
   .gs-reflective-overlay[data-gs-argent-ready], .gs-reflective-control[data-gs-argent-ready],
   [data-slot="navigation-menu"][data-viewport="false"] [data-slot="navigation-menu-content"][data-gs-argent-ready] {
-    background: var(--gs-overlay-base); border-color: currentColor;
+    background: var(--gs-overlay-base, var(--popover)); border-color: currentColor;
     box-shadow: none; backdrop-filter: none;
   }
 }

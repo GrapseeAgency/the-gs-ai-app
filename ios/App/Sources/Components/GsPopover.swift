@@ -42,8 +42,9 @@ struct GsAnchoredPopover<Content: View>: View {
     var body: some View {
         GeometryReader { geometry in
             let clearance = min(verticalInset, max(8, (geometry.size.height - 120) / 2))
-            let panelWidth = min(width, max(1, geometry.size.width - 2 * horizontalInset))
-            let cap = max(44, geometry.size.height - 2 * clearance)
+            let sideInset = min(horizontalInset, max(0, (geometry.size.width - 44) / 2))
+            let panelWidth = min(width, max(1, geometry.size.width - 2 * sideInset))
+            let cap = max(1, geometry.size.height - 2 * clearance - 12)
             ZStack(alignment: alignment) {
                 Color.black.opacity(0.12)
                     .ignoresSafeArea()
@@ -63,13 +64,12 @@ struct GsAnchoredPopover<Content: View>: View {
                 .accessibilityIdentifier("gs.reflective-popover")
                 .accessibilityAddTraits(.isModal)
                 .accessibilityAction(.escape) { onDismiss() }
-                .padding(.horizontal, horizontalInset)
+                .padding(.horizontal, sideInset)
                 .padding(.vertical, clearance)
                 .transition(.scale(scale: 0.94, anchor: unitAnchor).combined(with: .opacity))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 }
 

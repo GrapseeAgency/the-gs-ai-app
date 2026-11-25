@@ -30,27 +30,43 @@ struct GsDialogFrame<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var shown = false
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            (scheme == .dark ? Color.black.opacity(0.52) : Color.black.opacity(0.26))
-                .opacity(shown ? 1 : 0)
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture { onDismiss() }
+        GeometryReader { geometry in
+            let inset = min(CGFloat(18), max(0, (geometry.size.width - 44) / 2))
+            let bottom = min(CGFloat(26), max(0, (geometry.size.height - 88) / 2))
+            let cap = max(1, geometry.size.height - bottom - 12)
+            ZStack(alignment: .bottom) {
+                (scheme == .dark ? Color.black.opacity(0.52) : Color.black.opacity(0.26))
+                    .opacity(shown ? 1 : 0)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { onDismiss() }
+                    .accessibilityHidden(true)
 
-            content()
-                .padding(.horizontal, 18)
-                .padding(.bottom, 26)
+                ViewThatFits(in: .vertical) {
+                    content().fixedSize(horizontal: false, vertical: true)
+                    ScrollView(showsIndicators: false) { content() }
+                }
+                .frame(maxWidth: 600)
+                .frame(maxHeight: cap)
                 .gsOverlayGlass(corner: 28)
-                .scaleEffect(shown ? 1 : 0.92, anchor: .bottom)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("gs.reflective-dialog")
+                .accessibilityAddTraits(.isModal)
+                .accessibilityAction(.escape) { onDismiss() }
+                .scaleEffect(shown || reduceMotion ? 1 : 0.92, anchor: .bottom)
                 .opacity(shown ? 1 : 0)
+                .padding(.horizontal, inset)
+                .padding(.bottom, bottom)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { shown = true }
+            withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.82)) { shown = true }
         }
-        .accessibilityAddTraits(.isModal)
     }
 }
 
@@ -60,9 +76,10 @@ extension View {
         isPresented: Bool,
         @ViewBuilder _ content: @escaping () -> C
     ) -> some View {
-        overlay {
-            if isPresented { content() }
-        }
+        accessibilityHidden(isPresented)
+            .overlay {
+                if isPresented { content() }
+            }
     }
 }
 
@@ -182,7 +199,9 @@ struct GsChoiceDialog: View {
                     Spacer()
                     Button(action: onDismiss) {
                         NexlyGlyph(name: "x", size: 13, color: Aero.textTertiary)
-                            .frame(width: 26, height: 26)
+                            .frame(width: 30, height: 30)
+                            .gsGlass(.floatingControl, corner: 15)
+                            .padding(7)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Close")
