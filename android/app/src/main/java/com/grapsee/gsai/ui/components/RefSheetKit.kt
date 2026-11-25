@@ -659,8 +659,7 @@ fun RefDotsButton(onClick: () -> Unit, label: String, modifier: Modifier = Modif
     Box(
         modifier = modifier
             .size(28.dp)
-            .clip(CircleShape)
-            .background(colors.border.copy(alpha = 0.22f))
+            .gsGlass(GsGlassRole.FloatingControl, CircleShape)
             .clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

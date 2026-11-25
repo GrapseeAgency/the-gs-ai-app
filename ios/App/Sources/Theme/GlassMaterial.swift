@@ -232,6 +232,7 @@ private struct GsGlassModifier<S: InsettableShape>: ViewModifier {
     }
 
     private var argentEnabled: Bool { metalEdge ?? (role != .modal && role != .elevated) }
+    private var overlayRim: Bool { role == .modal && metalEdge == true }
 
     func body(content: Content) -> some View {
         content
@@ -245,12 +246,12 @@ private struct GsGlassModifier<S: InsettableShape>: ViewModifier {
             // card's height, and only the drawn card knows its height.
             .overlay {
                 GeometryReader { geometry in
-                    if !argentEnabled || settings.highContrast || contrast == .increased || !gsArgentComponentSize(geometry.size) {
+                    if !argentEnabled || settings.highContrast || contrast == .increased || !gsArgentComponentSize(geometry.size, overlayPanel: overlayRim) {
                         rim(in: geometry.size)
                     }
                 }
             }
-            .gsArgentComponentRim(shape, enabled: argentEnabled)
+            .gsArgentComponentRim(shape, enabled: argentEnabled, overlayPanel: overlayRim)
             // Cue: warm, non-grey shadow — this is depth, not darkness. Cast
             // from outside the glass rather than through it; see `castShadow`.
             .background {
@@ -373,5 +374,12 @@ extension View {
     /// pills — which always went through the single path — did not have it.
     func gsCapsuleGlass(_ role: GsGlassRole = .floatingControl, metalEdge: Bool? = nil) -> some View {
         modifier(GsGlassModifier(role: role, shape: Capsule(), metalEdge: metalEdge))
+    }
+}
+
+// Explicit transient surfaces share the existing glass body and reflection.
+extension View {
+    func gsOverlayGlass(corner: CGFloat = 22) -> some View {
+        gsGlass(.modal, corner: corner, metalEdge: true)
     }
 }

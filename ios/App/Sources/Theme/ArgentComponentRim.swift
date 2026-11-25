@@ -5,6 +5,7 @@ import SwiftUI
 private struct ArgentComponentRim<S: InsettableShape>: ViewModifier {
     let shape: S
     let enabled: Bool
+    var overlayPanel: Bool = false
     var fallback: Color? = nil
     var preserveBorder: Bool = false
     var fallbackWidth: CGFloat = 1
@@ -12,9 +13,10 @@ private struct ArgentComponentRim<S: InsettableShape>: ViewModifier {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.colorSchemeContrast) private var contrast
 
-    init(shape: S, enabled: Bool, fallback: Color? = nil, preserveBorder: Bool = false, fallbackWidth: CGFloat = 1) {
+    init(shape: S, enabled: Bool, fallback: Color? = nil, preserveBorder: Bool = false, fallbackWidth: CGFloat = 1, overlayPanel: Bool = false) {
         self.shape = shape
         self.enabled = enabled
+        self.overlayPanel = overlayPanel
         self.fallback = fallback
         self.preserveBorder = preserveBorder
         self.fallbackWidth = fallbackWidth
@@ -25,7 +27,7 @@ private struct ArgentComponentRim<S: InsettableShape>: ViewModifier {
             if enabled {
                 GeometryReader { geo in
                     if !preserveBorder && !settings.highContrast && contrast != .increased &&
-                        gsArgentComponentSize(geo.size) {
+                        gsArgentComponentSize(geo.size, overlayPanel: overlayPanel) {
                         rim(size: geo.size)
                     } else if let fallback {
                         shape.strokeBorder(fallback, lineWidth: fallbackWidth)
@@ -53,13 +55,13 @@ private struct ArgentComponentRim<S: InsettableShape>: ViewModifier {
     }
 }
 
-func gsArgentComponentSize(_ size: CGSize) -> Bool {
-    size.width >= 16 && size.height >= 16 && size.width <= 720 && size.height <= 320
+func gsArgentComponentSize(_ size: CGSize, overlayPanel: Bool = false) -> Bool {
+    size.width >= 16 && size.height >= 16 && size.width <= 720 && size.height <= (overlayPanel ? 1100 : 320)
 }
 
 extension View {
-    func gsArgentComponentRim<S: InsettableShape>(_ shape: S, enabled: Bool = true) -> some View {
-        modifier(ArgentComponentRim(shape: shape, enabled: enabled))
+    func gsArgentComponentRim<S: InsettableShape>(_ shape: S, enabled: Bool = true, overlayPanel: Bool = false) -> some View {
+        modifier(ArgentComponentRim(shape: shape, enabled: enabled, overlayPanel: overlayPanel))
     }
 
     func gsArgentComponentBorder<S: InsettableShape>(_ shape: S, fallback: Color, preserveBorder: Bool = false, fallbackWidth: CGFloat = 1) -> some View {

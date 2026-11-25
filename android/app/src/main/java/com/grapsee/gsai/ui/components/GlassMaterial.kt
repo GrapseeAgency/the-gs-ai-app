@@ -144,6 +144,7 @@ fun Modifier.gsGlass(
 ): Modifier {
     val colors = GsTheme.colors
     val argentEnabled = metalEdge ?: (role != GsGlassRole.Modal && role != GsGlassRole.Elevated)
+    val overlayRim = role == GsGlassRole.Modal && metalEdge == true
     val highContrast = com.grapsee.gsai.data.SettingsStore.highContrast
     val shadowMod = if (role.elevation > 0.dp) {
         this.shadow(
@@ -207,7 +208,7 @@ fun Modifier.gsGlass(
                 veil?.let { drawRect(it) }
                 // Preserve the original rim for containers, high contrast, and large panels.
                 // Eligible controls have one metal rim, not two stacked borders.
-                if (!argentEnabled || highContrast || !argentComponentSize(size.width / density, size.height / density)) {
+                if (!argentEnabled || highContrast || !argentComponentSize(size.width / density, size.height / density, overlayRim)) {
                     drawPath(rimPath, brush = rimBrush, style = Stroke(width = rimWidth))
                 }
             }
@@ -215,6 +216,7 @@ fun Modifier.gsGlass(
         .argentComponentRim(
             shape,
             enabled = argentEnabled,
+            overlay = overlayRim,
         )
 }
 
@@ -378,3 +380,9 @@ object GsGlassRadius {
     val sheet: Dp = 30.dp
     val control: Dp = 999.dp
 }
+
+/** Shared transient surface: readable modal glass and a single Argent rim.
+ * Only explicit overlays use the extended size allowance. */
+@Composable
+fun Modifier.gsOverlayGlass(shape: Shape): Modifier =
+    gsGlass(GsGlassRole.Modal, shape, metalEdge = true)

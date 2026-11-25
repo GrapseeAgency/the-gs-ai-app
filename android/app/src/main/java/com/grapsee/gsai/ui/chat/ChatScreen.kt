@@ -2816,21 +2816,15 @@ private fun StopGeneratingButton(onStop: () -> Unit) {
 /** Floating jump-back-to-the-live-edge control, mirroring the benchmark apps. */
 @Composable
 private fun JumpToLatestPill(onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        shadowElevation = 4.dp
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .gsGlass(GsGlassRole.FloatingControl, CircleShape)
+            .clickable(role = Role.Button, onClickLabel = "Jump to latest", onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp)) {
-            Icon(
-                GsIcons.ChevronDown,
-                contentDescription = "Jump to latest",
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(18.dp)
-            )
-        }
+        Icon(GsIcons.ChevronDown, contentDescription = null,
+            tint = GsTheme.colors.textPrimary, modifier = Modifier.size(18.dp))
     }
 }
 

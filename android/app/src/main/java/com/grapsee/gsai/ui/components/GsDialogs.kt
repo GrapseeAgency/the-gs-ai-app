@@ -137,23 +137,7 @@ private fun GsModalFrame(
                         scaleY = 0.92f + 0.08f * progress
                         transformOrigin = TransformOrigin(0.5f, 1f)
                     }
-                    .shadow(
-                        elevation = 30.dp,
-                        shape = DialogShape,
-                        ambientColor = colors.glassShadowAmbient,
-                        spotColor = colors.glassShadowAmbient
-                    )
-                    .gsGlass(GsGlassRole.Modal, DialogShape)
-                    .clip(DialogShape)
-                    // Glass alone is too transparent to carry body copy over a
-                    // busy page; the panel gets the dialog surface underneath,
-                    // the same way the anchored menus do.
-                    .background(colors.dialogSurface.copy(alpha = if (dark) 0.94f else 0.92f))
-                    .border(
-                        width = 0.8.dp,
-                        color = Color.White.copy(alpha = if (dark) 0.10f else 0.55f),
-                        shape = DialogShape
-                    )
+                    .gsOverlayGlass(DialogShape)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,

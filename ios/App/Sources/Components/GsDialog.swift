@@ -43,18 +43,7 @@ struct GsDialogFrame<Content: View>: View {
             content()
                 .padding(.horizontal, 18)
                 .padding(.bottom, 26)
-                .background(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .fill(Aero.dialogSurface.opacity(scheme == .dark ? 0.94 : 0.92))
-                )
-                .gsGlass(.modal, corner: 28)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .strokeBorder(
-                            Color.white.opacity(scheme == .dark ? 0.10 : 0.55),
-                            lineWidth: 0.8)
-                )
-                .shadow(color: Color.black.opacity(scheme == .dark ? 0.55 : 0.22), radius: 30, x: 0, y: 12)
+                .gsOverlayGlass(corner: 28)
                 .scaleEffect(shown ? 1 : 0.92, anchor: .bottom)
                 .opacity(shown ? 1 : 0)
         }

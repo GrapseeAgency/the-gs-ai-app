@@ -23,9 +23,10 @@ import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.theme.LocalGsIsDark
 import kotlin.math.*
 
-/** Component-only guard; full-size panels and modal surfaces retain plain glass. */
-internal fun argentComponentSize(width: Float, height: Float): Boolean =
-    width >= 16f && height >= 16f && width <= 720f && height <= 320f
+/** Regular cards retain the component limit. Explicit transient panels
+ * may be taller without enabling metal on permanent full-screen containers. */
+internal fun argentComponentSize(width: Float, height: Float, overlay: Boolean = false): Boolean =
+    width >= 16f && height >= 16f && width <= 720f && height <= (if (overlay) 1100f else 320f)
 
 /**
  * Original ArgentUI native shader, rim finish only. Draw a 0.75dp inset stroke
@@ -35,12 +36,12 @@ internal fun argentComponentSize(width: Float, height: Float): Boolean =
  * size/theme (static, deliberately no expensive per-frame CPU rasterization).
  */
 @Composable
-internal fun Modifier.argentComponentRim(shape: Shape, enabled: Boolean = true, fallback: Color? = null): Modifier {
+internal fun Modifier.argentComponentRim(shape: Shape, enabled: Boolean = true, fallback: Color? = null, overlay: Boolean = false): Modifier {
     if (!enabled) return this
     if (SettingsStore.highContrast) return if (fallback != null) this.border(1.dp, fallback, shape) else this
     val dark = LocalGsIsDark.current
     return drawWithCache {
-        if (!argentComponentSize(size.width / density, size.height / density)) {
+        if (!argentComponentSize(size.width / density, size.height / density, overlay)) {
             val outline = shape.createOutline(size, layoutDirection, this)
             val legacyPath = when (outline) {
                 is Outline.Rounded -> Path().apply { addRoundRect(outline.roundRect) }

@@ -652,9 +652,8 @@ struct ChatDetailView: View {
             } label: {
                 GsIconView(GsIcons.arrowDown, size: 14, color: Aero.text)
                     .frame(width: 36, height: 36)
-                    .background(Circle().fill(Aero.surface))
-                    .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
-                    .shadow(color: Color.black.opacity(0.18), radius: 8, y: 2)
+                    .gsGlass(.floatingControl, corner: 18)
+                    .accessibilityLabel("Jump to latest")
             }
             .buttonStyle(KineticPressStyle())
             .padding(.trailing, Aero.Spacing.m)

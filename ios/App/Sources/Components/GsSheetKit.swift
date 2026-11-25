@@ -254,7 +254,7 @@ struct GsDotsButton: View {
         Button(action: action) {
             NexlyGlyph(name: "dots", size: 12, color: Aero.textSecondary)
                 .frame(width: 26, height: 26)
-                .background(Circle().fill(Aero.outline.opacity(0.25)))
+                .gsGlass(.floatingControl, corner: 13)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

@@ -11,6 +11,10 @@ class ArgentRimTest {
         assertFalse(argentComponentSize(360f,780f))
         assertFalse(argentComponentSize(780f,360f))
         assertFalse(argentComponentSize(5f,5f))
+        assertTrue(argentComponentSize(248f, 540f, overlay = true))
+        assertTrue(argentComponentSize(360f, 780f, overlay = true))
+        assertFalse(argentComponentSize(780f, 360f, overlay = true))
+        assertFalse(argentComponentSize(360f, 1200f, overlay = true))
     }
 
     @Test fun directionalRimHasMutedFixedCornerHighlights() {

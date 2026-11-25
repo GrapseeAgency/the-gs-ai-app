@@ -144,7 +144,7 @@ fun GsOverlayPanel(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .gsGlass(GsGlassRole.Modal, RoundedCornerShape(26.dp))
+            .gsOverlayGlass(RoundedCornerShape(26.dp))
             // Swallow taps on the panel itself, so a tap that lands on padding
             // does not fall through to the scrim and dismiss.
             .clickable(
@@ -265,8 +265,6 @@ fun GsAnchoredPopover(
             contentAlignment = alignment
         ) {
             val shape = RoundedCornerShape(22.dp)
-            val colors = GsTheme.colors
-            val dark = LocalGsIsDark.current
             Column(
                 modifier = modifier
                     .padding(horizontal = horizontalInset, vertical = verticalInset)
@@ -277,22 +275,7 @@ fun GsAnchoredPopover(
                         scaleY = 0.94f + 0.06f * progress
                         transformOrigin = TransformOrigin(originX, originY)
                     }
-                    // A menu has to be legible over ANY content, so it is the one
-                    // surface in the app that is nearly opaque: the dialog token
-                    // under the glass, plus a real shadow. Pure glass was pretty
-                    // and unreadable — the probe showed rows floating on pearl.
-                    .shadow(
-                        elevation = 22.dp,
-                        shape = shape,
-                        ambientColor = Color.Black.copy(alpha = 0.22f),
-                        spotColor = Color.Black.copy(alpha = 0.28f),
-                    )
-                    .background(colors.dialogSurface.copy(alpha = if (dark) 0.92f else 0.88f), shape)
-                    .gsGlass(GsGlassRole.Modal, shape)
-                    // One hairline so the panel has an EDGE on a pearl page —
-                    // the glass rim is white-on-white there and the shadow alone
-                    // leaves the menu looking like a smudge.
-                    .border(0.8.dp, colors.glassBorder.copy(alpha = if (dark) 0.55f else 0.95f), shape)
+                    .gsOverlayGlass(shape)
                     // Swallow taps on the panel itself so a tap on its padding
                     // does not fall through to the scrim.
                     .clickable(
@@ -329,7 +312,6 @@ fun GsPopoverRow(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val colors = GsTheme.colors
-    val dark = LocalGsIsDark.current
     val ink = when {
         destructive -> colors.error
         enabled -> colors.textPrimary
@@ -355,17 +337,8 @@ fun GsPopoverRow(
             Box(
                 modifier = Modifier
                     .size(38.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (destructive) colors.error.copy(alpha = 0.14f)
-                        else colors.textPrimary.copy(alpha = if (dark) 0.10f else 0.055f)
-                    )
-                    .border(
-                        0.7.dp,
-                        if (destructive) colors.error.copy(alpha = 0.28f)
-                        else colors.glassBorder.copy(alpha = if (dark) 0.45f else 0.75f),
-                        CircleShape
-                    ),
+                    .gsGlass(GsGlassRole.FloatingControl, CircleShape)
+                    .background(if (destructive) colors.error.copy(alpha = 0.14f) else Color.Transparent, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(icon, contentDescription = null, tint = ink, modifier = Modifier.size(19.dp))

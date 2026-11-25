@@ -51,20 +51,7 @@ struct GsAnchoredPopover<Content: View>: View {
             content()
                 .frame(width: width)
                 .padding(.vertical, 6)
-                // A menu has to be legible over ANY content, so it is the one
-                // surface that is nearly opaque: the dialog fill under the glass,
-                // plus a real shadow. Pure glass was pretty and unreadable.
-                .background(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(Aero.dialogSurface.opacity(scheme == .dark ? 0.92 : 0.88)))
-                .gsGlass(.modal, corner: 22)
-                // One hairline so the panel has an EDGE on a pearl page — the
-                // glass rim is white-on-white there and the shadow alone leaves
-                // the menu looking like a smudge.
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .strokeBorder(Aero.outline.opacity(scheme == .dark ? 0.55 : 0.95), lineWidth: 0.8))
-                .shadow(color: .black.opacity(0.26), radius: 22, y: 10)
+                .gsOverlayGlass(corner: 22)
                 .padding(.horizontal, horizontalInset)
                 .padding(.vertical, verticalInset)
                 .transition(
@@ -99,17 +86,8 @@ struct GsPopoverRow: View {
             if well {
                 GsIconView(icon, size: 19, color: ink)
                     .frame(width: 38, height: 38)
-                    .background(
-                        Circle().fill(
-                            destructive
-                                ? Aero.danger.opacity(0.14)
-                                : Aero.text.opacity(scheme == .dark ? 0.10 : 0.055)))
-                    .overlay(
-                        Circle().strokeBorder(
-                            destructive
-                                ? Aero.danger.opacity(0.28)
-                                : Aero.outline.opacity(scheme == .dark ? 0.45 : 0.75),
-                            lineWidth: 0.7))
+                    .gsGlass(.floatingControl, corner: 19)
+                    .background(Circle().fill(destructive ? Aero.danger.opacity(0.14) : .clear))
             } else {
                 GsIconView(icon, size: 18, color: ink)
                     .frame(width: 22)
