@@ -884,7 +884,11 @@ private fun NexlyContextualActionPillsRow(
                 }
             }
         }
-        TextButton(onClick = { detailView = null }) { Text("Close details") }
+        TextButton(
+            onClick = { detailView = null },
+            modifier = Modifier.fillMaxWidth()
+                .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp)),
+        ) { Text("Close details") }
     }
     val actions = remember(blocks, citationUrls) {
         val hasChart = blocks.any { it is Block.WidgetBlock && it.kind == "chart" }

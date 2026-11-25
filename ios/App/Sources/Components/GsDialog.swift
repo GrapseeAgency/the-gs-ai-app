@@ -133,7 +133,7 @@ struct GsDialog: View {
                                         : [Aero.accentStrong, Aero.accent],
                                     startPoint: .top, endPoint: .bottom))
                         )
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.30), lineWidth: 1))
+                        .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.30))
                         .shadow(
                             color: (destructive ? Aero.danger : Aero.accent).opacity(0.42),
                             radius: 10, x: 0, y: 5)
@@ -333,10 +333,7 @@ struct GsPromptDialog: View {
                         RoundedRectangle(cornerRadius: 16)
                             .fill(Aero.inputSurface)
                     )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .strokeBorder(Aero.outline, lineWidth: 1)
-                    )
+                    .gsArgentComponentBorder(RoundedRectangle(cornerRadius: 16), fallback: Aero.outline)
                     .accessibilityLabel(fieldLabel)
 
                 Spacer().frame(height: 14)
@@ -363,7 +360,8 @@ struct GsPromptDialog: View {
                                         colors: [Aero.accentStrong, Aero.accent],
                                         startPoint: .top, endPoint: .bottom))
                             )
-                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
+                            .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.28),
+                                preserveBorder: draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     .buttonStyle(KineticPressStyle())
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

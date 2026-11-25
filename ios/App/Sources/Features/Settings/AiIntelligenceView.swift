@@ -585,6 +585,7 @@ private struct ModelDetailsSheet: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(Capsule().fill(Aero.accent))
+                        .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.30))
                 }
                 .buttonStyle(KineticPressStyle())
                 .padding(.top, 4)

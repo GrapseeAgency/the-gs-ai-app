@@ -395,7 +395,16 @@ struct GsHelpLibrarySheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("Close")
+                            .font(Aero.label())
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: 32)
+                            .gsCapsuleGlass(.floatingControl)
+                    }
+                    .buttonStyle(KineticPressStyle())
                 }
             }
             .navigationDestination(for: GsHelpRoute.self) { route in

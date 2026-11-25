@@ -1,6 +1,8 @@
 package com.grapsee.gsai.ui.attachment
 
 import com.grapsee.gsai.ui.components.gsOverlayGlass
+import com.grapsee.gsai.ui.components.gsGlass
+import com.grapsee.gsai.ui.components.GsGlassRole
 
 import androidx.compose.ui.graphics.asImageBitmap
 import android.media.MediaPlayer
@@ -32,7 +34,11 @@ internal fun MediaPreview(file: File, video: Boolean, onDismiss: () -> Unit) {
             Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(file.name, style = MaterialTheme.typography.titleMedium, maxLines = 2)
                 if (video) NativeVideoPreview(file) else NativeAudioPreview(file)
-                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Close preview") }
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                        .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp)),
+                ) { Text("Close preview") }
             }
         }
     }
@@ -181,7 +187,11 @@ internal fun ImagePreview(file: File, title: String, onDismiss: () -> Unit) {
                     !loaded -> LinearProgressIndicator(Modifier.fillMaxWidth())
                     else -> Text("This device could not decode the image.", color = MaterialTheme.colorScheme.error)
                 }
-                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Close preview") }
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                        .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp)),
+                ) { Text("Close preview") }
             }
         }
     }

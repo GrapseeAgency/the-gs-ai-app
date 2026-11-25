@@ -253,11 +253,7 @@ fun GsDialog(
                             Brush.verticalGradient(listOf(colors.accentStrong, colors.accent))
                         }
                     )
-                    .border(
-                        width = 1.dp,
-                        color = Color.White.copy(alpha = 0.30f),
-                        shape = pillShape
-                    )
+                    .argentComponentBorder(pillShape, Color.White.copy(alpha = 0.30f))
                     .clickable(role = Role.Button, onClick = { onConfirm(); onDismiss() }),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
@@ -372,8 +368,7 @@ fun GsFactDialog(
                 // the pill's height keeps it optically centred.
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(colors.textPrimary.copy(alpha = 0.06f))
+                    .gsGlass(GsGlassRole.FloatingControl, RoundedCornerShape(999.dp))
                     .clickable(role = Role.Button, onClick = onDismiss)
                     .padding(vertical = 13.dp),
                 fontSize = 12.5.sp,
@@ -481,7 +476,7 @@ fun GsPromptDialog(
                         .background(
                             Brush.verticalGradient(listOf(colors.accentStrong, colors.accent))
                         )
-                        .border(1.dp, Color.White.copy(alpha = 0.28f), RoundedCornerShape(999.dp))
+                        .argentComponentBorder(RoundedCornerShape(999.dp), Color.White.copy(alpha = 0.28f))
                         .clickable(role = Role.Button, onClick = submit),
                     contentAlignment = Alignment.Center
                 ) {
@@ -555,7 +550,7 @@ fun GsChoiceDialog(
                 Box(
                     Modifier
                         .size(26.dp)
-                        .clip(CircleShape)
+                        .gsGlass(GsGlassRole.FloatingControl, CircleShape)
                         .clickable(role = Role.Button, onClick = onDismiss),
                     contentAlignment = Alignment.Center
                 ) {
@@ -676,10 +671,7 @@ fun GsConfirmDialog(
 /** Kept for the compact menu surface that already ships. */
 @Composable
 fun GsMenuSurface(content: @Composable () -> Unit) {
-    androidx.compose.material3.Surface(
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
-        color = GsTheme.colors.elevatedSurface,
-        tonalElevation = 3.dp,
-        content = content,
-    )
+    Box(Modifier.gsOverlayGlass(RoundedCornerShape(18.dp))) {
+        content()
+    }
 }

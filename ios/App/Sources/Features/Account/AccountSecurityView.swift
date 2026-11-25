@@ -412,7 +412,7 @@ struct GsFactDialog: View {
                         .foregroundStyle(Aero.text)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 13)
-                        .background(Capsule().fill(Aero.text.opacity(0.06)))
+                        .gsCapsuleGlass(.floatingControl)
                 }
                 .buttonStyle(.plain)
 

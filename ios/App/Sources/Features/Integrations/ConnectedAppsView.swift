@@ -232,7 +232,7 @@ struct ConnectedAppsView: View {
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
-            .background(Capsule().fill(.white.opacity(0.55)))
+            .gsCapsuleGlass(.floatingControl)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Connect \(provider.name)")
@@ -285,6 +285,7 @@ struct GsIntegrationSheetView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .background(Capsule().fill(ExplorePalette.peachDeep))
+                        .gsArgentComponentBorder(Capsule(), fallback: Color.white.opacity(0.30))
                 }
                 .buttonStyle(KineticPressStyle())
                 .padding(.top, 4)
