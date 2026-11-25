@@ -56,7 +56,11 @@ private struct ArgentComponentRim<S: InsettableShape>: ViewModifier {
 }
 
 func gsArgentComponentSize(_ size: CGSize, overlayPanel: Bool = false) -> Bool {
-    size.width >= 16 && size.height >= 16 && size.width <= 720 && size.height <= (overlayPanel ? 1100 : 320)
+    guard size.width.isFinite, size.height.isFinite, size.width >= 16, size.height >= 16 else { return false }
+    // Only explicitly marked transient panels use the larger tablet bounds.
+    return overlayPanel
+        ? size.width <= 2048 && size.height <= 2048
+        : size.width <= 720 && size.height <= 320
 }
 
 extension View {

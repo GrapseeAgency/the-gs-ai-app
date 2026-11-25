@@ -63,8 +63,7 @@ struct VoiceView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Aero.text)
                     .frame(width: 36, height: 36)
-                    .background(Circle().fill(Aero.raised))
-                    .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
+                    .gsGlass(.floatingControl, corner: 18)
             }
             .buttonStyle(KineticPressStyle())
             Spacer()
@@ -82,8 +81,7 @@ struct VoiceView: View {
                     .foregroundStyle(Aero.text)
                     .padding(.horizontal, 11)
                     .padding(.vertical, 8)
-                    .background(Capsule().fill(Aero.container))
-                    .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+                    .gsCapsuleGlass(.floatingControl)
             }
             .buttonStyle(KineticPressStyle())
             .accessibilityLabel("Open Voice Position")
@@ -242,19 +240,24 @@ struct VoiceView: View {
     private func controlButton(
         _ icon: String,
         tint: Color = Aero.text,
-        background: Color = Aero.raised,
+        background: Color? = nil,
         dimmed: Bool = false,
         accessibilityLabel: String,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: icon)
+            let glyph = Image(systemName: icon)
                 .font(.system(size: 20, weight: .medium))
                 .foregroundStyle(tint)
                 .opacity(dimmed ? 0.55 : 1)
                 .frame(width: 64, height: 64)
-                .background(Circle().fill(background))
-                .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
+            if let background {
+                // Keep the destructive control's semantic fill intact.
+                glyph.background(Circle().fill(background))
+                    .gsArgentComponentBorder(Circle(), fallback: Aero.outline)
+            } else {
+                glyph.gsGlass(.floatingControl, corner: 32)
+            }
         }
         .buttonStyle(KineticPressStyle())
         .accessibilityLabel(accessibilityLabel)

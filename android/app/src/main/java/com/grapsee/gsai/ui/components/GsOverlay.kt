@@ -265,11 +265,17 @@ fun GsAnchoredPopover(
             contentAlignment = alignment
         ) {
             val shape = RoundedCornerShape(22.dp)
-            val panelHeight = (maxHeight - verticalInset * 2).coerceAtLeast(64.dp)
+            // Reserve actual menu space in landscape, multi-window and
+            // keyboard-constrained layouts instead of spending it on the
+            // phone portrait anchor inset.
+            val clearance = minOf(verticalInset, ((maxHeight - 120.dp) / 2).coerceAtLeast(0.dp))
+            val sideInset = minOf(horizontalInset, ((maxWidth - 44.dp) / 2).coerceAtLeast(0.dp))
+            val panelWidth = minOf(width, (maxWidth - sideInset * 2).coerceAtLeast(1.dp))
+            val panelHeight = (maxHeight - clearance * 2).coerceAtLeast(1.dp)
             Column(
                 modifier = modifier
-                    .padding(horizontal = horizontalInset, vertical = verticalInset)
-                    .width(width)
+                    .padding(horizontal = sideInset, vertical = clearance)
+                    .width(panelWidth)
                     .heightIn(max = panelHeight)
                     .graphicsLayer {
                         alpha = progress

@@ -1,5 +1,11 @@
 package com.grapsee.gsai.ui.voice
 
+import androidx.compose.foundation.shape.CircleShape
+
+import com.grapsee.gsai.ui.components.GsGlassRole
+
+import com.grapsee.gsai.ui.components.gsGlass
+
 import com.grapsee.gsai.ui.components.GsConfirmDialog
 
 import android.Manifest
@@ -170,7 +176,10 @@ fun VoicePositionScreen(
                     style = MaterialTheme.typography.titleMedium,
                     color = colors.textPrimary
                 )
-                TextButton(onClick = onOpenSpeech) {
+                TextButton(
+                    onClick = onOpenSpeech,
+                    modifier = Modifier.gsGlass(GsGlassRole.FloatingControl, CircleShape),
+                ) {
                     Text("Talk", color = colors.textPrimary)
                 }
             }
@@ -454,7 +463,11 @@ private fun CalibrationCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text("Calibrate this phone", style = MaterialTheme.typography.titleSmall, color = colors.textPrimary)
-                TextButton(onClick = onReset, enabled = state.hasAnyCalibration && state.calibrating == null) { Text("Reset") }
+                TextButton(
+                    onClick = onReset,
+                    enabled = state.hasAnyCalibration && state.calibrating == null,
+                    modifier = Modifier.gsGlass(GsGlassRole.FloatingControl, CircleShape),
+                ) { Text("Reset") }
             }
             Text(
                 "Keep the phone still. Stand at each marked side and speak naturally for a few seconds.",

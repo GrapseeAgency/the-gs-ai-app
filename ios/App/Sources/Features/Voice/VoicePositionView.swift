@@ -63,18 +63,19 @@ struct VoicePositionView: View {
             calibrationTask?.cancel()
             position.stop()
         }
-        .confirmationDialog(
-            "Reset voice calibration?",
-            isPresented: $confirmReset,
-            titleVisibility: .visible
-        ) {
-            Button("Reset calibration", role: .destructive) {
-                position.resetCalibration()
-                calibrationMessage = "Calibration cleared for every phone pose."
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This removes the saved left, ahead and right reference points on this device.")
+        .gsDialog(isPresented: confirmReset) {
+            GsDialog(
+                title: "Reset voice calibration?",
+                message: "This removes the saved left, ahead and right reference points on this device.",
+                confirmLabel: "Reset calibration",
+                onConfirm: {
+                    position.resetCalibration()
+                    calibrationMessage = "Calibration cleared for every phone pose."
+                    confirmReset = false
+                },
+                onDismiss: { confirmReset = false },
+                destructive: true
+            )
         }
     }
 
@@ -85,8 +86,7 @@ struct VoicePositionView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Aero.text)
                     .frame(width: 36, height: 36)
-                    .background(Circle().fill(Aero.raised))
-                    .overlay(Circle().stroke(Aero.outline, lineWidth: 1))
+                    .gsGlass(.floatingControl, corner: 18)
             }
             .buttonStyle(KineticPressStyle())
             Spacer()
@@ -104,8 +104,7 @@ struct VoicePositionView: View {
                     .foregroundStyle(Aero.text)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Capsule().fill(Aero.container))
-                    .overlay(Capsule().stroke(Aero.outline, lineWidth: 1))
+                    .gsCapsuleGlass(.floatingControl)
             }
             .buttonStyle(KineticPressStyle())
             .accessibilityLabel("Open speech mode")
@@ -173,6 +172,7 @@ struct VoicePositionView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
                     .background(Capsule().fill(Aero.accent))
+                    .gsArgentComponentBorder(Capsule(), fallback: Aero.outline)
                 }
                 .buttonStyle(KineticPressStyle())
                 .disabled(isStarting)
@@ -426,8 +426,7 @@ struct VoicePositionView: View {
             .foregroundStyle(ready ? Aero.accent : Aero.text)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Aero.container))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Aero.outline, lineWidth: 1))
+            .gsGlass(.floatingControl, corner: 12)
         }
         .buttonStyle(KineticPressStyle())
         .disabled(!meter.isRunning || !meter.isStereo || calibratingSide != nil)

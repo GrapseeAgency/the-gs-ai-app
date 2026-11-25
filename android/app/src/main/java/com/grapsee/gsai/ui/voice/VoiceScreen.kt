@@ -1,5 +1,9 @@
 package com.grapsee.gsai.ui.voice
 
+import com.grapsee.gsai.ui.components.GsGlassRole
+
+import com.grapsee.gsai.ui.components.gsGlass
+
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -333,7 +337,9 @@ fun VoiceScreen(
                     onClick = onBack,
                     tint = GsTheme.colors.textPrimary
                 )
-                TextButton(onClick = {
+                TextButton(
+                    modifier = Modifier.gsGlass(GsGlassRole.FloatingControl, CircleShape),
+                    onClick = {
                     // Position owns a different stereo capture. Release the
                     // recognizer and playback before navigating, never open two mics.
                     recognizer.value?.runCatching { cancel(); destroy() }
@@ -531,8 +537,9 @@ private fun VoiceCircle(
     Surface(
         onClick = onClick,
         shape = CircleShape,
-        color = container,
+        color = if (container == GsTheme.colors.elevatedSurface) Color.Transparent else container,
         modifier = Modifier.size(64.dp)
+            .gsGlass(GsGlassRole.FloatingControl, CircleShape)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(

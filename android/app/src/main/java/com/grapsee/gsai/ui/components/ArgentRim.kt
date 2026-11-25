@@ -23,10 +23,12 @@ import com.grapsee.gsai.data.SettingsStore
 import com.grapsee.gsai.ui.theme.LocalGsIsDark
 import kotlin.math.*
 
-/** Regular cards retain the component limit. Explicit transient panels
- * may be taller without enabling metal on permanent full-screen containers. */
+/** Regular cards keep the component limit. Only explicitly marked transient
+ * panels may extend it, including tablet and landscape sheet dimensions.
+ * The upper bound is a renderer guard, not a phone-size layout assumption. */
 internal fun argentComponentSize(width: Float, height: Float, overlay: Boolean = false): Boolean =
-    width >= 16f && height >= 16f && width <= 720f && height <= (if (overlay) 1100f else 320f)
+    width.isFinite() && height.isFinite() && width >= 16f && height >= 16f &&
+        if (overlay) width <= 2048f && height <= 2048f else width <= 720f && height <= 320f
 
 /**
  * Original ArgentUI native shader, rim finish only. Draw a 0.75dp inset stroke
