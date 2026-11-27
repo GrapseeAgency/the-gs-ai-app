@@ -38,6 +38,9 @@ class ComposerToolbarTest {
         val draft = mutableStateOf("")
         val mode = mutableStateOf("auto")
         val sent = mutableListOf<String>()
+        // The send disc runs a continuous metal-shader clock; an auto-advancing
+        // test clock never reports idle, so frames are advanced explicitly.
+        compose.mainClock.autoAdvance = false
         compose.setContent {
             TheGsAiTheme(darkTheme = false) {
                 ComposerRow(
@@ -50,6 +53,7 @@ class ComposerToolbarTest {
                 )
             }
         }
+        compose.mainClock.advanceTimeByFrame()
         val input = compose.onNode(hasSetTextAction())
         val agent = compose.onNodeWithContentDescription("Agent tasks, Agent")
         val auto = compose.onNodeWithContentDescription("Response mode, Auto")
@@ -58,11 +62,16 @@ class ComposerToolbarTest {
         assertTrue(bounds.bottom <= auto.fetchSemanticsNode().boundsInRoot.top)
         input.performTextInput("Kotlin")
         agent.performClick()
+        compose.mainClock.advanceTimeBy(320)
         compose.onNodeWithText("Code").performClick()
+        compose.mainClock.advanceTimeByFrame()
         input.assertTextContains("Help me code Kotlin")
         auto.performClick()
+        compose.mainClock.advanceTimeBy(320)
         compose.onNodeWithText("Thinking").performClick()
+        compose.mainClock.advanceTimeByFrame()
         assertEquals("thinking", mode.value)
+        compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithContentDescription("Send").performClick()
         assertEquals(listOf("Help me code Kotlin"), sent)
     }

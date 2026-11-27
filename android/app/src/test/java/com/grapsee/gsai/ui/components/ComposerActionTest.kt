@@ -56,6 +56,9 @@ class ComposerActionTest {
         var sends = 0
         var voices = 0
 
+        // The send disc runs a continuous metal-shader clock, so the test clock
+        // is driven by hand: an auto-advancing clock never reports idle.
+        compose.mainClock.autoAdvance = false
         compose.setContent {
             TheGsAiTheme(darkTheme = false) {
                 GsComposerAction(
@@ -65,12 +68,14 @@ class ComposerActionTest {
                 )
             }
         }
+        compose.mainClock.advanceTimeByFrame()
 
         compose.onNodeWithContentDescription("Voice").assertIsDisplayed().performClick()
         assertEquals(1, voices)
         assertEquals(0, sends)
 
         hasContent = true
+        compose.mainClock.advanceTimeByFrame()
         compose.waitForIdle()
 
         compose.onNodeWithContentDescription("Send").assertIsDisplayed().performClick()
@@ -81,11 +86,13 @@ class ComposerActionTest {
     @Test
     fun `without a voice route the control is a send button from the start`() {
         var sends = 0
+        compose.mainClock.autoAdvance = false
         compose.setContent {
             TheGsAiTheme(darkTheme = false) {
                 GsComposerAction(hasContent = true, onSend = { sends++ })
             }
         }
+        compose.mainClock.advanceTimeByFrame()
 
         compose.onNodeWithContentDescription("Send").assertIsDisplayed().performClick()
         assertTrue("a surface with no voice destination must not advertise one", sends == 1)

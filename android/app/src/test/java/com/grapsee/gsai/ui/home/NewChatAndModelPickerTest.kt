@@ -136,6 +136,9 @@ class NewChatAndModelPickerTest {
     @Test
     fun theComposerSendsWhatWasTypedAndWritesTheMode() {
         val sent = mutableListOf<Pair<String, Boolean>>()
+        // The composer's send disc runs a continuous shader clock, so the test
+        // clock is advanced by hand rather than waiting for an idle it never reaches.
+        compose.mainClock.autoAdvance = false
         compose.setContent {
             TheGsAiTheme(darkTheme = false) {
                 NewChatScreen(
@@ -145,6 +148,7 @@ class NewChatAndModelPickerTest {
                 )
             }
         }
+        compose.mainClock.advanceTimeByFrame()
 
         compose.onNodeWithTag("new-chat-input").performTextInput("hello there")
         compose.onNodeWithTag("new-chat-send").performClick()
@@ -155,6 +159,7 @@ class NewChatAndModelPickerTest {
     @Test
     fun aToolChipSeedsItsPromptWithoutSending() {
         val sent = mutableListOf<Pair<String, Boolean>>()
+        compose.mainClock.autoAdvance = false
         compose.setContent {
             TheGsAiTheme(darkTheme = false) {
                 NewChatScreen(
@@ -164,8 +169,10 @@ class NewChatAndModelPickerTest {
                 )
             }
         }
+        compose.mainClock.advanceTimeByFrame()
 
         compose.onNodeWithText("Web Search").performClick()
+        compose.mainClock.advanceTimeByFrame()
         // The chip seeds the composer and does NOT navigate: a bare draft would
         // land on a chat surface with no transcript. Nothing is sent until the
         // reader presses send.
